@@ -59,7 +59,11 @@ from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    get_runtime_context,
+    set_runtime_context,
+)
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
@@ -94,6 +98,13 @@ from weaver_fixtures import (
 )
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
+
+@pytest.fixture(autouse=True)
+def _clear_runtime_context() -> Iterator[None]:
+    set_runtime_context(None)
+    yield
+    set_runtime_context(None)
 
 
 @tool("demo.echo", description="Echo the provided text.")

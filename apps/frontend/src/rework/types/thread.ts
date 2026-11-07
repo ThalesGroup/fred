@@ -23,6 +23,7 @@ import type {
   SkillInvocation,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
+import type { SessionAttachment } from "./attachments";
 import type { TokenUsage } from "./conversation";
 import type { RawUiPart } from "./parts";
 import type { HitlAnswerSummary } from "../utils/hitlAnswerSummary";
@@ -70,4 +71,6 @@ export interface ThreadMessage {
   skillNames?: SkillInvocation["name"][];
   /** Trusted provenance from successful loads; absent on older history. */
   builtinSkillNames?: string[];
+  /** Files the conversation's list places on this user message; absent when none. */
+  attachments?: SessionAttachment[];
 }

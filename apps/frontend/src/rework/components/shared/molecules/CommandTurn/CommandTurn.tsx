@@ -46,7 +46,7 @@ export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProp
       }
     >
       <span className={`${badgeStyles.badge} ${styles.slug}`} data-kind="prompt" data-surface="bubble">
-        <Icon category="outlined" type="edit_note" />
+        <Icon category="outlined" type="chat" />
         <span className={badgeStyles.name}>/{command.command}</span>
       </span>
       {appended && <span className={styles.appended}> {appended}</span>}

@@ -49,3 +49,21 @@ it("keeps its content slots and gives the removal action a caller-owned or safe 
   act(() => root.unmount());
   host.remove();
 });
+
+it("is outlined by default and tonal on request", () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  act(() =>
+    root.render(
+      <>
+        <Chip label="Default" />
+        <Chip label="Tonal" appearance="tonal" />
+      </>,
+    ),
+  );
+  const chips = Array.from(host.querySelectorAll("[data-appearance]"));
+  expect(chips.map((chip) => chip.getAttribute("data-appearance"))).toEqual(["outlined", "tonal"]);
+  act(() => root.unmount());
+  host.remove();
+});

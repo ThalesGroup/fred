@@ -100,6 +100,23 @@ No Fred identity, team, or role ever belongs in that overlay's chart values — 
 identity and role is either the self-promoted root bootstrap admin or a name in a
 declarative import bundle, never a deployment-config literal.
 
+## Image SBOMs
+
+`make sbom` writes one CycloneDX report per image with `publish: true` in
+`.github/docker-images.json`. It needs `jq`, Docker and the images already built;
+Trivy runs from its pinned container. From the repository root:
+
+```bash
+make docker-build
+make -C apps/knowledge-flow-worker docker-build IMAGE_NAME=knowledge-flow-worker-pymupdf INSTALL_PYMUPDF=true
+make sbom                  # every published image
+make sbom IMAGE=frontend   # one image, by its name in docker-images.json
+make sbom CVES=true        # include detected vulnerabilities
+```
+
+Reports are written to `target/sbom/<image>.cdx.json`, ignored by Git. On a release
+tag (`code/v*`), CI publishes a report with CVEs as the `sbom-<image>` workflow artifact.
+
 ## Contact
 
 For any security or deployment-related concerns, please reach out via the [Fred GitHub repository](https://github.com/ThalesGroup/fred).

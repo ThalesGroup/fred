@@ -138,7 +138,7 @@ describe("CapabilitySidePanelHost panel drawer", () => {
   });
 
   it("keeps the drawer's title band for a panel that has no header of its own", () => {
-    state.entries = [entry("demo_echo", "edit_note", undefined, false)];
+    state.entries = [entry("demo_echo", "chat", undefined, false)];
 
     expect(render("demo_echo:demo_echo_pane")).toContain("data-drawer-title");
   });
@@ -201,7 +201,7 @@ describe("CapabilitySidePanelHost — the drawer animates before the panel mount
 
   beforeEach(() => {
     vi.useFakeTimers();
-    state.entries = [entry("writable_document", "edit_document", () => true, true), entry("demo_echo", "edit_note")];
+    state.entries = [entry("writable_document", "edit_document", () => true, true), entry("demo_echo", "chat")];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -459,10 +459,7 @@ describe("CapabilitySidePanelHost — a pane that fails to load", () => {
     const Broken = lazy<typeof StubPanel>(() =>
       Promise.reject(new Error("Failed to fetch dynamically imported module")),
     );
-    state.entries = [
-      { ...entry("writable_document", "edit_document"), Component: Broken },
-      entry("demo_echo", "edit_note"),
-    ];
+    state.entries = [{ ...entry("writable_document", "edit_document"), Component: Broken }, entry("demo_echo", "chat")];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);

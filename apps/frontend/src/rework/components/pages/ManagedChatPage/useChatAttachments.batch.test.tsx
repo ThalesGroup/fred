@@ -205,7 +205,7 @@ describe("conversation attachment transport and server state", () => {
     );
     expect(post.headers.get("content-type")).toContain("multipart/form-data");
     expect(post.headers.get("idempotency-key")).toBeTruthy();
-    expect(latest.hasReadyAttachments).toBe(false);
+    expect(latest.attachments.some((a) => a.status === "ready")).toBe(false);
     expect(latest.hasUploadingAttachments).toBe(true);
     documents = [document()];
     await refresh();
@@ -213,7 +213,7 @@ describe("conversation attachment transport and server state", () => {
     expect(latest.attachments[0].status).toBe("ingesting");
     documents = [document(true, "succeeded")];
     await refresh();
-    expect(latest.hasReadyAttachments).toBe(true);
+    expect(latest.attachments.some((a) => a.status === "ready")).toBe(true);
     expect(latest.hasUploadingAttachments).toBe(false);
     expect(managerImportsSnapshot()).toEqual([]);
     expect(fetcher.mock.calls.every(([r]) => !/knowledge-flow|\/teams\//.test(r.url))).toBe(true);
@@ -226,7 +226,7 @@ describe("conversation attachment transport and server state", () => {
       await refresh();
       expect(latest.attachments[0].status).toBe("error");
       expect(latest.hasUploadingAttachments).toBe(false);
-      expect(latest.hasReadyAttachments).toBe(false);
+      expect(latest.attachments.some((a) => a.status === "ready")).toBe(false);
     },
   );
   it("rehydrates running and completed documents from the server after remount", async () => {
@@ -245,15 +245,23 @@ describe("conversation attachment transport and server state", () => {
     await render();
     await refresh();
     expect(latest.attachments).toHaveLength(1);
-    expect(latest.hasReadyAttachments).toBe(true);
+    expect(latest.attachments.some((a) => a.status === "ready")).toBe(true);
   });
   it("drops sent ready documents from the composer and keeps them in the drawer", async () => {
     documents = [document(true, "succeeded")];
     await render("conversation", true, true, Date.parse("2026-10-29T10:00:01Z"));
     await refresh();
     expect(latest.attachments).toEqual([]);
-    expect(latest.hasReadyAttachments).toBe(false);
+    expect(latest.attachments.some((a) => a.status === "ready")).toBe(false);
     expect(latest.persistedAttachments).toHaveLength(1);
+  });
+  it("keeps the persisted list's identity across renders with unchanged documents", async () => {
+    documents = [document(true, "succeeded")];
+    await render();
+    await refresh();
+    const persisted = latest.persistedAttachments;
+    await render();
+    expect(latest.persistedAttachments).toBe(persisted);
   });
   it("gives the panel the same failure reason as the composer", async () => {
     documents = [document(false, "failed")];

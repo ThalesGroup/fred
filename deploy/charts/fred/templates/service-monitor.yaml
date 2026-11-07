@@ -1,6 +1,6 @@
 {{- define "common-library.service-monitor" -}}
 
-{{- if and .app.configuration .app.configuration.app .app.configuration.app.metrics_enabled .app.metricsService .app.metricsService.enabled .app.metricsService.serviceMonitor .app.metricsService.serviceMonitor.enabled }}
+{{- if and .app.metricsService .app.metricsService.enabled .app.metricsService.serviceMonitor .app.metricsService.serviceMonitor.enabled }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -24,7 +24,7 @@ spec:
 {{ toYaml .app.metricsService.serviceMonitor.namespaceSelector | indent 4 }}
   {{- end }}
   endpoints:
-    - port: {{ (.app.metricsService.port | default .app.configuration.app.metrics_port) | quote }}
+    - port: metrics
       {{- if .app.metricsService.serviceMonitor.path }}
       path: {{ .app.metricsService.serviceMonitor.path }}
       {{- end }}

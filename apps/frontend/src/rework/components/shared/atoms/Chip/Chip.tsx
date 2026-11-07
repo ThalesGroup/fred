@@ -43,6 +43,9 @@ export interface ChipProps {
   /** Semantic tone. "error" flips the container to the error-container role;
    *  "tertiary" and "success" only color the icon and the secondary line. */
   tone?: "default" | "error" | "tertiary" | "success";
+  /** "tonal" drops the outline and tints the parent's color instead, for a chip
+   *  sitting on a secondary-container surface such as a user message bubble. */
+  appearance?: "outlined" | "tonal";
 }
 
 /**
@@ -64,11 +67,12 @@ export default function Chip({
   removeButtonSize = "2xs",
   tone = "default",
   size = "medium",
+  appearance = "outlined",
 }: ChipProps) {
   const labelProps = { className: styles.label, title: title ?? label };
 
   return (
-    <span className={styles.chip} data-tone={tone} data-size={size}>
+    <span className={styles.chip} data-tone={tone} data-size={size} data-appearance={appearance}>
       {leading && (
         <span className={styles.leading} aria-hidden>
           {leading}

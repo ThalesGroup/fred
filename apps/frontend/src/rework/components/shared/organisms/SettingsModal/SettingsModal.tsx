@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import { type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import styles from "./SettingsModal.module.css";
 
 export interface SettingsModalProps {
@@ -54,9 +54,22 @@ export default function SettingsModal({
   cardClassName,
   children,
 }: SettingsModalProps) {
+  const card = useRef<HTMLDivElement>(null);
+
+  // FullPageModal hands focus over only after a user action; opened otherwise, this
+  // aria-modal must still hold it. A frame later, so the handoff places it first.
+  useEffect(() => {
+    if (!isOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const node = card.current;
+      if (node && !node.contains(document.activeElement)) node.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
+
   return (
     <FullPageModal isOpen={isOpen} onClose={onClose} id={id} background="container">
-      <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} tabIndex={-1}>
+      <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} ref={card} tabIndex={-1}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
             <div id={`${id}-title`} className={styles.title}>

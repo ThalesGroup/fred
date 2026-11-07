@@ -1,6 +1,6 @@
 {{- define "common-library.service-metrics" -}}
 
-{{- if and .app.configuration .app.configuration.app .app.configuration.app.metrics_enabled .app.metricsService .app.metricsService.enabled }}
+{{- if and .app.metricsService .app.metricsService.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -21,8 +21,8 @@ spec:
     app: {{ .app.applicationName }}
   ports:
     - name: metrics
-      port: {{ .app.metricsService.port | default .app.configuration.app.metrics_port }}
-      targetPort: {{ .app.metricsService.targetPort | default .app.configuration.app.metrics_port }}
+      port: {{ .app.metricsService.port }}
+      targetPort: {{ .app.metricsService.targetPort }}
 {{- end }}
 
 {{ end -}}

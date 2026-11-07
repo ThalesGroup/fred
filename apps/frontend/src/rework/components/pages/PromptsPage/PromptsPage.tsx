@@ -462,7 +462,7 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
         </div>
       ) : prompts.length === 0 ? (
         <PageEmptyState
-          icon="edit_note"
+          icon="chat"
           message={t("rework.teams.prompts.noPrompt")}
           action={offersManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: () => open() } : undefined}
         />

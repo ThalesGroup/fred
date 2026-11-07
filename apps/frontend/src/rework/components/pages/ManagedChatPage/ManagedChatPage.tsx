@@ -473,7 +473,7 @@ function ManagedChatContent({
             {
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
-              icon: "attach_file" as const,
+              icon: "folder" as const,
               badgeCount: attachmentsCount + conversationFiles.files.length,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
@@ -485,7 +485,7 @@ function ManagedChatContent({
             {
               key: "prompt-library",
               label: t("chatbot.promptSelectionPanel.menuRow"),
-              icon: "edit_note" as const,
+              icon: "chat" as const,
               selected: activePushDrawer?.kind === "prompt-library",
               onOpen: () =>
                 setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
@@ -938,9 +938,7 @@ function ManagedChatContent({
     {
       key: "full-reasoning",
       label: t("chatbot.fullReasoning.title"),
-      // The glyph a reasoning row carries in the chain of thought.
-      icon: "settings" as const,
-      iconFilled: true,
+      icon: "neurology" as const,
       selected: activePushDrawer?.kind === "full-reasoning",
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
@@ -950,7 +948,7 @@ function ManagedChatContent({
           {
             key: "debug",
             label: t("chatbot.debugRaw.title"),
-            icon: "build" as const,
+            icon: "bug_report" as const,
             selected: activePushDrawer?.kind === "debug",
             onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
           },
@@ -1014,15 +1012,13 @@ function ManagedChatContent({
                           text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                         >
                           <span
-                            className={styles.topBarAgentName}
+                            className={`${styles.topBarAgentName} ${styles.deletedAgent}`}
+                            data-agent-deleted="true"
                             tabIndex={0}
                             aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                           >
-                            <Chip
-                              size="large"
-                              leading={agentChipIcon}
-                              label={`${chat.agentDisplayName} ${t("chatbot.deletedAgentSuffix")}`}
-                            />
+                            <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                            <span className={styles.deletedAgentSuffix}>{t("chatbot.deletedAgentSuffix")}</span>
                           </span>
                         </Tooltip>
                       ) : (

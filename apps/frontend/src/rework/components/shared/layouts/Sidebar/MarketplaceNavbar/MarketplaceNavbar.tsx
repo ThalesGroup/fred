@@ -45,7 +45,7 @@ export default function MarketplaceNavbar() {
     {
       type: "link",
       label: t("rework.sidebar.marketplace.menu.prompts"),
-      icon: { category: "outlined", type: "edit_note", filled: true },
+      icon: { category: "outlined", type: "chat", filled: true },
       linkProps: { to: "/marketplace/prompts" },
     },
   ];

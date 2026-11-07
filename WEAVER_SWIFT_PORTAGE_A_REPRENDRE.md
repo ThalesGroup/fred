@@ -1,11 +1,8 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `303b7456e9709880a9fd6503d0d29a12e34f9793`** (merge `e9d18c16b`,
-étape 3 de la tranche en cours, section 14). Cette borne sert à inventorier les
-prochaines arrivées Swift. La dernière tranche complète s'arrête à
-`3d18384205a469f691bbf3ca3cb697911bc6b257` : le merge Swift `394a9150f` part de Weaver
-`e017f869ea5d5668a47d04da3c2de572e97af8b7` et reprend quatre nouveaux commits ; voir la
-section 12. Les réceptions et portages différés
+**Borne Swift intégrée : `ad5a1d2d30fec52e1b0c1c41086df5351b3f3516`** (merge `298008ebd`, section 14).
+Cette borne sert à inventorier les
+prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
 validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
 
@@ -21,7 +18,7 @@ initiale ; ce n'est pas une liste de missions à relancer intégralement.
 > Un comportement différé peut déjà avoir son commit Swift dans l'ascendance.
 > Un nouveau merge ne le réapplique pas. Les portages adaptés ne déplacent pas
 > à eux seuls la borne Swift. Celle de la tranche initiale était `53e39f6f7` ;
-> la borne actuelle après les tranches suivantes est `a2ebfe48c`.
+> la borne actuelle est celle de l'en-tête.
 
 ## 1. Point de reprise consolidé au 6 novembre 2026
 
@@ -1488,7 +1485,7 @@ arrivés ensuite, restent hors de cette tranche.
 | 1 | `b00551906` (#3460) tabulaire | Mergée en `d294b0e4e`, poussée sur `weaver`, non reçue |
 | 2 | `a2ebfe48c` (#3476) Azure APIM | Mergée en `4830c58bc` sans changement de fichier, poussée sur `weaver`, non reçue |
 | 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Mergée en `f06d57650` et `e9d18c16b`, non reçue |
-| 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
+| 4 | `507866562` (#3475), `89baab5b6` (#3455) | Mergée en `735d818ef` et `04aee8fbb`, non reçue. Tranche vers `89baab5b6` terminée |
 
 ### Etape 1 : décisions
 
@@ -1582,6 +1579,69 @@ le modèle Zabbix (demande client, compatibilité Weaver exigée), les SBOM d'im
 (`bef0098f4`) et, en priorité, l'affichage des pièces jointes (`ad5a1d2d3`). Leur forme dans Weaver reste à décider
 commit par commit.
 
+### Etape 4 : décisions
+
+- **Repris de `507866562` :** le modèle Zabbix, sans modification, et son README corrigé pour décrire les endpoints réels de Weaver.
+  Le Control Plane n'expose pas de `/metrics`.
+- **Exclu volontairement :** le guide SIEM de `89baab5b6`, qui décrit OpenFGA et des événements d'audit Swift. Un besoin SIEM
+  demanderait un guide court écrit depuis les événements réels de Weaver.
+- **Défaut corrigé en passant :** le Service de métriques du chart `fred` n'était jamais créé, car il exigeait une clé absente du chart
+  (`5f29e4ba6`, `13cc6d4bb`). `metricsService` décide seul, et `values.yaml` lie les exporteurs concernés à `0.0.0.0`.
+
+### Etape 4 : à recevoir
+
+- Avec `fred-agents` activé, `kubectl get service` liste `fred-agents-metrics`, `knowledge-flow-backend-metrics` et `knowledge-flow-worker-metrics`, et `/metrics`
+  répond depuis le cluster.
+- **Non prouvé :** l'import du modèle dans un vrai Zabbix 7.0, et un vrai Prometheus.
+
+### Rattrapage après `89baab5b6`
+
+| Commit Swift | Etat |
+| --- | --- |
+| `f951e3438` (#3487) oauthlib | Mergé en `6aefa8684` sans changement de fichier : aucun verrou de Weaver ne le contient |
+| `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Mergés en `e8cb6dad9` et `d34f2f7e6`, non reçus |
+| `174a38854` (#3498) test | Mergé en `57925ec07`, nettoyage automatique seul (`6c93c393f`) |
+| `9cdd1ac99` SBOM | Mergé en `d0495bad0`, simplifié, non reçu |
+| `ad5a1d2d3` (#3490) pièces jointes | Mergé en `298008ebd`, conçu pour Weaver, non reçu |
+| `bef0098f4` (#3491) wiki | Non commencé |
+
+- **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
+
+### UI-PORT : décisions
+
+- **Repris :** icônes, tokens et rayons, `::selection`, focus de `SettingsModal`, recherche prête à la souris, placement de `TaskDetailPopover`, rail et
+  tiroirs du chat, puce d'agent supprimé.
+- **Weaver garde :** logique, droits, espaces, contrats, seuil 1200 de `useChatNavPanel`, marge `--spacing-l`, `sendHint`, libellé « New conversation ».
+- **Exclu volontairement :** `TeamDescriptionReminder` (champ absent du contrat), mode hover de `TaskIndicator` (aucun usage, retiré en `a79951012`), section
+  « Pièces jointes » du tiroir (anticipation), notes de version Swift.
+
+### UI-PORT : à regarder pendant la campagne
+
+- Tiroir et barre du chat en FR et EN, y compris un agent supprimé.
+- Les thèmes en clair et en sombre, surtout la sélection de texte et les rayons.
+- Focus au clavier : `SettingsModal`, recherche des agents ; `TaskDetailPopover` seulement sur `dev/tasks`.
+- Chat avec panneaux ouverts : badge et séparateur du rail, repli du panneau de navigation.
+
+### SBOM : décisions et réception
+
+- **Repris :** les rapports CycloneDX avec CVE aux tags de release, et `make sbom`.
+- **Adapté à Weaver :** Trivy local uniquement par son conteneur épinglé, comme le scan de vulnérabilités existant ; usage court dans `deploy/README.md`.
+- **A recevoir :** `make sbom` sur des images construites, y compris `knowledge-flow-worker-pymupdf`, et l'artefact d'un vrai tag de release si le CI est activé pour `weaver`. Le chemin de publication d'un tag de release combine push, sortie locale et provenance : à tester localement avant le premier tag, avec un builder docker-container et un registre local. Si cette étape échoue, la release n'est pas créée, et des images peuvent déjà être publiées.
+
+### Pièces jointes : décisions et réception
+
+- **Repris :** puces en lecture seule dans la bulle, apparence `tonal` de `Chip`, bouton d'envoi grisé sans texte.
+- **Conçu pour Weaver :** l'affichage dérive de la liste du Control Plane, par la règle qui sépare déjà fichiers envoyés et en attente. Aucun contrat, écriture runtime ni donnée d'historique.
+- **Exclu volontairement :** la liste déclarée par le navigateur, `TurnAttachment`, sa copie dans l'historique et le code de reprise associé.
+- **Retiré :** l'envoi de fichiers sans texte, que le runtime refuse.
+- **Limites acceptées :** l'association repose sur les dates. Un fichier ajouté pendant une réponse peut s'afficher après rechargement sur le tour en cours. Un fichier ajouté juste avant une réponse à une question de l'agent peut n'apparaître que dans le tiroir. Un fichier supprimé disparaît de la bulle.
+- **A recevoir :** deux fichiers et un texte : les puces s'affichent aussitôt et après rechargement, et le composeur se vide. Un fichier ajouté au tour suivant s'affiche sur ce tour. Sans texte, le bouton reste grisé et Entrée n'envoie rien.
+
+### A trancher en fin de rattrapage
+
+- La CLI de `fred-runtime` lit encore `app.metrics_port`.
+- `TaskIndicator` et `TaskDetailPopover` ne sont utilisés par aucun écran de production : leur seul consommateur est `TaskPlayground`, page limitée au mode développement (`dev/tasks`). Leur retrait est à décider.
+
 
 ### Wiki — premier lot implémenté, recette différée (7 novembre)
 
@@ -1646,3 +1706,62 @@ liens du README signale un lien **préexistant** vers l'ancre absente
 8. Supprimer la conversation avant/après publication et purger après rétention ;
    vérifier l'expiration des propositions ainsi que la suppression équipe/organisation.
    Refaire ensuite la recette PowerPoint/Deep sur ce même état intégré.
+
+## 15. Intégration locale fichiers, Deep et premier Wiki - 7 novembre 2026
+
+La consolidation part de `404237a02` sur `codex/weaver-conversation-files` :
+`c65978740` conserve le catalogue CP, les livrables PowerPoint et le premier Wiki ;
+`96ebad324` raccorde les livrables Deep à ce catalogue. Le lot est ensuite réuni,
+sans rebase, avec Weaver local `da0fe9f558be984fbb42e141cac2099681e930c7`, également
+pointé par `merge/swift-89baab5b6`. Aucun commit n'est pris directement depuis Swift.
+La borne intégrée reste `ad5a1d2d3` ; `bef0098f4` reste à traiter séparément.
+
+Les deux conflits textuels sont résolus en conservant cette section 14 et le
+rapport du premier Wiki, puis l'icône `folder` de Weaver avec le compteur sources
+plus livrables du tiroir. Les adaptations automatiques de la navigation Wiki et de
+la fixture runtime sont relues. Les pièces jointes des messages restent dérivées
+de la liste CP, sans écriture dans l'historique ; l'envoi sans texte reste refusé.
+Le champ `uid` des résultats de recherche et son consommateur de traces sont
+préservés. Aucun retour de `docs/swift` ou d'`openspec`.
+
+Les routes Wiki utilisent l'espace canonique personnel ou équipe, sans repli du
+projet sur l'équipe. Les propositions restent privées à leur conversation ; les
+révisions publiées lui survivent. Les livrables utilisent les contenus immuables,
+les écritures conditionnelles, les compteurs de quota et le nettoyage existant du
+CP. Les sources de conversation restent seules dans la liste des pièces jointes
+et dans le parcours d'ingestion. Aucun nouvel arbitrage de droits ou de rétention.
+
+Les migrations `0001` à `0013` sont identiques à Weaver et à la référence locale
+`origin/weaver`. `0014_conversation_files.sql` et `0015_team_wiki.sql` n'ont aucune
+collision et gardent leurs numéros. La chaîne complète a été initialisée par
+`cargo run --quiet --locked -- initialize-schema` dans un PostgreSQL dédié jetable,
+puis vérifiée par une seconde initialisation et comparaison des 15 empreintes
+SQLx SHA-384 avec les sources. La ressource a été supprimée, sans accès aux bases
+applicatives. Cela complète l'état historique du premier lot ci-dessus ; la recette
+fonctionnelle de ses contraintes et parcours reste à faire.
+
+Les clients CP/runtime ont été régénérés avec `make update-control-plane-api
+update-runtime-api`, ainsi que le schéma de configuration CP et les références
+SQL/API par `make -C docs/architecture generate`. Contrôles réussis :
+- CP : `make -o dev code-quality` (rustfmt, Clippy et runtime Rust embarqué).
+- Frontend et producteur `libs/frontend` : `make code-quality`, avec Node 24.22.2.
+- SDK, runtime et PowerPoint : `UV_NO_SYNC=1 make -o dev code-quality`.
+  PowerPoint conserve l'avertissement préexistant `reportUnsupportedDunderAll`
+  de `tests/builder_decks.py:930` (zéro erreur).
+- Wiki : lint, imports, formatage, Bandit et détection de secrets via le Makefile
+  avec l'environnement runtime ; typage par
+  `../../fred-runtime/.venv/bin/basedpyright --venvpath ../../fred-runtime`.
+  L'essai avec l'environnement Wiki absent, puis sans chemin explicite pour le
+  typeur, échouait sur l'outillage/imports ; le contrôle corrigé passe.
+- `make -C docs/architecture check` : références, schéma et rendu des diagrammes.
+- `git diff --check`, également sur l'index de fusion.
+
+Aucun test fonctionnel, lancement applicatif, push ou déploiement n'a été exécuté.
+
+**Relais du prochain lot Wiki :** repartir du Wiki réel de Weaver (`src/wiki/`,
+`0015_team_wiki.sql`, routes `/spaces/{space_id}/wiki`, `TeamWikiAdapter` et
+consommateurs frontend CP). Comparer le prochain delta Swift à ces contrats, sans
+réintroduire le backend legacy, ses droits ou sa persistance. Le portage antérieur
+n'a pas déplacé la borne Swift. La recette k3d commune fichiers/PPTX/Deep/Wiki reste
+à faire, notamment confidentialité, conflits de révision, publication HITL,
+suppression/rétention et pièces jointes par message.

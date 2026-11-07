@@ -20,7 +20,15 @@ import { describe, expect, it } from "vitest";
 import embeddedSearchTurn from "../../../../../../../libs/fred-sdk/tests/fixtures/embedded_search_turn.json";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { groupTraceEntries, isCancelledByUser, statusForEntry, traceSummary } from "../../../utils/traceUtils";
-import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
+import type { SessionAttachment } from "@rework/types/attachments";
+import {
+  attachmentsByMessageTime,
+  hitlResponseKey,
+  reconstructPendingHitl,
+  reconstructPendingHitls,
+  toThreadMessages,
+  userMessageTimes,
+} from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
   return {
@@ -822,4 +830,57 @@ it("reloads Ralph's shared history with one answer, its tool trace and cited sou
   expect(rows[1].text).toBe("Answer [Manual, p. 2]");
   expect(rows[1].traceMessages.map((message) => message.channel)).toEqual(["tool_call", "tool_result"]);
   expect(rows[1].sources?.map((source) => source.uid)).toEqual(["doc-1"]);
+});
+
+describe("attachments on user messages", () => {
+  const turn = (exchange: string, rank: number, timestamp: string, overrides: Partial<ChatMessage> = {}) =>
+    msg({
+      exchange_id: exchange,
+      rank,
+      timestamp,
+      role: "user",
+      parts: [{ type: "text", text: exchange }],
+      ...overrides,
+    });
+  const file = (attachmentId: string, createdAt: string, status: SessionAttachment["status"] = "ready") =>
+    ({ attachmentId, name: `${attachmentId}.pdf`, summaryMd: "", createdAt, status }) as SessionAttachment;
+  const placed = (messages: ChatMessage[], attachments: SessionAttachment[]) =>
+    toThreadMessages(messages, false, attachmentsByMessageTime(userMessageTimes(messages), attachments))
+      .filter((row) => row.role === "user")
+      .map((row) => row.attachments?.map((attachment) => attachment.attachmentId));
+  const twoTurns = [turn("e1", 0, "2026-10-09T10:00:00Z"), turn("e2", 1, "2026-10-09T11:00:00Z")];
+
+  it("puts a file on the first user message at or after its creation", () => {
+    expect(placed(twoTurns, [file("early", "2026-10-09T09:00:00Z")])).toEqual([["early"], undefined]);
+    expect(placed(twoTurns, [file("same", "2026-10-09T10:00:00Z")])).toEqual([["same"], undefined]);
+  });
+
+  it("puts the next file on the next turn", () => {
+    expect(placed(twoTurns, [file("first", "2026-10-09T09:00:00Z"), file("next", "2026-10-09T10:30:00Z")])).toEqual([
+      ["first"],
+      ["next"],
+    ]);
+  });
+
+  it.each(["ingesting", "uploading", "error"] as const)("leaves out a %s file", (status) => {
+    expect(placed(twoTurns, [file("busy", "2026-10-09T09:00:00Z", status)])).toEqual([undefined, undefined]);
+  });
+
+  it("drops a deleted file, which the list no longer holds", () => {
+    const kept = file("kept", "2026-10-09T09:00:00Z");
+    expect(placed(twoTurns, [kept, file("deleted", "2026-10-09T09:30:00Z")])).toEqual([["kept", "deleted"], undefined]);
+    expect(placed(twoTurns, [kept])).toEqual([["kept"], undefined]);
+  });
+
+  it("puts a file newer than the last message on no turn", () => {
+    expect(placed(twoTurns, [file("pending", "2026-10-09T12:00:00Z")])).toEqual([undefined, undefined]);
+  });
+
+  it("counts an answer to the agent as no user message", () => {
+    const messages = [
+      turn("e1", 0, "2026-10-09T10:00:00Z"),
+      turn("e1", 1, "2026-10-09T10:30:00Z", { channel: "hitl_response" }),
+    ];
+    expect(placed(messages, [file("late", "2026-10-09T10:10:00Z")])).toEqual([undefined]);
+  });
 });

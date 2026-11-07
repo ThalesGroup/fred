@@ -19,7 +19,8 @@
 .chips {
   display: flex;
   flex-wrap: nowrap;
-  align-items: center;
+  /* Same height for every chip, whatever its status marker. */
+  align-items: stretch;
   gap: var(--spacing-xs);
   padding-bottom: 2px;
   width: 100%;

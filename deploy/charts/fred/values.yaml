@@ -690,6 +690,7 @@ applications:
         tracer: logging
         kpi:
           prometheus:
+            address: 0.0.0.0
             port: 9000
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
@@ -1225,6 +1226,7 @@ applications:
       observability:
         kpi:
           prometheus:
+            address: 0.0.0.0
             port: 9111
 
       security:        *kf-security
@@ -1442,6 +1444,7 @@ applications:
       observability:
         kpi:
           prometheus:
+            address: 0.0.0.0
             port: 9112
 
       # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
