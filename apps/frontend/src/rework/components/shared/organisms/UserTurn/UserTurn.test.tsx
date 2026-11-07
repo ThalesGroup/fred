@@ -523,3 +523,42 @@ describe("UserTurn copy affordance (#2359)", () => {
     reported.mockRestore();
   });
 });
+
+describe("UserTurn attachments", () => {
+  it("shows the turn's files as read-only chips in the bubble, above the message text", () => {
+    render(
+      <UserTurn
+        text="Summarise these"
+        attachments={[
+          { attachmentId: "a-1", name: "brief.pdf", mime: "application/pdf", summaryMd: "", status: "ready" },
+          { attachmentId: "a-2", name: "photo.png", mime: "image/png", summaryMd: "", status: "ready" },
+        ]}
+      />,
+    );
+    const list = container.querySelector("ul[aria-label='chatbot.attachmentChip.ariaLabel']")!;
+    const items = Array.from(list.querySelectorAll("li"));
+    expect(items.map((item) => item.querySelector("[title]")?.getAttribute("title"))).toEqual([
+      "brief.pdf",
+      "photo.png",
+    ]);
+    expect(items.map((item) => item.querySelector(".material-symbols-outlined")?.textContent)).toEqual([
+      "picture_as_pdf",
+      "image",
+    ]);
+    expect(list.querySelector("button")).toBeNull();
+    const text = Array.from(container.querySelectorAll("p, [data-skill-message]")).find((node) =>
+      node.textContent?.includes("Summarise these"),
+    )!;
+    expect(list.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Inside the bubble, beside its text, with the chip variant made for it.
+    expect(list.parentElement!.contains(text)).toBe(true);
+    expect(
+      Array.from(list.querySelectorAll("[data-appearance]")).map((chip) => chip.getAttribute("data-appearance")),
+    ).toEqual(["tonal", "tonal"]);
+  });
+
+  it("renders no chip row when the turn carries no attachments", () => {
+    render(<UserTurn text="Hello" />);
+    expect(container.querySelector("ul")).toBeNull();
+  });
+});

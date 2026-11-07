@@ -13,6 +13,11 @@
 // limitations under the License.
 
 import { Fragment } from "react";
+import { useTranslation } from "react-i18next";
+import Chip from "@shared/atoms/Chip/Chip";
+import Icon from "@shared/atoms/Icon/Icon";
+import { attachmentIcon } from "@rework/utils/fileIconSpec";
+import type { SessionAttachment } from "@rework/types/attachments";
 import { findSkillInvocations, skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
@@ -35,6 +40,8 @@ interface UserMessageProps {
   /** `promptIndex` is the entry of the turn's prompt list that was activated;
    *  absent for a turn that has no usable list. */
   onOpenCommand?: (promptIndex?: number) => void;
+  /** Files placed on this message, shown read-only above the text. */
+  attachments?: SessionAttachment[];
 }
 
 export function UserMessage({
@@ -47,7 +54,9 @@ export function UserMessage({
   skillDescription,
   onOpenSkill,
   onOpenCommand,
+  attachments,
 }: UserMessageProps) {
+  const { t } = useTranslation();
   const names = skillNames ?? (skillName ? [skillName] : []);
   const displayedText = skillInvocationsText(text, names, command);
   const skillTokens = findSkillInvocations(displayedText, names).map((token) => ({ ...token, kind: "skill" as const }));
@@ -79,6 +88,19 @@ export function UserMessage({
   ].sort((a, b) => a.from - b.from);
   return (
     <MessageBubble role="user">
+      {attachments && attachments.length > 0 && (
+        <ul className={styles.attachments} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
+          {attachments.map((attachment) => (
+            <li key={attachment.attachmentId}>
+              <Chip
+                appearance="tonal"
+                label={attachment.name}
+                leading={<Icon category="outlined" type={attachmentIcon(attachment.name, attachment.mime ?? "")} />}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
       {tokens.length ? (
         <div className={styles.skillTurn} data-skill-message>
           {tokens.map((token, index) => (

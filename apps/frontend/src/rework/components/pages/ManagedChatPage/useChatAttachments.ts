@@ -28,6 +28,9 @@ export function attachmentStatus(document: Attachment): ChatAttachment["status"]
   if (document.processing?.status === "pending" || document.processing?.status === "running") return "ingesting";
   return "error";
 }
+function documentError(document: Attachment) {
+  return document.processing?.error_code ?? (attachmentStatus(document) === "error" ? "not_ready" : undefined);
+}
 interface UseChatAttachmentsParams {
   enabled?: boolean;
   canUpload?: boolean;
@@ -125,8 +128,6 @@ export function useChatAttachments({
     }
   }, [documents, scope, uploads]);
 
-  const documentError = (document: Attachment) =>
-    document.processing?.error_code ?? (attachmentStatus(document) === "error" ? "not_ready" : undefined);
   const isPending = (document: Attachment) => {
     const status = attachmentStatus(document);
     if (status === "error") return !scope.dismissed.has(document.document_id);
@@ -162,18 +163,22 @@ export function useChatAttachments({
         }),
       ),
   ];
-  const persistedAttachments: SessionAttachment[] = (documents ?? []).map((d) => ({
-    sessionId: sessionId ?? undefined,
-    attachmentId: d.document_id,
-    name: d.name,
-    mime: d.mime,
-    sizeBytes: d.size,
-    documentUid: d.document_id,
-    summaryMd: "",
-    createdAt: d.created_at,
-    status: attachmentStatus(d),
-    error: documentError(d),
-  }));
+  const persistedAttachments = useMemo(
+    (): SessionAttachment[] =>
+      (documents ?? []).map((d) => ({
+        sessionId: sessionId ?? undefined,
+        attachmentId: d.document_id,
+        name: d.name,
+        mime: d.mime,
+        sizeBytes: d.size,
+        documentUid: d.document_id,
+        summaryMd: "",
+        createdAt: d.created_at,
+        status: attachmentStatus(d),
+        error: documentError(d),
+      })),
+    [documents, sessionId],
+  );
   const deletePersistedAttachment = useCallback(
     async (documentId: string) => {
       if (!enabled || !sessionId || managerActor() !== actor) return;
@@ -250,7 +255,6 @@ export function useChatAttachments({
     isHydratingAttachments: isFetching,
     listError,
     refreshAttachments: refetch,
-    hasReadyAttachments: attachments.some((a) => a.status === "ready"),
     hasUploadingAttachments:
       enabled &&
       canUpload &&

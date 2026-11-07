@@ -40,7 +40,12 @@ import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { useChatAttachments } from "./useChatAttachments";
 import { modelChoiceKey, offersReasoning, parseModelChoice } from "../../../features/capabilities/modelChoice";
-import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
+import {
+  attachmentsByMessageTime,
+  reconstructPendingHitls,
+  toThreadMessages,
+  userMessageTimes,
+} from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import {
@@ -717,10 +722,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   }, [sessionId, isHistoryAuthorized, sessionUnavailable, isScopeCurrent, adoptBackgroundTurn]);
 
   const mayShowMessages = sameSession && !sessionUnavailable && (!historyUnavailable || waitResponse);
-  const threadMessages = useMemo(
-    () => toThreadMessages(mayShowMessages ? messages : [], waitResponse),
-    [mayShowMessages, messages, waitResponse],
-  );
   executionDisabledRef.current = executionDisabled;
   // The backend links no document to a turn, so timestamps tell sent files from pending ones.
   const sentBefore = useMemo(
@@ -737,6 +738,17 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     canUpload: chatControls.some((control) => control.widget === "attach_files"),
     sentBefore,
   });
+  // Keyed on the timestamps, not on `messages`: a streamed frame keeps these arrays
+  // and therefore UserTurn's memo (#2221).
+  const userTimes = userMessageTimes(messages);
+  const attachmentsByTime = useMemo(
+    () => attachmentsByMessageTime(userTimes, attachments.persistedAttachments),
+    [userTimes, attachments.persistedAttachments],
+  );
+  const threadMessages = useMemo(
+    () => toThreadMessages(mayShowMessages ? messages : [], waitResponse, attachmentsByTime),
+    [mayShowMessages, messages, waitResponse, attachmentsByTime],
+  );
   reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
@@ -896,8 +908,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       skills?: SkillInvocation[],
       queued?: boolean,
     ): Promise<boolean> => {
-      const hasAttachments =
-        !queued && chatControls.some((control) => control.widget === "attach_files") && attachments.hasReadyAttachments;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
@@ -905,7 +915,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         hitlHoldsComposer(pendingHitl, sessionId) || hitlHoldsComposer(hitlResumeOwnerRef.current, sessionId);
       if (
         executionDisabledRef.current ||
-        (!text && !hasAttachments) ||
+        !text ||
         waitResponse ||
         awaitingAgentQuestion ||
         attachments.hasUploadingAttachments ||
@@ -915,7 +925,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         modelPreparationPending
       ) {
         console.debug(
-          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!hasAttachments} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
+          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
         return false;
       }
@@ -972,7 +982,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
                 .filter(Boolean)
                 .join(" — ")
             : text;
-          createSessionRow(sid, titleSource ? titleSource.slice(0, 120) : "Attached files");
+          createSessionRow(sid, titleSource.slice(0, 120));
         }
 
         // Block the send entirely on any pending or just-failed session write —
@@ -1035,8 +1045,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       }
     },
     [
-      attachments.hasReadyAttachments,
-      chatControls,
       attachments.hasUploadingAttachments,
       input,
       inputCharacterCount,

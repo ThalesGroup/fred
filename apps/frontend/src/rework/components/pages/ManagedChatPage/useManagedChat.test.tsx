@@ -226,11 +226,11 @@ vi.mock("./useSessionHistory", async (importOriginal) => {
   };
 });
 
+const readyAttachment = { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1 };
 const chatAttachmentsValue = {
   attachments: [] as unknown[],
   persistedAttachments: [] as unknown[],
   isHydratingAttachments: false,
-  hasReadyAttachments: false,
   hasUploadingAttachments: false,
   addFiles: vi.fn(),
   removeAttachment: vi.fn(),
@@ -870,6 +870,82 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[0][2]).toEqual({});
   });
 
+  it("keeps a message's attachments array across streamed frames, so UserTurn's memo holds (#2221)", () => {
+    const persisted = [
+      { attachmentId: "a-1", name: "brief.pdf", summaryMd: "", status: "ready", createdAt: "2026-10-09T00:00:00Z" },
+    ];
+    const frame = (text: string) => [
+      {
+        session_id: "session-1",
+        exchange_id: "exch-1",
+        timestamp: "2026-10-09T00:00:01Z",
+        rank: 0,
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "question" }],
+        metadata: {},
+      },
+      {
+        session_id: "session-1",
+        exchange_id: "exch-1",
+        timestamp: "2026-10-09T00:00:02Z",
+        rank: 1,
+        role: "assistant",
+        channel: "final",
+        parts: [{ type: "text", text }],
+        metadata: {},
+      },
+    ];
+    chatAttachmentsValue.persistedAttachments = persisted;
+    try {
+      chatSseMessages = frame("Hel");
+      mount();
+      bindSession("session-1");
+      const [firstUser] = latest.threadMessages;
+      expect(firstUser.attachments).toEqual(persisted);
+
+      chatSseMessages = frame("Hello");
+      rerender();
+
+      const [user, assistant] = latest.threadMessages;
+      expect(assistant.text).toBe("Hello");
+      expect(user.attachments).toBe(firstUser.attachments);
+    } finally {
+      chatAttachmentsValue.persistedAttachments = [];
+    }
+  });
+
+  it("sends nothing for ready attachments without text: the runtime needs an input", async () => {
+    chatAttachmentsValue.attachments = [readyAttachment];
+    try {
+      mount();
+      await act(async () => {
+        await latest.handleSend();
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.attachments).toEqual([readyAttachment]);
+    } finally {
+      chatAttachmentsValue.attachments = [];
+    }
+  });
+
+  it("sends no attachments field: the Control Plane owns the conversation's list", async () => {
+    chatAttachmentsValue.attachments = [readyAttachment];
+    try {
+      mount();
+      act(() => latest.setInput("question"));
+      rerender();
+
+      await act(async () => {
+        await latest.handleSend();
+      });
+
+      expect("attachments" in (sendMock.mock.calls[0][2] as Record<string, unknown>)).toBe(false);
+    } finally {
+      chatAttachmentsValue.attachments = [];
+    }
+  });
+
   // #2369: a brand-new conversation's composer settings live only in memory —
   // there is no session id to key sessionStorage on until handleSend mints
   // one. So the mint must both hand that id to the composer (making the pick
@@ -1460,7 +1536,7 @@ describe("useManagedChat — session write reliability", () => {
 
   it("queues text when files already belong to the conversation", async () => {
     chatSseWaitResponse = true;
-    chatAttachmentsValue.hasReadyAttachments = true;
+    chatAttachmentsValue.attachments = [readyAttachment];
     try {
       mount();
       bindSession("session-1");
@@ -1469,7 +1545,7 @@ describe("useManagedChat — session write reliability", () => {
       expect(latest.pendingMessages.map((message) => message.text)).toEqual(["focus on Marseille"]);
       expect(sendMock).not.toHaveBeenCalled();
     } finally {
-      chatAttachmentsValue.hasReadyAttachments = false;
+      chatAttachmentsValue.attachments = [];
     }
   });
 
@@ -1802,14 +1878,14 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(latest.pendingMessages).toEqual([expect.objectContaining({ text: "next", status: "waiting" })]);
     chatAttachmentsValue.hasUploadingAttachments = false;
-    chatAttachmentsValue.hasReadyAttachments = status === "ready";
+    chatAttachmentsValue.attachments = status === "ready" ? [readyAttachment] : [];
     await act(async () => rerender());
     await act(async () => rerender());
     expect(sendMock).toHaveBeenCalledTimes(2);
     expect(sendMock.mock.calls[1][0]).toBe("next");
     expect(sendMock.mock.calls[0]).toEqual(firstTurn);
     expect(latest.pendingMessages).toEqual([]);
-    chatAttachmentsValue.hasReadyAttachments = false;
+    chatAttachmentsValue.attachments = [];
   });
 
   it("holds queued text while a human-input prompt is pending", async () => {

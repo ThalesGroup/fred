@@ -24,6 +24,7 @@ import type {
   VectorSearchHit,
 } from "../../../../slices/runtime/runtimeOpenApi";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import type { SessionAttachment } from "@rework/types/attachments";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
@@ -36,6 +37,35 @@ import {
   uiPartsOf,
 } from "../../../utils/traceUtils";
 import { hitlAnswerSummary, type HitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
+
+function isUserMessage(m: ChatMessage): boolean {
+  return m.role === "user" && (m.channel as string) !== "hitl_response";
+}
+
+/** The displayed user messages' timestamps as one string: streamed frames leave it equal, so a memo on it holds. */
+export function userMessageTimes(messages: ChatMessage[]): string {
+  return messages
+    .filter(isUserMessage)
+    .map((m) => m.timestamp)
+    .join("\n");
+}
+
+// The backend links no document to a turn. A ready file goes on the first user
+// message at or after its creation: the comparison that takes it out of the composer.
+export function attachmentsByMessageTime(
+  userTimes: string,
+  attachments: SessionAttachment[],
+): Map<string, SessionAttachment[]> {
+  const times = userTimes.split("\n");
+  const placed = new Map<string, SessionAttachment[]>();
+  for (const attachment of attachments) {
+    if (attachment.status !== "ready") continue;
+    const created = Date.parse(attachment.createdAt ?? "");
+    const time = times.find((candidate) => Date.parse(candidate) >= created);
+    if (time) placed.set(time, [...(placed.get(time) ?? []), attachment]);
+  }
+  return placed;
+}
 
 function isPauseMetadata(m: ChatMessage): boolean {
   return m.channel === "system_note" && m.metadata?.extras?.pause_metadata === true;
@@ -249,7 +279,11 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
   return total;
 }
 
-export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
+export function toThreadMessages(
+  messages: ChatMessage[],
+  isStreaming: boolean,
+  attachmentsByTime?: ReadonlyMap<string, SessionAttachment[]>,
+): ThreadMessage[] {
   const exchanges = groupByExchange(messages);
   // A steered user message starts a new display segment inside its persisted exchange.
   const order: string[] = [];
@@ -259,9 +293,8 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     let segmentId = eid;
     let hasUser = false;
     for (const message of exchanges.groups.get(eid)!) {
-      const isUserMessage = message.role === "user" && (message.channel as string) !== "hitl_response";
-      if (isUserMessage && hasUser) segmentId = `${eid}:steer:${message.rank}`;
-      if (isUserMessage) hasUser = true;
+      if (isUserMessage(message) && hasUser) segmentId = `${eid}:steer:${message.rank}`;
+      if (isUserMessage(message)) hasUser = true;
       if (!groups.has(segmentId)) {
         order.push(segmentId);
         groups.set(segmentId, []);
@@ -288,7 +321,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     const msgs = groups.get(eid)!;
     const isLast = eid === lastEid;
 
-    const userMsg = msgs.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
+    const userMsg = msgs.find(isUserMessage);
     if (userMsg) {
       const loaded = msgs.map(skillLoadOf).find((load) => load?.origin === "user" && !load.child);
       const invocation: unknown = userMsg.metadata?.extras?.skill_invocation;
@@ -324,6 +357,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           const load = skillLoadOf(message);
           return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
         }),
+        attachments: attachmentsByTime?.get(userMsg.timestamp),
       });
     }
 

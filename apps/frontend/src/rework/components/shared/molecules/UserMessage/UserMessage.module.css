@@ -28,3 +28,19 @@
 .skillTurn > p {
   display: inline;
 }
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  list-style: none;
+}
+
+/* A long file name truncates inside the chip instead of widening the bubble. */
+.attachments > li {
+  min-width: 0;
+  max-width: 100%;
+}
