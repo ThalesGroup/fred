@@ -44,6 +44,7 @@ from fred_sdk.contracts.runtime import (
     Executor,
     RuntimeServices,
     TracerPort,
+    WorkspaceFsPort,
 )
 from fred_sdk.contracts.skills import SkillsPort
 from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
@@ -59,6 +60,7 @@ from fred_runtime.capabilities.assembly import (
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
+from fred_runtime.deep.conversation_files import TOOL_NAMES, ConversationFilesMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
@@ -215,11 +217,17 @@ class DeepAgentRuntime(ReActRuntime):
             )
         filesystem = (
             DeepConversationFilesystemPort(backend, permissions)
-            if isinstance(capability_filesystem, DeepConversationFilesystemPort)
+            if (
+                capability_filesystem is None and self.services.workspace_fs is not None
+            )
+            or isinstance(capability_filesystem, DeepConversationFilesystemPort)
             or self.services.skills is not None
             else capability_filesystem
         )
         services = replace(self.services, conversation_filesystem=filesystem)
+        catalogue = services.workspace_fs
+        if catalogue is not None:
+            catalogue.bind(binding)
 
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
@@ -241,6 +249,11 @@ class DeepAgentRuntime(ReActRuntime):
                 *(bound_tool.runtime_name for bound_tool in bound_tools),
                 *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
                 *(("concat_files",) if filesystem is not None else ()),
+                *(
+                    TOOL_NAMES
+                    if filesystem is not None and catalogue is not None
+                    else ()
+                ),
             ),
             capability_block,
         )
@@ -307,6 +320,7 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=filesystem,
+                catalogue=catalogue,
                 skills=self.services.skills,
             ),
             subagent_middleware=_build_deepagent_runtime_middleware(
@@ -317,6 +331,7 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=child_filesystem,
+                catalogue=catalogue,
                 skills=self.services.skills,
                 child=True,
             ),
@@ -566,6 +581,15 @@ def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
     """Describe Deep's mounted filesystem scope and unavailable operations."""
     unavailable_tool_names = _unavailable_filesystem_tool_names(available_tool_names)
     parts = [_CONVERSATION_FILESYSTEM_PROMPT]
+    if TOOL_NAMES[2] in available_tool_names:
+        parts.append(
+            "Deliver saved Markdown/CSV workspace files with publish_conversation_file. "
+            "On a later turn, list_conversation_files and read_conversation_file recover "
+            "the deliverable into the workspace. Retain that read's content_id for "
+            "replacement; never refresh it at publication time. Editor buffers are "
+            "not synchronized with workspace files. Announce delivery only after the "
+            "tool returns the CP receipt and download link."
+        )
     if unavailable_tool_names:
         parts.append(
             "The following filesystem tools are disabled in this runtime: "
@@ -583,6 +607,7 @@ def _build_deepagent_runtime_middleware(
     available_tool_names: Collection[str],
     capability_block: CapabilityAgentBlock | None = None,
     filesystem: ConversationFilesystemPort | None = None,
+    catalogue: WorkspaceFsPort | None = None,
     child: bool = False,
     skills: SkillsPort | None = None,
 ) -> list[AgentMiddleware]:
@@ -618,6 +643,17 @@ def _build_deepagent_runtime_middleware(
         cast(AgentMiddleware, TodoListMiddleware()),
         *(capability_block.middleware if capability_block is not None else ()),
         *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
+        *(
+            (
+                ConversationFilesMiddleware(
+                    filesystem, catalogue, binding.runtime_context.session_id
+                ),
+            )
+            if filesystem is not None
+            and catalogue is not None
+            and binding.runtime_context.session_id
+            else ()
+        ),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         ToolCallTextRecoveryMiddleware(kpi=kpi),
         TracingKpiMiddleware(

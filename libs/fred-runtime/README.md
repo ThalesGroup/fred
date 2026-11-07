@@ -175,6 +175,26 @@ inference/title admission. See the [operator note](../../deploy/release-notes/ch
 
 ---
 
+### Deep conversation deliverables
+
+Deep registers `list_conversation_files`, `read_conversation_file` and
+`publish_conversation_file` through its existing middleware tool mechanism. They
+reuse `RuntimeServices.workspace_fs`, the admitted CP delegation, the common writer
+and its transport replay. Lists contain up to 100 entries per call. Reading copies
+UTF-8 bytes into an unused workspace path and returns the content identity selected
+with those bytes. The model retains that identity in the conversation tool result
+and submits it unchanged when replacing the original catalogue path on a later turn.
+A concurrent update returns a conflict, requiring another read and edit.
+
+Publication accepts saved `.md` and `.csv` workspace files up to 4 MiB. A null
+expected identity means creation only. The tool returns the confirmed CP identity
+and common download link; on transport uncertainty it returns an error with the
+replay key, never a success link. Replay requires identical arguments and unchanged
+workspace bytes. The existing conversation files drawer reloads after the turn.
+Workspace, `.deep`, checkpoints, skills and editor access keep their existing
+owners. Editor buffers are not synchronized back to workspace files and are never
+used as publication input. This implementation still needs end-to-end k3d acceptance.
+
 ### Managed conversation titles
 
 Managed execution now uses the workload-delegated **POST** runtime resolver. Its
