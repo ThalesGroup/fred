@@ -55,6 +55,14 @@ from pydantic import BaseModel, Field
 
 _KF_SERVICE = "Knowledge Flow"
 
+DOCUMENT_UID_DESCRIPTION = (
+    "Exact document uid copied unchanged from a search hit's 'uid', a document "
+    "entry's 'uid' in the document tree, or an attachment. Never use a file name, "
+    "title, folder id or a shortened/reconstructed uid. If unavailable, "
+    "discover the document first. This is an internal tool reference, "
+    "not a value to repeat to the user."
+)
+
 # Built-in default page length when neither the caller (the LLM) nor the
 # capability config specifies one. Matches the adapter's default page size.
 DEFAULT_PAGE_MAX_CHARS = 8000

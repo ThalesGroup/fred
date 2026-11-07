@@ -47,7 +47,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, List
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from sqlalchemy import MetaData, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -134,6 +134,17 @@ def _serialize_metadata(metadata: Any) -> dict:
     if isinstance(metadata, dict):
         return metadata
     return {}
+
+
+def _normalize_history_text(value: JsonValue) -> JsonValue:
+    """PostgreSQL JSONB refuses NUL: mark it in stored values, live messages stay unchanged."""
+    if isinstance(value, str):
+        return value.replace("\x00", "[U+0000]")
+    if isinstance(value, list):
+        return [_normalize_history_text(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_history_text(item) for key, item in value.items()}
+    return value
 
 
 def history_metadata() -> MetaData:
@@ -249,8 +260,12 @@ class PostgresHistoryStore(BaseHistoryStore):
                 "exchange_id": msg.exchange_id,
                 "space_id": space_id,
                 "agent_instance_id": agent_instance_id,
-                "parts_json": [_serialize_part(p) for p in (msg.parts or [])],
-                "metadata_json": _serialize_metadata(msg.metadata),
+                "parts_json": _normalize_history_text(
+                    [_serialize_part(p) for p in (msg.parts or [])]
+                ),
+                "metadata_json": _normalize_history_text(
+                    _serialize_metadata(msg.metadata)
+                ),
             }
             for msg in messages
         ]

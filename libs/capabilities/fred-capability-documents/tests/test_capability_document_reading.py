@@ -58,6 +58,7 @@ from fred_sdk.contracts.runtime import (
     DocumentScopeRefusedError,
     RuntimeServices,
 )
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 _VERBATIM_EP = "fred_capability_documents.document_verbatim:DocumentVerbatimCapability"
 _EXTRACT_EP = "fred_capability_documents.document_extract:DocumentExtractCapability"
@@ -138,6 +139,21 @@ async def _invoke(cap: Any, ctx: Any, name: str, args: dict[str, Any]):
     return await the_tool.ainvoke(
         {"type": "tool_call", "name": name, "args": args, "id": "call-1"}
     )
+
+
+def test_read_uid_guidance_reaches_provider_schema() -> None:
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(), config={}
+    )
+    schema = convert_to_openai_tool(_tools(cap, ctx)["read_document"])
+    field = schema["function"]["parameters"]["properties"]["document_uid"]
+
+    assert field["type"] == "string"
+    assert "pattern" not in field
+    description = field.get("description", "").lower()
+    for guidance in ("unchanged", "search", "file name", "folder", "first"):
+        assert guidance in description
 
 
 # ---------------------------------------------------------------------------

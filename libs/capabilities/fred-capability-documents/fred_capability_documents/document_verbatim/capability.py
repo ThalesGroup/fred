@@ -31,6 +31,7 @@ team admin must enable.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Annotated
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -41,8 +42,10 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from langchain_core.tools import BaseTool, tool
+from pydantic import Field
 
 from fred_capability_documents.document_read_common import (
+    DOCUMENT_UID_DESCRIPTION,
     DocumentReadConfig,
     read_document_page,
     resolve_page_max_chars,
@@ -87,7 +90,7 @@ class DocumentVerbatimCapability(
 
         @tool("read_document", response_format="content_and_artifact")
         async def read_document(
-            document_uid: str,
+            document_uid: Annotated[str, Field(description=DOCUMENT_UID_DESCRIPTION)],
             offset: int = 0,
             max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:

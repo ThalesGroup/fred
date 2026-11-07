@@ -30,6 +30,7 @@ Covers the runtime half of the pilot:
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Sequence
 from importlib.metadata import EntryPoint
 from types import SimpleNamespace
@@ -538,6 +539,9 @@ async def test_turn_option_bounded_by_capability_config() -> None:
     # sources ride the tool artifact for the chat Sources panel.
     assert message.artifact.tool_ref == DOCUMENT_ACCESS_TOOL_REF
     assert message.artifact.sources[0].uid == "d1"
+    payload = json.loads(message.content)
+    assert payload["hits"][0]["uid"] == "d1"
+    assert message.artifact.blocks[0].data == payload
 
 
 @pytest.mark.asyncio
