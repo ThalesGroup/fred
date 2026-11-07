@@ -1,11 +1,8 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `f951e343823efae25056c8e372d5f72e1c70974d`** (merge `6aefa8684`, section 14).
+**Borne Swift intégrée : `174a38854cbd265dd6ae5b63a3f46c4982eb9063`** (merge `57925ec07`, section 14).
 Cette borne sert à inventorier les
-prochaines arrivées Swift. La dernière tranche complète s'arrête à
-`3d18384205a469f691bbf3ca3cb697911bc6b257` : le merge Swift `394a9150f` part de Weaver
-`e017f869ea5d5668a47d04da3c2de572e97af8b7` et reprend quatre nouveaux commits ; voir la
-section 12. Les réceptions et portages différés
+prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
 validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
 
@@ -1593,7 +1590,7 @@ commit par commit.
 
 ### Etape 4 : à recevoir
 
-- `kubectl get service` liste `fred-agents-metrics`, `knowledge-flow-backend-metrics` et `knowledge-flow-worker-metrics`, et `/metrics`
+- Avec `fred-agents` activé, `kubectl get service` liste `fred-agents-metrics`, `knowledge-flow-backend-metrics` et `knowledge-flow-worker-metrics`, et `/metrics`
   répond depuis le cluster.
 - **Non prouvé :** l'import du modèle dans un vrai Zabbix 7.0, et un vrai Prometheus.
 
@@ -1602,8 +1599,8 @@ commit par commit.
 | Commit Swift | Etat |
 | --- | --- |
 | `f951e3438` (#3487) oauthlib | Mergé en `6aefa8684` sans changement de fichier : aucun verrou de Weaver ne le contient |
-| `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Non commencé |
-| `174a38854` (#3498) test | Non commencé |
+| `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Mergés en `e8cb6dad9` et `d34f2f7e6`, non reçus |
+| `174a38854` (#3498) test | Mergé en `57925ec07`, fixtures seules |
 | `9cdd1ac99` SBOM | Non commencé |
 | `ad5a1d2d3` (#3490) pièces jointes | Non commencé. Décision : affichage dérivé des pièces jointes du Control Plane, sans contrat ni écriture runtime |
 | `bef0098f4` (#3491) wiki | Non commencé |
@@ -1611,3 +1608,18 @@ commit par commit.
 - **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
 - **A trancher en fin de rattrapage :** la CLI de `fred-runtime` (`url_helpers.py`, `pod_client.py`, `entrypoint.py` et son README) lit encore
   `app.metrics_port`, alors que le port vit sous `observability.kpi.prometheus`.
+
+### UI-PORT : décisions
+
+- **Repris :** icônes, tokens et rayons, `::selection`, focus de `SettingsModal`, recherche prête à la souris, placement de `TaskDetailPopover`, rail et
+  tiroirs du chat, puce d'agent supprimé.
+- **Weaver garde :** logique, droits, espaces, contrats, seuil 1200 de `useChatNavPanel`, marge `--spacing-l`, `sendHint`, libellé « New conversation ».
+- **Exclu volontairement :** `TeamDescriptionReminder` (champ absent du contrat), mode hover de `TaskIndicator` (aucun usage, retiré en `a79951012`), section
+  « Pièces jointes » du tiroir (anticipation), notes de version Swift.
+
+### UI-PORT : à regarder pendant la campagne
+
+- Tiroir et barre du chat en FR et EN, y compris un agent supprimé.
+- Les thèmes en clair et en sombre, surtout la sélection de texte et les rayons.
+- Focus au clavier : `SettingsModal`, recherche des agents, `TaskDetailPopover`.
+- Chat avec panneaux ouverts : badge et séparateur du rail, repli du panneau de navigation.
