@@ -23,9 +23,10 @@ A chapter marks a generated block like this, the body being rewritten by `genera
 
 Directives:
     include <path> [lang]   the file, verbatim, in a fenced block
-    mermaid <path>          a generated .mmd file as a mermaid block
+    mermaid <path> [tables...] a generated .mmd file, optionally an induced ER subgraph
     routes <path> <base>    the HTTP routes of an axum router
     openapi <path> [groups...] operations and schemas, optionally filtered by route group
+    schemas <path> <names...> selected JSON/OpenAPI schemas and their referenced types
     invariants              each invariant of the dossier and the tests proving it
 
 `check` fails when a block differs from its sources, when an invariant has no test,
@@ -43,6 +44,7 @@ import re
 import sys
 from itertools import takewhile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 DOSSIER = Path(__file__).resolve().parents[1]
 ROOT = DOSSIER.parents[1]
@@ -55,7 +57,11 @@ PROVES = re.compile(
     r"//\s*Proves:\s*([I\d, ]+)\n(?:\s*#\[[^\n]*\]\n)*\s*(?:pub )?(?:async )?fn (\w+)"
 )
 # Rust sources that may prove an invariant; extend as components are ported.
-TEST_SOURCES = ["apps/control-plane/src", "apps/control-plane/tests", "libs/fred-rust-sdk/src"]
+TEST_SOURCES = [
+    "apps/control-plane/src",
+    "apps/control-plane/tests",
+    "libs/fred-rust-sdk/src",
+]
 
 
 def chapters() -> list[Path]:
@@ -313,6 +319,107 @@ def openapi(path: str, *selected_groups: str) -> str:
     return "\n".join(lines)
 
 
+def schemas(path: str, *names: str) -> str:
+    """Reuse the API renderer for a closed set of configuration or wire types."""
+    spec = json.loads((ROOT / path).read_text())
+    definitions = spec.get("$defs", spec.get("components", {}).get("schemas", {}))
+    prefix = "#/$defs/" if "$defs" in spec else "#/components/schemas/"
+    selected: set[str] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            if "$ref" in value:
+                ref = value["$ref"]
+                if not ref.startswith(prefix):
+                    raise ValueError(f"{path}: unsupported schema reference {ref}")
+                add(ref[len(prefix) :])
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    def add(name: str) -> None:
+        if name not in definitions:
+            raise ValueError(f"{path}: missing schema {name}")
+        if name not in selected:
+            selected.add(name)
+            visit(definitions[name])
+
+    if not names:
+        raise ValueError("schemas requires at least one named type")
+    for name in names:
+        add(name)
+    return "\n".join(
+        line
+        for name in sorted(selected)
+        for line in schema_section(name, definitions[name])
+    )
+
+
+def mermaid(path: str, *tables: str) -> str:
+    text = (ROOT / path).read_text()
+    if not tables:
+        return fenced("mermaid", text)
+    if not text.startswith("erDiagram\n"):
+        raise ValueError(f"{path}: table selection requires tbls ER output")
+    entities = dict(re.findall(r'^"([^"]+)" (\{\n.*?^\})', text, re.M | re.S))
+    missing = set(tables) - entities.keys()
+    if missing:
+        raise ValueError(f"{path}: missing ER tables {sorted(missing)}")
+    edges = [
+        line
+        for line in text.splitlines()
+        if (match := re.fullmatch(r'"([^"]+)" [^ ]+ "([^"]+)" : ".*"', line))
+        and set(match.groups()) <= set(tables)
+    ]
+    blocks = [f'"{name}" {entities[name]}' for name in tables]
+    style = (
+        "classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554\nclass "
+        + ",".join(tables)
+        + " fred"
+    )
+    return fenced(
+        "mermaid", "\n\n".join(["erDiagram", "\n".join(edges), *blocks, style])
+    )
+
+
+def links(paths: list[str]) -> int:
+    """Check inline local Markdown links and anchors, including generated type links."""
+    problems = []
+    for chapter in [ROOT / path for path in paths] if paths else chapters():
+        # Fenced code contains examples, not navigation links.
+        text = re.sub(
+            r"^```[^\n]*\n.*?^```\s*$", "", chapter.read_text(), flags=re.M | re.S
+        )
+        for destination in re.findall(r"\]\(([^\s)]+)\)", text):
+            url = urlsplit(destination)
+            if url.scheme or url.netloc:
+                continue
+            target = (
+                (chapter.parent / unquote(url.path)).resolve() if url.path else chapter
+            )
+            error = None
+            if not target.exists():
+                error = "missing file"
+            elif url.fragment and target.suffix == ".md":
+                contents = target.read_text()
+                anchors = set(re.findall(r'<a\s+id="([^"]+)"', contents))
+                counts: dict[str, int] = {}
+                for heading in re.findall(r"^#{1,6} (.+)$", contents, re.M):
+                    slug = anchor(heading)
+                    count = counts.get(slug, 0)
+                    anchors.add(f"{slug}-{count}" if count else slug)
+                    counts[slug] = count + 1
+                if unquote(url.fragment) not in anchors:
+                    error = "missing heading"
+            if error:
+                problems.append(f"{chapter.relative_to(ROOT)}: {error}: {destination}")
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    return bool(problems)
+
+
 def defined_invariants() -> list[str]:
     """Invariant ids defined in hand-written tables; generated blocks only cite them."""
     found: list[str] = []
@@ -348,11 +455,13 @@ def render(directive: str) -> str:
     if kind == "include":
         return fenced(args[1] if len(args) > 1 else "", (ROOT / args[0]).read_text())
     if kind == "mermaid":
-        return fenced("mermaid", (ROOT / args[0]).read_text())
+        return mermaid(*args)
     if kind == "routes":
         return routes(args[0], args[1])
     if kind == "openapi":
         return openapi(*args)
+    if kind == "schemas":
+        return schemas(*args)
     if kind == "invariants":
         return invariants()
     raise ValueError(f"unknown directive: {directive}")
@@ -414,6 +523,8 @@ if __name__ == "__main__":
         generate(rest)
     elif command == "check":
         sys.exit(check(rest))
+    elif command == "links":
+        sys.exit(links(rest))
     elif command == "tidy-er":
         tidy_er(rest[0])
     else:

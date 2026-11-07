@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - swift
+      - weaver
   pull_request:
     branches:
       - main
       - swift
+      - weaver
     # Pull requests only: a base-branch push still checks every schema.
     paths:
       - 'apps/knowledge-flow-backend/**'

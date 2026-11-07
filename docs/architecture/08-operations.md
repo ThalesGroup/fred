@@ -2,18 +2,27 @@
 
 ## Deployment and configuration
 
-The checkout-owned [k3d profile](../../deploy/k3d/README.md) deploys
-`control-plane-backend`, `knowledge-flow-worker` and `frontend` in the secondary
-cluster. The deployment factory supplies infrastructure and the generic application
-build/import/sync sequence. The control-plane configuration comes only from the chart
-defaults and this profile, which declares the k3d service addresses; any factory
-configuration for it is discarded. The frontend forwards `/control-plane/v1` to port 8222.
+The deployment factory owns the local k3d instance values and infrastructure;
+Fred supplies the application chart and image build. Helm combines the chart
+defaults with the instance values, including the Control Plane's model sources
+and each runtime's credential references. The
+[operations reference](A3-manager-operations.md) and
+[model reference](A13-models.md#deployment-evidence) identify the deployment inputs.
+The frontend forwards `/control-plane/v1` to port 8222.
 
 Rust configuration is validated against its generated schema. Credentials are
 references to Secrets, never literal values in application configuration.
 `control-plane serve` supervises HTTP, original-storage cleanup, the processing
 outbox and lifecycle work in one process. Knowledge Flow runs its Temporal worker.
 There is no separate `control-plane worker` command in this runtime.
+
+Model governance and credential provisioning have different lifetimes. The
+organization Owner changes permitted models and defaults through Control Plane;
+deployment supplies approved destinations and local credentials to the workloads.
+Changing a policy does not provision a missing credential. Credentials injected
+as environment variables require a workload restart after Secret rotation;
+the [rotation contract](A13-models.md#deployment-evidence) explains ordering and
+the limits for turns already in progress.
 
 ## Ingestion preparation
 

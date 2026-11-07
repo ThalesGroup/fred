@@ -38,6 +38,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
 | Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [typed permission evaluator](A2-manager-contracts.md#permission-storage-and-evaluation) | `migrations/`, `db.rs`, `authorization.rs` in the source map |
 | API endpoints and frontend bindings | [REST API reference](A12-control-plane-api.md), [HTTP surface rules](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
+| Who selects the model, and where do credentials stay? | [Model responsibilities](01-system-overview.md#14-model-decisions-and-credentials), [turn admission](02.3-agent-administration.md#2-configure-an-assistant-for-the-task) | [Generated model reference and source map](A13-models.md) |
 | Why separate pod capability offers, authorization and agent selection? | [Capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use) | [Offer identity, storage and admission](A2-manager-contracts.md#pod-capability-offers) |
 | Startup, schema initialization or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-initialization) | Source map rows schema initialization and local profile |
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
@@ -67,6 +68,7 @@ Exact implementation detail is available without making it the main reading path
 | [A10. Open issues](A10-open-issues.md) | Which quality questions remain open, and what evidence would settle them? |
 | [A11. Roles](A11-roles.md) | What does each role mean, and where do current permissions differ? |
 | [A12. Control-plane REST API](A12-control-plane-api.md) | Which operations and JSON schemas does the Control Plane expose? |
+| [A13. Model governance and execution](A13-models.md) | Which SQL/configuration contracts connect model policy, turn admission and local credentials? |
 
 Generated blocks remain tied to source code; they are references, not another
 handwritten API specification.

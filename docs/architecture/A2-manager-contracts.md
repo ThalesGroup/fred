@@ -227,6 +227,9 @@ semantics of skills. Configuration preparation is a separate availability concer
 
 ### Model storage
 
+The [model reference](A13-models.md) provides the generated SQL subgraph,
+configuration fields and the cross-runtime source map.
+
 Model storage has a separate platform admin in
 [`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and the `model_source` and `model_offer` tables of
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql).
@@ -393,7 +396,7 @@ its requested model choice to Agent Pod. It does not invent a `team_id` to estab
 authority. The pod obtains a fresh trusted binding from Control Plane; it does not
 reuse browser preparation as a grant. Control Plane's same `decide` function fixes
 the selected model, effective options and revisions. Python's `TurnAuthority` and
-[Rust execution library](../../apps/control-plane/agent/README.md) retain this
+[Rust execution library](../../libs/fred-rust-agent/README.md) retain this
 context through the turn. Both verify the binding, destination and authentication
 against local provisioning before resolving a credential. The
 [connection](../../apps/control-plane/README.md#inference-connection) separates protocol,
@@ -507,11 +510,13 @@ erDiagram
 "control_plane.document" }o--|| "control_plane.generation" : "published_generation, id"
 "control_plane.document" }o--|| "control_plane.session_metadata" : "session_id, space_id"
 "control_plane.document_upload" |o--o| "control_plane.document_upload" : "retry_of"
+"control_plane.document_upload" }o--|| "control_plane.session_metadata" : "session_id, space_id"
 "control_plane.document_processing" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_processing" |o--o| "control_plane.document_processing" : "retry_of"
 "control_plane.generation" }o--|| "control_plane.document_processing" : "processing_id, document_id"
 "control_plane.artifact" }o--|| "control_plane.generation" : "generation_id"
 "control_plane.agent_instance" }o--|| "control_plane.space" : "space_id"
+"control_plane.agent_instance" }o--o| "control_plane.capability_preparation" : "preparation_id"
 "control_plane.runtime_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
 "control_plane.runtime_template_capability" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
@@ -542,6 +547,11 @@ erDiagram
 "control_plane.space_capability_permission" }o--|| "control_plane.space_capability_policy" : "space_id, runtime_id"
 "control_plane.powerpoint_file" }o--o| "control_plane.space" : "live_space_id"
 "control_plane.powerpoint_file" }o--o| "control_plane.agent_instance" : "live_agent_id, live_space_id"
+"control_plane.capability_preparation" }o--|| "control_plane.powerpoint_file" : "file_id"
+"control_plane.organization_powerpoint_settings" }o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_powerpoint_settings" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
+"control_plane.organization_powerpoint_settings" }o--o| "control_plane.powerpoint_file" : "file_id"
+"control_plane.embedded_agent_conversation" |o--|| "control_plane.session_metadata" : "session_id"
 
 "control_plane.deletion" {
   uuid id
@@ -560,6 +570,8 @@ erDiagram
   bigint folders_deleted
   bigint spaces_deleted
   bigint documents_deleted
+  text session_user_id
+  uuid session_agent_instance_id
 }
 "control_plane.space" {
   uuid id
@@ -604,6 +616,7 @@ erDiagram
   timestamp_with_time_zone purged_at
   timestamp_with_time_zone purge_after
   uuid deletion_id FK
+  timestamp_with_time_zone original_cleaned_at
 }
 "control_plane.platform_bootstrap" {
   boolean singleton
@@ -645,9 +658,9 @@ erDiagram
   uuid request_key
   text actor
   uuid organization_id
-  uuid space_id
+  uuid space_id FK
   uuid folder_id
-  uuid session_id
+  uuid session_id FK
   uuid quota_owner
   text name
   text mime
@@ -666,6 +679,7 @@ erDiagram
   timestamp_with_time_zone cleanup_due_at
   integer cleanup_attempts
   timestamp_with_time_zone cleaned_at
+  boolean put_pending
 }
 "control_plane.document_processing" {
   uuid id
@@ -713,6 +727,9 @@ erDiagram
   integer cleanup_cursor
   timestamp_with_time_zone cleanup_after
   timestamp_with_time_zone cleaned_at
+  uuid_array write_ids
+  uuid_array pending_writes
+  uuid_array pending_workspaces
 }
 "control_plane.artifact" {
   uuid generation_id FK
@@ -736,6 +753,9 @@ erDiagram
   timestamp_with_time_zone updated_at
   bigint configuration_revision
   text logical_name
+  uuid preparation_id FK
+  text preparation_state
+  text preparation_error
 }
 "control_plane.users_preferences" {
   text user_id
@@ -995,6 +1015,43 @@ erDiagram
   integer cleanup_attempts
   timestamp_with_time_zone cleaned_at
   text error_code
+  text runtime_id
+  boolean upload_ready
+  boolean effective
+}
+"control_plane.capability_preparation" {
+  uuid id
+  uuid file_id FK
+  text runtime_id
+  text capability_id
+  uuid space_id
+  uuid agent_instance_id
+  bigint configuration_revision
+  jsonb config
+  text state
+  text reference
+  text error
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone deadline_at
+  text workflow_id
+  text task_queue
+  text run_id
+  timestamp_with_time_zone delivered_at
+  uuid dispatch_owner
+  timestamp_with_time_zone dispatch_until
+  timestamp_with_time_zone delivery_due_at
+  timestamp_with_time_zone cleaned_at
+}
+"control_plane.organization_powerpoint_settings" {
+  uuid organization_id FK
+  text runtime_id FK
+  text capability_id FK
+  uuid file_id FK
+  jsonb config
+}
+"control_plane.embedded_agent_conversation" {
+  uuid session_id FK
+  bytea log
 }
 ```
 <!-- end generated -->

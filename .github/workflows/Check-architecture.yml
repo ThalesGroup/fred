@@ -1,0 +1,47 @@
+name: Check Weaver model architecture
+
+on:
+  push:
+    branches: [weaver]
+  pull_request:
+    branches: [weaver]
+    paths:
+      - 'docs/architecture/**'
+      - 'apps/control-plane/**'
+      - 'apps/fred-agents/config/schema/**'
+      - 'apps/frontend/src/**'
+      - 'libs/fred-rust-sdk/**'
+      - 'libs/fred-rust-agent/**'
+      - 'libs/fred-sdk/**'
+      - 'libs/fred-runtime/**'
+      - 'deploy/postgres/**'
+      - 'deploy/charts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/makefiles/rust-*.mk'
+      - '.github/workflows/Check-architecture.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  model-reference:
+    runs-on: ubuntu-24.04
+    env:
+      PROTOC: /usr/bin/protoc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install protobuf compiler and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup override set 1.99.0
+      - name: Check references, links and rendered diagrams
+        run: make -C docs/architecture check-models
+      # Check Config JSON Schemas separately verifies Rust/Pydantic -> JSON schema.
+      # This job verifies JSON schema -> documentation, plus migrations -> ER.

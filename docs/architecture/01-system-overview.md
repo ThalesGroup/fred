@@ -24,7 +24,7 @@ flowchart TB
     class ui,cp,pod,kf fred
 ```
 
-Control Plane owns placement and access decisions. Agent Pods execute assistants;
+Control Plane owns placement, access decisions and model governance. Agent Pods execute assistants;
 Fred supplies `fred-agent`, and developers can provide other pods. Capability
 libraries belong to their pod. Knowledge Flow processes documents and serves
 knowledge through its API. Each backend also has background work: grouping it
@@ -95,3 +95,35 @@ Organization-level policy limits which models and pod offers may be used; local
 capability restrictions can narrow it. Roles in the working space determine what
 the person may do. [Security](03-security.md) explains these two controls;
 [journey 2.3](02.3-agent-administration.md) shows how people use them.
+
+## 1.4. Model decisions and credentials
+
+Control Plane selects the model at admission of each turn, using the working
+space's organization policy, the assistant's recommendation and the user's choice.
+Team and project execution do not introduce separate model policies.
+
+```mermaid
+flowchart TB
+    owner["Organization Owner"] -->|"Permitted models and defaults"| cp
+    platform["Platform configuration"] -->|"Approved sources"| cp
+    cp["Control Plane<br/>Select model and connection"]
+    cp --> python["Python agent<br/>Separate Agent Pod"]
+    cp --> rust["Ralph - Rust agent<br/>Inside Control Plane"]
+    secrets["Kubernetes Secrets<br/>Local credentials"] -.-> python
+    secrets -.-> rust
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class cp,python,rust fred
+    class secrets cots
+    class owner,platform neutral
+```
+
+Both runtimes consume the admitted decision and verify it against their local
+credential binding before calling the provider. The decision carries a credential
+reference, never its value. Browser preparation exposes neither that connection
+nor a secret. Startup supplies credentials; it does not fix one model for the
+pod's lifetime. The [model reference](A13-models.md) connects this boundary to the
+SQL schema, configuration types and runtime contracts, including Ralph's narrower
+transport support.

@@ -251,9 +251,11 @@ Temporal SDK against a protocol fixture, including exact workflow inputs,
 conflict/error responses and deletion interleavings. They verify submission,
 not execution by a worker or production throughput.
 
-## Invariants and their proofs
+## Invariants and their referenced checks
 
-Generated from the `// Proves:` markers.
+Generated from the `// Proves:` markers. This is a traceability index: generation
+checks that references exist, not that the tests pass. Execution results and
+deployed validation belong to the corresponding CI run and validation PR.
 
 <!-- generated: invariants -->
 | Invariant | Proved by |

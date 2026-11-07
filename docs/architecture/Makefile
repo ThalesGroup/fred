@@ -9,6 +9,11 @@ ROOT            := $(realpath ../..)
 
 # One entity-relationship diagram per component, from its migrations.
 ER_COMPONENTS   ?= control-plane
+ER_MODE         ?= write
+MODEL_REFERENCE := docs/architecture/A13-models.md
+MODEL_CONTRACTS := $(MODEL_REFERENCE) docs/architecture/A12-control-plane-api.md docs/architecture/A2-manager-contracts.md
+MODEL_PAGES     := docs/architecture/01-system-overview.md docs/architecture/02.3-agent-administration.md docs/architecture/08-operations.md $(MODEL_REFERENCE)
+RENDER_PAGES    ?= $(wildcard *.md)
 
 .DEFAULT_GOAL := help
 
@@ -18,19 +23,29 @@ ER_COMPONENTS   ?= control-plane
 er: ## Regenerate generated/<component>.er.mmd from each component's migrations
 	@set -e; for c in $(ER_COMPONENTS); do \
 		pg=docs-er-$$c-$$$$; \
-		trap 'docker rm -f $$pg >/dev/null 2>&1 || true' EXIT; \
+		tmp=$$(mktemp); \
+		trap 'docker rm -f $$pg >/dev/null 2>&1 || true; rm -f "$$tmp"' EXIT; \
 		docker run -d --name $$pg -e POSTGRES_PASSWORD=docs -p 127.0.0.1::5432 $(POSTGRES_IMAGE) >/dev/null; \
-		until docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1; do sleep 1; done; \
-		docker exec -i $$pg psql -U postgres -q -v database=postgres < $(ROOT)/deploy/postgres/bootstrap.sql; \
+		attempt=0; until docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1; do \
+			attempt=$$((attempt + 1)); test $$attempt -lt 60 || { echo "Postgres did not start" >&2; exit 1; }; sleep 1; \
+		done; \
+		docker exec -i $$pg psql -U postgres -q -v ON_ERROR_STOP=1 -v database=postgres < $(ROOT)/deploy/postgres/bootstrap.sql; \
 		for migration in $(ROOT)/apps/$$c/migrations/*.sql; do \
 			docker exec -i -e PGOPTIONS="-c search_path=control_plane -c role=fred_cp" $$pg psql -U postgres -q -1 -v ON_ERROR_STOP=1 < "$$migration"; \
 		done; \
 		addr=$$(docker port $$pg 5432/tcp | head -n1); \
 		docker run --rm --network host $(TBLS_IMAGE) out -t mermaid \
-			"postgres://postgres:docs@$$addr/postgres?sslmode=disable" > generated/$$c.er.mmd; \
-		$(PYTHON) tools/docs.py tidy-er docs/architecture/generated/$$c.er.mmd; \
-		docker rm -f $$pg >/dev/null; echo "generated/$$c.er.mmd"; \
+			"postgres://postgres:docs@$$addr/postgres?sslmode=disable" > "$$tmp"; \
+		$(PYTHON) tools/docs.py tidy-er "$$tmp"; \
+		if [ "$(ER_MODE)" = check ]; then \
+			cmp "$$tmp" generated/$$c.er.mmd || { echo "Stale SQL diagram: run make er" >&2; exit 1; }; \
+		else cp "$$tmp" generated/$$c.er.mmd; fi; \
+		docker rm -f $$pg >/dev/null; rm -f "$$tmp"; echo "generated/$$c.er.mmd ($(ER_MODE))"; \
 	done
+
+.PHONY: check-er
+check-er: ## Compare migrations with the committed SQL diagram without rewriting it
+	$(MAKE) --no-print-directory er ER_MODE=check
 
 .PHONY: openapi
 openapi: ## Regenerate apps/control-plane/openapi.json (unversioned) from the control-plane router
@@ -39,6 +54,10 @@ openapi: ## Regenerate apps/control-plane/openapi.json (unversioned) from the co
 .PHONY: generate
 generate: er openapi ## Rewrite every generated block from its sources
 	$(PYTHON) tools/docs.py generate
+
+.PHONY: generate-models
+generate-models: er openapi ## Regenerate the SQL, API and model references
+	$(PYTHON) tools/docs.py generate $(MODEL_CONTRACTS)
 
 # Code-derived reference only: this does not validate a journey for the dossier.
 KF_REFERENCE := apps/knowledge-flow-backend/docs/API_REFERENCE.md
@@ -54,9 +73,19 @@ check-knowledge-flow-reference: knowledge-flow-openapi ## Check KF reference fre
 	$(PYTHON) tools/docs.py check $(KF_REFERENCE)
 
 .PHONY: check
-check: er openapi ## Fail if a generated block is stale, an invariant lacks a test, or a diagram does not render
+check: check-er openapi ## Check generated blocks, invariant references and diagram rendering
 	$(PYTHON) tools/docs.py check
-	@set -e; out=$$(mktemp -d); trap 'rm -rf $$out' EXIT; cp *.md $$out/; \
+	$(MAKE) --no-print-directory render
+
+.PHONY: check-models render
+check-models: check-er openapi ## Check the LLM reference and its reading path (no provider calls)
+	$(PYTHON) -m unittest discover -s tools -p 'test_*.py'
+	$(PYTHON) tools/docs.py check $(MODEL_CONTRACTS)
+	$(PYTHON) tools/docs.py links $(MODEL_PAGES) docs/architecture/README.md docs/architecture/A2-manager-contracts.md
+	$(MAKE) --no-print-directory render RENDER_PAGES="$(notdir $(MODEL_PAGES))"
+
+render: ## Render selected Markdown diagrams in disposable output
+	@set -e; out=$$(mktemp -d); trap 'rm -rf $$out' EXIT; cp $(RENDER_PAGES) $$out/; \
 	for f in $$out/*.md; do \
 		grep -q '```mermaid' $$f || continue; \
 		docker run --rm -u $$(id -u):$$(id -g) -v $$out:/data $(MERMAID_IMAGE) \
