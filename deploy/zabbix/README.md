@@ -19,21 +19,19 @@ high-cardinality exporters.
 Zabbix 7.0 also limits one master item to 29,999 dependent items, so an
 exporter above that size needs a narrower metric filter or separate endpoints.
 
-Use a distinct host for each endpoint. The `fred` chart sets the metrics port of
-fred-agents to 9000, of the Knowledge Flow API to 9111 and of the Knowledge Flow
-worker to 9112. An agent pod serves KPI metrics on port 9000 by default. A
-Knowledge Base pod serves KPI metrics on port 9000 and Temporal metrics on port
-9001 by default. The Control Plane does not expose `/metrics`. These exporters
-listen on `127.0.0.1` by default, so Zabbix reaches one only after the deployment
-sets `observability.kpi.prometheus.address`, or
-`observability.temporal.prometheus.address` for Temporal, to an outward address
-such as `0.0.0.0`. The `agent-pod` and `knowledge-base` charts also require
-`enabled: true` on that block. Configure the URL to the relevant pod or metrics
-Service. The `knowledge-base` chart creates a metrics Service. The Service
-template of the `fred` chart requires `configuration.app.metrics_enabled`, which
-its values schema does not accept, so use the pod addresses there. Avoid a
-load-balanced Service across replicas if per-process counters and histograms need
-stable series. Each replica should have its own Zabbix host. The
+Use a distinct host for each endpoint. The `fred` chart creates one metrics
+Service per application with `metricsService.enabled` and sets the listening
+address of that application's exporter itself: fred-agents on port 9000, the
+Knowledge Flow API on 9111 and the Knowledge Flow worker on 9112. The Control
+Plane does not expose `/metrics`. An agent pod serves KPI metrics on port 9000 by
+default. A Knowledge Base pod serves KPI metrics on port 9000 and Temporal metrics
+on port 9001 by default. These two exporters listen on `127.0.0.1` by default, so
+the `agent-pod` and `knowledge-base` charts require `enabled: true` and an outward
+address such as `0.0.0.0` under `observability.kpi.prometheus`, or
+`observability.temporal.prometheus` for Temporal. Configure the URL to the
+relevant pod or metrics Service. The `knowledge-base` chart also creates a metrics
+Service. Avoid a load-balanced Service across replicas if per-process counters and
+histograms need stable series. Each replica should have its own Zabbix host. The
 `process_resident_memory_bytes` example below comes from `prometheus_client`, so
 look for it on a Python KPI endpoint, not on the Temporal one.
 
