@@ -84,6 +84,13 @@ def _is_formula(value: Any) -> bool:
     return isinstance(value, dict) and "formula" in value
 
 
+def _cell_value(column: dict[str, Any], value: Any) -> Any:
+    """null empties the cell; in a formula column that is an explicit `=""`
+    override, otherwise the column formula would fill it again."""
+
+    return {"formula": '=""'} if value is None and column.get("formula") else value
+
+
 class ChangeError(ValueError):
     """One or more changes cannot apply; the message lists each with its fix."""
 
@@ -477,14 +484,17 @@ def _resolve(
                 'fills; give {"formula": "=..."} to override this one cell'
             )
         _claim(sheet, [row], "edited")
-        sheet.edits.setdefault(row, {})[column] = change["value"]
+        sheet.edits.setdefault(row, {})[column] = _cell_value(base, value)
         return
     if op == "edit_rows":
         rows = _rows(sheet, change)
         values = change.get("values")
         if not isinstance(values, dict) or not values:
             raise ChangeError("give `values`, an object {header: new value}")
-        columns = {_column(sheet, h): v for h, v in values.items()}
+        columns = {
+            index: _cell_value(sheet.base_columns[index], v)
+            for index, v in ((_column(sheet, h), v) for h, v in values.items())
+        }
         _claim(sheet, rows, "edited")
         for row in rows:
             sheet.edits.setdefault(row, {}).update(columns)

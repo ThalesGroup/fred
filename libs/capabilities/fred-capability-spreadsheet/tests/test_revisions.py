@@ -576,6 +576,30 @@ def test_edit_cell_with_a_value_in_a_formula_column_is_refused():
     assert '{"formula": "=..."}' in message
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"op": "edit_cell", "sheet": "Notes", "cell": "C4", "value": None},
+        {"op": "edit_rows", "sheet": "Notes", "rows": [4], "values": {"TTC": None}},
+    ],
+)
+def test_null_empties_a_formula_column_cell(change: dict[str, Any]):
+    spec = _apply(change, base=COMPUTED)
+    ws = load_workbook(
+        io.BytesIO(
+            build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
+        ),
+        data_only=True,
+    )["Notes"]
+    assert ws["C4"].value in (None, "")
+    assert ws["C3"].value == pytest.approx(24)
+    # The blank survives as the base of the next revision.
+    again = _apply(
+        {"op": "edit_cell", "sheet": "Notes", "cell": "B2", "value": 5}, base=spec
+    )
+    assert _cell_formula(again, "Notes", 2, 2) == '=""'
+
+
 def test_a_row_wise_column_formula_stays_relative_after_a_revision():
     base = json.loads(json.dumps(COMPUTED))
     base["sheets"][0]["columns"][2]["formula"] = "=SUM(B2:B2)*1.2"
