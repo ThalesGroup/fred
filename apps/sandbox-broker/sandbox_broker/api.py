@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fred_sdk.contracts.sandbox import SandboxError, SandboxRequest, SandboxResult
 from pydantic import ValidationError
 
@@ -25,6 +25,7 @@ from .kubernetes_backend import KubernetesBackend
 from .pool import OnDemandCapacity
 from .sessions import ConversationPool
 from .settings_sync import SettingsSync
+from .shared_sessions import SharedConversationPool
 
 logger = logging.getLogger(__name__)
 _MAX_REQUEST_BYTES = 20_000
@@ -44,16 +45,28 @@ def create_app(
             selected_backend = AgentSandboxBackend(config, SubprocessRunner())
         else:
             selected_backend = KubernetesBackend(config, SubprocessRunner())
-        pool = OnDemandCapacity(selected_backend, config)
-        await pool.start()
-        sessions = ConversationPool(
-            pool,
-            idle_seconds=config.idle_timeout_seconds,
-            max_sessions=config.max_sandboxes,
+        pool = None
+        if config.coordinator_dsn:
+            if not isinstance(selected_backend, AgentSandboxBackend):
+                raise ValueError("Shared coordination requires Agent Sandbox")
+            sessions = SharedConversationPool(selected_backend, config)
+            await sessions.start()
+        else:
+            pool = OnDemandCapacity(selected_backend, config)
+            await pool.start()
+            sessions = ConversationPool(
+                pool,
+                idle_seconds=config.idle_timeout_seconds,
+                max_sessions=config.max_sandboxes,
+            )
+            sessions.start()
+        sync = (
+            SettingsSync(config, sessions)
+            if isinstance(sessions, ConversationPool)
+            else None
         )
-        sessions.start()
-        sync = SettingsSync(config, sessions)
-        sync.start()
+        if sync is not None:
+            sync.start()
         app.state.settings = config
         app.state.pool = pool
         app.state.sessions = sessions
@@ -61,20 +74,40 @@ def create_app(
         try:
             yield
         finally:
-            await sync.close()
+            if sync is not None:
+                await sync.close()
             await sessions.close()
-            await pool.close()
+            if pool is not None:
+                await pool.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
-    @app.get("/healthz")
-    async def health() -> dict[str, int]:
+    @app.get("/healthz", response_model=None)
+    async def health() -> dict[str, int] | JSONResponse:
+        if app.state.settings.coordinator_dsn:
+            try:
+                stats = await app.state.sessions.statistics()
+            except Exception:
+                return _error(503, "unavailable")
+            return stats
         return {
-            "allocated": app.state.pool.allocated_count,
+            "allocated": app.state.pool.allocated_count if app.state.pool else 0,
             "limit": app.state.settings.max_sandboxes,
             "active_conversations": app.state.sessions.active_count,
             "idle_timeout_seconds": app.state.sessions.idle_seconds,
         }
+
+    @app.get("/metrics")
+    async def metrics() -> PlainTextResponse:
+        if not app.state.settings.coordinator_dsn:
+            return PlainTextResponse("", media_type="text/plain")
+        try:
+            return PlainTextResponse(
+                await app.state.sessions.prometheus(),
+                media_type="text/plain; version=0.0.4",
+            )
+        except Exception:
+            return PlainTextResponse("", status_code=503)
 
     @app.post("/v1/view-key")
     async def view_key(request: Request) -> JSONResponse:
@@ -88,9 +121,18 @@ def create_app(
         session_key = request.headers.get("X-Fred-Sandbox-Session", "")
         if not re.fullmatch(r"[a-f0-9]{64}", session_key):
             return _error(400, "invalid_request")
+        tenant_key = request.headers.get("X-Fred-Sandbox-Tenant", "")
+        if config.coordinator_dsn and not re.fullmatch(r"[a-f0-9]{64}", tenant_key):
+            return _error(400, "invalid_request")
         try:
             return JSONResponse(
-                {"view_key": await app.state.sessions.view_key(session_key)}
+                {
+                    "view_key": await (
+                        app.state.sessions.view_key(session_key, tenant_key)
+                        if config.coordinator_dsn
+                        else app.state.sessions.view_key(session_key)
+                    )
+                }
             )
         except SandboxError as exc:
             return _error(429 if exc.code == "busy" else 503, exc.code)
@@ -111,11 +153,20 @@ def create_app(
         except ValidationError:
             return _error(400, "invalid_request")
         session_key = request.headers.get("X-Fred-Sandbox-Session")
+        if config.coordinator_dsn and session_key is None:
+            return _error(400, "invalid_request")
         if session_key is not None:
             if not re.fullmatch(r"[a-f0-9]{64}", session_key):
                 return _error(400, "invalid_request")
+            tenant_key = request.headers.get("X-Fred-Sandbox-Tenant", "")
+            if config.coordinator_dsn and not re.fullmatch(r"[a-f0-9]{64}", tenant_key):
+                return _error(400, "invalid_request")
             try:
-                result = await app.state.sessions.execute(session_key, execution)
+                result = await (
+                    app.state.sessions.execute(session_key, tenant_key, execution)
+                    if config.coordinator_dsn
+                    else app.state.sessions.execute(session_key, execution)
+                )
                 return JSONResponse(result.model_dump())
             except SandboxError as exc:
                 return _error(429 if exc.code == "busy" else 503, exc.code)

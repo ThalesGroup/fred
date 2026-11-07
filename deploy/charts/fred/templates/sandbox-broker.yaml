@@ -8,6 +8,15 @@
 {{- if and (eq $broker.backend "kubernetes") (gt (int $broker.maxSandboxes) (int $broker.quota.jobs)) }}{{ fail "sandboxBroker.maxSandboxes exceeds guest Job quota" }}{{ end }}
 {{- if and (eq $broker.mountProvider "rclone_csi") (or (gt (add (int $broker.maxSandboxes) (ternary 1 0 (ne $broker.skillsVolume ""))) (int $broker.quota.persistentVolumeClaims)) (gt (int $broker.maxSandboxes) (int $broker.quota.secrets))) }}{{ fail "sandboxBroker.maxSandboxes exceeds guest file mount quota" }}{{ end }}
 {{- if and (eq $broker.backend "agent_sandbox") (not $broker.agentPoolName) }}{{ fail "sandboxBroker.agentPoolName is required for agent_sandbox" }}{{ end }}
+{{- if and (gt (int $broker.replicas) 1) (not $broker.shared.enabled) }}{{ fail "Multiple sandbox broker replicas require shared coordination" }}{{ end }}
+{{- if $broker.shared.enabled }}
+  {{- if ne $broker.backend "agent_sandbox" }}{{ fail "Shared sandbox mode requires agent_sandbox" }}{{ end }}
+  {{- if not (and $broker.shared.coordinatorDsnSecret $broker.shared.workspaceStorageClass) }}{{ fail "Shared sandbox mode requires a coordinator DSN Secret and workspace StorageClass" }}{{ end }}
+  {{- if gt (int $broker.shared.maxPreparations) (int $broker.maxSandboxes) }}{{ fail "Preparation ceiling exceeds active sandbox capacity" }}{{ end }}
+  {{- $claims := add (int $broker.shared.maxRetainedSessions) (ternary (int $broker.shared.maxRetainedSessions) 0 (eq $broker.mountProvider "rclone_csi")) (ternary 1 0 (ne $broker.skillsVolume "")) }}
+  {{- if gt $claims (int $broker.quota.persistentVolumeClaims) }}{{ fail "Retained sandbox workspaces exceed PVC quota" }}{{ end }}
+  {{- if and (eq $broker.mountProvider "rclone_csi") (gt (int $broker.shared.maxRetainedSessions) (int $broker.quota.secrets)) }}{{ fail "Retained sandbox views exceed Secret quota" }}{{ end }}
+{{- end }}
 {{- if eq $broker.mountProvider "rclone_csi" }}
   {{- if not (and $broker.fileGatewayUrl $broker.fileGatewayRevokeUrl $broker.fileGatewaySecret $broker.fileStorageClass) }}{{ fail "sandboxBroker rclone_csi requires gateway URLs, Secret and StorageClass" }}{{ end }}
 {{- end }}
@@ -38,6 +47,9 @@ spec:
     count/jobs.batch: {{ $broker.quota.jobs | quote }}
     persistentvolumeclaims: {{ $broker.quota.persistentVolumeClaims | quote }}
     count/secrets: {{ $broker.quota.secrets | quote }}
+    {{- if and $broker.shared.enabled (eq $broker.backend "agent_sandbox") }}
+    count/sandboxclaims.extensions.agents.x-k8s.io: {{ $broker.shared.maxRetainedSessions | quote }}
+    {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -119,7 +131,7 @@ rules:
     verbs: [patch]
   - apiGroups: [agents.x-k8s.io]
     resources: [sandboxes]
-    verbs: [get]
+    verbs: [get{{ if $broker.shared.enabled }}, patch{{ end }}]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -184,6 +196,31 @@ roleRef:
   name: fred-sandbox-broker-files-read
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
+{{- if $broker.shared.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fred-sandbox-broker-workspace-read
+rules:
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    resourceNames: [{{ $broker.shared.workspaceStorageClass }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fred-sandbox-broker-workspace-read
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: fred-sandbox-broker-workspace-read
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -191,9 +228,9 @@ metadata:
   name: fred-sandbox-broker
   namespace: {{ $broker.namespace }}
 spec:
-  replicas: 1
+  replicas: {{ $broker.replicas }}
   strategy:
-    type: Recreate
+    type: {{ if $broker.shared.enabled }}RollingUpdate{{ else }}Recreate{{ end }}
   selector:
     matchLabels:
       app: fred-sandbox-broker
@@ -241,6 +278,29 @@ spec:
               value: {{ $broker.agentPoolName | quote }}
             - name: SANDBOX_MAX_SANDBOXES
               value: {{ $broker.maxSandboxes | quote }}
+            {{- if $broker.shared.enabled }}
+            - name: SANDBOX_COORDINATOR_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.shared.coordinatorDsnSecret }}
+                  key: dsn
+            - name: SANDBOX_WORKSPACE_STORAGE_CLASS
+              value: {{ $broker.shared.workspaceStorageClass | quote }}
+            - name: SANDBOX_WORKSPACE_SIZE
+              value: {{ $broker.shared.workspaceSize | quote }}
+            - name: SANDBOX_ACTIVE_IDLE_SECONDS
+              value: {{ $broker.shared.activeIdleSeconds | quote }}
+            - name: SANDBOX_MAX_RETAINED
+              value: {{ $broker.shared.maxRetainedSessions | quote }}
+            - name: SANDBOX_MAX_PREPARATIONS
+              value: {{ $broker.shared.maxPreparations | quote }}
+            - name: SANDBOX_MAX_QUEUE
+              value: {{ $broker.shared.maxQueueLength | quote }}
+            - name: SANDBOX_MAX_QUEUE_PER_TENANT
+              value: {{ $broker.shared.maxQueuePerTenant | quote }}
+            - name: SANDBOX_QUEUE_WAIT_SECONDS
+              value: {{ $broker.shared.queueWaitSeconds | quote }}
+            {{- end }}
             - name: SANDBOX_WARM_POOL_SIZE
               value: "0"
             - name: SANDBOX_COLD_START_ON_MISS

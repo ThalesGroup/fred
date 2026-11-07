@@ -57,15 +57,29 @@ class AgentSandboxBackend:
             "networkPolicyManagement"
         ) != "Unmanaged" or not self.kubernetes.is_safe_pod_spec(pod, sig_claim=True):
             raise SandboxError("policy_unavailable")
-        if self.kubernetes.mount is not None:
+        if self.kubernetes.mount is not None or self.settings.coordinator_dsn:
             if spec.get("volumeClaimTemplatesPolicy") != "Allowed" or spec.get(
                 "volumeClaimTemplates"
             ):
                 raise SandboxError("policy_unavailable")
+        if self.settings.workspace_storage_class:
+            await self.kubernetes._get_json(
+                [
+                    "kubectl",
+                    "get",
+                    "storageclass",
+                    self.settings.workspace_storage_class,
+                    "-o",
+                    "json",
+                ],
+                "policy_unavailable",
+            )
 
-    async def prepare(self, view_key: str | None = None) -> SandboxLease:
+    async def prepare(
+        self, view_key: str | None = None, *, name: str | None = None
+    ) -> SandboxLease:
         await self.preflight()
-        name = f"fred-sbx-{uuid4().hex[:20]}"
+        name = name or f"fred-sbx-{uuid4().hex[:20]}"
         mount = self.kubernetes.mount
         mounted_key = view_key_for_mount(view_key) if mount else None
         lease = SandboxLease(id=name, target=name, view_key=mounted_key)
@@ -90,8 +104,24 @@ class AgentSandboxBackend:
                 },
             },
         }
+        templates = []
         if mount is not None:
-            manifest["spec"]["volumeClaimTemplates"] = [mount.claim_template()]
+            templates.append(mount.claim_template())
+        if self.settings.workspace_storage_class:
+            templates.append(
+                {
+                    "metadata": {"name": "workspace"},
+                    "spec": {
+                        "accessModes": ["ReadWriteOnce"],
+                        "storageClassName": self.settings.workspace_storage_class,
+                        "resources": {
+                            "requests": {"storage": self.settings.workspace_size}
+                        },
+                    },
+                }
+            )
+        if templates:
+            manifest["spec"]["volumeClaimTemplates"] = templates
         try:
             if mount is not None and mounted_key is not None:
                 await mount.create_secret(name, mounted_key)
@@ -116,41 +146,121 @@ class AgentSandboxBackend:
             )
             if result.returncode != 0:
                 raise SandboxError("backend_failed")
-            claim = await self._get("sandboxclaim", name)
-            pod_name = claim.get("status", {}).get("sandbox", {}).get("name")
-            if not isinstance(pod_name, str) or not pod_name:
-                raise SandboxError("backend_failed")
-            sandbox = await self._get("sandbox", pod_name)
-            sandbox_uid = sandbox.get("metadata", {}).get("uid")
-            claim_uid = claim.get("metadata", {}).get("uid")
-            pod = await self._get("pod", pod_name)
-            if (
-                not isinstance(sandbox_uid, str)
-                or not isinstance(claim_uid, str)
-                or not has_controller_owner(
-                    sandbox.get("metadata", {}),
-                    kind="SandboxClaim",
-                    name=name,
-                    uid=claim_uid,
-                )
-                or not has_controller_owner(
-                    pod.get("metadata", {}),
-                    kind="Sandbox",
-                    name=pod_name,
-                    uid=sandbox_uid,
-                )
-                or not self.kubernetes.is_safe_pod_spec(
-                    pod.get("spec"), workload_name=name, sig_claim=True
-                )
-            ):
-                raise SandboxError("policy_unavailable")
-            return SandboxLease(id=name, target=pod_name, view_key=mounted_key)
+            return await self.attach(name, mounted_key)
         except BaseException:
             try:
                 await self.dispose(lease)
             except Exception as exc:
                 raise SandboxPrepareLeak(lease) from exc
             raise
+
+    async def attach(self, name: str, view_key: str | None) -> SandboxLease:
+        claim = await self._get("sandboxclaim", name)
+        pod_name = claim.get("status", {}).get("sandbox", {}).get("name")
+        # Mount Secret names are fixed before the claim is ready.
+        if not isinstance(pod_name, str) or pod_name != name:
+            raise SandboxError("backend_failed")
+        sandbox = await self._get("sandbox", pod_name)
+        sandbox_uid = sandbox.get("metadata", {}).get("uid")
+        claim_uid = claim.get("metadata", {}).get("uid")
+        pod = await self._get("pod", pod_name)
+        if (
+            not isinstance(sandbox_uid, str)
+            or not isinstance(claim_uid, str)
+            or not has_controller_owner(
+                sandbox.get("metadata", {}),
+                kind="SandboxClaim",
+                name=name,
+                uid=claim_uid,
+            )
+            or not has_controller_owner(
+                pod.get("metadata", {}),
+                kind="Sandbox",
+                name=pod_name,
+                uid=sandbox_uid,
+            )
+            or not self.kubernetes.is_safe_pod_spec(
+                pod.get("spec"), workload_name=pod_name, sig_claim=True
+            )
+        ):
+            raise SandboxError("policy_unavailable")
+        if self.settings.workspace_storage_class:
+            expected = {
+                "accessModes": ["ReadWriteOnce"],
+                "storageClassName": self.settings.workspace_storage_class,
+                "resources": {"requests": {"storage": self.settings.workspace_size}},
+            }
+            templates = claim.get("spec", {}).get("volumeClaimTemplates", [])
+            workspace = next(
+                (
+                    item
+                    for item in templates
+                    if item.get("metadata", {}).get("name") == "workspace"
+                ),
+                None,
+            )
+            if not isinstance(workspace, dict) or workspace.get("spec") != expected:
+                raise SandboxError("policy_unavailable")
+            pvc = await self._get("pvc", f"workspace-{pod_name}")
+            if (
+                pvc.get("status", {}).get("phase") != "Bound"
+                or pvc.get("spec", {}).get("storageClassName")
+                != self.settings.workspace_storage_class
+                or not has_controller_owner(
+                    pvc.get("metadata", {}),
+                    kind="Sandbox",
+                    name=pod_name,
+                    uid=sandbox_uid,
+                )
+            ):
+                raise SandboxError("policy_unavailable")
+        return SandboxLease(id=name, target=pod_name, view_key=view_key)
+
+    async def suspend(self, name: str) -> None:
+        claim = await self._get("sandboxclaim", name)
+        sandbox_name = claim.get("status", {}).get("sandbox", {}).get("name")
+        if not isinstance(sandbox_name, str) or not sandbox_name:
+            raise SandboxError("backend_failed")
+        await self._set_mode(sandbox_name, "Suspended")
+        await self._wait_sandbox(sandbox_name, "Suspended")
+
+    async def resume(self, name: str, view_key: str | None) -> SandboxLease:
+        claim = await self._get("sandboxclaim", name)
+        sandbox_name = claim.get("status", {}).get("sandbox", {}).get("name")
+        if not isinstance(sandbox_name, str) or not sandbox_name:
+            raise SandboxError("backend_failed")
+        await self._set_mode(sandbox_name, "Running")
+        await self._wait_sandbox(sandbox_name, "Ready")
+        return await self.attach(name, view_key)
+
+    async def _set_mode(self, name: str, mode: str) -> None:
+        result = await self.runner.run(
+            self.kubernetes._kubectl(
+                "patch",
+                "sandbox",
+                name,
+                "--type=merge",
+                "-p",
+                json.dumps({"spec": {"operatingMode": mode}}),
+            ),
+            timeout=15,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
+
+    async def _wait_sandbox(self, name: str, condition: str) -> None:
+        result = await self.runner.run(
+            self.kubernetes._kubectl(
+                "wait",
+                "sandbox",
+                name,
+                f"--for=condition={condition}",
+                f"--timeout={self.settings.preparation_timeout_seconds}s",
+            ),
+            timeout=self.settings.preparation_timeout_seconds + 5,
+        )
+        if result.returncode != 0:
+            raise SandboxError("backend_failed")
 
     async def execute(
         self, lease: SandboxLease, request: SandboxRequest
