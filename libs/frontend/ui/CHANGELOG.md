@@ -3,7 +3,7 @@
 ## 0.1.1-alpha.0
 
 Review: approved
-Changes: Prepare the developer-requested patch increment across all Fred libraries, retaining the alpha publication channel. Package behavior is unchanged from the preceding candidate. This version is prepared in source only; publication remains a separate release action.
+Changes: Prepare the developer-requested patch increment across all Fred libraries, retaining the alpha publication channel. Package behavior is unchanged from the preceding candidate, except that Chip accepts an optional `appearance` (`"outlined"` by default, `"tonal"` for a chip on a secondary-container surface) and never grows wider than its container. This version is prepared in source only; publication remains a separate release action.
 
 ## 0.1.0-alpha.4
 
