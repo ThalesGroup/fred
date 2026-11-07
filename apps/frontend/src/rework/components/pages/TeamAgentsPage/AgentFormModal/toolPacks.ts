@@ -63,11 +63,11 @@ export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_PPT_BUILDER = "ppt_builder";
-
-/** Capabilities shown with a Beta badge; hard-coded until they declare their own maturity. */
-export const BETA_CAPABILITY_IDS: ReadonlySet<string> = new Set([CAP_PPT_BUILDER]);
 export const CAP_HTML_ARTIFACT = "html_artifact";
 export const CAP_SPREADSHEET = "spreadsheet";
+/** Capabilities shown with a Beta badge; hard-coded until they declare their own maturity. */
+export const BETA_CAPABILITY_IDS: ReadonlySet<string> = new Set([CAP_PPT_BUILDER, CAP_SPREADSHEET]);
+
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
