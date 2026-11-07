@@ -1,7 +1,7 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `a2ebfe48cf854dfe7088523e9c296c267941c628`** (merge `4830c58bc`,
-étape 2 de la tranche en cours, section 14). Cette borne sert à inventorier les
+**Borne Swift intégrée : `303b7456e9709880a9fd6503d0d29a12e34f9793`** (merge `e9d18c16b`,
+étape 3 de la tranche en cours, section 14). Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à
 `3d18384205a469f691bbf3ca3cb697911bc6b257` : le merge Swift `394a9150f` part de Weaver
 `e017f869ea5d5668a47d04da3c2de572e97af8b7` et reprend quatre nouveaux commits ; voir la
@@ -1487,7 +1487,7 @@ arrivés ensuite, restent hors de cette tranche.
 | --- | --- | --- |
 | 1 | `b00551906` (#3460) tabulaire | Mergée en `d294b0e4e`, poussée sur `weaver`, non reçue |
 | 2 | `a2ebfe48c` (#3476) Azure APIM | Mergée en `4830c58bc` sans changement de fichier, poussée sur `weaver`, non reçue |
-| 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Non commencée |
+| 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Mergée en `f06d57650` et `e9d18c16b`, non reçue |
 | 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
 
 ### Etape 1 : décisions
@@ -1546,3 +1546,38 @@ arrivés ensuite, restent hors de cette tranche.
 - Le merge `4830c58bc` a pour parents `03e6f0d14` et `a2ebfe48c`, et son arbre est identique à celui de
   `03e6f0d14`. Il n'enregistre que l'ascendance. Aucune compilation ni aucun test n'a été lancé pour ce merge.
 - **Non prouvé :** rien n'a été testé sur une vraie passerelle APIM ou un vrai tenant Entra.
+
+### Etape 3 : décisions
+
+- **Repris de `d9eb3738f` :** test React déplacé en suite d'intégration, étape CI et README. Les règles Makefile de
+  Weaver qui préparaient les caches avant `make test` sont retirées, car elles répondaient au même besoin.
+- **Repris de `303b7456e` :** consignes de référence exacte pour `read_document`, `summarize_document` et
+  `search_documents`, et retrait du NUL à l'écriture des documents modifiables.
+- **Adapté à Weaver :** `uid` reste le champ des résultats de recherche. `document_uid` reste seulement l'argument des outils.
+  L'historique note le NUL `[U+0000]`, sans la métadonnée `history_text_normalization`, qu'aucun code ne lit.
+- **Exclu volontairement :** le renommage `hits[].uid`, qui retirerait au panneau de traces le lien vers le document ;
+  `docs/swift` et `openspec`.
+
+### Etape 3 : preuves locales rapportées, sans déploiement
+
+- Frontend : `make test` sans caches, 398 réussis et 1 ignoré (archive iframe, cache absent). Intégration : 1 réussi.
+- `fred-core` historique : 40. Accès aux documents : 81. Documents : 66. Document modifiable : 96. Runtime `-k history` : 120.
+- PostgreSQL 16 jetable : 3 réussis, 0 ignoré. `make code-quality` conforme sur les composants touchés.
+  `make migration-check` : 34 déclarations.
+- **Non prouvé :** aucun parcours déployé ni vrai modèle ; un NUL dans une édition navigateur ou une clé JSON ; le
+  checkpoint LangGraph (`metadata_json` en JSONB) n'a pas été tracé.
+- **Limite :** `weaver` n'a pas de CI, donc l'intégration React et l'installation iframe ne tournent que sur lancement manuel.
+
+### Etape 3 : à recevoir sur déploiement
+
+- Une recherche suivie d'un résumé trouve le bon document du premier coup.
+- Dans les traces, une source de recherche garde son lien « ouvrir le document ».
+- Un Markdown contenant un NUL s'ouvre comme document modifiable, le retrait est annoncé, et la conversation reste correcte
+  après rechargement.
+
+### Suite du rattrapage : besoins confirmés le 7 novembre
+
+Les tests sont regroupés en une campagne complète jusqu'à k3d, une fois le rattrapage terminé. Le développeur confirme :
+le modèle Zabbix (demande client, compatibilité Weaver exigée), les SBOM d'images (`9cdd1ac99`), le wiki d'équipe
+(`bef0098f4`) et, en priorité, l'affichage des pièces jointes (`ad5a1d2d3`). Leur forme dans Weaver reste à décider
+commit par commit.
