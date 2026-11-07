@@ -1,0 +1,346 @@
+{{- $broker := .Values.sandboxBroker }}
+{{- if $broker.enabled }}
+{{- if not (regexMatch "^[^[:space:]]+@sha256:[a-f0-9]{64}$" $broker.image) }}{{ fail "sandboxBroker.image must be pinned by sha256 digest" }}{{ end }}
+{{- if not (regexMatch "^[^[:space:]]+@sha256:[a-f0-9]{64}$" $broker.executionImage) }}{{ fail "sandboxBroker.executionImage must be pinned by sha256 digest" }}{{ end }}
+{{- if not $broker.runtimeName }}{{ fail "sandboxBroker.runtimeName is required" }}{{ end }}
+{{- if not (and $broker.networkPolicyVerified $broker.pidLimitVerified) }}{{ fail "sandboxBroker requires verified NetworkPolicy and pod PID limits" }}{{ end }}
+{{- if gt (int $broker.maxSandboxes) (int $broker.quota.pods) }}{{ fail "sandboxBroker.maxSandboxes exceeds guest Pod quota" }}{{ end }}
+{{- if and (eq $broker.backend "kubernetes") (gt (int $broker.maxSandboxes) (int $broker.quota.jobs)) }}{{ fail "sandboxBroker.maxSandboxes exceeds guest Job quota" }}{{ end }}
+{{- if and (eq $broker.mountProvider "rclone_csi") (or (gt (add (int $broker.maxSandboxes) (ternary 1 0 (ne $broker.skillsVolume ""))) (int $broker.quota.persistentVolumeClaims)) (gt (int $broker.maxSandboxes) (int $broker.quota.secrets))) }}{{ fail "sandboxBroker.maxSandboxes exceeds guest file mount quota" }}{{ end }}
+{{- if and (eq $broker.backend "agent_sandbox") (not $broker.agentPoolName) }}{{ fail "sandboxBroker.agentPoolName is required for agent_sandbox" }}{{ end }}
+{{- if eq $broker.mountProvider "rclone_csi" }}
+  {{- if not (and $broker.fileGatewayUrl $broker.fileGatewayRevokeUrl $broker.fileGatewaySecret $broker.fileStorageClass) }}{{ fail "sandboxBroker rclone_csi requires gateway URLs, Secret and StorageClass" }}{{ end }}
+{{- end }}
+{{- if ne (empty $broker.settingsUrl) (empty $broker.settingsTokenSecret) }}{{ fail "sandboxBroker settings URL and token Secret must be configured together" }}{{ end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fred-sandbox-broker
+  namespace: {{ $broker.namespace }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fred-sandbox-deny-all
+  namespace: {{ $broker.sandboxNamespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: fred-sandbox-cap
+  namespace: {{ $broker.sandboxNamespace }}
+spec:
+  hard:
+    pods: {{ $broker.quota.pods | quote }}
+    count/jobs.batch: {{ $broker.quota.jobs | quote }}
+    persistentvolumeclaims: {{ $broker.quota.persistentVolumeClaims | quote }}
+    count/secrets: {{ $broker.quota.secrets | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker
+  namespace: {{ $broker.sandboxNamespace }}
+rules:
+  {{- if eq $broker.backend "kubernetes" }}
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, delete]
+  {{- end }}
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [get, create]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker
+  namespace: {{ $broker.sandboxNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fred-sandbox-broker-read
+rules:
+  - apiGroups: [node.k8s.io]
+    resources: [runtimeclasses]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [{{ $broker.sandboxNamespace }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fred-sandbox-broker-read
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: fred-sandbox-broker-read
+  apiGroup: rbac.authorization.k8s.io
+{{- if eq $broker.backend "agent_sandbox" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker-agent-sandbox
+  namespace: {{ $broker.sandboxNamespace }}
+rules:
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxclaims]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxtemplates, sandboxwarmpools]
+    verbs: [get]
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxwarmpools]
+    resourceNames: [{{ $broker.agentPoolName }}]
+    verbs: [patch]
+  - apiGroups: [agents.x-k8s.io]
+    resources: [sandboxes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker-agent-sandbox
+  namespace: {{ $broker.sandboxNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker-agent-sandbox
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- if eq $broker.mountProvider "rclone_csi" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker-files
+  namespace: {{ $broker.sandboxNamespace }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets, persistentvolumeclaims]
+    verbs: [create, get, list, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker-files
+  namespace: {{ $broker.sandboxNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker-files
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fred-sandbox-broker-files-read
+rules:
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    resourceNames: [{{ $broker.fileStorageClass }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fred-sandbox-broker-files-read
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: {{ $broker.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: fred-sandbox-broker-files-read
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fred-sandbox-broker
+  namespace: {{ $broker.namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: fred-sandbox-broker
+  template:
+    metadata:
+      labels:
+        app: fred-sandbox-broker
+    spec:
+      serviceAccountName: fred-sandbox-broker
+      automountServiceAccountToken: true
+      {{- with $broker.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: broker
+          image: {{ $broker.image | quote }}
+          imagePullPolicy: {{ $broker.imagePullPolicy }}
+          ports:
+            - name: https
+              containerPort: 8443
+          env:
+            - name: SANDBOX_BACKEND
+              value: {{ $broker.backend | quote }}
+            - name: SANDBOX_ISOLATION
+              value: {{ $broker.isolation | quote }}
+            - name: SANDBOX_RUNTIME_NAME
+              value: {{ $broker.runtimeName | quote }}
+            - name: SANDBOX_IMAGE
+              value: {{ $broker.executionImage | quote }}
+            - name: SANDBOX_NAMESPACE
+              value: {{ $broker.sandboxNamespace | quote }}
+            - name: SANDBOX_NETWORK_POLICY_VERIFIED
+              value: "true"
+            - name: SANDBOX_PID_LIMIT_VERIFIED
+              value: "true"
+            - name: SANDBOX_AGENT_POOL_NAME
+              value: {{ $broker.agentPoolName | quote }}
+            - name: SANDBOX_MAX_SANDBOXES
+              value: {{ $broker.maxSandboxes | quote }}
+            - name: SANDBOX_WARM_POOL_SIZE
+              value: "0"
+            - name: SANDBOX_COLD_START_ON_MISS
+              value: "true"
+            - name: SANDBOX_MOUNT_PROVIDER
+              value: {{ $broker.mountProvider | quote }}
+            - name: SANDBOX_BROKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.brokerTokenSecret }}
+                  key: token
+            - name: HOME
+              value: /tmp
+            {{- if $broker.caSecret }}
+            - name: SSL_CERT_FILE
+              value: /etc/sandbox-ca/ca.crt
+            {{- end }}
+            {{- if eq $broker.mountProvider "rclone_csi" }}
+            - name: SANDBOX_FILE_GATEWAY_URL
+              value: {{ $broker.fileGatewayUrl | quote }}
+            - name: SANDBOX_FILE_GATEWAY_REVOKE_URL
+              value: {{ $broker.fileGatewayRevokeUrl | quote }}
+            - name: SANDBOX_FILE_GATEWAY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.fileGatewaySecret }}
+                  key: secret
+            - name: SANDBOX_FILE_STORAGE_CLASS
+              value: {{ $broker.fileStorageClass | quote }}
+            {{- end }}
+            {{- if $broker.skillsVolume }}
+            - name: SANDBOX_SKILLS_VOLUME
+              value: {{ $broker.skillsVolume | quote }}
+            {{- end }}
+            {{- if $broker.settingsUrl }}
+            - name: SANDBOX_SETTINGS_URL
+              value: {{ $broker.settingsUrl | quote }}
+            - name: SANDBOX_SETTINGS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.settingsTokenSecret }}
+                  key: token
+            {{- end }}
+          command: [uvicorn]
+          args: [sandbox_broker.main:app, --host, 0.0.0.0, --port, "8443", --ssl-certfile, /tls/tls.crt, --ssl-keyfile, /tls/tls.key]
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: scratch
+              mountPath: /tmp
+            {{- if $broker.caSecret }}
+            - name: ca
+              mountPath: /etc/sandbox-ca
+              readOnly: true
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+          resources:
+            {{- toYaml $broker.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ $broker.tlsSecret }}
+            defaultMode: 288
+        - name: scratch
+          emptyDir:
+            sizeLimit: 16Mi
+        {{- if $broker.caSecret }}
+        - name: ca
+          secret:
+            secretName: {{ $broker.caSecret }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fred-sandbox-broker
+  namespace: {{ $broker.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: fred-sandbox-broker
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+{{- end }}

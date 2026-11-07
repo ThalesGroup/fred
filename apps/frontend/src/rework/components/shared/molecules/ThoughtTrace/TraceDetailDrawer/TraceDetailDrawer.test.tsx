@@ -115,6 +115,121 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
   };
 }
 
+describe("TraceDetailDrawer sandbox execution", () => {
+  function sandboxEntry(code: string, content?: unknown, ok = true): TraceEntry {
+    return {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "sandbox-1",
+            name: "execute_code",
+            args: { code },
+          },
+        ],
+      }),
+      result:
+        content === undefined
+          ? undefined
+          : message({
+              channel: "tool_result",
+              role: "tool",
+              parts: [
+                { type: "tool_result", call_id: "sandbox-1", ok, content: JSON.stringify(content), latency_ms: 42 },
+              ],
+            }),
+    };
+  }
+
+  it("shows the submitted shell command invoking Python and its stdout", () => {
+    const entry = sandboxEntry("# Print the answer\npython -c 'print(42)'", {
+      exit_code: 0,
+      stdout: "hello\n",
+      stderr: "",
+      timed_out: false,
+      truncated: false,
+    });
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("<header>rework.chatTrace.toolLabels.codeSandbox");
+    expect(html).toContain("rework.chatTrace.sandbox.code");
+    expect(html).toContain('data-language="bash"');
+    expect(html).toContain("python -c &#x27;print(42)&#x27;");
+    expect(html).toContain("# Print the answer");
+    expect(html).toContain("rework.chatTrace.sandbox.result");
+    expect(html).toContain("rework.chatTrace.sandbox.output");
+    expect(html).toContain("hello\n");
+    expect(html).toContain("rework.chatTrace.sandbox.exitCode");
+    expect(html).not.toContain("&quot;action&quot;");
+  });
+
+  it("shows Bash, standard error and execution limits", () => {
+    const entry = sandboxEntry("echo failed >&2", {
+      exit_code: 2,
+      stdout: "",
+      stderr: "failed\n",
+      timed_out: true,
+      truncated: true,
+    });
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain('data-language="bash"');
+    expect(html).toContain("echo failed &gt;&amp;2");
+    expect(html).toContain("failed\n");
+    expect(html).toContain("rework.chatTrace.sandbox.errors");
+    expect(html).toContain("rework.chatTrace.sandbox.exitCode");
+    expect(html).toContain("rework.chatTrace.sandbox.timedOut");
+    expect(html).toContain("rework.chatTrace.sandbox.truncated");
+  });
+
+  it("shows the code while running and a bounded broker error when execution fails", () => {
+    const running = renderToStaticMarkup(
+      <TraceDetailDrawer entry={sandboxEntry("python -c 'print(1)'")} onClose={() => undefined} />,
+    );
+    expect(running).toContain('data-language="bash"');
+    expect(running).toContain("print(1)");
+    expect(running).toContain("rework.chatTrace.toolStatus.running");
+
+    const failed = renderToStaticMarkup(
+      <TraceDetailDrawer
+        entry={sandboxEntry("python -c 'print(1)'", { error_code: "runtime_unavailable", details: "private" }, false)}
+        onClose={() => undefined}
+      />,
+    );
+    expect(failed).toContain("rework.chatTrace.sandbox.errorsByCode.runtime_unavailable");
+    expect(failed).not.toContain("private");
+
+    const malformed = renderToStaticMarkup(
+      <TraceDetailDrawer
+        entry={sandboxEntry("python -c 'print(1)'", { stdout: "private transport details" }, false)}
+        onClose={() => undefined}
+      />,
+    );
+    expect(malformed).toContain("rework.chatTrace.sandbox.errorsByCode.unavailable");
+    expect(malformed).not.toContain("private transport details");
+  });
+
+  it("keeps invalid tool arguments redacted", () => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "sandbox-1", name: "execute_code", args: { unexpected: "secret code" } }],
+      }),
+      result: message({
+        channel: "tool_result",
+        role: "tool",
+        parts: [{ type: "tool_result", call_id: "sandbox-1", ok: true, content: "secret output", latency_ms: 42 }],
+      }),
+    };
+
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("&quot;action&quot;: &quot;rework.chatTrace.toolLabels.codeSandbox&quot;");
+    expect(html).not.toContain("secret code");
+    expect(html).not.toContain("secret output");
+  });
+});
+
 describe("TraceDetailDrawer inactive HITL", () => {
   it.each(["unavailable", "unknown"])("does not show %s questions as running", (status) => {
     const entry: TraceEntry = {

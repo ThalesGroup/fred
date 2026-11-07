@@ -85,6 +85,25 @@ class PostgresTagStore(BaseTagStore):
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
         return self._row_to_tag(row)
 
+    async def filter_owned_tag_ids(self, owner_id: str, tag_ids: set[str]) -> set[str]:
+        if not tag_ids:
+            return set()
+        async with use_session(self._sessions) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(TagRow.tag_id).where(
+                            TagRow.owner_id == owner_id,
+                            TagRow.type == TagType.DOCUMENT.value,
+                            TagRow.tag_id.in_(tag_ids),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return set(rows)
+
     async def create_tag(self, tag: Tag, session: AsyncSession | None = None) -> Tag:
         tid = self._require_id(tag)
         async with use_session(self._sessions, session) as s:

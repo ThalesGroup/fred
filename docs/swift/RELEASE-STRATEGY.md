@@ -212,15 +212,16 @@ The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
 2. `fred-core`
 3. `fred-sdk`
 4. `fred-runtime`
-5. `fred-capability-document-access`
-6. `fred-capability-documents`
-7. `fred-capability-html-artifact`
-8. `fred-capability-mcp`
-9. `fred-capability-platform-ops`
-10. `fred-capability-ppt-filler`
-11. `fred-capability-team-wiki`
-12. `fred-capability-web-research`
-13. `fred-capability-writable-document`
+5. `fred-capability-code-sandbox`
+6. `fred-capability-document-access`
+7. `fred-capability-documents`
+8. `fred-capability-html-artifact`
+9. `fred-capability-mcp`
+10. `fred-capability-platform-ops`
+11. `fred-capability-ppt-filler`
+12. `fred-capability-team-wiki`
+13. `fred-capability-web-research`
+14. `fred-capability-writable-document`
 
 Selected packages floor newly prepared FRED dependencies at their corresponding
 versions; unchanged packages retain compatible older floors. Publishing out of

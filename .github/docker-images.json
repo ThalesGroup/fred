@@ -57,6 +57,13 @@
       "publish": true
     },
     {
+      "name": "sandbox-broker",
+      "context": ".",
+      "dockerfile": "apps/sandbox-broker/Dockerfile",
+      "build_args": "",
+      "publish": true
+    },
+    {
       "name": "frontend",
       "context": ".",
       "dockerfile": "apps/frontend/dockerfiles/Dockerfile-prod",

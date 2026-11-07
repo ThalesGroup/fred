@@ -31,11 +31,10 @@ def _build_user(uid: str = "user-1") -> KeycloakUser:
 
 
 @pytest.mark.asyncio
-async def test_delete_fast_ingest_artifacts_deletes_vectors_and_ignores_storage_key() -> None:
-    # FILES-04: chat attachments no longer keep a raw copy in workspace storage, so deleting
-    # a fast-ingested attachment only removes its retrieval vectors; storage_key is ignored.
+async def test_delete_fast_ingest_artifacts_deletes_vectors_and_original(monkeypatch) -> None:
     controller = IngestionController.__new__(IngestionController)
     deleted_vectors: list[str] = []
+    deleted_originals: list[str] = []
     controller.service = SimpleNamespace()
     controller.scheduler_task_service = None
 
@@ -44,6 +43,28 @@ async def test_delete_fast_ingest_artifacts_deletes_vectors_and_ignores_storage_
         return SchedulerBackend.MEMORY.value
 
     controller._delete_fast_vectors = _delete_fast_vectors  # type: ignore[method-assign]
+
+    async def _delete_tabular(**kwargs):
+        return None
+
+    controller._delete_attachment_tabular_dataset = _delete_tabular  # type: ignore[method-assign]
+    context = SimpleNamespace(get_pg_async_engine=lambda: None)
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_controller.ApplicationContext.get_instance",
+        lambda: context,
+    )
+
+    class _Originals:
+        def __init__(self, engine):
+            assert engine is None
+
+        async def delete_attachment_original(self, **kwargs):
+            deleted_originals.append(kwargs["document_uid"])
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.ingestion.ingestion_controller.SandboxViewStore",
+        _Originals,
+    )
 
     backend = await controller._delete_fast_ingest_artifacts(
         user=_build_user(),
@@ -54,3 +75,4 @@ async def test_delete_fast_ingest_artifacts_deletes_vectors_and_ignores_storage_
 
     assert backend == SchedulerBackend.MEMORY.value
     assert deleted_vectors == ["doc-1"]
+    assert deleted_originals == ["doc-1"]

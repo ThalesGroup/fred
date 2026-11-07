@@ -123,6 +123,7 @@ def test_discover_finds_installed_ppt_filler() -> None:
 # of silently shrinking an agent's tools.
 _SHIPPED_CAPABILITY_IDS = frozenset(
     {
+        "code_sandbox",
         "document_access",
         "document_summarize",
         "document_verbatim",
