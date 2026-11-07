@@ -1,6 +1,6 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `9cdd1ac9950da0bc6cafa425e5ec14ca59c35e04`** (merge `d0495bad0`, section 14).
+**Borne Swift intégrée : `ad5a1d2d30fec52e1b0c1c41086df5351b3f3516`** (merge `298008ebd`, section 14).
 Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -1602,7 +1602,7 @@ commit par commit.
 | `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Mergés en `e8cb6dad9` et `d34f2f7e6`, non reçus |
 | `174a38854` (#3498) test | Mergé en `57925ec07`, nettoyage automatique seul (`6c93c393f`) |
 | `9cdd1ac99` SBOM | Mergé en `d0495bad0`, simplifié, non reçu |
-| `ad5a1d2d3` (#3490) pièces jointes | Non commencé. Décision : affichage dérivé des pièces jointes du Control Plane, sans contrat ni écriture runtime |
+| `ad5a1d2d3` (#3490) pièces jointes | Mergé en `298008ebd`, conçu pour Weaver, non reçu |
 | `bef0098f4` (#3491) wiki | Non commencé |
 
 - **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
@@ -1619,17 +1619,25 @@ commit par commit.
 
 - Tiroir et barre du chat en FR et EN, y compris un agent supprimé.
 - Les thèmes en clair et en sombre, surtout la sélection de texte et les rayons.
-- Focus au clavier : `SettingsModal`, recherche des agents, `TaskDetailPopover`.
+- Focus au clavier : `SettingsModal`, recherche des agents ; `TaskDetailPopover` seulement sur `dev/tasks`.
 - Chat avec panneaux ouverts : badge et séparateur du rail, repli du panneau de navigation.
 
 ### SBOM : décisions et réception
 
 - **Repris :** les rapports CycloneDX avec CVE aux tags de release, et `make sbom`.
 - **Adapté à Weaver :** Trivy local uniquement par son conteneur épinglé, comme le scan de vulnérabilités existant ; usage court dans `deploy/README.md`.
-- **A recevoir :** `make sbom` sur des images construites, y compris `knowledge-flow-worker-pymupdf`, et l'artefact d'un vrai tag de release si le CI est activé pour `weaver`.
+- **A recevoir :** `make sbom` sur des images construites, y compris `knowledge-flow-worker-pymupdf`, et l'artefact d'un vrai tag de release si le CI est activé pour `weaver`. Le chemin de publication d'un tag de release combine push, sortie locale et provenance : à tester localement avant le premier tag, avec un builder docker-container et un registre local. Si cette étape échoue, la release n'est pas créée, et des images peuvent déjà être publiées.
+
+### Pièces jointes : décisions et réception
+
+- **Repris :** puces en lecture seule dans la bulle, apparence `tonal` de `Chip`, bouton d'envoi grisé sans texte.
+- **Conçu pour Weaver :** l'affichage dérive de la liste du Control Plane, par la règle qui sépare déjà fichiers envoyés et en attente. Aucun contrat, écriture runtime ni donnée d'historique.
+- **Exclu volontairement :** la liste déclarée par le navigateur, `TurnAttachment`, sa copie dans l'historique et le code de reprise associé.
+- **Retiré :** l'envoi de fichiers sans texte, que le runtime refuse.
+- **Limites acceptées :** l'association repose sur les dates. Un fichier ajouté pendant une réponse peut s'afficher après rechargement sur le tour en cours. Un fichier ajouté juste avant une réponse à une question de l'agent peut n'apparaître que dans le tiroir. Un fichier supprimé disparaît de la bulle.
+- **A recevoir :** deux fichiers et un texte : les puces s'affichent aussitôt et après rechargement, et le composeur se vide. Un fichier ajouté au tour suivant s'affiche sur ce tour. Sans texte, le bouton reste grisé et Entrée n'envoie rien.
 
 ### A trancher en fin de rattrapage
 
 - La CLI de `fred-runtime` lit encore `app.metrics_port`.
-- `TaskIndicator` et `TaskDetailPopover` n'ont pour seul usage en production aucun écran : leur seul consommateur est `TaskPlayground`, page limitée au mode
-  développement (`dev/tasks`). Leur retrait est à décider.
+- `TaskIndicator` et `TaskDetailPopover` ne sont utilisés par aucun écran de production : leur seul consommateur est `TaskPlayground`, page limitée au mode développement (`dev/tasks`). Leur retrait est à décider.
