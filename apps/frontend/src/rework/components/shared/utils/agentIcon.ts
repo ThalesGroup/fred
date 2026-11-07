@@ -167,7 +167,7 @@ export const AGENT_ICON_RULES: AgentIconRule[] = [
   },
   // ── Writing / Documents / Media ───────────────────────────────────────
   {
-    icon: "edit_note",
+    icon: "edit",
     strong: ["rédac", "blog"],
     keywords: ["writ", "draft", "contenu", "content", "article"],
   },

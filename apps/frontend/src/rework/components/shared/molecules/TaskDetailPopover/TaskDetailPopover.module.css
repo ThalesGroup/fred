@@ -13,33 +13,37 @@
  * limitations under the License.
  */
 
+/* Click surface: the MenuPopover grammar (shadow, outline, corner, floating
+   surface). In hover mode the Tooltip atom provides the surface instead. */
 .popover {
-  display: flex;
   position: fixed;
-  flex-direction: column;
-  gap: var(--spacing-xs);
   z-index: 1400;
   box-shadow: var(--shadow-m);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
   background: var(--surface-floating);
-  padding: var(--spacing-s);
   width: 280px;
-  /* A long backend error (e.g. a raw DuckDB sniffer dump) can be taller than
-     the viewport space below the anchor. Cap and scroll internally instead of
-     overflowing past the viewport edge with no way to reach the rest. Capped
-     to the viewport itself too (16px = 2x MARGIN in the positioning math
-     below) so a short viewport (mobile landscape, a squeezed split window)
-     can't still clip the box past its own bottom edge. */
+  /* A long error scrolls inside; 16px = 2x MARGIN in the positioning math. */
   max-height: min(400px, calc(100vh - 16px));
   overflow-y: auto;
+  color: var(--on-surface);
 }
 
-/* Header */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-s);
+  width: 280px;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 
@@ -48,44 +52,17 @@
   min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
-  font: var(--font-label-medium);
+  font: var(--font-title-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.closeBtn {
-  flex-shrink: 0;
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--on-surface-retreat);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.closeBtn:hover {
-  color: var(--on-surface);
-}
-
-/* State + % row */
 .stateRow {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
 }
 
-.pct {
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-}
-
-/* Progress bar */
-.barWrap {
-  /* constrain height so the bar is slim */
-}
-
-/* Step + elapsed */
 .stepRow {
   display: flex;
   flex-wrap: wrap;
@@ -101,31 +78,34 @@
   white-space: nowrap;
 }
 
-.elapsed {
+.meta {
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
   white-space: nowrap;
 }
 
-/* Error row */
 .errorRow {
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-xs);
 }
 
+/* Where a failure is actually read: wrap fully, keep newlines, break long tokens. */
 .errorText {
   flex: 1;
   min-width: 0;
   color: var(--error);
-  font: var(--font-label-small);
-  /* The popover is where a failure is actually read — wrap it fully instead of
-     truncating; preserve newlines and break long unspaced tokens. */
+  font: var(--font-body-small);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* Acknowledge action */
+.supportRef {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}
+
 .ackRow {
   display: flex;
   justify-content: flex-end;

@@ -2,7 +2,7 @@
 title: Prompts
 order: 40
 description: Save the team's recurring requests and reuse them.
-icon: category
+icon: chat
 ---
 
 # Prompts

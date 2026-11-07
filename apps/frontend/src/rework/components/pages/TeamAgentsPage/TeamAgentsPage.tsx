@@ -32,6 +32,7 @@ import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState";
 import { filterAgents } from "./agentFilter";
 import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort";
 import { isAgentNameConflict, normalizeAgentName, takenAgentNames } from "./agentNames";
+import { useMediaQuery } from "@core/hooks/useMediaQuery";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { agentErrorText, createAgentRequest, resolveAgentSpace, updateAgentRequest } from "./weaverAgents";
 import styles from "./TeamAgentsPage.module.css";
@@ -58,6 +59,8 @@ function SpaceAgents({ space }: { space: MySpace }) {
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { agentsNicknamePlural, agentsNicknameSingular } = useFrontendProperties();
+  // Search ready on arrival with a mouse or trackpad; never on touch, where it would pop the keyboard.
+  const finePointer = useMediaQuery("(pointer: fine)");
   const spaceId = space.id;
   const access = useSpaceAccess(spaceId, "write");
   const { allowed: canManageAgents, offered: offersManagement } = access;
@@ -243,6 +246,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
               <SearchInput
                 value={search}
                 onChange={setSearch}
+                autoFocus={finePointer}
                 placeholder={t("rework.teams.agents.searchPlaceholder", { agentsNicknamePlural })}
                 clearAriaLabel={t("rework.teams.agents.clearSearch")}
                 size="xs"

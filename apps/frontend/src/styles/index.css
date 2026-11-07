@@ -124,6 +124,12 @@ body {
   user-select: none;
 }
 
+/* Theme-aware highlight instead of the OS accent colour, readable in every theme. */
+::selection {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
 input,
 textarea,
 [contenteditable] {

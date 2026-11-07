@@ -193,7 +193,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`edit_note/${command} Before mermaid middle verify-answer after`);
+      expect(body.textContent).toBe(`chat/${command} Before mermaid middle verify-answer after`);
       expect(container.textContent).not.toContain("PRIVATE EXPANDED PROMPT");
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
       expect(
@@ -287,7 +287,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         />,
       );
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe(`Before review middle edit_note/${command} after mermaid Notes`);
+      expect(body.textContent).toBe(`Before review middle chat/${command} after mermaid Notes`);
       expect(body.querySelectorAll("[data-skill-name]")).toHaveLength(2);
       const prompt = body.querySelector("button[class*=command]") as HTMLButtonElement;
       await click(prompt);
@@ -321,7 +321,7 @@ describe("UserTurn copy affordance (#2359)", () => {
     it("shows one badge per prompt at its position, with the skill badge, and never the prompt text", () => {
       render(<UserTurn text={sent.text} command={sent.command} skillNames={["verify-answer"]} />);
       const body = container.querySelector("[data-skill-message]")!;
-      expect(body.textContent).toBe("First edit_note/summary then edit_note/tone please verify-answer");
+      expect(body.textContent).toBe("First chat/summary then chat/tone please verify-answer");
       expect(
         Array.from(body.querySelectorAll<HTMLElement>("[data-surface=bubble]")).map((badge) => badge.dataset.kind),
       ).toEqual(["prompt", "prompt", "skill"]);
@@ -361,9 +361,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         { command: "summary", promptId: "p-s", promptName: "Summary", from: 15, to: 23, text: "Summarise." },
       ]);
       render(<UserTurn text={twice.text} command={twice.command} />);
-      expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "edit_note/summary of A, edit_note/summary of B",
-      );
+      expect(container.querySelector("[data-skill-message]")!.textContent).toBe("chat/summary of A, chat/summary of B");
     });
 
     it("renders from the single fields when the list does not fit the stored text", async () => {
@@ -374,7 +372,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       };
       render(<UserTurn text={sent.text} command={command} onOpenCommand={onOpenCommand} />);
       expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "First edit_note/summary then /tone please /verify-answer",
+        "First chat/summary then /tone please /verify-answer",
       );
       expect(promptBadges()).toHaveLength(1);
       await click(promptBadges()[0]);
@@ -386,7 +384,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       const { prompts: _prompts, ...single } = sent.command;
       render(<UserTurn text={sent.text} command={single} />);
       expect(container.querySelector("[data-skill-message]")!.textContent).toBe(
-        "First edit_note/summary then /tone please /verify-answer",
+        "First chat/summary then /tone please /verify-answer",
       );
     });
   });

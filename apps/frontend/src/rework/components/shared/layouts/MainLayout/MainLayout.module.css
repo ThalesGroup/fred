@@ -61,7 +61,10 @@
 
 /* A page that draws its own cards. Below 768px the shell card is edge to edge and stays. */
 @media (min-width: 768px) {
+  /* No radius either: an invisible rounded corner would still clip what overlaps it,
+     such as a rail launcher's badge. */
   .content:has([data-shell-card="none"]) {
+    border-radius: 0;
     background-color: transparent;
   }
 

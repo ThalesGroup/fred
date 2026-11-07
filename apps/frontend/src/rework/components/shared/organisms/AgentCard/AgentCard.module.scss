@@ -22,8 +22,8 @@
   --agent-name-color: var(--secondary);
   --agent-meta-color: var(--on-surface);
   --agent-description-color: var(--on-surface-retreat);
-  --agent-icon-background-color: var(--secondary-container);
-  --agent-icon-color: var(--on-secondary-container);
+  --agent-icon-background-color: var(--primary-container);
+  --agent-icon-color: var(--on-primary-container);
   --agent-icon-opacity: 1;
 }
 
@@ -46,7 +46,7 @@
   position: relative;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  border-radius: var(--radius-ms);
+  border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 100%;
 }
@@ -88,7 +88,7 @@
   align-items: center;
   opacity: var(--agent-icon-opacity);
   transition: opacity 150ms ease;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-ms);
   background-color: var(--agent-icon-background-color);
   width: 3rem;
   height: 3rem;

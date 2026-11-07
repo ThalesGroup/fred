@@ -144,11 +144,11 @@
   color: var(--on-surface-retreat);
 }
 
-/* A translucent layer, not a container colour: the selection sits behind the
-   syntax palette and must not repaint the text under it. */
-.host :global(.cm-selectionBackground),
-.host :global(.cm-content ::selection) {
-  background-color: var(--state-primary-selected);
+/* Same colour as the app-wide highlight, focused or not. The layer sits behind the
+   syntax palette, so the text keeps its colours; the native one stays hidden by CodeMirror. */
+.host :global(.cm-editor .cm-selectionLayer .cm-selectionBackground),
+.host :global(.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground) {
+  background-color: var(--primary-container);
 }
 
 /* Syntax palette. Restricted to the neutral roles plus primary/secondary/

@@ -271,7 +271,7 @@ export function TuningFieldRenderer({
               color="primary"
               variant="text"
               size="small"
-              icon={{ category: "outlined", type: "edit_note" }}
+              icon={{ category: "outlined", type: "chat" }}
               onClick={() => setPickerExplicit(true)}
               disabled={disabled}
             >
