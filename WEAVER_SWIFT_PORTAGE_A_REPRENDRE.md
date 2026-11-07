@@ -1,6 +1,6 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `ad5a1d2d30fec52e1b0c1c41086df5351b3f3516`** (merge `298008ebd`, section 14).
+**Borne Swift intégrée : `bef0098f4fa37f21121f023725394c212b012604`** (merge `81198bc56`, section 14).
 Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -1603,7 +1603,7 @@ commit par commit.
 | `174a38854` (#3498) test | Mergé en `57925ec07`, nettoyage automatique seul (`6c93c393f`) |
 | `9cdd1ac99` SBOM | Mergé en `d0495bad0`, simplifié, non reçu |
 | `ad5a1d2d3` (#3490) pièces jointes | Mergé en `298008ebd`, conçu pour Weaver, non reçu |
-| `bef0098f4` (#3491) wiki | Non commencé |
+| `bef0098f4` (#3491) wiki | Mergé en `81198bc56`, adapté au wiki du Control Plane, non reçu |
 
 - **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
 
@@ -1635,12 +1635,21 @@ commit par commit.
 - **Exclu volontairement :** la liste déclarée par le navigateur, `TurnAttachment`, sa copie dans l'historique et le code de reprise associé.
 - **Retiré :** l'envoi de fichiers sans texte, que le runtime refuse.
 - **Limites acceptées :** l'association repose sur les dates. Un fichier ajouté pendant une réponse peut s'afficher après rechargement sur le tour en cours. Un fichier ajouté juste avant une réponse à une question de l'agent peut n'apparaître que dans le tiroir. Un fichier supprimé disparaît de la bulle.
-- **A recevoir :** deux fichiers et un texte : les puces s'affichent aussitôt et après rechargement, et le composeur se vide. Un fichier ajouté au tour suivant s'affiche sur ce tour. Sans texte, le bouton reste grisé et Entrée n'envoie rien.
+- **A recevoir :** deux fichiers et un texte : les puces s'affichent aussitôt et après rechargement, et le composeur se vide. Un fichier ajouté au tour suivant s'affiche sur ce tour. Sans texte, le bouton reste grisé et Entrée n'envoie rien. Pendant une réponse, le composeur vide affiche Stop à côté d'Envoi grisé : à regarder.
+
+### Wiki : décisions et réception
+
+- **Repris :** arbre replié et mémorisé, dernière page rouverte, titre, parent et suppression dans l'éditeur, recherche et ancrage du `Select`.
+- **Adapté à Weaver :** clé par utilisateur et par espace, identifiant de page plutôt que slug. L'URL porte toujours la page : déplacer une page ne peut pas fermer un brouillon.
+- **Limite acceptée :** titre et parent sont enregistrés avant le texte. Un conflit sur le texte laisse le renommage appliqué. Une écriture atomique demanderait un changement de contrat.
+- **A recevoir, avec la recette Wiki de la section 15 :** à la première visite, l'arbre est replié et une page à relire reste accessible par le filtre. La dernière page se rouvre, par utilisateur et par espace. Renommer et déplacer depuis l'éditeur, y compris en cas de doublon et de conflit, sans perdre le brouillon. Après une suppression, on ne reste pas sur la page supprimée. Le retour arrière reste normal.
+- **Select :** recherche au clavier sur un long wiki, et comportement inchangé sur les autres écrans.
 
 ### A trancher en fin de rattrapage
 
 - La CLI de `fred-runtime` lit encore `app.metrics_port`.
 - `TaskIndicator` et `TaskDetailPopover` ne sont utilisés par aucun écran de production : leur seul consommateur est `TaskPlayground`, page limitée au mode développement (`dev/tasks`). Leur retrait est à décider.
+- Inventaire des écrans qui utilisent encore `legacyControlPlane`, avant la campagne : un écran sans backend paraîtrait en panne pendant les tests.
 
 
 ### Wiki — premier lot implémenté, recette différée (7 novembre)
@@ -1714,7 +1723,7 @@ La consolidation part de `404237a02` sur `codex/weaver-conversation-files` :
 `96ebad324` raccorde les livrables Deep à ce catalogue. Le lot est ensuite réuni,
 sans rebase, avec Weaver local `da0fe9f558be984fbb42e141cac2099681e930c7`, également
 pointé par `merge/swift-89baab5b6`. Aucun commit n'est pris directement depuis Swift.
-La borne intégrée reste `ad5a1d2d3` ; `bef0098f4` reste à traiter séparément.
+La borne intégrée restait alors `ad5a1d2d3` ; `bef0098f4` a ensuite été traité (`81198bc56`, section 14).
 
 Les deux conflits textuels sont résolus en conservant cette section 14 et le
 rapport du premier Wiki, puis l'icône `folder` de Weaver avec le compteur sources
