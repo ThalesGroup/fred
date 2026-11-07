@@ -94,14 +94,19 @@ describe("buildWikiTree", () => {
 });
 
 describe("visibleNodes", () => {
-  it("hides the subtree of a collapsed node", () => {
+  it("shows only the subtrees of expanded nodes", () => {
     const tree = buildWikiTree([
       page("root"),
       page("child", { parent_page_id: "root" }),
       page("grandchild", { parent_page_id: "child" }),
     ]);
-    expect(visibleNodes(tree, new Set()).map((n) => n.page.page_id)).toEqual(["root", "child", "grandchild"]);
-    expect(visibleNodes(tree, new Set(["child"])).map((n) => n.page.page_id)).toEqual(["root", "child"]);
+    expect(visibleNodes(tree, new Set()).map((n) => n.page.page_id)).toEqual(["root"]);
+    expect(visibleNodes(tree, new Set(["root"])).map((n) => n.page.page_id)).toEqual(["root", "child"]);
+    expect(visibleNodes(tree, new Set(["root", "child"])).map((n) => n.page.page_id)).toEqual([
+      "root",
+      "child",
+      "grandchild",
+    ]);
   });
 });
 
