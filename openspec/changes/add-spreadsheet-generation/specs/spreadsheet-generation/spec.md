@@ -186,7 +186,7 @@ Each created workbook SHALL be stored with a JSON preview beside it, and the con
 
 ### Requirement: Users revise the last workbook with targeted changes
 
-The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) or `changes`, a list of operations applied to the last workbook delivered in the conversation by the same agent: `add_column` (a formula column included), `remove_column`, `edit_column`, `add_rows`, `remove_rows`, `edit_rows`, `edit_cell`, `rename_sheet`, `add_sheet`, `remove_sheet` and `move_rows` (to an existing sheet, or to a new sheet created with the source's columns). Sheets SHALL be addressed by name, columns by header, rows by their row number in the file (header = row 1) or by a `where` match on a column value. All names and numbers SHALL refer to the base workbook, never shifted by earlier changes of the same call. The system SHALL apply the changes to the stored request and build the whole resulting workbook through the same validation, formulas, writer and preview as a `sheets` call, adjusting the base's formula references like Excel when rows, columns or sheets change (rows inserted above a range shift it, inside it widen it, appended after a range ending on the last data row extend it); formulas sent in the changes themselves SHALL be read as written for the resulting workbook. It SHALL reject, listing every bad change with its index and the fix and writing no file: `sheets` and `changes` together, an unknown op, sheet, header or row (naming the existing ones), incompatible changes on the same target, a change that would leave a formula pointing at a removed cell, column or sheet or that moves rows a formula references (naming each dependent formula), a call with no base, and a call that changes nothing.
+The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) or `changes`, a list of operations applied to the last workbook delivered in the conversation by the same agent: `add_column` (a formula column included), `remove_column`, `edit_column`, `add_rows`, `remove_rows`, `edit_rows`, `edit_cell`, `rename_sheet`, `add_sheet`, `remove_sheet` and `move_rows` (to an existing sheet, or to a new sheet created with the source's columns). Sheets SHALL be addressed by name, columns by header, rows by their row number in the file (header = row 1) or by a `where` match on a column value. All names and numbers SHALL refer to the base workbook, never shifted by earlier changes of the same call. The system SHALL apply the changes to the stored request and build the whole resulting workbook through the same validation, formulas, writer and preview as a `sheets` call, adjusting the base's formula references like Excel when rows, columns or sheets change (rows inserted above a range shift it, inside it widen it, appended after a range ending on the last data row extend it); formulas sent in the changes themselves SHALL be read as written for the resulting workbook. It SHALL reject, listing every bad change with its index and the fix and writing no file: `sheets` and `changes` together, an unknown op, sheet, header or row (naming the existing ones), incompatible changes on the same target, a change that would leave a formula pointing at a removed cell, column or sheet or that moves rows a formula references (naming each dependent formula), a call with no base, and a call that changes nothing. A `null` value SHALL empty the cell, in a formula column too (stored as an `=""` override). After a revision that addressed rows, the tool result SHALL name each base row it removed, changed, moved or inserted after, with its first value, so the model can catch a wrong row number.
 
 #### Scenario: Add a formula column
 
@@ -225,6 +225,17 @@ The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) 
 
 - **WHEN** the model sends `changes` in a conversation with no delivered workbook for this agent
 - **THEN** the tool returns "No file was written: there is no previous workbook in this conversation to change. Send the whole workbook in sheets."
+
+#### Scenario: Empty a formula-column cell
+
+- **GIVEN** a column "TTC" filled by `=B2*1.2`
+- **WHEN** the model sends `{op: "edit_cell", sheet: "Notes", cell: "C4", value: null}`
+- **THEN** C4 is empty in the new version, the other "TTC" cells keep the formula, and C4 stays empty in later revisions
+
+#### Scenario: The result names the rows touched
+
+- **WHEN** the model sends `{op: "remove_rows", sheet: "Budget", rows: [3]}`
+- **THEN** the tool result says `removed row 3 (Voyages)` and that another change can fix a row that is not the one the user meant
 
 #### Scenario: Nothing changed
 

@@ -40,3 +40,4 @@ Tracking: GitHub issue #3208.
 - [x] 6.1 Candidate B as a translator to the D10 operations, bench-only switch
 - [x] 6.2 Bench: 22 edit tasks FR+EN plus the 14 creation tasks
 - [x] 6.3 A/B run 2026-11-04: thresholds not met on mistral-medium, B deleted (D14)
+- [x] 6.4 From the A/B: `null` empties a formula-column cell; the result names the rows touched (unit-tested; the bench harness is gone, no re-run)
