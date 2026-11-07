@@ -43,6 +43,7 @@ const h = vi.hoisted(() => ({
     isError: boolean;
   },
   wikiEnabled: undefined as boolean | undefined,
+  wikiError: false,
   defaultTeamAvatarFile: "",
   teamAvatarImageUrl: undefined as string | undefined,
   userPictureUrl: undefined as string | undefined,
@@ -51,6 +52,16 @@ const h = vi.hoisted(() => ({
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePromptPublicationTeamsQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
+  useWikiAvailabilityQuery: (
+    args: { spaceId: string },
+    options: { skip: boolean; refetchOnMountOrArgChange: boolean },
+  ) => {
+    h.wiki(args, options);
+    return {
+      currentData: options.skip || h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
+      isError: !options.skip && h.wikiError,
+    };
+  },
 }));
 
 vi.mock("@core/hooks/useSpaceAccess", () => ({
@@ -129,16 +140,20 @@ vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanc
     h.knowledgeBasesQuery(args, options);
     return { ...h.knowledgeBases, refetch: h.refetchKnowledgeBases };
   },
-  useWikiAvailabilityQuery: (args: unknown, options: unknown) => (
-    h.wiki(args, options),
-    {
-      data: h.wikiEnabled === undefined ? undefined : { enabled: h.wikiEnabled },
-    }
-  ),
 }));
 vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div data-chat-list /> }));
 
 import TeamContentNavbar from "./TeamContentNavbar.tsx";
+
+beforeEach(() => {
+  h.pathname = "/team/team-1/resources";
+  h.memberships = [];
+  h.canRead = true;
+  h.isPersonalTeam = false;
+  h.wikiEnabled = undefined;
+  h.wikiError = false;
+  h.wiki.mockClear();
+});
 
 const application = {
   id: "example",
@@ -207,11 +222,53 @@ describe("TeamContentNavbar — the wiki entry", () => {
     h.applicationsEnabled = false;
     h.result = { data: undefined, isError: false };
     h.wikiEnabled = undefined;
+    h.pathname = "/team/team-1/agents";
+    h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["member"] }];
   });
 
-  it("offers the wiki when the capability is enabled for the team", () => {
+  it.each(["agents", "resources", "prompts", "wiki", "managed-chat/session-1"])(
+    "offers the enabled wiki to a reader on %s",
+    (route) => {
+      h.pathname = `/team/team-1/${route}`;
+      h.wikiEnabled = true;
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/wiki"');
+      expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
+    },
+  );
+
+  it("skips availability and hides the wiki without content read access", () => {
+    h.canRead = false;
+    h.canManage = true;
+    try {
+      h.wikiEnabled = true;
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/wiki"');
+      expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: true, refetchOnMountOrArgChange: true });
+    } finally {
+      h.canManage = false;
+    }
+  });
+
+  it("keeps the wiki available for an authorized personal space", () => {
+    h.memberships = [{ id: "team-1", kind: "personal", name: "Personal", roles: [] }];
     h.wikiEnabled = true;
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("/team/team-1/wiki");
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/wiki"');
+    expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
+  });
+
+  it.each([undefined, "organization", "project"])("skips availability for unsupported space kind %s", (kind) => {
+    h.memberships = kind ? [{ id: "team-1", kind, name: "Unsupported", roles: ["member"] }] : [];
+    h.wikiEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/wiki"');
+    expect(h.wiki).toHaveBeenLastCalledWith(
+      { spaceId: kind ? "team-1" : "" },
+      { skip: true, refetchOnMountOrArgChange: true },
+    );
+  });
+
+  it("hides the wiki when availability fails despite a previous enabled response", () => {
+    h.wikiEnabled = true;
+    h.wikiError = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/wiki"');
   });
 
   it("hides it when the capability is off", () => {
@@ -278,6 +335,7 @@ describe("TeamContentNavbar — knowledge bases and beta badges", () => {
   });
 
   it("shows enabled definitions even before any instance is created, with beta after each label", () => {
+    h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["member"] }];
     h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     for (const [route, label] of [
@@ -329,12 +387,13 @@ describe("TeamContentNavbar — pending knowledge base entry", () => {
 
 it("skips legacy sidebar reads and shows the Weaver chat list on agent management", () => {
   h.pathname = "/team/team-1/agents";
+  h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["member"] }];
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
   expect(h.bootstrap).toHaveBeenLastCalledWith(true);
   expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
-  expect(h.wiki).toHaveBeenLastCalledWith({ teamId: "team-1" }, { skip: true });
+  expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
   expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
   expect(html).not.toContain("rework.weaverAgents.chatUnavailable");

@@ -136,7 +136,7 @@ export default function TeamContentNavbar() {
   const { currentData: wikiAvailability, isError: wikiUnavailable } = useWikiAvailabilityQuery(
     { spaceId: space?.id ?? "" },
     {
-      skip: agentManagement || !canReadContent || !space || !["team", "personal"].includes(space.kind),
+      skip: !canReadContent || !space || !["team", "personal"].includes(space.kind),
       refetchOnMountOrArgChange: true,
     },
   );
