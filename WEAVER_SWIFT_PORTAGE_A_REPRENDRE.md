@@ -1,9 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Dernière tranche intégrée : Swift `3d18384205a469f691bbf3ca3cb697911bc6b257`.**
-Le merge Swift `394a9150f` part de Weaver `e017f869ea5d5668a47d04da3c2de572e97af8b7` et
-reprend quatre nouveaux commits ; voir la section 12. Cette borne sert à
-inventorier les prochaines arrivées Swift. Les réceptions et portages différés
+**Borne Swift intégrée : `a2ebfe48cf854dfe7088523e9c296c267941c628`** (merge `4830c58bc`,
+étape 2 de la tranche en cours, section 14). Cette borne sert à inventorier les
+prochaines arrivées Swift. La dernière tranche complète s'arrête à
+`3d18384205a469f691bbf3ca3cb697911bc6b257` : le merge Swift `394a9150f` part de Weaver
+`e017f869ea5d5668a47d04da3c2de572e97af8b7` et reprend quatre nouveaux commits ; voir la
+section 12. Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
 validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
 
@@ -19,7 +21,7 @@ initiale ; ce n'est pas une liste de missions à relancer intégralement.
 > Un comportement différé peut déjà avoir son commit Swift dans l'ascendance.
 > Un nouveau merge ne le réapplique pas. Les portages adaptés ne déplacent pas
 > à eux seuls la borne Swift. Celle de la tranche initiale était `53e39f6f7` ;
-> la borne actuelle après les tranches suivantes est `3d1838420`.
+> la borne actuelle après les tranches suivantes est `a2ebfe48c`.
 
 ## 1. Point de reprise consolidé au 6 novembre 2026
 
@@ -219,8 +221,9 @@ pas confondre nombre de contrôles et nombre de développements restant à finan
   en montre six, jusqu'à `89baab5b6` : `b00551906` (#3460, schémas tabulaires, prochain
   sujet choisi), `a2ebfe48c` (#3476, Azure APIM), `d9eb3738f` (#3453, test React),
   `303b7456e` (#3483, références de documents et écritures NUL), `507866562` (#3475,
-  modèle Zabbix) et `89baab5b6` (#3455, SIEM). Aucun n'est intégré ni nécessaire pour
-  recevoir le lot actuel.
+  modèle Zabbix) et `89baab5b6` (#3455, SIEM). `b00551906` et `a2ebfe48c` sont depuis
+  intégrés ; l'état à jour est en section 14. Aucun n'est nécessaire pour recevoir le
+  lot actuel.
 
 ### Reprendre après une interruption
 
@@ -1475,14 +1478,15 @@ et rollback sur installation isolée non exécutés.
 
 ## 14. Tranche Swift vers 89baab5b6 - 6 novembre 2026
 
-Cible figée : `89baab5b6`. Base Weaver : `7c29aede0`. Borne intégrée : `3d1838420`.
-Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance Swift. `6fae3a708`,
-`6f3b28478` et `f951e3438`, arrivés ensuite, restent hors de cette tranche.
+Cible figée : `89baab5b6`. Base Weaver : `7c29aede0`. Borne de départ : `3d1838420`.
+Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance Swift. `f951e3438`,
+`6f3b28478`, `6fae3a708`, `174a38854`, `9cdd1ac99`, `ad5a1d2d3` et `bef0098f4` (fetch du 7 novembre),
+arrivés ensuite, restent hors de cette tranche.
 
 | Etape | Commits Swift | Etat |
 | --- | --- | --- |
-| 1 | `b00551906` (#3460) tabulaire | Commitée en `d294b0e4e` sur la branche, non poussée, non fusionnée dans `weaver`, non reçue |
-| 2 | `a2ebfe48c` (#3476) Azure APIM | Non commencée |
+| 1 | `b00551906` (#3460) tabulaire | Mergée en `d294b0e4e`, poussée sur `weaver`, non reçue |
+| 2 | `a2ebfe48c` (#3476) Azure APIM | Mergée en `4830c58bc` sans changement de fichier, poussée sur `weaver`, non reçue |
 | 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Non commencée |
 | 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
 
@@ -1526,3 +1530,19 @@ Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance 
   à la première recherche, comme son modèle de reranking. L'API démarre donc sans vector store joignable, et la
   première recherche répond 503 `corpus_not_ready`.
 - `make test-knowledge-flow-contracts` n'exige plus de Control Plane et n'autorise que `127.0.0.1` : 58 réussis.
+
+### Etape 2 : décisions
+
+- **Besoin Swift :** authentifier la découverte des modèles derrière Azure APIM. #3476 le fait dans le
+  `catalog.py` du pod, que Weaver a supprimé.
+- **Déjà couvert par Weaver (`8dc5dbc77`, `03e6f0d14`) :** le Control Plane possède les sources ; une source
+  APIM utilise un inventaire déclaré. Le pod garde ses secrets Entra et de passerelle pour le seul appel
+  d'inférence, et `test_model_discovery.py` vérifie qu'il ne fait aucune découverte.
+- **Exclu volontairement :** `catalog.py`, le test Swift de découverte par le pod, la note de migration et
+  `openspec/changes/azure-apim-model-discovery`.
+
+### Etape 2 : preuves
+
+- Le merge `4830c58bc` a pour parents `03e6f0d14` et `a2ebfe48c`, et son arbre est identique à celui de
+  `03e6f0d14`. Il n'enregistre que l'ascendance. Aucune compilation ni aucun test n'a été lancé pour ce merge.
+- **Non prouvé :** rien n'a été testé sur une vraie passerelle APIM ou un vrai tenant Entra.
