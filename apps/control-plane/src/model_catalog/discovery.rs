@@ -7,7 +7,10 @@ use reqwest::{StatusCode, header};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::config::{DiscoveryAuthentication, ModelSource, Qualification, bounded_text};
+use super::config::{
+    DeclaredModel, DiscoveryAuthentication, ModelSource, Qualification, SourceInventory,
+    bounded_text,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BYTES: usize = 1024 * 1024;
@@ -106,7 +109,11 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
     }
 }
 
-fn parse(bytes: &[u8], source: &ModelSource) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
+fn parse(
+    bytes: &[u8],
+    qualification: Qualification,
+    complete_inventory_guaranteed: bool,
+) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
     let payload: Value = serde_json::from_slice(bytes).map_err(|error| {
         if error.is_eof() {
             DiscoveryFailure::Incomplete
@@ -148,10 +155,10 @@ fn parse(bytes: &[u8], source: &ModelSource) -> Result<Vec<DiscoveredOffer>, Dis
         }
         offers.push(DiscoveredOffer {
             upstream_model_id: id.to_owned(),
-            metadata: metadata(item, source.qualification),
+            metadata: metadata(item, qualification),
         });
     }
-    if !source.complete_inventory_guaranteed {
+    if !complete_inventory_guaranteed {
         return Err(DiscoveryFailure::Incomplete);
     }
     Ok(offers)
@@ -170,11 +177,16 @@ fn client() -> Result<&'static reqwest::Client, DiscoveryFailure> {
         .map_err(|_| DiscoveryFailure::TransportUnavailable)
 }
 
-async fn fetch(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
+async fn fetch(
+    url: &str,
+    authentication: &DiscoveryAuthentication,
+    qualification: Qualification,
+    complete_inventory_guaranteed: bool,
+) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
     let mut request = client()?
-        .get(&source.discovery_url)
+        .get(url)
         .header(header::ACCEPT, "application/json");
-    if let DiscoveryAuthentication::Bearer { secret_env_var, .. } = &source.authentication {
+    if let DiscoveryAuthentication::Bearer { secret_env_var, .. } = authentication {
         // Reuse the process environment loaded by ENV_FILE/dotenvy. No pod lookup.
         let secret = crate::config::opt_env(secret_env_var)
             .ok_or(DiscoveryFailure::CredentialUnavailable)?;
@@ -227,20 +239,81 @@ async fn fetch(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, DiscoveryFa
     if expected_length.is_some_and(|size| size != bytes.len() as u64) {
         return Err(DiscoveryFailure::Incomplete);
     }
-    parse(&bytes, source)
+    parse(&bytes, qualification, complete_inventory_guaranteed)
+}
+
+fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
+    DiscoveredOffer {
+        upstream_model_id: model.id.clone(),
+        metadata: ModelMetadata {
+            chat: Some(true),
+            chat_provenance: Some(ChatProvenance::SourceGuarantee),
+            reasoning: model.reasoning,
+            display_name: model.display_name.clone(),
+            context_window_tokens: model.context_window_tokens,
+            max_input_tokens: model.max_input_tokens,
+            max_output_tokens: model.max_output_tokens,
+        },
+    }
 }
 
 pub(super) async fn discover(
     source: &ModelSource,
 ) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
-    tokio::time::timeout(TIMEOUT, fetch(source))
+    match &source.inventory {
+        SourceInventory::Declared { models } => Ok(models.iter().map(declared_offer).collect()),
+        SourceInventory::Discovered {
+            url,
+            authentication,
+            qualification,
+            complete_inventory_guaranteed,
+        } => tokio::time::timeout(
+            TIMEOUT,
+            fetch(
+                url,
+                authentication,
+                *qualification,
+                *complete_inventory_guaranteed,
+            ),
+        )
         .await
-        .unwrap_or(Err(DiscoveryFailure::TransportUnavailable))
+        .unwrap_or(Err(DiscoveryFailure::TransportUnavailable)),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_declared_list_is_published_without_network_or_secret() {
+        let source: ModelSource = serde_json::from_value(serde_json::json!({
+            "source_id":"apim","revision":1,"enabled":true,
+            "inventory":{"kind":"declared","models":[
+                {"id":"gpt-4o","display_name":"GPT-4o","reasoning":false,
+                    "context_window_tokens":128000,"max_input_tokens":100,"max_output_tokens":200},
+                {"id":"bare"},
+            ]},
+            "inference":{"credential_binding":"b","api_root":"https://gateway.invalid/v1",
+                "wire":"openai_chat","route":"standard","dialect":"openai_compatible",
+                "auth":{"kind":"none"}},
+            "visibility_scope":"account"}))
+        .unwrap();
+        let offers = discover(&source).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&offers).unwrap(),
+            serde_json::json!([
+                {"upstream_model_id":"gpt-4o","metadata":{"chat":true,
+                    "chat_provenance":"source_guarantee","reasoning":false,
+                    "display_name":"GPT-4o","context_window_tokens":128000,
+                    "max_input_tokens":100,"max_output_tokens":200}},
+                {"upstream_model_id":"bare","metadata":{"chat":true,
+                    "chat_provenance":"source_guarantee","reasoning":null,
+                    "display_name":null,"context_window_tokens":null,
+                    "max_input_tokens":null,"max_output_tokens":null}},
+            ])
+        );
+    }
 
     #[test]
     fn reasoning_is_a_discovered_boolean_never_a_name_guess() {

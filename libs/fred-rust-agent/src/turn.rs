@@ -95,7 +95,7 @@ pub enum InferenceError {
 fn wire_config(connection: &ModelConnection, secret: String) -> OpenAIConfig {
     let dialect: &Dialect = match connection.dialect {
         ModelDialect::Mistral => &MISTRAL,
-        ModelDialect::Openai => &OPENAI,
+        ModelDialect::Openai | ModelDialect::OpenaiCompatible => &OPENAI,
     };
     let mut config = OpenAIConfig::with_key(dialect, secret).with_base_url(&connection.api_root);
     config.dialect.quirks.completion_path = "/chat/completions";
@@ -338,6 +338,11 @@ mod tests {
         );
         assert_eq!(config.dialect, OPENAI);
         assert_eq!(config.base_url, "https://api.mistral.ai/v1");
+        let config = wire_config(
+            &connection("http://ollama:11434/v1", ModelDialect::OpenaiCompatible),
+            "key".into(),
+        );
+        assert_eq!(config.dialect, OPENAI);
     }
 
     /// The same fixture gives Python its URLs: here is the path Rig really sends.

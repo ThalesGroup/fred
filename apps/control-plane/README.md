@@ -232,23 +232,47 @@ platform:
     - source_id: example-gateway
       revision: 1
       enabled: false
-      discovery_url: https://catalog.example.invalid/v1/models
+      inventory:
+        kind: discovered
+        url: https://catalog.example.invalid/v1/models
+        authentication:
+          mode: bearer
+          secret_env_var: EXAMPLE_MODEL_DISCOVERY_TOKEN
+          provider_scopes: [provider-list-scope]
+          authority: discovery_only
+        qualification: mixed_capabilities_v1
+        complete_inventory_guaranteed: true
       inference:
         credential_binding: example-gateway-inference
         api_root: https://inference.example.invalid/v1
         wire: openai_chat
         route: standard
-        dialect: openai
+        dialect: openai_compatible
         auth:
           kind: api_key
       visibility_scope: example-account-namespace-all-models
-      authentication:
-        mode: bearer
-        secret_env_var: EXAMPLE_MODEL_DISCOVERY_TOKEN
-        provider_scopes: [provider-list-scope]
-        authority: discovery_only
-      qualification: mixed_capabilities_v1
-      complete_inventory_guaranteed: true
+    # A source without a usable model list: the platform declares its models.
+    - source_id: example-declared-gateway
+      revision: 1
+      enabled: false
+      inventory:
+        kind: declared
+        models:
+          - id: example-model
+            display_name: Example model   # optional
+            reasoning: false              # optional; absent means unknown
+            context_window_tokens: 128000 # optional, like the next two
+            max_input_tokens: 120000
+            max_output_tokens: 4096
+      inference:
+        credential_binding: example-declared-gateway-inference
+        api_root: https://gateway.example.invalid/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai_compatible
+        auth:
+          kind: api_key
+      visibility_scope: example-gateway-deployments
 ```
 
 ### Initialize organization models once
@@ -256,7 +280,7 @@ platform:
 `platform.organization_models` declares exact existing organization names (the same
 PostgreSQL lookup as provisioning), explicit source IDs and exact offer keys. It
 never creates an organization. This fictitious example assumes the two separately
-approved, enabled sources have successfully discovered the named chat models:
+approved, enabled sources can publish the named chat models:
 
 ```yaml
 platform:
@@ -332,6 +356,12 @@ an explicit administrative change; this lot adds no association-management UI.
 
 ### Source approval and discovery
 
+Every source has exactly one `inventory`. `kind: discovered` reads the models from an
+HTTP list endpoint. `kind: declared` is the platform's own list, for a source without a
+usable list endpoint, such as a gateway. A declared list replaces discovery for its
+source; it never supplements it. Both publish through the same refresh, and selection,
+policy and admission do not know which one produced an offer.
+
 The platform must review both destinations, the provider account/namespace,
 visibility, actual credential scopes and egress/TLS policy together. Discovery
 secrets use the existing `ENV_FILE`/process environment; inference credentials
@@ -345,8 +375,8 @@ derived from another and no Fred or pod token is implicitly reused.
 
 Increase `revision` for every change, including rotation behind the same secret
 reference. Apply the same configuration across replicas: older revisions and
-different content at the same revision are rejected. A changed discovery URL,
-inference root, wire or route, or visibility scope requires a new source ID. The platform
+different content at the same revision are rejected. A changed inventory kind, discovery
+URL, inference root, wire or route, or visibility scope requires a new source ID. The platform
 must declare account/namespace changes through `visibility_scope`; discovery cannot
 verify them from a bearer token. Disable a source at a higher revision before
 removing its configuration. Disabled SQL rows and offers remain for diagnostics.
@@ -373,9 +403,21 @@ the inventory member. Metadata records chat provenance, optional `name` or
 `display_name`, positive integer `context_length`/`max_model_len`/
 `max_context_length`, `max_input_tokens` and `max_output_tokens`. Invalid optional
 fields become unknown. Labels are bounded to 256 bytes, limits to positive i64;
-these remain source-reported facts. Reasoning is `true`, `false`, or unknown; no
-static list supplements discovery. No tools, reasoning, modalities or limits are
+these remain source-reported facts. Reasoning is `true`, `false`, or unknown; a
+discovered source takes nothing from a declared list. No tools, reasoning, modalities or limits are
 inferred from IDs; unsupported feature metadata remains unknown.
+
+A declared inventory lists 1 to 256 `models`. `id` follows the discovery rule above and is
+never normalized; `display_name` is at most 256 bytes; limits are strictly positive. This
+is a platform statement, so an invalid value refuses the configuration instead of becoming
+unknown. Chat is established by `source_guarantee`; `reasoning`, the label and the limits
+are exactly what is declared, and an absent one stays unknown. A refresh uses no network
+or secret, and the steps do not change: `not_observed` until a refresh, then published
+offers, then an explicit organization permission. A declaration grants nothing, and pods
+never receive the list. Changing it requires a higher `revision`, which returns the
+observation to `not_observed`; the next refresh withdraws the models no longer declared.
+As for discovered limits, the lowest known limit becomes the admitted token ceiling: a
+`context_window_tokens` declared without `max_output_tokens` is sent as that ceiling.
 
 Successful publication is atomic per source, including the observation and empty
 inventories. Withdrawals retain the composite key, first/last-seen dates and last
@@ -484,7 +526,7 @@ call here); the additional authorization checks occur outside the read transacti
 Reasoning activation is an organization ceiling stored on the existing permission
 rows (`reasoning_enabled`, initially false). Complete policy replacement
 includes `reasoning_enabled`, a subset of permitted composite keys. Newly enabled
-reasoning requires a selectable offer with discovery-reported `reasoning: true`;
+reasoning requires a selectable offer with source-reported `reasoning: true`;
 revoking permission removes its reasoning activation too. The same Manage gate,
 revision check and source/offer locks apply. No model-name inference is used.
 
@@ -503,7 +545,7 @@ known metadata and source/snapshot revisions and dates. A candidate requires kno
 presence/chat, current source revision, enabled source, permission and compatible
 known option limits. It does not prove pod support, credentials, connectivity or
 upstream authorization. After discovery failure a retained candidate may remain;
-`selectable` is false until successful current discovery. Withdrawn, non-chat,
+`selectable` is false until a successful refresh at the current revision. Withdrawn, non-chat,
 disabled, revoked, unknown and obsolete-source references are not candidates.
 
 `model_catalog::instance::decide` is the single inference decision used by public
@@ -540,7 +582,7 @@ The legacy profile remains diagnostic data, never a connection lookup key.
 | --- | --- | --- |
 | `wire` | `openai_chat`, `openai_responses` | Which protocol |
 | `route`, `api_version` | `standard`, `azure_deployment`; optional version | Which address |
-| `dialect` | `openai`, `mistral` | Which provider quirks |
+| `dialect` | `openai`, `openai_compatible`, `mistral` | Which provider quirks |
 | `auth.kind` | `none`, `api_key`, `entra` | Which authentication |
 
 `auth.tenant_id`, `auth.client_id` and `auth.scope` are required with `entra` and
@@ -561,12 +603,25 @@ One connection reaches exactly one URL for a given model:
 `?api-version={api_version}` is added when the version is present. A deployment route
 limits the model identifier to `[A-Za-z0-9._-]+`, without `.` or `..`.
 
-`dialect` never changes the URL. On Chat Completions, `mistral` sends the token ceiling
-as `max_tokens`, asks for no `stream_options` and, on the Python path, replays reasoning.
+`dialect` never changes the URL. It decides what Chat Completions sends:
+
+| `dialect` | For | Token ceiling | `stream_options` |
+| --- | --- | --- | --- |
+| `openai` | OpenAI and Azure OpenAI only | `max_completion_tokens` in Python, `max_tokens` in Ralph | Sent |
+| `openai_compatible` | Other servers reading the ceiling only from `max_tokens` | `max_tokens` | Sent |
+| `mistral` | Mistral, directly or behind a gateway | `max_tokens` | Not sent; Python replays reasoning |
+
+`openai_responses` always sends `max_output_tokens`, whatever the dialect.
+
+Python never ignores an admitted setting without saying so. LangChain removes the
+temperature of some models, at construction or from the Responses payload; the factory
+compares the payload the client would send and refuses the model with a fixed message,
+before any request, instead of leaving the guard to report a lost authority.
 
 Connection examples, all implemented and tested on a simulated transport only; none
-was received on a real gateway, Ollama server or Entra tenant, and such a source cannot
-publish offers yet, because discovery does not know this authentication:
+was received on a real gateway, Ollama server or Entra tenant. Discovery knows neither
+Entra nor a gateway key, so such a source publishes its offers through a declared
+inventory:
 
 ```yaml
 # Mistral
@@ -584,7 +639,7 @@ inference:
   api_root: http://ollama:11434/v1
   wire: openai_chat
   route: standard
-  dialect: openai
+  dialect: openai_compatible
   auth: {kind: none}
 ---
 # Azure API Management, chat completions by deployment
@@ -663,7 +718,7 @@ accepted only by the model that obtained them. A gateway key is added by the tra
 guard after all its checks and stays off the model and the SDK client.
 
 For rotation, prepare the new Secret, increase the Control Plane source revision,
-refresh discovery for that revision, and roll the consuming workloads. The binding
+refresh the source at that revision, and roll the consuming workloads. The binding
 carries no revision: `selection.source_revision` remains for audit, and Control Plane
 keeps blocking a source that has not been observed at its current revision. Deployment
 ordering must prevent mismatched connections from admitting work; mismatches fail closed

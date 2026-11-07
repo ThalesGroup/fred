@@ -57,7 +57,8 @@ def _healthy_context() -> SimpleNamespace:
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
-        get_vector_store=lambda: object(),
+        get_embedder=lambda: "embedder",
+        get_create_vector_store=MagicMock(return_value=object()),
         get_published_artifact_reader=MagicMock(side_effect=AssertionError("API readiness must not access S3")),
         get_authorization_client=lambda: authorization,
         configuration=SimpleNamespace(storage=SimpleNamespace(opensearch=object()), control_plane_url="https://cp/control-plane/v1"),
@@ -88,6 +89,15 @@ def test_ready_all_dependencies_ok() -> None:
     assert set(body["checks"]) == {"postgres", "opensearch", "control_plane"}
     for name in body["checks"]:
         assert body["checks"][name]["ok"] is True
+
+
+def test_ready_opens_the_read_only_vector_store() -> None:
+    ctx = _healthy_context()
+
+    with _client(ctx) as client:
+        assert client.get("/knowledge-flow/v2/ready").status_code == 200
+
+    ctx.get_create_vector_store.assert_called_once_with("embedder", read_only=True)
 
 
 def test_ready_reports_degraded_when_postgres_down() -> None:
@@ -130,7 +140,7 @@ def test_api_stays_live_and_becomes_ready_after_corpus_initialization():
     ctx = _healthy_context()
     store = MagicMock(spec=OpenSearchVectorStoreAdapter)
     store.ensure_ready.side_effect = [RuntimeError("Corpus index is not initialized"), None]
-    ctx.get_vector_store = lambda: store
+    ctx.get_create_vector_store.return_value = store
     with _client(ctx) as client:
         assert client.get("/knowledge-flow/v2/healthz").status_code == 200
         response = client.get("/knowledge-flow/v2/ready")

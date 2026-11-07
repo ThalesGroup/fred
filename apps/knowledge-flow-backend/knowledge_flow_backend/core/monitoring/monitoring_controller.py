@@ -109,7 +109,8 @@ class MonitoringController:
         ok = await asyncio.to_thread(client.ping)
         if not ok:
             raise RuntimeError("OpenSearch ping returned False")
-        store = self._context.get_vector_store()
+        # The store opens on first use: an unready pod receives no search to open it.
+        store = await asyncio.to_thread(self._context.get_create_vector_store, self._context.get_embedder(), read_only=True)
         if isinstance(store, OpenSearchVectorStoreAdapter):
             await asyncio.to_thread(store.ensure_ready)
 

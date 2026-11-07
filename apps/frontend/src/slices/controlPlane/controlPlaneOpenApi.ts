@@ -2821,11 +2821,11 @@ export type ModelAuth = {
   /** Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. */
   tenant_id?: string | null;
 };
-export type ModelDialect = "openai" | "mistral";
+export type ModelDialect = "openai" | "openai_compatible" | "mistral";
 export type ModelRoute = "standard" | "azure_deployment";
 export type ModelWire = "openai_chat" | "openai_responses";
 export type ModelConnection = {
-  /** Separately approved canonical root; never derived from discovery_url. */
+  /** Separately approved canonical root; never derived from a discovery URL. */
   api_root: string;
   api_version?: string | null;
   auth: ModelAuth;

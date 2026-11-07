@@ -71,7 +71,10 @@ pub enum ModelRoute {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelDialect {
+    /// OpenAI and Azure OpenAI themselves.
     Openai,
+    /// A server that reads the token ceiling only from `max_tokens`, with `stream_options`.
+    OpenaiCompatible,
     Mistral,
 }
 
@@ -107,7 +110,7 @@ pub struct ModelAuth {
 pub struct ModelConnection {
     /// Source-bound workload provisioning reference; never a credential value.
     pub credential_binding: String,
-    /// Separately approved canonical root; never derived from discovery_url.
+    /// Separately approved canonical root; never derived from a discovery URL.
     pub api_root: String,
     pub wire: ModelWire,
     pub route: ModelRoute,

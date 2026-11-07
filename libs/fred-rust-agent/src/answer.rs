@@ -455,6 +455,10 @@ mod tests {
         for (dialect, asks_for_usage) in [
             (fred_rust_sdk::inference::ModelDialect::Mistral, false),
             (fred_rust_sdk::inference::ModelDialect::Openai, true),
+            (
+                fred_rust_sdk::inference::ModelDialect::OpenaiCompatible,
+                true,
+            ),
         ] {
             let provider = Provider::at("/inference/v2").await;
             let mut a = crate::testing::admission();

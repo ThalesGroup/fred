@@ -276,6 +276,56 @@
       ],
       "type": "string"
     },
+    "DeclaredModel": {
+      "additionalProperties": false,
+      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+      "properties": {
+        "context_window_tokens": {
+          "format": "int64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Exact upstream identifier, never normalized.",
+          "type": "string"
+        },
+        "max_input_tokens": {
+          "format": "int64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_output_tokens": {
+          "format": "int64",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "DirectoryDelegation": {
       "additionalProperties": false,
       "description": "Shared identity classification and runtime-resolver delegation settings.\nNames and defaults match Python security.delegation; acceptance is route-scoped.",
@@ -517,7 +567,7 @@
       "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
       "properties": {
         "api_root": {
-          "description": "Separately approved canonical root; never derived from discovery_url.",
+          "description": "Separately approved canonical root; never derived from a discovery URL.",
           "type": "string"
         },
         "api_version": {
@@ -556,6 +606,7 @@
     "ModelDialect": {
       "enum": [
         "openai",
+        "openai_compatible",
         "mistral"
       ],
       "type": "string"
@@ -591,24 +642,14 @@
           "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
           "type": "boolean"
         },
-        "authentication": {
-          "$ref": "#/$defs/DiscoveryAuthentication"
-        },
-        "complete_inventory_guaranteed": {
-          "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
-          "type": "boolean"
-        },
-        "discovery_url": {
-          "type": "string"
-        },
         "enabled": {
           "type": "boolean"
         },
         "inference": {
           "$ref": "#/$defs/ModelConnection"
         },
-        "qualification": {
-          "$ref": "#/$defs/Qualification"
+        "inventory": {
+          "$ref": "#/$defs/SourceInventory"
         },
         "revision": {
           "description": "Strictly increase for every configuration change, including secret rotation.",
@@ -626,12 +667,9 @@
       "required": [
         "source_id",
         "revision",
-        "discovery_url",
+        "inventory",
         "inference",
-        "visibility_scope",
-        "authentication",
-        "qualification",
-        "complete_inventory_guaranteed"
+        "visibility_scope"
       ],
       "type": "object"
     },
@@ -952,6 +990,65 @@
         "user"
       ],
       "type": "object"
+    },
+    "SourceInventory": {
+      "description": "Where this source's offers come from. A declared list replaces discovery for its\nsource, never supplements it, and both publish through the same refresh.",
+      "oneOf": [
+        {
+          "properties": {
+            "authentication": {
+              "$ref": "#/$defs/DiscoveryAuthentication"
+            },
+            "complete_inventory_guaranteed": {
+              "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
+              "type": "boolean"
+            },
+            "kind": {
+              "enum": [
+                "discovered"
+              ],
+              "type": "string"
+            },
+            "qualification": {
+              "$ref": "#/$defs/Qualification"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url",
+            "authentication",
+            "qualification",
+            "complete_inventory_guaranteed",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "declared"
+              ],
+              "type": "string"
+            },
+            "models": {
+              "items": {
+                "$ref": "#/$defs/DeclaredModel"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "models",
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "StorageConfig": {
       "additionalProperties": false,

@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 _SEGMENT = re.compile(r"(?!\.{1,2}$)[A-Za-z0-9._-]+")
 _ENTRA_UNAVAILABLE = "Inference authentication is unavailable for the approved source"
+_TEMPERATURE_REFUSED = "The model client does not accept the admitted temperature"
 
 
 def _local_secret(variable: str | None) -> str:
@@ -126,6 +127,14 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         # Explicit options only; do not inject core's default temperature.
         options = selection.options.model_dump(exclude_none=True)
         options.setdefault("temperature", None)
+        # Through the body: ChatOpenAI renames this option to max_completion_tokens,
+        # which these servers would ignore.
+        if (
+            connection.wire == "openai_chat"
+            and connection.dialect == "openai_compatible"
+            and "max_tokens" in options
+        ):
+            options["extra_body"] = {"max_tokens": options.pop("max_tokens")}
         config = ModelConfiguration(
             provider="openai",
             name=model_id,
@@ -162,6 +171,15 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             )
             if type(built) is not ChatOpenAI:
                 raise TypeError("Expected the connected OpenAI-compatible client")
+            # LangChain silently drops a temperature some models refuse, at construction
+            # or when serializing. Every call path sends this payload. An admitted setting
+            # is never ignored, and the guard would report this as lost authority.
+            temperature = selection.options.temperature
+            if (
+                temperature is not None
+                and built._get_request_payload([]).get("temperature") != temperature
+            ):
+                raise ModelRoutingError(_TEMPERATURE_REFUSED)
             if connection.dialect == "mistral":
                 built = with_mistral_reasoning_replay(built)
             model = guarded_model(built, authority.check)

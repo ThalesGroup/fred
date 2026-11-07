@@ -18935,68 +18935,6 @@
                             "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
                             "type": "boolean"
                           },
-                          "authentication": {
-                            "oneOf": [
-                              {
-                                "properties": {
-                                  "mode": {
-                                    "enum": [
-                                      "public"
-                                    ],
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "mode"
-                                ],
-                                "type": "object"
-                              },
-                              {
-                                "properties": {
-                                  "accept_inference_authority": {
-                                    "type": "boolean"
-                                  },
-                                  "authority": {
-                                    "enum": [
-                                      "discovery_only",
-                                      "discovery_and_inference"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "mode": {
-                                    "enum": [
-                                      "bearer"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "provider_scopes": {
-                                    "description": "Actual provider scopes, reviewed by the platform; a separate key proves nothing.",
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "secret_env_var": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "secret_env_var",
-                                  "provider_scopes",
-                                  "authority",
-                                  "mode"
-                                ],
-                                "type": "object"
-                              }
-                            ]
-                          },
-                          "complete_inventory_guaranteed": {
-                            "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
-                            "type": "boolean"
-                          },
-                          "discovery_url": {
-                            "type": "string"
-                          },
                           "enabled": {
                             "type": "boolean"
                           },
@@ -19005,7 +18943,7 @@
                             "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
                             "properties": {
                               "api_root": {
-                                "description": "Separately approved canonical root; never derived from discovery_url.",
+                                "description": "Separately approved canonical root; never derived from a discovery URL.",
                                 "type": "string"
                               },
                               "api_version": {
@@ -19065,6 +19003,7 @@
                               "dialect": {
                                 "enum": [
                                   "openai",
+                                  "openai_compatible",
                                   "mistral"
                                 ],
                                 "type": "string"
@@ -19094,12 +19033,167 @@
                             ],
                             "type": "object"
                           },
-                          "qualification": {
-                            "enum": [
-                              "chat_source",
-                              "mixed_capabilities_v1"
-                            ],
-                            "type": "string"
+                          "inventory": {
+                            "description": "Where this source's offers come from. A declared list replaces discovery for its\nsource, never supplements it, and both publish through the same refresh.",
+                            "oneOf": [
+                              {
+                                "properties": {
+                                  "authentication": {
+                                    "oneOf": [
+                                      {
+                                        "properties": {
+                                          "mode": {
+                                            "enum": [
+                                              "public"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "mode"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "accept_inference_authority": {
+                                            "type": "boolean"
+                                          },
+                                          "authority": {
+                                            "enum": [
+                                              "discovery_only",
+                                              "discovery_and_inference"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "mode": {
+                                            "enum": [
+                                              "bearer"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "provider_scopes": {
+                                            "description": "Actual provider scopes, reviewed by the platform; a separate key proves nothing.",
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "secret_env_var": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "secret_env_var",
+                                          "provider_scopes",
+                                          "authority",
+                                          "mode"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "complete_inventory_guaranteed": {
+                                    "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
+                                    "type": "boolean"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "discovered"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "qualification": {
+                                    "enum": [
+                                      "chat_source",
+                                      "mixed_capabilities_v1"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "url",
+                                  "authentication",
+                                  "qualification",
+                                  "complete_inventory_guaranteed",
+                                  "kind"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "declared"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+                                      "properties": {
+                                        "context_window_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "display_name": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "id": {
+                                          "description": "Exact upstream identifier, never normalized.",
+                                          "type": "string"
+                                        },
+                                        "max_input_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "max_output_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "reasoning": {
+                                          "type": [
+                                            "boolean",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "models",
+                                  "kind"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           },
                           "revision": {
                             "description": "Strictly increase for every configuration change, including secret rotation.",
@@ -19117,12 +19211,9 @@
                         "required": [
                           "source_id",
                           "revision",
-                          "discovery_url",
+                          "inventory",
                           "inference",
-                          "visibility_scope",
-                          "authentication",
-                          "qualification",
-                          "complete_inventory_guaranteed"
+                          "visibility_scope"
                         ],
                         "type": "object"
                       },
@@ -21122,68 +21213,6 @@
                             "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
                             "type": "boolean"
                           },
-                          "authentication": {
-                            "oneOf": [
-                              {
-                                "properties": {
-                                  "mode": {
-                                    "enum": [
-                                      "public"
-                                    ],
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "mode"
-                                ],
-                                "type": "object"
-                              },
-                              {
-                                "properties": {
-                                  "accept_inference_authority": {
-                                    "type": "boolean"
-                                  },
-                                  "authority": {
-                                    "enum": [
-                                      "discovery_only",
-                                      "discovery_and_inference"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "mode": {
-                                    "enum": [
-                                      "bearer"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "provider_scopes": {
-                                    "description": "Actual provider scopes, reviewed by the platform; a separate key proves nothing.",
-                                    "items": {
-                                      "type": "string"
-                                    },
-                                    "type": "array"
-                                  },
-                                  "secret_env_var": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "secret_env_var",
-                                  "provider_scopes",
-                                  "authority",
-                                  "mode"
-                                ],
-                                "type": "object"
-                              }
-                            ]
-                          },
-                          "complete_inventory_guaranteed": {
-                            "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
-                            "type": "boolean"
-                          },
-                          "discovery_url": {
-                            "type": "string"
-                          },
                           "enabled": {
                             "type": "boolean"
                           },
@@ -21192,7 +21221,7 @@
                             "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
                             "properties": {
                               "api_root": {
-                                "description": "Separately approved canonical root; never derived from discovery_url.",
+                                "description": "Separately approved canonical root; never derived from a discovery URL.",
                                 "type": "string"
                               },
                               "api_version": {
@@ -21252,6 +21281,7 @@
                               "dialect": {
                                 "enum": [
                                   "openai",
+                                  "openai_compatible",
                                   "mistral"
                                 ],
                                 "type": "string"
@@ -21281,12 +21311,167 @@
                             ],
                             "type": "object"
                           },
-                          "qualification": {
-                            "enum": [
-                              "chat_source",
-                              "mixed_capabilities_v1"
-                            ],
-                            "type": "string"
+                          "inventory": {
+                            "description": "Where this source's offers come from. A declared list replaces discovery for its\nsource, never supplements it, and both publish through the same refresh.",
+                            "oneOf": [
+                              {
+                                "properties": {
+                                  "authentication": {
+                                    "oneOf": [
+                                      {
+                                        "properties": {
+                                          "mode": {
+                                            "enum": [
+                                              "public"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "mode"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "accept_inference_authority": {
+                                            "type": "boolean"
+                                          },
+                                          "authority": {
+                                            "enum": [
+                                              "discovery_only",
+                                              "discovery_and_inference"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "mode": {
+                                            "enum": [
+                                              "bearer"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "provider_scopes": {
+                                            "description": "Actual provider scopes, reviewed by the platform; a separate key proves nothing.",
+                                            "items": {
+                                              "type": "string"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "secret_env_var": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "secret_env_var",
+                                          "provider_scopes",
+                                          "authority",
+                                          "mode"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "complete_inventory_guaranteed": {
+                                    "description": "Platform attests that an unpaginated response lists the entire visibility scope.\nWithout this guarantee, discovery cannot publish an authoritative inventory.",
+                                    "type": "boolean"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "discovered"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "qualification": {
+                                    "enum": [
+                                      "chat_source",
+                                      "mixed_capabilities_v1"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "url",
+                                  "authentication",
+                                  "qualification",
+                                  "complete_inventory_guaranteed",
+                                  "kind"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "declared"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "models": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+                                      "properties": {
+                                        "context_window_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "display_name": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "id": {
+                                          "description": "Exact upstream identifier, never normalized.",
+                                          "type": "string"
+                                        },
+                                        "max_input_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "max_output_tokens": {
+                                          "format": "int64",
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
+                                          ]
+                                        },
+                                        "reasoning": {
+                                          "type": [
+                                            "boolean",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 256,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "models",
+                                  "kind"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           },
                           "revision": {
                             "description": "Strictly increase for every configuration change, including secret rotation.",
@@ -21304,12 +21489,9 @@
                         "required": [
                           "source_id",
                           "revision",
-                          "discovery_url",
+                          "inventory",
                           "inference",
-                          "visibility_scope",
-                          "authentication",
-                          "qualification",
-                          "complete_inventory_guaranteed"
+                          "visibility_scope"
                         ],
                         "type": "object"
                       },

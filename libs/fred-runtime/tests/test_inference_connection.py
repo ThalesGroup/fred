@@ -3,7 +3,7 @@
 """One connection model, one path: the real factory, ChatOpenAI and guard.
 
 No network: both shared pools answer on a local transport. No real gateway, Ollama
-or Entra tenant is involved, and no source of these kinds can publish offers yet.
+or Entra tenant is involved.
 """
 
 import asyncio
@@ -44,7 +44,7 @@ from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.contracts.weaver import ModelConnection, WeaverRuntimeBinding
 from langchain_core.load import dumpd
 from langchain_openai import ChatOpenAI
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from test_inference_admission import admitted, build
 from test_reasoning_replay import _history, _thinking
 
@@ -164,7 +164,7 @@ def valid_payload(name, **changes):
             "temperature": 0.2,
             "top_p": 0.8,
         }
-        if connection_of(name).dialect == "mistral":
+        if connection_of(name).dialect != "openai":
             payload["max_tokens"] = payload.pop("max_completion_tokens")
     payload.update(changes)
     return {key: value for key, value in payload.items() if value is not ABSENT}
@@ -290,10 +290,22 @@ def _mistral_reply(request):
     )
 
 
+def _compatible_reply(request):
+    """Such a server ignores max_completion_tokens, and reports usage only when asked."""
+    body = body_of(request)
+    if "max_completion_tokens" in body or body["stream_options"] != {
+        "include_usage": True
+    }:
+        return httpx.Response(422, json={"detail": "request outside the contract"})
+    return _reply(request)
+
+
 def serve(transport, name):
     """The fake provider checks the contract of this connection's dialect."""
     if connection_of(name).dialect == "mistral":
         transport.reply = _mistral_reply
+    elif connection_of(name).dialect == "openai_compatible":
+        transport.reply = _compatible_reply
 
 
 class Credential:
@@ -515,6 +527,20 @@ async def test_turn_title_and_usage_share_one_path(
         }
         title_body = body_of(title_call)
         assert title_body["max_tokens"] == 128
+    elif connection_of(name).dialect == "openai_compatible":
+        assert body_of(turn_call) == {
+            "model": case["model"],
+            "stream": True,
+            "messages": [question],
+            "max_tokens": 50,
+            "reasoning_effort": "high",
+            "stream_options": {"include_usage": True},
+            "temperature": 0.2,
+            "top_p": 0.8,
+        }
+        title_body = body_of(title_call)
+        assert title_body["max_tokens"] == 128
+        assert "max_completion_tokens" not in title_body
     else:
         assert body_of(turn_call) == {
             "model": case["model"],
@@ -598,7 +624,7 @@ async def test_the_client_is_always_the_plain_chat_openai_path(
     "name,expected", [(COMPATIBLE, False), (APIM_RESPONSES, True), (APIM_CHAT, False)]
 )
 async def test_use_responses_api_is_never_automatic(name, expected, transport):
-    binding = admission_of(name, model="gpt-5.5-pro")
+    binding = admission_of(name, model="gpt-5.5-pro", temperature=None)
     with turn(binding):
         model = cast(ChatOpenAI, build(routed(name), binding))
         assert model.use_responses_api is expected
@@ -629,6 +655,120 @@ async def test_the_dialect_decides_the_payload_behind_one_gateway_root(transport
     assert body_of(mistral)["max_tokens"] == 50
     assert body_of(openai)["max_completion_tokens"] == 50
     assert body_of(openai)["stream_options"] == {"include_usage": True}
+
+
+def _with_dialect(name, dialect, **options):
+    fields = admission_of(name, **options).model_dump(mode="json")
+    fields["inference"]["connection"]["dialect"] = dialect
+    return WeaverRuntimeBinding.model_validate(fields)
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_sends_no_ceiling_without_an_admitted_one(transport):
+    serve(transport, COMPATIBLE)
+    binding = admission_of(COMPATIBLE, max_tokens=None)
+    with turn(binding):
+        await build(routed(COMPATIBLE), binding).ainvoke("question")
+    body = body_of(transport.calls[0])
+    assert "max_tokens" not in body and "max_completion_tokens" not in body
+    assert "extra_body" not in body
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_changes_nothing_on_responses(transport):
+    binding = _with_dialect(APIM_RESPONSES, "openai_compatible")
+    with turn(binding):
+        await build(routed(APIM_RESPONSES), binding).ainvoke("question")
+    body = body_of(transport.calls[0])
+    assert body["max_output_tokens"] == 50
+    assert "max_tokens" not in body and "extra_body" not in body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", [COMPATIBLE, APIM_CHAT, APIM_RESPONSES, GATEWAY])
+async def test_a_temperature_dropped_by_the_client_refuses_the_model(name, transport):
+    """The fixed refusal comes before any request, instead of the guard's."""
+    binding = admission_of(name, model="gpt-5", temperature=0.2)
+    with turn(binding) as authority:
+        with pytest.raises(ModelRoutingError) as caught:
+            build(routed(name), binding)
+        assert authority.models == {}
+    assert caught.value.user_message == routed_provider._TEMPERATURE_REFUSED
+    assert not isinstance(caught.value, AuthorityLostError)
+    assert transport.calls == []
+    assert all(credential.scopes == [] for credential in Credential.created)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_id,temperature",
+    [("gpt-5", None), ("gpt-5", 1.0), ("gpt-5-chat-latest", 0.2), ("gpt-4o", 0.2)],
+)
+async def test_a_temperature_the_client_keeps_reaches_the_request(
+    model_id, temperature, transport
+):
+    serve(transport, COMPATIBLE)
+    binding = admission_of(COMPATIBLE, model=model_id, temperature=temperature)
+    with turn(binding):
+        await build(routed(COMPATIBLE), binding).ainvoke("question")
+    assert body_of(transport.calls[0]).get("temperature") == temperature
+
+
+@pytest.mark.asyncio
+async def test_a_temperature_dropped_when_serializing_refuses_the_model(transport):
+    """The client keeps it at construction and removes it from the Responses payload."""
+    kept = ChatOpenAI(
+        model="gpt-5",
+        temperature=1,
+        use_responses_api=True,
+        api_key=SecretStr(API_KEY),
+    )
+    assert kept.temperature == 1
+    binding = admission_of(
+        APIM_RESPONSES, model="gpt-5", temperature=1.0, reasoning_effort="high"
+    )
+    with turn(binding) as authority:
+        with pytest.raises(ModelRoutingError) as caught:
+            build(routed(APIM_RESPONSES), binding)
+        assert authority.models == {}
+    assert caught.value.user_message == routed_provider._TEMPERATURE_REFUSED
+    assert not isinstance(caught.value, AuthorityLostError)
+    assert transport.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_id,temperature,effort",
+    [
+        ("gpt-5", None, "high"),
+        ("gpt-4o", 0.2, None),
+        ("gpt-5-chat-latest", 0.2, None),
+    ],
+)
+async def test_responses_sends_exactly_the_admitted_temperature(
+    model_id, temperature, effort, transport
+):
+    binding = admission_of(
+        APIM_RESPONSES, model=model_id, temperature=temperature, reasoning_effort=effort
+    )
+    with turn(binding):
+        model = build(routed(APIM_RESPONSES), binding)
+        await model.ainvoke("question")
+        model.invoke("question")
+    assert len(transport.calls) == 2
+    for call in transport.calls:
+        assert body_of(call).get("temperature") == temperature
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_keeps_the_temperature_responses_would_drop(transport):
+    serve(transport, COMPATIBLE)
+    binding = admission_of(
+        COMPATIBLE, model="gpt-5", temperature=1.0, reasoning_effort="high"
+    )
+    with turn(binding):
+        await build(routed(COMPATIBLE), binding).ainvoke("question")
+    assert body_of(transport.calls[0])["temperature"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -772,9 +912,13 @@ async def test_body_outside_the_admission_is_refused(name, body, transport):
         (MISTRAL, {"max_tokens": 51}),
         (MISTRAL, {"max_tokens": ABSENT}),
         (MISTRAL_GATEWAY, {"max_tokens": 51}),
-        (COMPATIBLE, {"max_completion_tokens": 51}),
-        (COMPATIBLE, {"max_completion_tokens": True}),
-        (COMPATIBLE, {"max_completion_tokens": ABSENT}),
+        (OPENAI_GATEWAY, {"max_completion_tokens": 51}),
+        (OPENAI_GATEWAY, {"max_completion_tokens": True}),
+        (OPENAI_GATEWAY, {"max_completion_tokens": ABSENT}),
+        (COMPATIBLE, {"max_tokens": 51}),
+        (COMPATIBLE, {"max_tokens": True}),
+        (COMPATIBLE, {"max_tokens": ABSENT}),
+        (OLLAMA, {"max_tokens": 51}),
         (COMPATIBLE, {"reasoning_effort": "low"}),
         (COMPATIBLE, {"reasoning_effort": None}),
         (COMPATIBLE, {"reasoning_effort": ABSENT}),
@@ -1226,9 +1370,7 @@ async def test_entra_failure_is_fixed_and_carries_nothing(
 async def test_only_the_dialect_activates_the_replay(
     name, dialect, model_id, replayed, transport
 ):
-    fields = admission_of(name, model=model_id).model_dump(mode="json")
-    fields["inference"]["connection"]["dialect"] = dialect
-    binding = WeaverRuntimeBinding.model_validate(fields)
+    binding = _with_dialect(name, dialect, model=model_id)
     with turn(binding):
         model = build(routed(name), binding)
     assert isinstance(model, MistralReasoningReplayChatOpenAI) is replayed
@@ -1240,10 +1382,10 @@ async def test_only_the_dialect_activates_the_replay(
     [
         {"api_root": "https://gateway.invalid/v1/"},
         {"api_root": "https://Gateway.invalid/v1"},
-        {"api_root": "https://user:pw@gateway.invalid/v1"},
+        {"api_root": "https://user:pw@gateway.invalid/v1"},  # pragma: allowlist secret
         {"api_root": "https://gateway.invalid/v1?a=b"},
-        {"api_key_env": "not-a-name"},
-        {"client_secret_env": "1NOPE"},
+        {"api_key_env": "not-a-name"},  # pragma: allowlist secret
+        {"client_secret_env": "1NOPE"},  # pragma: allowlist secret
         {"gateway_key_env": "A B"},
         {"credential_binding": ""},
         {"source_id": "source"},

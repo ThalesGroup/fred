@@ -9,7 +9,7 @@
     },
     {
       "name": "openai-compatible",
-      "connection": {"credential_binding": "gateway", "api_root": "https://gateway.invalid/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "api_key"}},
+      "connection": {"credential_binding": "gateway", "api_root": "https://gateway.invalid/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai_compatible", "auth": {"kind": "api_key"}},
       "model": "any/model:tag",
       "url": "https://gateway.invalid/v1/chat/completions",
       "ralph": true
@@ -30,7 +30,7 @@
     },
     {
       "name": "ollama",
-      "connection": {"credential_binding": "ollama", "api_root": "http://ollama:11434/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "none"}},
+      "connection": {"credential_binding": "ollama", "api_root": "http://ollama:11434/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai_compatible", "auth": {"kind": "none"}},
       "model": "llama3.1:8b",
       "url": "http://ollama:11434/v1/chat/completions"
     },
@@ -95,7 +95,7 @@
     {"name": "no scheme", "changes": {"api_root": "gateway.invalid/v1"}},
     {"name": "no host", "changes": {"api_root": "https:///v1"}},
     {"name": "user", "changes": {"api_root": "https://user@gateway.invalid/v1"}},
-    {"name": "user and password", "changes": {"api_root": "https://user:secret@gateway.invalid/v1"}},
+    {"name": "user and password", "changes": {"api_root": "https://user:abcdef@gateway.invalid/v1"}},
     {"name": "query", "changes": {"api_root": "https://gateway.invalid/v1?a=b"}},
     {"name": "empty query", "changes": {"api_root": "https://gateway.invalid/v1?"}},
     {"name": "fragment", "changes": {"api_root": "https://gateway.invalid/v1#a"}},

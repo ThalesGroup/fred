@@ -143,6 +143,7 @@ strict service-account protocol, then operation and actor checks.
 | GET | `/control-plane/v1/document-processing/{id}/original` | `original` |
 | POST | `/control-plane/v1/document-processing/{id}/vectors` | `vectors` |
 | GET | `/control-plane/v1/document-processing/{id}/work` | `work` |
+| POST | `/control-plane/v1/document-processing/{id}/writes` | `writes` |
 | GET | `/control-plane/v1/documents/{id}/preview` | `preview` |
 | GET | `/control-plane/v1/documents/{id}/processing` | `history` |
 | POST | `/control-plane/v1/documents/{id}/processing` | `start` |
@@ -350,8 +351,9 @@ the SQL guarantees; it does not establish end-to-end validation of those journey
 ### Chat model preparation and turn admission
 
 Companion to [Bob's first exchange](02.3-agent-administration.md). Model identity is
-`(source_id, upstream_model_id)`, not a display name or pod-local profile. Discovery
-supplies observations; the organization's policy supplies permission. The retained
+`(source_id, upstream_model_id)`, not a display name or pod-local profile. A source's
+inventory, discovered or declared by the platform, supplies observations; the
+organization's policy supplies permission. The retained
 instance recommendation and organization default are optional.
 
 | Selection step | Rule |
@@ -416,13 +418,15 @@ not a model-readiness guarantee, and creation does not require a recommendation.
 
 **Deployment prerequisites and business choices.**
 [`model_catalog/config.rs`](../../apps/control-plane/src/model_catalog/config.rs)
-defines platform-approved discovery and inference destinations separately.
-Control Plane uses the configured discovery authentication; the inference
+defines platform-approved inference destinations and, for each source, one inventory:
+either a discovery destination with its own authentication, or a declared list that
+replaces discovery for that source. The declared form is implemented and tested on
+simulated providers, not received on a real gateway. The inference
 connection contains a binding reference that the pod resolves locally, not a secret
 value. Alice, Acme's organization owner, may refresh an approved source and
 change Acme's model policy; this is business responsibility, not Oscar's admin
 mandate. Her organization role cannot rewrite platform connections. Deployment
-configuration must provide both discovery and inference access; discovering an offer proves neither permission nor
+configuration must provide an inventory and inference access; publishing an offer proves neither permission nor
 a successful model call.
 
 <!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->

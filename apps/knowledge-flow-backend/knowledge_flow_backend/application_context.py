@@ -308,14 +308,6 @@ class ApplicationContext:
 
         return CrossEncoder(model_name_or_path=model_config.name, cache_folder=None)
 
-    def get_vector_store(self) -> BaseVectorStore:
-        """
-        Vector Store Factory
-        """
-        if self._vector_store_instance is not None:
-            return self._vector_store_instance
-        raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
-
     def get_create_vector_store(self, embedding_model: Embeddings, *, read_only: bool = False) -> BaseVectorStore:
         """
         Vector Store Factory

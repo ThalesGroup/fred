@@ -96,7 +96,7 @@ class ModelConnection(ResolverFact):
     wire: Literal["openai_chat", "openai_responses"]
     route: Literal["standard", "azure_deployment"]
     api_version: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
-    dialect: Literal["openai", "mistral"]
+    dialect: Literal["openai", "openai_compatible", "mistral"]
     auth: ModelAuth
 
     @model_validator(mode="after")

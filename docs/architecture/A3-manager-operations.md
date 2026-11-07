@@ -175,7 +175,19 @@ platform:
     - source_id: mistral
       revision: 1
       enabled: true
-      discovery_url: https://api.mistral.ai/v1/models
+      inventory:
+        kind: discovered
+        url: https://api.mistral.ai/v1/models
+        authentication:
+          mode: bearer
+          secret_env_var: OPENAI_API_KEY
+          # API operations of the existing local test key, not OAuth scope names.
+          provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
+          authority: discovery_and_inference
+          # Explicit reuse of the existing Swift test key for discovery.
+          accept_inference_authority: true
+        qualification: mixed_capabilities_v1
+        complete_inventory_guaranteed: true
       inference:
         credential_binding: mistral
         api_root: https://api.mistral.ai/v1
@@ -185,16 +197,6 @@ platform:
         auth:
           kind: api_key
       visibility_scope: local-test-mistral-account
-      authentication:
-        mode: bearer
-        secret_env_var: OPENAI_API_KEY
-        # API operations of the existing local test key, not OAuth scope names.
-        provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
-        authority: discovery_and_inference
-        # Explicit reuse of the existing Swift test key for discovery.
-        accept_inference_authority: true
-      qualification: mixed_capabilities_v1
-      complete_inventory_guaranteed: true
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2

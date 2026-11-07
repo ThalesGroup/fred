@@ -124,13 +124,20 @@ impl Provider {
     }
     fn source(&self, id: &str) -> ModelSource {
         serde_json::from_value(json!({"source_id":id,"revision":1,"enabled":true,
-            "discovery_url":format!("{}/models",self.url),
+            "inventory":{"kind":"discovered","url":format!("{}/models",self.url),
+                "authentication":{"mode":"public"},"qualification":"mixed_capabilities_v1",
+                "complete_inventory_guaranteed":true},
             "inference":{"credential_binding":id,"api_root":self.url,"wire":"openai_chat",
                 "route":"standard","dialect":"openai","auth":{"kind":"api_key"}},
-            "visibility_scope":format!("account-{id}"),"authentication":{"mode":"public"},
-            "qualification":"mixed_capabilities_v1","complete_inventory_guaranteed":true,
-            "allow_insecure_http":true}))
+            "visibility_scope":format!("account-{id}"),"allow_insecure_http":true}))
         .unwrap()
+    }
+    fn declared(&self, id: &str, revision: i64, models: Value) -> ModelSource {
+        let mut source = self.source(id);
+        source.revision = revision;
+        source.inventory =
+            serde_json::from_value(json!({"kind":"declared","models":models})).unwrap();
+        source
     }
 }
 fn key(source: &str) -> Value {
@@ -219,6 +226,176 @@ fn yaml_validation_rejects_invalid_policy_and_cli_redacts_input() {
             .unwrap()
             .contains("fixture-secret")
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn a_declared_list_follows_the_published_path_without_discovery_or_permission() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    let models = json!([
+        {"id":"chat","display_name":"Chat","reasoning":true,"max_output_tokens":100},
+        {"id":"other"},
+    ]);
+    let source = provider.declared("d", 1, models.clone());
+    let mut platform = PlatformConfig {
+        model_sources: vec![source.clone()],
+        organization_models: vec![
+            serde_json::from_value(json!({"organization":"TSN","sources":["d"],"permitted":[],
+                "default":null,"fallback":null,"reasoning_enabled":[]}))
+            .unwrap(),
+        ],
+        ..Default::default()
+    };
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform.clone()).await;
+    let refresh = format!("/organizations/{}/model-sources/d/refresh", org.id);
+    let policy_path = format!("/organizations/{}/model-policy", org.id);
+    let offer = |id: &str| json!({"source_id":"d","upstream_model_id":id});
+    let policy = |revision, permitted: Value, reasoning: Value| {
+        json!({"expected_revision":revision,"permitted":permitted,"reasoning_enabled":reasoning,
+            "default":null,"fallback":null,"title":null})
+    };
+
+    // Declared is not yet observed: nothing is published or selectable before a refresh.
+    let view = inventory(&app, &identity, org.id).await;
+    assert_eq!(view["sources"][0]["observation"]["state"], "not_observed");
+    assert_eq!(view["sources"][0]["offers"], json!([]));
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &policy_path,
+        policy(1, json!([offer("chat")]), json!([])),
+    )
+    .await;
+    assert_eq!(status, 422, "{body}");
+
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &refresh,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 204, "{body}");
+    let view = inventory(&app, &identity, org.id).await;
+    assert_eq!(view["sources"][0]["observation"]["state"], "ok");
+    assert!(!view.to_string().contains(&provider.url));
+    let offers = view["sources"][0]["offers"].as_array().unwrap();
+    assert_eq!(offers.len(), 2);
+    assert_eq!(offers[0]["upstream_model_id"], "chat");
+    assert_eq!(offers[0]["selectable"], true);
+    assert_eq!(offers[0]["metadata"]["chat"], true);
+    assert_eq!(offers[0]["metadata"]["chat_provenance"], "source_guarantee");
+    assert_eq!(offers[0]["metadata"]["reasoning"], true);
+    assert_eq!(offers[0]["metadata"]["display_name"], "Chat");
+    assert_eq!(offers[0]["metadata"]["max_output_tokens"], 100);
+    assert_eq!(offers[1]["metadata"]["reasoning"], Value::Null);
+    // A declaration grants nothing, and its unknown reasoning stays unknown.
+    assert_eq!(view["policy"]["permitted"], json!([]));
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &policy_path,
+        policy(
+            1,
+            json!([offer("chat"), offer("other")]),
+            json!([offer("other")]),
+        ),
+    )
+    .await;
+    assert_eq!(status, 422, "{body}");
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &policy_path,
+        policy(1, json!([offer("chat")]), json!([offer("chat")])),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+
+    // A changed list needs a higher revision, and a changed kind a new source_id.
+    let reduced = json!([{"id":"chat","reasoning":true}]);
+    assert!(
+        model_catalog::configure_sources(&e.pool, &[provider.declared("d", 1, reduced.clone())])
+            .await
+            .is_err()
+    );
+    let mut discovered = provider.source("d");
+    discovered.revision = 3;
+    assert!(
+        model_catalog::configure_sources(&e.pool, &[discovered])
+            .await
+            .is_err()
+    );
+    platform.model_sources = vec![provider.declared("d", 2, reduced)];
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    let app = model_app(&e, &identity, platform).await;
+    let view = inventory(&app, &identity, org.id).await;
+    assert_eq!(view["sources"][0]["observation"]["state"], "not_observed");
+    assert_eq!(view["sources"][0]["offers"][0]["selectable"], false);
+    assert_eq!(view["policy"]["permitted"], json!([offer("chat")]));
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &refresh,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 204, "{body}");
+    let view = inventory(&app, &identity, org.id).await;
+    let offers = view["sources"][0]["offers"].as_array().unwrap();
+    assert_eq!(offers[0]["selectable"], true);
+    assert_eq!(offers[1]["upstream_model_id"], "other");
+    assert_eq!(offers[1]["advertised"], false);
+    assert!(!offers[1]["withdrawn_at"].is_null());
+    // The whole journey never reached the provider's list endpoint.
+    assert_eq!(provider.response.lock().await.2, 0);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn organization_initialization_publishes_a_declared_list_it_permits() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    let platform = PlatformConfig {
+        model_sources: vec![provider.declared(
+            "d",
+            1,
+            json!([{"id":"chat","reasoning":true},{"id":"extra"}]),
+        )],
+        organization_models: vec![declaration("TSN", &["d"])],
+        ..Default::default()
+    };
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    assert!(completion(&e, org.id).await);
+    let identity = support::IdentityServer::start().await;
+    let view = inventory(&model_app(&e, &identity, platform).await, &identity, org.id).await;
+    assert_eq!(view["sources"][0]["observation"]["state"], "ok");
+    assert_eq!(view["policy"]["permitted"], json!([key("d")]));
+    assert_eq!(view["policy"]["default"], key("d"));
+    assert_eq!(provider.response.lock().await.2, 0);
 }
 
 #[tokio::test]

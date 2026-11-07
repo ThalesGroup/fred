@@ -2650,7 +2650,7 @@ One destination, independent of the vendor: protocol, address and authentication
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `api_root` | string | yes | Separately approved canonical root; never derived from discovery_url. |
+| `api_root` | string | yes | Separately approved canonical root; never derived from a discovery URL. |
 | `api_version` | string or null |  |  |
 | `auth` | [`ModelAuth`](#modelauth) | yes |  |
 | `credential_binding` | string | yes | Source-bound workload provisioning reference; never a credential value. |
@@ -2664,7 +2664,7 @@ One of: `unknown_offer`, `not_permitted`, `source_disabled`, `source_revision_un
 
 ### ModelDialect
 
-One of: `openai`, `mistral`.
+One of: `openai`, `openai_compatible`, `mistral`.
 
 ### ModelInventory
 

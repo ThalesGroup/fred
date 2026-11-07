@@ -44,6 +44,7 @@ The pinned Rig 0.46 crates run one `rig-agent` agent per turn, over its Chat
 Completions wire with an explicit API key and base URL, and a shared reqwest pool
 (redirects disabled; 5-second connect and 60-second read timeouts). A connection
 with `dialect: mistral` uses Rig's Mistral dialect, which sends no `stream_options`;
+`openai` and `openai_compatible` both use its OpenAI dialect, with `max_tokens`;
 `api_root` alone fixes the URL, as `{api_root}/chat/completions`.
 The agent consumes the admitted model, temperature, token ceiling, top-p and
 reasoning through Rig's typed options; an option the wire cannot honour fails the
