@@ -10,6 +10,7 @@ The page remounts per agent instance, not per conversation, and the composer sta
 - **Agent context.** A composer send lists the sent files and the drafts it sends; HITL resumes and restarts list only the sent files.
 - **Drafts come back from the attachment list.** Rows that are not sent and not already in the local state are shown as ready composer chips. Local chips carry the conversation they were ingested for, and only those of the current conversation are shown and sent.
 - **The attachment list never shows the previous conversation's rows** while the new one loads (`currentData`), so they cannot pass as drafts.
+- **Drop and paste follow the composer.** Both reach the whole page, so they are refused while a question holds the composer, like typing.
 - **Never-sent drafts are not cleaned up separately.** Removing the chip already deletes the row and its Knowledge Flow artifacts; session erasure covers the rest.
 
 ## Known gaps
