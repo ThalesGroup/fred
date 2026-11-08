@@ -1471,6 +1471,11 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/fast/preview/{document_uid}
+    review_status: pending_review
+    required_permission: pending_review # Uploader-owned session chunk, else 404; like the other fast routes, no ReBAC permission to name yet.
+  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/fast/text
     review_status: pending_review

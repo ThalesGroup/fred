@@ -661,14 +661,22 @@ Knowledge Flow artifacts, which are otherwise permanently orphaned.
 /fast/delete/{document_uid}` directly on this failure path, the same
 KF-facing route the frontend already calls for a normal, persisted delete.
 Best-effort: a cleanup failure here doesn't mask the original upload error
-already shown to the user. Known residual gap, not addressed: `fastIngest`
-and `readImageContext` run under one `Promise.all`, so if fast-ingest
-succeeds but the sibling image-preview read rejects (a `FileReader` error on
-an image file), the same orphan can still occur — narrower and rarer than
-the persist-failure path this fix targets. No automated test covers this
+already shown to the user. No automated test covers this
 fix; this repo has no existing pattern for testing a hook's async
 orchestration against mocked RTK Query mutations, and building one was
 judged out of scope for this fix.
+
+**Image previews.** For a chat image, `fast_ingest` keeps only the bounded
+image it prepares for the describer (long edge at most 1568 px; JPEG q85 for an
+opaque photo when under 70% of its PNG, PNG otherwise), never the original, at
+`chat-attachment-previews/{document_uid}` (`attachment_preview.py`); over 4 MiB
+it is not kept. `GET /fast/preview/{document_uid}?session_id=` returns it, typed
+by its bytes, when the caller owns a chunk of the document in that session,
+else 404, never 403 (a delegated caller reads 403 as lost authority). At most 8
+reads run at once in their own pool; past a 0.5 s wait it answers 503. The fast
+delete, hence session erasure, removes it. This partly reopens the "no raw copy"
+decision (FILES-04 note in `ingestion_controller.py`), pending reviewer
+confirmation.
 
 **Prompt suffix.** `build_attachment_context_suffix`
 (`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents

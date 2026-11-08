@@ -17,13 +17,6 @@ export type ChatAttachmentStatus = "uploading" | "ready" | "ingesting" | "error"
 /** Composer entry point a file came from. */
 export type AttachmentSource = "picker" | "drop" | "paste";
 
-export interface ChatImageContext {
-  name: string;
-  mime: string;
-  size: number;
-  dataUrl: string;
-}
-
 export interface ChatAttachment {
   id: string;
   name: string;
@@ -32,9 +25,10 @@ export interface ChatAttachment {
   status: ChatAttachmentStatus;
   isImage: boolean;
   documentUid?: string;
-  imageContext?: ChatImageContext;
   taskIds: string[];
   error?: string;
+  /** The row persisted for this file and its conversation, until the attachment list shows it. */
+  persisted?: { sessionId: string; attachment: SessionAttachment };
 }
 
 export interface SessionAttachment {

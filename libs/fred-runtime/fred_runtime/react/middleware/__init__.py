@@ -30,6 +30,8 @@ The frame, in `create_agent` middleware list order:
        `wrap_model_call`): dangling-tool-call sanitize + history trim +
        reasoning-strip, applied to the MODEL INPUT ONLY — never persisted to the
        checkpoint — plus legacy tool-output metadata attach on the response.
+       VisionAttachmentsMiddleware follows it only when the model supports
+       vision: the turn's attached images, added to the model input only.
     2. DynamicPromptMiddleware       — per-turn system-prompt suffix
        (filesystem browsing continuation context).
     3. >>> CAPABILITY BLOCK INSERTION SLOT (#1973) <<<
@@ -99,6 +101,7 @@ from .rate_limit_retry import ProviderRateLimitError, RateLimitRetryMiddleware
 from .tool_call_recovery import ToolCallTextRecoveryMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
+from .vision_attachments import VisionAttachmentsMiddleware
 
 __all__ = [
     "CapabilityHitlBinding",
@@ -110,6 +113,7 @@ __all__ = [
     "ToolObservabilityMiddleware",
     "ToolCallTextRecoveryMiddleware",
     "TracingKpiMiddleware",
+    "VisionAttachmentsMiddleware",
     "build_react_platform_middleware_frame",
     "build_tool_approval_request",
 ]

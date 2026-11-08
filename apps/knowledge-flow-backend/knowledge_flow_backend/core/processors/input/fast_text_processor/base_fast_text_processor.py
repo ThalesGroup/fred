@@ -36,6 +36,8 @@ class FastTextResult:
     text: str
     pages: List[FastPageText] = field(default_factory=list)
     extras: dict = field(default_factory=dict)
+    # Images only: the bounded PNG or JPEG a vision model sees, kept for later chat turns.
+    preview_image: Optional[bytes] = None
 
 
 @dataclass

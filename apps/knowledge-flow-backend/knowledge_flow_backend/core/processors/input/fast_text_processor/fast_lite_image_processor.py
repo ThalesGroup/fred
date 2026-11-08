@@ -47,6 +47,9 @@ VISION_MAX_EDGE_PX = 1568
 # Decoded pixels after the JPEG draft: above this the bitmap alone costs hundreds of MB.
 VISION_MAX_PIXELS = 50_000_000
 _VISION_FORMATS = ["PNG", "JPEG", "GIF", "WEBP", "BMP", "ICO"]
+# A photo preview is kept as JPEG only when it saves this much: charts and diagrams stay sharp PNGs.
+PREVIEW_JPEG_QUALITY = 85
+PREVIEW_JPEG_MAX_RATIO = 0.7
 DESCRIPTION_LIMITS = "Limits: this description was written once, without knowing future questions. It is not exhaustive: anything it does not mention was not checked and is unknown, not absent."
 
 
@@ -128,6 +131,21 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
             return None
         return buffer.getvalue()
 
+    @staticmethod
+    def _preview_image(png: bytes) -> bytes:
+        # Every chat turn resends this preview: an opaque photo is several times smaller as JPEG.
+        try:
+            with Image.open(io.BytesIO(png)) as image:
+                if image.mode != "RGB":
+                    return png
+                buffer = io.BytesIO()
+                image.save(buffer, format="JPEG", quality=PREVIEW_JPEG_QUALITY, optimize=True)
+        except Exception as exc:  # Pillow raises many error types on corrupt or exotic input.
+            logger.warning("[FAST TEXT][IMAGE] Could not compact image preview: %s", exc)
+            return png
+        jpeg = buffer.getvalue()
+        return jpeg if len(jpeg) < PREVIEW_JPEG_MAX_RATIO * len(png) else png
+
     def extract(self, file_path: Path, options: FastTextOptions | None = None) -> FastTextResult:
         _ = options or FastTextOptions()
         if not file_path.exists():
@@ -141,10 +159,11 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
         # the end of the description, never the limits note.
         text = self._fallback_text(file_path)
         describer = self._resolve_image_describer()
-        png = self._vision_png(file_path) if describer is not None else None
+        # Prepared even without a describer: the chat model may see the pixels itself.
+        png = self._vision_png(file_path)
         vision_url = f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}" if png else None
         description = describer.describe(vision_url).strip() if describer is not None and vision_url else ""
-        if vision_url and description in ("", IMAGE_DESCRIPTION_UNAVAILABLE):
+        if describer is not None and vision_url and description in ("", IMAGE_DESCRIPTION_UNAVAILABLE):
             logger.info("[FAST TEXT][IMAGE] No visual description for %s: the vision model gave none", file_path.name)
         if len(description) > DESCRIPTION_MAX_CHARS:
             description = description[: DESCRIPTION_MAX_CHARS - len(DESCRIPTION_TRUNCATED) - 1] + "\n" + DESCRIPTION_TRUNCATED
@@ -160,4 +179,6 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
             truncated=False,
             text=text,
             extras={"file_type": "image", "extension": file_path.suffix.lower()},
+            # SVG renders are drawings: always PNG.
+            preview_image=None if png is None else png if file_path.suffix.lower() == ".svg" else self._preview_image(png),
         )

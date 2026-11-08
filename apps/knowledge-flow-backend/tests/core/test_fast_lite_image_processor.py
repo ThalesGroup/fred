@@ -20,7 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PIL import Image, ImageStat
+from PIL import Image, ImageFilter, ImageStat
 
 from knowledge_flow_backend.core.processors.input.common.image_describer import (
     IMAGE_DESCRIPTION_UNAVAILABLE,
@@ -211,3 +211,54 @@ def test_deeply_nested_svg_keeps_its_facts_without_a_description(tmp_path: Path,
 
     assert "Elements: g 3000" in text and "Texts: deep" in text
     assert sent == [] and text.endswith(NO_DESCRIPTION)
+
+
+def _photo_bytes(size: tuple[int, int], mode: str = "RGB") -> bytes:
+    # Smooth noise plus a gradient: compresses like a photo, unlike a flat test square.
+    noise = Image.effect_noise(size, 60).filter(ImageFilter.GaussianBlur(1))
+    photo = Image.merge("RGB", (noise, Image.linear_gradient("L").resize(size), noise.transpose(Image.Transpose.FLIP_LEFT_RIGHT)))
+    if mode == "RGBA":
+        photo.putalpha(128)
+    buffer = io.BytesIO()
+    photo.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "preview"),
+    [
+        ("photo.png", _photo_bytes((3200, 1600)), ("JPEG", (VISION_MAX_EDGE_PX, VISION_MAX_EDGE_PX // 2))),
+        ("chart.jpg", _image_bytes((4000, 2000), "JPEG"), ("PNG", (VISION_MAX_EDGE_PX, VISION_MAX_EDGE_PX // 2))),  # flat: JPEG saves too little
+        ("logo.png", _photo_bytes((800, 600), "RGBA"), ("PNG", (800, 600))),  # transparency kept
+        ("plan.svg", b'<svg xmlns="http://www.w3.org/2000/svg"/>', ("PNG", (800, 600))),  # renders are drawings
+        ("poster.png", _image_bytes((9000, 9000), "PNG", "1"), None),
+    ],
+)
+def test_preview_is_kept_even_without_a_vision_model(tmp_path: Path, monkeypatch, caplog, name: str, data: bytes, preview: tuple | None) -> None:
+    image_path = tmp_path / name
+    image_path.write_bytes(data)
+    monkeypatch.setattr(f"{_MODULE}.get_configuration", lambda: SimpleNamespace(vision_model=None))
+    monkeypatch.setattr(f"{_MODULE}.svg_png_data_url", lambda _path: "data:image/png;base64," + base64.b64encode(_photo_bytes((800, 600))).decode())
+
+    with caplog.at_level(logging.INFO, logger=_MODULE):
+        result = FastLiteImageProcessor().extract(image_path)
+
+    if preview is None:
+        assert result.preview_image is None
+    else:
+        assert result.preview_image is not None
+        kept = Image.open(io.BytesIO(result.preview_image))
+        assert (kept.format, kept.size) == preview
+    assert result.text.endswith(NO_DESCRIPTION)
+    assert not any("No visual description" in record.getMessage() for record in caplog.records)
+
+
+def test_describer_gets_a_png_even_when_the_preview_is_a_jpeg(tmp_path: Path, monkeypatch) -> None:
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(_photo_bytes((1200, 800)))
+    sent = _use_vision(monkeypatch)
+
+    result = FastLiteImageProcessor().extract(image_path)
+
+    assert result.preview_image is not None and result.preview_image.startswith(b"\xff\xd8\xff")
+    assert len(sent) == 1 and _decoded(sent[0]).format == "PNG"

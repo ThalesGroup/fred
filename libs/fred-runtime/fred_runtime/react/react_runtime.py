@@ -90,6 +90,7 @@ from fred_runtime.capabilities.assembly import (
     collect_available_tool_names,
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.model_routing.provider import RoutedChatModelFactory
 from fred_runtime.runtime_support.authority import RunStopError
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
@@ -110,6 +111,7 @@ from .middleware.tool_call_recovery import (
     is_mistral_model_name,
     is_tool_call_recovery_reference_block,
 )
+from .middleware.vision_attachments import SessionImageSource
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:
@@ -1239,6 +1241,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         super().__init__(definition=definition, services=services)
         self._skill_source = services.skills
         self._model: BaseChatModel | None = None
+        self._model_supports_vision = False
         # Selected capabilities, pre-assembled into the frame block (#1974):
         # id-sorted middleware stacks + HitlSpec bindings for the single
         # platform HITL gate. None when the agent selects no capabilities.
@@ -1267,10 +1270,16 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             raise RuntimeError(
                 "ReActRuntime requires RuntimeServices.chat_model_factory."
             )
-        self._model = cast(
-            BaseChatModel,
-            self.services.chat_model_factory.build(self.definition, binding),
-        )
+        factory = self.services.chat_model_factory
+        if isinstance(factory, RoutedChatModelFactory):
+            model, selection = factory.build_for_chat(
+                definition=self.definition, binding=binding
+            )
+            self._model_supports_vision = factory.supports_vision(selection)
+        else:
+            model = factory.build(self.definition, binding)
+            self._model_supports_vision = False
+        self._model = cast(BaseChatModel, model)
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
         if delegation_enabled():
@@ -1401,6 +1410,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             available_tool_names=available_tool_names,
             max_tool_calls_per_turn=policy.tool_selection.max_tool_calls_per_turn,
             capability_block=self._capability_block,
+            session_images=self._session_images(),
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -1410,6 +1420,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             available_tool_names=available_tool_names,
             model_name=_extract_model_name_from_object(self._model),
         )
+
+    def _session_images(self) -> SessionImageSource | None:
+        source = self.services.document_content
+        if self._model_supports_vision and isinstance(source, SessionImageSource):
+            return source
+        return None
 
     async def on_dispose(self) -> None:
         if self.services.tool_provider is not None:
@@ -1453,6 +1469,7 @@ def _create_compiled_react_agent(
     max_tool_calls_per_turn: int | None = None,
     capability_block: CapabilityAgentBlock | None = None,
     skills: SkillsPort | None = None,
+    session_images: SessionImageSource | None = None,
 ) -> _CompiledReActAgent:
     """
     Create the compiled ReAct agent implementation used at runtime.
@@ -1507,5 +1524,6 @@ def _create_compiled_react_agent(
             capability_hitl=(
                 capability_block.hitl if capability_block is not None else None
             ),
+            session_images=session_images,
         ),
     )

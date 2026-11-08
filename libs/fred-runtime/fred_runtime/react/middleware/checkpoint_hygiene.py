@@ -18,13 +18,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_sdk.contracts.context import BoundRuntimeContext
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, BaseMessage
 
 from fred_runtime.support.reasoning_replay import replays_native_reasoning
 from fred_runtime.support.thinking import (
@@ -42,6 +42,9 @@ from fred_runtime.support.tool_loop import (
 )
 
 from .shared import identity_kpi_dims, state_messages
+
+if TYPE_CHECKING:
+    from .vision_attachments import VisionAttachmentsMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +77,12 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         binding: BoundRuntimeContext,
         kpi: BaseKPIWriter | None,
         max_history_chars: int | None = None,
+        image_reservation: VisionAttachmentsMiddleware | None = None,
     ) -> None:
         super().__init__()
         self._max_history_messages = max_history_messages
         self._max_history_chars = max_history_chars
+        self._image_reservation = image_reservation
         self._binding = binding
         self._kpi = kpi
 
@@ -116,7 +121,18 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
             # hit) can stay far under the message cap while blowing past a
             # provider's real context window (#2350 field evidence: ~60
             # messages, 178k+ tokens). Trim again, this time by size.
-            trimmed = trim_to_char_budget(messages, self._max_history_chars)
+            reservation = self._image_reservation
+            reserved = await reservation.reserved_chars() if reservation else 0
+            trimmed = trim_to_char_budget(messages, self._max_history_chars - reserved)
+            if reservation and self._too_large(messages, trimmed, reserved):
+                text_only = trim_to_char_budget(messages, self._max_history_chars)
+                if not self._too_large(messages, text_only, 0):
+                    # The turn fit before images existed: it still goes, without pixels.
+                    logger.warning(
+                        "[VISION] Image pixels left out: the turn needs the whole budget"
+                    )
+                    reservation.release()
+                    reserved, trimmed = 0, text_only
             if not trimmed and messages:
                 # `trim_to_char_budget` can legitimately collapse to `[]`
                 # when the only message it could keep under budget is a lone
@@ -129,9 +145,9 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 # itself as the over-budget signal: measure the pre-trim
                 # total instead, guaranteed > budget since
                 # `trim_to_char_budget` only trims when that already holds.
-                actual_chars = total_char_len(messages)
+                actual_chars = total_char_len(messages) + reserved
             else:
-                actual_chars = total_char_len(trimmed)
+                actual_chars = total_char_len(trimmed) + reserved
             if actual_chars > self._max_history_chars:
                 # Even the trimmed window is too big: the CURRENT turn's own
                 # content is the culprit, and no amount of dropping older
@@ -189,6 +205,16 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         )
         self._attach_tool_outputs(response, request)
         return response
+
+    def _too_large(
+        self,
+        messages: list[BaseMessage],
+        trimmed: list[BaseMessage],
+        reserved: int,
+    ) -> bool:
+        # A collapse to [] is itself over budget, see the comment in awrap_model_call.
+        kept = trimmed if trimmed or not messages else messages
+        return total_char_len(kept) + reserved > cast(int, self._max_history_chars)
 
     @staticmethod
     def _attach_tool_outputs(response: ModelResponse, request: ModelRequest) -> None:
