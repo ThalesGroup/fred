@@ -70,7 +70,11 @@ from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    get_runtime_context,
+    set_runtime_context,
+)
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
@@ -94,6 +98,20 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+
+
+@pytest.fixture(autouse=True)
+def _clear_runtime_context() -> Iterator[None]:
+    set_runtime_context(None)
+    yield
+    set_runtime_context(None)
+
+
+@pytest.fixture
+def offline_runtime_context() -> None:
+    set_runtime_context(
+        FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid"))
+    )
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -5423,7 +5441,9 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
         )
 
 
-def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> None:
+def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none(
+    offline_runtime_context,
+) -> None:
     """
     Ensure _apply_runtime_tuning distinguishes None from [] for MCP activation.
 
@@ -5485,7 +5505,9 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     assert list(disabled.default_mcp_servers) == []
 
 
-def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
+def test_capability_block_delivers_mcp_agent_instructions_for_active_server(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` delivers an active MCP server's catalog
     `agent_instructions` as an `McpPromptGroup`.
@@ -5562,7 +5584,9 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     assert fragments == ["Always cite retrieved claims."]
 
 
-def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> None:
+def test_capability_block_skips_mcp_agent_instructions_for_inactive_server(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` skips a non-selected MCP server's
     behavioral instructions.
@@ -5636,7 +5660,9 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     assert server_ids == ["mcp-storage"]
 
 
-def test_build_capability_block_for_graph_agent_returns_tools() -> None:
+def test_build_capability_block_for_graph_agent_returns_tools(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` builds a non-empty block for a Graph agent.
 
@@ -5769,7 +5795,9 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     assert [t.name for t in block.tools] == ["graph_probe"]
 
 
-def test_build_capability_block_rejects_react_only_capability_for_graph_agent() -> None:
+def test_build_capability_block_rejects_react_only_capability_for_graph_agent(
+    offline_runtime_context,
+) -> None:
     """
     A capability declaring `execution_models=("react",)` (a `middleware()`-only
     hook `tools()` can't express) must fail LOUDLY when a Graph agent selects
@@ -5885,7 +5913,9 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         )
 
 
-def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() -> None:
+def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent(
+    offline_runtime_context,
+) -> None:
     """Graph now consumes the same capability HITL declarations as ReAct/Deep."""
     from collections.abc import Mapping as _Mapping
 
@@ -6003,9 +6033,9 @@ def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() 
     assert block.hitl["gated_probe"].spec.require
 
 
-def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (
-    None
-):
+def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent(
+    offline_runtime_context,
+) -> None:
     """
     A `GraphAgentDefinition` that leaves `supports_capabilities` at its False
     default (the honest "this agent doesn't support capabilities" signal, see
@@ -6139,7 +6169,9 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
     assert block is None
 
 
-def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
+def test_capability_block_orders_mcp_prompt_groups_by_server_id(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection
     order.

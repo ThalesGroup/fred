@@ -168,6 +168,10 @@ dev:  ## Start development environment in all submodules
 
 ##@ Docker
 
+.PHONY: sbom
+sbom: ## Generate local image CycloneDX SBOMs (IMAGE=name for one, CVES=true for vulnerabilities)
+	@bash scripts/generate_image_sboms.sh
+
 .PHONY: docker-build
 docker-build: ## Build Docker images for Fred services and the sandbox broker
 	@set -e; \

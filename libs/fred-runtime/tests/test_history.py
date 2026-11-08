@@ -342,6 +342,45 @@ def test_write_turn_history_leaves_ui_parts_empty_when_the_turn_had_none() -> No
     assert final.metadata.ui_parts == []
 
 
+def test_write_turn_history_stores_the_turn_attachments_next_to_skills() -> None:
+    """
+    The files sent with a turn are kept on its user row for display.
+
+    Why this test exists:
+    - the transcript reads them back from ``metadata.extras.attachments``
+      after a reload, beside the turn's skill selections
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="Summarise these",
+            skill_invocations=[{"name": "review"}],
+            attachments=[
+                {
+                    "attachment_id": "a-1",
+                    "name": "brief.pdf",
+                    "mime": "application/pdf",
+                },
+                {"attachment_id": "a-2", "name": "notes.txt"},
+            ],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    user = store.save.call_args.kwargs["messages"][0]
+    assert user.metadata.extras["skill_invocations"] == [{"name": "review"}]
+    assert user.metadata.extras["attachments"] == [
+        {"attachment_id": "a-1", "name": "brief.pdf", "mime": "application/pdf"},
+        {"attachment_id": "a-2", "name": "notes.txt", "mime": None},
+    ]
+
+
 def test_write_turn_history_skips_save_when_no_content() -> None:
     """
     _write_turn_history must not call save() when there is no request message

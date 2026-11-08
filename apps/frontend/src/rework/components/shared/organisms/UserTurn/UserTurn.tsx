@@ -18,7 +18,7 @@ import { skillInvocationsText } from "@rework/utils/skillInvocation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
-import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { CommandDescriptor, SkillInvocation, TurnAttachment } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -44,6 +44,8 @@ interface UserTurnProps {
    *  hand down one stable callback for every row — an arrow built per message
    *  would defeat this component's memo on every streamed frame. */
   onOpenCommand?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
+  /** Files sent with the turn, shown read-only in the bubble above the text. */
+  attachments?: TurnAttachment[];
 }
 
 // Memoized alongside AssistantTurn — see #2221.
@@ -59,6 +61,7 @@ export const UserTurn = memo(function UserTurn({
   skillDescription,
   onOpenSkill,
   onOpenCommand,
+  attachments,
 }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
@@ -118,6 +121,7 @@ export const UserTurn = memo(function UserTurn({
         skillDescription={skillDescription}
         onOpenSkill={onOpenSkill}
         onOpenCommand={command && onOpenCommand ? openCommand : undefined}
+        attachments={attachments}
       />
     </div>
   );

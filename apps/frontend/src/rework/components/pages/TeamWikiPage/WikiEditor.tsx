@@ -18,11 +18,23 @@ import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider";
 import Button from "@shared/atoms/Button/Button";
+import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
+import TextInput from "@shared/atoms/TextInput/TextInput";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import Select, { type SelectOption } from "@shared/molecules/Select/Select";
 import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import styles from "./WikiEditor.module.css";
 
+/** What an ordinary page lets the editor change besides its text: "" is the root. */
+export interface WikiPagePlacement {
+  title: string;
+  parentId: string;
+}
+
 interface WikiEditorProps {
   title: string;
+  /** Ordinary pages only: the rules page keeps a fixed title, no parent and no delete. */
+  placement?: { parentId: string; parentOptions: SelectOption<string>[]; onDelete: () => void };
   initialContent: string;
   /** Character cap the backend enforces; shown once the draft approaches it. */
   maxChars: number;
@@ -32,7 +44,7 @@ interface WikiEditorProps {
   /** Shown above the editor when it opened on a starting outline rather than on
    *  text the team wrote — how to fill it in belongs here, not in the page. */
   hint?: string;
-  onSave: (contentMd: string) => void;
+  onSave: (contentMd: string, placement: WikiPagePlacement | null) => void;
   onCancel: () => void;
   onTakeTheirs: (contentMd: string) => void;
 }
@@ -46,6 +58,7 @@ interface WikiEditorProps {
  */
 export function WikiEditor({
   title,
+  placement,
   initialContent,
   maxChars,
   saving,
@@ -58,14 +71,30 @@ export function WikiEditor({
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
   const [draft, setDraft] = useState(initialContent);
+  const [titleDraft, setTitleDraft] = useState(title);
+  const [parentDraft, setParentDraft] = useState(placement?.parentId ?? "");
 
   const tooLong = draft.length > maxChars;
+  const titleMissing = placement !== undefined && !titleDraft.trim();
 
   return (
     <section className={styles.editor}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{title}</h1>
+        {/* Follows the title field as it is typed, so the bar always names the page being saved. */}
+        <h1 className={styles.title}>{placement ? titleDraft.trim() || title : title}</h1>
         <div className={styles.actions}>
+          {placement && (
+            <span className={styles.deleteAction}>
+              <Tooltip text={t("rework.wiki.editor.delete")}>
+                <DeleteIconButton
+                  size="small"
+                  onClick={placement.onDelete}
+                  disabled={saving}
+                  aria-label={t("rework.wiki.editor.delete")}
+                />
+              </Tooltip>
+            </span>
+          )}
           <Button color="on-surface-retreat" variant="text" size="small" onClick={onCancel} disabled={saving}>
             {t("rework.wiki.editor.cancel")}
           </Button>
@@ -73,13 +102,37 @@ export function WikiEditor({
             color="primary"
             variant="filled"
             size="small"
-            onClick={() => onSave(draft)}
-            disabled={saving || tooLong}
+            onClick={() => onSave(draft, placement ? { title: titleDraft.trim(), parentId: parentDraft } : null)}
+            disabled={saving || tooLong || titleMissing}
           >
             {t("rework.wiki.editor.save")}
           </Button>
         </div>
       </header>
+
+      {placement && (
+        <div className={styles.fields}>
+          <TextInput
+            compact
+            size="small"
+            label={t("rework.wiki.editor.titleLabel")}
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+          />
+          <Select
+            compact
+            size="small"
+            label={t("rework.wiki.editor.parentLabel")}
+            value={parentDraft}
+            onChange={setParentDraft}
+            options={placement.parentOptions}
+            search={{
+              placeholder: t("rework.wiki.editor.parentSearch"),
+              noMatchMessage: t("rework.wiki.editor.parentNoMatch"),
+            }}
+          />
+        </div>
+      )}
 
       {/* Someone else saved while this draft was open. The user's own text is
           never discarded for them: they are shown what landed and choose. */}

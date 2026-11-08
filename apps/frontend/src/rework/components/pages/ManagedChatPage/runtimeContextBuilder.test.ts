@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
+import type { ChatAttachment } from "@rework/types/attachments";
+import { buildComposerRuntimeContext, toTurnAttachments } from "./runtimeContextBuilder";
 
 describe("buildComposerRuntimeContext", () => {
   it("sends selected document uids when documents are chosen", () => {
@@ -100,5 +101,31 @@ describe("buildComposerRuntimeContext", () => {
     expect(buildComposerRuntimeContext({ ...base, chatProfileId: "chat.large" }).chat_profile_id).toBe("chat.large");
     expect(buildComposerRuntimeContext({ ...base, chatProfileId: null })).not.toHaveProperty("chat_profile_id");
     expect(buildComposerRuntimeContext(base)).not.toHaveProperty("chat_profile_id");
+  });
+});
+
+describe("toTurnAttachments", () => {
+  const file = (id: string, status: ChatAttachment["status"], mime = ""): ChatAttachment => ({
+    id,
+    name: `${id}.bin`,
+    size: 1,
+    mime,
+    status,
+    isImage: false,
+    taskIds: [],
+  });
+
+  it("keeps only the ready files, with their id, name and MIME type", () => {
+    expect(
+      toTurnAttachments([
+        file("ready", "ready", "application/pdf"),
+        file("busy", "ingesting"),
+        file("broken", "error"),
+        file("bare", "ready"),
+      ]),
+    ).toEqual([
+      { attachment_id: "ready", name: "ready.bin", mime: "application/pdf" },
+      { attachment_id: "bare", name: "bare.bin", mime: null },
+    ]);
   });
 });
