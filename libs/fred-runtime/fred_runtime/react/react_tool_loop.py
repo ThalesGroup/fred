@@ -43,6 +43,7 @@ from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
 from .middleware import CapabilityHitlBinding, build_react_platform_middleware_frame
+from .middleware.vision_attachments import SessionImageSource
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ def build_tool_loop_compiled_react_agent(
     capability_middleware: Sequence[AgentMiddleware] = (),
     skills_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+    session_images: SessionImageSource | None = None,
 ) -> object:
     """
     Build the compiled ReAct agent: `create_agent` + the platform middleware frame.
@@ -138,6 +140,7 @@ def build_tool_loop_compiled_react_agent(
         capability_middleware=capability_middleware,
         skills_middleware=skills_middleware,
         capability_hitl=capability_hitl,
+        session_images=session_images,
     )
     # Names, per middleware, exactly what tools reach `create_agent` — the
     # boundary past which tool binding is LangChain's own responsibility, not

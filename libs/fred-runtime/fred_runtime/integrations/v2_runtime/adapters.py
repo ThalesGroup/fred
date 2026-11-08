@@ -128,6 +128,10 @@ from fred_runtime.common.outbound_credentials import (
     attach_grant,
     resolve_credential_provider,
 )
+from fred_runtime.common.session_image_previews import (
+    SessionImage,
+    fetch_recent_session_images,
+)
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.table_hits import repair_table_hits
 from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME
@@ -1695,13 +1699,16 @@ class DocumentContentAdapter(DocumentContentPort):
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._credentials = credentials
-        self._client = KfDocumentClient(
-            agent=_VectorSearchAgentShim(
-                binding=binding,
-                settings=settings,
-                credentials=self._credentials,
-            )
+        self._agent = _VectorSearchAgentShim(
+            binding=binding,
+            settings=settings,
+            credentials=self._credentials,
         )
+        self._client = KfDocumentClient(agent=self._agent)
+
+    async def recent_session_images(self, limit: int) -> list[SessionImage]:
+        """Pixels of this conversation's newest image attachments (vision models)."""
+        return await fetch_recent_session_images(self._agent, limit=limit)
 
     async def fetch_raw(self, document_uid: str) -> DocumentRawContent:
         blob = await self._client.fetch_raw_content(document_uid=document_uid)

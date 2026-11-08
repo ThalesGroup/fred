@@ -41,6 +41,7 @@ from .rate_limit_retry import RateLimitRetryMiddleware
 from .tool_call_recovery import ToolCallTextRecoveryMiddleware
 from .tool_observability import ToolObservabilityMiddleware
 from .tracing_kpi import TracingKpiMiddleware
+from .vision_attachments import SessionImageSource, VisionAttachmentsMiddleware
 
 
 def build_react_platform_middleware_frame(
@@ -57,6 +58,7 @@ def build_react_platform_middleware_frame(
     capability_middleware: Sequence[AgentMiddleware] = (),
     skills_middleware: Sequence[AgentMiddleware] = (),
     capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
+    session_images: SessionImageSource | None = None,
 ) -> list[AgentMiddleware]:
     """
     Assemble the fixed platform middleware frame for one ReAct agent.
@@ -78,13 +80,23 @@ def build_react_platform_middleware_frame(
     - `build_react_platform_middleware_frame(..., capability_middleware=block.middleware, capability_hitl=block.hitl)`
     """
 
+    vision = (
+        VisionAttachmentsMiddleware(
+            source=session_images, session_id=binding.portable_context.session_id
+        )
+        if session_images is not None
+        else None
+    )
     frame: list[AgentMiddleware] = [
         CheckpointHygieneMiddleware(
             max_history_messages=max_history_messages,
             max_history_chars=max_history_chars,
             binding=binding,
             kpi=kpi,
+            # Hygiene trims before the images are added: it reserves their cost.
+            image_reservation=vision,
         ),
+        *([vision] if vision is not None else []),
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
         TurnSteeringMiddleware(
             binding.portable_context.session_id,
