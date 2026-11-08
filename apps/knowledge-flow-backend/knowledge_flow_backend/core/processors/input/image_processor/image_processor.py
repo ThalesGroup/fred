@@ -38,8 +38,9 @@ class ImageProcessor(BaseMarkdownProcessor):
 
     The generated markdown always contains the filename-based title so the image
     stays retrievable by name. When a vision model is configured, a vision
-    description is appended so the image content itself becomes searchable —
-    same behaviour as the fast-path FastLiteImageProcessor for chat attachments.
+    description is appended so the image content itself becomes searchable. Unlike
+    the chat path (FastLiteImageProcessor), it uses the retrieval prompt, sends the
+    file as is (no SVG rendering, no downscaling) and adds no limits note.
     """
 
     description = "Processes image files into searchable markdown, with a vision description when a vision model is configured."
