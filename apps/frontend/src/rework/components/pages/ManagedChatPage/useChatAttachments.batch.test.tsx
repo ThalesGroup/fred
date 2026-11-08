@@ -189,4 +189,17 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     );
     expect(latest.attachmentsMarkdown).toContain("    > A floor plan.");
   });
+
+  it("keeps an unsent file of another conversation out of the agent context", async () => {
+    // The composer keeps unsent files across a conversation switch: the hook now shows session-1.
+    await act(async () => {
+      void latest.addFiles([png("plan.png")], "paste", "session-other");
+    });
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-plan", summary_md: "A floor plan." });
+    });
+
+    expect(statuses()).toEqual([["plan.png", "ready"]]);
+    expect(latest.attachmentsMarkdown).toBeNull();
+  });
 });

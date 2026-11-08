@@ -27,8 +27,8 @@ export interface ChatAttachment {
   documentUid?: string;
   taskIds: string[];
   error?: string;
-  /** The row persisted for this file, until the session attachment list shows it. */
-  persisted?: SessionAttachment;
+  /** The row persisted for this file and its conversation, until the attachment list shows it. */
+  persisted?: { sessionId: string; attachment: SessionAttachment };
 }
 
 export interface SessionAttachment {

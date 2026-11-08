@@ -322,7 +322,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
                     status: "ready",
                     documentUid: fastIngest?.document_uid,
                     taskIds: [localTaskId],
-                    persisted,
+                    persisted: { sessionId: ingestionSessionId, attachment: persisted },
                   }
                 : attachment,
             ),
@@ -388,13 +388,16 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
 
   // A file can be sent before the attachment list refetch shows it: it still counts,
   // so its description and the runtime's image fetch already apply on that turn.
+  // Only for this conversation: the composer keeps unsent files across a switch.
   const attachmentsMarkdown = useMemo(() => {
     const listed = new Set(persistedAttachments.map((attachment) => attachment.attachmentId));
     const unlisted = attachments.flatMap((attachment) =>
-      attachment.status === "ready" && attachment.persisted && !listed.has(attachment.id) ? [attachment.persisted] : [],
+      attachment.status === "ready" && attachment.persisted?.sessionId === sessionId && !listed.has(attachment.id)
+        ? [attachment.persisted.attachment]
+        : [],
     );
     return buildAttachmentsMarkdown([...persistedAttachments, ...unlisted]);
-  }, [attachments, persistedAttachments]);
+  }, [attachments, persistedAttachments, sessionId]);
 
   // True while any attachment is still uploading/ingesting. Used to block message
   // send until every attachment has finished, so the agent never answers before
