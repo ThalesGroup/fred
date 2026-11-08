@@ -7415,3 +7415,19 @@ the corresponding migration note for validation and compatibility limits.
 `RuntimeContext` gains optional `attachments` (see §2.3), stored on the user row
 as `metadata.extras.attachments`. Older pods ignore it; older rows render as
 before. The `managed-conversations` specification owns the acceptance contract.
+
+### 8.126 Chat image pixels on every vision call (2026-11-07)
+
+For a ReAct turn whose routed profile declares `supports_vision`,
+`VisionAttachmentsMiddleware` appends the previews of the conversation's 5
+newest images to the first human message of every model call, never
+checkpointed. Once per turn it reads the control-plane session attachments, then
+the Knowledge Flow previews (`GET /fast/preview/{document_uid}?session_id=`)
+concurrently, with the turn's credentials, within 5 s; not at all when the
+attachments context lists no image. An unusable preview keeps its description;
+any `RunStopError` stops the run. The history size trim reserves the images'
+cost, and a turn that fits only without them, or a call refused with a 4xx other
+than 401/403/429 (retried once), goes without pixels. The vision description of
+an image sent as pixels is omitted from the attachments context; SVG facts stay.
+Deep, Graph and non-vision profiles are unchanged. The `chat-image-attachments`
+specification owns the acceptance contract.
