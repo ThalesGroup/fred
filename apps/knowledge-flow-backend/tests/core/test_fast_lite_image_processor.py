@@ -161,12 +161,14 @@ def test_sixteen_bit_grayscale_keeps_its_tones(tmp_path: Path, monkeypatch) -> N
         ("broken.png", b"not an image at all", "broken.png not described: UnidentifiedImageError"),
         ("scan.png", _image_bytes((50, 50), "TIFF"), "scan.png not described: UnidentifiedImageError"),  # not a chat format
         ("poster.png", _image_bytes((9000, 9000), "PNG", "1"), "poster.png not described: 9000x9000 px"),  # refused before decoding
+        ("logo.svg", b'<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>', None),  # failed render: never raw markup
     ],
 )
 def test_image_that_cannot_be_prepared_is_not_sent_to_vision(tmp_path: Path, monkeypatch, caplog, name: str, data: bytes, log: str | None) -> None:
     image_path = tmp_path / name
     image_path.write_bytes(data)
     sent = _use_vision(monkeypatch)
+    monkeypatch.setattr(f"{_MODULE}.svg_png_data_url", lambda _path: None)
 
     with caplog.at_level(logging.INFO, logger=_MODULE):
         text = FastLiteImageProcessor().extract(image_path).text
@@ -185,3 +187,27 @@ def test_long_description_is_cut_with_a_marker_inside_the_budget(tmp_path: Path,
 
     assert text.endswith(DESCRIPTION_TRUNCATED)
     assert len(text.split("Vision summary:\n", 1)[1]) == DESCRIPTION_MAX_CHARS
+
+
+def test_svg_summary_puts_facts_first_and_describes_the_rendering(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "plan.svg"
+    path.write_text('<svg xmlns="http://www.w3.org/2000/svg"><title>Floor plan</title></svg>')
+    sent = _use_vision(monkeypatch, "A floor plan.")
+    monkeypatch.setattr(f"{_MODULE}.svg_png_data_url", lambda _path: _png_url())
+
+    text = FastLiteImageProcessor().extract(path).text
+
+    # The rendering goes through the same PNG preparation as any raster image.
+    assert len(sent) == 1 and _decoded(sent[0]).size == (40, 30)
+    assert text.index("SVG markup facts (exact):\n") < text.index("Texts: Floor plan") < text.index("A floor plan.")
+
+
+def test_deeply_nested_svg_keeps_its_facts_without_a_description(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "deep.svg"
+    path.write_text('<svg xmlns="http://www.w3.org/2000/svg">' + "<g>" * 3000 + "<text>deep</text>" + "</g>" * 3000 + "</svg>")
+    sent = _use_vision(monkeypatch)
+
+    text = FastLiteImageProcessor().extract(path).text
+
+    assert "Elements: g 3000" in text and "Texts: deep" in text
+    assert sent == [] and text.endswith(NO_DESCRIPTION)

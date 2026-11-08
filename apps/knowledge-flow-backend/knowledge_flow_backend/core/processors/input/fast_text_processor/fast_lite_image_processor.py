@@ -33,6 +33,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
     FastTextOptions,
     FastTextResult,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.svg_summary import svg_facts, svg_png_data_url
 from knowledge_flow_backend.core.processors.input.image_processor.image_processor import SUPPORTED_IMAGE_EXTENSIONS
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,9 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
     def _fallback_text(file_path: Path) -> str:
         stem = file_path.stem.replace("_", " ").replace("-", " ").strip() or file_path.stem
         ext = file_path.suffix.lower().lstrip(".") or "unknown"
-        return f"Image attachment: {file_path.name}\nTitle: {stem}\nFormat: {ext}\nThis image was attached to the conversation and is available for session-scoped retrieval."
+        header = f"Image attachment: {file_path.name}\nTitle: {stem}\nFormat: {ext}\nThis image was attached to the conversation and is available for session-scoped retrieval."
+        # Exact facts sit in the header so that any truncation of the description spares them.
+        return f"{header}\n\nSVG markup facts (exact):\n{svg_facts(file_path)}" if ext == "svg" else header
 
     @staticmethod
     def _eight_bit(image: Image.Image) -> Image.Image:
@@ -95,8 +98,16 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
     @staticmethod
     def _vision_png(file_path: Path) -> bytes | None:
         """The bounded PNG a vision model sees, or None when the image cannot be prepared."""
+        if file_path.suffix.lower() == ".svg":
+            # Vision APIs refuse SVG: describe the sanitized rendering, or nothing.
+            rendered = svg_png_data_url(file_path)
+            if rendered is None:
+                return None
+            source: Path | io.BytesIO = io.BytesIO(base64.b64decode(rendered.split("base64,", 1)[1]))
+        else:
+            source = file_path
         try:
-            with Image.open(file_path, formats=_VISION_FORMATS) as opened:
+            with Image.open(source, formats=_VISION_FORMATS) as opened:
                 opened.draft(None, (VISION_MAX_EDGE_PX, VISION_MAX_EDGE_PX))
                 if opened.width * opened.height > VISION_MAX_PIXELS:
                     logger.warning("[FAST TEXT][IMAGE] %s not described: %dx%d px is above the vision limit", file_path.name, opened.width, opened.height)
