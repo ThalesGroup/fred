@@ -145,33 +145,28 @@ workload restart, while already-admitted clients retain their context.
 
 ---
 
-### Pod skills and admitted loading
+### Admitted space skills
 
-Missing `skills` or `skills: {}` defaults to the packaged directory; explicit
-`skills: null` disables it. Custom directories retain the same admission rules.
-The pod inventories a bounded immutable snapshot, including invocation modes and
-builtin provenance. ReAct `load_skill`, native reads and Deep's read-only backend
-use that snapshot; a later filesystem edit requires a restart and inventory refresh.
+Control Plane owns packages and resolves their space access at admission. Agent
+Pods have no configured directory, embedded packages or catalog/preview routes.
+ReAct and Deep receive one immutable copy of the authorized files with the
+catalog. Skill selections carry their UUID and owning space; logical names are
+display metadata. Reads and native Deep pins use the UUID, including when names
+are identical. A digest covers instructions and references together; a replacement or
+revocation affects later admissions, while the running turn keeps its copy.
+Only compact metadata enters the initial model context. Instructions and textual
+references are read as needed through the existing ReAct tools or native Deep
+filesystem; neither path grants tools or executes scripts. Graph and Ralph do
+not support skills. File and instruction traces remain based on actual reads.
 
-Control Plane owns authorization, using the same pod offers as capabilities with
-organization/team/project ceilings. `WeaverRuntimeBinding.skills` admits a subset
-and its source revision. Missing admission denies new loads; mismatching nonempty
-revisions or metadata fail explicitly. Runtime configuration cannot grant a skill.
-An available empty source, disabled source and unavailable source are distinct.
+The distribution packages and their format, invocation extensions and management
+contract are documented in [Control Plane](../../apps/control-plane/README.md#space-skills).
+The standalone directory loader is only a package-development/test utility;
+managed execution accepts content exclusively from the authenticated admission.
 
-The packaged set is `analyze-data`, `compare-options`, `grounded-research`,
-`summarize-document` (model-only), `meeting-minutes`, `grill-me` (user-selected),
-and `graph` (both). The graph skill can use tables, charts or Mermaid and loads
-its Mermaid reference only when needed. Retired names have no aliases. Custom
-skills retain their own presentation; only trusted package entries get translated
-builtin labels. Graph agents and embedded Ralph are unsupported.
-
-Each managed team, personal or project turn/resume receives a fresh server
-admission. A running admitted turn may finish; revocation prevents later loads,
-without deleting historical instructions/checkpoints. Partial/full load traces
-come from actual reads, including referenced files, not from plain name mentions.
-Public catalog/detail GETs use the person's resolver projection and never obtain
-inference/title admission. See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md).
+Selections persist `(space_id, skill_id)` and each occurrence’s draft offset, as
+for prompt commands. Recalling a message preserves homonymous selections; the
+runtime preloads each resource once per turn. Names are presentation only.
 
 ---
 
@@ -440,9 +435,9 @@ working pod with several agents.
 
 Managed turns use the `space_id` validated by Control Plane, including evaluation,
 HITL resume, capabilities and checkpoint/history writes. `team_id` is optional
-ancestry, not a substitute for that space. Runtime skill catalog/detail reads now
-require `space_id` and `agent_instance_id`, without a `team_id` query parameter.
-Their person-credential and resolver consistency checks remain in place.
+ancestry, not a substitute for that space. Control Plane owns skill catalog and
+detail reads, using the same space access rules as the other space resources.
+The runtime consumes only the identity-bound, admitted execution snapshot.
 
 For an existing local database, read the [schema notes](fred_runtime/migrations/README)
 before starting the pod: Alembic owns history/steering, whereas the checkpointer

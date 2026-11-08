@@ -353,9 +353,19 @@ export function toThreadMessages(
         command: userMsg.metadata?.command ?? null,
         skillName: skillNames[0] ?? null,
         skillNames,
-        builtinSkillNames: msgs.flatMap((message) => {
+        skillInvocations: Array.isArray(selections)
+          ? selections.filter(
+              (item): item is { skill_id: string; space_id: string; name: string } =>
+                !!item &&
+                typeof item === "object" &&
+                typeof item.skill_id === "string" &&
+                typeof item.space_id === "string" &&
+                typeof item.name === "string",
+            )
+          : [],
+        builtinSkillIds: msgs.flatMap((message) => {
           const load = skillLoadOf(message);
-          return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
+          return load?.origin === "user" && !load.child && load.builtin ? [load.skill_id] : [];
         }),
         attachments: attachmentsByTime?.get(userMsg.timestamp),
       });

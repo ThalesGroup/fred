@@ -146,7 +146,7 @@ pub struct ExecutionPreparation {
     pub max_chat_input_chars: Option<u64>,
     pub chat_controls: Vec<ChatControlDescriptor>,
     pub models: PreparationModels,
-    pub skills: Option<crate::agents::skills::SkillCatalog>,
+    pub skills: Option<crate::skills::SkillCatalog>,
     pub skill_detail_url_template: Option<String>,
     /// Echo of the requested choice; binds this diagnostic to the current composer selection.
     #[schema(required = true)]
@@ -291,15 +291,9 @@ async fn prepare_execution(
     let supports_skills = !embedded && matches!(template.category.as_str(), "react" | "deep");
     let skills = if supports_skills {
         Some(
-            crate::agents::skills::resolve(&mut tx, &space, &current.source_runtime_id, &policy)
+            crate::skills::resolve(&mut tx, &user.uid, &space, false)
                 .await?
-                .unwrap_or(crate::agents::skills::SkillCatalog {
-                    availability: crate::agents::skills::SkillAvailability::Unavailable,
-                    supported: false,
-                    policy_supported: false,
-                    revision: String::new(),
-                    skills: vec![],
-                }),
+                .catalog,
         )
     } else {
         None
@@ -352,8 +346,12 @@ async fn prepare_execution(
         chat_controls,
         models,
         skills,
-        skill_detail_url_template: supports_skills
-            .then(|| format!("{base}/agents/skills/{{skill_name}}")),
+        skill_detail_url_template: supports_skills.then(|| {
+            format!(
+                "{}/spaces/{space_id}/skills/scope/{{skill_id}}",
+                nesting.as_ref().map_or("", |p| p.as_str())
+            )
+        }),
         model_choice,
         model_error,
         inference,

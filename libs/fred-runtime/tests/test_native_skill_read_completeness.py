@@ -13,7 +13,6 @@ from fred_core.kpi import BaseKPIWriter
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.skills.native_reads import _partial_skill_read
 from fred_sdk.contracts.runtime import StatusRuntimeEvent
-from fred_sdk.contracts.skills import SkillLoadAttribution
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from test_platform_skills import Model, binding, call, compiled, skill
 
@@ -126,19 +125,6 @@ async def test_native_size_clipping_is_partial_despite_requested_1000_lines(
     assert "truncated" in str(returned[-1].content)
     if token_limit == 32:
         assert "truncated mid-line" in str(returned[-1].content)
-
-
-def test_legacy_attribution_retains_non_partial_default() -> None:
-    load = SkillLoadAttribution.model_validate(
-        {
-            "name": "example",
-            "origin": "agent",
-            "revision": "r",
-            "load_id": "load",
-            "agent_id": "test",
-        }
-    )
-    assert load.partial is False
 
 
 @pytest_asyncio.fixture(autouse=True)

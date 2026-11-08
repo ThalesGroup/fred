@@ -1387,27 +1387,6 @@
           },
           "title": "WebResearchDeploymentConfig",
           "type": "object"
-        },
-        "skills": {
-          "anyOf": [
-            {
-              "description": "Pod skill source; permissions are supplied by Weaver at admission.",
-              "properties": {
-                "directory": {
-                  "default": "package",
-                  "minLength": 1,
-                  "title": "Directory",
-                  "type": "string"
-                }
-              },
-              "title": "PodSkillsConfig",
-              "type": "object",
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "required": [

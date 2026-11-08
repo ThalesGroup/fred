@@ -397,7 +397,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             base = _graph_input(input_model, config)
             selections = self._binding.runtime_context.selected_skills
             names = (
-                [s.name for s in selections] if config.resume_payload is None else []
+                [s.skill_id for s in selections]
+                if config.resume_payload is None
+                else []
             )
             if isinstance(base, Command):
                 return replace(
@@ -1256,8 +1258,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             self._services = replace(
                 self.services,
                 skills=self._skill_source.for_execution(
-                    tuple(s.name for s in binding.runtime_context.selected_skills),
-                    binding.unavailable_skill_names,
+                    binding.runtime_context.selected_skills,
+                    binding.unavailable_skill_ids,
                     resuming=binding.is_resuming,
                 ),
             )

@@ -1,3 +1,4 @@
+import type { ThreadMessage } from "@rework/types/thread";
 // @vitest-environment jsdom
 // Copyright Thales 2026
 //
@@ -20,7 +21,7 @@
 
 import { cursorCharLeft, cursorCharRight, deleteCharBackward, undo, redo } from "@codemirror/commands";
 import { EditorView } from "@codemirror/view";
-import { act, useState } from "react";
+import { act, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
@@ -77,7 +78,27 @@ const listCommands = vi.fn();
 // What a catalog answers when the hook asks it again; nothing by default.
 const refetchCommands = vi.fn<(teamId: string) => Promise<{ data?: typeof PROMPTS }>>();
 const refetchSkills = vi.fn<() => Promise<{ data?: typeof skillCatalog }>>();
+const refreshCompleteSkills = async () => ({ data: completeSkills((await refetchSkills()).data) });
 const NO_SKILLS = { supported: false, skills: [] };
+function completeSkills(catalog: typeof skillCatalog) {
+  return catalog
+    ? {
+        ...catalog,
+        availability: "available" as const,
+        policy_supported: true,
+        revision: "fixture",
+        skills: catalog.skills.map((skill) => ({
+          skill_id: skill.name,
+          space_id: "local",
+          space_name: "",
+          builtin: false,
+          user_invocable: true,
+          disable_model_invocation: false,
+          ...skill,
+        })),
+      }
+    : undefined;
+}
 let skillsPending = false;
 let skillsFailed = false;
 
@@ -126,6 +147,9 @@ let skillCatalog:
       supported: boolean;
       skills: {
         name: string;
+        skill_id?: string;
+        space_id?: string;
+        space_name?: string;
         description: string;
         user_invocable?: boolean;
         disable_model_invocation?: boolean;
@@ -159,13 +183,14 @@ function Host({
 }) {
   const [input, setInput] = useState("");
   setHostInput = setInput;
+  const fullSkillCatalog = useMemo(() => completeSkills(skillCatalog ?? NO_SKILLS), [skillCatalog]);
   const commands = useComposerCommands({
     teamId,
     skillsEnabled,
-    skillCatalog: skillsEnabled && !skillsPending ? (skillCatalog ?? NO_SKILLS) : undefined,
+    skillCatalog: skillsEnabled && !skillsPending ? fullSkillCatalog : undefined,
     skillsLoading: skillsEnabled && skillsPending,
     skillsFailed: skillsEnabled && skillsFailed,
-    refreshSkills: refetchSkills,
+    refreshSkills: refreshCompleteSkills,
     sessionId,
     agentInstanceId,
     personalTeamId,
@@ -192,7 +217,7 @@ function Host({
               promptTokens: commands.selectedPrompts,
               tokens: commands.selectedSkills.map((token) => ({
                 ...token,
-                ...commands.skillSummaries.get(token.name),
+                ...commands.skillSummaries.get(token.skillId),
                 onOpen: () => {},
               })),
             }
@@ -772,7 +797,13 @@ describe("platform skills", () => {
     if (!inlineEditor) act(() => textarea().focus());
   }
   const selected = () =>
-    renders[renders.length - 1].selectedSkills[0] ? { name: renders[renders.length - 1].selectedSkills[0].name } : null;
+    renders[renders.length - 1].selectedSkills[0]
+      ? {
+          name: renders[renders.length - 1].selectedSkills[0].name,
+          skill_id: renders[renders.length - 1].selectedSkills[0].skillId,
+          space_id: renders[renders.length - 1].selectedSkills[0].spaceId,
+        }
+      : null;
 
   it.each(["Tab", "Enter", "click"])("keeps both selected skills when adding the second with %s", async (method) => {
     activateSkills(true);
@@ -799,17 +830,37 @@ describe("platform skills", () => {
     ]);
     expect(container.querySelectorAll(".cm-content button")).toHaveLength(2);
     await act(async () => renders[renders.length - 1]!.submit());
-    expect(onRunSkill).toHaveBeenCalledWith({ text: draft, skills: [{ name: "meeting-minutes" }, { name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: draft,
+      skills: [
+        {
+          name: "meeting-minutes",
+          skill_id: "meeting-minutes",
+          space_id: "local",
+          draft_offset: draft.indexOf("/meeting-minutes"),
+        },
+        {
+          name: "review",
+          skill_id: "review",
+          space_id: "local",
+          draft_offset: draft.indexOf("/review"),
+        },
+      ],
+    });
     expect(onRunCommand).not.toHaveBeenCalled();
   });
-  it("deduplicates loads while displaying repeated invocations and keeps other tokens after deletion", () => {
+  it("preserves repeated occurrences for runtime deduplication and keeps other tokens after deletion", () => {
     activateSkills(true);
     cmType("Before /review middle /meeting-minutes after /review ");
     expect(container.querySelectorAll(".cm-content button")).toHaveLength(3);
     act(() => renders[renders.length - 1]!.submit());
     expect(onRunSkill).toHaveBeenLastCalledWith({
       text: "Before /review middle /meeting-minutes after /review ",
-      skills: [{ name: "review" }, { name: "meeting-minutes" }],
+      skills: [
+        { name: "review", skill_id: "review", space_id: "local", draft_offset: 7 },
+        { name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local", draft_offset: 22 },
+        { name: "review", skill_id: "review", space_id: "local", draft_offset: 45 },
+      ],
     });
     act(() => cm().dispatch({ changes: { from: 7, to: 14 } }));
     expect(renders[renders.length - 1]!.selectedSkills.map((token) => token.name)).toEqual([
@@ -866,7 +917,15 @@ describe("platform skills", () => {
             },
           ],
         },
-        skills: [{ name: "review" }, { name: "meeting-minutes" }],
+        skills: [
+          { name: "review", skill_id: "review", space_id: "local", draft_offset: draft.indexOf("/review") },
+          {
+            name: "meeting-minutes",
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            draft_offset: draft.indexOf("/meeting-minutes"),
+          },
+        ],
       });
       expect(onSend).not.toHaveBeenCalled();
     },
@@ -888,7 +947,15 @@ describe("platform skills", () => {
       expect(onRunCommand).toHaveBeenCalledWith({
         text: "Before /review middle\n\nRésume le document en :\n\nafter /meeting-minutes Notes",
         command: expect.objectContaining({ command, draft_text: draft, draft_command_offset: 22 }),
-        skills: [{ name: "review" }, { name: "meeting-minutes" }],
+        skills: [
+          { name: "review", skill_id: "review", space_id: "local", draft_offset: draft.indexOf("/review") },
+          {
+            name: "meeting-minutes",
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            draft_offset: draft.indexOf("/meeting-minutes"),
+          },
+        ],
       });
     },
   );
@@ -1141,11 +1208,14 @@ describe("platform skills", () => {
     type("/meet");
     press(key);
     expect(textarea().value).toBe("/meeting-minutes ");
-    expect(selected()).toEqual({ name: "meeting-minutes" });
+    expect(selected()).toEqual({ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" });
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
     press("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/meeting-minutes ", skills: [{ name: "meeting-minutes" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/meeting-minutes ",
+      skills: [{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local", draft_offset: 0 }],
+    });
   });
   it.each([
     { input: "/meet**Meeting**\nNotes", caret: 5, expected: "/meeting-minutes **Meeting**\nNotes" },
@@ -1159,18 +1229,38 @@ describe("platform skills", () => {
     expect(textarea().selectionStart).toBe(expected.indexOf("/meeting-minutes") + "/meeting-minutes ".length);
     expect(onRunSkill).not.toHaveBeenCalled();
     press("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: expected, skills: [{ name: "meeting-minutes" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: expected,
+      skills: [
+        {
+          name: "meeting-minutes",
+          skill_id: "meeting-minutes",
+          space_id: "local",
+          draft_offset: expected.indexOf("/meeting-minutes"),
+        },
+      ],
+    });
   });
   it.each(["/meeting-minutes ", "Before /meeting-minutes after", "Notes\n/meeting-minutes "])(
     "recognizes a complete delimited invocation typed or pasted: %s",
     (text) => {
       activateSkills();
       type(text);
-      expect(selected()).toEqual({ name: "meeting-minutes" });
+      expect(selected()).toEqual({ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" });
       expect(panel()).toBeNull();
       expect(onRunSkill).not.toHaveBeenCalled();
       act(() => renders[renders.length - 1].submit());
-      expect(onRunSkill).toHaveBeenCalledWith({ text, skills: [{ name: "meeting-minutes" }] });
+      expect(onRunSkill).toHaveBeenCalledWith({
+        text,
+        skills: [
+          {
+            name: "meeting-minutes",
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            draft_offset: text.indexOf("/meeting-minutes"),
+          },
+        ],
+      });
     },
   );
   it("keeps a name editable until its delimiter and accepts a bare invocation on submit", () => {
@@ -1178,9 +1268,12 @@ describe("platform skills", () => {
     type("/meeting-minutes");
     expect(selected()).toBeNull();
     act(() => renders[renders.length - 1].submit());
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/meeting-minutes", skills: [{ name: "meeting-minutes" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/meeting-minutes",
+      skills: [{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local", draft_offset: 0 }],
+    });
     type("/meeting-minutes ");
-    expect(selected()).toEqual({ name: "meeting-minutes" });
+    expect(selected()).toEqual({ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" });
   });
   it("removes the import after any character of its name is deleted, preserving the request", () => {
     activateSkills();
@@ -1197,7 +1290,7 @@ describe("platform skills", () => {
     activateSkills();
     type("/meeting-minutes Notes");
     type("/review Other notes");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     type("Plain replacement");
     expect(selected()).toBeNull();
   });
@@ -1205,11 +1298,11 @@ describe("platform skills", () => {
     activateSkills();
     type("Before /meeting-minutes First");
     type("New /meeting-minutes Second\nAction");
-    expect(selected()).toEqual({ name: "meeting-minutes" });
+    expect(selected()).toEqual({ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" });
     press("Enter");
     expect(onRunSkill).toHaveBeenCalledWith({
       text: "New /meeting-minutes Second\nAction",
-      skills: [{ name: "meeting-minutes" }],
+      skills: [{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local", draft_offset: 4 }],
     });
   });
   it("does not recognize URLs, paths, partial names or unknown names as imports", () => {
@@ -1248,9 +1341,12 @@ describe("platform skills", () => {
     expect(labels()).toEqual(["/review", "review"]);
     press("ArrowDown");
     press("Tab");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     press("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/review ", skills: [{ name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/review ",
+      skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+    });
   });
   it.each([true, false])("preserves prompts that prefix skill (enabled: %s)", async (enabled) => {
     listResult = {
@@ -1281,7 +1377,7 @@ describe("platform skills", () => {
     type("/ski");
     expect(labels()).toEqual(["skillet"]);
     press("Tab");
-    expect(selected()).toEqual({ name: "skillet" });
+    expect(selected()).toEqual({ name: "skillet", skill_id: "skillet", space_id: "local" });
   });
   it("does not use stale or unsupported catalogs", () => {
     activateSkills();
@@ -1301,7 +1397,10 @@ describe("platform skills", () => {
     activateSkills();
     type("/skill meeting-minutes Notes");
     press("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/meeting-minutes Notes", skills: [{ name: "meeting-minutes" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/meeting-minutes Notes",
+      skills: [{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local", draft_offset: 0 }],
+    });
   });
   it("keeps named legacy completion available without a dispatcher row", () => {
     activateSkills();
@@ -1309,7 +1408,7 @@ describe("platform skills", () => {
     expect(labels()).toEqual(["meeting-minutes", "review"]);
     press("Tab");
     expect(textarea().value).toBe("/meeting-minutes ");
-    expect(selected()).toEqual({ name: "meeting-minutes" });
+    expect(selected()).toEqual({ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" });
   });
   it("reports unavailable legacy names and a bare dispatcher", () => {
     activateSkills();
@@ -1365,7 +1464,20 @@ describe("platform skills", () => {
           draft_text: draft,
           draft_command_offset: prefix.length,
         }),
-        skills: [{ name: "meeting-minutes" }, { name: "review" }],
+        skills: [
+          {
+            name: "meeting-minutes",
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            draft_offset: draft.indexOf("/meeting-minutes"),
+          },
+          {
+            name: "review",
+            skill_id: "review",
+            space_id: "local",
+            draft_offset: draft.indexOf("/review"),
+          },
+        ],
       });
       cmType("Before /summary after");
       expect(container.querySelector("[data-kind=prompt]")).not.toBeNull();
@@ -1403,7 +1515,20 @@ describe("platform skills", () => {
             draft_text: draft,
             draft_command_offset: draft.indexOf("/summary"),
           }),
-          skills: [{ name: "review" }, { name: "meeting-minutes" }],
+          skills: [
+            {
+              name: "review",
+              skill_id: "review",
+              space_id: "local",
+              draft_offset: draft.indexOf("/review"),
+            },
+            {
+              name: "meeting-minutes",
+              skill_id: "meeting-minutes",
+              space_id: "local",
+              draft_offset: draft.indexOf("/meeting-minutes"),
+            },
+          ],
         });
       }
     },
@@ -1434,11 +1559,14 @@ describe("platform skills", () => {
     cmType("/review");
     cmPress("ArrowDown");
     cmPress("Enter");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onRunSkill).not.toHaveBeenCalled();
     cmPress("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/review ", skills: [{ name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/review ",
+      skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+    });
   });
   it("gives canonical pasted/typed homonyms skill identity unless the prompt was explicitly chosen", () => {
     listResult = {
@@ -1454,7 +1582,7 @@ describe("platform skills", () => {
     };
     activateSkills(true);
     cmType("/review Notes");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     cmType("/review");
     cmPress("Tab");
     expect(selected()).toBeNull();
@@ -1464,9 +1592,12 @@ describe("platform skills", () => {
       cm().contentDOM.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertFromPaste" }));
     });
     cmType("/review New notes");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     cmPress("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/review New notes", skills: [{ name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/review New notes",
+      skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+    });
   });
   it("replacing a skill with its prompt homonym clears the earlier choice", async () => {
     listResult = {
@@ -1485,7 +1616,7 @@ describe("platform skills", () => {
     cmType("/rev");
     cmPress("ArrowDown");
     cmPress("Tab");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     cmType("/review");
     cmPress("Tab");
     expect(selected()).toBeNull();
@@ -1500,7 +1631,7 @@ describe("platform skills", () => {
     act(() => cm().dispatch({ changes: { from: 8, insert: "Notes" } }));
     act(() => cm().dispatch({ changes: { from: 7, to: 13 } }));
     expect(cm().state.doc.toString()).toBe("/review");
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
   });
   it("keeps a typed skill's identity over its prompt homonym when the request is deleted", async () => {
     listResult = {
@@ -1517,9 +1648,12 @@ describe("platform skills", () => {
     activateSkills(true);
     cmType("/review Notes");
     act(() => cm().dispatch({ changes: { from: 7, to: 13 }, selection: { anchor: 7 } }));
-    expect(selected()).toEqual({ name: "review" });
+    expect(selected()).toEqual({ name: "review", skill_id: "review", space_id: "local" });
     await act(async () => renders[renders.length - 1].submit());
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/review", skills: [{ name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/review",
+      skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+    });
     expect(onRunCommand).not.toHaveBeenCalled();
     // An invocation edit clears the prior identity and restores completion.
     act(() => cm().dispatch({ changes: { from: 6, to: 7 }, selection: { anchor: 6 } }));
@@ -1585,7 +1719,14 @@ describe("personal and team prompt commands", () => {
           draft_text: "/review /summary Notes",
           draft_command_offset: 8,
         }),
-        skills: [{ name: "review" }],
+        skills: [
+          {
+            name: "review",
+            skill_id: "review",
+            space_id: "local",
+            draft_offset: 0,
+          },
+        ],
       });
       expect(onRunSkill).not.toHaveBeenCalled();
     },
@@ -1702,7 +1843,11 @@ describe("personal and team prompt commands", () => {
     press("Tab");
     expect(
       renders[renders.length - 1]?.selectedSkills[0]
-        ? { name: renders[renders.length - 1].selectedSkills[0].name }
+        ? {
+            name: renders[renders.length - 1].selectedSkills[0].name,
+            skill_id: renders[renders.length - 1].selectedSkills[0].skillId,
+            space_id: renders[renders.length - 1].selectedSkills[0].spaceId,
+          }
         : null,
     ).toBeNull();
     await pressAsync("Enter");
@@ -1712,12 +1857,19 @@ describe("personal and team prompt commands", () => {
     type("/summary notes");
     expect(
       renders[renders.length - 1]?.selectedSkills[0]
-        ? { name: renders[renders.length - 1].selectedSkills[0].name }
+        ? {
+            name: renders[renders.length - 1].selectedSkills[0].name,
+            skill_id: renders[renders.length - 1].selectedSkills[0].skillId,
+            space_id: renders[renders.length - 1].selectedSkills[0].spaceId,
+          }
         : null,
-    ).toEqual({ name: "summary" });
+    ).toEqual({ name: "summary", skill_id: "summary", space_id: "local" });
     expect(renders[renders.length - 1]?.selectedPrompts).toEqual([]);
     press("Enter");
-    expect(onRunSkill).toHaveBeenCalledWith({ text: "/summary notes", skills: [{ name: "summary" }] });
+    expect(onRunSkill).toHaveBeenCalledWith({
+      text: "/summary notes",
+      skills: [{ name: "summary", skill_id: "summary", space_id: "local", draft_offset: 0 }],
+    });
   });
   it("does not replace a removed selected personal prompt with a team homonym", async () => {
     mountReact();
@@ -1932,7 +2084,10 @@ describe("sending while a catalog has not answered", () => {
     nothingSent();
 
     await skills.answer({ supported: true, skills: [{ name: "review", description: "Review" }] });
-    expect(onRunSkill).toHaveBeenCalledExactlyOnceWith({ text: "/review notes", skills: [{ name: "review" }] });
+    expect(onRunSkill).toHaveBeenCalledExactlyOnceWith({
+      text: "/review notes",
+      skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+    });
     expect(onSend).not.toHaveBeenCalled();
   });
 
@@ -2275,7 +2430,7 @@ describe("several prompt commands in one message", () => {
     expect(onRunCommand).toHaveBeenCalledOnce();
     expect(onRunCommand.mock.calls[0][0]).toMatchObject({
       text: "Summarise the document.\n\n/verify-answer and\n\nUse a formal tone.\n\nnow",
-      skills: [{ name: "verify-answer" }],
+      skills: [{ name: "verify-answer", skill_id: "verify-answer", space_id: "local" }],
     });
     expect(onRunCommand.mock.calls[0][0].command.prompts.map((entry: { command: string }) => entry.command)).toEqual([
       "summary",
@@ -2426,7 +2581,7 @@ describe("several prompt commands in one message", () => {
     await submit();
     expect(onRunCommand.mock.calls[0][0]).toMatchObject({
       text: "Summarise the document.\n\nthen /review the text",
-      skills: [{ name: "review" }],
+      skills: [{ name: "review", skill_id: "review", space_id: "local" }],
     });
     expect(onRunCommand.mock.calls[0][0].command.prompts).toHaveLength(1);
 
@@ -2662,7 +2817,10 @@ describe("several prompt commands in one message", () => {
       expect(latest().selectedPrompts).toEqual([]);
       expect(latest().selectedSkills.map((skill) => skill.from)).toEqual([0]);
       await submit();
-      expect(onRunSkill).toHaveBeenCalledWith({ text: "/review x", skills: [{ name: "review" }] });
+      expect(onRunSkill).toHaveBeenCalledWith({
+        text: "/review x",
+        skills: [{ name: "review", skill_id: "review", space_id: "local", draft_offset: 0 }],
+      });
       expect(onRunCommand).not.toHaveBeenCalled();
     });
   });
@@ -2861,7 +3019,117 @@ it("runs an authorized project skill alongside the project prompt catalog", asyn
   act(() => root.render(<Host teamId="project" skillsEnabled />));
   type("/graph explain");
   await pressAsync("Enter");
-  expect(onRunSkill).toHaveBeenCalledWith(expect.objectContaining({ skills: [{ name: "graph" }] }));
+  expect(onRunSkill).toHaveBeenCalledWith(
+    expect.objectContaining({ skills: [{ name: "graph", skill_id: "graph", space_id: "local", draft_offset: 0 }] }),
+  );
   expect(onSkillError).not.toHaveBeenCalled();
   expect(listCommands).toHaveBeenCalledWith({ spaceId: "project" }, expect.objectContaining({ skip: false }));
+});
+
+describe("skills with the same name in directly readable spaces", () => {
+  const org = { skill_id: "org-skill", space_id: "org", name: "graph" };
+  const team = { skill_id: "team-skill", space_id: "team-1", name: "graph" };
+  function mountHomonyms() {
+    skillCatalog = {
+      supported: true,
+      skills: [
+        { ...org, space_name: "Organization", description: "Organization method" },
+        { ...team, space_name: "Team", description: "Team method" },
+      ],
+    };
+    act(() => root.render(<Host skillsEnabled />));
+    act(() => textarea().focus());
+  }
+  it("sends ordinary messages and lets each homonym be selected independently in one draft", () => {
+    mountHomonyms();
+    type("Ordinary conversation");
+    press("Enter");
+    expect(onSend).toHaveBeenCalledOnce();
+    type("/gra");
+    expect(labels()[0]).toContain("Organization");
+    expect(labels()[1]).toContain("Team");
+    act(() => options()[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+    type(textarea().value + "/gra");
+    act(() => options()[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+    expect(renders[renders.length - 1]?.selectedSkills.map((s) => [s.skillId, s.spaceId])).toEqual([
+      [org.skill_id, org.space_id],
+      [team.skill_id, team.space_id],
+    ]);
+    press("Enter");
+    expect(onRunSkill).toHaveBeenLastCalledWith({
+      text: "/graph /graph ",
+      skills: [
+        { ...org, draft_offset: "/graph /graph ".indexOf("/" + org.name, 0) },
+        {
+          ...team,
+          draft_offset: "/graph /graph ".indexOf("/" + team.name, "/graph /graph ".indexOf("/" + org.name, 0) + 1),
+        },
+      ],
+    });
+  });
+  it("requires a choice for a typed ambiguous name and never substitutes a revoked selected identity", () => {
+    mountHomonyms();
+    type("/graph notes");
+    press("Enter");
+    expect(onSkillError).toHaveBeenLastCalledWith("ambiguous");
+    expect(onRunSkill).not.toHaveBeenCalled();
+    type("/gra");
+    act(() => options()[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
+    skillCatalog = { supported: true, skills: [{ ...team, space_name: "Team", description: "Team method" }] };
+    act(() => root.render(<Host skillsEnabled />));
+    press("Enter");
+    expect(onSkillError).toHaveBeenLastCalledWith("unavailable");
+    expect(onRunSkill).not.toHaveBeenCalled();
+  });
+  it("recalls the exact owner even when its homonym comes first in the current catalog", () => {
+    mountHomonyms();
+    const line = "/graph notes";
+    type(line);
+    const message: ThreadMessage = {
+      id: "past",
+      role: "user",
+      text: line,
+      isStreaming: false,
+      traceMessages: [],
+      sources: [],
+      uiParts: [],
+      skillNames: ["graph"],
+      skillInvocations: [team],
+    };
+    act(() => renders[renders.length - 1]!.dismiss(line, message));
+    press("Enter");
+    expect(onRunSkill).toHaveBeenLastCalledWith({
+      text: line,
+      skills: [{ ...team, draft_offset: line.indexOf("/" + team.name, 0) }],
+    });
+  });
+  it("preserves every occurrence when repeated homonyms belong to different spaces", () => {
+    mountHomonyms();
+    const line = "/graph /graph /graph";
+    const references = [
+      { ...org, draft_offset: 0 },
+      { ...org, draft_offset: 7 },
+      { ...team, draft_offset: 14 },
+    ];
+    type(line);
+    const message: ThreadMessage = {
+      id: "past",
+      role: "user",
+      text: line,
+      isStreaming: false,
+      traceMessages: [],
+      sources: [],
+      uiParts: [],
+      skillNames: ["graph"],
+      skillInvocations: references,
+    };
+    act(() => renders[renders.length - 1].dismiss(line, message));
+    expect(renders[renders.length - 1].selectedSkills.map((s) => s.skillId)).toEqual([
+      org.skill_id,
+      org.skill_id,
+      team.skill_id,
+    ]);
+    press("Enter");
+    expect(onRunSkill).toHaveBeenLastCalledWith({ text: line, skills: references });
+  });
 });

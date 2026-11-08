@@ -73,7 +73,9 @@ def observe_skill_read(
                 skills,
                 name,
                 origin="user"
-                if any(s.name == name for s in binding.runtime_context.selected_skills)
+                if any(
+                    s.skill_id == name for s in binding.runtime_context.selected_skills
+                )
                 else "agent",
                 load_id=load_id,
                 agent_id=agent_id,

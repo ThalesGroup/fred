@@ -491,13 +491,13 @@ class RuntimeContext(BaseModel):
     def validate_skill_selections(self) -> RuntimeContext:
         if self.skill is not None and self.skills is not None:
             raise ValueError("Use skills or legacy skill, not both")
-        if self.skills is not None:
-            self.skills = list({item.name: item for item in self.skills}.values())
         return self
 
     @property
     def selected_skills(self) -> tuple[SkillInvocation, ...]:
-        return tuple(self.skills or ()) if self.skill is None else (self.skill,)
+        # Keep occurrences in history; preload each resource only once per turn.
+        items = (self.skills or ()) if self.skill is None else (self.skill,)
+        return tuple({(item.space_id, item.skill_id): item for item in items}.values())
 
     # Group B — Auth delegation (mutable; refreshed in place by token refresh logic)
     access_token: Optional[str] = None
@@ -944,7 +944,7 @@ class BoundRuntimeContext(FrozenModel):
       `portable_context` instead of expanding direct `runtime_context` usage
     """
 
-    unavailable_skill_names: tuple[str, ...] = ()
+    unavailable_skill_ids: tuple[str, ...] = ()
     is_resuming: bool = False
     runtime_context: RuntimeContext = Field(
         ...,

@@ -112,7 +112,8 @@ describe("UserTurn copy affordance (#2359)", () => {
           <UserTurn
             text="Before /meeting-minutes after"
             skillName="meeting-minutes"
-            builtinSkillNames={["meeting-minutes"]}
+            skillInvocations={[{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }]}
+            builtinSkillIds={["meeting-minutes"]}
           />
           <div data-copyable-content>
             <p>Compte rendu de réunion is a heading</p>
@@ -187,6 +188,7 @@ describe("UserTurn copy affordance (#2359)", () => {
           text="PRIVATE EXPANDED PROMPT Before /mermaid middle /verify-answer after"
           command={descriptor}
           skillNames={["mermaid", "verify-answer"]}
+          skillInvocations={["mermaid", "verify-answer"].map((name) => ({ name, skill_id: name, space_id: "local" }))}
           onOpenCommand={onOpenCommand}
           onOpenSkill={onOpenSkill}
           onEdit={onEdit}
@@ -216,7 +218,13 @@ describe("UserTurn copy affordance (#2359)", () => {
     },
   );
   it("renders a skill badge with the request and copies a reusable invocation", async () => {
-    render(<UserTurn text={"Notes\nAction"} skillName="meeting-minutes" />);
+    render(
+      <UserTurn
+        text={"Notes\nAction"}
+        skillName="meeting-minutes"
+        skillInvocations={[{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }]}
+      />,
+    );
     expect(container.querySelector('[role="group"]')?.textContent).toContain("meeting-minutes");
     expect(container.querySelector("[class*=skillTurn]")?.textContent).toBe("meeting-minutes Notes\nAction");
     expect(container.querySelector('[aria-label="chatbot.skills.remove"]')).toBeNull();
@@ -235,7 +243,14 @@ describe("UserTurn copy affordance (#2359)", () => {
 
   it("keeps an inline token at its stored position for selection-copy, full copy and editing", async () => {
     const onEdit = vi.fn();
-    render(<UserTurn text={"Before /meeting-minutes after\nAction"} skillName="meeting-minutes" onEdit={onEdit} />);
+    render(
+      <UserTurn
+        text={"Before /meeting-minutes after\nAction"}
+        skillName="meeting-minutes"
+        skillInvocations={[{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }]}
+        onEdit={onEdit}
+      />,
+    );
     const body = container.querySelector("[class*=skillTurn]")!;
     expect(body.textContent).toBe("Before meeting-minutes after\nAction");
     expect(body.firstChild?.textContent).toBe("Before ");
@@ -280,6 +295,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         <UserTurn
           text="assembled prompt"
           skillNames={["review", "mermaid"]}
+          skillInvocations={["review", "mermaid"].map((name) => ({ name, skill_id: name, space_id: "local" }))}
           command={{ command, prompt_id: "p-review", draft_text: draft, draft_command_offset: 22 }}
           onEdit={onEdit}
           onOpenSkill={onOpenSkill}
@@ -401,6 +417,7 @@ describe("UserTurn copy affordance (#2359)", () => {
       <UserTurn
         text="Notes"
         skillName="meeting-minutes"
+        skillInvocations={[{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }]}
         skillDescription="Prepare meeting minutes"
         onOpenSkill={onOpenSkill}
       />,
@@ -417,7 +434,14 @@ describe("UserTurn copy affordance (#2359)", () => {
 
   it("preserves the selection when a skill turn is edited", async () => {
     const onEdit = vi.fn();
-    render(<UserTurn text="Notes" skillName="meeting-minutes" onEdit={onEdit} />);
+    render(
+      <UserTurn
+        text="Notes"
+        skillName="meeting-minutes"
+        skillInvocations={[{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }]}
+        onEdit={onEdit}
+      />,
+    );
     await click(buttons()[0]);
     expect(onEdit).toHaveBeenCalledWith("/meeting-minutes Notes");
   });

@@ -958,7 +958,8 @@
           "title": "Visualize data",
           "description": "Choose a useful representation of data and create it using available tools."
         }
-      }
+      },
+      "ambiguous": "Several skills have this name. Choose their space in the command menu."
     }
   },
   "mermaid": {
@@ -5264,9 +5265,9 @@
       "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
       "failed": "The change could not be confirmed. Refresh the list before retrying."
     },
-    "skillGovernance": {
-      "title": "Capabilities and skills",
-      "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space and does not load a skill.",
+    "toolGovernance": {
+      "title": "Tools",
+      "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space.",
       "restrict": "Restrict offers in this space",
       "inherit": "Without a local restriction, this space follows its parent permissions.",
       "denyAll": "Allow no offers in this space",
@@ -5281,9 +5282,22 @@
       "failed": "The change was not saved.",
       "source": {
         "disabled": "The source is disabled.",
-        "unavailable": "The source is unavailable; saved choices are retained.",
-        "incompatible": "This pod does not provide the skill governance contract. Upgrade its replicas."
+        "unavailable": "The source is unavailable; saved choices are retained."
       }
+    },
+    "spaceSkills": {
+      "title": "Skills",
+      "scope": "This catalog belongs to the selected space. Conversations also use skills in parent spaces you can read directly.",
+      "empty": "No skills installed in this space.",
+      "defaults": "Provided skills",
+      "installExplanation": "Install an independent package in this space. Its contents can then be managed here.",
+      "install": "Install",
+      "remove": "Remove",
+      "removeConfirm": "Remove {{name}} from this space?",
+      "edit": "Edit files",
+      "save": "Save package",
+      "cancel": "Cancel",
+      "failed": "The operation failed. Check the package format and reload if it changed."
     }
   },
   "runtime": {

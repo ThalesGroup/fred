@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Local ceilings on pod offers. Direct space owners manage only their own row;
-//! the same decision applies to tools and instruction skills at admission.
+//! the same decision applies to tool offers at admission.
 
 use super::{
     catalog, enablement,
@@ -42,8 +42,6 @@ pub struct SpaceCapabilityPolicy {
     pub permitted_ids: Vec<String>,
     pub source_enabled: bool,
     pub reachable: bool,
-    pub skills_supported: bool,
-    pub skills_availability: Option<String>,
     pub offers: Vec<LocalOffer>,
 }
 
@@ -133,10 +131,6 @@ async fn space_capability_policies(
             permitted_ids,
             source_enabled: source.enabled,
             reachable: observation.as_ref().is_some_and(|v| v.reachable),
-            skills_supported: observation
-                .as_ref()
-                .is_some_and(|v| v.skills_availability.is_some()),
-            skills_availability: observation.and_then(|v| v.skills_availability),
             offers,
         });
     }

@@ -256,8 +256,8 @@ const previewResult = vi.hoisted(() => ({
   error: undefined as unknown,
   refetch: vi.fn(),
 }));
-vi.mock("../../../../slices/runtime/skillPreview", () => ({
-  useWeaverSkillDetailQuery: (args: unknown, options: unknown) => {
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  usePreviewSkillQuery: (args: unknown, options: unknown) => {
     skillPreviewQuery(args, options);
     return previewResult;
   },
@@ -407,7 +407,7 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     capabilityIds: [],
     chatControls: [],
     skillsSupported: true,
-    skillDetailUrlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+    skillDetailUrlTemplate: "/control-plane/spaces/team-1/skills/scope/{skill_id}",
     skills: {
       supported: true,
       skills: [
@@ -1160,7 +1160,19 @@ const historicalSkill: ChatMessage = {
   role: "system",
   channel: "system_note",
   parts: [{ type: "text", text: "Loaded instructions" }],
-  metadata: { extras: { skill_load: { name: "compare-options", origin: "user", load_id: "load", child: false } } },
+  metadata: {
+    extras: {
+      skill_load: {
+        skill_id: "compare-options",
+        space_id: "team-1",
+        space_name: "",
+        name: "compare-options",
+        origin: "user",
+        load_id: "load",
+        child: false,
+      },
+    },
+  },
 };
 
 describe("ManagedChatPage skill preview", () => {
@@ -1177,7 +1189,19 @@ describe("ManagedChatPage skill preview", () => {
       role: "system",
       channel: "system_note",
       parts: [{ type: "text", text: "Loaded instructions" }],
-      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child } } },
+      metadata: {
+        extras: {
+          skill_load: {
+            skill_id: "meeting-minutes",
+            space_id: "team-1",
+            space_name: "",
+            name: "meeting-minutes",
+            origin,
+            load_id: "load",
+            child,
+          },
+        },
+      },
     };
     chatValue = baseChatValue([load]);
     chatValue.threadMessages = [{ ...renderedTurn, traceMessages: [load] }];
@@ -1187,7 +1211,14 @@ describe("ManagedChatPage skill preview", () => {
     chatValue.setInput = setInput;
     chatValue.handleSend = handleSend;
     previewResult.currentData = {
-      skill: { name: "meeting-minutes", description: "Prepare meeting minutes", argument_hint: "[notes]" },
+      skill: {
+        skill_id: "meeting-minutes",
+        space_id: "team-1",
+        space_name: "",
+        name: "meeting-minutes",
+        description: "Prepare meeting minutes",
+        argument_hint: "[notes]",
+      },
       revision: "snapshot",
       content: "## Minutes\nRead **notes**.",
     };
@@ -1204,9 +1235,7 @@ describe("ManagedChatPage skill preview", () => {
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         {
           spaceId: "team-1",
-          agentInstanceId: "agent-1",
-          skillName: "meeting-minutes",
-          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+          skillId: "meeting-minutes",
         },
         { skip: false, refetchOnMountOrArgChange: true },
       );
@@ -1232,7 +1261,14 @@ describe("ManagedChatPage skill preview", () => {
     chatValue.setInput = setInput;
     chatValue.handleSend = handleSend;
     previewResult.currentData = {
-      skill: { name: "compare-options", description: "Compare alternatives", argument_hint: "[options]" },
+      skill: {
+        skill_id: "compare-options",
+        space_id: "team-1",
+        space_name: "",
+        name: "compare-options",
+        description: "Compare alternatives",
+        argument_hint: "[options]",
+      },
       revision: "snapshot",
       content: "---\nname: compare-options\n---\n## Procedure\nRead **evidence**.",
     };
@@ -1246,9 +1282,7 @@ describe("ManagedChatPage skill preview", () => {
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         {
           spaceId: "team-1",
-          agentInstanceId: "agent-1",
-          skillName: "",
-          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+          skillId: "",
         },
         { skip: true, refetchOnMountOrArgChange: true },
       );
@@ -1260,9 +1294,7 @@ describe("ManagedChatPage skill preview", () => {
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         {
           spaceId: "team-1",
-          agentInstanceId: "agent-1",
-          skillName: "compare-options",
-          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+          skillId: "compare-options",
         },
         { skip: false, refetchOnMountOrArgChange: true },
       );
@@ -1278,9 +1310,7 @@ describe("ManagedChatPage skill preview", () => {
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
         {
           spaceId: "team-1",
-          agentInstanceId: "agent-1",
-          skillName: "",
-          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+          skillId: "",
         },
         { skip: true, refetchOnMountOrArgChange: true },
       );
@@ -1375,7 +1405,7 @@ describe("ManagedChatPage skill reference preview", () => {
             args:
               toolName === "read_file"
                 ? { file_path: "/skills/compare-options/references/model.md", offset: 1, limit: 1 }
-                : { name: "compare-options", path: "references/model.md" },
+                : { skill_id: "compare-options", path: "references/model.md" },
           },
         ],
       };
@@ -1397,7 +1427,13 @@ describe("ManagedChatPage skill reference preview", () => {
       const handleSend = vi.fn();
       chatValue.handleSend = handleSend;
       previewResult.currentData = {
-        skill: { name: "compare-options", description: "Current skill description" },
+        skill: {
+          skill_id: "compare-options",
+          space_id: "team-1",
+          space_name: "",
+          name: "compare-options",
+          description: "Current skill description",
+        },
         revision: "now",
         content: "Current instructions",
       };
@@ -1420,7 +1456,7 @@ describe("ManagedChatPage skill reference preview", () => {
         expect(container.textContent).not.toContain("Current skill description");
         expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Historical");
         expect(skillPreviewQuery).toHaveBeenLastCalledWith(
-          expect.objectContaining({ skillName: "" }),
+          expect.objectContaining({ skillId: "" }),
           expect.objectContaining({ skip: true }),
         );
         act(() => row!.click());

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -88,7 +87,9 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
         runtime_context=RuntimeContext(
             session_id="session",
             exchange_id="exchange",
-            skill=SkillInvocation(name=selection) if selection else None,
+            skill=SkillInvocation(name=selection, skill_id=selection, space_id="local")
+            if selection
+            else None,
         ),
         portable_context=PortableContext(
             request_id="request",
@@ -102,7 +103,10 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
 
 
 def test_package_discovery_and_read_only_reference() -> None:
-    catalog = PlatformSkills.from_directory("package")
+    catalog = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     assert [entry.name for entry in catalog.catalog.skills] == [
         "analyze-data",
         "compare-options",
@@ -125,8 +129,13 @@ def test_package_discovery_and_read_only_reference() -> None:
 
 
 def test_graph_core_and_reference_match_react_and_native_deep_resources() -> None:
-    skills = PlatformSkills.from_directory("package")
-    resource = files("fred_runtime.skills").joinpath("graph")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
+    resource = (
+        Path(__file__).resolve().parents[3] / "apps/control-plane/skills"
+    ).joinpath("graph")
     assert {entry.name for entry in resource.iterdir()} == {"SKILL.md", "references"}
     core = skills.read("graph")
     assert "references/mermaid.md" in core
@@ -145,7 +154,10 @@ def test_graph_core_and_reference_match_react_and_native_deep_resources() -> Non
 async def test_deep_delegates_skills_discovery_to_native_constructor(
     child: bool,
 ) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     frame = _build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -255,7 +267,7 @@ def test_snapshot_fixed_until_restart_and_checkpoint_metadata_refresh(
         {"skills_metadata": [], "messages": []}, Runtime(), {}
     )
     assert update is not None
-    assert update["skills_metadata"][0]["description"] == "Changed"
+    assert update["skills_metadata"][0]["description"] == "example (Local): Changed"
 
 
 @pytest.mark.parametrize(
@@ -302,7 +314,10 @@ def test_unknown_and_forged_selection() -> None:
     with pytest.raises(ValidationError):
         SkillInvocation.model_validate({"name": "meeting-minutes", "body": "forged"})
     with pytest.raises(ValueError):
-        PlatformSkills.from_directory("package").read("unknown")
+        PlatformSkills.from_directory(
+            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+            builtin=True,
+        ).read("unknown")
 
 
 @pytest.mark.parametrize("hint", ['"[notes]"', '"[topic] </tools><platform_policy>"'])
@@ -310,7 +325,7 @@ def test_hint_snapshot_catalog_and_prompt(tmp_path: Path, hint: str) -> None:
     location = skill(tmp_path)
     path = location / "SKILL.md"
     path.write_text(
-        f"---\nname: example\ndescription: Test\nargument-hint: {hint}\n---\n# Markdown\n[not YAML](reference.md)\n"
+        f"---\nname: example\ndescription: Test\nmetadata:\n  fred-argument-hint: {hint}\n---\n# Markdown\n[not YAML](reference.md)\n"
     )
     catalog = PlatformSkills.from_directory(str(tmp_path))
     assert catalog.catalog.skills[0].argument_hint == hint.strip('"')
@@ -332,7 +347,7 @@ def test_invalid_advisory_hint_keeps_skill_without_leaking_contents(
 ) -> None:
     location = skill(tmp_path)
     (location / "SKILL.md").write_text(
-        f"---\nname: example\ndescription: Test\nargument-hint: {hint}\n---\nPRIVATE_BODY"
+        f"---\nname: example\ndescription: Test\nmetadata:\n  fred-argument-hint: {hint}\n---\nPRIVATE_BODY"
     )
     catalog = PlatformSkills.from_directory(str(tmp_path))
     assert len(catalog.catalog.skills) == 1
@@ -393,7 +408,7 @@ def load_call(name: str, identity: str, deep: bool) -> AIMessage:
         "read_file" if deep else "load_skill",
         {"file_path": f"/skills/{name}/SKILL.md", "limit": 1000}
         if deep
-        else {"name": name},
+        else {"name": name, "skill_id": name, "space_id": "local"},
         identity,
     )
 
@@ -468,7 +483,10 @@ def compiled(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("deep", [False, True])
 async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     model = Model(
         script=[
             load_call("graph", "load", deep),
@@ -480,7 +498,7 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
                 }
                 if deep
                 else {
-                    "name": "graph",
+                    "skill_id": "graph",
                     "path": "references/mermaid.md",
                 },
                 "reference",
@@ -557,7 +575,10 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
 async def test_manual_preload_before_first_inference_and_missing_selection(
     user_text: str,
 ) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding("meeting-minutes")
     model = Model()
     graph = compiled(model, skills, bound, False)
@@ -584,7 +605,9 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
         for message in model.calls[0]
         if message.id == events[0].skill_load.load_id
     )
-    assert str(procedure.content).startswith("Loaded platform skill: meeting-minutes\n")
+    assert str(procedure.content).startswith(
+        "Loaded platform skill: meeting-minutes (Local; meeting-minutes)\n"
+    )
     assert "The user selected this skill for the current request." in str(
         procedure.content
     )
@@ -611,7 +634,9 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
         == 1
     )
     assert model.calls[0][-1].content == user_text
-    bound.runtime_context.skill = SkillInvocation(name="missing")
+    bound.runtime_context.skill = SkillInvocation(
+        name="missing", skill_id="missing", space_id="local"
+    )
     before = len(model.calls)
     with pytest.raises(ValueError):
         await in_turn(bound, executor.invoke(input_model, config))
@@ -621,16 +646,29 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
 async def test_multiple_selections_load_before_inference_in_order(stream: bool) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding().model_copy(
         update={
             "runtime_context": RuntimeContext.model_validate(
                 {
                     **binding().runtime_context.model_dump(),
                     "skills": [
-                        SkillInvocation(name="meeting-minutes"),
-                        SkillInvocation(name="graph"),
-                        SkillInvocation(name="meeting-minutes"),
+                        SkillInvocation(
+                            name="meeting-minutes",
+                            skill_id="meeting-minutes",
+                            space_id="local",
+                        ),
+                        SkillInvocation(
+                            name="graph", skill_id="graph", space_id="local"
+                        ),
+                        SkillInvocation(
+                            name="meeting-minutes",
+                            skill_id="meeting-minutes",
+                            space_id="local",
+                        ),
                     ],
                 }
             )
@@ -682,8 +720,10 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
     assert all(call.kwargs["dims"]["skill_origin"] == "user" for call in counts)
     before = len(model.calls)
     bound.runtime_context.skills = [
-        SkillInvocation(name="meeting-minutes"),
-        SkillInvocation(name="missing"),
+        SkillInvocation(
+            name="meeting-minutes", skill_id="meeting-minutes", space_id="local"
+        ),
+        SkillInvocation(name="missing", skill_id="missing", space_id="local"),
     ]
     with pytest.raises(ValueError):
         await in_turn(bound, executor.invoke(input_model, config))
@@ -702,15 +742,24 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
 
 @pytest.mark.asyncio
 async def test_deep_pins_user_selections_and_attributes_actual_native_reads() -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding().model_copy(
         update={
             "runtime_context": RuntimeContext.model_validate(
                 {
                     **binding().runtime_context.model_dump(),
                     "skills": [
-                        SkillInvocation(name="meeting-minutes"),
-                        SkillInvocation(name="graph"),
+                        SkillInvocation(
+                            name="meeting-minutes",
+                            skill_id="meeting-minutes",
+                            space_id="local",
+                        ),
+                        SkillInvocation(
+                            name="graph", skill_id="graph", space_id="local"
+                        ),
                     ],
                 }
             )
@@ -783,7 +832,10 @@ async def test_deep_pins_user_selections_and_attributes_actual_native_reads() ->
 async def test_packaged_graph_loads_through_shared_paths(
     deep: bool, origin: str
 ) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding("graph" if origin == "user" else None)
     model = Model(
         script=[]
@@ -850,7 +902,10 @@ async def test_packaged_graph_loads_through_shared_paths(
 async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
     streaming: bool,
 ) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding()
     model = Model(
         script=[
@@ -869,7 +924,9 @@ async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
     question = "Draw the same workflow"
     for selected in (False, True):
         bound.runtime_context.skills = (
-            [SkillInvocation(name="graph")] if selected else []
+            [SkillInvocation(name="graph", skill_id="graph", space_id="local")]
+            if selected
+            else []
         )
         request = ReActInput(
             messages=(
@@ -908,7 +965,10 @@ async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
 
 @pytest.mark.asyncio
 async def test_native_child_load_has_attribution() -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     model = Model(
         script=[
             call(
@@ -1106,11 +1166,14 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
     assert "NEW PROCEDURE" in str(restarted.calls[-1])
     state = await agent.aget_state(config)
     if not deep:
-        assert state.values["skills_metadata"][0]["description"] == "Changed"
+        assert (
+            state.values["skills_metadata"][0]["description"]
+            == "example (Local): Changed"
+        )
     if deep:
         assert "- **example**: Changed" in str(restarted.calls[0][0].content)
     else:
-        assert "Skill `example` (not a tool): Changed" in str(
+        assert "Skill `example` in Local (not a tool): Changed" in str(
             restarted.calls[0][0].content
         )
     await agent.aupdate_state(
@@ -1153,7 +1216,15 @@ def test_skill_tool_collision_is_rejected() -> None:
         ReActRuntimeToolResolver(
             declared_tool_refs=(),
             toolset_key=None,
-            services=RuntimeServices(skills=PlatformSkills.from_directory("package")),
+            services=RuntimeServices(
+                skills=PlatformSkills.from_directory(
+                    str(
+                        Path(__file__).resolve().parents[3]
+                        / "apps/control-plane/skills"
+                    ),
+                    builtin=True,
+                )
+            ),
             binding=binding(),
             capability_tool_names=("load_skill",),
         ).resolve_tools()
@@ -1193,13 +1264,24 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
             update={
                 "runtime_context": RuntimeContext(
                     skills=[
-                        SkillInvocation(name="meeting-minutes"),
-                        SkillInvocation(name="graph"),
+                        SkillInvocation(
+                            name="meeting-minutes",
+                            skill_id="meeting-minutes",
+                            space_id="local",
+                        ),
+                        SkillInvocation(
+                            name="graph", skill_id="graph", space_id="local"
+                        ),
                     ]
                 )
             }
         ),
-        RuntimeServices(skills=PlatformSkills.from_directory("package")),
+        RuntimeServices(
+            skills=PlatformSkills.from_directory(
+                str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+                builtin=True,
+            )
+        ),
         ExecutionConfig(resume_payload={"answer": "continue"}),
     )
     assert result is marker and event == ()
@@ -1236,7 +1318,15 @@ async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) ->
             AIMessage(content="done"),
         ]
     )
-    agent = compiled(model, PlatformSkills.from_directory("package"), bound, deep)
+    agent = compiled(
+        model,
+        PlatformSkills.from_directory(
+            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+            builtin=True,
+        ),
+        bound,
+        deep,
+    )
     config = {"configurable": {"thread_id": "hitl-skills"}}
     with active_turn(bound):
         events = [
@@ -1335,142 +1425,13 @@ async def test_reference_read_escapes_reserved_tags_only_for_model_messages(
         for tool in build_skill_tools(snapshot, binding())
         if tool.runtime_name == "read_skill_file"
     )
-    content, result = await reader.invoke({"name": "example", "path": "reference.md"})
+    content, result = await reader.invoke(
+        {"skill_id": "example", "path": "reference.md"}
+    )
     assert "<tools>" not in content and "</tools>" not in content
     assert "&lt;tools>sample&lt;/tools>" in content
     assert result is not None
     assert result.blocks[0].text == content
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("denied", [False, True])
-@pytest.mark.parametrize("kind", ["project", "personal"])
-async def test_runtime_catalog_uses_person_metadata_and_selected_instance(
-    monkeypatch: pytest.MonkeyPatch, denied: bool, kind: str
-) -> None:
-    import httpx
-    from fastapi import HTTPException
-    from fred_core.security.structure import KeycloakUser
-    from fred_runtime.skills import api
-    from test_history import _PingAgent
-    from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
-
-    catalog = PlatformSkills.from_directory("package")
-    definition = _PingAgent()
-    requests = []
-
-    def metadata(request):
-        requests.append(request)
-        assert (
-            request.url.path
-            == f"/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime"
-        )
-        assert not request.url.params
-        assert request.headers["Authorization"] == "Bearer person-token"
-        binding = turn_binding(definition.agent_id).model_dump(mode="json")
-        binding.pop("inference")
-        binding["skills"] = catalog.catalog.model_dump(mode="json")
-        binding["space"].update(
-            kind=kind,
-            team_id="00000000-0000-0000-0000-000000000019"
-            if kind == "project"
-            else None,
-            project_id=SPACE_ID if kind == "project" else None,
-        )
-        return httpx.Response(403 if denied else 200, json=binding)
-
-    monkeypatch.setattr(
-        api,
-        "get_runtime_context",
-        lambda: SimpleNamespace(
-            config=SimpleNamespace(
-                control_plane_url="https://control.invalid",
-                service_name="test-pod",
-                skills=catalog,
-            )
-        ),
-    )
-    async with httpx.AsyncClient(transport=httpx.MockTransport(metadata)) as client:
-        container = cast(
-            Any, SimpleNamespace(get_control_plane_http_client=lambda: client)
-        )
-        args = (
-            INSTANCE_ID,
-            SPACE_ID,
-            KeycloakUser(uid="alice", username="alice", roles=[]),
-            "Bearer person-token",
-            container,
-            {definition.agent_id: definition},
-        )
-        if denied:
-            with pytest.raises(HTTPException) as exc:
-                await api.get_instance_skills(*args)
-            assert exc.value.status_code == 403
-        else:
-            result = await api.get_instance_skills(*args)
-            assert result == catalog.catalog
-    assert len(requests) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("denied", [False, True])
-async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, denied: bool
-) -> None:
-    from unittest.mock import AsyncMock
-
-    from fastapi import HTTPException
-    from fred_runtime.skills import api
-
-    location = skill(tmp_path, body="PROCEDURE\n```xml\n<tools>sample</tools>\n```")
-    snapshot = PlatformSkills.from_directory(str(tmp_path))
-    (location / "SKILL.md").write_text("Changed after startup")
-    gate = AsyncMock(
-        side_effect=HTTPException(status_code=403) if denied else None,
-        return_value=snapshot.catalog,
-    )
-    monkeypatch.setattr(api, "get_instance_skills", gate)
-    monkeypatch.setattr(
-        api,
-        "get_runtime_context",
-        lambda: SimpleNamespace(
-            config=SimpleNamespace(
-                control_plane_url="https://control.invalid",
-                skills=snapshot,
-            )
-        ),
-    )
-    container = cast(Any, SimpleNamespace(get_control_plane_http_client=lambda: None))
-    if denied:
-        with pytest.raises(HTTPException) as exc:
-            await api.get_instance_skill_detail(
-                "example", "selected", "team", None, None, container, {}
-            )
-        assert exc.value.status_code == 403
-        gate.assert_awaited_once()
-    else:
-        result = await api.get_instance_skill_detail(
-            "example", "selected", "team", None, "Bearer verified", container, {}
-        )
-        assert result.skill == snapshot.catalog.skills[0]
-        assert result.revision == snapshot.catalog.revision
-        assert "PROCEDURE" in result.content
-        assert "<tools>sample</tools>" in result.content
-        assert "&lt;tools>" not in result.content
-        assert "Changed after startup" not in result.content
-        for name, status in [
-            ("missing", 404),
-            ("../example", 422),
-            ("example/references", 422),
-        ]:
-            with pytest.raises(HTTPException) as exc:
-                await api.get_instance_skill_detail(
-                    name, "selected", "team", None, None, container, {}
-                )
-            assert exc.value.status_code == status
-
-    assert gate.await_args is not None
-    assert gate.await_args.args[0:2] == ("selected", "team")
 
 
 class RecordingSkillKPIStore(BaseKPIStore):
@@ -1504,7 +1465,10 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
 
     store = RecordingSkillKPIStore()
     writer = KPIWriter(store=store)
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     bound = binding("meeting-minutes")
     bound = bound.model_copy(
         update={
@@ -1543,6 +1507,8 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
     assert loads[0].dims == {
         "actor_type": "system",
         "skill_name": "meeting-minutes",
+        "skill_id": "meeting-minutes",
+        "skill_space_id": "local",
         "skill_origin": "user",
         "space_id": SPACE_ID,
         "team_id": "trusted-team",
@@ -1713,7 +1679,10 @@ async def test_native_deep_read_attribution_windows_and_reference_context(
 
 @pytest.mark.asyncio
 async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     metrics = Mock(spec=BaseKPIWriter)
     model = Model(
         script=[
@@ -1778,7 +1747,10 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail", [False, True])
 async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     store = RecordingSkillKPIStore(fail=fail)
     writer = KPIWriter(store=store)
     model = Model(
@@ -1844,7 +1816,10 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
                 system_prompt_template="Use relevant skills and available tools."
             )
 
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     model = Model(
         script=[
             load_call("graph", "parent-load", True),
@@ -1932,3 +1907,182 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         if selection:
             assert loads[0].origin == "user" and not loads[0].child
         assert any(not load.child and load.origin == expected_origin for load in loads)
+
+
+def homonymous_snapshot():
+    from fred_runtime.skills.catalog import admitted_skills
+    from fred_sdk.contracts.skills import SkillCatalog
+    from weaver_fixtures import skill_facts
+
+    ids = (
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    )
+    spaces = (
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    )
+    from fred_sdk.contracts.skills import SkillSummary
+
+    summaries = tuple(
+        SkillSummary(
+            skill_id=key,
+            space_id=space,
+            space_name=label,
+            name="graph",
+            description="Draw graphs",
+        )
+        for key, space, label in zip(ids, spaces, ("Organization", "Team"))
+    )
+    contents = {}
+    for key, label in zip(ids, ("ORGANIZATION", "TEAM")):
+        contents[f"/skills/{key}/SKILL.md"] = (
+            f"---\nname: graph\ndescription: Draw graphs\n---\n{label} PROCEDURE. Read references/guide.md".encode()
+        )
+        contents[f"/skills/{key}/references/guide.md"] = f"{label} REFERENCE".encode()
+    raw = PlatformSkills(
+        contents, catalog=SkillCatalog(skills=summaries, policy_supported=True)
+    )
+    facts = skill_facts(raw)
+    snapshot = admitted_skills(
+        facts["skill_files"], SkillCatalog.model_validate(facts["skills"])
+    )
+    assert snapshot is not None
+    return snapshot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deep", [False, True])
+async def test_homonymous_skills_load_their_own_instructions_references_and_attribution(
+    deep,
+):
+    skills = homonymous_snapshot()
+    ids = [s.skill_id for s in skills.catalog.skills]
+    assert [s.name for s in skills.catalog.skills] == ["graph", "graph"]
+    assert {m["name"] for m in skills.native_metadata} == set(ids)
+    assert "ORGANIZATION PROCEDURE" not in skills.prompt
+    script = []
+    for index, key in enumerate(ids):
+        script.append(
+            call(
+                "read_file" if deep else "load_skill",
+                {"file_path": f"/skills/{key}/SKILL.md", "limit": 1000}
+                if deep
+                else {"skill_id": key},
+                f"load-{index}",
+            )
+        )
+        script.append(
+            call(
+                "read_file" if deep else "read_skill_file",
+                {"file_path": f"/skills/{key}/references/guide.md"}
+                if deep
+                else {"skill_id": key, "path": "references/guide.md"},
+                f"reference-{index}",
+            )
+        )
+    model = Model(script=[*script, AIMessage(content="done")])
+    bound = binding()
+    agent = compiled(model, skills, bound, deep)
+    with active_turn(bound):
+        events = [
+            event
+            async for event in agent.astream(
+                {"messages": [HumanMessage(content="Compare both methods")]},
+                {"configurable": {"thread_id": "homonyms"}},
+                stream_mode=["updates", "custom"],
+            )
+        ]
+    loads = [
+        payload.skill_load
+        for mode, payload in events
+        if mode == "custom"
+        and isinstance(payload, StatusRuntimeEvent)
+        and payload.skill_load
+    ]
+    assert {load.skill_id for load in loads} == set(ids)
+    assert {load.space_id for load in loads} == {
+        s.space_id for s in skills.catalog.skills
+    }
+    assert {load.name for load in loads} == {"graph"}
+    for label in ("ORGANIZATION", "TEAM"):
+        assert f"{label} PROCEDURE" in str(model.calls[-1])
+        assert f"{label} REFERENCE" in str(model.calls[-1])
+
+
+def test_homonym_selection_validates_identity_and_space_without_name_fallback():
+    skills = homonymous_snapshot()
+    selections = tuple(
+        SkillInvocation(skill_id=s.skill_id, space_id=s.space_id, name=s.name)
+        for s in skills.catalog.skills
+    )
+    context = RuntimeContext(skills=list(selections))
+    assert len(context.selected_skills) == 2
+    assert len(skills.for_execution(context.selected_skills).catalog.skills) == 2
+    with pytest.raises(ValueError, match="space"):
+        skills.for_execution(
+            (selections[0].model_copy(update={"space_id": selections[1].space_id}),)
+        )
+    revoked = skills.for_catalog((selections[0].skill_id,))
+    with pytest.raises(ValueError, match="unavailable"):
+        revoked.for_execution((selections[0],))
+    assert "TEAM PROCEDURE" in revoked.read(selections[1].skill_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deep", [False, True])
+async def test_both_homonyms_can_be_explicitly_preloaded_before_the_first_model_call(
+    deep,
+):
+    skills = homonymous_snapshot()
+    bound = binding()
+    bound.runtime_context.skills = [
+        SkillInvocation(skill_id=s.skill_id, space_id=s.space_id, name=s.name)
+        for s in skills.catalog.skills
+    ]
+    model = Model()
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled(model, skills, bound, deep),
+        binding=bound,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="DeepRuntime" if deep else "ReActRuntime",
+        preload_selected_skill=not deep,
+    )
+    with active_turn(bound):
+        events = [
+            event
+            async for event in executor.stream(
+                ReActInput(
+                    messages=(
+                        ReActMessage(role=ReActMessageRole.USER, content="Use both"),
+                    )
+                ),
+                ExecutionConfig(session_id="session"),
+            )
+        ]
+    loads = [
+        e.skill_load
+        for e in events
+        if isinstance(e, StatusRuntimeEvent) and e.skill_load
+    ]
+    assert {s.skill_id for s in loads} == {s.skill_id for s in skills.catalog.skills}
+    assert all(s.origin == "user" for s in loads)
+    assert "ORGANIZATION PROCEDURE" in str(model.calls[0])
+    assert "TEAM PROCEDURE" in str(model.calls[0])
+
+
+def test_repeated_occurrences_remain_in_history_but_preload_once_per_identity():
+    skills = homonymous_snapshot()
+    a, b = [
+        SkillInvocation(skill_id=s.skill_id, space_id=s.space_id, name=s.name)
+        for s in skills.catalog.skills
+    ]
+    occurrences = [
+        a.model_copy(update={"draft_offset": 0}),
+        a.model_copy(update={"draft_offset": 7}),
+        b.model_copy(update={"draft_offset": 14}),
+    ]
+    context = RuntimeContext(skills=occurrences)
+    assert context.skills == occurrences
+    assert len(context.selected_skills) == 2
+    assert {s.skill_id for s in context.selected_skills} == {a.skill_id, b.skill_id}

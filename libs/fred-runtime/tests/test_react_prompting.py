@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID
@@ -603,11 +604,18 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
     legacy: bool,
 ) -> None:
     bound = _binding(context_prompt_text="Reply in French.")
-    selections = [SkillInvocation(name="meeting-minutes")]
+    selections = [
+        SkillInvocation(
+            name="meeting-minutes", skill_id="meeting-minutes", space_id="local"
+        )
+    ]
     if legacy:
         bound.runtime_context.skill = selections[0]
     else:
-        bound.runtime_context.skills = [*selections, SkillInvocation(name="mermaid")]
+        bound.runtime_context.skills = [
+            *selections,
+            SkillInvocation(name="mermaid", skill_id="mermaid", space_id="local"),
+        ]
 
     def compose() -> str:
         return compose_system_prompt(
@@ -621,7 +629,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
         in prompt
     )
     assert ("`mermaid`" in prompt) is not legacy
-    assert "names are skills, not tool or subagent names" in prompt
+    assert "identifiers refer to skills, not tools or subagents" in prompt
     assert "unless already loaded" in prompt
     assert "absent from the catalog, report it as unavailable" in prompt
     assert "references/meeting-minutes-template.md" not in prompt
@@ -701,7 +709,10 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
 
 
 def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
         binding=_binding(),
@@ -714,12 +725,13 @@ def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> 
     assert "TOOL-LIST" in tools
     assert "FILESYSTEM-NOTICE" in tools
     assert "graph" in tools
-    assert "Skill `graph` (not a tool)" in tools
-    assert 'load_skill(name="graph")' in tools
-    assert 'load_skill(name="meeting-minutes")' in tools
+    assert "Skill `graph` in Local (not a tool)" in tools
+    assert 'load_skill(skill_id="graph")' in tools
+    assert 'load_skill(skill_id="meeting-minutes")' in tools
     assert "Before answering or choosing a task tool, check the catalog" in tools
     assert (
-        "you MUST call load_skill(name) before answering or using task tools" in tools
+        "you MUST call load_skill(skill_id) before answering or using task tools"
+        in tools
     )
     assert "even without a skill name or slash" in tools
     assert "[goal, source or data] [constraints]" in tools

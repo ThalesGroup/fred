@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from fred_runtime.skills.catalog import PlatformSkills
+from fred_sdk.contracts.skills import SkillInvocation
 
 
 def publish(root: Path, name: str, flags: str = "") -> None:
@@ -23,8 +24,10 @@ def test_common_loader_enforces_invocation_controls_without_an_http_route(
     from fred_runtime.skills.tools import load_skill
     from test_platform_skills import binding
 
-    publish(tmp_path, "internal", "user-invocable: false\n")
-    publish(tmp_path, "interview", "disable-model-invocation: true\n")
+    publish(tmp_path, "internal", 'metadata:\n  fred-user-invocable: "false"\n')
+    publish(
+        tmp_path, "interview", 'metadata:\n  fred-disable-model-invocation: "true"\n'
+    )
     publish(tmp_path, "other")
     source = PlatformSkills.from_directory(str(tmp_path))
     with pytest.raises(ValueError, match="user"):
@@ -50,37 +53,83 @@ def test_common_loader_enforces_invocation_controls_without_an_http_route(
 
 
 def test_agent_only_skill_cannot_be_selected_by_a_user(tmp_path: Path) -> None:
-    publish(tmp_path, "internal", "user-invocable: false\n")
+    publish(tmp_path, "internal", 'metadata:\n  fred-user-invocable: "false"\n')
     skills = PlatformSkills.from_directory(str(tmp_path))
     assert skills.catalog.skills[0].user_invocable is False
     assert "PROCEDURE" in skills.for_execution().read("internal")
     with pytest.raises(ValueError, match="user"):
-        skills.for_execution(selected_names=("internal",))
+        skills.for_execution(
+            selections=tuple(
+                SkillInvocation(name=n, skill_id=n, space_id="local")
+                for n in ("internal",)
+            )
+        )
 
 
 def test_explicit_only_skill_requires_a_current_selection(tmp_path: Path) -> None:
-    publish(tmp_path, "interview", "disable-model-invocation: true\n")
+    publish(
+        tmp_path, "interview", 'metadata:\n  fred-disable-model-invocation: "true"\n'
+    )
     skills = PlatformSkills.from_directory(str(tmp_path))
     with pytest.raises(ValueError, match="unavailable"):
         skills.for_execution().read("interview")
-    assert "PROCEDURE" in skills.for_execution(selected_names=("interview",)).read(
-        "interview"
-    )
+    assert "PROCEDURE" in skills.for_execution(
+        selections=tuple(
+            SkillInvocation(name=n, skill_id=n, space_id="local")
+            for n in ("interview",)
+        )
+    ).read("interview")
     assert "interview" not in skills.for_execution().prompt
     assert skills.for_catalog().catalog.skills[0].name == "interview"
 
 
 def test_invalid_invocation_flags_exclude_only_the_bad_skill(tmp_path: Path) -> None:
-    publish(tmp_path, "bad", 'user-invocable: "false"\n')
+    publish(tmp_path, "bad", "metadata:\n  fred-user-invocable: false\n")
     publish(tmp_path, "good")
     skills = PlatformSkills.from_directory(str(tmp_path))
     assert [s.name for s in skills.catalog.skills] == ["good"]
 
 
+@pytest.mark.parametrize(
+    "flags", ["user-invocable: false\n", "disable-model-invocation: true\n"]
+)
+def test_retired_controls_cannot_silently_expand_invocation(
+    tmp_path: Path, flags: str
+) -> None:
+    publish(tmp_path, "old", flags)
+    assert not PlatformSkills.from_directory(str(tmp_path)).catalog.skills
+
+
+def test_standard_external_skill_needs_no_fred_extensions(tmp_path: Path) -> None:
+    # Unmodified minimal fixture from agentskills/agentskills, skills-ref
+    # tests/test_validator.py::test_valid_skill, revision 83021e2 (Apache-2.0).
+    folder = tmp_path / "my-skill"
+    folder.mkdir()
+    content = "---\nname: my-skill\ndescription: A test skill\n---\n# My Skill\n"
+    (folder / "SKILL.md").write_text(content)
+    skills = PlatformSkills.from_directory(str(tmp_path))
+    summary = skills.catalog.skills[0]
+    assert summary.user_invocable and not summary.disable_model_invocation
+    assert summary.argument_hint is None
+    assert skills.for_execution().read("my-skill") == content
+    assert (
+        skills.for_execution(
+            tuple(
+                SkillInvocation(name=n, skill_id=n, space_id="local")
+                for n in ("my-skill",)
+            )
+        ).read("my-skill")
+        == content
+    )
+
+
 def test_packaged_policy_is_scoped_without_mutating_the_shared_catalog() -> None:
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     assert all(s.builtin for s in skills.catalog.skills)
-    denied = skills.for_execution(disabled_names=("graph",))
+    denied = skills.for_execution(disabled_ids=("graph",))
     with pytest.raises(ValueError, match="unavailable"):
         denied.read("graph")
     assert "graph" not in {s.name for s in denied.catalog.skills}
@@ -93,7 +142,7 @@ def test_pod_policy_also_disables_a_custom_homonym(tmp_path: Path) -> None:
     skills = PlatformSkills.from_directory(str(tmp_path))
     assert not skills.catalog.skills[0].builtin
     with pytest.raises(ValueError, match="unavailable"):
-        skills.for_execution(disabled_names=("graph",)).read("graph")
+        skills.for_execution(disabled_ids=("graph",)).read("graph")
 
 
 def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_changes() -> (
@@ -106,14 +155,19 @@ def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_chan
 
     runtime = ReActRuntime(
         definition=_PingAgent(),
-        services=RuntimeServices(skills=PlatformSkills.from_directory("package")),
+        services=RuntimeServices(
+            skills=PlatformSkills.from_directory(
+                str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+                builtin=True,
+            )
+        ),
     )
     runtime.bind(binding())
     assert runtime.services.skills is not None
     assert "grill-me" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding("grill-me"))
     assert runtime.services.skills.read("grill-me")
-    runtime.bind(binding().model_copy(update={"unavailable_skill_names": ("graph",)}))
+    runtime.bind(binding().model_copy(update={"unavailable_skill_ids": ("graph",)}))
     assert "graph" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding())
     assert runtime.services.skills.read("graph")

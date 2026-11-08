@@ -34,6 +34,7 @@ import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/Mar
 import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
 import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
+import SkillsPage from "@components/pages/SkillsPage/SkillsPage";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
@@ -173,6 +174,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "team/:teamId/managed-chat/:agentInstanceId",
         element: <ManagedChatPageRoute />,
+      },
+      {
+        path: "team/:teamId/skills",
+        element: <SkillsPage />,
       },
       {
         path: "team/:teamId/prompts",

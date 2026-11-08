@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 import { useTranslation } from "react-i18next";
-import type { SkillDetail } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillDetail } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import Button from "@shared/atoms/Button/Button";
@@ -12,7 +12,7 @@ import styles from "./SkillDetailPanel.module.css";
 
 interface SkillDetailPanelProps {
   open: boolean;
-  name: string;
+  skillId: string;
   onClose: () => void;
   detail?: SkillDetail;
   file?: ReturnType<typeof skillFileReadOf>;
@@ -23,7 +23,7 @@ interface SkillDetailPanelProps {
 
 export default function SkillDetailPanel({
   open,
-  name,
+  skillId,
   onClose,
   detail,
   file,
@@ -32,8 +32,8 @@ export default function SkillDetailPanel({
   onRetry,
 }: SkillDetailPanelProps) {
   const { t } = useTranslation();
-  const available = !error && detail?.skill.name === name;
-  const display = skillPresentation(t, available ? detail.skill : { name });
+  const available = !error && detail?.skill.skill_id === skillId;
+  const display = skillPresentation(t, available ? detail.skill : { name: t("chatbot.skills.loading") });
   const instructions =
     detail?.content.replace(/^---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/, "").trim() ?? "";
   return (
@@ -55,7 +55,6 @@ export default function SkillDetailPanel({
           {file !== undefined ? (
             file ? (
               <>
-                <p className={styles.description}>{t("chatbot.skills.panelTitle", { name: file.name })}</p>
                 {!file.excerpt && /\.(md|markdown)$/i.test(file.path) ? (
                   <MarkdownRenderer text={file.content} fullWidth localLinksAsText />
                 ) : (

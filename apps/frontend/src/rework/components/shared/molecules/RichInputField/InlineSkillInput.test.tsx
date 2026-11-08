@@ -473,7 +473,21 @@ function mountResetComposer() {
       teamId: "team-1",
       agentInstanceId: "instance-1",
       skillsEnabled: true,
-      skillCatalog: commandCatalog,
+      skillCatalog: {
+        ...commandCatalog,
+        availability: "available",
+        revision: "fixture",
+        policy_supported: true,
+        skills: commandCatalog.skills.map((s) => ({
+          ...s,
+          skill_id: s.name,
+          space_id: "local",
+          space_name: "",
+          builtin: false,
+          user_invocable: true,
+          disable_model_invocation: false,
+        })),
+      },
       input,
       setInput,
       onRunSkill: (run) => {
@@ -535,9 +549,14 @@ it("restores a rejected skill draft through the controlled composer reset withou
   act(() => badge.click());
   expect(container.querySelector("aside")).toBeNull();
   pressKey("Enter");
-  expect(runSkill).toHaveBeenCalledExactlyOnceWith({ text: draft, skills: [{ name: "graph" }] });
+  expect(runSkill).toHaveBeenCalledExactlyOnceWith({
+    text: draft,
+    skills: [{ name: "graph", skill_id: "graph", space_id: "local", draft_offset: draft.indexOf("/" + "graph", 0) }],
+  });
   expect(editor().state.doc.toString()).toBe("");
-  expect(latest().trigger.choices).toEqual([{ kind: "skill", name: "graph", from: 0, to: 6, scope: 0 }]);
+  expect(latest().trigger.choices).toEqual([
+    { kind: "skill", skillId: "graph", spaceId: "local", name: "graph", from: 0, to: 6, scope: 0 },
+  ]);
 
   // The refreshed catalog now reflects the administrator's opt-out. The
   // failed turn restores canonical text while its old choice is still held.

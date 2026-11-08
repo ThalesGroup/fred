@@ -10,6 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class SkillSummary(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    skill_id: str
+    space_id: str
+    space_name: str
     name: str
     description: str
     argument_hint: str | None = Field(default=None, min_length=1, max_length=256)
@@ -29,10 +32,13 @@ class SkillCatalog(BaseModel):
 
 
 class SkillInvocation(BaseModel):
-    """A name only: clients cannot supply procedural instructions or paths."""
+    """A resource reference; its name is presentation, never loading authority."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    skill_id: str
+    space_id: str
+    draft_offset: int | None = Field(default=None, ge=0)
     name: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)
 
 
@@ -49,6 +55,9 @@ class SkillDetail(BaseModel):
 class SkillLoadAttribution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    skill_id: str
+    space_id: str
+    space_name: str
     name: str
     origin: Literal["user", "agent"]
     revision: str
@@ -76,6 +85,6 @@ class SkillsPort(Protocol):
         """Return the escaped discovery guidance for the current catalog."""
         raise NotImplementedError
 
-    def read(self, name: str, path: str = "SKILL.md") -> str:
+    def read(self, skill_id: str, path: str = "SKILL.md") -> str:
         """Return original UTF-8 text; escape reserved tags at model boundaries."""
         raise NotImplementedError

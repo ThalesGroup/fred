@@ -41,7 +41,7 @@ function recallTurnsOf(messages: ThreadMessage[]): { line: string; message: Thre
       message.command?.draft_command_offset ?? null,
       usablePromptList(message.command, message.text)?.map((entry) => [entry.prompt_id ?? null, entry.draft_offset]) ??
         null,
-      message.skillNames ?? (message.skillName ? [message.skillName] : []),
+      message.skillInvocations?.map((s) => [s.space_id, s.skill_id, s.draft_offset]) ?? [],
     ]);
     if (!line || identity === previousIdentity) continue;
     turns.push({ line, message });

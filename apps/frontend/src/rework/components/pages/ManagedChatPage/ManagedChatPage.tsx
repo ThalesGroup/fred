@@ -77,7 +77,7 @@ import { useMySpacesQuery, useLazyGetPromptQuery } from "../../../../slices/cont
 import type { MySpace, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import { useWeaverSkillDetailQuery } from "../../../../slices/runtime/skillPreview";
+import { usePreviewSkillQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -209,7 +209,7 @@ function ManagedChatContent({
       ),
     [],
   );
-  const previewSkillName = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
+  const previewSkillId = activePushDrawer?.kind === "skill" ? activePushDrawer.name : null;
   const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
   const previewPromptIdRef = useRef<string | null>(null);
   previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
@@ -243,7 +243,7 @@ function ManagedChatContent({
           );
         } else if (skill) {
           setSelectedTraceKey(null);
-          openSkill(skill.name);
+          openSkill(skill.skill_id);
         } else {
           setSelectedTraceKey(traceEntryKey(entry));
         }
@@ -262,14 +262,12 @@ function ManagedChatContent({
   useEffect(() => {
     if (!chat.waitResponse && !filesUninitialized) void refreshFiles();
   }, [chat.waitResponse, filesUninitialized, refreshFiles]);
-  const skillPreview = useWeaverSkillDetailQuery(
+  const skillPreview = usePreviewSkillQuery(
     {
-      spaceId: teamId,
-      agentInstanceId,
-      skillName: previewSkillName ?? "",
-      urlTemplate: chat.skillDetailUrlTemplate ?? "",
+      spaceId: space.id,
+      skillId: previewSkillId ?? "",
     },
-    { skip: !previewSkillName || !chat.skillDetailUrlTemplate, refetchOnMountOrArgChange: true },
+    { skip: !previewSkillId || !chat.skillDetailUrlTemplate, refetchOnMountOrArgChange: true },
   );
 
   // Opening a push drawer is a statement about ONE conversation, so switching
@@ -713,7 +711,7 @@ function ManagedChatContent({
     onSkillError: (reason) =>
       showError({
         summary: t("chatbot.skills.errorTitle"),
-        detail: t(reason === "usage" ? "chatbot.skills.usage" : "chatbot.skills.unavailable"),
+        detail: t(`chatbot.skills.${reason}`),
       }),
     input: chat.input,
     setInput: chat.setInput,
@@ -840,9 +838,9 @@ function ManagedChatContent({
           onOpenPrompt: openPromptPreview,
           tokens: commands.selectedSkills.map((token) => ({
             ...token,
-            description: commands.skillSummaries.get(token.name)?.description,
-            builtin: commands.skillSummaries.get(token.name)?.builtin,
-            onOpen: openSkill,
+            description: commands.skillSummaries.get(token.skillId)?.description,
+            builtin: commands.skillSummaries.get(token.skillId)?.builtin,
+            onOpen: () => openSkill(token.skillId),
           })),
         }}
         aboveTextSlot={
@@ -1275,9 +1273,9 @@ function ManagedChatContent({
           />
 
           <SkillDetailPanel
-            open={!!previewSkillName || activePushDrawer?.kind === "skill-file"}
+            open={!!previewSkillId || activePushDrawer?.kind === "skill-file"}
             file={activePushDrawer?.kind === "skill-file" ? previewFile : undefined}
-            name={previewSkillName ?? ""}
+            skillId={previewSkillId ?? ""}
             onClose={() =>
               setActivePushDrawer((drawer) =>
                 drawer?.kind === "skill" || drawer?.kind === "skill-file" ? null : drawer,

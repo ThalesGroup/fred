@@ -325,3 +325,36 @@ async def in_turn(binding: BoundRuntimeContext, work: Awaitable[_Result]) -> _Re
     """Run a local invocation in a fresh scope, including every HITL resume."""
     with active_turn(binding):
         return await work
+
+
+def skill_facts(source):
+    """Serialize the same two-level content digest as Control Plane admission."""
+    import hashlib
+
+    contents = {
+        path: content.decode()
+        for path, content in source._backend.contents.items()
+        if any(
+            path.startswith(f"/skills/{skill.skill_id}/")
+            for skill in source.catalog.skills
+        )
+    }
+    versions = {}
+    for skill in source.catalog.skills:
+        digest = hashlib.sha256()
+        prefix = f"/skills/{skill.skill_id}/"
+        for path, text in sorted(contents.items()):
+            if path.startswith(prefix):
+                digest.update(
+                    path.removeprefix(prefix).encode() + b"\0" + text.encode() + b"\0"
+                )
+        versions[f"{skill.space_id}/{skill.skill_id}"] = digest.hexdigest()
+    digest = hashlib.sha256()
+    for name, version in sorted(versions.items()):
+        digest.update(name.encode() + b"\0" + version.encode() + b"\0")
+    return {
+        "skills": source.catalog.model_copy(
+            update={"revision": digest.hexdigest()}
+        ).model_dump(mode="json"),
+        "skill_files": contents,
+    }

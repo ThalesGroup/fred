@@ -449,6 +449,9 @@ const injectedRtkApi = api.injectEndpoints({
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
     }),
+    defaultSkills: build.query<DefaultSkillsApiResponse, DefaultSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/skills/defaults` }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -894,6 +897,44 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/generated-title`,
         method: "POST",
         body: queryArg.generatedTitle,
+      }),
+    }),
+    listSkills: build.query<ListSkillsApiResponse, ListSkillsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills` }),
+    }),
+    createSkill: build.mutation<CreateSkillApiResponse, CreateSkillApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills`,
+        method: "POST",
+        body: queryArg.createSkill,
+      }),
+    }),
+    installSkill: build.mutation<InstallSkillApiResponse, InstallSkillApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/packages/${queryArg.name}/install`,
+        method: "POST",
+      }),
+    }),
+    skillScope: build.query<SkillScopeApiResponse, SkillScopeApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/scope` }),
+    }),
+    previewSkill: build.query<PreviewSkillApiResponse, PreviewSkillApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/scope/${queryArg.skillId}` }),
+    }),
+    getSkill: build.query<GetSkillApiResponse, GetSkillApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/${queryArg.skillId}` }),
+    }),
+    putSkill: build.mutation<PutSkillApiResponse, PutSkillApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/${queryArg.skillId}`,
+        method: "PUT",
+        body: queryArg.putSkill,
+      }),
+    }),
+    deleteSkill: build.mutation<DeleteSkillApiResponse, DeleteSkillApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/${queryArg.skillId}`,
+        method: "DELETE",
       }),
     }),
     spaceUsage: build.query<SpaceUsageApiResponse, SpaceUsageApiArg>({
@@ -1422,6 +1463,8 @@ export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ Pow
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
 };
+export type DefaultSkillsApiResponse = /** status 200 undefined */ PackageSummary[];
+export type DefaultSkillsApiArg = void;
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
   createSpace: CreateSpace;
@@ -1810,6 +1853,45 @@ export type RecordTitleApiArg = {
   spaceId: string;
   sessionId: string;
   generatedTitle: GeneratedTitle;
+};
+export type ListSkillsApiResponse = /** status 200 undefined */ SpaceSkill[];
+export type ListSkillsApiArg = {
+  spaceId: string;
+};
+export type CreateSkillApiResponse = unknown;
+export type CreateSkillApiArg = {
+  spaceId: string;
+  createSkill: CreateSkill;
+};
+export type InstallSkillApiResponse = unknown;
+export type InstallSkillApiArg = {
+  spaceId: string;
+  name: string;
+};
+export type SkillScopeApiResponse = /** status 200 undefined */ SkillCatalog;
+export type SkillScopeApiArg = {
+  spaceId: string;
+};
+export type PreviewSkillApiResponse = /** status 200 undefined */ SkillDetail;
+export type PreviewSkillApiArg = {
+  spaceId: string;
+  skillId: string;
+};
+export type GetSkillApiResponse = /** status 200 undefined */ PutSkill;
+export type GetSkillApiArg = {
+  spaceId: string;
+  skillId: string;
+};
+export type PutSkillApiResponse = unknown;
+export type PutSkillApiArg = {
+  spaceId: string;
+  skillId: string;
+  putSkill: PutSkill;
+};
+export type DeleteSkillApiResponse = unknown;
+export type DeleteSkillApiArg = {
+  spaceId: string;
+  skillId: string;
 };
 export type SpaceUsageApiResponse = /** status 200 undefined */ UsageResponse;
 export type SpaceUsageApiArg = {
@@ -2646,15 +2728,7 @@ export type CapabilityFieldDescription = {
   type: CapabilityFieldType;
 };
 export type CapabilityExecutionModel = "react" | "graph";
-export type PodCapabilityKind = "tool" | "skill";
-export type SkillSummary = {
-  argument_hint?: string | null;
-  builtin: boolean;
-  description: string;
-  disable_model_invocation: boolean;
-  name: string;
-  user_invocable: boolean;
-};
+export type PodCapabilityKind = "tool";
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
@@ -2665,7 +2739,6 @@ export type PodCapabilityDescriptor = {
   name: string;
   public_version?: string | null;
   runtime_id?: string | null;
-  skill?: SkillSummary | null;
   source_id?: string | null;
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
@@ -2706,8 +2779,6 @@ export type PodCapabilityInventory = {
   observation: CatalogObservationState;
   observed_at?: string | null;
   runtime_id: string;
-  skills_availability?: string | null;
-  skills_supported: boolean;
   /** Links from the last successful snapshot, all scoped to this runtime. */
   template_capabilities: PodTemplateCapability[];
 };
@@ -2868,6 +2939,14 @@ export type PowerPointFile = {
   space_id: string;
   /** Stored means attached in CP, not prepared or activated in the pod. */
   status: PowerPointFileStatus;
+};
+export type PackageSummary = {
+  argument_hint?: string | null;
+  builtin: boolean;
+  description: string;
+  disable_model_invocation: boolean;
+  name: string;
+  user_invocable: boolean;
 };
 export type CreateSpace = {
   kind: SpaceKind;
@@ -3155,6 +3234,11 @@ export type PreparationModels = {
   requires_reselection: boolean;
 };
 export type SkillAvailability = "available" | "disabled" | "unavailable";
+export type SkillSummary = PackageSummary & {
+  skill_id: string;
+  space_id: string;
+  space_name: string;
+};
 export type SkillCatalog = {
   availability: SkillAvailability;
   policy_supported: boolean;
@@ -3274,6 +3358,13 @@ export type RuntimeBinding = {
   inference?: InferenceAdmission | null;
   models: RuntimeModels;
   run_id: string | null;
+  skill_files?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
   skills?: SkillCatalog | null;
   space: RuntimeSpace;
   subject_id: string;
@@ -3326,8 +3417,6 @@ export type SpaceCapabilityPolicy = {
   restricted: boolean;
   revision: number;
   runtime_id: string;
-  skills_availability?: string | null;
-  skills_supported: boolean;
   source_enabled: boolean;
 };
 export type ReplaceSpaceCapabilityPolicy = {
@@ -3493,6 +3582,29 @@ export type GeneratedTitle = {
   attempt_id: string;
   subject_id: string;
   title: string;
+};
+export type SpaceSkill = {
+  name: string;
+  revision: string;
+  skill_id: string;
+  space_id: string;
+  summary: PackageSummary;
+};
+export type BTreeMap = {
+  [key: string]: string;
+};
+export type CreateSkill = {
+  files: BTreeMap;
+  name: string;
+};
+export type SkillDetail = {
+  content: string;
+  revision: string;
+  skill: SkillSummary;
+};
+export type PutSkill = {
+  expected_revision?: string | null;
+  files: BTreeMap;
 };
 export type WikiAvailability = {
   enabled: boolean;
@@ -3715,6 +3827,8 @@ export const {
   useLazyTeamSupervisionQuery,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
+  useDefaultSkillsQuery,
+  useLazyDefaultSkillsQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,
@@ -3798,6 +3912,18 @@ export const {
   usePreviewConversationFileQuery,
   useLazyPreviewConversationFileQuery,
   useRecordTitleMutation,
+  useListSkillsQuery,
+  useLazyListSkillsQuery,
+  useCreateSkillMutation,
+  useInstallSkillMutation,
+  useSkillScopeQuery,
+  useLazySkillScopeQuery,
+  usePreviewSkillQuery,
+  useLazyPreviewSkillQuery,
+  useGetSkillQuery,
+  useLazyGetSkillQuery,
+  usePutSkillMutation,
+  useDeleteSkillMutation,
   useSpaceUsageQuery,
   useLazySpaceUsageQuery,
   useWikiAvailabilityQuery,

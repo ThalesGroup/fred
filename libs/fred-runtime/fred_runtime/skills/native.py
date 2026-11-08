@@ -66,8 +66,8 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         kpi: BaseKPIWriter | None = None,
     ) -> None:
         self.skills = skills.for_execution(
-            tuple(s.name for s in binding.runtime_context.selected_skills),
-            binding.unavailable_skill_names,
+            binding.runtime_context.selected_skills,
+            binding.unavailable_skill_ids,
             resuming=binding.is_resuming,
         )
         self.binding = binding
@@ -109,7 +109,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse | ExtendedModelResponse:
         """Observe native pins and tell the model which instructions it already has."""
-        summaries = {s.name: s for s in self.skills.catalog.skills}
+        summaries = {s.skill_id: s for s in self.skills.catalog.skills}
         pending = tuple(
             cast(NativeSkillState, request.state).get("fred_pending_skill_names") or ()
         )

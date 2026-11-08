@@ -187,8 +187,10 @@ async def test_app_mounts_before_capability_assembly_for_deep_only(
     from fred_runtime.app import agent_app
     from fred_runtime.runtime_context import RuntimeConfig
     from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
+    from fred_sdk.contracts.weaver import WeaverRuntimeBinding
     from test_deep_agent_dispatch import _DeepAgent, _ReActAgent
     from test_platform_skills import binding
+    from weaver_fixtures import skill_facts
 
     skills = snapshot(tmp_path / "catalog")
     storage = LocalFilesystem(str(tmp_path / "workspace"))
@@ -196,13 +198,12 @@ async def test_app_mounts_before_capability_assembly_for_deep_only(
         RuntimeConfig(
             knowledge_flow_url="http://knowledge-flow.invalid",
             filesystem=cast(Any, storage),
-            skills=skills,
         )
     )
     monkeypatch.setattr("fred_runtime.runtime_context._RUNTIME_CONTEXT", context)
     with active_turn(binding()) as authority:
-        authority.binding = authority.binding.model_copy(
-            update={"skills": skills.catalog}
+        authority.binding = WeaverRuntimeBinding.model_validate(
+            {**authority.binding.model_dump(), **skill_facts(skills)}
         )
         services = agent_app._build_runtime_services(
             _DeepAgent() if deep else _ReActAgent(), binding()
@@ -287,7 +288,10 @@ def test_package_source_is_independent_of_cwd_and_backend_is_reused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    skills = PlatformSkills.from_directory("package")
+    skills = PlatformSkills.from_directory(
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        builtin=True,
+    )
     default = FilesystemBackend(root_dir=tmp_path)
     native = skills.filesystem_backend
 

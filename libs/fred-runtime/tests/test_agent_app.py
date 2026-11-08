@@ -2724,11 +2724,16 @@ async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_i
         "fred_runtime.runtime_context._RUNTIME_CONTEXT", runtime_context
     )
 
-    def _binding(
-        *, trusted_session_id: str | None, request_id: str
-    ) -> BoundRuntimeContext:
-        return BoundRuntimeContext(
-            runtime_context=RuntimeContext(session_id=trusted_session_id),
+    definition = _EchoAgent()
+
+    def _scratchpad(*, trusted_session_id: str | None, request_id: str):
+        binding = BoundRuntimeContext(
+            runtime_context=RuntimeContext(
+                user_id="alice",
+                session_id=trusted_session_id,
+                space_id=SPACE_ID,
+                agent_instance_id=INSTANCE_ID,
+            ),
             portable_context=PortableContext(
                 request_id=request_id,
                 correlation_id=f"correlation-{request_id}",
@@ -2738,24 +2743,21 @@ async def test_build_runtime_services_binds_scratchpad_to_trusted_conversation_i
                 session_id="portable-shadow",
             ),
         )
+        with active_turn(definition.agent_id, session=trusted_session_id):
+            return agent_app_module._build_runtime_services(
+                definition, binding
+            ).conversation_filesystem
 
-    definition = _EchoAgent()
-    first = agent_app_module._build_runtime_services(
-        definition,
-        _binding(trusted_session_id="trusted-session", request_id="request-one"),
-    ).conversation_filesystem
-    fresh_same_session = agent_app_module._build_runtime_services(
-        definition,
-        _binding(trusted_session_id="trusted-session", request_id="request-two"),
-    ).conversation_filesystem
-    other_session = agent_app_module._build_runtime_services(
-        definition,
-        _binding(trusted_session_id="other-session", request_id="request-three"),
-    ).conversation_filesystem
-    request_fallback = agent_app_module._build_runtime_services(
-        definition,
-        _binding(trusted_session_id=None, request_id="fallback-request"),
-    ).conversation_filesystem
+    first = _scratchpad(trusted_session_id="trusted-session", request_id="request-one")
+    fresh_same_session = _scratchpad(
+        trusted_session_id="trusted-session", request_id="request-two"
+    )
+    other_session = _scratchpad(
+        trusted_session_id="other-session", request_id="request-three"
+    )
+    request_fallback = _scratchpad(
+        trusted_session_id=None, request_id="fallback-request"
+    )
     assert first is not None
     assert fresh_same_session is not None
     assert other_session is not None
@@ -5585,11 +5587,12 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
     assert resolve_calls[0]["request_id"] == trace_id
 
 
+@pytest.mark.asyncio
 @pytest.mark.usefixtures("empty_runtime_context")
 @pytest.mark.parametrize(
     "turn_documents", [None, [], ["00000000-0000-0000-0000-000000000101"]]
 )
-def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
+async def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
     turn_documents,
 ) -> None:
     from fred_core.documents.selection import DocumentScope
@@ -5646,15 +5649,16 @@ def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
             environment=PortableEnvironment.DEV,
         ),
     )
-    services = agent_app_module._build_runtime_services(
-        definition,
-        binding,
-        tuning=tuning,
-        registry={definition.agent_id: definition},
-        capability_registry=registry,
-        turn_options={"document_access": {"document_uids": turn_documents}},
-        bound_library_ids=[folder],
-    )
+    with active_turn(definition.agent_id, session="s"):
+        services = agent_app_module._build_runtime_services(
+            definition,
+            binding,
+            tuning=tuning,
+            registry={definition.agent_id: definition},
+            capability_registry=registry,
+            turn_options={"document_access": {"document_uids": turn_documents}},
+            bound_library_ids=[folder],
+        )
     expected = DocumentScope.from_ids([folder], [explicit]).intersect(
         DocumentScope.from_ids(document_ids=turn_documents)
     )

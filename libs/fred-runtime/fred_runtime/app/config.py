@@ -426,12 +426,6 @@ class PodPlatformConfig(BaseModel):
     control_plane_url: str | None = None
 
 
-class PodSkillsConfig(BaseModel):
-    """Pod skill source; permissions are supplied by Weaver at admission."""
-
-    directory: str = Field(default="package", min_length=1)
-
-
 _ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
 
 
@@ -488,7 +482,6 @@ class AgentPodConfig(BaseModel):
     web_research: WebResearchDeploymentConfig = Field(
         default_factory=WebResearchDeploymentConfig
     )
-    skills: PodSkillsConfig | None = Field(default_factory=PodSkillsConfig)
 
     def set_platform_prompt_file(self, file: Any) -> None:
         """

@@ -18,12 +18,17 @@ import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
 import { attachmentIcon } from "@rework/utils/fileIconSpec";
 import type { SessionAttachment } from "@rework/types/attachments";
-import { findSkillInvocations, skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
+import {
+  findSkillInvocations,
+  skillReferenceAt,
+  skillInvocationsText,
+  usablePromptList,
+} from "@rework/utils/skillInvocation";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
 import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
 import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
-import type { SkillSummary } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserMessage.module.css";
 
 interface UserMessageProps {
@@ -33,7 +38,8 @@ interface UserMessageProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  builtinSkillNames?: string[];
+  skillInvocations?: SkillInvocation[];
+  builtinSkillIds?: string[];
   skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
@@ -49,7 +55,8 @@ export function UserMessage({
   command,
   skillName,
   skillNames,
-  builtinSkillNames,
+  skillInvocations,
+  builtinSkillIds,
   skillSummaries,
   skillDescription,
   onOpenSkill,
@@ -59,7 +66,11 @@ export function UserMessage({
   const { t } = useTranslation();
   const names = skillNames ?? (skillName ? [skillName] : []);
   const displayedText = skillInvocationsText(text, names, command);
-  const skillTokens = findSkillInvocations(displayedText, names).map((token) => ({ ...token, kind: "skill" as const }));
+  const skillTokens = findSkillInvocations(displayedText, names).map((token) => ({
+    ...token,
+    reference: skillReferenceAt(skillInvocations, token),
+    kind: "skill" as const,
+  }));
   const listed = usablePromptList(command, text);
   const singleToken =
     !listed && command && (command.draft_text != null || names.length)
@@ -115,9 +126,15 @@ export function UserMessage({
               ) : (
                 <SkillBadge
                   name={token.name}
-                  builtin={builtinSkillNames?.includes(token.name)}
-                  description={skillSummaries?.get(token.name)?.description ?? skillDescription ?? undefined}
-                  onOpen={onOpenSkill}
+                  builtin={
+                    skillSummaries?.get(token.reference?.skill_id ?? "")?.builtin ??
+                    builtinSkillIds?.includes(token.reference?.skill_id ?? "")
+                  }
+                  description={
+                    skillSummaries?.get(token.reference?.skill_id ?? "")?.description ?? skillDescription ?? undefined
+                  }
+                  spaceName={skillSummaries?.get(token.reference?.skill_id ?? "")?.space_name}
+                  onOpen={onOpenSkill && token.reference ? () => onOpenSkill(token.reference!.skill_id) : undefined}
                 />
               )}
             </Fragment>

@@ -18,7 +18,6 @@ pub mod catalog;
 pub mod enablement;
 mod inventory;
 mod local_policy;
-pub mod skills;
 
 use std::{collections::BTreeMap, time::Duration};
 

@@ -26,6 +26,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && \
 # Migrations are embedded in the binary at compile time.
 COPY apps/control-plane/migrations ./migrations
 COPY apps/control-plane/src ./src
+COPY apps/control-plane/skills ./skills
 RUN touch src/main.rs && cargo build --release --locked -p control-plane
 
 # -----------------------------------------------------------------------------

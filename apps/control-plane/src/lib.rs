@@ -48,6 +48,7 @@ pub mod processing;
 pub mod prompts;
 pub mod roles;
 pub mod sessions;
+pub mod skills;
 pub mod space_members;
 pub mod spaces;
 pub mod supervision;

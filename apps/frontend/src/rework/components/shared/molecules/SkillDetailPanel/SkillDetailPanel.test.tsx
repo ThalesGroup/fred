@@ -32,7 +32,17 @@ afterEach(() => {
   container.remove();
 });
 const detail = {
-  skill: { name: "minutes", description: "Prepare meeting minutes", argument_hint: "[notes]" },
+  skill: {
+    skill_id: "minutes",
+    space_id: "local",
+    space_name: "",
+    builtin: false,
+    user_invocable: true,
+    disable_model_invocation: false,
+    name: "minutes",
+    description: "Prepare meeting minutes",
+    argument_hint: "[notes]",
+  },
   revision: "current",
   content:
     "---\nname: minutes\ndescription: hidden YAML\n---\n## Procedure\nRead **the notes** and [template](references/template.md).\n<script>alert('x')</script>",
@@ -42,7 +52,7 @@ function render(props: Partial<React.ComponentProps<typeof SkillDetailPanel>> = 
     root.render(
       <SkillDetailPanel
         open
-        name="minutes"
+        skillId="minutes"
         detail={detail}
         loading={false}
         error={false}
@@ -71,12 +81,26 @@ describe("skill preview content and request states", () => {
     expect(container.textContent).toContain("template");
   });
   it("omits the arguments section when no hint is supplied", () => {
-    render({ detail: { ...detail, skill: { name: "minutes", description: "Prepare meeting minutes" } } });
+    render({
+      detail: {
+        ...detail,
+        skill: {
+          skill_id: "minutes",
+          space_id: "local",
+          space_name: "",
+          builtin: false,
+          user_invocable: true,
+          disable_model_invocation: false,
+          name: "minutes",
+          description: "Prepare meeting minutes",
+        },
+      },
+    });
     expect(container.textContent).not.toContain("chatbot.skills.arguments");
     expect(container.querySelector("p")?.textContent).toBe("chatbot.skills.description Prepare meeting minutes");
   });
   it("does not display an old skill or cached content during loading and errors", () => {
-    render({ name: "other" });
+    render({ skillId: "other" });
     expect(container.textContent).not.toContain("the notes");
     render({ loading: true });
     expect(container.textContent).toContain("chatbot.skills.loading");

@@ -1,10 +1,10 @@
 ---
 name: grill-me
 description: Sharpen an idea, plan or decision through an adaptive interview with concrete recommendations and visible trade-offs.
-argument-hint: "[idea, plan or decision to examine]"
-disable-model-invocation: true
 license: MIT
 metadata:
+  fred-argument-hint: "[idea, plan or decision to examine]"
+  fred-disable-model-invocation: "true"
   author: Matt Pocock and Fred contributors
   upstream-revision: 59db609eb1e18aaf59b63284d0e52255aff0c63c
 ---

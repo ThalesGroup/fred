@@ -33,6 +33,8 @@ const prompt = (source: "team" | "personal", command: string): CommandMenuEntry 
 });
 const skill = (name: string): CommandMenuEntry => ({
   kind: "skill",
+  skillId: name,
+  spaceId: "local",
   source: "platform",
   promptId: `platform:skill:${name}`,
   command: name,

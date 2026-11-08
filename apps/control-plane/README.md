@@ -172,43 +172,58 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
-## Pod skills and local offer ceilings
+## Space skills
 
-Skills are pod-owned offers in the existing capability inventory (`kind: skill`,
-ID `skill:<canonical-name>`). Instructions are never stored in Control Plane or
-accepted from the browser. Organization authorizations remain in the existing
-capability policy. New skill offers are initially denied. Skill refresh uses the
-same source configuration, observation transaction and diagnostic path as tools.
-Unreachable/unavailable sources retain the last known offers and decisions;
-a successful complete catalog marks removed offers as withdrawn.
+`0017_space_skills.sql` stores each package in its owning space. The shared
+`authorization::readable_path` determines conversation scope: current space and
+parents with a direct reading role, with the existing personal-space boundary.
+Management reads the exact owning space. `spaces::authorized_mutation` applies
+Write permission and the organization mutation lock, as for prompts. Creator
+identity is provenance, not authority. Space deletion cascades to its packages.
 
-Migration `0005_pod_skills_and_local_offers.sql` adds source skill diagnostics and
-the shared team/project restriction tables. No local policy means inheritance;
-`restricted=true` with no permissions means deny all. Every ancestor ceiling
-must allow an offer. Reset preserves a monotonically increasing revision, so a
-stale PUT cannot undo a later decision. SQL uniqueness/FKs retain source identity; space
-cascades own local cleanup; mutations use the existing organization lock.
-No runtime call is made inside the policy mutation transaction.
+The seven Swift packages (`analyze-data`, `compare-options`, `graph`, `grill-me`,
+`grounded-research`, `meeting-minutes`, `summarize-document`) live in `skills/`.
+Their instructions, references, MIT attribution and license were preserved from
+Swift `d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`. Fresh installations expose these
+installation templates at `/skills/defaults`; nothing is activated automatically.
+Installing creates an independent space-owned package. Subsequent distribution
+updates do not overwrite space edits. No marketplace publication is implemented.
 
-`GET /spaces/{space_id}/capability-policies` and revision-checked
-`PUT /spaces/{space_id}/capability-policies/{runtime_id}` require direct Manage in
-the team/project, without requiring Read or granting rights in a child. Personal
-spaces follow the organization ceiling. Tools and skills use the same
-`agents::enablement::usable` rule. Admission loads only the target ancestry.
-Project agents/chat use the existing direct roles; organization authorization
-is still a ceiling. No prompt publication/editor behavior is added to projects.
+`/spaces/{id}/skills` lists owned packages and accepts POST creation.
+GET/PUT/DELETE on `/{skill_id}` manages an existing package by its immutable UUID
+and owning space. POST `/packages/{name}/install` installs a supplied template.
+PUT includes the expected content revision and replaces all files atomically.
+`/scope` and `/scope/{skill_id}` expose the shared readable scope.
 
-Preparation projects only eligible ReAct/Deep skills and the source preview URL.
-Public runtime GET provides metadata without inference/title allocation. Private
-execution POST carries the admitted skill snapshot alongside inference. Runtime
-checks source revision and summary identity before loading; replicas must serve
-matching content. A new turn or resume observes current policy while history
-remains intact. Embedded Ralph and graph agents cannot load skills.
+A skill's logical name is a label, not its execution identity. Homonyms in
+readable spaces remain separate catalog entries, with their UUID and owning space.
+The composer displays the space, retains the selected identity through edits and
+recall, and requires an explicit choice for an ambiguous typed name. Admission
+validates the identity/space pair. Deletion or revocation cannot silently select
+another package with the same name. Runtime snapshots and native Deep pins are
+keyed by UUID; authored SKILL.md content is unchanged.
 
-See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md)
-for rollout/rollback and `tests/support/pod_skills.rs` for disposable SQL,
-concurrency, isolation and execution-preparation proofs. These tests do not
-replace a deployed k3d acceptance journey.
+Private execution admission includes the authorized files and their catalog
+revision. Public preparation contains only metadata. The pod reads that admitted
+copy, so instructions and references cannot come from different revisions.
+A running turn keeps its admitted copy. Skills no longer participate in pod
+capability inventory or tool-offer policies; tool authorization remains separate.
+
+The packages pass [Agent Skills](https://agentskills.io/specification) reference
+validator `skills-ref` 0.1.0 at revision
+`83021e2be457a9b6679148719c1f6074f0ad975e` (`skills-ref validate skills/<name>`).
+Fred supports ASCII skill names, UTF-8 `.md`, `.txt`, `.json`, `.yaml`, `.yml` and
+`.csv` resources, at most 64 skills, 128 files/package, 64 KiB/file and 4 MiB per
+space/admitted snapshot. Binary assets and script execution are unsupported.
+Standard packages need no Fred-specific adaptation; `allowed-tools` never grants
+permissions or registers tools. Fred-specific invocation controls are string
+values in `metadata`: `fred-argument-hint`, `fred-user-invocable` (default `"true"`),
+`fred-disable-model-invocation` (default `"false"`). Old top-level controls are
+rejected. The reference validator is a development check, not a runtime dependency.
+
+Tests cover fresh SQL initialization, direct-space rights, parent scope, atomic
+replacement, previews and immutable admission. These are automated checks, not
+k3d/platform functional reception.
 
 ## Platform model inventory and organization administration
 

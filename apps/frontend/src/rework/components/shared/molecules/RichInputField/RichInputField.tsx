@@ -39,7 +39,7 @@ export type CommandKeyEvent = Pick<KeyboardEvent, "key" | "shiftKey" | "preventD
 
 /** Selection identity is part of the editor's undo history, alongside text. */
 export type CommandChoice = { name: string; from: number; to: number; scope: number } & (
-  | { kind: "skill" }
+  | { kind: "skill"; skillId?: string; spaceId?: string }
   | { kind: "prompt"; promptId: string; promptTeamId: string }
 );
 

@@ -69,7 +69,6 @@ const pod = (over: Partial<PodCapabilityInventory> & Pick<PodCapabilityInventory
     observed_at: "2026-10-28T08:00:00Z",
     capabilities: [],
     template_capabilities: [],
-    skills_supported: false,
     ...over,
   }) satisfies PodCapabilityInventory;
 

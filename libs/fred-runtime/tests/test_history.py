@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import httpx
@@ -1086,6 +1087,9 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
     store.next_rank = AsyncMock(return_value=0)
     attribution = SkillLoadAttribution(
         name="meeting-minutes",
+        skill_id="meeting-minutes",
+        space_id="local",
+        space_name="Local",
         origin="user",
         revision="r",
         load_id="load",
@@ -1123,7 +1127,6 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
 def test_runtime_rejects_missing_or_forged_skill_before_inference(
     monkeypatch, tmp_path
 ) -> None:
-    from fred_runtime.app.config import PodSkillsConfig
 
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])
     factory = StaticChatModelFactory(model)
@@ -1131,7 +1134,6 @@ def test_runtime_rejects_missing_or_forged_skill_before_inference(
         agent_app_module, "_build_chat_model_factory", lambda config: factory
     )
     config = _build_config(tmp_path)
-    config.skills = PodSkillsConfig(directory="package")
     definition = _PingAgent()
     app = create_managed_app(
         monkeypatch, registry={definition.agent_id: definition}, config=config
@@ -1143,7 +1145,13 @@ def test_runtime_rejects_missing_or_forged_skill_before_inference(
             {
                 "agent_id": definition.agent_id,
                 "input": "notes",
-                "runtime_context": {"skill": {"name": "missing"}},
+                "runtime_context": {
+                    "skill": {
+                        "name": "missing",
+                        "skill_id": "missing",
+                        "space_id": "local",
+                    }
+                },
             }
         )
         response = client.post("/pod/v1/agents/execute", json=request)
@@ -1161,11 +1169,12 @@ def test_runtime_rejects_missing_or_forged_skill_before_inference(
 def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
     monkeypatch, tmp_path, deep
 ) -> None:
-    from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
+    from fred_runtime.app.config import LocalRuntimeFilesystemConfig
     from fred_runtime.skills.catalog import PlatformSkills
     from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
     from langchain_core.messages import HumanMessage
     from test_platform_skills import Model
+    from weaver_fixtures import skill_facts
 
     class DeepDefinition(DeepAgentDefinition):
         agent_id: str = "test.multi.deep"
@@ -1185,7 +1194,6 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         agent_app_module, "_build_chat_model_factory", lambda config: Factory()
     )
     config = _build_config(tmp_path)
-    config.skills = PodSkillsConfig(directory="package")
     config.storage.object_store = LocalRuntimeFilesystemConfig(
         root=str(tmp_path / "filesystem")
     )
@@ -1195,12 +1203,21 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         registry={definition.agent_id: definition},
         config=config,
         binding_transform=lambda data: data.update(
-            skills=PlatformSkills.from_directory("package").catalog.model_dump(
-                mode="json"
+            **skill_facts(
+                PlatformSkills.from_directory(
+                    str(
+                        Path(__file__).resolve().parents[3]
+                        / "apps/control-plane/skills"
+                    ),
+                    builtin=True,
+                )
             )
         ),
     )
-    selections = [{"name": "meeting-minutes"}, {"name": "graph"}]
+    selections = [
+        {"name": "meeting-minutes", "skill_id": "meeting-minutes", "space_id": "local"},
+        {"name": "graph", "skill_id": "graph", "space_id": "local"},
+    ]
     command = {
         "command": "summary",
         "prompt_id": "prompt",
@@ -1235,7 +1252,10 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
         assert len(procedures) == (0 if deep else 2)
         rows = client.get("/pod/v1/agents/sessions/multiple-history/messages").json()
         user = next(row for row in rows if row["role"] == "user")
-        assert user["metadata"]["extras"]["skill_invocations"] == selections
+        assert user["metadata"]["extras"]["skill_invocations"] == [
+            *selections,
+            selections[0],
+        ]
         assert all(
             user["metadata"]["command"][key] == value for key, value in command.items()
         )
@@ -1246,7 +1266,16 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                 {
                     "agent_id": definition.agent_id,
                     "input": "notes",
-                    "runtime_context": {"skills": [selections[0], {"name": "missing"}]},
+                    "runtime_context": {
+                        "skills": [
+                            selections[0],
+                            {
+                                "name": "missing",
+                                "skill_id": "missing",
+                                "space_id": "local",
+                            },
+                        ]
+                    },
                 }
             ),
         )
@@ -1274,7 +1303,6 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
 def test_multiple_skills_reject_unsupported_runtime_configuration(
     monkeypatch, tmp_path, family, configured
 ) -> None:
-    from fred_runtime.app.config import PodSkillsConfig
     from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
     from test_graph_checkpoint_namespace import _GraphAgent
     from test_platform_skills import Model
@@ -1297,7 +1325,6 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
         agent_app_module, "_build_chat_model_factory", lambda config: Factory()
     )
     config = _build_config(tmp_path)
-    config.skills = PodSkillsConfig(directory="package") if configured else None
     definition = {
         "react": _PingAgent(),
         "deep": DeepDefinition(),
@@ -1316,7 +1343,18 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
                     "agent_id": definition.agent_id,
                     "input": "/meeting-minutes /mermaid notes",
                     "runtime_context": {
-                        "skills": [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+                        "skills": [
+                            {
+                                "name": "meeting-minutes",
+                                "skill_id": "meeting-minutes",
+                                "space_id": "local",
+                            },
+                            {
+                                "name": "mermaid",
+                                "skill_id": "mermaid",
+                                "space_id": "local",
+                            },
+                        ]
                     },
                 }
             ),
@@ -1329,11 +1367,12 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
 def test_deep_selection_reaches_native_inference_without_snapshot_preload(
     monkeypatch, tmp_path, selection
 ) -> None:
-    from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
+    from fred_runtime.app.config import LocalRuntimeFilesystemConfig
     from fred_runtime.skills.catalog import PlatformSkills
     from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
     from langchain_core.messages import HumanMessage
     from test_platform_skills import Model
+    from weaver_fixtures import skill_facts
 
     class Definition(DeepAgentDefinition):
         agent_id: str = "test.history.deep"
@@ -1353,7 +1392,6 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         agent_app_module, "_build_chat_model_factory", lambda config: NativeFactory()
     )
     config = _build_config(tmp_path)
-    config.skills = PodSkillsConfig(directory="package")
     config.storage.object_store = LocalRuntimeFilesystemConfig(
         root=str(tmp_path / "filesystem")
     )
@@ -1363,8 +1401,14 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         registry={definition.agent_id: definition},
         config=config,
         binding_transform=lambda data: data.update(
-            skills=PlatformSkills.from_directory("package").catalog.model_dump(
-                mode="json"
+            **skill_facts(
+                PlatformSkills.from_directory(
+                    str(
+                        Path(__file__).resolve().parents[3]
+                        / "apps/control-plane/skills"
+                    ),
+                    builtin=True,
+                )
             )
         ),
     )
@@ -1380,7 +1424,11 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
                     "input": text,
                     "runtime_context": {
                         "session_id": "native-history",
-                        "skill": {"name": selection},
+                        "skill": {
+                            "name": selection,
+                            "skill_id": selection,
+                            "space_id": "local",
+                        },
                     },
                 }
             ),
@@ -1404,7 +1452,11 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         assert history.status_code == 200, history.text
         rows = history.json()
         user_row = next(row for row in rows if row["role"] == "user")
-        assert user_row["metadata"]["extras"]["skill_invocation"] == {"name": selection}
+        assert user_row["metadata"]["extras"]["skill_invocation"] == {
+            "name": selection,
+            "skill_id": selection,
+            "space_id": "local",
+        }
         loads = [
             row["metadata"]["extras"]["skill_load"]
             for row in rows

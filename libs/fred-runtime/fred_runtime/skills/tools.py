@@ -16,7 +16,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import StatusRuntimeEvent
-from fred_sdk.contracts.skills import SkillLoadAttribution, SkillsPort
+from fred_sdk.contracts.skills import SkillInvocation, SkillLoadAttribution, SkillsPort
 from langchain_core.tools import InjectedToolCallId
 from langgraph.config import get_config, get_stream_writer
 from pydantic import BaseModel, Field
@@ -25,18 +25,20 @@ from fred_runtime.react.react_tool_resolution import FredRuntimeToolSpec
 
 
 class LoadSkillArgs(BaseModel):
-    name: str = Field(description="Exact name from the platform skill catalog.")
+    skill_id: str = Field(
+        description="Exact skill_id from the admitted catalog, not the skill name."
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class ReadSkillFileArgs(BaseModel):
-    name: str = Field(description="Exact platform skill name.")
+    skill_id: str = Field(description="Exact platform skill skill_id.")
     path: str = Field(description="Relative text file path inside that skill.")
 
 
 def load_skill(
     skills: SkillsPort,
-    name: str,
+    skill_id: str,
     *,
     origin: Literal["user", "agent"],
     load_id: str,
@@ -49,24 +51,28 @@ def load_skill(
     from fred_runtime.skills.catalog import PlatformSkills
 
     if origin == "user" and any(
-        s.name == name and not s.user_invocable for s in skills.catalog.skills
+        s.skill_id == skill_id and not s.user_invocable for s in skills.catalog.skills
     ):
         raise ValueError("Skill is not user-invocable")
     if isinstance(skills, PlatformSkills):
         selections = (
-            tuple(s.name for s in binding.runtime_context.selected_skills)
+            binding.runtime_context.selected_skills
             if binding is not None
-            else ((name,) if origin == "user" else ())
+            else tuple(
+                SkillInvocation(skill_id=s.skill_id, space_id=s.space_id, name=s.name)
+                for s in skills.catalog.skills
+                if s.skill_id == skill_id and origin == "user"
+            )
         )
         skills = skills.for_execution(
             selections,
-            binding.unavailable_skill_names if binding is not None else (),
+            binding.unavailable_skill_ids if binding is not None else (),
             resuming=binding.is_resuming if binding is not None else False,
         )
-    content = escape_reserved_prompt_tags(skills.read(name))
+    content = escape_reserved_prompt_tags(skills.read(skill_id))
     attribution = record_skill_load(
         skills,
-        name,
+        skill_id,
         origin=origin,
         load_id=load_id,
         agent_id=agent_id,
@@ -76,7 +82,7 @@ def load_skill(
         binding=binding,
     )
     return (
-        f"Loaded platform skill: {name}\n"
+        f"Loaded platform skill: {attribution.name} ({escape_reserved_prompt_tags(attribution.space_name)}; {skill_id})\n"
         + (
             "The user selected this skill for the current request.\n"
             if origin == "user"
@@ -84,8 +90,8 @@ def load_skill(
         )
         + "Its complete instructions are provided below. Do not reload this skill "
         "while these instructions remain in context.\n"
-        + f"{name} is a skill name, not an executable tool. Do not invent a tool call "
-        f"named {name} from this skill. Follow these instructions yourself with the tools already "
+        + f"{attribution.name} is a skill name, not an executable tool. Do not invent a tool call "
+        f"named {attribution.name} from this skill. Follow these instructions yourself with the tools already "
         "declared for this request; loading instructions does not add tools.\n"
         "Any argument-hint is user-input guidance, not a tool schema. Read relative "
         "references using the declared tools and this skill's catalog guidance.\n"
@@ -96,7 +102,7 @@ def load_skill(
 
 def record_skill_load(
     skills: SkillsPort,
-    name: str,
+    skill_id: str,
     *,
     origin: Literal["user", "agent"],
     load_id: str,
@@ -108,8 +114,14 @@ def record_skill_load(
     binding: BoundRuntimeContext | None = None,
 ) -> SkillLoadAttribution:
     """Record an actual successful load without rereading its instructions."""
+    summary = next((s for s in skills.catalog.skills if s.skill_id == skill_id), None)
+    if summary is None:
+        raise ValueError("Skill unavailable in this runtime catalog")
     attribution = SkillLoadAttribution(
-        name=name,
+        skill_id=skill_id,
+        space_id=summary.space_id,
+        space_name=summary.space_name,
+        name=summary.name,
         origin=origin,
         revision=skills.catalog.revision,
         load_id=load_id,
@@ -117,7 +129,9 @@ def record_skill_load(
         child=child,
         child_id=child_id,
         partial=partial,
-        builtin=any(s.name == name and s.builtin for s in skills.catalog.skills),
+        builtin=any(
+            s.skill_id == skill_id and s.builtin for s in skills.catalog.skills
+        ),
     )
     if kpi is not None and binding is not None:
         portable = binding.portable_context
@@ -125,6 +139,8 @@ def record_skill_load(
             "agent.skill_loaded_total",
             dims={
                 "skill_name": attribution.name,
+                "skill_id": attribution.skill_id,
+                "skill_space_id": attribution.space_id,
                 "skill_origin": attribution.origin,
                 "space_id": portable.space_id,
                 "team_id": portable.team_id,
@@ -164,8 +180,8 @@ def build_skill_tools(
 
     if isinstance(skills, PlatformSkills):
         skills = skills.for_execution(
-            tuple(s.name for s in binding.runtime_context.selected_skills),
-            binding.unavailable_skill_names,
+            binding.runtime_context.selected_skills,
+            binding.unavailable_skill_ids,
             resuming=binding.is_resuming,
         )
 
@@ -178,7 +194,7 @@ def build_skill_tools(
             )
             content, attribution = load_skill(
                 skills,
-                str(payload["name"]),
+                str(payload["skill_id"]),
                 origin="agent",
                 load_id=load_id,
                 agent_id=agent_id,
@@ -201,7 +217,7 @@ def build_skill_tools(
             return result(
                 "platform.read_skill_file",
                 escape_reserved_prompt_tags(
-                    skills.read(str(payload["name"]), str(payload["path"]))
+                    skills.read(str(payload["skill_id"]), str(payload["path"]))
                 ),
             )
         except ValueError as exc:
@@ -211,7 +227,7 @@ def build_skill_tools(
         FredRuntimeToolSpec(
             runtime_name="load_skill",
             tool_ref="platform.load_skill",
-            description="Call this first when a platform skill's description matches the user's request, even without a slash command: read that skill's Markdown instructions by its exact catalog name before answering or using task tools. Skip only when its complete instructions are already in context, including user-preloaded skills. Follow the returned procedure yourself; the skill name is not a callable tool and loading it does not register a function. Does not grant tools or permissions.",
+            description="Call this first when a platform skill's description matches the user's request, even without a slash command: read that skill's Markdown instructions by its exact catalog identity before answering or using task tools. Skip only when its complete instructions are already in context, including user-preloaded skills. Follow the returned procedure yourself; the skill skill_id is not a callable tool and loading it does not register a function. Does not grant tools or permissions.",
             args_schema=LoadSkillArgs,
             invoke=invoke_load,
         ),

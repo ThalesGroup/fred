@@ -34,7 +34,6 @@ use crate::{
 pub enum PodCapabilityKind {
     #[default]
     Tool,
-    Skill,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -100,8 +99,6 @@ pub struct PodCapabilityDescriptor {
     pub icon: String,
     #[serde(default)]
     pub kind: PodCapabilityKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skill: Option<super::skills::SkillSummary>,
     #[serde(default)]
     pub config_fields: Vec<CapabilityFieldDescription>,
     #[serde(default)]
@@ -124,18 +121,14 @@ struct PodInventory {
     complete: bool,
     capabilities: Vec<PodCapabilityDescriptor>,
     template_capabilities: Vec<PodTemplateCapability>,
-    #[serde(default)]
-    skills: Option<super::skills::SkillCatalog>,
 }
 
 impl PodInventory {
-    fn snapshot(mut self, runtime_id: &str) -> Result<catalog::CatalogSnapshot> {
+    fn snapshot(self, runtime_id: &str) -> Result<catalog::CatalogSnapshot> {
         ensure!(self.complete, "incomplete inventory");
         for entry in &self.capabilities {
             ensure!(
-                !entry.id.starts_with("skill:")
-                    && entry.skill.is_none()
-                    && matches!(entry.kind, PodCapabilityKind::Tool),
+                !entry.id.starts_with("skill:"),
                 "reserved instruction offer"
             );
             ensure!(
@@ -156,47 +149,7 @@ impl PodInventory {
                 }
             }
         }
-        let skills_revision = self
-            .skills
-            .as_ref()
-            .filter(|catalog| {
-                !matches!(
-                    catalog.availability,
-                    super::skills::SkillAvailability::Unavailable
-                )
-            })
-            .map(|catalog| catalog.revision.clone());
-        let skills_availability = self
-            .skills
-            .as_ref()
-            .map(|catalog| match catalog.availability {
-                super::skills::SkillAvailability::Available => "available".to_owned(),
-                super::skills::SkillAvailability::Disabled => "disabled".to_owned(),
-                super::skills::SkillAvailability::Unavailable => "unavailable".to_owned(),
-            });
-        if let Some(skills) = self.skills {
-            skills.validate()?;
-            for skill in skills.skills {
-                self.capabilities.push(PodCapabilityDescriptor {
-                    id: super::skills::offer_id(&skill.name),
-                    source_id: None,
-                    runtime_id: None,
-                    version: skills.revision.clone(),
-                    public_version: None,
-                    name: skill.name.clone(),
-                    description: skill.description.clone(),
-                    icon: "psychology".into(),
-                    kind: PodCapabilityKind::Skill,
-                    config_fields: Vec::new(),
-                    team_settings_fields: Vec::new(),
-                    execution_models: vec![CapabilityExecutionModel::React],
-                    skill: Some(skill),
-                });
-            }
-        }
         let snapshot = catalog::CatalogSnapshot {
-            skills_revision,
-            skills_availability,
             capabilities: self
                 .capabilities
                 .into_iter()
@@ -316,8 +269,6 @@ pub struct PodCapabilityInventory {
     pub runtime_id: String,
     pub enabled: bool,
     pub observation: CatalogObservationState,
-    pub skills_supported: bool,
-    pub skills_availability: Option<String>,
     pub checked_at: Option<DateTime<Utc>>,
     pub observed_at: Option<DateTime<Utc>>,
     pub capabilities: Vec<CapabilityInventoryOffer>,
@@ -349,12 +300,6 @@ pub(super) async fn read_inventory(
         items.push(PodCapabilityInventory {
             runtime_id: source.runtime_id.clone(),
             enabled: source.enabled,
-            skills_supported: observation
-                .as_ref()
-                .is_some_and(|v| v.skills_availability.is_some()),
-            skills_availability: observation
-                .as_ref()
-                .and_then(|v| v.skills_availability.clone()),
             observation: match &observation {
                 None => CatalogObservationState::NotObserved,
                 Some(value) if value.reachable => CatalogObservationState::Observed,

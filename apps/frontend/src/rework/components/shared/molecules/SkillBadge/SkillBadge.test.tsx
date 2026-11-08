@@ -127,7 +127,9 @@ it("localizes successful activity and historical invocations only from trusted l
     role: "user",
     channel: "final",
     parts: [{ type: "text", text: "/meeting-minutes Notes" }],
-    metadata: { extras: { skill_invocations: [{ name: "meeting-minutes" }] } },
+    metadata: {
+      extras: { skill_invocations: [{ name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" }] },
+    },
   };
   const load: ChatMessage = {
     ...user,
@@ -135,7 +137,19 @@ it("localizes successful activity and historical invocations only from trusted l
     role: "assistant",
     channel: "system_note",
     parts: [],
-    metadata: { extras: { skill_load: { name: "meeting-minutes", origin: "user", load_id: "load", builtin: true } } },
+    metadata: {
+      extras: {
+        skill_load: {
+          skill_id: "meeting-minutes",
+          space_id: "local",
+          space_name: "",
+          name: "meeting-minutes",
+          origin: "user",
+          load_id: "load",
+          builtin: true,
+        },
+      },
+    },
   };
   const [turn] = toThreadMessages([user, load], false);
   act(() =>
@@ -148,7 +162,18 @@ it("localizes successful activity and historical invocations only from trusted l
             kind: "solo",
             message: {
               ...load,
-              metadata: { extras: { skill_load: { name: "meeting-minutes", origin: "agent", load_id: "old" } } },
+              metadata: {
+                extras: {
+                  skill_load: {
+                    skill_id: "meeting-minutes",
+                    space_id: "local",
+                    space_name: "",
+                    name: "meeting-minutes",
+                    origin: "agent",
+                    load_id: "old",
+                  },
+                },
+              },
             },
           }}
         />
@@ -169,16 +194,21 @@ it("localizes detail metadata while preserving the English body and argument hin
       <I18nextProvider i18n={language}>
         <SkillDetailPanel
           open
-          name="meeting-minutes"
+          skillId="meeting-minutes"
           loading={false}
           error={false}
           onClose={vi.fn()}
           onRetry={vi.fn()}
           detail={{
             skill: {
+              skill_id: "meeting-minutes",
+              space_id: "local",
+              space_name: "",
               name: "meeting-minutes",
               description: "Authored English metadata",
               builtin: true,
+              user_invocable: true,
+              disable_model_invocation: false,
               argument_hint: "[meeting notes]",
             },
             revision: "v1",
@@ -192,4 +222,56 @@ it("localizes detail metadata while preserving the English body and argument hin
   expect(container.textContent).toContain("décisions confirmées");
   expect(container.textContent).toContain("[meeting notes]");
   expect(container.textContent).toContain("Preserve confirmed decisions.");
+});
+
+it("opens each homonym by identity and preserves the owner in a recalled user message", () => {
+  const references = [
+    { name: "graph", skill_id: "org-graph", space_id: "org", draft_offset: 0 },
+    { name: "graph", skill_id: "team-graph", space_id: "team", draft_offset: 7 },
+  ];
+  const [turn] = toThreadMessages(
+    [
+      {
+        session_id: "session",
+        exchange_id: "exchange",
+        rank: 0,
+        timestamp: "2026-11-08T00:00:00Z",
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "/graph /graph" }],
+        metadata: { extras: { skill_invocations: references } },
+      },
+    ],
+    false,
+  );
+  const summaries = new Map(
+    references.map((r) => [
+      r.skill_id,
+      {
+        ...r,
+        description: r.space_id,
+        space_name: r.space_id === "org" ? "Organisation" : "Equipe",
+        builtin: r.space_id === "org",
+        user_invocable: true,
+        disable_model_invocation: false,
+        argument_hint: null,
+      },
+    ]),
+  );
+  act(() =>
+    root.render(
+      <I18nextProvider i18n={language}>
+        <UserMessage {...turn} skillSummaries={summaries} onOpenSkill={onOpen} />
+      </I18nextProvider>,
+    ),
+  );
+  const buttons = container.querySelectorAll<HTMLButtonElement>("button");
+  expect(buttons).toHaveLength(2);
+  expect(buttons[0].textContent).toContain("Organisation");
+  expect(buttons[1].textContent).toContain("Equipe");
+  act(() => {
+    buttons[0].click();
+    buttons[1].click();
+  });
+  expect(onOpen.mock.calls).toEqual([["org-graph"], ["team-graph"]]);
 });

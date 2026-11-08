@@ -1,9 +1,9 @@
 # Copyright Thales 2026
 # Licensed under the Apache License, Version 2.0.
-"""Bounded startup discovery through DeepAgents' public SkillsMiddleware hook.
+"""Immutable skill execution snapshots using DeepAgents' public SkillsMiddleware hook.
 
 ReAct, previews and native Deep reads use the same bounded immutable bytes.
-Packaged resources are the default; explicit null configuration opts out.
+Control Plane supplies the canonical admitted package bytes.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import re
 import stat
 from collections import Counter
 from copy import copy
-from importlib.resources import as_file, files
 from itertools import islice
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
@@ -47,7 +46,12 @@ from deepagents.middleware.skills import (
     SkillsStateUpdate,
 )
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
-from fred_sdk.contracts.skills import SkillCatalog, SkillsPort, SkillSummary
+from fred_sdk.contracts.skills import (
+    SkillCatalog,
+    SkillInvocation,
+    SkillsPort,
+    SkillSummary,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
@@ -74,7 +78,7 @@ your general knowledge of the task.
 An explicit /skill invocation is preloaded by the runtime: use the supplied
 instructions directly {preloaded}. The same applies to
 instructions retained from an earlier load. {references}
-Resolve relative Markdown links within that skill using its catalog name and the
+Resolve relative Markdown links within that skill using its catalog identity and the
 linked path. An argument-hint describes useful user input, not a tool schema or
 JSON parameter names. It never defines mandatory arguments.
 When a user invokes a skill without extra text, use relevant conversation inputs
@@ -95,20 +99,20 @@ def render_skills_prompt(catalog: SkillCatalog) -> str:
         return ""
     guidance = _GUIDANCE.format(
         preloaded="without calling load_skill again",
-        loading="For each matching skill, you MUST call load_skill(name) before answering or using task tools, unless its complete instructions are already in context.",
-        references="Call read_skill_file(name, path) for\nreferenced text or templates that are not yet available in context.",
+        loading="For each matching skill, you MUST call load_skill(skill_id) before answering or using task tools, unless its complete instructions are already in context.",
+        references="Call read_skill_file(skill_id, path) for\nreferenced text or templates that are not yet available in context.",
     )
     return (
         guidance
         + "\n"
         + "\n".join(
-            f"- Skill `{skill.name}` (not a tool): {escape_reserved_prompt_tags(skill.description)}"
+            f"- Skill `{skill.name}` in {escape_reserved_prompt_tags(skill.space_name)} (not a tool): {escape_reserved_prompt_tags(skill.description)}"
             + (
                 f" (argument-hint: {escape_reserved_prompt_tags(skill.argument_hint)})"
                 if skill.argument_hint
                 else ""
             )
-            + f'\n  To load its instructions, call `load_skill(name="{skill.name}")`; '
+            + f'\n  To load its instructions, call `load_skill(skill_id="{skill.skill_id}")`; '
             "then follow them yourself. Skip this call if the instructions are already in context."
             for skill in catalog.skills
         )
@@ -123,12 +127,12 @@ def _argument_hint(content: bytes, folder: str) -> str | None:
     """
     try:
         frontmatter = next(yaml.safe_load_all(content.decode("utf-8")))
-        hint = frontmatter.get("argument-hint")
+        hint = frontmatter.get("metadata", {}).get("fred-argument-hint")
         if hint is None:
             return None
         if isinstance(hint, str) and 0 < len(hint.strip()) <= 256:
             return hint.strip()
-    except (yaml.YAMLError, RecursionError, ValueError, TypeError):
+    except (yaml.YAMLError, RecursionError, ValueError, TypeError, AttributeError):
         # Malformed optional hints use the shared warning/fallback below;
         # the skill validated by upstream discovery remains available.
         pass
@@ -347,9 +351,26 @@ def _snapshot(root: Path) -> dict[str, bytes]:
 
 
 class PlatformSkills:
-    """Pod-owned catalogue and bytes. Rebuilding at restart changes revision."""
+    """Immutable execution copy; Control Plane owns packages and authorizes them."""
 
-    def __init__(self, contents: dict[str, bytes], *, builtin: bool = False) -> None:
+    def __init__(
+        self,
+        contents: dict[str, bytes],
+        *,
+        builtin: bool = False,
+        catalog: SkillCatalog | None = None,
+    ) -> None:
+        if catalog is not None:
+            # CP already validated these packages. Never rediscover/merge by name.
+            self._catalog = catalog
+            self._backend = SnapshotBackend(contents)
+            self._paths = MappingProxyType(
+                {s.skill_id: f"/skills/{s.skill_id}" for s in catalog.skills}
+            )
+            self._native_metadata = tuple(skill_metadata(s) for s in catalog.skills)
+            self._prompt = render_skills_prompt(catalog)
+            self._refresh_native_snapshot()
+            return
         backend = SnapshotBackend(contents)
         metadata: list[SkillMetadata] = []
         # Discover separately: upstream merges by name, hiding duplicates.
@@ -396,9 +417,12 @@ class PlatformSkills:
                 frontmatter = next(
                     yaml.safe_load_all(contents[item["path"]].decode("utf-8"))
                 )
-                user = frontmatter.get("user-invocable", True)
-                model = frontmatter.get("disable-model-invocation", False)
-                if not isinstance(user, bool) or not isinstance(model, bool):
+                if {"user-invocable", "disable-model-invocation"} & frontmatter.keys():
+                    raise ValueError("Invocation controls belong in Fred metadata")
+                extensions = frontmatter.get("metadata", {})
+                user = extensions.get("fred-user-invocable", "true")
+                model = extensions.get("fred-disable-model-invocation", "false")
+                if user not in ("true", "false") or model not in ("true", "false"):
                     raise ValueError("Invalid invocation controls")
             except (
                 yaml.YAMLError,
@@ -411,7 +435,7 @@ class PlatformSkills:
                     "Platform skill %s skipped: invalid invocation controls", name
                 )
                 continue
-            controls[name] = (user, model)
+            controls[name] = (user == "true", model == "true")
             accepted.append(item)
         self._native_metadata = tuple(accepted)
         self._paths = MappingProxyType(
@@ -429,6 +453,9 @@ class PlatformSkills:
             policy_supported=True,
             skills=tuple(
                 SkillSummary(
+                    skill_id=item["name"],
+                    space_id="local",
+                    space_name="Local",
                     name=item["name"],
                     description=item["description"],
                     builtin=builtin,
@@ -447,9 +474,7 @@ class PlatformSkills:
 
     @classmethod
     def from_directory(cls, directory: str, *, builtin: bool = False) -> PlatformSkills:
-        if directory == "package":
-            with as_file(files("fred_runtime.skills")) as root:
-                return cls.from_directory(str(root), builtin=True)
+        """Explicit development/test loader; never used by Agent App admission."""
         try:
             return cls(_snapshot(Path(directory)), builtin=builtin)
         except ValueError:
@@ -472,20 +497,20 @@ class PlatformSkills:
             }
         )
 
-    def for_catalog(self, disabled_names: tuple[str, ...] = ()) -> PlatformSkills:
+    def for_catalog(self, disabled_ids: tuple[str, ...] = ()) -> PlatformSkills:
         """Immutable admitted view; every pod source obeys the same ceiling."""
-        disabled = frozenset(disabled_names)
-        allowed = tuple(s for s in self.catalog.skills if s.name not in disabled)
+        disabled = frozenset(disabled_ids)
+        allowed = tuple(s for s in self.catalog.skills if s.skill_id not in disabled)
         if allowed == self.catalog.skills:
             return self
         view = copy(self)
         view._catalog = self.catalog.model_copy(update={"skills": allowed})
-        names = {s.name for s in allowed}
+        ids = {s.skill_id for s in allowed}
         view._paths = MappingProxyType(
-            {n: p for n, p in self._paths.items() if n in names}
+            {n: p for n, p in self._paths.items() if n in ids}
         )
         view._native_metadata = tuple(
-            m for m in self._native_metadata if m["name"] in names
+            m for m in self._native_metadata if m["name"] in ids
         )
         view._prompt = render_skills_prompt(view.catalog)
         view._refresh_native_snapshot()
@@ -493,44 +518,54 @@ class PlatformSkills:
 
     def for_execution(
         self,
-        selected_names: tuple[str, ...] = (),
-        disabled_names: tuple[str, ...] = (),
+        selections: tuple[SkillInvocation, ...] = (),
+        disabled_ids: tuple[str, ...] = (),
         *,
         resuming: bool = False,
     ) -> PlatformSkills:
-        view = self.for_catalog(disabled_names)
-        by_name = {s.name: s for s in view.catalog.skills}
+        view = self.for_catalog(disabled_ids)
+        by_id = {s.skill_id: s for s in view.catalog.skills}
+        if any(
+            s.skill_id in by_id and s.space_id != by_id[s.skill_id].space_id
+            for s in selections
+        ):
+            raise ValueError("Skill does not belong to the selected space")
+        selected_ids = tuple(s.skill_id for s in selections)
         if resuming:
             # Preserve trusted same-exchange selection intent without allowing
-            # disappeared, disabled or newly user-ineligible names to block a
+            # disappeared, disabled or newly user-ineligible skills to block a
             # resume or grant fresh access. Pin/preload suppression is separate.
-            selected_names = tuple(
-                n for n in selected_names if n in by_name and by_name[n].user_invocable
+            selected_ids = tuple(
+                n for n in selected_ids if n in by_id and by_id[n].user_invocable
             )
-        for name in selected_names:
-            summary = by_name.get(name)
+        for skill_id in selected_ids:
+            summary = by_id.get(skill_id)
             if summary is None:
                 raise ValueError("Skill unavailable in this runtime catalog")
             if not summary.user_invocable:
                 raise ValueError("Skill is not user-invocable")
-        names = tuple(
-            s.name
+        ids = tuple(
+            s.skill_id
             for s in view.catalog.skills
-            if not s.disable_model_invocation or s.name in selected_names
+            if not s.disable_model_invocation or s.skill_id in selected_ids
         )
-        excluded = tuple(s.name for s in view.catalog.skills if s.name not in names)
+        excluded = tuple(
+            s.skill_id for s in view.catalog.skills if s.skill_id not in ids
+        )
         if not excluded:
             return view
         view = copy(view)
         # Invocation eligibility never expands the admitted source ceiling.
         view._catalog = view.catalog.model_copy(
-            update={"skills": tuple(s for s in view.catalog.skills if s.name in names)}
+            update={
+                "skills": tuple(s for s in view.catalog.skills if s.skill_id in ids)
+            }
         )
         view._paths = MappingProxyType(
             {n: p for n, p in view._paths.items() if n not in excluded}
         )
         view._native_metadata = tuple(
-            m for m in view._native_metadata if m["name"] in names
+            m for m in view._native_metadata if m["name"] in ids
         )
         view._prompt = render_skills_prompt(view.catalog)
         view._refresh_native_snapshot()
@@ -553,8 +588,8 @@ class PlatformSkills:
     def prompt(self) -> str:
         return self._prompt
 
-    def read(self, name: str, path: str = "SKILL.md") -> str:
-        root = self._paths.get(name)
+    def read(self, skill_id: str, path: str = "SKILL.md") -> str:
+        root = self._paths.get(skill_id)
         if root is None:
             raise ValueError("Skill unavailable in this runtime catalog")
         relative = PurePosixPath(path)
@@ -595,47 +630,60 @@ class SnapshotSkillsMiddleware(SkillsMiddleware):
         return self.before_agent(state, runtime, config)
 
 
+def skill_metadata(skill: SkillSummary) -> SkillMetadata:
+    # DeepAgents keys its pins by name. Use resource identity in this internal
+    # slot; keep the authored name and owning space visible in the description.
+    return SkillMetadata(
+        name=skill.skill_id,
+        description=escape_reserved_prompt_tags(
+            f"{skill.name} ({skill.space_name}): {skill.description}"
+        ),
+        path=f"/skills/{skill.skill_id}/SKILL.md",
+        license=None,
+        compatibility=None,
+        metadata={},
+        allowed_tools=[],
+    )
+
+
 def build_skills_middleware(skills: SkillsPort | None) -> list[AgentMiddleware]:
     if skills is None:
         return []
-    metadata = tuple(
-        SkillMetadata(
-            name=skill.name,
-            description=skill.description,
-            path=f"/skills/{skill.name}/SKILL.md",
-            license=None,
-            compatibility=None,
-            metadata={},
-            allowed_tools=[],
-        )
-        for skill in skills.catalog.skills
-    )
+    metadata = tuple(skill_metadata(skill) for skill in skills.catalog.skills)
     return [
         cast(AgentMiddleware, SnapshotSkillsMiddleware(SnapshotBackend({}), metadata))
     ]
 
 
 def admitted_skills(
-    source: SkillsPort | None, admitted: SkillCatalog | None
-) -> SkillsPort | None:
-    """Narrow a pod snapshot with server facts, never a browser-supplied selection."""
-    if source is None:
-        if admitted is not None and admitted.skills:
-            raise ValueError("Admitted skills are unavailable on this runtime")
+    files: dict[str, str] | None, admitted: SkillCatalog | None
+) -> PlatformSkills | None:
+    """Consume the server-bound snapshot, never local configuration or browser bytes."""
+    if admitted is None or not admitted.skills:
         return None
-    names = {s.name for s in admitted.skills} if admitted is not None else set()
-    if names and (
-        admitted is None
-        or not admitted.policy_supported
-        or admitted.revision != source.catalog.revision
-        or source.catalog.availability != "available"
-    ):
-        raise ValueError(
-            "Skill source changed or is unavailable; refresh the pod inventory"
-        )
-    actual = {s.name: s for s in source.catalog.skills}
-    if admitted is not None and any(actual.get(s.name) != s for s in admitted.skills):
-        raise ValueError("Admitted skill metadata does not match this pod snapshot")
-    if not isinstance(source, PlatformSkills):
-        raise ValueError("Weaver requires a governed skill snapshot")
-    return source.for_catalog(tuple(name for name in actual if name not in names))
+    if files is None or not admitted.policy_supported:
+        raise ValueError("Missing admitted skill content")
+    if len({s.skill_id for s in admitted.skills}) != len(admitted.skills):
+        raise ValueError("Duplicate admitted skill identity")
+    source = PlatformSkills(
+        {path: text.encode("utf-8") for path, text in files.items()}, catalog=admitted
+    )
+    versions: dict[str, str] = {}
+    for skill in admitted.skills:
+        digest = hashlib.sha256()
+        prefix = f"/skills/{skill.skill_id}/"
+        for path, text in sorted(files.items()):
+            if path.startswith(prefix):
+                digest.update(path.removeprefix(prefix).encode())
+                digest.update(b"\0")
+                digest.update(text.encode())
+                digest.update(b"\0")
+        versions[f"{skill.space_id}/{skill.skill_id}"] = digest.hexdigest()
+    digest = hashlib.sha256()
+    for name, version in sorted(versions.items()):
+        digest.update(name.encode() + b"\0" + version.encode() + b"\0")
+    if digest.hexdigest() != admitted.revision:
+        raise ValueError("Admitted skill revision does not match its content")
+    source._catalog = admitted
+    source._prompt = render_skills_prompt(admitted)
+    return source

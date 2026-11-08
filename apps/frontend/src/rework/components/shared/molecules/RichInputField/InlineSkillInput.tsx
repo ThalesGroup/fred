@@ -40,6 +40,7 @@ export interface InlinePromptToken {
 export type InlinePromptTarget = Pick<InlinePromptToken, "promptId" | "promptTeamId" | "name"> & { command: string };
 
 export interface InlineSkillToken {
+  spaceName?: string;
   from: number;
   to: number;
   name: string;
@@ -373,9 +374,12 @@ export function InlineSkillInput(props: Props) {
           Decoration.replace({
             widget: new SkillWidget(
               token,
-              skillTooltip(skillPresentation(t, token).title, skillPresentation(t, token).description),
-              t("chatbot.skills.open", { name: skillPresentation(t, token).title }),
-              skillPresentation(t, token).title,
+              skillTooltip(
+                skillPresentation(t, { ...token, space_name: token.spaceName }).title,
+                skillPresentation(t, { ...token, space_name: token.spaceName }).description,
+              ),
+              t("chatbot.skills.open", { name: skillPresentation(t, { ...token, space_name: token.spaceName }).title }),
+              skillPresentation(t, { ...token, space_name: token.spaceName }).title,
             ),
           }).range(token.from, token.to),
           ...(props.tokens.length === 1 && props.value.trim() === `/${token.name}` && props.placeholder

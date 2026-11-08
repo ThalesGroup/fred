@@ -2763,8 +2763,11 @@ describe("useManagedChat — session write reliability", () => {
   });
 
   it.each([
-    { exchangeId: "exch-1", invocation: { name: "meeting-minutes" } },
-    { exchangeId: "older-exchange", invocation: { name: "meeting-minutes" } },
+    { exchangeId: "exch-1", invocation: { name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" } },
+    {
+      exchangeId: "older-exchange",
+      invocation: { name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" },
+    },
     { exchangeId: "exch-1", invocation: { name: 42 } },
   ])("does not turn stored skill metadata into resume authority ($exchangeId)", async ({ exchangeId, invocation }) => {
     chatSseMessages = [
@@ -2802,7 +2805,10 @@ describe("useManagedChat — session write reliability", () => {
   });
 
   it("sends explicit command skills but does not infer resume authority from stored metadata", async () => {
-    const skills = [{ name: "meeting-minutes" }, { name: "mermaid" }];
+    const skills = [
+      { name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" },
+      { name: "mermaid", skill_id: "mermaid", space_id: "local" },
+    ];
     const command = {
       command: "summary",
       prompt_id: "p-summary",

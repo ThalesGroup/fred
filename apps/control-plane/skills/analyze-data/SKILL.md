@@ -1,10 +1,10 @@
 ---
 name: analyze-data
 description: Analyze supplied tables or accessible datasets with explicit metric definitions, missing-data checks and conclusions supported by computed results.
-argument-hint: "[data or document] [question or metric]"
-user-invocable: false
 license: Apache-2.0
 metadata:
+  fred-argument-hint: "[data or document] [question or metric]"
+  fred-user-invocable: "false"
   author: Fred contributors
   provenance: Original Fred procedure.
 ---

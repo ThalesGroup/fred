@@ -216,6 +216,12 @@ export default function TeamContentNavbar() {
         },
         {
           type: "link",
+          label: t("rework.spaceSkills.title"),
+          icon: { category: "outlined", type: "school", filled: true },
+          linkProps: { to: `/team/${teamId}/skills` },
+        },
+        {
+          type: "link",
           label: "Prompts",
           icon: { category: "outlined", type: "chat", filled: true },
           linkProps: { to: `/team/${teamId}/prompts` },
@@ -259,7 +265,7 @@ export default function TeamContentNavbar() {
   const settingsItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: t("rework.skillGovernance.title"),
+      label: t("rework.toolGovernance.title"),
       icon: { category: "outlined", type: "tune" },
       linkProps: { to: `${settingsBase}/offers` },
     },

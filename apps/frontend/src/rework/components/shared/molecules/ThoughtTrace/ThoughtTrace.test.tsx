@@ -183,7 +183,19 @@ describe("ThoughtTrace", () => {
     const load = msg({
       role: "system",
       channel: "system_note",
-      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child } } },
+      metadata: {
+        extras: {
+          skill_load: {
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            space_name: "",
+            name: "meeting-minutes",
+            origin,
+            load_id: "load",
+            child,
+          },
+        },
+      },
     });
     const html = render([load, load, ...TRACE], false);
     expect([...html.matchAll(/>([123])</g)].map((match) => match[1])).toEqual(["1", "2", "3"]);
@@ -204,7 +216,17 @@ describe("ThoughtTrace", () => {
       role: "system",
       channel: "system_note",
       metadata: {
-        extras: { skill_load: { name: "graph", origin: "agent", load_id: "partial", partial: true } },
+        extras: {
+          skill_load: {
+            skill_id: "graph",
+            space_id: "local",
+            space_name: "",
+            name: "graph",
+            origin: "agent",
+            load_id: "partial",
+            partial: true,
+          },
+        },
       },
     });
     const html = render([load], false);

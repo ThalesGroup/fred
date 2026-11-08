@@ -1,9 +1,9 @@
 ---
 name: graph
 description: Create or repair diagrams, charts and visual comparisons from source facts or verified data, choosing a representation and output supported by the available tools.
-argument-hint: "[goal, source or data] [constraints]"
 license: Apache-2.0
 metadata:
+  fred-argument-hint: "[goal, source or data] [constraints]"
   author: Fred contributors
   provenance: Original Fred procedure.
 ---

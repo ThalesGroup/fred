@@ -1,8 +1,9 @@
 ---
 name: meeting-minutes
 description: Prepare meeting minutes from notes or a transcript, separating confirmed decisions, actions and missing information.
-argument-hint: "[meeting notes or document]"
-disable-model-invocation: true
+metadata:
+  fred-argument-hint: "[meeting notes or document]"
+  fred-disable-model-invocation: "true"
 ---
 
 # Meeting minutes

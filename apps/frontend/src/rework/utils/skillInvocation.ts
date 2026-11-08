@@ -1,7 +1,12 @@
 // Copyright Thales 2026
 // Licensed under the Apache License, Version 2.0.
 
-import type { CommandDescriptor, CommandPromptDescriptor, TurnCommand } from "../../slices/runtime/runtimeOpenApi";
+import type {
+  CommandDescriptor,
+  CommandPromptDescriptor,
+  SkillInvocation,
+  TurnCommand,
+} from "../../slices/runtime/runtimeOpenApi";
 
 /** Most prompt commands one message may hold. Mirrors `MAX_TURN_PROMPTS` in
  *  fred-sdk (`contracts/context.py`): the runtime refuses a longer list. */
@@ -221,4 +226,15 @@ export function selectedSkillText(range: Range, container: HTMLElement, selectio
     range.intersectsNode(label),
   );
   return touchesBadge || text !== range.toString() ? text : null;
+}
+
+/** An occurrence keeps its resource identity even when another skill has the same name. */
+export function skillReferenceAt(
+  references: readonly SkillInvocation[] | undefined,
+  token: { name: string; from: number },
+) {
+  const candidates = (references ?? []).filter((s) => s.name === token.name);
+  const exact = candidates.find((s) => s.draft_offset === token.from);
+  if (exact) return exact;
+  return candidates.length === 1 && candidates[0].draft_offset == null ? candidates[0] : undefined;
 }

@@ -27,7 +27,7 @@ export type CommandMenuEntry = {
   name: string;
   description?: string | null;
   emoji?: string | null;
-} & ({ kind: "skill" } | { kind: "prompt"; promptTeamId: string });
+} & ({ kind: "skill"; skillId: string; spaceId: string } | { kind: "prompt"; promptTeamId: string });
 
 type CommandMenuSource = "team" | "personal" | "platform";
 

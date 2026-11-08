@@ -41,7 +41,6 @@ Example:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -167,7 +166,7 @@ from fred_sdk.contracts.runtime import (
     SessionTitleRuntimeEvent,
     parse_human_input_answer,
 )
-from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
+from fred_sdk.contracts.skills import SkillInvocation
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.contracts.weaver import ModelOfferKey, WeaverRuntimeBinding
 from fred_sdk.support.authored_toolsets import (
@@ -943,12 +942,14 @@ def _build_runtime_services(
 
     governed_skills = (
         None
-        if runtime_config.skills is None or isinstance(definition, GraphAgentDefinition)
-        else admitted_skills(runtime_config.skills, current_turn().binding.skills)
+        if isinstance(definition, GraphAgentDefinition)
+        else admitted_skills(
+            current_turn().binding.skill_files, current_turn().binding.skills
+        )
     )
     if isinstance(governed_skills, PlatformSkills):
         governed_skills = governed_skills.for_execution(
-            tuple(s.name for s in binding.runtime_context.selected_skills),
+            binding.runtime_context.selected_skills,
             resuming=binding.is_resuming,
         )
     if conversation_filesystem is None:
@@ -1365,7 +1366,6 @@ class _PodCapabilityInventory(BaseModel):
     complete: Literal[True]
     capabilities: list[CapabilityCatalogEntry]
     template_capabilities: list[_PodTemplateCapability]
-    skills: SkillCatalog
 
 
 class _McpCatalogEntry(BaseModel):
@@ -2201,14 +2201,14 @@ async def _authorize_and_resolve(
                 None
                 if isinstance(target.definition, GraphAgentDefinition)
                 else admitted_skills(
-                    get_runtime_context().config.skills, authority.binding.skills
+                    authority.binding.skill_files, authority.binding.skills
                 )
             )
             if selections and request.resume_payload is None and skills is None:
                 raise ValueError("Skills unavailable for this agent")
             if isinstance(skills, PlatformSkills):
                 skills.for_execution(
-                    tuple(s.name for s in selections),
+                    selections,
                     resuming=request.resume_payload is not None,
                 )
         except ValueError as exc:
@@ -2855,7 +2855,9 @@ async def _write_turn_history(
         if skill_invocations:
             extras = {
                 "skill_invocations": [
-                    SkillInvocation.model_validate(item).model_dump(mode="json")
+                    SkillInvocation.model_validate(item).model_dump(
+                        mode="json", exclude_none=True
+                    )
                     for item in skill_invocations
                 ]
             }
@@ -2866,7 +2868,7 @@ async def _write_turn_history(
             extras = {
                 "skill_invocation": SkillInvocation.model_validate(
                     skill_invocation
-                ).model_dump(mode="json")
+                ).model_dump(mode="json", exclude_none=True)
             }
             user_message.metadata = user_message.metadata.model_copy(
                 update={"extras": extras}
@@ -5041,19 +5043,9 @@ def _build_agent_router(
                 spec.enum = None
                 spec.pattern = None
                 spec.ui = type(spec.ui)()
-        installed_skills = get_runtime_context().config.skills
         return _PodCapabilityInventory(
             complete=True,
             capabilities=entries,
-            skills=(
-                installed_skills.catalog
-                if installed_skills is not None
-                else SkillCatalog(
-                    policy_supported=True,
-                    revision=hashlib.sha256(b"").hexdigest(),
-                    availability="disabled",
-                )
-            ),
             template_capabilities=[
                 _PodTemplateCapability(
                     source_agent_id=definition.agent_id,
@@ -5122,55 +5114,6 @@ def _build_agent_router(
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
         ]
-
-    @router.get(
-        "/skills",
-        response_model=SkillCatalog,
-        operation_id="get_runtime_instance_skills",
-    )
-    async def get_skills(
-        http_request: Request,
-        agent_instance_id: str,
-        space_id: str,
-        container: PodApplicationContext = Depends(get_pod_container),
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillCatalog:
-        """List metadata after the same space and target checks as execution."""
-        from fred_runtime.skills.api import get_instance_skills
-
-        return await get_instance_skills(
-            agent_instance_id,
-            space_id,
-            caller,
-            http_request.headers.get("Authorization"),
-            container,
-            registry,
-        )
-
-    @router.get(
-        "/skills/{skill_name}",
-        response_model=SkillDetail,
-        operation_id="get_runtime_instance_skill_detail",
-    )
-    async def get_skill_detail(
-        http_request: Request,
-        skill_name: str,
-        agent_instance_id: str,
-        space_id: str,
-        container: PodApplicationContext = Depends(get_pod_container),
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillDetail:
-        from fred_runtime.skills.api import get_instance_skill_detail
-
-        return await get_instance_skill_detail(
-            skill_name,
-            agent_instance_id,
-            space_id,
-            caller,
-            http_request.headers.get("Authorization"),
-            container,
-            registry,
-        )
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -6641,15 +6584,6 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
-            from fred_runtime.skills.catalog import PlatformSkills
-
-            skills = (
-                await asyncio.to_thread(
-                    PlatformSkills.from_directory, config.skills.directory
-                )
-                if config.skills is not None
-                else None
-            )
             set_runtime_context(
                 FredRuntimeContext(
                     RuntimeConfig(
@@ -6662,7 +6596,6 @@ def create_agent_app(
                         filesystem=container.get_filesystem(),
                         session_fence=container.session_fence,
                         api_base_url=base_url,
-                        skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem
                         ),

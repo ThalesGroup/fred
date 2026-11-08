@@ -1563,7 +1563,16 @@ describe("skill load history", () => {
       channel: "system_note",
       metadata: {
         extras: {
-          skill_load: { name: "graph", origin: "agent", load_id: "read", child: true, partial: true },
+          skill_load: {
+            skill_id: "graph",
+            space_id: "local",
+            space_name: "",
+            name: "graph",
+            origin: "agent",
+            load_id: "read",
+            child: true,
+            partial: true,
+          },
         },
       },
     });
@@ -1576,7 +1585,19 @@ describe("skill load history", () => {
     const step = msg({
       role: "system",
       channel: "system_note",
-      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child: false } } },
+      metadata: {
+        extras: {
+          skill_load: {
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            space_name: "",
+            name: "meeting-minutes",
+            origin,
+            load_id: "load",
+            child: false,
+          },
+        },
+      },
     });
     const rows = groupTraceEntries([
       toolCallMsg("load", "load_skill", { name: "meeting-minutes" }),
@@ -1597,6 +1618,9 @@ describe("skill load history", () => {
       metadata: {
         extras: {
           skill_load: {
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            space_name: "",
             name: "meeting-minutes",
             origin: "agent",
             load_id: "child:load",
@@ -1620,7 +1644,7 @@ describe("skill load history", () => {
 
 describe("skill file read preview", () => {
   it("opens only a successful canonical read and preserves the exact returned text", () => {
-    const call = toolCallMsg("ref", "read_skill_file", { name: "meeting-minutes", path: "references/model.md" });
+    const call = toolCallMsg("ref", "read_skill_file", { skill_id: "meeting-minutes", path: "references/model.md" });
     const result = toolResultMsg("ref", "## Archived model\n**Exact** text");
     const [entry] = groupTraceEntries([call, result]);
     expect(skillFileReadOf(entry)).toEqual({
@@ -1635,7 +1659,7 @@ describe("skill file read preview", () => {
     expect(
       skillFileReadOf(
         groupTraceEntries([
-          toolCallMsg("ref", "custom_read_skill_file", { name: "meeting-minutes", path: "model.md" }),
+          toolCallMsg("ref", "custom_read_skill_file", { skill_id: "meeting-minutes", path: "model.md" }),
           result,
         ])[0],
       ),

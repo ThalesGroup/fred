@@ -22,7 +22,7 @@ import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/r
 import type { SessionAttachment } from "@rework/types/attachments";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
-import type { SkillSummary } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
@@ -37,7 +37,8 @@ interface UserTurnProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  builtinSkillNames?: string[];
+  skillInvocations?: SkillInvocation[];
+  builtinSkillIds?: string[];
   skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
@@ -57,7 +58,8 @@ export const UserTurn = memo(function UserTurn({
   command,
   skillName,
   skillNames,
-  builtinSkillNames,
+  skillInvocations,
+  builtinSkillIds,
   skillSummaries,
   skillDescription,
   onOpenSkill,
@@ -116,7 +118,8 @@ export const UserTurn = memo(function UserTurn({
         text={text}
         command={command}
         skillNames={skillNames}
-        builtinSkillNames={builtinSkillNames}
+        skillInvocations={skillInvocations}
+        builtinSkillIds={builtinSkillIds}
         skillSummaries={skillSummaries}
         skillName={skillName}
         skillDescription={skillDescription}

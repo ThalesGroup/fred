@@ -1,8 +1,9 @@
 ---
 name: compare-options
 description: Compare alternatives for a decision using explicit criteria, supported evidence and visible trade-offs.
-argument-hint: "[options] [decision criteria]"
-user-invocable: false
+metadata:
+  fred-argument-hint: "[options] [decision criteria]"
+  fred-user-invocable: "false"
 ---
 
 # Evidence-based option comparison

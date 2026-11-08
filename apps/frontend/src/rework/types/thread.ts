@@ -69,8 +69,9 @@ export interface ThreadMessage {
   /** Explicit user selection, from a live hint or the exchange's persisted load. */
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
+  skillInvocations?: SkillInvocation[];
   /** Trusted provenance from successful loads; absent on older history. */
-  builtinSkillNames?: string[];
+  builtinSkillIds?: string[];
   /** Files the conversation's list places on this user message; absent when none. */
   attachments?: SessionAttachment[];
 }

@@ -94,7 +94,9 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
-    pub skills: Option<crate::agents::skills::SkillCatalog>,
+    pub skills: Option<crate::skills::SkillCatalog>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill_files: Option<std::collections::BTreeMap<String, String>>,
     /// Present only for trusted delegated or in-process admission.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<fred_rust_sdk::inference::InferenceAdmission>,
@@ -326,8 +328,9 @@ async fn resolve_runtime_binding(
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
-    let skills =
-        crate::agents::skills::resolve(&mut tx, &space, &record.source_runtime_id, &policy).await?;
+    let snapshot = crate::skills::resolve(&mut tx, subject, &space, private).await?;
+    let skills = Some(snapshot.catalog);
+    let skill_files = private.then_some(snapshot.files);
     record
         .tuning
         .0
@@ -434,6 +437,7 @@ async fn resolve_runtime_binding(
     };
     Ok(RuntimeBinding {
         skills,
+        skill_files,
         title,
         models,
         inference,

@@ -958,7 +958,8 @@
           "title": "Visualiser des données",
           "description": "Choisir une représentation utile des données et la produire avec les outils disponibles."
         }
-      }
+      },
+      "ambiguous": "Plusieurs skills portent ce nom. Choisissez leur espace dans le menu des commandes."
     }
   },
   "mermaid": {
@@ -5264,9 +5265,9 @@
       "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
       "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
     },
-    "skillGovernance": {
-      "title": "Capabilities et skills",
-      "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace et ne charge aucun skill.",
+    "toolGovernance": {
+      "title": "Outils",
+      "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace.",
       "restrict": "Restreindre les offres dans cet espace",
       "inherit": "Sans restriction locale, cet espace suit les autorisations de ses parents.",
       "denyAll": "Ne rien autoriser dans cet espace",
@@ -5281,9 +5282,22 @@
       "failed": "La modification n'a pas été enregistrée.",
       "source": {
         "disabled": "La source est désactivée.",
-        "unavailable": "La source est indisponible ; les choix enregistrés sont conservés.",
-        "incompatible": "Ce pod ne fournit pas le contrat de gouvernance des skills. Mettez à jour ses replicas."
+        "unavailable": "La source est indisponible ; les choix enregistrés sont conservés."
       }
+    },
+    "spaceSkills": {
+      "title": "Skills",
+      "scope": "Ce catalogue appartient à l’espace sélectionné. Les conversations utilisent aussi les skills des espaces parents directement accessibles en lecture.",
+      "empty": "Aucun skill installé dans cet espace.",
+      "defaults": "Skills fournis",
+      "installExplanation": "Installez un package indépendant dans cet espace. Son contenu pourra ensuite être géré ici.",
+      "install": "Installer",
+      "remove": "Supprimer",
+      "removeConfirm": "Supprimer {{name}} de cet espace ?",
+      "edit": "Modifier les fichiers",
+      "save": "Enregistrer le package",
+      "cancel": "Annuler",
+      "failed": "L’opération a échoué. Vérifiez le format du package et rechargez-le s’il a changé."
     }
   },
   "runtime": {

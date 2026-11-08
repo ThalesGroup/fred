@@ -197,27 +197,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/skills`,
-        params: {
-          agent_instance_id: queryArg.agentInstanceId,
-          space_id: queryArg.spaceId,
-        },
-      }),
-    }),
-    getRuntimeInstanceSkillDetail: build.query<
-      GetRuntimeInstanceSkillDetailApiResponse,
-      GetRuntimeInstanceSkillDetailApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/skills/${queryArg.skillName}`,
-        params: {
-          agent_instance_id: queryArg.agentInstanceId,
-          space_id: queryArg.spaceId,
-        },
-      }),
-    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -412,17 +391,6 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   messageId: string;
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
-export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
-export type GetRuntimeInstanceSkillsApiArg = {
-  agentInstanceId: string;
-  spaceId: string;
-};
-export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
-export type GetRuntimeInstanceSkillDetailApiArg = {
-  skillName: string;
-  agentInstanceId: string;
-  spaceId: string;
-};
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
@@ -601,21 +569,6 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   version: string;
 };
-export type SkillSummary = {
-  argument_hint?: string | null;
-  builtin?: boolean;
-  description: string;
-  disable_model_invocation?: boolean;
-  name: string;
-  user_invocable?: boolean;
-};
-export type SkillCatalog = {
-  availability?: "available" | "disabled" | "unavailable";
-  policy_supported?: boolean;
-  revision?: string;
-  skills?: SkillSummary[];
-  supported?: boolean;
-};
 export type PodTemplateCapability = {
   capability_id: string;
   default_selected: boolean;
@@ -624,7 +577,6 @@ export type PodTemplateCapability = {
 export type PodCapabilityInventory = {
   capabilities: CapabilityCatalogEntry[];
   complete: true;
-  skills: SkillCatalog;
   template_capabilities: PodTemplateCapability[];
 };
 export type ChatControlItem = {
@@ -802,7 +754,10 @@ export type ModelOfferKey = {
   upstream_model_id: string;
 };
 export type SkillInvocation = {
+  draft_offset?: number | null;
   name: string;
+  skill_id: string;
+  space_id: string;
 };
 export type RuntimeContext = {
   access_token?: string | null;
@@ -1112,6 +1067,9 @@ export type SkillLoadAttribution = {
   /** The actual instruction read did not prove full-file coverage. */
   partial?: boolean;
   revision: string;
+  skill_id: string;
+  space_id: string;
+  space_name: string;
 };
 export type StatusRuntimeEvent = {
   detail?: string | null;
@@ -1361,11 +1319,6 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
-export type SkillDetail = {
-  content: string;
-  revision: string;
-  skill: SkillSummary;
-};
 export type ClientAuthMode = "user_token" | "no_token" | "delegated";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
@@ -1497,10 +1450,6 @@ export const {
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
-  useGetRuntimeInstanceSkillsQuery,
-  useLazyGetRuntimeInstanceSkillsQuery,
-  useGetRuntimeInstanceSkillDetailQuery,
-  useLazyGetRuntimeInstanceSkillDetailQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,

@@ -28,8 +28,6 @@ pub struct TemplateCapability {
 /// A union of template pickers is not necessarily a complete pod inventory.
 pub struct CatalogSnapshot {
     pub capabilities: Vec<CapabilityOffer>,
-    pub skills_revision: Option<String>,
-    pub skills_availability: Option<String>,
     pub template_capabilities: Vec<TemplateCapability>,
 }
 
@@ -37,8 +35,6 @@ pub struct CatalogSnapshot {
 pub struct CatalogObservation {
     pub runtime_id: String,
     pub reachable: bool,
-    pub skills_revision: Option<String>,
-    pub skills_availability: Option<String>,
     pub checked_at: DateTime<Utc>,
     pub observed_at: Option<DateTime<Utc>>,
 }
@@ -125,25 +121,20 @@ pub async fn replace(
 ) -> Result<()> {
     snapshot.validate(runtime_id)?;
     sqlx::query(
-        "insert into runtime_catalog (runtime_id, reachable, observed_at, skills_revision, skills_availability)
-         values ($1, true, clock_timestamp(), $2, $3)
+        "insert into runtime_catalog (runtime_id, reachable, observed_at)
+         values ($1, true, clock_timestamp())
          on conflict (runtime_id) do update set reachable = true,
-             checked_at = clock_timestamp(), observed_at = clock_timestamp(),
-             skills_revision = coalesce(excluded.skills_revision, runtime_catalog.skills_revision),
-             skills_availability = excluded.skills_availability",
+             checked_at = clock_timestamp(), observed_at = clock_timestamp()",
     )
     .bind(runtime_id)
-    .bind(&snapshot.skills_revision)
-    .bind(&snapshot.skills_availability)
     .execute(&mut *conn)
     .await?;
     sqlx::query("delete from runtime_template_capability where runtime_id = $1")
         .bind(runtime_id)
         .execute(&mut *conn)
         .await?;
-    sqlx::query("update runtime_capability set advertised = false where runtime_id = $1 and ($2 or capability_id not like 'skill:%')")
+    sqlx::query("update runtime_capability set advertised = false where runtime_id = $1")
         .bind(runtime_id)
-        .bind(snapshot.skills_availability.as_deref() != Some("unavailable"))
         .execute(&mut *conn)
         .await?;
     for offer in &snapshot.capabilities {
@@ -194,7 +185,7 @@ pub async fn observation<'e>(
     runtime_id: &str,
 ) -> sqlx::Result<Option<CatalogObservation>> {
     sqlx::query_as(
-        "select runtime_id, reachable, skills_revision, skills_availability, checked_at, observed_at from runtime_catalog where runtime_id = $1",
+        "select runtime_id, reachable, checked_at, observed_at from runtime_catalog where runtime_id = $1",
     )
     .bind(runtime_id)
     .fetch_optional(ex)

@@ -297,6 +297,7 @@ class WeaverRuntimeResolution(ResolverFact):
     agent: RuntimeAgent
     models: RuntimeModels
     skills: SkillCatalog | None = None
+    skill_files: dict[str, str] | None = None
     title: TitleAdmission | None = None
     attachments: tuple[RuntimeAttachment, ...]
 

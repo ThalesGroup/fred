@@ -11,7 +11,7 @@ creation provenance does not grant a private right over collective content.
 | Prompt | Any of the four spaces; Control Plane | SQL text, metadata, local category and caller favorites | Reusable current text; source-space permissions and deletion |
 | Agent instance | Team, project or personal space; Control Plane | SQL configuration referring to a pod template | Configuration is distinct from the person's conversations |
 | Agent template | Supplied by an Agent Pod; organization authorization | Pod declaration and Control Plane policy | Defines available behavior; an instance selects and configures it |
-| Skill / tool capability offer | Supplied by a pod; organization ceiling and local restrictions | Pod content/declaration, SQL catalogue and policy | Offer governance; not the four-space prompt CRUD contract |
+| Tool capability offer | Supplied by a pod; organization ceiling and local restrictions | Pod declaration, SQL catalogue and policy | Offer governance; not the four-space prompt CRUD contract |
 | Model offer | Model source catalogue; organization policy | SQL observations and policy; protected connection configuration | Selected at turn admission; credentials stay out of the browser |
 | Document | Space drive or private conversation | SQL placement and lifecycle; object storage for bytes | Processing and cleanup are explicit operations |
 | Conversation | A person within a space | Conversation metadata and execution history | Access to the space alone does not open another person's history |

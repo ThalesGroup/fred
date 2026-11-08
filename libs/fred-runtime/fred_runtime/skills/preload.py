@@ -33,13 +33,11 @@ async def preload_skills(
     if skills is None:
         raise ValueError("Platform skills are unavailable on this runtime")
     if isinstance(skills, PlatformSkills):
-        skills = skills.for_execution(
-            tuple(s.name for s in selections), binding.unavailable_skill_names
-        )
+        skills = skills.for_execution(selections, binding.unavailable_skill_ids)
 
     # Direct executor callers also fail the whole selection before any load event.
     for selection in selections:
-        skills.read(selection.name)
+        skills.read(selection.skill_id)
 
     async def load(name: str) -> tuple[HumanMessage, StatusRuntimeEvent]:
         load_id = (
@@ -71,7 +69,7 @@ async def preload_skills(
             name="tool.invoke",
             context=binding.portable_context,
             attributes={"tool_name": "load_skill", "origin": "user"},
-            input_payload={"name": name},
+            input_payload={"skill_id": name},
         ) as span:
             content, event = await ToolExecution(
                 kpi=services.kpi_writer, binding=binding
@@ -89,7 +87,9 @@ async def preload_skills(
                 span.set_io(output=content)
         return HumanMessage(content=content, id=load_id), event
 
-    loaded = await asyncio.gather(*(load(selection.name) for selection in selections))
+    loaded = await asyncio.gather(
+        *(load(selection.skill_id) for selection in selections)
+    )
     base = cast(dict[str, object], graph_input)
     messages = cast(list[BaseMessage], base["messages"])
     return {

@@ -27,16 +27,27 @@ import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "
 
 export function skillLoadOf(
   message: ChatMessage,
-): Required<Pick<SkillLoadAttribution, "name" | "origin" | "load_id" | "child" | "builtin" | "partial">> | null {
+): Required<
+  Pick<
+    SkillLoadAttribution,
+    "name" | "skill_id" | "space_id" | "space_name" | "origin" | "load_id" | "child" | "builtin" | "partial"
+  >
+> | null {
   const extras = message.metadata?.extras as Record<string, unknown> | undefined;
   const value = extras?.skill_load;
   if (!value || typeof value !== "object") return null;
   const load = value as Record<string, unknown>;
   return typeof load.name === "string" &&
+    typeof load.skill_id === "string" &&
+    typeof load.space_id === "string" &&
+    typeof load.space_name === "string" &&
     typeof load.load_id === "string" &&
     (load.origin === "user" || load.origin === "agent")
     ? {
         name: load.name,
+        skill_id: load.skill_id,
+        space_id: load.space_id,
+        space_name: load.space_name,
         origin: load.origin,
         load_id: load.load_id,
         child: load.child === true,
@@ -300,7 +311,9 @@ function skillFilePathOf(entry: TraceEntry): { name: string; path: string; excer
   if (entry.kind !== "combo") return null;
   const args = toolArgs(entry.call);
   if (toolName(entry.call) === "read_skill_file") {
-    return typeof args.name === "string" && typeof args.path === "string" ? { name: args.name, path: args.path } : null;
+    return typeof args.skill_id === "string" && typeof args.path === "string"
+      ? { name: args.skill_id, path: args.path }
+      : null;
   }
   if (toolName(entry.call) !== "read_file" || typeof args.file_path !== "string") return null;
   // Match native validate_path: normalize redundant separators and dot segments,

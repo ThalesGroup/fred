@@ -8,7 +8,6 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
-import { skillPresentation } from "@rework/utils/skillPresentation";
 import {
   useSpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
@@ -47,9 +46,9 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
   };
   return (
     <div className={styles.teamSettingsPage}>
-      <PageHeader title={t("rework.skillGovernance.title")} />
-      <p>{t("rework.skillGovernance.ceiling")}</p>
-      {error && <p role="alert">{t(`rework.skillGovernance.${error}`)}</p>}
+      <PageHeader title={t("rework.toolGovernance.title")} />
+      <p>{t("rework.toolGovernance.ceiling")}</p>
+      {error && <p role="alert">{t(`rework.toolGovernance.${error}`)}</p>}
       {access.error || query.isError ? (
         <p role="alert">{t("rework.manager.unavailable")}</p>
       ) : !access.settled ? (
@@ -64,14 +63,9 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
         query.currentData.map((policy) => (
           <section key={policy.runtime_id} className={styles.offerSource}>
             <h2>{policy.runtime_id}</h2>
-            {(!policy.source_enabled ||
-              !policy.reachable ||
-              !policy.skills_supported ||
-              policy.skills_availability !== "available") && (
+            {(!policy.source_enabled || !policy.reachable) && (
               <p role="status">
-                {t(
-                  `rework.skillGovernance.source.${!policy.source_enabled ? "disabled" : !policy.reachable ? "unavailable" : !policy.skills_supported ? "incompatible" : policy.skills_availability}`,
-                )}
+                {t(`rework.toolGovernance.source.${!policy.source_enabled ? "disabled" : "unavailable"}`)}
               </p>
             )}
             <label>
@@ -88,9 +82,9 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
                   )
                 }
               />
-              {t("rework.skillGovernance.restrict")}
+              {t("rework.toolGovernance.restrict")}
             </label>
-            {!policy.restricted && <p>{t("rework.skillGovernance.inherit")}</p>}
+            {!policy.restricted && <p>{t("rework.toolGovernance.inherit")}</p>}
             {policy.restricted && (
               <Button
                 color="primary"
@@ -99,7 +93,7 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
                 disabled={busy}
                 onClick={() => void save(policy, true, [])}
               >
-                {t("rework.skillGovernance.denyAll")}
+                {t("rework.toolGovernance.denyAll")}
               </Button>
             )}
             <DataTable
@@ -107,23 +101,21 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
               rowKey={(offer) => offer.capability_id}
               columns={[
                 {
-                  label: t("rework.skillGovernance.offer"),
+                  label: t("rework.toolGovernance.offer"),
                   cellRenderer: (offer) => (
                     <span className={styles.offerName}>
-                      {offer.descriptor.skill
-                        ? skillPresentation(t, offer.descriptor.skill).title
-                        : t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
+                      {t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
                     </span>
                   ),
                 },
                 {
-                  label: t("rework.skillGovernance.parent"),
+                  label: t("rework.toolGovernance.parent"),
                   cellRenderer: (offer) => (
-                    <span>{t(`rework.skillGovernance.${offer.parent_permitted ? "allowed" : "denied"}`)}</span>
+                    <span>{t(`rework.toolGovernance.${offer.parent_permitted ? "allowed" : "denied"}`)}</span>
                   ),
                 },
                 {
-                  label: t("rework.skillGovernance.local"),
+                  label: t("rework.toolGovernance.local"),
                   cellRenderer: (offer) => (
                     <Checkbox
                       aria-label={offer.descriptor.name}
@@ -146,11 +138,11 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
                   ),
                 },
                 {
-                  label: t("rework.skillGovernance.effective"),
+                  label: t("rework.toolGovernance.effective"),
                   cellRenderer: (offer) => (
                     <span>
                       {t(
-                        `rework.skillGovernance.${!offer.advertised ? "withdrawn" : offer.permitted ? "allowed" : "denied"}`,
+                        `rework.toolGovernance.${!offer.advertised ? "withdrawn" : offer.permitted ? "allowed" : "denied"}`,
                       )}
                     </span>
                   ),

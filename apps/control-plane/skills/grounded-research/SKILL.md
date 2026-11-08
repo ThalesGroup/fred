@@ -1,8 +1,9 @@
 ---
 name: grounded-research
 description: Answer questions that require source research, with traceable evidence and explicit handling of conflicting or incomplete sources.
-argument-hint: "[question] [scope or source constraints]"
-user-invocable: false
+metadata:
+  fred-argument-hint: "[question] [scope or source constraints]"
+  fred-user-invocable: "false"
 ---
 
 # Grounded research

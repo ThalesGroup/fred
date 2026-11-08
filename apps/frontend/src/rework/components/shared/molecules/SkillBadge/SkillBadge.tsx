@@ -10,14 +10,15 @@ import styles from "./SkillBadge.module.css";
 
 interface SkillBadgeProps {
   name: string;
+  spaceName?: string;
   description?: string | null;
   builtin?: boolean;
   onOpen?: (name: string) => void;
 }
 
-export function SkillBadge({ name, description, builtin, onOpen }: SkillBadgeProps) {
+export function SkillBadge({ name, spaceName, description, builtin, onOpen }: SkillBadgeProps) {
   const { t } = useTranslation();
-  const display = skillPresentation(t, { name, description, builtin });
+  const display = skillPresentation(t, { name, description, builtin, space_name: spaceName });
   const hint = skillTooltip(display.title, display.description);
   const content = (
     <>

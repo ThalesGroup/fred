@@ -57,7 +57,18 @@ it("shows a steered user message in the current exchange", () => {
         role: "system",
         channel: "system_note",
         rank: 1,
-        metadata: { extras: { skill_load: { name: "review", origin: "user", load_id: "load" } } },
+        metadata: {
+          extras: {
+            skill_load: {
+              skill_id: "review",
+              space_id: "local",
+              space_name: "",
+              name: "review",
+              origin: "user",
+              load_id: "load",
+            },
+          },
+        },
       }),
       msg({
         role: "assistant",
@@ -128,7 +139,19 @@ describe("explicit skill selection on user turns", () => {
       role: "system",
       channel: "system_note",
       exchange_id,
-      metadata: { extras: { skill_load: { name: "meeting-minutes", origin, load_id: "load", child } } },
+      metadata: {
+        extras: {
+          skill_load: {
+            skill_id: "meeting-minutes",
+            space_id: "local",
+            space_name: "",
+            name: "meeting-minutes",
+            origin,
+            load_id: "load",
+            child,
+          },
+        },
+      },
     });
 
   it("labels a reopened user turn using its user-origin load without a catalog", () => {

@@ -2414,27 +2414,6 @@
                   },
                   "title": "WebResearchDeploymentConfig",
                   "type": "object"
-                },
-                "skills": {
-                  "anyOf": [
-                    {
-                      "description": "Pod skill source; permissions are supplied by Weaver at admission.",
-                      "properties": {
-                        "directory": {
-                          "default": "package",
-                          "minLength": 1,
-                          "title": "Directory",
-                          "type": "string"
-                        }
-                      },
-                      "title": "PodSkillsConfig",
-                      "type": "object",
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 }
               },
               "required": [
@@ -19515,6 +19494,15 @@
                                       "format": "int64",
                                       "type": "integer"
                                     },
+                                    "organization_total_bytes": {
+                                      "default": null,
+                                      "description": "Optional combined ceiling across all storage spaces in an organization.",
+                                      "format": "int64",
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ]
+                                    },
                                     "personal_bytes": {
                                       "default": 5368709120,
                                       "format": "int64",
@@ -19990,6 +19978,15 @@
                                   "default": 5368709120,
                                   "format": "int64",
                                   "type": "integer"
+                                },
+                                "organization_total_bytes": {
+                                  "default": null,
+                                  "description": "Optional combined ceiling across all storage spaces in an organization.",
+                                  "format": "int64",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
                                 },
                                 "personal_bytes": {
                                   "default": 5368709120,
@@ -21793,6 +21790,15 @@
                                       "format": "int64",
                                       "type": "integer"
                                     },
+                                    "organization_total_bytes": {
+                                      "default": null,
+                                      "description": "Optional combined ceiling across all storage spaces in an organization.",
+                                      "format": "int64",
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ]
+                                    },
                                     "personal_bytes": {
                                       "default": 5368709120,
                                       "format": "int64",
@@ -22268,6 +22274,15 @@
                                   "default": 5368709120,
                                   "format": "int64",
                                   "type": "integer"
+                                },
+                                "organization_total_bytes": {
+                                  "default": null,
+                                  "description": "Optional combined ceiling across all storage spaces in an organization.",
+                                  "format": "int64",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
                                 },
                                 "personal_bytes": {
                                   "default": 5368709120,

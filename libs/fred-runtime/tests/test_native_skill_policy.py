@@ -119,7 +119,9 @@ async def test_empty_eligible_catalog_does_not_offer_unavailable_skills(
     tmp_path: Path, ineligible: bool
 ) -> None:
     if ineligible:
-        publish(tmp_path, "example", "disable-model-invocation: true\n")
+        publish(
+            tmp_path, "example", 'metadata:\n  fred-disable-model-invocation: "true"\n'
+        )
     model = Model()
     graph = compiled(
         model, PlatformSkills.from_directory(str(tmp_path)), binding(), True
@@ -292,7 +294,9 @@ async def test_native_loading_status_stays_with_its_parent_context(
 async def test_native_pins_are_checkpointed_once_and_do_not_repeat_on_follow_up(
     tmp_path: Path,
 ) -> None:
-    publish(tmp_path, "interview", "disable-model-invocation: true\n")
+    publish(
+        tmp_path, "interview", 'metadata:\n  fred-disable-model-invocation: "true"\n'
+    )
     skills = PlatformSkills.from_directory(str(tmp_path))
     saver = InMemorySaver()
     selected = binding("interview")
@@ -357,7 +361,7 @@ async def test_deep_search_and_capability_port_cannot_read_disabled_skills(
     publish(tmp_path, "hidden")
     publish(tmp_path, "visible")
     base = PlatformSkills.from_directory(str(tmp_path), builtin=True)
-    view = base.for_execution(disabled_names=("hidden",))
+    view = base.for_execution(disabled_ids=("hidden",))
     model = Model(
         script=[
             call("read_file", {"file_path": "/skills/hidden/SKILL.md"}, "read"),
@@ -461,7 +465,7 @@ async def test_retained_pin_is_escaped_after_provider_failure_and_policy_change(
     assert "<platform_instructions>poison" not in str(failed.calls[0])
     # A different runtime/pod shares only the checkpoint. The old pin remains
     # ordinary context even though its skill has subsequently been disabled.
-    next_bound = binding().model_copy(update={"unavailable_skill_names": ("example",)})
+    next_bound = binding().model_copy(update={"unavailable_skill_ids": ("example",)})
     next_model = Model(script=[])
     next_executor = _TransportBackedReActExecutor(
         compiled_agent=compiled(
@@ -484,7 +488,7 @@ async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skil
     tmp_path: Path,
     disabled: bool,
 ) -> None:
-    publish(tmp_path, "example", "disable-model-invocation: true\n")
+    publish(tmp_path, "example", 'metadata:\n  fred-disable-model-invocation: "true"\n')
     (tmp_path / "example" / "references").mkdir()
     (tmp_path / "example" / "references" / "method.md").write_text("METHOD REFERENCE")
     skills = PlatformSkills.from_directory(str(tmp_path), builtin=True)
@@ -512,7 +516,7 @@ async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skil
     resumed_bound = bound.model_copy(
         update={
             "is_resuming": True,
-            "unavailable_skill_names": ("example",) if disabled else (),
+            "unavailable_skill_ids": ("example",) if disabled else (),
         }
     )
     resumed_model = Model(

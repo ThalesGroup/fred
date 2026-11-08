@@ -516,7 +516,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         );
       mount();
       await act(async () => {
-        await latest.send("notes", "session-1", { skill: { name: "meeting-minutes" } });
+        await latest.send("notes", "session-1", {
+          skill: { name: "meeting-minutes", skill_id: "meeting-minutes", space_id: "local" },
+        });
       });
       const rows = latest.messages.filter((message) => message.channel === "system_note");
       expect(rows).toHaveLength(1);
@@ -524,9 +526,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(rows[0].metadata?.extras).toEqual({ skill_load: load });
       expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).runtime_context.skill).toEqual({
         name: "meeting-minutes",
+        skill_id: "meeting-minutes",
+        space_id: "local",
       });
       expect(latest.messages.find((message) => message.role === "user")?.metadata?.extras?.skill_invocation).toEqual({
         name: "meeting-minutes",
+        skill_id: "meeting-minutes",
+        space_id: "local",
       });
       fetchSpy.mockRestore();
     },

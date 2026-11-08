@@ -34,10 +34,8 @@ const OBSERVATION_TONE: Record<CatalogObservationState, StatusBadgeTone> = {
 export function OrganizationCapabilities({
   organizationId,
   capabilityColumns,
-  kind = "tool",
 }: {
   organizationId: string;
-  kind?: "tool" | "skill";
   capabilityColumns: DataTableColumn<CapabilityInventoryOffer>[];
 }) {
   const { t } = useTranslation();
@@ -101,8 +99,7 @@ export function OrganizationCapabilities({
     {
       label: t(`${prefix}.col.capabilities`),
       size: "1fr",
-      cellRenderer: (pod) =>
-        pod.capabilities.filter((offer) => offer.advertised && offer.descriptor.kind === kind).length,
+      cellRenderer: (pod) => pod.capabilities.filter((offer) => offer.advertised).length,
     },
     {
       label: t("rework.admin.capabilities.col.actions"),
@@ -156,13 +153,6 @@ export function OrganizationCapabilities({
           </Button>
           <span className={styles.capName}>{selectedPod.runtime_id}</span>
         </div>
-        {kind === "skill" && (!selectedPod.skills_supported || selectedPod.skills_availability !== "available") && (
-          <p role="status">
-            {t(
-              `rework.skillGovernance.source.${selectedPod.skills_supported ? selectedPod.skills_availability : "incompatible"}`,
-            )}
-          </p>
-        )}
         {selectedPod.observation === "unavailable" && (
           <p className={styles.statusWarning} role="status">
             {selectedPod.observed_at
@@ -170,10 +160,10 @@ export function OrganizationCapabilities({
               : t(`${prefix}.neverAnsweredHint`)}
           </p>
         )}
-        {selectedPod.capabilities.some((offer) => offer.descriptor.kind === kind) ? (
+        {selectedPod.capabilities.length > 0 ? (
           <DataTable
             columns={capabilityColumns}
-            data={selectedPod.capabilities.filter((offer) => offer.descriptor.kind === kind)}
+            data={selectedPod.capabilities}
             rowKey={(offer) => offer.capability_id}
             size="medium"
           />

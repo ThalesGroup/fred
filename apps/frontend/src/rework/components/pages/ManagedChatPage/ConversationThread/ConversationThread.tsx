@@ -26,7 +26,7 @@ import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswe
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
-import type { SkillSummary } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
@@ -129,10 +129,13 @@ export const ConversationThread = memo(function ConversationThread({
               text={key ? t(key) : msg.text}
               command={msg.command}
               skillNames={msg.skillNames}
-              builtinSkillNames={msg.builtinSkillNames}
+              skillInvocations={msg.skillInvocations}
+              builtinSkillIds={msg.builtinSkillIds}
               skillSummaries={skillSummaries}
               skillName={msg.skillName}
-              skillDescription={msg.skillName ? skillSummaries?.get(msg.skillName)?.description : undefined}
+              skillDescription={
+                msg.skillName ? skillSummaries?.get(msg.skillInvocations?.[0]?.skill_id ?? "")?.description : undefined
+              }
               onOpenSkill={onOpenSkill}
               onOpenCommand={onOpenCommandPrompt}
               attachments={msg.attachments}

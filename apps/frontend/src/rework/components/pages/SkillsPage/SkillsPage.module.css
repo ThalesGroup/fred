@@ -1,0 +1,21 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+  min-width: 0;
+}
+.list {
+  display: grid;
+  gap: var(--spacing-m);
+  padding: 0;
+  list-style: none;
+}
+.list li {
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}

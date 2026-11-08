@@ -1,8 +1,9 @@
 ---
 name: summarize-document
 description: Summarize supplied documents or excerpts faithfully while preserving critical conditions, numbers and uncertainties.
-argument-hint: "[document or excerpt] [audience or purpose]"
-user-invocable: false
+metadata:
+  fred-argument-hint: "[document or excerpt] [audience or purpose]"
+  fred-user-invocable: "false"
 ---
 
 # Faithful document summary

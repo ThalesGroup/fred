@@ -629,10 +629,19 @@ def test_agent_tuning_reads_legacy_reasoning_keys_and_carries_recommendation() -
     "payload,names",
     [
         ({}, []),
-        ({"skill": {"name": "review"}}, ["review"]),
+        (
+            {"skill": {"name": "review", "skill_id": "review", "space_id": "local"}},
+            ["review"],
+        ),
         ({"skills": []}, []),
         (
-            {"skills": [{"name": "review"}, {"name": "mermaid"}, {"name": "review"}]},
+            {
+                "skills": [
+                    {"name": "review", "skill_id": "review", "space_id": "local"},
+                    {"name": "mermaid", "skill_id": "mermaid", "space_id": "local"},
+                    {"name": "review", "skill_id": "review", "space_id": "local"},
+                ]
+            },
             ["review", "mermaid"],
         ),
     ],
@@ -646,11 +655,32 @@ def test_runtime_context_resolves_legacy_and_multiple_skills(payload, names):
 @pytest.mark.parametrize(
     "payload",
     [
-        {"skill": {"name": "review"}, "skills": []},
-        {"skills": [{"name": "review", "body": "FORGED"}]},
-        {"skills": [{"name": "../review"}]},
-        {"skills": [{"name": "review"}, {"name": ""}]},
-        {"skills": {"name": "review"}},
+        {
+            "skill": {"name": "review", "skill_id": "review", "space_id": "local"},
+            "skills": [],
+        },
+        {
+            "skills": [
+                {
+                    "name": "review",
+                    "skill_id": "review",
+                    "space_id": "local",
+                    "body": "FORGED",
+                }
+            ]
+        },
+        {
+            "skills": [
+                {"name": "../review", "skill_id": "../review", "space_id": "local"}
+            ]
+        },
+        {
+            "skills": [
+                {"name": "review", "skill_id": "review", "space_id": "local"},
+                {"name": "", "skill_id": "", "space_id": "local"},
+            ]
+        },
+        {"skills": {"name": "review", "skill_id": "review", "space_id": "local"}},
     ],
 )
 def test_runtime_context_rejects_ambiguous_or_malformed_skills(payload):

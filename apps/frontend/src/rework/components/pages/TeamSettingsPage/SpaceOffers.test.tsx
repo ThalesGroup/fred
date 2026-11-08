@@ -53,20 +53,18 @@ beforeEach(() => {
       permitted_ids: [],
       source_enabled: true,
       reachable: true,
-      skills_supported: true,
-      skills_availability: "available",
       offers: [
         {
-          capability_id: "skill:graph",
+          capability_id: "restricted-tool",
           advertised: true,
           parent_permitted: false,
           permitted: false,
           descriptor: {
-            id: "skill:graph",
+            id: "restricted-tool",
             name: "graph",
             description: "Draw",
             icon: "tune",
-            kind: "skill",
+            kind: "tool",
             version: "1",
           },
         },
@@ -112,7 +110,7 @@ it("starts a local restriction from the effective parent ceiling and current rev
 });
 it("saves explicit empty separately from inheritance and reports a stale edit", async () => {
   h.policies[0].restricted = true;
-  h.policies[0].permitted_ids = ["skill:graph"];
+  h.policies[0].permitted_ids = ["restricted-tool"];
   h.fail = true;
   render();
   const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("denyAll"))!;
@@ -130,6 +128,6 @@ it("distinguishes unavailable source from a saved refusal", () => {
   h.policies[0].restricted = true;
   render();
   expect(container.textContent).toContain("source.unavailable");
-  expect(container.textContent).toContain("rework.skillGovernance.denied");
+  expect(container.textContent).toContain("rework.toolGovernance.denied");
   expect(container.textContent).toContain("graph");
 });

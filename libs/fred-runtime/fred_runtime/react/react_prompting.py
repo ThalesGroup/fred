@@ -419,17 +419,18 @@ def compose_system_prompt(
         render_prompt_block(tag, content)
         for tag, content in zip(_BLOCK_TAGS, contents, strict=True)
     ]
-    selected_skill_names = ", ".join(
-        f"`{selection.name}`" for selection in binding.runtime_context.selected_skills
+    selected_skill_ids = ", ".join(
+        f"`{selection.skill_id}`"
+        for selection in binding.runtime_context.selected_skills
     )
     skill_selection = (
         "\n\nFor this request, the user explicitly requested these platform skills: "
-        f"{selected_skill_names}. Apply the matching catalog procedures before "
+        f"{selected_skill_ids}. Apply the matching catalog procedures before "
         "drafting or using task tools. Read their instructions and required "
         "references with the catalog's declared loading tools unless already "
-        "loaded. These names are skills, not tool or subagent names. If a selected "
-        "name is absent from the catalog, report it as unavailable."
-        if selected_skill_names
+        "loaded. These identifiers refer to skills, not tools or subagents. If a selected "
+        "identity is absent from the catalog, report it as unavailable."
+        if selected_skill_ids
         else ""
     )
     per_turn = (
