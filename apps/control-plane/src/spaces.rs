@@ -591,6 +591,7 @@ pub async fn grant(
     Ok(())
 }
 
+/// Revoke access without deleting space-owned resources or their publications.
 /// A personal space is managed from its organization: its owner's roles can be removed
 /// there, never added, so an organization can always let a member go.
 pub async fn revoke(

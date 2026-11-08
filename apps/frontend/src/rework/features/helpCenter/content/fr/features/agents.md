@@ -22,12 +22,14 @@ capable de chercher dans des documents. Vous obtenez votre propre agent, qui
 appartient à votre équipe et que vous réglez librement. C'est toujours à un
 agent de votre équipe que vous parlez.
 
-## Les quatre réglages
+## Les principaux réglages
 
 - **Les instructions** — les consignes de fond : son rôle, son ton, ses limites.
-  C'est le réglage déterminant ; les autres le complètent.
-- **Les prompts attachés** — des prompts de la bibliothèque qui complètent ces
-  instructions (voir [Les prompts](/help/fr/features/prompts)).
+  C'est le réglage déterminant ; les autres le complètent. Lorsqu'un champ
+  propose la bibliothèque, vous pouvez y copier le texte d'un prompt de
+  l'espace de cet agent. Vous enregistrez cette copie avec l'agent : modifier
+  le prompt source ne met pas à jour ses instructions (voir
+  [Les prompts](/help/fr/features/prompts)).
 - **Les ressources** — les bibliothèques de documents que l'agent peut
   consulter. Sans rattachement, il ne voit aucun document.
 - **Les fonctions** — ce qu'il sait faire au-delà de répondre.

@@ -205,11 +205,11 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{space_id}/prompt-categories/{category_id}",
         "put /spaces/{space_id}/prompts/{prompt_id}/favorite",
         "delete /spaces/{space_id}/prompts/{prompt_id}/favorite",
-        "get /me/prompt-marketplaces",
-        "get /me/prompt-publication-teams",
-        "get /organizations/{organization_id}/published-prompts",
-        "get /organizations/{organization_id}/published-prompts/{prompt_id}",
-        "put /spaces/{space_id}/prompts/{prompt_id}/publication",
+        "get /me/marketplaces",
+        "get /me/prompt-publication-spaces",
+        "get /spaces/{marketplace_space_id}/published-prompts",
+        "get /spaces/{marketplace_space_id}/published-prompts/{prompt_id}",
+        "put /spaces/{space_id}/prompts/{prompt_id}/publications/{marketplace_space_id}",
         "get /spaces/{space_id}/prompts",
         "post /spaces/{space_id}/prompts",
         "get /spaces/{space_id}/prompts/{prompt_id}",
@@ -918,14 +918,14 @@ fn prompt_publication_contract_has_no_snapshot_import_or_usage_fields() {
     let api = schema();
     let schemas = &api["components"]["schemas"];
     assert_eq!(
-        schemas["PromptMetadata"]["properties"]["published"]["type"],
-        "boolean"
+        schemas["PromptMetadata"]["properties"]["published_in"]["type"],
+        "array"
     );
     assert!(
         schemas["PromptMetadata"]["required"]
             .as_array()
             .unwrap()
-            .contains(&json!("published"))
+            .contains(&json!("published_in"))
     );
     assert_eq!(
         schemas["PromptPublicationRequest"]["additionalProperties"],
@@ -944,13 +944,38 @@ fn prompt_publication_contract_has_no_snapshot_import_or_usage_fields() {
     );
     for name in [
         "PublishedPromptPage",
-        "PromptMarketplacePage",
-        "PromptPublicationTeamPage",
+        "MarketplacePage",
+        "PromptPublicationSpacePage",
     ] {
         assert_eq!(schemas[name]["properties"]["items"]["maxItems"], 100);
         assert_eq!(schemas[name]["properties"]["next_cursor"]["format"], "uuid");
     }
+    assert!(
+        schemas["PromptMetadata"]["properties"]
+            .get("published")
+            .is_none()
+    );
+    assert_eq!(
+        schemas["Marketplace"]["properties"]["space_id"]["format"],
+        "uuid"
+    );
+    assert!(
+        schemas["Marketplace"]["properties"]
+            .get("organization_id")
+            .is_none()
+    );
     let paths = api["paths"].as_object().unwrap();
+    for obsolete in [
+        "/me/prompt-marketplaces",
+        "/me/prompt-publication-teams",
+        "/organizations/{organization_id}/published-prompts",
+        "/spaces/{space_id}/prompts/{prompt_id}/publication",
+    ] {
+        assert!(
+            !paths.contains_key(obsolete),
+            "obsolete contract {obsolete}"
+        );
+    }
     assert!(
         !paths
             .keys()

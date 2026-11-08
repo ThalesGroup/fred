@@ -371,8 +371,6 @@ async fn prompts_authorization_admission_and_placement() {
         ),
         ("foreign organization", Some("carol"), team.id, 404, 404),
         ("personal isolation", Some("reader"), personal.id, 403, 403),
-        ("organization placement", Some("alice"), org.id, 400, 400),
-        ("project placement", Some("alice"), project.id, 400, 400),
     ] {
         let catalog = collection(space);
         let item = format!("{catalog}/{id}");
@@ -399,7 +397,12 @@ async fn prompts_authorization_admission_and_placement() {
             }
         }
     }
-    for (actor, space) in [("alice", personal.id), ("carol", foreign.id)] {
+    for (actor, space) in [
+        ("alice", personal.id),
+        ("alice", org.id),
+        ("alice", project.id),
+        ("carol", foreign.id),
+    ] {
         for method in ["GET", "PATCH", "DELETE"] {
             assert_eq!(
                 request(
@@ -477,6 +480,403 @@ async fn prompts_authorization_admission_and_placement() {
             .unwrap(),
         "Original {{unknown}}"
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Project".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    for space in [&org, &team, &project] {
+        grant(&e, space.id, Role::Editor, "alice").await;
+        grant(&e, space.id, Role::Member, "reader").await;
+    }
+    grant(&e, org.id, Role::Member, "team-editor").await;
+    grant(&e, team.id, Role::Editor, "team-editor").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical-admin','organization_admin')")
+        .bind(org.id).execute(&e.pool).await.unwrap();
+    for actor in ["alice", "reader", "team-editor", "technical-admin"] {
+        admit(&e, actor).await;
+    }
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let (status, sources) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        "/me/prompt-publication-spaces",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(sources["items"].as_array().unwrap().len(), 4);
+    for space in [&org, &team, &project, &personal] {
+        let source = sources["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|source| source["id"] == space.id.to_string())
+            .unwrap();
+        assert_eq!(source["marketplace_space_ids"], json!([org.id]));
+    }
+    let mut ids = std::collections::HashSet::new();
+    for space in [&org, &team, &project, &personal] {
+        let catalog = collection(space.id);
+        let categories = format!("/spaces/{}/prompt-categories", space.id);
+        let (status, category) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &categories,
+            json!({"name":"Analysis"}),
+        )
+        .await;
+        assert_eq!(status, 201, "{:?}: {category}", space.kind);
+        let category_path = format!("{categories}/{}", category["id"].as_str().unwrap());
+        let mut body = creation("resume");
+        body["category_id"] = category["id"].clone();
+        let prompt = create(&app, &identity, space.id, body.clone()).await;
+        let id = prompt["prompt_id"].as_str().unwrap();
+        assert!(ids.insert(id.to_owned()));
+        assert_eq!(prompt["space_id"], space.id.to_string());
+        assert_eq!(prompt["published_in"], json!([]));
+        let path = format!("{catalog}/{id}");
+        let favorite = format!("{path}/favorite");
+        for (method, route, body) in [
+            ("GET", &catalog, Value::Null),
+            ("GET", &path, Value::Null),
+            ("GET", &categories, Value::Null),
+            ("POST", &catalog, creation("denied")),
+            ("PUT", &favorite, Value::Null),
+        ] {
+            assert_eq!(
+                request(
+                    &app,
+                    &identity,
+                    Some("technical-admin"),
+                    method,
+                    route,
+                    body
+                )
+                .await
+                .0,
+                403,
+                "admin {method} {route}"
+            );
+        }
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "POST", &catalog, body)
+                .await
+                .0,
+            409
+        );
+        let reader = if space.kind == SpaceKind::Personal {
+            "alice"
+        } else {
+            "reader"
+        };
+        for (method, route, body, expected) in [
+            ("GET", &catalog, Value::Null, 200),
+            ("GET", &path, Value::Null, 200),
+            ("GET", &categories, Value::Null, 200),
+            ("PUT", &favorite, Value::Null, 204),
+        ] {
+            let (status, result) =
+                request(&app, &identity, Some(reader), method, route, body).await;
+            assert_eq!(
+                status, expected,
+                "{:?} {method} {route}: {result}",
+                space.kind
+            );
+            if method == "GET" && route == &catalog {
+                assert_eq!(result["items"].as_array().unwrap().len(), 1);
+                assert_eq!(result["items"][0]["prompt_id"], id);
+            }
+        }
+        let (_, starred) = request(&app, &identity, Some(reader), "GET", &path, Value::Null).await;
+        assert_eq!(starred["is_favorite"], true);
+        assert_eq!(starred["updated_at"], prompt["updated_at"]);
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some(reader),
+                "DELETE",
+                &favorite,
+                Value::Null
+            )
+            .await
+            .0,
+            204
+        );
+        if space.kind != SpaceKind::Personal {
+            for (method, route, body) in [
+                ("POST", &catalog, creation("denied")),
+                ("PATCH", &path, json!({"text":"denied"})),
+                ("DELETE", &path, Value::Null),
+                ("POST", &categories, json!({"name":"Denied"})),
+                ("PATCH", &category_path, json!({"name":"Denied"})),
+                ("DELETE", &category_path, Value::Null),
+            ] {
+                assert_eq!(
+                    request(&app, &identity, Some(reader), method, route, body)
+                        .await
+                        .0,
+                    403,
+                    "{method} {route}"
+                );
+            }
+        }
+        let publication = format!("{path}/publications/{}", org.id);
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("reader"),
+                "PUT",
+                &publication,
+                json!({"published":true})
+            )
+            .await
+            .0,
+            403
+        );
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("technical-admin"),
+                "PUT",
+                &publication,
+                json!({"published":true})
+            )
+            .await
+            .0,
+            403
+        );
+        let marketplace_detail = format!("/spaces/{}/published-prompts/{id}", org.id);
+        for _ in 0..2 {
+            assert_eq!(
+                request(
+                    &app,
+                    &identity,
+                    Some("alice"),
+                    "PUT",
+                    &publication,
+                    json!({"published":true})
+                )
+                .await
+                .0,
+                204
+            );
+        }
+        let (_, public) = request(
+            &app,
+            &identity,
+            Some("reader"),
+            "GET",
+            &marketplace_detail,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(public["text"], prompt["text"]);
+        assert_eq!(public["published_in"], json!([org.id]));
+        assert_eq!(public["updated_at"], prompt["updated_at"]);
+        let (published_by, published_at): (String, chrono::DateTime<chrono::Utc>) = sqlx::query_as(
+            "select published_by,published_at from prompt_publication where prompt_id=$1",
+        )
+        .bind(Uuid::parse_str(id).unwrap())
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+        assert_eq!(published_by, "alice");
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &publication,
+                json!({"published":true})
+            )
+            .await
+            .0,
+            204
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                "select published_at from prompt_publication where prompt_id=$1"
+            )
+            .bind(Uuid::parse_str(id).unwrap())
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+            published_at
+        );
+        if space.kind == SpaceKind::Personal {
+            assert_eq!(
+                request(&app, &identity, Some("reader"), "GET", &path, Value::Null)
+                    .await
+                    .0,
+                403
+            );
+            let secret = create(&app, &identity, space.id, creation("unpublished")).await;
+            assert_eq!(
+                request(
+                    &app,
+                    &identity,
+                    Some("reader"),
+                    "GET",
+                    &format!(
+                        "/spaces/{}/published-prompts/{}",
+                        org.id,
+                        secret["prompt_id"].as_str().unwrap()
+                    ),
+                    Value::Null
+                )
+                .await
+                .0,
+                404
+            );
+        }
+        if space.kind != SpaceKind::Team {
+            for route in [&catalog, &path, &categories] {
+                assert_eq!(
+                    request(
+                        &app,
+                        &identity,
+                        Some("team-editor"),
+                        "GET",
+                        route,
+                        Value::Null
+                    )
+                    .await
+                    .0,
+                    if space.kind == SpaceKind::Organization {
+                        200
+                    } else {
+                        403
+                    }
+                );
+            }
+            assert_eq!(
+                request(
+                    &app,
+                    &identity,
+                    Some("team-editor"),
+                    "PATCH",
+                    &path,
+                    json!({"text":"denied"})
+                )
+                .await
+                .0,
+                403
+            );
+        }
+        let (status, edited) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &path,
+            json!({"text":"Revised", "tags":["analysis"]}),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(edited["text"], "Revised");
+        assert_eq!(edited["tags"], json!(["analysis"]));
+        assert_eq!(edited["category_id"], category["id"]);
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PATCH",
+                &category_path,
+                json!({"name":"Renamed"})
+            )
+            .await
+            .0,
+            200
+        );
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "DELETE",
+                &category_path,
+                Value::Null
+            )
+            .await
+            .0,
+            409
+        );
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "DELETE", &path, Value::Null)
+                .await
+                .0,
+            204
+        );
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "GET", &path, Value::Null)
+                .await
+                .0,
+            404
+        );
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("reader"),
+                "GET",
+                &marketplace_detail,
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "select count(*) from prompt_publication where prompt_id=$1"
+            )
+            .bind(Uuid::parse_str(id).unwrap())
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+            0
+        );
+
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "DELETE",
+                &category_path,
+                Value::Null
+            )
+            .await
+            .0,
+            204
+        );
+    }
 }
 
 #[tokio::test]
@@ -1237,11 +1637,24 @@ async fn publication_uses_current_definition_and_organization_participation() {
     let identity = IdentityServer::start().await;
     let app = app(&e, &identity).await;
     let prompt = create(&app, &identity, team.id, creation("publication")).await;
-    assert_eq!(prompt["published"], false);
+    assert_eq!(prompt["published_in"], json!([]));
     let id = prompt["prompt_id"].as_str().unwrap();
     let private = format!("{}/{id}", collection(team.id));
-    let publication = format!("{private}/publication");
-    let catalog = format!("/organizations/{}/published-prompts", org.id);
+    let publication = format!("{private}/publications/{}", org.id);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("{private}/publications/{}", other.id),
+            json!({"published":true})
+        )
+        .await
+        .0,
+        400
+    );
+    let catalog = format!("/spaces/{}/published-prompts", org.id);
     let detail = format!("{catalog}/{id}");
 
     let (status, page) = request(
@@ -1265,7 +1678,7 @@ async fn publication_uses_current_definition_and_organization_participation() {
             &identity,
             Some(actor),
             "GET",
-            "/me/prompt-marketplaces",
+            "/me/marketplaces",
             Value::Null,
         )
         .await;
@@ -1275,7 +1688,7 @@ async fn publication_uses_current_definition_and_organization_participation() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|item| item["organization_id"] == org.id.to_string()),
+                .any(|item| item["space_id"] == org.id.to_string()),
             expected_marketplace
         );
         let (status, teams) = request(
@@ -1283,7 +1696,7 @@ async fn publication_uses_current_definition_and_organization_participation() {
             &identity,
             Some(actor),
             "GET",
-            "/me/prompt-publication-teams",
+            "/me/prompt-publication-spaces",
             Value::Null,
         )
         .await;
@@ -1381,7 +1794,7 @@ async fn publication_uses_current_definition_and_organization_participation() {
             &identity,
             Some("carol"),
             "GET",
-            &format!("/organizations/{}/published-prompts/{id}", other.id),
+            &format!("/spaces/{}/published-prompts/{id}", other.id),
             Value::Null
         )
         .await
@@ -1459,12 +1872,15 @@ async fn publication_uses_current_definition_and_organization_participation() {
             &identity,
             Some("alice"),
             "PUT",
-            &format!("/spaces/{}/prompts/{personal_id}/publication", personal.id),
+            &format!(
+                "/spaces/{}/prompts/{personal_id}/publications/{}",
+                personal.id, org.id
+            ),
             json!({"published":true})
         )
         .await
         .0,
-        403
+        204
     );
     // Removing the last collective role removes admission, even with old consent.
     sqlx::query("delete from space_role_grant where subject='owner-only'")
@@ -1506,9 +1922,67 @@ async fn publication_uses_current_definition_and_organization_participation() {
         .0,
         404
     );
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Published project".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    grant(&e, project.id, Role::Editor, "alice").await;
+    let project_prompt = create(&app, &identity, project.id, creation("published-project")).await;
+    let project_id = project_prompt["prompt_id"].as_str().unwrap();
+    for route in [
+        &publication,
+        &format!(
+            "/spaces/{}/prompts/{project_id}/publications/{}",
+            project.id, org.id
+        ),
+    ] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                route,
+                json!({"published":true})
+            )
+            .await
+            .0,
+            204
+        );
+    }
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
+    for hidden in [id, project_id] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "GET",
+                &format!("{catalog}/{hidden}"),
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+    }
+    let (_, remaining) =
+        request(&app, &identity, Some("alice"), "GET", &catalog, Value::Null).await;
+    assert!(
+        remaining["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["prompt_id"] != id && row["prompt_id"] != project_id)
+    );
     for actor in ["alice", "technical-only"] {
         let (status, body) = request(
             &app,
@@ -1536,4 +2010,172 @@ async fn publication_uses_current_definition_and_organization_participation() {
         404
     );
     e.pool.close().await;
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn prompts_and_publications_survive_the_authors_departure() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Project".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    for space in [&org, &team, &project] {
+        grant(&e, space.id, Role::Editor, "bob").await;
+        grant(&e, space.id, Role::Editor, "alice").await;
+    }
+    let (personal, _) = spaces::create_personal_space(&e.pool, "bob", org.id)
+        .await
+        .unwrap();
+    for actor in ["alice", "bob"] {
+        admit(&e, actor).await;
+    }
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let mut definitions = Vec::new();
+    for space in [&org, &team, &project, &personal] {
+        let (status, prompt) = request(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &collection(space.id),
+            creation("retained"),
+        )
+        .await;
+        assert_eq!(status, 201, "{prompt}");
+        let id = prompt["prompt_id"].as_str().unwrap();
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("bob"),
+                "PUT",
+                &format!("{}/{id}/publications/{}", collection(space.id), org.id),
+                json!({"published":true})
+            )
+            .await
+            .0,
+            204
+        );
+        definitions.push((space, prompt));
+    }
+    let (status, private) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &collection(personal.id),
+        creation("still-private"),
+    )
+    .await;
+    assert_eq!(status, 201);
+
+    // Use the common revocation path, children first. Departure is not space deletion.
+    for space in [&project, &team, &personal, &org] {
+        spaces::revoke(&e.pool, "alice", space.id, Role::Editor, "bob")
+            .await
+            .unwrap();
+        if space.kind == SpaceKind::Personal {
+            spaces::revoke(&e.pool, "alice", space.id, Role::Member, "bob")
+                .await
+                .unwrap();
+        }
+    }
+    assert!(
+        control_plane::authorization::roles_of(&e.pool, "bob")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    for (space, prompt) in definitions {
+        let id = prompt["prompt_id"].as_str().unwrap();
+        let source = format!("{}/{id}", collection(space.id));
+        let public = format!("/spaces/{}/published-prompts/{id}", org.id);
+        for (method, route, body) in [
+            ("GET", source.as_str(), Value::Null),
+            ("GET", public.as_str(), Value::Null),
+            ("PATCH", source.as_str(), json!({"text":"denied"})),
+            ("DELETE", source.as_str(), Value::Null),
+        ] {
+            let (status, error) = request(&app, &identity, Some("bob"), method, route, body).await;
+            assert!(
+                matches!(status, 403 | 404),
+                "{method} {route}: {status} {error}"
+            );
+        }
+        let (status, published) =
+            request(&app, &identity, Some("alice"), "GET", &public, Value::Null).await;
+        assert_eq!(status, 200, "{published}");
+        assert_eq!(published["text"], prompt["text"]);
+        assert_eq!(published["created_by"], "bob");
+        assert_eq!(published["updated_at"], prompt["updated_at"]);
+        let publisher: String =
+            sqlx::query_scalar("select published_by from prompt_publication where prompt_id=$1")
+                .bind(Uuid::parse_str(id).unwrap())
+                .fetch_one(&e.pool)
+                .await
+                .unwrap();
+        assert_eq!(publisher, "bob");
+        // Existing editors continue managing collective definitions; no personal access is added.
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PATCH",
+                &source,
+                json!({"description":"Maintained"})
+            )
+            .await
+            .0,
+            if space.kind == SpaceKind::Personal {
+                403
+            } else {
+                200
+            }
+        );
+    }
+    let id = private["prompt_id"].as_str().unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!("{}/{id}", collection(personal.id)),
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!("/spaces/{}/published-prompts/{id}", org.id),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("select text from prompt where prompt_id=$1")
+            .bind(Uuid::parse_str(id).unwrap())
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        private["text"].as_str().unwrap()
+    );
 }

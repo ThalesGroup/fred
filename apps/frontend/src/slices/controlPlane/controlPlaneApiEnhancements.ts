@@ -7,10 +7,10 @@ import {
   type PromptSummary,
   type PublishedPromptSummary,
   type PublishedPromptsApiArg,
-  type PromptMarketplace,
-  type PromptPublicationTeam,
-  type PromptPublicationTeamsApiArg,
-  type PromptMarketplacesApiArg,
+  type Marketplace,
+  type PromptPublicationSpace,
+  type PromptPublicationSpacesApiArg,
+  type MarketplacesApiArg,
   type ListPromptsApiArg,
   type ListPromptCategoriesApiArg,
   type ManagedAgentInstanceSummary,
@@ -100,7 +100,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Prompts",
     "PublishedPrompts",
     "PublishedPrompt",
-    "PromptMarketplaces",
+    "Marketplaces",
     "PromptCategories",
     "AgentTemplates",
     "Sessions",
@@ -142,28 +142,28 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
-    promptMarketplaces(endpoint) {
+    marketplaces(endpoint) {
       endpoint.keepUnusedDataFor = 0;
-      endpoint.providesTags = ["PromptMarketplaces"];
-      endpoint.queryFn = catalogQuery<PromptMarketplace, PromptMarketplacesApiArg>(
+      endpoint.providesTags = ["Marketplaces"];
+      endpoint.queryFn = catalogQuery<Marketplace, MarketplacesApiArg>(
         endpoint.query!,
-        (organization) => organization.organization_id,
+        (marketplace) => marketplace.space_id,
       );
       Object.assign(endpoint, { query: undefined });
     },
-    promptPublicationTeams(endpoint) {
+    promptPublicationSpaces(endpoint) {
       endpoint.keepUnusedDataFor = 0;
-      endpoint.providesTags = ["PromptMarketplaces"];
-      endpoint.queryFn = catalogQuery<PromptPublicationTeam, PromptPublicationTeamsApiArg>(
+      endpoint.providesTags = ["Marketplaces"];
+      endpoint.queryFn = catalogQuery<PromptPublicationSpace, PromptPublicationSpacesApiArg>(
         endpoint.query!,
-        (team) => team.id,
+        (space) => space.id,
       );
       Object.assign(endpoint, { query: undefined });
     },
     publishedPrompts(endpoint) {
       endpoint.keepUnusedDataFor = 0;
-      endpoint.providesTags = (_result, _error, { organizationId }) => [
-        { type: "PublishedPrompts", id: organizationId },
+      endpoint.providesTags = (_result, _error, { marketplaceSpaceId }) => [
+        { type: "PublishedPrompts", id: marketplaceSpaceId },
       ];
       endpoint.queryFn = catalogQuery<PublishedPromptSummary, PublishedPromptsApiArg>(
         endpoint.query!,
@@ -173,14 +173,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     publishedPrompt: {
       keepUnusedDataFor: 0,
-      providesTags: (_result, _error, { organizationId }) => [{ type: "PublishedPrompt", id: organizationId }],
-      async onQueryStarted({ organizationId }, { dispatch, queryFulfilled }) {
+      providesTags: (_result, _error, { marketplaceSpaceId }) => [{ type: "PublishedPrompt", id: marketplaceSpaceId }],
+      async onQueryStarted({ marketplaceSpaceId }, { dispatch, queryFulfilled }) {
         try {
           await queryFulfilled;
         } catch {
           // Revalidate previews after a detail refusal. Use a distinct list tag
           // so a missing detail never triggers an endless self-refetch loop.
-          dispatch(enhancedControlPlaneApi.util.invalidateTags([{ type: "PublishedPrompts", id: organizationId }]));
+          dispatch(enhancedControlPlaneApi.util.invalidateTags([{ type: "PublishedPrompts", id: marketplaceSpaceId }]));
         }
       },
     },
@@ -190,7 +190,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_result, _error, { spaceId, promptId }) => [
         "PublishedPrompts",
         "PublishedPrompt",
-        "PromptMarketplaces",
+        "Marketplaces",
         { type: "Prompts", id: spaceId },
         { type: "Prompts", id: `${spaceId}:${promptId}` },
       ],
@@ -555,8 +555,8 @@ export const {
   useSpaceMemberCandidatesQuery,
   useGrantMutation,
   useRevokeMutation,
-  usePromptMarketplacesQuery,
-  usePromptPublicationTeamsQuery,
+  useMarketplacesQuery,
+  usePromptPublicationSpacesQuery,
   usePublishedPromptsQuery,
   usePublishedPromptQuery,
   useSetPromptPublicationMutation,

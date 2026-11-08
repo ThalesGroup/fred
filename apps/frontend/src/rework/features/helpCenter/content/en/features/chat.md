@@ -66,7 +66,11 @@ Rather than retyping a recurring request, insert a saved prompt into the input
 field, then edit it before sending. It is a shortcut for that message, not a
 lasting setting of the conversation.
 
-A prompt carrying a command runs shorter still: type `/` in the input field,
+The panel offers prompts from the conversation's space and, when accessible,
+your personal space in the same organization. It does not offer marketplace
+publications. See [Prompts](/help/en/features/prompts).
+
+To use its command name, type `/` in the input field,
 even when it already contains text: see
 [Commands](/help/en/features/commands).
 

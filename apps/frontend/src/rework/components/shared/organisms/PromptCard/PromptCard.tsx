@@ -37,8 +37,7 @@ export interface PromptCardProps {
   teamName?: string | null;
   /** team variant: caller can edit this team → shows the more-menu. */
   canManage?: boolean;
-  /** team variant: prompt can be published to the marketplace (team prompts
-   *  only — personal-space prompts stay private, so no publish action). */
+  /** Library variant: the server authorizes publication to the selected marketplace. */
   publishable?: boolean;
   /** team variant: prompt is published → storefront chip + "unpublish" action. */
   published?: boolean;

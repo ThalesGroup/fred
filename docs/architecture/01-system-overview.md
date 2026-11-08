@@ -3,6 +3,7 @@
 The [space](00-introduction.md#organizations-teams-and-projects) is a work perimeter, not a
 separate deployment. Fred's components carry its identity and the user's authority
 through each operation. They serve many spaces without merging their access rights.
+The [resource map](06-resources.md) compares ownership, storage and lifecycle boundaries.
 
 **Legend:** 🟦 Fred · 🟨 COTS · 🟪 Extensions · ⬜ Concepts
 

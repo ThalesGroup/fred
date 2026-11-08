@@ -20,11 +20,12 @@ You start from a **template** the platform provides — for example one able to
 search documents. You get your own agent, belonging to your team, which you tune
 freely. You always talk to an agent of your own team.
 
-## The four settings
+## The main settings
 
 - **Instructions** — the substantive brief: its role, its tone, its limits. This
-  is the decisive setting; the others complete it.
-- **Attached prompts** — prompts from the library that complete those
+  is the decisive setting; the others complete it. When a field offers the
+  library, you can copy text from a prompt in that agent's space. You save this
+  copy with the agent: editing the source prompt does not update the
   instructions (see [Prompts](/help/en/features/prompts)).
 - **Resources** — the document libraries the agent may consult. With nothing
   attached, it sees no document at all.

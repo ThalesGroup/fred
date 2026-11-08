@@ -878,7 +878,7 @@
       "title": "Sélectionner un prompt à insérer",
       "spaceLabel": "Espace",
       "space": {
-        "team": "Équipe",
+        "team": "Espace courant",
         "personal": "Mon espace"
       },
       "searchPlaceholder": "Rechercher un prompt...",
@@ -1450,7 +1450,7 @@
       "documentSelectionFailed": "La sélection complète n'a pas pu être chargée. Aucun changement effectué. Réessayez.",
       "notConnected": "Pas encore raccordé à Weaver.",
       "chatUnavailable": "Le chat et l’historique des conversations ne sont pas encore raccordés à Weaver.",
-      "scopeUnavailable": "Cet espace équipe ou personnel est indisponible ou vous n’y avez pas accès.",
+      "scopeUnavailable": "Cet espace est indisponible ou vous n’y avez pas accès.",
       "modelProfile": "Modèle recommandé",
       "modelUnavailable": "La sélection de modèles n'est pas encore raccordée dans ce formulaire. Les réglages enregistrés sont conservés.",
       "legacyModelReselection": "Cet ancien profil est conservé pour diagnostic uniquement. Une re-sélection explicite d'un modèle plateforme est nécessaire ; ce formulaire conserve la référence.",
@@ -2785,6 +2785,7 @@
       "uploadFailedDetail": "Veuillez réessayer dans un instant."
     },
     "home": {
+      "organizationPrompts": "Prompts de l'organisation",
       "title": "Accueil",
       "searchPlaceholder": "Rechercher une équipe",
       "searchClear": "Effacer la recherche",
@@ -2911,7 +2912,7 @@
         "title": "Gérer les catégories",
         "createPlaceholder": "Nouvelle catégorie...",
         "create": "Créer",
-        "empty": "Aucune catégorie pour cet espace.",
+        "empty": "Aucune catégorie dans cet espace pour le moment.",
         "saveAria": "Enregistrer",
         "cancelEditAria": "Annuler",
         "editAria": "Renommer {{name}}",
@@ -3266,7 +3267,7 @@
           "wiki": "Wiki",
           "knowledgeBases": "Bases de connaissance"
         },
-        "teamLabel": "Equipe",
+        "spaceLabel": "Espace",
         "userTeam": "Espace personnel"
       }
     },
@@ -3274,7 +3275,7 @@
       "page": {
         "title": "Auto-test",
         "subtitle": "Chaque famille vérifie un domaine de ce déploiement, avec votre compte, sur les vrais services. Tout ce qu'une exécution crée porte son jeton et est supprimé à la fin.",
-        "durationTitle": "Un run complet prend 5 à 10 minutes",
+        "durationTitle": "Données de test temporaires",
         "durationDescription": "Gardez cet onglet ouvert jusqu'à la fin. Le fermer arrête le run et laisse ses données de test, nommées avec le jeton du run.",
         "runAll": "Tout lancer",
         "copyAll": "Copier le rapport complet"
@@ -3348,7 +3349,11 @@
         },
         "prompts": {
           "title": "Prompts",
-          "subtitle": "Crée une catégorie et un prompt personnel avec une commande, attache le prompt à une conversation et vérifie que l'agent le reçoit, puis qu'une modification atteint la conversation. Vérifie la liste des commandes, les favoris, le renommage d'une catégorie, la liste du marketplace, et qu'un prompt supprimé n'est plus lisible."
+          "subtitle": "Crée une catégorie et un prompt temporaires dans l'espace sélectionné. Vérifie les modifications partielles, les commandes, les favoris, les catégories, la liste du marketplace et le nettoyage. Le serveur décide si les écritures sont autorisées.",
+          "spaceLabel": "Espace du scénario",
+          "spacePlaceholder": "Sélectionnez explicitement un espace",
+          "spaceUnavailable": "Impossible de charger les espaces.",
+          "spaceEmpty": "Aucun espace accessible."
         },
         "web": {
           "title": "Recherche web",
@@ -4052,7 +4057,7 @@
           "confirm": "Supprimer"
         },
         "missingTeam": "Identifiant d'équipe manquant dans l'URL.",
-        "title": "Prompts de l'équipe",
+        "title": "Prompts de l'espace",
         "view": {
           "closeAria": "Fermer",
           "copiedToast": "Copié dans le presse-papier",
@@ -5238,6 +5243,7 @@
       "replicas": "{{ready}}/{{desired}} réplicas prêts"
     },
     "promptPublication": {
+      "marketplace": "Marketplace",
       "noAccess": "Aucun rôle métier actif ne vous donne accès à un catalogue de prompts publiés.",
       "importUnavailable": "L’import n’est pas encore disponible.",
       "title": "Prompts publiés",

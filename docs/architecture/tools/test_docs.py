@@ -77,6 +77,101 @@ class ReferenceChecks(unittest.TestCase):
         )
         self.assertIn("### Connection", docs.schemas("api.json", "Admission"))
 
+    def test_api_inventory_covers_methods_without_parameters_or_schema_prose(self):
+        operations = {
+            method: {
+                "operationId": f"{method}_prompt",
+                "responses": {"200": {"description": "OK"}},
+            }
+            for method in [
+                "get",
+                "post",
+                "put",
+                "patch",
+                "delete",
+                "head",
+                "options",
+                "trace",
+            ]
+        }
+        self.write(
+            "api.json",
+            json.dumps(
+                {
+                    "paths": {"/api/prompts": {"parameters": [], **operations}},
+                    "components": {"schemas": {"Prompt": {"type": "string"}}},
+                }
+            ),
+        )
+        result = docs.openapi("api.json", inventory=True)
+        self.assertIn("Paths are relative to `/api`.", result)
+        for method in operations:
+            self.assertEqual(result.count(f"| {method.upper()} | `/prompts` |"), 1)
+        self.assertNotIn("Schemas", result)
+        self.assertNotIn("### Prompt", result)
+        self.assertIn("### Prompt", docs.openapi("api.json"))
+
+    def test_api_inventory_distinguishes_inherited_public_and_optional_security(self):
+        self.write(
+            "api.json",
+            json.dumps(
+                {
+                    "security": [{"bearer": []}],
+                    "paths": {
+                        f"/api/{name}": {"get": {"operationId": name, **override}}
+                        for name, override in {
+                            "private": {},
+                            "public": {"security": []},
+                            "anonymous": {"security": [{}]},
+                            "optional": {"security": [{}, {"bearer": []}]},
+                        }.items()
+                    },
+                }
+            ),
+        )
+        result = docs.openapi("api.json", inventory=True)
+        for name, status in [
+            ("private", "Required"),
+            ("public", "Public"),
+            ("anonymous", "Public"),
+            ("optional", "Optional"),
+        ]:
+            self.assertIn(f"| GET | `/{name}` | `{name}` | {status} |", result)
+
+    def test_api_inventory_detects_removed_routes_without_rewriting(self):
+        self.write(
+            "api.json",
+            json.dumps(
+                {
+                    "paths": {
+                        "/api/prompts": {"get": {"operationId": "list"}},
+                        "/api/prompts/{id}": {"get": {"operationId": "read"}},
+                    }
+                }
+            ),
+        )
+        chapter = self.write(
+            "reference.md",
+            "<!-- generated: openapi-index api.json -->\n<!-- end generated -->\n",
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            docs.generate(["reference.md"])
+        original = chapter.read_bytes()
+        self.assertEqual(docs.check(["reference.md"]), 0)
+        self.write(
+            "api.json",
+            json.dumps(
+                {
+                    "paths": {
+                        "/api/prompts": {"get": {"operationId": "list"}},
+                    }
+                }
+            ),
+        )
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(docs.check(["reference.md"]), 1)
+        self.assertEqual(chapter.read_bytes(), original)
+
     def test_er_view_omits_external_edges_and_rejects_a_renamed_table(self):
         self.write(
             "schema.mmd",
@@ -135,6 +230,58 @@ class ReferenceChecks(unittest.TestCase):
     def test_navigation_ignores_example_links_in_fenced_code(self):
         self.write("reference.md", "```markdown\n[example](missing.md)\n```\n")
         self.assertEqual(docs.links(["reference.md"]), 0)
+
+    def test_source_map_resolves_symbol_comment_and_relative_line_link(self):
+        self.write(
+            "src/prompts.rs",
+            "// Copyright\n/// Own the definition.\n/// Keep A | B distinct.\n"
+            "pub(super) async fn create<'e>() {}\n",
+        )
+        result = docs.source_map(
+            ["src/prompts.rs::create"], self.root / "docs" / "reference.md"
+        )
+        self.assertIn("(../src/prompts.rs#L4)", result)
+        self.assertIn("Own the definition. Keep A \\| B distinct.", result)
+
+    def test_source_map_refuses_lost_ambiguous_or_undocumented_anchors(self):
+        for source in [
+            "/// Renamed.\nfn renamed() {}\n",
+            "fn create() {}\n",
+            "/// Detached.\n\nfn create() {}\n",
+            "/// A.\nfn create() {}\n/// B.\nfn create() {}\n",
+            "/// Attributes are outside this pilot.\n#[test]\nfn create() {}\n",
+        ]:
+            with self.subTest(source=source):
+                self.write("src/prompts.rs", source)
+                with self.assertRaises(ValueError):
+                    docs.source_map(
+                        ["src/prompts.rs::create"], self.root / "reference.md"
+                    )
+
+    def test_source_map_comment_drift_fails_check_without_rewriting(self):
+        self.write("src/prompts.rs", "/// Original.\nfn create() {}\n")
+        chapter = self.write(
+            "docs/reference.md",
+            "<!-- generated: source-map src/prompts.rs::create -->\n"
+            "<!-- end generated -->\n",
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            docs.generate(["docs/reference.md"])
+        original = chapter.read_bytes()
+        self.assertEqual(docs.check(["docs/reference.md"]), 0)
+        self.assertEqual(docs.links(["docs/reference.md"]), 0)
+        self.write("src/prompts.rs", "/// Changed.\nfn create() {}\n")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(docs.check(["docs/reference.md"]), 1)
+        self.assertEqual(chapter.read_bytes(), original)
+
+    def test_source_map_does_not_claim_to_detect_behavior_drift(self):
+        self.write("src/prompts.rs", "/// Same claim.\nfn create() { old(); }\n")
+        reference = ["src/prompts.rs::create"]
+        chapter = self.root / "reference.md"
+        original = docs.source_map(reference, chapter)
+        self.write("src/prompts.rs", "/// Same claim.\nfn create() { changed(); }\n")
+        self.assertEqual(docs.source_map(reference, chapter), original)
 
 
 if __name__ == "__main__":

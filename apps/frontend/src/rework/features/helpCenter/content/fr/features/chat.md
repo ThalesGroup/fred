@@ -69,7 +69,12 @@ Plutôt que de retaper une demande récurrente, insérez le contenu d'un prompt
 enregistré dans le champ de saisie, puis modifiez-le avant d'envoyer. C'est un
 raccourci pour ce message, pas un réglage durable de la conversation.
 
-Un prompt porteur d'une commande se lance plus court encore : tapez `/` dans le
+Le panneau propose les prompts de l'espace de la conversation et, s'il est
+accessible, de votre espace personnel dans la même organisation. Il ne
+propose pas les publications du marketplace. Voir
+[Les prompts](/help/fr/features/prompts).
+
+Pour utiliser son nom de commande, tapez `/` dans le
 champ de saisie, même s'il contient déjà du texte : voir
 [Les commandes](/help/fr/features/commands).
 

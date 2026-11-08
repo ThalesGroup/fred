@@ -1,11 +1,11 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Space-scoped prompt definitions, validation and persistence. HTTP callers enforce authorization;
+//! Prompt definitions in any space, with shared Read/Write authorization independent of space kind;
 //! writes retain the shared space mutation transaction until commit.
 
 use crate::{
-    domain::{self, SpaceKind},
+    domain,
     error::{AppError, AppResult},
     extract::present,
 };
@@ -61,16 +61,6 @@ pub struct UpdatePromptRequest {
     pub tags: Option<Vec<String>>,
     /// Omitted/null keeps the value; a nonblank string replaces it verbatim.
     pub text: Option<String>,
-}
-
-pub(super) fn require_prompt_space(kind: SpaceKind) -> AppResult<()> {
-    if matches!(kind, SpaceKind::Team | SpaceKind::Personal) {
-        Ok(())
-    } else {
-        Err(AppError::BadRequest(
-            "prompts require a team or personal space".into(),
-        ))
-    }
 }
 
 pub(super) fn validate_logical_name(name: &str) -> AppResult<()> {
@@ -137,7 +127,8 @@ pub(super) fn validate_content(
 pub struct PromptMetadata {
     pub prompt_id: Uuid,
     pub space_id: Uuid,
-    pub published: bool,
+    /// Marketplaces carrying an explicit publication of this definition.
+    pub published_in: Vec<Uuid>,
     /// Immutable space-local identity. The slash command is "/" + logical_name.
     pub logical_name: String,
     pub display_name: String,
@@ -182,7 +173,7 @@ pub(super) async fn list_by_space<'e>(
     actor: &str,
 ) -> sqlx::Result<Vec<PromptSummary>> {
     sqlx::query_as(
-        "select prompt_id, space_id, published, logical_name, display_name, description, category_id, tags,
+        "select prompt_id, space_id, array(select marketplace_space_id from prompt_publication publication where publication.prompt_id=prompt.prompt_id order by marketplace_space_id) as published_in, logical_name, display_name, description, category_id, tags,
             created_at, created_by, updated_at, updated_by, left(text, 240) as text_preview,
             exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $4) as is_favorite
         from prompt where space_id = $1 and logical_name > coalesce($2, '')
@@ -202,7 +193,7 @@ pub(super) async fn get_for_space<'e>(
     prompt_id: Uuid,
     actor: &str,
 ) -> sqlx::Result<Option<Prompt>> {
-    sqlx::query_as("select prompt.*, exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $3) as is_favorite from prompt where space_id = $1 and prompt_id = $2")
+    sqlx::query_as("select prompt.*, array(select marketplace_space_id from prompt_publication publication where publication.prompt_id=prompt.prompt_id order by marketplace_space_id) as published_in, exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $3) as is_favorite from prompt where space_id = $1 and prompt_id = $2")
         .bind(space_id)
         .bind(prompt_id)
         .bind(actor)
@@ -210,6 +201,8 @@ pub(super) async fn get_for_space<'e>(
         .await
 }
 
+/// Insert an independent definition with a new UUID in the authorized destination space.
+/// The HTTP caller supplies the admitted author and holds the space mutation transaction.
 pub(super) async fn create<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space_id: Uuid,
@@ -218,7 +211,7 @@ pub(super) async fn create<'e>(
 ) -> sqlx::Result<Prompt> {
     sqlx::query_as(
         "insert into prompt (prompt_id, space_id, logical_name, display_name, description,
-            text, created_by, category_id, tags) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *, false as is_favorite",
+            text, created_by, category_id, tags) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *, array[]::uuid[] as published_in, false as is_favorite",
     )
     .bind(Uuid::new_v4())
     .bind(space_id)
@@ -242,7 +235,7 @@ pub(super) async fn update<'e>(
 ) -> sqlx::Result<Prompt> {
     sqlx::query_as(
         "update prompt set display_name = $3, description = $4, text = $5, updated_by = $6, category_id = $7, tags = $8
-        where space_id = $1 and prompt_id = $2 returning *,
+        where space_id = $1 and prompt_id = $2 returning *, array(select marketplace_space_id from prompt_publication publication where publication.prompt_id=prompt.prompt_id order by marketplace_space_id) as published_in,
             exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $6) as is_favorite",
     )
     .bind(prompt.metadata.space_id)
@@ -257,6 +250,8 @@ pub(super) async fn update<'e>(
     .await
 }
 
+/// Delete the definition in its owning space; SQL cascades its favorites and publications.
+/// The HTTP caller checks Write permission in the space mutation transaction.
 pub(super) async fn delete<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space_id: Uuid,

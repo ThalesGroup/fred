@@ -7,8 +7,9 @@ icon: bolt
 
 # Commands
 
-A **command** is a shortcut to a prompt, yours or a team's. In a conversation,
-type `/` followed by its name: when you send, the agent receives the prompt's
+A **command** is a shortcut to a prompt from the conversation's space or your
+personal space in the same organization. In a conversation, type `/` followed
+by its name: when you send, the agent receives the prompt's
 text directly, without going through the library.
 
 It pays off on the requests you make over and over: a review, a summary, a
@@ -16,22 +17,22 @@ framed search.
 
 ## Give a prompt a command
 
-On the **Prompts** page, any prompt can carry a command: one short word,
-lowercase, no accents and no spaces: `summary`, `review`, `internal-note`. The
-field sits just under the prompt's title.
+At creation, each prompt receives a required **command name**, unique within
+its space: 1 to 64 lowercase unaccented letters, digits, hyphens or `_`
+characters, without spaces or `/`. For example: `summary`, `review`,
+`internal-note`.
 
-> In your personal space, you can give a command to any of your prompts: it
-> follows you into all your conversations. In a team, it requires the
-> **Editor** role, like creating a prompt; every member of the team can then
-> use it.
+The command name is immutable. Space editors can still edit the title and
+content. To make a variant with a different command, duplicate the prompt
+and choose a new, available name. No suffix is added automatically when a
+name is taken.
 
-A command belongs to one space: two teams can each have their own `/summary`,
-and you can have yours, but inside one team or inside your personal space it
-can only point at a single prompt. A prompt without a command stays usable as
-usual from the library.
-
-When you import a prompt whose command is already taken in the receiving
-space, a suffix is added (`/summary-2`) so both stay reachable.
+The library supports organization, team, project and personal spaces, but
+the `/` menu does not combine all those libraries: it offers the conversation's
+space and, when available, your personal space in the same organization.
+Marketplace publications are not added. Two spaces can each have a `/summary`;
+within one space, that name identifies only one prompt. See
+[Prompts](/help/en/features/prompts).
 
 ## Run a command
 
@@ -45,18 +46,19 @@ with it.
 
 The list comes in three parts, each under its own title:
 
-1. **Team "name of the team"**: the commands of the conversation's team;
-2. **Personal space**: your own commands, offered whatever the agent;
+1. **Team "space name"**: the commands of the conversation's space;
+2. **Personal space**: your commands in the same organization, when that space
+   is accessible;
 3. **Platform skills**: the skills the agent can use.
 
 A part with nothing to offer does not appear. In your personal space, your
 commands are listed once, under **Personal space**. If the commands cannot be
 loaded, the list says so: type `/` again to retry.
 
-If the team and you have a command with the same name, it appears in both
-parts: pick the row you want, and that exact prompt is the one that runs. If
-you type the name without picking a row, the team's command comes first, then
-yours if the team has none.
+If the conversation's space and you have a command with the same name, it
+appears in both parts: pick the row you want, and that exact prompt is the one that runs. If
+you type the name without picking a row, the conversation's space comes first,
+then your personal space if it has none.
 
 - **↓** and **↑** walk the list;
 - **Enter**, **Tab** or a click add the command to your message, without
@@ -132,6 +134,5 @@ A skill's instructions remain valid for the rest of the conversation and apply
 when the request calls for them. They give the agent no additional tool or
 permission.
 
-`/skill` is reserved. An older prompt with that command remains available in the
-library and editable; rename its command to restore its command shortcut. It
-cannot be newly assigned, imported or promoted with the reserved command.
+`/skill` is reserved and cannot be chosen as a prompt command name, either
+when creating or duplicating a prompt.

@@ -1,105 +1,54 @@
 # Fred architecture
 
-A compact explanation of Fred: its user journeys, domain boundaries, security
-rules and runtime interactions. The structure adapts arc42's context, building
-blocks, runtime, cross-cutting concepts and quality views to Fred's domains.
-Start with the introduction and system overview, then read the journeys and
-follow the relevant domain chapter.
+Read the architecture through responsibilities, resources and access boundaries.
+Each rule has one home; journeys illustrate it. Diagrams and matrices carry the
+explanation. Field-level contracts remain in OpenAPI and implementation detail
+stays next to the code.
 
-| Chapter | Reader's question |
+## Reading path
+
+| View | Reader's question |
 | --- | --- |
-| [0. Introduction](00-introduction.md) | What is Fred and what can you build with it? |
-| [1. System overview](01-system-overview.md) | What are Fred's main components? |
-| [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
-| [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
-| [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
-| [2.3. An assistant in a space](02.3-agent-administration.md) | How do authorization, assistant configuration and user's own conversation fit together? |
-| [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
-| [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
-| [5. Documents and knowledge](05-documents.md) | How do drive documents and conversation documents differ, and how are they used? |
-| [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
-| [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
+| [Introduction](00-introduction.md) and [system overview](01-system-overview.md) | What does Fred provide, and which component is responsible? |
+| [Journeys](02-journeys.md) | How do access, documents and an assistant fit together? |
+| [Security](03-security.md) and [organizations/spaces](04-organizations.md) | Where are identity, authority and isolation enforced? |
+| [Resources and prompts](06-resources.md) | What is owned, stored, reused and deleted? |
+| [Documents and knowledge](05-documents.md) | How do stored documents become usable knowledge? |
+| [Operations](08-operations.md) | What does deployment and operation require? |
+| [Quality and invariants](09-quality.md) | What guarantees and evidence support the design? |
 
-Chapter 2 follows people through access, document ingestion and working with an
-assistant. The main chapters explain who acts, which component is responsible and
-what the user experiences. Technical contracts and source references belong in
-the annexes. Validation records live in each lot's PR; remaining work in GitHub issues.
+## Decision tables and generated references
 
-## Find a function
-
-| Question | Canonical explanation | Implementation entry |
-| --- | --- | --- |
-| [Independent platform initialization with shared SSO](03-security.md#independent-platform-initialization) | [Contract and validation scope](A6-security.md#independent-platform-initialization) | `onboarding.rs`, `bootstrap.rs`, `OnboardingGuard`, `BootstrapPage`; [source map](../../apps/control-plane/src/README.md) |
-| Login, CGU, first platform admin | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
-| Organization admin/owner selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-admin-creates-an-organization), [Organizations](04-organizations.md#platform-administration) | Source map rows directory and organizations |
-| Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
-| Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
-| What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |
-| Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
-| Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [typed permission evaluator](A2-manager-contracts.md#permission-storage-and-evaluation) | `migrations/`, `db.rs`, `authorization.rs` in the source map |
-| API endpoints and frontend bindings | [REST API reference](A12-control-plane-api.md), [HTTP surface rules](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
-| Who selects the model, and where do credentials stay? | [Model responsibilities](01-system-overview.md#14-model-decisions-and-credentials), [turn admission](02.3-agent-administration.md#2-configure-an-assistant-for-the-task) | [Generated model reference and source map](A13-models.md) |
-| Why separate pod capability offers, authorization and agent selection? | [Capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use) | [Offer identity, storage and admission](A2-manager-contracts.md#pod-capability-offers) |
-| Startup, schema initialization or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-initialization) | Source map rows schema initialization and local profile |
-| Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
-| Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
-| Draft, revise and export a conversation document | [Bob's report](02.3-agent-administration.md#bob-prepares-a-report-with-his-assistant), [Document concepts](05-documents.md#55-documents-authored-in-a-conversation) | [Conversation-document implementation](A9-documents.md#documents-authored-in-a-conversation) |
-| Generate PowerPoint from a reusable template | [PowerPoint journey](02.3-agent-administration.md#4-generate-a-powerpoint-presentation) | [Data ownership and storage](A9-documents.md#powerpoint-builder-data) |
-
-Follow this map to locate current behavior and its implementation.
-For an audit, trace the named UI consumer through the handler, authorization and
-persistence; record discrepancies rather than treating prose or a test name as proof.
-
-## Technical references
-
-Exact implementation detail is available without making it the main reading path.
-
-| Annex | Reader's question |
+| Reference | Purpose |
 | --- | --- |
-| [A1. Control-plane runtime](A1-manager-runtime.md) | Which dependencies and runtime sequences does the Control Plane rely on? |
-| [A2. Schemas and contracts](A2-manager-contracts.md) | Which HTTP rules, [SQL tables](A2-manager-contracts.md#control-plane-sql-catalogue) and typed permission evaluator back the domain? |
-| [A3. Control-plane operations](A3-manager-operations.md) | How is the Control Plane configured, logged and diagnosed? |
-| [A4. Document journey trace](A4-document-journey.md) | Which code and state does a document upload go through, and how do I inspect it? |
-| [A5. User journey contracts](A5-user-journeys.md) | Which admission, provisioning and folder contracts back the user journeys? |
-| [A6. Security mechanisms](A6-security.md) | How are authentication, consent, authorization and lifecycle enforced? |
-| [A7. Action and role matrix](A7-action-role-matrix.md) | Which role may perform which action, through which entry point? |
-| [A8. Organizations and provisioning](A8-organizations.md) | How are context, placement, membership and retirement resolved? |
-| [A9. Document storage and processing](A9-documents.md) | How are originals stored, processed, published and cleaned up? |
-| [A10. Open issues](A10-open-issues.md) | Which quality questions remain open, and what evidence would settle them? |
-| [A11. Roles](A11-roles.md) | What does each role mean, and where do current permissions differ? |
-| [A12. Control-plane REST API](A12-control-plane-api.md) | Which operations and JSON schemas does the Control Plane expose? |
-| [A13. Model governance and execution](A13-models.md) | Which SQL/configuration contracts connect model policy, turn admission and local credentials? |
+| [Action/role matrices](A7-action-role-matrix.md) and [role definitions](A11-roles.md) | SSI review of permissions, scope and administration boundaries |
+| [REST inventory](A12-control-plane-api.md) | Registered methods, paths and operation names; naming and API consistency |
+| [Storage responsibilities and evidence](A2-manager-contracts.md) | Ownership, SQL catalogue, three prompt anchors and links to checks |
+| [Model governance](A13-models.md) | Source offers, organization policy and trusted admission contracts |
 
-Generated blocks remain tied to source code; they are references, not another
-handwritten API specification.
+## Specialist references
 
-## Convergence with the implementation
+These remain linked for a specific investigation; they are not a second sequential
+reading path. Use the [component documentation](../../apps/control-plane/README.md)
+for commands and the [source map](../../apps/control-plane/src/README.md) to locate code.
 
-The dossier explains implemented behavior and its key design decisions. Code,
-migrations and executable checks provide the implementation evidence; generated
-extracts keep technical references tied to their sources. Plans belong in the
-current issue, with a focused OpenSpec change only when an increment requires it.
+| Subject | References |
+| --- | --- |
+| Runtime and operations | [Runtime](A1-manager-runtime.md), [operations](A3-manager-operations.md) |
+| Security and organizations | [Security mechanisms](A6-security.md), [organizations/provisioning](A8-organizations.md) |
+| Journey evidence | [User journey contracts](A5-user-journeys.md), [document trace](A4-document-journey.md), [storage/processing](A9-documents.md) |
+| Open architectural questions | [Evidence and tradeoffs](A10-open-issues.md) |
 
-## Keeping one useful account
+## Reliability and maintenance
 
-- Explain current behavior and the reason for its boundaries, in the present tense.
-  Describe a rule in its domain chapter; journeys illustrate it and link back.
-- Start persistent domain changes from the business invariant and database schema,
-  then trace transactions, permissions, API contracts and user interactions.
-- Component READMEs contain developer commands. This dossier explains how Fred's
-  parts fit together. An implementation change updates its relevant chapters.
-- Define each invariant once in chapter 9. Tests cite `// Proves: I<n>`; the proof
-  table, route tables, SQL diagram, model and configuration are generated.
-- Run `make -C docs/architecture generate` after source changes and
-  `make -C docs/architecture check` to verify sources, proofs and diagrams.
-- Previous RFCs, Swift docs and OpenSpec records remain in Git history. They do
-  not define the current architecture or authorize restoring retired behavior.
-
-The [shared development workflow](../../AGENTS.md#validation-and-reporting)
-sets review and commit requirements. Only documented behavior belongs in the reading path.
-
-For a repeatable independent review of the Rust reconstruction, use
-[`audit-control-plane`](../../.agents/skills/audit-control-plane/SKILL.md). It checks
-implemented control-plane behavior against this dossier and affected Fred contracts,
-with explicit coverage and exclusions. It does not audit the whole platform or
-treat future migration features as defects.
+- Current implementation contracts, automated checks and deployed acceptance are distinct.
+  Acceptance results belong in the lot PR; outstanding work belongs in its task/issue.
+- `make -C docs/architecture generate-models` updates the SQL diagram, API inventory
+  and selected references. `make -C docs/architecture check-models` checks freshness,
+  links, generator tests and the selected diagrams.
+- Code anchors verify named symbols and their comments, not semantic correctness.
+  Tests establish behavior only when executed; they do not replace application reception.
+- Keep security matrices and useful exceptions. Remove duplicated API fields,
+  function-by-function prose and generated bulk from the reading path.
+- Use the [shared workflow](../../AGENTS.md) for changes. Historical Swift documentation
+  and planned features are not current contracts.

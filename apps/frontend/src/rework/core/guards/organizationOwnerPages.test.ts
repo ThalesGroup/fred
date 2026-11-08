@@ -39,7 +39,6 @@ describe("organizationOwnerPages", () => {
       "/admin/marketplaces",
       "/admin/migration",
       "/admin/corpus-audit",
-      "/admin/self-test",
       "/admin/platform-access",
     ]);
   });

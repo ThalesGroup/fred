@@ -1437,9 +1437,9 @@ describe("ManagedChatPage skill reference preview", () => {
 });
 
 describe("ManagedChatPage slash prompt sources", () => {
-  it("resolves personal prompts in the conversation organization", () => {
+  it.each(["team", "project"] as const)("resolves local and personal prompts in a %s conversation", (kind) => {
     spaces = [
-      { ...SPACES[0], id: "team-1", name: "Finance" },
+      { ...SPACES[0], kind, id: "team-1", name: "Finance" },
       { ...SPACES[1], id: "wrong-org", organization_id: "other" },
       { ...SPACES[1], id: "personal-1" },
     ];

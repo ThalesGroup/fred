@@ -376,10 +376,10 @@ describe("SelfTestPage families", () => {
     expect(fr.rework.selftest.authz.notice.description).toContain("Tout lancer");
   });
 
-  it("announces how long a full run takes, in English and French", () => {
+  it("announces temporary test data, in English and French", () => {
     expect(container.textContent).toContain("rework.selftest.page.durationTitle");
-    expect(en.rework.selftest.page.durationTitle).toBe("A full run takes 5 to 10 minutes");
-    expect(fr.rework.selftest.page.durationTitle).toBe("Un run complet prend 5 à 10 minutes");
+    expect(en.rework.selftest.page.durationTitle).toBe("Temporary test data");
+    expect(fr.rework.selftest.page.durationTitle).toBe("Données de test temporaires");
   });
 
   it("runs every family in order and keeps going after one fails", async () => {

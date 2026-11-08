@@ -12,153 +12,193 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type {
+  CreatePromptApiArg,
+  UpdatePromptApiArg,
+  GetPromptApiArg,
+  DeletePromptApiArg,
+  CreatePromptCategoryApiArg,
+  RenamePromptCategoryApiArg,
+  DeletePromptCategoryApiArg,
+  Prompt,
+  PromptSummary,
+  PromptCategory,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { runStep, SkipStep } from "../step";
-import type { PipelineDeps, Scenario } from "../types";
-import { CONTEXT_PROMPT_MARKER_BASE, PROMPT_PROBE, SELF_TEST_AGENT_ID } from "./corpus";
+import type { Scenario } from "../types";
 import { cleanup, expectRefused, newRunScope } from "./runScope";
 
-export interface PromptsDeps extends PipelineDeps {
-  createPrompt: (args: { name: string; text: string; categoryId?: string; command?: string }) => Promise<string>;
-  updatePrompt: (
-    id: string,
-    args: { name: string; text: string; categoryId?: string; command?: string },
-  ) => Promise<void>;
-  readPrompt: (id: string) => Promise<{ text: string; categoryId: string | null; favorite: boolean }>;
-  setFavorite: (id: string, favorite: boolean) => Promise<void>;
-  listFavorites: () => Promise<string[]>;
-  listCommands: () => Promise<Array<{ promptId: string; command: string }>>;
-  createCategory: (name: string) => Promise<string>;
-  renameCategory: (id: string, name: string) => Promise<void>;
-  listCategories: () => Promise<Array<{ id: string; name: string }>>;
-  deleteCategory: (id: string) => Promise<void>;
-  marketplaceCount: () => Promise<number>;
+export interface PromptsDeps {
+  resolveSpaceId: () => Promise<string>;
+  createPrompt: (args: CreatePromptApiArg) => Promise<Prompt>;
+  updatePrompt: (args: UpdatePromptApiArg) => Promise<Prompt>;
+  readPrompt: (args: GetPromptApiArg) => Promise<Prompt>;
+  deletePrompt: (args: DeletePromptApiArg) => Promise<void>;
+  listPrompts: (spaceId: string) => Promise<PromptSummary[]>;
+  setFavorite: (spaceId: string, promptId: string, favorite: boolean) => Promise<void>;
+  createCategory: (args: CreatePromptCategoryApiArg) => Promise<PromptCategory>;
+  renameCategory: (args: RenamePromptCategoryApiArg) => Promise<PromptCategory>;
+  listCategories: (spaceId: string) => Promise<PromptCategory[]>;
+  deleteCategory: (args: DeletePromptCategoryApiArg) => Promise<void>;
+  marketplaceCount: (spaceId: string) => Promise<number>;
 }
 
-/** Prompts family, in the personal space: the agent echoes the context prompt it receives. */
+/** Validate the library consumed by the composer, without the retired session-context attachment path. */
 export const promptsScenario: Scenario<PromptsDeps> = async (deps, report, signal) => {
   const scope = newRunScope();
-  const firstMarker = scope.name(`${CONTEXT_PROMPT_MARKER_BASE}A`);
-  const secondMarker = scope.name(`${CONTEXT_PROMPT_MARKER_BASE}B`);
-  const promptName = scope.name("fred-selftest-prompt");
-  const command = `selftest-${scope.token.toLowerCase()}`;
-  let agentId: string | null = null;
+  const logicalName = `selftest-${scope.token.toLowerCase()}`;
+  const displayName = scope.name("Self-test prompt");
+  const text = `  Self-test prompt ${scope.token}\nPreserve whitespace.  `;
+  const description = scope.name("Self-test description");
+  const spaceId = await runStep(report, "prompt-space", "Resolve the Weaver prompt space", async () => {
+    signal.throwIfAborted();
+    const id = await deps.resolveSpaceId();
+    return { value: id, detail: id };
+  });
+  if (!spaceId) return;
   let categoryId: string | null = null;
   let promptId: string | null = null;
-  let sessionId: string | null = null;
-
-  const askForPrompts = () => {
-    if (!agentId || !sessionId) throw new SkipStep("agent instance or session missing");
-    return deps.runAgentTurn({ agentInstanceId: agentId, question: PROMPT_PROBE, libraryIds: [], sessionId, signal });
-  };
 
   try {
-    agentId = await runStep(report, "provision-agent", "Provision the self-test agent", async () => {
-      const id = await deps.provisionAgentInstance(SELF_TEST_AGENT_ID, undefined, signal, scope.token);
-      if (!id) throw new SkipStep(`template '${SELF_TEST_AGENT_ID}' is not available on this deployment`);
-      return { value: id, detail: id };
-    });
     await runStep(report, "create-category", "Create a prompt category", async () => {
-      const id = await deps.createCategory(scope.name("Self-test category"));
-      categoryId = id;
-      if (!(await deps.listCategories()).some((c) => c.id === id)) throw new Error("the new category is not listed");
-      return { value: id, detail: id };
-    });
-    await runStep(report, "create-prompt", "Create a personal prompt with a category and a command", async () => {
-      const id = await deps.createPrompt({
-        name: promptName,
-        text: `Self-test context prompt. Delivery marker: ${firstMarker}`,
-        categoryId: categoryId ?? undefined,
-        command,
+      signal.throwIfAborted();
+      const created = await deps.createCategory({
+        spaceId,
+        promptCategoryRequest: { name: scope.name("Self-test category") },
       });
-      promptId = id;
-      const stored = await deps.readPrompt(id);
-      if (categoryId && stored.categoryId !== categoryId) throw new Error("the prompt lost its category");
-      return { value: id, detail: id };
+      categoryId = created.id;
+      if (
+        created.space_id !== spaceId ||
+        !(await deps.listCategories(spaceId)).some((c) => c.id === created.id && c.space_id === spaceId)
+      )
+        throw new Error("the new category is not listed in the scenario space");
+      return { value: created.id, detail: created.id };
     });
-    sessionId = await runStep(report, "create-session", "Create a chat session", async () => {
-      if (!agentId) throw new SkipStep("agent instance missing");
-      const id = await deps.createSession(agentId, scope.token);
-      return { value: id, detail: id };
-    });
-    await runStep(report, "attach-prompt", "Attach the prompt to the session", async () => {
-      if (!sessionId || !promptId) throw new SkipStep("session or prompt missing");
-      await deps.attachSessionPrompts(sessionId, [promptId]);
-      return { value: undefined, detail: `prompt ${promptId} attached to session ${sessionId}` };
-    });
-    await runStep(report, "query-context-prompt", "The attached prompt is delivered to the agent", async () => {
-      const { answer } = await askForPrompts();
-      if (!answer.includes(firstMarker)) throw new Error(`'${firstMarker}' not delivered (${answer.slice(-120)})`);
-      return { value: undefined, detail: "context prompt echoed back" };
-    });
-    await runStep(report, "prompt-update", "An edited prompt is delivered with its new text", async () => {
-      if (!promptId) throw new SkipStep("prompt missing");
-      await deps.updatePrompt(promptId, {
-        name: promptName,
-        text: `Self-test context prompt. Delivery marker: ${secondMarker}`,
-        categoryId: categoryId ?? undefined,
-        command,
-      });
-      const { answer } = await askForPrompts();
-      if (!answer.includes(secondMarker) || answer.includes(firstMarker)) {
-        throw new Error("the session still receives the previous prompt text");
-      }
-      return { value: undefined, detail: "new text echoed back" };
-    });
-    await runStep(report, "prompt-command", "The prompt's command is offered", async () => {
-      if (!promptId) throw new SkipStep("prompt missing");
-      const offered = (await deps.listCommands()).some((c) => c.promptId === promptId && c.command === command);
-      if (!offered) throw new Error(`command '${command}' is not offered`);
-      return { value: undefined, detail: command };
-    });
-    await runStep(report, "favorite", "A prompt can be marked and unmarked as favorite", async () => {
-      if (!promptId) throw new SkipStep("prompt missing");
-      await deps.setFavorite(promptId, true);
-      if (!(await deps.listFavorites()).includes(promptId)) throw new Error("the prompt is not listed as favorite");
-      await deps.setFavorite(promptId, false);
-      if ((await deps.listFavorites()).includes(promptId)) throw new Error("the favorite mark could not be removed");
-      return { value: undefined, detail: "marked, then unmarked" };
-    });
-    await runStep(report, "rename-category", "A category can be renamed", async () => {
+    await runStep(report, "create-prompt", "Create a prompt with a stable identity, category and command", async () => {
+      signal.throwIfAborted();
       if (!categoryId) throw new SkipStep("category missing");
-      const name = scope.name("Self-test category renamed");
-      await deps.renameCategory(categoryId, name);
-      if (!(await deps.listCategories()).some((c) => c.id === categoryId && c.name === name)) {
-        throw new Error("the category kept its old name");
-      }
-      return { value: undefined, detail: name };
+      const created = await deps.createPrompt({
+        spaceId,
+        createPromptRequest: {
+          logical_name: logicalName,
+          display_name: displayName,
+          text,
+          description,
+          tags: [scope.token],
+          category_id: categoryId,
+        },
+      });
+      promptId = created.prompt_id;
+      const stored = await deps.readPrompt({ spaceId, promptId });
+      if (
+        stored.prompt_id !== promptId ||
+        stored.space_id !== spaceId ||
+        stored.logical_name !== logicalName ||
+        stored.display_name !== displayName ||
+        stored.text !== text ||
+        stored.category_id !== categoryId
+      )
+        throw new Error("the stored prompt differs from the created definition or space");
+      return { value: promptId, detail: promptId };
     });
-    await runStep(report, "marketplace", "The prompt marketplace can be read", async () => ({
-      value: undefined,
-      detail: `${await deps.marketplaceCount()} published prompt(s)`,
-    }));
-  } finally {
-    await cleanup(report, "delete-session", "Delete the chat session", sessionId, deps.deleteSession, (id) =>
-      deps.verifyDeleted("session", id),
-    );
-    await cleanup(report, "delete-prompt", "Delete the prompt", promptId, deps.deleteContextPrompt, (id) =>
-      deps.verifyDeleted("prompt", id),
-    );
-    await cleanup(report, "delete-category", "Delete the category", categoryId, deps.deleteCategory, async (id) => {
-      if ((await deps.listCategories()).some((category) => category.id === id))
-        throw new Error(`category ${id} is still listed after deletion`);
+    await runStep(report, "category-in-use", "Refuse deletion of an assigned category", async () => {
+      signal.throwIfAborted();
+      if (!categoryId || !promptId) throw new SkipStep("category or prompt missing");
+      const id = categoryId;
+      const status = await expectRefused(
+        () => deps.deleteCategory({ spaceId, categoryId: id }),
+        "deleting an assigned category",
+        [409],
+      );
+      return { value: undefined, detail: `HTTP ${status}` };
     });
-    await cleanup(report, "delete-agent", "Delete the self-test agent", agentId, deps.deleteAgentInstance, (id) =>
-      deps.verifyDeleted("agent", id),
-    );
     await runStep(
       report,
-      "prompt-gone",
-      "A deleted prompt can no longer be read",
+      "prompt-update",
+      "Edit title and text while preserving omitted fields and command",
       async () => {
-        if (!promptId) throw new SkipStep("no prompt was created");
-        const id = promptId;
-        const status = await expectRefused(() => deps.readPrompt(id), "reading the deleted prompt", [404]);
-        if (categoryId && (await deps.listCategories()).some((c) => c.id === categoryId)) {
-          throw new Error("the deleted category is still listed");
-        }
-        return { value: undefined, detail: `HTTP ${status}` };
+        signal.throwIfAborted();
+        if (!promptId) throw new SkipStep("prompt missing");
+        const editedName = `${displayName} edited`;
+        const editedText = `${text}\nEdited ${scope.token}`;
+        await deps.updatePrompt({
+          spaceId,
+          promptId,
+          updatePromptRequest: { display_name: editedName, text: editedText },
+        });
+        const stored = await deps.readPrompt({ spaceId, promptId });
+        if (
+          stored.prompt_id !== promptId ||
+          stored.space_id !== spaceId ||
+          stored.logical_name !== logicalName ||
+          stored.display_name !== editedName ||
+          stored.text !== editedText ||
+          stored.category_id !== categoryId ||
+          stored.description !== description ||
+          stored.tags.join() !== scope.token
+        )
+          throw new Error("the partial update changed identity, lost omitted fields or retained old text");
+        return { value: undefined, detail: "updated title and full text; identity and omitted fields preserved" };
       },
-      { optional: true },
+    );
+    await runStep(report, "prompt-command", "The immutable logical name supplies the slash command", async () => {
+      signal.throwIfAborted();
+      if (!promptId) throw new SkipStep("prompt missing");
+      const offered = (await deps.listPrompts(spaceId)).some(
+        (prompt) => prompt.prompt_id === promptId && prompt.space_id === spaceId && prompt.logical_name === logicalName,
+      );
+      if (!offered) throw new Error(`command '/${logicalName}' is not offered`);
+      return { value: undefined, detail: `/${logicalName}` };
+    });
+    await runStep(report, "favorite", "The caller can mark and unmark a favorite", async () => {
+      signal.throwIfAborted();
+      if (!promptId) throw new SkipStep("prompt missing");
+      for (const favorite of [true, false]) {
+        await deps.setFavorite(spaceId, promptId, favorite);
+        const listed = (await deps.listPrompts(spaceId)).find((prompt) => prompt.prompt_id === promptId);
+        if (listed?.is_favorite !== favorite || (await deps.readPrompt({ spaceId, promptId })).is_favorite !== favorite)
+          throw new Error("the caller's favorite state differs between the detail and catalog");
+      }
+      return { value: undefined, detail: "marked, then unmarked" };
+    });
+    await runStep(report, "rename-category", "A category can be renamed within its space", async () => {
+      signal.throwIfAborted();
+      if (!categoryId) throw new SkipStep("category missing");
+      const name = scope.name("Self-test category renamed");
+      await deps.renameCategory({ spaceId, categoryId, promptCategoryRequest: { name } });
+      if (
+        !(await deps.listCategories(spaceId)).some(
+          (c) => c.id === categoryId && c.space_id === spaceId && c.name === name,
+        )
+      )
+        throw new Error("the category kept its old name or moved space");
+      return { value: undefined, detail: name };
+    });
+    await runStep(report, "marketplace", "The prompt marketplace can be read", async () => {
+      signal.throwIfAborted();
+      return { value: undefined, detail: `${await deps.marketplaceCount(spaceId)} published prompt(s)` };
+    });
+  } finally {
+    await cleanup(
+      report,
+      "delete-prompt",
+      "Delete the prompt",
+      promptId,
+      (id) => deps.deletePrompt({ spaceId, promptId: id }),
+      async (id) => {
+        await expectRefused(() => deps.readPrompt({ spaceId, promptId: id }), "reading the deleted prompt", [404]);
+      },
+    );
+    await cleanup(
+      report,
+      "delete-category",
+      "Delete the category",
+      categoryId,
+      (id) => deps.deleteCategory({ spaceId, categoryId: id }),
+      async (id) => {
+        if ((await deps.listCategories(spaceId)).some((category) => category.id === id))
+          throw new Error(`category ${id} is still listed after deletion`);
+      },
     );
   }
 };

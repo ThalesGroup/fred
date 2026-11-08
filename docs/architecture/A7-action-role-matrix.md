@@ -29,7 +29,7 @@ to read its Resources. Organization context is derived from committed spaces and
 SQL direct grants, never selected by a request URL or a token group.
 
 The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
-[manager contracts](A2-manager-contracts.md#control-plane-http-surface).
+[the REST inventory](A12-control-plane-api.md).
 
 ## Content actions
 
@@ -49,6 +49,9 @@ have no separate ACL, sharing grant or role inheritance tree.
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
 | Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any published document or pending upload refuses the whole subtree |
 | Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
+| List/read prompts and categories - `GET /spaces/{id}/prompts`, `GET /spaces/{id}/prompts/{prompt_id}`, `GET /spaces/{id}/prompt-categories` | Yes, local | Yes | No | Yes | Owning-space Read; all four space kinds; no author privilege |
+| Create/edit/delete prompts and categories - `POST`, `PATCH`, `DELETE` on the same collections/items | No | Yes | No | No | Owning-space Write; used categories cannot be deleted; an author's departure does not remove another editor's rights |
+| Add/remove a prompt favorite - `PUT`, `DELETE /spaces/{id}/prompts/{prompt_id}/favorite` | Yes, local | Yes | No | Yes | Owning-space Read; changes only the caller's preference, without granting access |
 
 The original Resources UI binds listing, navigation, creation, rename and subtree
 deletion to manager. Its directory response supplies the current write decision;
@@ -56,17 +59,17 @@ each mutation rechecks it. Names are display metadata; paths use immutable UUIDs
 Original upload and individual download use manager; processing controls preserve
 their presentation with processing unavailable in this view.
 
-Organization participation means a direct business role (owner, member, editor or
-analyst) on an active collective space in that organization, with active organization
-and parent. It admits both the personal space and the published-prompt marketplace;
-technical administration alone admits neither. Private prompts still require local
-`Read` (owner alone is excluded). Publication requires local `Write` on a team.
-Invitations do not contribute rights and have no persisted tables.
-`PUT /spaces/{space_id}/prompts/{prompt_id}/publication` uses the shared space
-error order: missing or outside-organization space gives 404, retirement gives
-409 `space_pending_deletion`, and missing local Write gives 403. An organization
-admin alone is in context and receives 403; a retired team gives 409 even to an
-in-context non-editor. A missing prompt still gives 404 after access is checked.
+### Publication audience
+
+| Action | Authority | Boundary |
+| --- | --- | --- |
+| Read published prompts | Active organization participation through a direct business role on an active collective space | Owner, member, editor or analyst; technical Admin alone does not qualify. |
+| Publish / withdraw | Write on the prompt's source space | Only the source organization's marketplace is enabled; no source-library access is granted to its audience. |
+
+Personal-space eligibility uses the same participation predicate. Business roles stay
+local; invitations currently have no persisted grants. [Common refusal ordering](A2-manager-contracts.md#control-plane-http-surface)
+applies; an unsupported publication destination gives 400 after source authorization.
+[Resource ownership](06-resources.md#prompts) defines departure and deletion separately.
 
 ## Consumption reads
 

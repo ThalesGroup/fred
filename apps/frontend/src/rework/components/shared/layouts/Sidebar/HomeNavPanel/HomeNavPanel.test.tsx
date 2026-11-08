@@ -12,10 +12,17 @@ const state = vi.hoisted(() => ({
   teamKind: "team",
   personal: false,
   organization: true,
+  otherOrganization: false,
   fail: false,
+  organizationRead: false,
   navigate: vi.fn(),
   open: vi.fn(),
   refetch: vi.fn(() => ({ unwrap: async () => [{ id: "personal" }, { id: "private-priya" }, { id: "new-personal" }] })),
+}));
+vi.mock("@core/hooks/useSpaceAccess", () => ({
+  useSpaceAccess: (id: string | undefined, permission: string) => ({
+    allowed: (id === "org" || id === "other") && permission === "read" && state.organizationRead,
+  }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
@@ -29,6 +36,18 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useMeQuery: () => ({ data: { user_id: state.user } }),
   useMySpacesQuery: () => {
     const data = [
+      ...(state.otherOrganization
+        ? [
+            {
+              id: "other",
+              kind: "organization",
+              path: ["other"],
+              name: "Other",
+              organization_id: "other",
+              roles: ["member"],
+            },
+          ]
+        : []),
       ...(state.organization
         ? [{ id: "org", kind: "organization", path: ["org"], name: "Demo", organization_id: "org", roles: state.roles }]
         : []),
@@ -75,7 +94,9 @@ afterEach(async () => {
   state.teamKind = "team";
   state.personal = false;
   state.organization = true;
+  state.otherOrganization = false;
   state.fail = false;
+  state.organizationRead = false;
   vi.clearAllMocks();
 });
 const entry = () => node.querySelector<HTMLButtonElement>('button[aria-label="rework.sidebar.team.userTeam"]');
@@ -219,4 +240,38 @@ it("keeps the Home title without an organization", async () => {
   await render();
   expect(node.querySelector("h2")?.textContent).toBe("rework.home.title");
   expect(node.querySelector("h2")?.previousElementSibling).toBeNull();
+});
+
+it("opens organization prompts through the ordinary page only with the server's Read permission", async () => {
+  state.roles = ["organization_admin"];
+  await render();
+  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  state.organizationRead = true;
+  await render();
+  expect(node.querySelector('a[href="/team/org/prompts"]')?.textContent).toContain("rework.home.organizationPrompts");
+  state.fail = true;
+  await render();
+  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+});
+
+it("lets a member choose the organization for both prompt and personal-space access", async () => {
+  state.otherOrganization = true;
+  state.organizationRead = true;
+  state.roles = ["member"];
+  state.open.mockReturnValue({ unwrap: async () => ({ id: "new-personal" }) });
+  await render();
+  expect(node.querySelector('a[href="/team/other/prompts"]')).not.toBeNull();
+  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (el) => el.textContent === "Demo",
+  )!;
+  await act(async () => option.click());
+  expect(node.querySelector('a[href="/team/org/prompts"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/other/prompts"]')).toBeNull();
+  await act(async () => entry()!.click());
+  expect(state.open).toHaveBeenCalledExactlyOnceWith({ createPersonalSpace: { organization_id: "org" } });
+  state.organization = false;
+  await render();
+  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/other/prompts"]')).not.toBeNull();
 });

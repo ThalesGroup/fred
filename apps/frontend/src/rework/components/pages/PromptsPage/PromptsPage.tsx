@@ -30,7 +30,7 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useMySpacesQuery,
-  usePromptPublicationTeamsQuery,
+  usePromptPublicationSpacesQuery,
   usePromptCatalogQuery,
   useListPromptCategoriesQuery,
   useGetPromptQuery,
@@ -45,7 +45,7 @@ import type {
   PromptMetadata,
   PromptSummary,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { agentErrorText, resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
+import { agentErrorText } from "../TeamAgentsPage/weaverAgents";
 import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog";
 import styles from "./PromptsPage.module.scss";
@@ -66,23 +66,42 @@ export default function PromptsPage() {
     ...crossSessionRefreshOptions(false),
     refetchOnMountOrArgChange: true,
   });
-  const publication = usePromptPublicationTeamsQuery(
+  const publication = usePromptPublicationSpacesQuery(
     {},
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(context.refetch, false);
   useRefetchOnWindowFocus(publication.refetch, false);
-  const team = !publication.isError ? publication.currentData?.items.find((item) => item.id === teamId) : undefined;
-  const ordinarySpace = !context.isError ? resolveAgentSpace(context.currentData, teamId) : undefined;
-  const space = ordinarySpace ?? team;
+  const publishingSpace = !publication.isError
+    ? publication.currentData?.items.find(
+        (item) => item.id === teamId || (teamId === "personal" && item.kind === "personal"),
+      )
+    : undefined;
+  const ordinarySpace = !context.isError
+    ? context.currentData?.find((item) => (teamId === "personal" ? item.kind === "personal" : item.id === teamId))
+    : undefined;
+  const space = ordinarySpace ?? publishingSpace;
   if (context.isError) return <ServiceNotice icon="info" title={agentErrorText(context.error, t)} />;
   if (!context.currentData || (!ordinarySpace && !publication.currentData && !publication.isError))
     return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
-  return <SpacePrompts key={space.id} space={space} canPublish={!!team && !publication.isFetching} />;
+  return (
+    <SpacePrompts
+      key={space.id}
+      space={space}
+      marketplaceSpaceId={!publication.isFetching ? publishingSpace?.marketplace_space_ids[0] : undefined}
+    />
+  );
 }
 
-function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind" | "name">; canPublish: boolean }) {
+function SpacePrompts({
+  space,
+  marketplaceSpaceId,
+}: {
+  space: Pick<MySpace, "id" | "kind" | "name">;
+  marketplaceSpaceId?: string;
+}) {
+  const canPublish = !!marketplaceSpaceId;
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -143,7 +162,8 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
   const [viewingId, setViewingId] = useState<string>();
   const [duplicating, setDuplicating] = useState<PromptSummary>();
   const [form, setForm] = useState<CreatePromptRequest>(emptyForm);
-  const [seeded, setSeeded] = useState(false);
+  // Compare edits with the values shown at opening, even if the query refreshes.
+  const [initialForm, setInitialForm] = useState<CreatePromptRequest>();
   const [nameError, setNameError] = useState<string>();
   // Increments on every dialog change, including reopening the same prompt.
   const dialogVersion = useRef(0);
@@ -167,25 +187,26 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
     },
   );
   useEffect(() => {
-    if (mode !== "edit" || seeded || detail.isFetching || detail.isError || !detail.currentData) return;
+    if (mode !== "edit" || initialForm || detail.isFetching || detail.isError || !detail.currentData) return;
     const saved = detail.currentData;
-    setForm({
+    const initial = {
       logical_name: saved.logical_name,
       display_name: saved.display_name,
       description: saved.description,
       category_id: saved.category_id,
       tags: saved.tags,
       text: saved.text,
-    });
-    setSeeded(true);
-  }, [mode, seeded, detail.isFetching, detail.isError, detail.currentData]);
+    };
+    setForm(initial);
+    setInitialForm(initial);
+  }, [mode, initialForm, detail.isFetching, detail.isError, detail.currentData]);
   const close = () => {
     dialogVersion.current++;
     setMode(null);
     setEditingId(undefined);
     setDuplicating(undefined);
     setForm(emptyForm);
-    setSeeded(false);
+    setInitialForm(undefined);
     setNameError(undefined);
   };
   const open = (prompt?: PromptSummary) => {
@@ -223,11 +244,11 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
   const ready =
     Boolean(categoryCatalog.currentData) &&
     !categoryCatalog.isError &&
-    (mode === "create" || (seeded && !detail.isFetching && !detail.isError));
+    (mode === "create" || (!!initialForm && !detail.isFetching && !detail.isError));
   const save = async (confirmed = false) => {
     if (!canManage || busy || !ready || !validName || !validTitle || !validDescription || !validText || !validTags)
       return;
-    if (mode === "edit" && detail.currentData?.published && !confirmed) {
+    if (mode === "edit" && detail.currentData?.published_in.length && !confirmed) {
       const version = dialogVersion.current;
       showConfirmationDialog({
         title: t("rework.teams.prompts.editPublishedDialog.title"),
@@ -241,16 +262,16 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
     }
     const version = dialogVersion.current;
     try {
-      if (mode === "edit" && editingId && detail.currentData) {
+      if (mode === "edit" && editingId && initialForm) {
         await update({
           spaceId,
           promptId: editingId,
           updatePromptRequest: {
-            display_name: form.display_name === detail.currentData.display_name ? undefined : form.display_name,
-            description: form.description === detail.currentData.description ? undefined : form.description || null,
-            category_id: form.category_id === detail.currentData.category_id ? undefined : form.category_id,
-            tags: JSON.stringify(form.tags) === JSON.stringify(detail.currentData.tags) ? undefined : form.tags,
-            text: form.text === detail.currentData.text ? undefined : form.text,
+            display_name: form.display_name === initialForm.display_name ? undefined : form.display_name,
+            description: form.description === initialForm.description ? undefined : form.description || null,
+            category_id: form.category_id === initialForm.category_id ? undefined : form.category_id,
+            tags: JSON.stringify(form.tags) === JSON.stringify(initialForm.tags) ? undefined : form.tags,
+            text: form.text === initialForm.text ? undefined : form.text,
           },
         }).unwrap();
       } else if (mode === "create") {
@@ -266,7 +287,7 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
     }
   };
   const changePublication = (prompt: PromptMetadata, published: boolean) => {
-    if (!canPublish || busy || space.kind !== "team") return;
+    if (!canPublish || busy || !marketplaceSpaceId) return;
     const key = published ? "publishDialog" : "unpublishDialog";
     showConfirmationDialog({
       criticalAction: !published,
@@ -279,6 +300,7 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
           await setPublication({
             spaceId,
             promptId: prompt.prompt_id,
+            marketplaceSpaceId,
             promptPublicationRequest: { published },
           }).unwrap();
           if (live.current) showSuccess({ summary: t(`rework.teams.prompts.${key}.successToast`) });
@@ -364,6 +386,7 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
     <div className={styles.pageContainer}>
       <PageHeader
         title={t(space.kind === "personal" ? "rework.teams.prompts.titlePersonal" : "rework.teams.prompts.title")}
+        subtitle={space.name}
         actions={
           <>
             {offersManage && (
@@ -477,7 +500,7 @@ function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind
               categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
               canManage={offersManage && !busy}
               publishable={canPublish && !busy}
-              published={prompt.published}
+              published={prompt.published_in.length > 0}
               onPublish={() => changePublication(prompt, true)}
               onUnpublish={() => changePublication(prompt, false)}
               onToggleFavorite={canFavorite ? () => void toggleFavorite(prompt) : undefined}

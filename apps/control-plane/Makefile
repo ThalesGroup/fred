@@ -59,6 +59,10 @@ bundle-migration: ## Build only the Nova coexistence provisioning ZIP; no servic
 test-browser: ## Run the real provisioning browser journey and integration regressions (frontend dependencies and Chromium required)
 	$(MAKE) test-integration CARGO_TEST_OPTS="--test browser_provisioning"
 
+.PHONY: test-prompts-browser
+test-prompts-browser: ## Receive prompt journeys and roles in four spaces using the real UI and disposable services
+	CONTROL_PLANE_BROWSER_PROMPTS_ONLY=1 $(MAKE) test-integration CARGO_TEST_OPTS="--test browser_provisioning provisioning_browser_journey"
+
 # Fixed secrets belong only to disposable integration fixtures.
 test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-bootstrap-secret
 test-integration: export FRED_TEST_INFERENCE_CREDENTIAL := synthetic-inference-key

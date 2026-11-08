@@ -95,7 +95,9 @@ editor or analyst) on an active collective space whose organization and parent a
 also active. Participation lets a person open their own personal space and browse
 the organization's published prompts; an admin role alone does neither. Losing the
 last such role closes both accesses without deleting personal data. Private prompts
-require a local content-reading role; publishing requires an editor role on the team.
+require a local content-reading role. Their [ownership and lifecycle](06-resources.md#prompts)
+follow the owning space: creator provenance grants no special rights, departure
+preserves content, and collective-space editors retain their ordinary permissions.
 
 ## 3.4. Rights remain current
 

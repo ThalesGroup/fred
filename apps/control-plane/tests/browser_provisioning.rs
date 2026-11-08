@@ -1,8 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Browser acceptance of the real manager HTTP handlers and Keycloak login.
-//! No control-plane route or prepared root role participates in this journey.
+//! Browser acceptance of real Control Plane HTTP handlers and Keycloak login.
+//! Services and data are disposable; the UI bootstraps the first administrator.
 use control_plane::{api, auth::Authenticator, config::Configuration, keycloak::Directory};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -148,6 +148,9 @@ async fn provisioning_browser_journey() {
         String::from_utf8_lossy(&output.stderr)
     );
     println!("{}", String::from_utf8_lossy(&output.stdout));
+    if std::env::var("CONTROL_PLANE_BROWSER_PROMPTS_ONLY").as_deref() == Ok("1") {
+        return; // Prompt-specific assertions are made against real HTTP in the browser journey.
+    }
     if std::env::var("CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY").as_deref() == Ok("1") {
         assert_eq!(
             sqlx::query_scalar::<_, i64>("select count(*) from document")

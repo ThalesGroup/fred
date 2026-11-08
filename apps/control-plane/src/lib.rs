@@ -40,6 +40,7 @@ pub mod extract;
 pub mod keycloak;
 pub mod lifecycle;
 pub mod logging;
+pub mod marketplaces;
 pub mod model_catalog;
 pub mod onboarding;
 pub mod platform;

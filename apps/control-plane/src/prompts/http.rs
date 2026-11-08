@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    CreatePromptRequest, PAGE_SIZE, Prompt, PromptSummary, UpdatePromptRequest,
-    require_prompt_space, validate_content, validate_logical_name,
+    CreatePromptRequest, PAGE_SIZE, Prompt, PromptSummary, UpdatePromptRequest, validate_content,
+    validate_logical_name,
 };
 
 #[derive(Deserialize)]
@@ -96,8 +96,7 @@ async fn list_prompts(
     ApiPath(space_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<PromptQuery>,
 ) -> AppResult<Json<PromptPage>> {
-    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    require_prompt_space(space.kind)?;
+    authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     if let Some(after) = &query.after {
         validate_logical_name(after)?;
     }
@@ -130,8 +129,7 @@ async fn get_prompt(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, prompt_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<Prompt>> {
-    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    require_prompt_space(space.kind)?;
+    authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     Ok(Json(
         super::get_for_space(&s.pool, space_id, prompt_id, &user.uid)
             .await?
@@ -170,9 +168,8 @@ async fn create_prompt(
         Some(&body.text),
         Some(&mut body.tags),
     )?;
-    let (mut tx, space) =
+    let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    require_prompt_space(space.kind)?;
     let prompt = super::create(&mut *tx, space_id, &body, &user.uid)
         .await
         .map_err(write_error)?;
@@ -211,9 +208,8 @@ async fn update_prompt(
         body.text.as_deref(),
         body.tags.as_mut(),
     )?;
-    let (mut tx, space) =
+    let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    require_prompt_space(space.kind)?;
     // Read after acquiring the shared mutation lock: independent field edits compose.
     let mut current = super::get_for_space(&mut *tx, space_id, prompt_id, &user.uid)
         .await?
@@ -260,9 +256,8 @@ async fn delete_prompt(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, prompt_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<StatusCode> {
-    let (mut tx, space) =
+    let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    require_prompt_space(space.kind)?;
     if !super::delete(&mut *tx, space_id, prompt_id).await? {
         return Err(AppError::NotFound);
     }

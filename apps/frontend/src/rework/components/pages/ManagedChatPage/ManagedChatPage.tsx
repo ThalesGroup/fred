@@ -701,7 +701,6 @@ function ManagedChatContent({
   const commands = useComposerCommands({
     enabled: !chat.executionDisabled,
     skillsEnabled: chat.skillsSupported,
-    promptsEnabled: space.kind !== "project",
     skillCatalog: chat.skills,
     skillsLoading: chat.modelPreparationPending,
     skillsFailed: chat.preparationUnavailable || chat.skillsUnavailable,

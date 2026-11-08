@@ -14,6 +14,7 @@ const platformRoutes = new Set([
   "/admin/organizations",
   "/admin/provisioning",
   "/admin/monitor",
+  "/admin/self-test",
   "/settings",
   "/gcu",
   "/gdpr",

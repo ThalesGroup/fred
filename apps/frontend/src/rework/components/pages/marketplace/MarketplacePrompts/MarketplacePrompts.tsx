@@ -15,7 +15,7 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   usePublishedPromptsQuery,
-  usePromptPublicationTeamsQuery,
+  usePromptPublicationSpacesQuery,
   useSetPromptPublicationMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { PublishedPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -26,46 +26,49 @@ import styles from "./MarketplacePrompts.module.scss";
 export default function MarketplacePrompts() {
   return (
     <PromptMarketplaceScope>
-      {(organizationId) => <OrganizationPrompts key={organizationId} organizationId={organizationId} />}
+      {(marketplaceSpaceId) => <MarketplaceContents key={marketplaceSpaceId} marketplaceSpaceId={marketplaceSpaceId} />}
     </PromptMarketplaceScope>
   );
 }
 
-function OrganizationPrompts({ organizationId }: { organizationId: string }) {
+function MarketplaceContents({ marketplaceSpaceId }: { marketplaceSpaceId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const teamsQuery = usePromptPublicationTeamsQuery(
+  const spacesQuery = usePromptPublicationSpacesQuery(
     {},
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
-  useRefetchOnWindowFocus(teamsQuery.refetch, false);
-  const publishingTeams = teamsQuery.isError
+  useRefetchOnWindowFocus(spacesQuery.refetch, false);
+  const publishingSpaces = spacesQuery.isError
     ? []
-    : (teamsQuery.currentData?.items ?? []).filter((team) => team.organization_id === organizationId);
+    : (spacesQuery.currentData?.items ?? []).filter((space) =>
+        space.marketplace_space_ids.includes(marketplaceSpaceId),
+      );
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [search, setSearch] = useState("");
-  const [activeTeam, setActiveTeam] = useState<string | null>(null);
+  const [activeSpace, setActiveSpace] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string>();
   const catalog = usePublishedPromptsQuery(
-    { organizationId },
+    { marketplaceSpaceId },
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(catalog.refetch, false);
   const prompts = catalog.currentData?.items;
   const [setPublication] = useSetPromptPublicationMutation();
-  const teams = useMemo(() => {
+  const sources = useMemo(() => {
     const byId = new Map<string, { id: string; label: string }>();
-    for (const prompt of prompts ?? []) byId.set(prompt.space_id, { id: prompt.space_id, label: prompt.team_name });
+    for (const prompt of prompts ?? [])
+      byId.set(prompt.space_id, { id: prompt.space_id, label: prompt.source_space_name });
     return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
   }, [prompts]);
   const filtered = (prompts ?? []).filter((prompt) => {
     const query = search.trim().toLowerCase();
     return (
-      (!activeTeam || prompt.space_id === activeTeam) &&
+      (!activeSpace || prompt.space_id === activeSpace) &&
       (!query ||
-        [prompt.display_name, prompt.description, prompt.logical_name, prompt.team_name, ...prompt.tags].some((value) =>
-          value?.toLowerCase().includes(query),
+        [prompt.display_name, prompt.description, prompt.logical_name, prompt.source_space_name, ...prompt.tags].some(
+          (value) => value?.toLowerCase().includes(query),
         ))
     );
   });
@@ -80,6 +83,7 @@ function OrganizationPrompts({ organizationId }: { organizationId: string }) {
           await setPublication({
             spaceId: prompt.space_id,
             promptId: prompt.prompt_id,
+            marketplaceSpaceId,
             promptPublicationRequest: { published: false },
           }).unwrap();
           setViewingId(undefined);
@@ -116,24 +120,24 @@ function OrganizationPrompts({ organizationId }: { organizationId: string }) {
         </div>
       </div>
       <div className={styles.content}>
-        {publishingTeams.length > 0 && (
+        {publishingSpaces.length > 0 && (
           <Select
             size="small"
             compact
             label={t("rework.promptPublication.libraries")}
             placeholder={t("rework.promptPublication.libraries")}
-            options={publishingTeams.map((team) => ({ key: team.id, value: team.id, label: team.name }))}
+            options={publishingSpaces.map((space) => ({ key: space.id, value: space.id, label: space.name }))}
             onChange={(id) => navigate(`/team/${id}/prompts`)}
           />
         )}
 
         <FilterChips
-          options={teams}
-          value={activeTeam}
-          onChange={setActiveTeam}
+          options={sources}
+          value={activeSpace}
+          onChange={setActiveSpace}
           allLabel={t("rework.teams.agents.podFilter.all")}
           maxVisible={4}
-          aria-label={t("rework.manager.kinds.team")}
+          aria-label={t("rework.sidebar.team.spaceLabel")}
         />
         {catalog.isFetching && !catalog.currentData ? (
           <Spinner size={20} />
@@ -148,7 +152,7 @@ function OrganizationPrompts({ organizationId }: { organizationId: string }) {
                 key={prompt.prompt_id}
                 prompt={prompt}
                 variant="marketplace"
-                teamName={prompt.team_name}
+                teamName={prompt.source_space_name}
                 canRemoveFromMarketplace={prompt.can_publish}
                 onView={() => setViewingId(prompt.prompt_id)}
                 onRemoveFromMarketplace={() => remove(prompt)}
@@ -159,7 +163,7 @@ function OrganizationPrompts({ organizationId }: { organizationId: string }) {
       </div>
       <PromptViewDialog
         open={!!viewingId && prompts.some((prompt) => prompt.prompt_id === viewingId)}
-        organizationId={organizationId}
+        marketplaceSpaceId={marketplaceSpaceId}
         promptId={viewingId}
         onClose={() => setViewingId(undefined)}
       />

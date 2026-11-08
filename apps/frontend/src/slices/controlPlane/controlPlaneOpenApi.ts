@@ -330,6 +330,14 @@ const injectedRtkApi = api.injectEndpoints({
     me: build.query<MeApiResponse, MeApiArg>({
       query: () => ({ url: `/control-plane/v1/me` }),
     }),
+    marketplaces: build.query<MarketplacesApiResponse, MarketplacesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/marketplaces`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
     onboardingStatus: build.query<OnboardingStatusApiResponse, OnboardingStatusApiArg>({
       query: () => ({ url: `/control-plane/v1/me/onboarding` }),
     }),
@@ -340,17 +348,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createPersonalSpace,
       }),
     }),
-    promptMarketplaces: build.query<PromptMarketplacesApiResponse, PromptMarketplacesApiArg>({
+    promptPublicationSpaces: build.query<PromptPublicationSpacesApiResponse, PromptPublicationSpacesApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/me/prompt-marketplaces`,
-        params: {
-          after: queryArg.after,
-        },
-      }),
-    }),
-    promptPublicationTeams: build.query<PromptPublicationTeamsApiResponse, PromptPublicationTeamsApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/me/prompt-publication-teams`,
+        url: `/control-plane/v1/me/prompt-publication-spaces`,
         params: {
           after: queryArg.after,
         },
@@ -433,19 +433,6 @@ const injectedRtkApi = api.injectEndpoints({
     organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
     }),
-    publishedPrompts: build.query<PublishedPromptsApiResponse, PublishedPromptsApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/organizations/${queryArg.organizationId}/published-prompts`,
-        params: {
-          after: queryArg.after,
-        },
-      }),
-    }),
-    publishedPrompt: build.query<PublishedPromptApiResponse, PublishedPromptApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/organizations/${queryArg.organizationId}/published-prompts/${queryArg.promptId}`,
-      }),
-    }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision`,
@@ -520,6 +507,19 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     summary: build.query<SummaryApiResponse, SummaryApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/storage` }),
+    }),
+    publishedPrompts: build.query<PublishedPromptsApiResponse, PublishedPromptsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/published-prompts`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    publishedPrompt: build.query<PublishedPromptApiResponse, PublishedPromptApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/published-prompts/${queryArg.promptId}`,
+      }),
     }),
     listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
       query: (queryArg) => ({
@@ -758,7 +758,7 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     setPromptPublication: build.mutation<SetPromptPublicationApiResponse, SetPromptPublicationApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/publication`,
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/publications/${queryArg.marketplaceSpaceId}`,
         method: "PUT",
         body: queryArg.promptPublicationRequest,
       }),
@@ -1331,6 +1331,10 @@ export type ImportBlueprintApiArg = {
 };
 export type MeApiResponse = /** status 200 Success */ Me;
 export type MeApiArg = void;
+export type MarketplacesApiResponse = /** status 200 undefined */ MarketplacePage;
+export type MarketplacesApiArg = {
+  after?: string;
+};
 export type OnboardingStatusApiResponse = /** status 200 undefined */ OnboardingStatus;
 export type OnboardingStatusApiArg = void;
 export type CreatePersonalSpaceApiResponse = /** status 200 Existing personal space */
@@ -1339,12 +1343,8 @@ export type CreatePersonalSpaceApiResponse = /** status 200 Existing personal sp
 export type CreatePersonalSpaceApiArg = {
   createPersonalSpace: CreatePersonalSpace;
 };
-export type PromptMarketplacesApiResponse = /** status 200 undefined */ PromptMarketplacePage;
-export type PromptMarketplacesApiArg = {
-  after?: string;
-};
-export type PromptPublicationTeamsApiResponse = /** status 200 undefined */ PromptPublicationTeamPage;
-export type PromptPublicationTeamsApiArg = {
+export type PromptPublicationSpacesApiResponse = /** status 200 undefined */ PromptPublicationSpacePage;
+export type PromptPublicationSpacesApiArg = {
   after?: string;
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
@@ -1406,16 +1406,6 @@ export type RefreshModelSourceApiArg = {
 export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
 export type OrganizationModelsApiArg = {
   organizationId: string;
-};
-export type PublishedPromptsApiResponse = /** status 200 undefined */ PublishedPromptPage;
-export type PublishedPromptsApiArg = {
-  organizationId: string;
-  after?: string;
-};
-export type PublishedPromptApiResponse = /** status 200 undefined */ PublishedPrompt;
-export type PublishedPromptApiArg = {
-  organizationId: string;
-  promptId: string;
 };
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
@@ -1487,6 +1477,16 @@ export type RevokeApiArg = {
 export type SummaryApiResponse = /** status 200 undefined */ StorageSummary;
 export type SummaryApiArg = {
   id: string;
+};
+export type PublishedPromptsApiResponse = /** status 200 undefined */ PublishedPromptPage;
+export type PublishedPromptsApiArg = {
+  marketplaceSpaceId: string;
+  after?: string;
+};
+export type PublishedPromptApiResponse = /** status 200 undefined */ PublishedPrompt;
+export type PublishedPromptApiArg = {
+  marketplaceSpaceId: string;
+  promptId: string;
 };
 export type ListAgentInstancesApiResponse = /** status 200 undefined */ AgentInstancePage;
 export type ListAgentInstancesApiArg = {
@@ -1685,6 +1685,7 @@ export type SetPromptPublicationApiResponse = unknown;
 export type SetPromptPublicationApiArg = {
   spaceId: string;
   promptId: string;
+  marketplaceSpaceId: string;
   promptPublicationRequest: PromptPublicationRequest;
 };
 export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
@@ -2522,6 +2523,14 @@ export type Me = {
   user_id: string;
   username: string;
 };
+export type Marketplace = {
+  name: string;
+  space_id: string;
+};
+export type MarketplacePage = {
+  items: Marketplace[];
+  next_cursor: string | null;
+};
 export type Acceptance = {
   accepted_at: string;
   version: string;
@@ -2537,19 +2546,11 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type PromptMarketplace = {
-  name: string;
-  organization_id: string;
+export type PromptPublicationSpace = Space & {
+  marketplace_space_ids: string[];
 };
-export type PromptMarketplacePage = {
-  items: PromptMarketplace[];
-  next_cursor: string | null;
-};
-export type PromptPublicationTeam = Space & {
-  organization_id: string;
-};
-export type PromptPublicationTeamPage = {
-  items: PromptPublicationTeam[];
+export type PromptPublicationSpacePage = {
+  items: PromptPublicationSpace[];
   next_cursor: string | null;
 };
 export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
@@ -2781,45 +2782,6 @@ export type OrganizationModelInventory = {
   /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
-export type PromptMetadata = {
-  category_id: string | null;
-  created_at: string;
-  created_by: string;
-  description: string | null;
-  display_name: string;
-  /** Immutable space-local identity. The slash command is "/" + logical_name. */
-  logical_name: string;
-  prompt_id: string;
-  published: boolean;
-  space_id: string;
-  tags: string[];
-  updated_at: string;
-  updated_by: string;
-};
-export type PromptSummary = PromptMetadata & {
-  is_favorite: boolean;
-  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
-  text_preview: string;
-};
-export type PublishedPromptSummary = PromptSummary & {
-  /** Advisory UI decision; writes always recheck the current source-team title. */
-  can_publish: boolean;
-  team_name: string;
-};
-export type PublishedPromptPage = {
-  items: PublishedPromptSummary[];
-  /** Exclusive immutable UUID cursor. Pages are current reads, not a snapshot
-    across requests; restart to see concurrent publications before the cursor. */
-  next_cursor: string | null;
-};
-export type Prompt = PromptMetadata & {
-  is_favorite: boolean;
-  /** Current full text, preserved verbatim. */
-  text: string;
-};
-export type PublishedPrompt = Prompt & {
-  team_name: string;
-};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -2948,6 +2910,46 @@ export type SpaceMember = {
 export type SpaceMembers = {
   items: SpaceMember[];
   next_cursor: string | null;
+};
+export type PromptMetadata = {
+  category_id: string | null;
+  created_at: string;
+  created_by: string;
+  description: string | null;
+  display_name: string;
+  /** Immutable space-local identity. The slash command is "/" + logical_name. */
+  logical_name: string;
+  prompt_id: string;
+  /** Marketplaces carrying an explicit publication of this definition. */
+  published_in: string[];
+  space_id: string;
+  tags: string[];
+  updated_at: string;
+  updated_by: string;
+};
+export type PromptSummary = PromptMetadata & {
+  is_favorite: boolean;
+  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
+  text_preview: string;
+};
+export type PublishedPromptSummary = PromptSummary & {
+  /** Advisory UI decision; writes always recheck the current source-space Write permission. */
+  can_publish: boolean;
+  source_space_name: string;
+};
+export type PublishedPromptPage = {
+  items: PublishedPromptSummary[];
+  /** Exclusive immutable UUID cursor. Pages are current reads, not a snapshot
+    across requests; restart to see concurrent publications before the cursor. */
+  next_cursor: string | null;
+};
+export type Prompt = PromptMetadata & {
+  is_favorite: boolean;
+  /** Current full text, preserved verbatim. */
+  text: string;
+};
+export type PublishedPrompt = Prompt & {
+  source_space_name: string;
 };
 export type ModelOptions = {
   max_tokens?: number | null;
@@ -3681,13 +3683,13 @@ export const {
   useImportBlueprintMutation,
   useMeQuery,
   useLazyMeQuery,
+  useMarketplacesQuery,
+  useLazyMarketplacesQuery,
   useOnboardingStatusQuery,
   useLazyOnboardingStatusQuery,
   useCreatePersonalSpaceMutation,
-  usePromptMarketplacesQuery,
-  useLazyPromptMarketplacesQuery,
-  usePromptPublicationTeamsQuery,
-  useLazyPromptPublicationTeamsQuery,
+  usePromptPublicationSpacesQuery,
+  useLazyPromptPublicationSpacesQuery,
   useMySpacesQuery,
   useLazyMySpacesQuery,
   useMyUsageQuery,
@@ -3707,10 +3709,6 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
-  usePublishedPromptsQuery,
-  useLazyPublishedPromptsQuery,
-  usePublishedPromptQuery,
-  useLazyPublishedPromptQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
@@ -3731,6 +3729,10 @@ export const {
   useRevokeMutation,
   useSummaryQuery,
   useLazySummaryQuery,
+  usePublishedPromptsQuery,
+  useLazyPublishedPromptsQuery,
+  usePublishedPromptQuery,
+  useLazyPublishedPromptQuery,
   useListAgentInstancesQuery,
   useLazyListAgentInstancesQuery,
   useCreateAgentInstanceMutation,

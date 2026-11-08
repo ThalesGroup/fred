@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
 }));
 // RTK keeps the last successful `data` when a refetch fails.
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePromptMarketplacesQuery: () => ({
+  useMarketplacesQuery: () => ({
     currentData: { items: [], next_cursor: null },
     isError: false,
     isLoading: false,
@@ -199,6 +199,7 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
     "/admin/organizations",
     "/admin/provisioning",
     "/admin/monitor",
+    "/admin/self-test",
   ]);
   expect(host.textContent).not.toContain("rework.mainNav.home");
 });

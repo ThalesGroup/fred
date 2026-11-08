@@ -1,1267 +1,143 @@
-# Reference: control-plane schemas and contracts
+# Control Plane contracts and evidence
 
-Exact source-derived references for the organization/team/project implementation.
-Read [Security](03-security.md) and [Organizations](04-organizations.md) for meaning.
-
-Team/project membership reads and candidate eligibility are described in the
-[owner-only management contract](A8-organizations.md#owner-only-team-management).
+The [resource map](06-resources.md) explains ownership and use. This reference
+keeps the storage responsibilities and a few implementation anchors; permissions
+are in the [SSI matrices](A7-action-role-matrix.md), routes in the [REST inventory](A12-control-plane-api.md).
 
 ## control-plane HTTP surface
 
-Health and frontend configuration are public. Other routes require a bearer token
-([security](03-security.md)); business routes also require current personal CGU acceptance
-and a direct role in the target space's organization, as described in
-[Organizations](04-organizations.md#people-in-several-organizations).
-`/me` remains platform-role metadata; `/me/spaces` lists the caller's active spaces
-across their organizations. No organization request parameter
-selects a tenant. Business routes answer a missing or foreign space with 404, then a
-retired one with 409 `space_pending_deletion`, then a missing permission with 403
-([security](A6-security.md#business-authorization-answer)). Authorization probes return
-`allowed: false` for each of these refusals and for a missing document, and 409 for
-an ambiguous context. A role grant answers 422 for an invalid or unknown subject,
-and 503 when the directory is unavailable.
+| Boundary | Contract |
+| --- | --- |
+| Authentication | Public exceptions are marked in the REST inventory; other operations require a bearer token. |
+| Admission | Business routes require current personal terms acceptance when configured. |
+| Space access | Direct organization context, then the permission on the target space; no tenant selected by a token group. |
+| Refusal order | Missing/outside-context space: 404; retired space: 409; missing permission: 403. Authorization probes return a decision instead. |
+| Invalid input | Malformed JSON: 400; invalid typed fields: 422; oversized JSON: 413. Errors do not echo sensitive input. |
 
-`GET /organizations/{organization_id}/agents` reuses runtime discovery after
-`authorization::authorize(..., Manage)` and an organization-kind check. The target must
-belong to an organization where the admitted caller holds a direct role, and be
-active. Organization attachment alone, team/project ownership and platform roles
-confer no access.
-The response contains `AgentEnablement` rows with runtime/template provenance and
-the SQL default enablement for this organization. The UI reuses the existing
-switch and confirmation with organization-scoped messages.
-`PUT /organizations/{organization_id}/agents/{agent_id}/default-on` repeats
-admission and authorization, discovers before locking, then rechecks under the
-existing platform/organization locks. It updates the organization template policy. Activation requires every tool dependency the template
-declares to be enabled by default for the organization on the same pod; the
-check runs under the organization lock, and the first missing one is named in the
-409 refusal.
-Template IDs are UUIDv5, first namespaced by organization/runtime, then template;
-no mutable display name participates. `agent_template_policy` stores organization
-defaults; policy cleanup follows its SQL organization foreign key.
-
-
-The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
-`control-plane`; external-source failure still fails the whole discovery.
-
-<!-- generated: routes apps/control-plane/src/agents.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/organizations/{organization_id}/agents` | `organization_agents` |
-| PUT | `/control-plane/v1/organizations/{organization_id}/agents/{agent_id}/default-on` | `set_organization_agent_default` |
-| GET | `/control-plane/v1/spaces/{space_id}/agent-templates` | `space_agent_templates` |
-<!-- end generated -->
-
-<!-- generated: routes apps/control-plane/src/agent_instances/http.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/spaces/{space_id}/agent-instances` | `list_agent_instances` |
-| POST | `/control-plane/v1/spaces/{space_id}/agent-instances` | `create_agent_instance` |
-| DELETE | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `delete_agent_instance` |
-| GET | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` |
-| PATCH | `/control-plane/v1/spaces/{space_id}/agent-instances/{agent_instance_id}` | `update_agent_instance` |
-<!-- end generated -->
-
-Every error answer is an `ErrorBody` JSON object with `detail` and `code`. An unreadable
-JSON body answers 400 `invalid_json`; path, query or body values that do not match
-their type answer 422 `invalid_fields`; an oversized JSON body answers 413
-`request_too_large`. These rejections use fixed messages that never echo input, and
-the contract declares them on every route that takes parameters or a body.
-
-`POST /me/personal-space` takes `{organization_id}` and returns a `Space`: 201 when it
-creates the caller's personal space, 200 when it reuses it under current authority.
-Another organization than the caller's gives 404; missing eligibility on creation, or
-missing organization or personal read on reuse, gives 403; a personal space without its
-organization link gives 409. An inaccessible existing space is never replaced. `MySpace`
-carries the space's `organization_id` from SQL placement.
-
-<!-- generated: routes apps/control-plane/src/api.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/admin/organizations` | `organization_registry` |
-| POST | `/control-plane/v1/admin/organizations` | `create_organization` |
-| GET | `/control-plane/v1/admin/organizations/candidates` | `search_organization_candidates` |
-| GET | `/control-plane/v1/admin/organizations/{id}` | `get_organization` |
-| PATCH | `/control-plane/v1/admin/organizations/{id}` | `update_organization` |
-| GET | `/control-plane/v1/admin/teams` | `team_registry` |
-| POST | `/control-plane/v1/authorize/document` | `authorize_document` |
-| POST | `/control-plane/v1/authorize/platform` | `authorize_platform` |
-| POST | `/control-plane/v1/authorize/scope` | `authorize_scope` |
-| POST | `/control-plane/v1/authorize/space` | `authorize_space` |
-| POST | `/control-plane/v1/bootstrap/platform-admin` | `bootstrap_platform_admin` |
-| GET | `/control-plane/v1/deletions/{operation_id}` | `deletion_status` |
-| POST | `/control-plane/v1/folders` | `create_folder` |
-| DELETE | `/control-plane/v1/folders/{id}` | `delete_folder` |
-| PATCH | `/control-plane/v1/folders/{id}` | `rename_folder` |
-| GET | `/control-plane/v1/frontend/config` | `frontend_config` |
-| POST | `/control-plane/v1/gcu` | `accept_terms` |
-| GET | `/control-plane/v1/healthz` | `health` |
-| POST | `/control-plane/v1/import-export/import` | `import_blueprint` |
-| GET | `/control-plane/v1/me` | `me` |
-| GET | `/control-plane/v1/me/onboarding` | `onboarding_status` |
-| POST | `/control-plane/v1/me/personal-space` | `create_personal_space` |
-| GET | `/control-plane/v1/me/spaces` | `my_spaces` |
-| POST | `/control-plane/v1/spaces` | `create_space` |
-| DELETE | `/control-plane/v1/spaces/{id}` | `delete_space` |
-| DELETE | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `revoke` |
-| PUT | `/control-plane/v1/spaces/{id}/roles/{role}/{user}` | `grant` |
-| GET | `/control-plane/v1/users/platform-roles` | `list_platform_roles` |
-| DELETE | `/control-plane/v1/users/{user}/platform-roles/{role}` | `revoke_platform_role` |
-| PUT | `/control-plane/v1/users/{user}/platform-roles/{role}` | `grant_platform_role` |
-<!-- end generated -->
-
-
-Original-storage routes use the same router/OpenAPI registration mechanism:
-
-<!-- generated: routes apps/control-plane/src/documents/http.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/document-uploads/{id}` | `receipt` |
-| PUT | `/control-plane/v1/document-uploads/{id}/acknowledgment` | `acknowledge` |
-| DELETE | `/control-plane/v1/documents/{id}` | `delete_document` |
-| GET | `/control-plane/v1/documents/{id}/content` | `content` |
-| POST | `/control-plane/v1/folders/{id}/documents` | `upload` |
-| POST | `/control-plane/v1/folders/{id}/documents/preflight` | `preflight` |
-| GET | `/control-plane/v1/spaces/{id}/document-uploads` | `receipts` |
-| GET | `/control-plane/v1/spaces/{id}/entries` | `entries` |
-| GET | `/control-plane/v1/spaces/{id}/storage` | `summary` |
-<!-- end generated -->
-
-Processing routes share the same generated OpenAPI mechanism. `/documents` routes
-use personal admission and space authority; `/document-processing` routes use the
-strict service-account protocol, then operation and actor checks.
-
-<!-- generated: routes apps/control-plane/src/processing/http.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/document-processing/cleanup` | `cleanup` |
-| POST | `/control-plane/v1/document-processing/cleanup` | `cleaned` |
-| GET | `/control-plane/v1/document-processing/retrievable/{id}` | `retrieval_work` |
-| POST | `/control-plane/v1/document-processing/retrievable/{id}` | `confirm_retrievable` |
-| POST | `/control-plane/v1/document-processing/{id}/abandon` | `abandon` |
-| POST | `/control-plane/v1/document-processing/{id}/claim` | `claim` |
-| POST | `/control-plane/v1/document-processing/{id}/commit` | `commit` |
-| GET | `/control-plane/v1/document-processing/{id}/original` | `original` |
-| POST | `/control-plane/v1/document-processing/{id}/vectors` | `vectors` |
-| GET | `/control-plane/v1/document-processing/{id}/work` | `work` |
-| POST | `/control-plane/v1/document-processing/{id}/writes` | `writes` |
-| GET | `/control-plane/v1/documents/{id}/preview` | `preview` |
-| GET | `/control-plane/v1/documents/{id}/processing` | `history` |
-| POST | `/control-plane/v1/documents/{id}/processing` | `start` |
-| PUT | `/control-plane/v1/documents/{id}/retrievable` | `set_retrievable` |
-<!-- end generated -->
-
-### Organization supervision API
-
-These routes expose aggregate metadata through the existing Control Plane process.
-They require organization attachment, not content read permission. The
-[supervision contract](A8-organizations.md#organization-supervision) defines
-disclosure boundaries, counters, failure behavior and pagination. Wire schemas
-come from [supervision/models.rs](../../apps/control-plane/src/supervision/models.rs)
-through utoipa/OpenAPI and the generated RTK client. The
-[supervision UI](A8-organizations.md#supervision-ui) consumes these two read routes.
-
-<!-- generated: routes apps/control-plane/src/supervision/mod.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/organizations/{organization_id}/supervision` | `organization_supervision` |
-| GET | `/control-plane/v1/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` |
-<!-- end generated -->
+[Authentication and authorization](A6-security.md) explain exceptions and trusted delegation.
 
 ## Control-plane SQL catalogue
 
-This catalogue covers the Rust control-plane's PostgreSQL tables. In the local k3d
-configuration they live in database `fred`, schema `control_plane`; consumers
-read the `cp_read` views installed by `0002_cp_read.sql`. It does not describe
-the private schemas of Keycloak, Temporal or other Fred services.
-
-### Pod capability offers
-
-The [capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use)
-separates pod supply, organization authorization and agent selection. The offer
-key is `(runtime_id, capability_id)`: `runtime_id` identifies a logical pod, not
-a replica. Its version describes the observed offer; it does not combine offers
-from different pods into a global library identity.
-
-Internal catalog storage is defined by the `runtime_*` tables of
-[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
-and [`agents/catalog.rs`](../../apps/control-plane/src/agents/catalog.rs).
-Offerings and template links share the composite runtime/capability key; successful
-replacement and failed observation retain withdrawn or last-known declarations.
-[`agents/inventory.rs`](../../apps/control-plane/src/agents/inventory.rs) connects
-configured sources to organization Manage-protected read/refresh. The pod's complete
-registry advertisement lives in
-[`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py).
-Read uses a consistent SQL snapshot; bounded discovery precedes the authorized
-write transaction. Agent enrollment and chat preparation read live template
-discovery, not this store.
-
-Organization enablement of these offers is defined by table `organization_capability` of
-[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
-and owned by [`agents/enablement.rs`](../../apps/control-plane/src/agents/enablement.rs).
-A row authorizes one `(runtime_id, capability_id)` offer at organization level;
-absence of a row denies it. Team and project restrictions in
-[`0005_pod_skills_and_local_offers.sql`](../../apps/control-plane/migrations/0005_pod_skills_and_local_offers.sql)
-can narrow that ceiling through `space_capability_policy` and
-`space_capability_permission`. `Policy::load_for_space` and `usable` intersect
-organization permission with restrictions on the space's ancestor path. A local
-permission cannot grant an offer denied by the organization. The organization
-grant's foreign key requires an observed offer, and enabling requires the offer
-to be currently advertised. It is SQL configuration,
-not an SQL grant. The organization Capabilities tab reads it within the
-inventory snapshot and writes it in the same authorized transaction as refresh,
-with a `capability.default_changed` audit event when the decision changes.
-`usable_capability_ids` filters agent forms and gates enrollment and capability
-edits. [`select_capabilities`](../../apps/control-plane/src/agent_instances/tuning.rs)
-stores the effective selection and configuration in the agent's tuning, checking
-the template's supported offers. New turn admission calls `require_usable` on
-that saved selection in
-[`resolve_runtime_binding`](../../apps/control-plane/src/agent_instances/runtime.rs).
-Revocation retains the configuration but refuses new turns using the forbidden
-offer; it does not revoke an already admitted turn.
-
-The pod's
-[`build_capability_contexts`](../../libs/fred-runtime/fred_runtime/capabilities/assembly.py)
-assembles only the selected tool capabilities. This contract does not establish
-the policy coverage of every capability-specific HTTP route or the selection
-semantics of skills. Configuration preparation is a separate availability concern.
-
-### Model storage
-
-The [model reference](A13-models.md) provides the generated SQL subgraph,
-configuration fields and the cross-runtime source map.
-
-Model storage has a separate platform admin in
-[`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and the `model_source` and `model_offer` tables of
-[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql).
-Observations and retained offers use `(source_id, upstream_model_id)` and create no
-grants. [`http.rs`](../../apps/control-plane/src/model_catalog/http.rs) supplies
-organization Manage-protected inventory, refresh and policy read/write.
-[`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs) and the `organization_model_*` tables
-store organization choices with expected revision, attribution and composite foreign
-keys. Source approvals remain platform-only. Publication uses the transaction that
-rechecks admission/Manage and fences authorization after HTTP, preserving the M1
-configuration/token fences. Turn admission consumes this policy through the
-[model contract below](#chat-model-preparation-and-turn-admission); saving the policy
-alone does not prove provider connectivity or pod credential provisioning.
-The [initial schema](../../apps/control-plane/migrations/0001_schema.sql)
-includes explicit `organization_model_source` assignments and a durable initialization
-receipt independent of policy deletion. Every permission requires a source assignment;
-unassigned sources are filtered from inventory and admission and refused on writes/refresh. [`initialization.rs`](../../apps/control-plane/src/model_catalog/initialization.rs)
-resolves exact organization names after provisioning and publishes once using the
-shared policy operations. This is implemented with isolated SQL/provider-fixture
-coverage; it is not a claim of a validated k3d/provider journey or Rust inference.
-The schema alone does not initialize an installation: explicit mappings and a
-successful bounded initialization pass are required.
-The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
-defines source approval, payloads, eligibility, errors and concurrency.
-
-The organization Models tab is bound through
-[`OrganizationModels.tsx`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx)
-and the generated Control Plane client. It reads inventory and policy together,
-refreshes discovery on entry as in Swift, and replaces policy with its expected
-revision. Known rows remain visible while discovery runs; the existing Refresh
-action performs the same update without exposing per-source controls.
-Source observations remain distinct from model permission; failed refreshes retain
-existing choices. Discovery retains the provider's boolean `capabilities.reasoning`;
-missing metadata remains unknown. The existing reasoning switch persists an
-organization ceiling on permission rows (`reasoning_enabled`).
-Preparation exposes the corresponding per-model control. The pod combines it with
-the user's explicit per-question choice in its admitted turn context, and enforces
-`reasoning_effort: high` (or omission) at the transport boundary. This UI binding
-still requires functional validation.
-
-Instance model settings reuse `agent_instance.tuning` through
-[`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs)
-and [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs).
-[`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs)
-reuses M2 selection locks and defines the three typed invocation options. The
-[existing resolver](../../apps/control-plane/src/agent_instances/runtime.rs) reads
-policy/catalog/configuration in one snapshot and reads the selected inference
-connection only for trusted delegated or internal admission. Legacy profiles remain diagnostic
-references, never selectable aliases. Control Plane owns the shared selection and effective options. Python and Rust
-execute that admitted decision; browser preparation receives its public projection. [Component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
-define omission/null, known limits, candidate diagnostics and connection visibility.
-
-### Resource identity and conversation placement
-
-The resource schema distinguishes three names with different responsibilities:
-
-| Field | Meaning | Stability |
-| --- | --- | --- |
-| UUID (`agent_instance_id` or `prompt_id`) | Technical identity of one resource; used by stored associations. | Immutable. A promotion creates a different UUID. |
-| `logical_name` | Readable reference within one resource type and deployment space, such as `bid-assistant` or `resume`. A prompt's command is `/` followed by this name. | Immutable once assigned. Unique on `(space_id, logical_name)` in each table. |
-| `display_name` | Human-facing label, such as "Bid assistant". It carries no authority. | Editable without changing identity. Agent display names are unique within their space, ignoring case. |
-
-The agreed role of the logical name is stable references, including future
-agent-to-agent calls, not a globally unique agent address or a permission. A
-reference must still be resolved in an authorized space and converted to its UUID.
-The database accepts exactly 1 to 64 lowercase ASCII characters from `a-z`,
-`0-9`, `_`, `-`, under `C` collation. It rejects noncanonical input rather than
-silently trimming, lowercasing or adding a suffix. The same name can exist in two
-spaces or in the agent and prompt tables. Prompt name `skill` remains reserved
-for the existing slash-command convention. This does not introduce a skill table.
-
-[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
-implements these constraints and makes persisted agent references and authors mandatory.
-The unique index on `(space_id, lower(display_name))` means two agents in one
-space cannot share a display name, including case variants. The API trims surrounding
-whitespace on creation and rename. The same display name is allowed in different
-spaces. Prompts still require an explicit logical name.
-
-The agent creation API accepts an omitted or null `logical_name`.
-[`agent_instances::create`](../../apps/control-plane/src/agent_instances.rs)
-generates `agent-` followed by the new instance UUID's 32 lowercase hexadecimal
-digits, independently of the display name. Explicit references retain the same
-validation and are persisted unchanged. Both forms use the existing SQL uniqueness
-constraint; a collision returns `409 agent_name_conflict`, without replacing a row
-or silently changing the requested reference. Renaming never changes either identity.
-A display-name conflict also returns `409 agent_name_conflict`, on creation or rename.
-A copy submitted through creation must choose an available display name and omit
-the source UUID and logical reference to receive new ones.
-There is no dedicated Weaver agent-copy endpoint. The provisioning
-ZIP does not import agents; catalog template identities remain independent of instance
-references. Logical-name resolution for agent-to-agent calls is not exposed by this API.
-
-Each table holds one current definition. Promoting it means inserting an independent
-row in another space, not maintaining a source link or synchronizing later edits.
-Prompts store current text verbatim, with no template interpretation in SQL.
-Creation initializes the last-edit timestamp and author from creation metadata.
-A changed definition receives a database timestamp and the authenticated author
-supplied by the writer; no-op updates preserve both. SQL cannot authenticate that
-author. Subject strings do not reference the observed `user_identity` cache.
-Agent creation and edits require an author. Prompt deletion follows definitive
-space purge; agent deletion remains explicit in the existing lifecycle cleanup.
-
-`session_metadata.space_id` is the conversation's immutable space.
-`agent_space_id` records the associated agent's deployment space, independently.
-At insertion the agent must exist, its template/runtime must match, and both spaces
-must belong to the same organization. Shared row locks hold those facts through
-the inserting transaction. The session owner and association cannot subsequently
-change. There is deliberately no permanent foreign key to the agent or deployment
-space: their deletion preserves the conversation and its association facts.
-For an old session whose agent is already gone, `agent_space_id` stays unknown.
-The attachment foreign key `(session_id, space_id)` continues to refer to the
-conversation space.
-
-The current session/runtime handlers still use the conversation space to look up
-the agent. They require adaptation before cross-space use is exposed. Existing
-revision columns and revision-mismatch refusal also remain; removing that refusal
-and reading the current definition at each new turn is a separate application
-change. An already admitted turn keeps its fixed context.
-[`resource_schema.rs`](../../apps/control-plane/tests/resource_schema.rs) verifies
-the SQL guarantees; it does not establish end-to-end validation of those journeys.
-
-### Chat model preparation and turn admission
-
-Companion to [Bob's first exchange](02.3-agent-administration.md). Model identity is
-`(source_id, upstream_model_id)`, not a display name or pod-local profile. A source's
-inventory, discovered or declared by the platform, supplies observations; the
-organization's policy supplies permission. The retained
-instance recommendation and organization default are optional.
-
-| Selection step | Rule |
-| --- | --- |
-| Explicit chat choice | Used first, subject to permission and candidate checks. |
-| Instance recommendation | Used only when the chat supplies no choice. |
-| Organization default | Used only when neither choice nor recommendation is present. |
-| No selection | Refuse with a diagnostic; do not pick the first available offer. |
-
-A missing or forbidden selected offer cannot trigger substitution. An approved
-fallback applies only to confirmed withdrawal without another disqualifying
-condition, and must itself be permitted and a candidate within the same source
-and approved provisioning account. Failed discovery alone
-is not withdrawal: an existing candidate may remain usable, while new administrative selection
-writes require successful observation at the current source revision. A retained
-legacy profile requires explicit offer re-selection unless a recommendation exists.
-
-**Browser preparation.**
-[`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs)
-accepts paired `model_source_id` / `model_upstream_id` query parameters, a requested
-`reasoning` flag and an optional registered `session_id`. It verifies space, instance, template and session
-access, then evaluates the model facts already read in its transaction.
-`ExecutionPreparation` returns `model_choice`, nullable `model_error` and a public
-`inference` selection alongside the offers, controls and approved runtime URLs. A readable response may be HTTP 200
-with an unusable model choice: callers must check the diagnostic before sending.
-Capability routes are derived from the approved public base.
-No inference connection or secret is exposed in this browser response.
-
-[`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs),
-`decide`, distinguishes `selection_missing`, `reselection_required`,
-`offer_unknown`, `offer_forbidden`, `offer_unavailable` and `fallback_unavailable`.
-These are safe fixed messages. Preparation does not verify pod-local credentials
-or make an inference request.
-
-**Turn admission.** The browser sends canonical `runtime_context.space_id` and
-its requested model choice to Agent Pod. It does not invent a `team_id` to establish
-authority. The pod obtains a fresh trusted binding from Control Plane; it does not
-reuse browser preparation as a grant. Control Plane's same `decide` function fixes
-the selected model, effective options and revisions. Python's `TurnAuthority` and
-[Rust execution library](../../libs/fred-rust-agent/README.md) retain this
-context through the turn. Both verify the binding, destination and authentication
-against local provisioning before resolving a credential. The
-[connection](../../apps/control-plane/README.md#inference-connection) separates protocol,
-address and authentication. Python implements all its forms on one path, tested only on a
-simulated transport, and Ralph accepts only `openai_chat`, `standard` and `api_key`.
-The [security annex](A6-security.md#managed-agent-turn-authority) describes identity,
-conversation binding and the turn boundary. No per-LLM-call authority refresh is
-added. This implementation contract does not establish Ralph selector availability
-or k3d/provider validation; rotation and current runtime limits are documented in
-the [component README](../../apps/control-plane/README.md#workload-provisioning-and-rotation).
-
-**UI consumers.** The generated
-[`Control Plane client`](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
-is consumed by
-[`useChatSse`](../../apps/frontend/src/rework/core/hooks/useChatSse.ts) and
-[`useManagedChat`](../../apps/frontend/src/rework/components/pages/ManagedChatPage/useManagedChat.ts).
-The chat binds the preparation diagnostic to the requested choice, preserves the
-draft and keeps the selector accessible. Every send checks preparation before
-optimistic message insertion or runtime dispatch. Resume code has the same guard;
-Weaver preparation still advertises `supports_hitl: false`. An enabled instance is
-not a model-readiness guarantee, and creation does not require a recommendation.
-
-**Deployment prerequisites and business choices.**
-[`model_catalog/config.rs`](../../apps/control-plane/src/model_catalog/config.rs)
-defines platform-approved inference destinations and, for each source, one inventory:
-either a discovery destination with its own authentication, or a declared list that
-replaces discovery for that source. The declared form is implemented and tested on
-simulated providers, not received on a real gateway. The inference
-connection contains a binding reference that the pod resolves locally, not a secret
-value. Alice, Acme's organization owner, may refresh an approved source and
-change Acme's model policy; this is business responsibility, not Oscar's admin
-mandate. Her organization role cannot rewrite platform connections. Deployment
-configuration must provide an inventory and inference access; publishing an offer proves neither permission nor
-a successful model call.
-
-<!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/organizations/{organization_id}/model-policy` | `organization_model_policy` |
-| PUT | `/control-plane/v1/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` |
-| POST | `/control-plane/v1/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` |
-| GET | `/control-plane/v1/organizations/{organization_id}/models` | `organization_models` |
-<!-- end generated -->
-
-<!-- generated: routes apps/control-plane/src/agents/inventory.rs /control-plane/v1 -->
-| Method | Path | Handler |
-| --- | --- | --- |
-| GET | `/control-plane/v1/organizations/{organization_id}/capabilities` | `organization_capabilities` |
-| POST | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/refresh` | `refresh_organization_capabilities` |
-| PUT | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on` | `set_organization_capability_default` |
-| GET | `/control-plane/v1/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact` | `organization_capability_revoke_impact` |
-<!-- end generated -->
-
-The [administration journey](02.3-agent-administration.md) remains agreed behavior.
-
-The source of truth is the complete initial schema in
-[0001_schema.sql](../../apps/control-plane/migrations/0001_schema.sql). It defines every
-application table. The diagram below is generated by tbls from the bootstrapped schemas and SQLx migrations
-(`make -C docs/architecture er`), not maintained by hand. SQLx creates its own
-`_sqlx_migrations` fingerprint table; it is outside that generated diagram.
+Control Plane owns its PostgreSQL schema; object storage holds binary content.
+The [immutable migrations](../../apps/control-plane/migrations/) define constraints;
+`cp_read` views are the bounded reader surface. Other services' private schemas
+are outside this catalogue.
 
 ### Table responsibilities
 
-| Table | Key and responsibility | Lifecycle and ownership |
-| --- | --- | --- |
-| `space` | UUID `id`; kind, name, optional personal owner, required `organization_id` and optional `parent_id`, both referencing `space.id`. | Control Plane stores placement and direct roles atomically. `deletion_id` marks scheduled cleanup without removing attachment metadata. |
-| `folder` | UUID `id`; named folder, containing space, optional parent folder and UUID-based path. | Control-plane owns the hierarchy. Placement is immutable; folder and parent must belong to the same space. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
-| `document` | UUID `id`; name, MIME type, size, SHA-256, creator, object key and quota owner. | Metadata for a stored original. The bytes live in object storage, not PostgreSQL. Placement is immutable. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
-| `deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. `target_kind` is text constrained to `organization`, `team`, `project` or `document`. |
-| `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
-| `powerpoint_file` | UUID `id`, unique `(actor, request_key)`; organization, space, logical pod, optional agent, immutable object key and cleanup receipt. | Control Plane owns the original and its attachment; the pod owns the prepared data. See [PowerPoint storage](A9-documents.md#powerpoint-builder-data). |
-| `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
-| `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
-| `platform_bootstrap` | Boolean singleton; claimant, claim time and role-grant completion time. | Durable bootstrap receipt. The role grant and completed receipt commit atomically. This is not the platform-admin role store. |
-| `platform_role_grant` | Subject and typed platform role | Canonical direct platform grants. |
-| `space_role_grant` | Space, subject and typed space role | Canonical direct grants, deleted with the space. |
-| `agent_template_policy` | Organization and template | Organization default enablement, deleted with the organization. |
-| `terms_acceptance` | Text `user_id`; accepted terms version and timestamp. | Consent belongs to the authenticated subject independently of directory profiles and space membership. |
-| `user_identity` | UUID `id`; username, email, first/last names and last observation time. | Local-directory profiles observed after authentication, including generic OIDC users. No passwords, bearer tokens or grants. Usernames are intentionally not unique; exact lookup rejects ambiguous matches. |
-| `_sqlx_migrations` | Baseline `version`; description, installation time, success, checksum and execution time. | Owned by SQLx. Records the installed schema fingerprint; application code must not rewrite its checksum. |
+| SQL group | Authority and lifecycle |
+| --- | --- |
+| `space`, `space_role_grant` | Placement and direct business roles; grants disappear with their space. |
+| `prompt`, `prompt_category`, `prompt_favorite`, `prompt_publication` | Space-owned definitions and categories; caller preferences; explicit publication relationships. |
+| `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
+| `runtime_catalog`, `runtime_capability`, template/capability policies | Observed pod offers and their authorization ceilings. |
+| Model source, offer and policy tables | [Organization model governance](A13-models.md). |
+| `folder`, `document`, `document_content`, `document_current` | Document placement, stored-content references and current content; bytes live in object storage. |
+| `document_upload`, `document_processing`, `document_storage` | Upload receipts, processing attempts and installation storage inventory. |
+| `powerpoint_file`, `capability_preparation` | [Managed PowerPoint originals and prepared data](A9-documents.md#powerpoint-builder-data). |
+| `wiki_page`, `wiki_revision` | Page identity and revision references within the managed document model. |
+| `deletion` | Durable cleanup receipt, deliberately surviving removal of its target. |
+| `platform_bootstrap`, `platform_role_grant` | Bootstrap receipt and canonical direct platform grants. |
+| `user_identity`, `terms_acceptance` | Observed directory profile and personal consent; neither grants content access. |
+
+The ER diagram lists all tables, columns and keys; this table groups responsibilities.
 
 ### Physical relationships
 
-The diagram represents SQL foreign keys. Absence of an edge is meaningful:
-SQL records immutable placement and direct user-role relationships. Subject identifiers such
-as `actor`, `created_by`, `completed_by` and `terms_acceptance.user_id` do not
-reference `user_identity`: Keycloak directory mode does not require local profile
-rows. Do not add such foreign keys as an apparent completeness fix.
+The [complete ER diagram](generated/control-plane.er.mmd) is generated from the
+migration chain. It remains available for database inspection without duplicating
+all columns in the architectural reading path.
 
-`document.folder_id` is nullable for a document at the space root, whereas an upload
-reservation requires a folder. The self-reference on `folder` also allows a null
-parent for a root folder. The generated composite-FK edges do not express that
-nullability precisely; the SQL declarations and these rules define it. Deletion order must respect SQL foreign keys; the
-`document_upload.retry_of` reference explicitly uses `ON DELETE SET NULL`.
+### Resource identity and conversation placement
 
-<!-- generated: mermaid docs/architecture/generated/control-plane.er.mmd -->
-```mermaid
-erDiagram
+| Identity | Meaning |
+| --- | --- |
+| UUID | Stable identity of a prompt or agent instance. |
+| Logical name | Immutable reference, unique per resource type and space; a prompt's slash command. |
+| Display name | Editable title, not an authorization fact. |
+| Conversation | Owned by a person in a space; association with an agent does not transfer ownership. |
 
-"control_plane.space" }o--o| "control_plane.deletion" : "deletion_id"
-"control_plane.space" }o--|| "control_plane.space" : "organization_id"
-"control_plane.space" }o--o| "control_plane.space" : "parent_id"
-"control_plane.space" }o--|| "control_plane.space" : "parent_id, organization_id"
-"control_plane.folder" }o--o| "control_plane.deletion" : "deletion_id"
-"control_plane.folder" }o--|| "control_plane.space" : "space_id"
-"control_plane.folder" }o--|| "control_plane.folder" : "parent_id, space_id"
-"control_plane.document" }o--o| "control_plane.deletion" : "deletion_id"
-"control_plane.document" }o--|| "control_plane.space" : "quota_owner"
-"control_plane.document" }o--|| "control_plane.space" : "space_id"
-"control_plane.document" }o--|| "control_plane.folder" : "folder_id, space_id"
-"control_plane.document" }o--|| "control_plane.generation" : "published_generation, id"
-"control_plane.document" }o--|| "control_plane.session_metadata" : "session_id, space_id"
-"control_plane.document" }o--|| "control_plane.document_content" : "current_content_id, id"
-"control_plane.document_upload" }o--o| "control_plane.document" : "target_document_id"
-"control_plane.document_upload" |o--o| "control_plane.document_upload" : "retry_of"
-"control_plane.document_upload" }o--|| "control_plane.session_metadata" : "session_id, space_id"
-"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id"
-"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id, target_document_id"
-"control_plane.document_processing" }o--|| "control_plane.document" : "document_id"
-"control_plane.document_processing" |o--o| "control_plane.document_processing" : "retry_of"
-"control_plane.generation" }o--|| "control_plane.document_processing" : "processing_id, document_id"
-"control_plane.artifact" }o--|| "control_plane.generation" : "generation_id"
-"control_plane.agent_instance" }o--|| "control_plane.space" : "space_id"
-"control_plane.agent_instance" }o--o| "control_plane.capability_preparation" : "preparation_id"
-"control_plane.runtime_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
-"control_plane.runtime_template_capability" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
-"control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
-"control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
-"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
-"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
-"control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
-"control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
-"control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
-"control_plane.session_metadata" }o--o| "control_plane.deletion" : "deletion_id"
-"control_plane.organization_capability" }o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_capability" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
-"control_plane.space_role_grant" }o--|| "control_plane.space" : "space_id"
-"control_plane.agent_template_policy" }o--|| "control_plane.space" : "organization_id"
-"control_plane.storage_budget" }o--|| "control_plane.space" : "space_id"
-"control_plane.prompt_category" }o--|| "control_plane.space" : "space_id"
-"control_plane.prompt" }o--|| "control_plane.space" : "space_id"
-"control_plane.prompt" }o--|| "control_plane.prompt_category" : "space_id, category_id"
-"control_plane.prompt_favorite" }o--|| "control_plane.prompt" : "prompt_id"
-"control_plane.document_move" }o--|| "control_plane.document" : "document_id"
-"control_plane.organization_model_source" }o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_model_source" }o--|| "control_plane.model_source" : "source_id"
-"control_plane.organization_model_initialization" |o--|| "control_plane.space" : "organization_id"
-"control_plane.space_capability_policy" }o--|| "control_plane.space" : "space_id"
-"control_plane.space_capability_policy" }o--|| "control_plane.runtime_catalog" : "runtime_id"
-"control_plane.space_capability_permission" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
-"control_plane.space_capability_permission" }o--|| "control_plane.space_capability_policy" : "space_id, runtime_id"
-"control_plane.powerpoint_file" }o--o| "control_plane.space" : "live_space_id"
-"control_plane.powerpoint_file" }o--o| "control_plane.agent_instance" : "live_agent_id, live_space_id"
-"control_plane.capability_preparation" }o--|| "control_plane.powerpoint_file" : "file_id"
-"control_plane.organization_powerpoint_settings" }o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_powerpoint_settings" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
-"control_plane.organization_powerpoint_settings" }o--o| "control_plane.powerpoint_file" : "file_id"
-"control_plane.embedded_agent_conversation" |o--|| "control_plane.session_metadata" : "session_id"
-"control_plane.document_content" }o--|| "control_plane.document" : "document_id"
-"control_plane.document_content" }o--|| "control_plane.document_content" : "source_content_id, document_id"
-"control_plane.wiki_page" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id"
-"control_plane.wiki_page" }o--|| "control_plane.wiki_revision" : "current_revision_id, page_id, space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
+Placement and creation provenance are protected by SQL. Copies have independent
+identities. Prepared schema capacity does not establish an integrated cross-space journey.
 
-"control_plane.deletion" {
-  uuid id
-  uuid target_id
-  text target_kind
-  uuid target_parent_id
-  uuid organization_id
-  text actor_subject
-  timestamp_with_time_zone requested_at
-  timestamp_with_time_zone due_at
-  text rule_id
-  text status
-  timestamp_with_time_zone last_visit
-  timestamp_with_time_zone completed_at
-  text error_code
-  bigint folders_deleted
-  bigint spaces_deleted
-  bigint documents_deleted
-  text session_user_id
-  uuid session_agent_instance_id
-}
-"control_plane.space" {
-  uuid id
-  control_plane_space_kind kind
-  text name
-  text personal_owner
-  timestamp_with_time_zone created_at
-  uuid deletion_id FK
-  uuid organization_id FK
-  uuid parent_id FK
-}
-"control_plane.folder" {
-  uuid id
-  uuid space_id FK
-  uuid parent_id FK
-  text name
-  text path
-  timestamp_with_time_zone created_at
-  uuid deletion_id FK
-}
-"control_plane.document" {
-  uuid id FK
-  uuid space_id FK
-  uuid folder_id FK
-  uuid session_id FK
-  text name
-  text created_by
-  timestamp_with_time_zone created_at
-  uuid quota_owner FK
-  boolean retrievable
-  uuid retrieval_id
-  text retrieval_actor
-  boolean retrieval_target
-  text retrieval_phase
-  boolean retrieval_confirmed
-  boolean retrievable_pending
-  uuid published_generation FK
-  timestamp_with_time_zone purged_at
-  timestamp_with_time_zone purge_after
-  uuid deletion_id FK
-  timestamp_with_time_zone original_cleaned_at
-  text purpose
-  text parent_path
-  uuid current_content_id FK
-  timestamp_with_time_zone updated_at
-}
-"control_plane.platform_bootstrap" {
-  boolean singleton
-  text completed_by
-  timestamp_with_time_zone completed_at
-  timestamp_with_time_zone granted_at
-}
-"control_plane.terms_acceptance" {
-  text user_id
-  text version
-  timestamp_with_time_zone accepted_at
-}
-"control_plane.user_identity" {
-  uuid id
-  text username
-  text email
-  text first_name
-  text last_name
-  timestamp_with_time_zone last_seen_at
-}
-"control_plane.document_storage" {
-  boolean singleton
-  uuid namespace
-  text endpoint
-  text bucket
-  text prefix
-  text inventory_cursor
-  bigint inventory_bytes
-  bigint orphan_bytes
-  text derived_endpoint
-  text derived_bucket
-  text derived_prefix
-  timestamp_with_time_zone inventory_completed_at
-  uuid lease_owner
-  timestamp_with_time_zone lease_until
-}
-"control_plane.document_upload" {
-  uuid id
-  uuid request_key
-  text actor
-  uuid organization_id
-  uuid space_id FK
-  uuid folder_id
-  uuid session_id FK
-  uuid quota_owner
-  text name
-  text mime
-  bigint size
-  text sha256
-  text object_key
-  text status
-  text error_code
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
-  timestamp_with_time_zone completed_at
-  timestamp_with_time_zone acknowledged_at
-  uuid retry_of FK
-  uuid successor_key
-  text processing_profile
-  timestamp_with_time_zone cleanup_due_at
-  integer cleanup_attempts
-  timestamp_with_time_zone cleaned_at
-  boolean put_pending
-  uuid target_document_id FK
-  uuid content_id FK
-  uuid expected_content_id
-  text purpose
-  text parent_path
-  bigint reserved_bytes
-}
-"control_plane.document_processing" {
-  uuid id
-  uuid request_key
-  text actor
-  uuid document_id FK
-  text profile
-  text status
-  text stage
-  bigint revision
-  text workflow_id
-  jsonb submission
-  text run_id
-  timestamp_with_time_zone first_dispatch_at
-  timestamp_with_time_zone delivered_at
-  timestamp_with_time_zone delivery_due_at
-  integer delivery_attempts
-  uuid dispatch_owner
-  timestamp_with_time_zone dispatch_until
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone deadline_at
-  timestamp_with_time_zone completed_at
-  text error_code
-  uuid retry_of FK
-  jsonb profile_settings
-  integer preparation_seconds
-  integer extraction_seconds
-  integer indexing_seconds
-}
-"control_plane.generation" {
-  uuid id
-  uuid processing_id FK
-  uuid document_id FK
-  text stage
-  uuid execution_id
-  uuid activity_id
-  integer attempt
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
-  text prefix
-  timestamp_with_time_zone committed_at
-  integer chunks
-  integer__ vector_ordinals
-  bigint rows
-  integer cleanup_cursor
-  timestamp_with_time_zone cleanup_after
-  timestamp_with_time_zone cleaned_at
-  uuid_array write_ids
-  uuid_array pending_writes
-  uuid_array pending_workspaces
-}
-"control_plane.artifact" {
-  uuid generation_id FK
-  text path
-  bigint size
-  text sha256
-}
-"control_plane.agent_instance" {
-  uuid agent_instance_id
-  uuid space_id FK
-  uuid template_id
-  text source_runtime_id
-  text source_agent_id
-  varchar_255_ display_name
-  varchar_500_ description
-  boolean enabled
-  text created_by
-  text updated_by
-  jsonb tuning
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone updated_at
-  bigint configuration_revision
-  text logical_name
-  uuid preparation_id FK
-  text preparation_state
-  text preparation_error
-}
-"control_plane.users_preferences" {
-  text user_id
-  text ui_theme_id
-  text theme_mode
-  text language
-  boolean sidebar_collapsed
-  text team_sort_mode
-  text agent_sort
-  timestamp_with_time_zone updated_at
-}
-"control_plane.runtime_catalog" {
-  text runtime_id
-  boolean reachable
-  timestamp_with_time_zone checked_at
-  timestamp_with_time_zone observed_at
-  text skills_revision
-  text skills_availability
-}
-"control_plane.runtime_capability" {
-  text runtime_id FK
-  text capability_id
-  text version
-  jsonb descriptor
-  boolean advertised
-}
-"control_plane.runtime_template_capability" {
-  text runtime_id FK
-  text source_agent_id
-  text capability_id FK
-  boolean default_selected
-}
-"control_plane.model_source" {
-  text source_id
-  jsonb configuration
-  uuid refresh_token
-  text state
-  text error_code
-  timestamp_with_time_zone checked_at
-  timestamp_with_time_zone last_success_at
-  bigint snapshot_revision
-  bigint snapshot_source_revision
-}
-"control_plane.model_offer" {
-  text source_id FK
-  text upstream_model_id
-  jsonb metadata
-  timestamp_with_time_zone first_seen_at
-  timestamp_with_time_zone last_seen_at
-  boolean advertised
-  timestamp_with_time_zone withdrawn_at
-}
-"control_plane.organization_model_policy" {
-  uuid organization_id FK
-  bigint revision
-  text default_source_id FK
-  text default_upstream_model_id FK
-  text fallback_source_id FK
-  text fallback_upstream_model_id FK
-  text created_by
-  timestamp_with_time_zone created_at
-  text updated_by
-  timestamp_with_time_zone updated_at
-  text title_source_id FK
-  text title_upstream_model_id FK
-}
-"control_plane.organization_model_permission" {
-  uuid organization_id FK
-  text source_id FK
-  text upstream_model_id FK
-  boolean reasoning_enabled
-}
-"control_plane.session_metadata" {
-  uuid session_id
-  text user_id
-  uuid space_id
-  uuid agent_instance_id
-  uuid template_id
-  text runtime_id
-  varchar_255_ agent_display_name
-  varchar_500_ title
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone updated_at
-  uuid deletion_id FK
-  bigint agent_configuration_revision
-  uuid agent_space_id
-  boolean title_pending
-  uuid title_attempt
-}
-"control_plane.model_usage" {
-  uuid report_id
-  uuid session_id
-  text exchange_id
-  timestamp_with_time_zone occurred_at
-  uuid space_id
-  text user_id
-  uuid agent_instance_id
-  text model_source_id
-  text upstream_model_id
-  bigint input_tokens
-  bigint output_tokens
-  bigint cache_read_tokens
-  bigint cache_creation_tokens
-}
-"control_plane.organization_capability" {
-  uuid organization_id FK
-  text runtime_id FK
-  text capability_id FK
-  text enabled_by
-  timestamp_with_time_zone enabled_at
-}
-"control_plane.platform_role_grant" {
-  text subject
-  text role
-}
-"control_plane.space_role_grant" {
-  uuid space_id FK
-  text subject
-  text role
-}
-"control_plane.agent_template_policy" {
-  uuid organization_id FK
-  uuid template_id
-}
-"control_plane.storage_budget" {
-  uuid space_id FK
-  text scope
-  bigint limit_bytes
-  bigint used_bytes
-  bigint reserved_bytes
-}
-"control_plane.prompt_category" {
-  uuid id
-  uuid space_id FK
-  varchar_120_ name
-}
-"control_plane.prompt" {
-  uuid prompt_id
-  uuid space_id FK
-  text logical_name
-  varchar_255_ display_name
-  text description
-  text text
-  timestamp_with_time_zone created_at
-  text created_by
-  timestamp_with_time_zone updated_at
-  text updated_by
-  uuid category_id FK
-  text__ tags
-  boolean published
-}
-"control_plane.prompt_favorite" {
-  text user_id
-  uuid prompt_id FK
-}
-"control_plane.document_move" {
-  uuid id
-  uuid document_id FK
-  text actor
-  uuid source_space_id
-  uuid source_folder_id
-  uuid destination_space_id
-  uuid destination_folder_id
-  uuid generation_id
-  text phase
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone finished_at
-}
-"control_plane.organization_model_source" {
-  uuid organization_id FK
-  text source_id FK
-}
-"control_plane.organization_model_initialization" {
-  uuid organization_id FK
-  timestamp_with_time_zone completed_at
-}
-"cp_read.space_state" {
-  uuid id
-  boolean retired
-  text name
-}
-"cp_read.folder_path" {
-  uuid id
-  uuid space_id
-  text path
-  text name
-}
-"cp_read.conversation" {
-  uuid conversation_id
-  uuid space_id
-  text owner
-}
-"cp_read.terms_acceptance" {
-  text user_id
-  text version
-}
-"cp_read.platform_role_grant" {
-  text subject
-  text role
-}
-"control_plane.space_capability_policy" {
-  uuid space_id FK
-  text runtime_id FK
-  bigint revision
-  boolean restricted
-  text updated_by
-  timestamp_with_time_zone updated_at
-}
-"control_plane.space_capability_permission" {
-  uuid space_id FK
-  text runtime_id FK
-  text capability_id FK
-}
-"control_plane.powerpoint_file" {
-  uuid id
-  uuid request_key
-  text actor
-  uuid organization_id
-  uuid space_id
-  uuid agent_instance_id
-  uuid live_space_id FK
-  uuid live_agent_id FK
-  uuid quota_owner
-  uuid expected_file_id
-  text name
-  text mime
-  bigint size
-  text sha256
-  text object_key
-  text status
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
-  timestamp_with_time_zone published_at
-  timestamp_with_time_zone cleanup_due_at
-  integer cleanup_attempts
-  timestamp_with_time_zone cleaned_at
-  text error_code
-  text runtime_id
-  boolean upload_ready
-  boolean effective
-}
-"control_plane.capability_preparation" {
-  uuid id
-  uuid file_id FK
-  text runtime_id
-  text capability_id
-  uuid space_id
-  uuid agent_instance_id
-  bigint configuration_revision
-  jsonb config
-  text state
-  text reference
-  text error
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone deadline_at
-  text workflow_id
-  text task_queue
-  text run_id
-  timestamp_with_time_zone delivered_at
-  uuid dispatch_owner
-  timestamp_with_time_zone dispatch_until
-  timestamp_with_time_zone delivery_due_at
-  timestamp_with_time_zone cleaned_at
-}
-"control_plane.organization_powerpoint_settings" {
-  uuid organization_id FK
-  text runtime_id FK
-  text capability_id FK
-  uuid file_id FK
-  jsonb config
-}
-"control_plane.embedded_agent_conversation" {
-  uuid session_id FK
-  bytea log
-}
-"control_plane.document_content" {
-  uuid id
-  uuid document_id FK
-  text kind
-  uuid source_content_id FK
-  text object_key
-  text mime
-  bigint size
-  text sha256
-  timestamp_with_time_zone published_at
-  timestamp_with_time_zone cleanup_after
-  timestamp_with_time_zone cleaned_at
-}
-"control_plane.document_current" {
-  uuid id
-  uuid space_id
-  uuid folder_id
-  uuid session_id
-  text name
-  text created_by
-  timestamp_with_time_zone created_at
-  uuid quota_owner
-  boolean retrievable
-  uuid retrieval_id
-  text retrieval_actor
-  boolean retrieval_target
-  text retrieval_phase
-  boolean retrieval_confirmed
-  boolean retrievable_pending
-  uuid published_generation
-  timestamp_with_time_zone purged_at
-  timestamp_with_time_zone purge_after
-  uuid deletion_id
-  timestamp_with_time_zone original_cleaned_at
-  text purpose
-  text parent_path
-  uuid current_content_id
-  timestamp_with_time_zone updated_at
-  text mime
-  bigint size
-  text sha256
-  text object_key
-}
-"cp_read.document_visibility" {
-  uuid document_id
-  uuid space_id
-  uuid folder_id
-  uuid conversation_id
-  text conversation_owner
-  uuid generation_id
-  integer__ vector_ordinals
-  text name
-  text source_revision
-  boolean visible
-  text__ rejection_reasons
-  text mime
-  timestamp_with_time_zone created_at
-}
-"cp_read.published_artifact" {
-  uuid document_id
-  text path
-  bigint size
-  text sha256
-  text prefix
-}
-"control_plane.wiki_page" {
-  uuid page_id FK
-  uuid space_id FK
-  text slug
-  text title
-  text kind
-  uuid parent_page_id FK
-  integer position
-  uuid current_revision_id FK
-  boolean needs_review
-  timestamp_with_time_zone updated_at
-  text updated_by
-}
-"control_plane.wiki_revision" {
-  uuid revision_id
-  uuid space_id FK
-  uuid page_id FK
-  text content_md
-  text status
-  uuid base_revision_id
-  text author_user_id
-  text author_kind
-  uuid agent_instance_id
-  uuid session_id
-  text proposed_title
-  uuid proposed_parent_page_id FK
-  timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
-  timestamp_with_time_zone reviewed_at
-  text reviewed_by
-}
-```
+### Prompt implementation anchors
+
+The prompt contract is described once in the [resource map](06-resources.md#prompts)
+and [role matrix](A7-action-role-matrix.md#content-actions). These three anchors trace
+write authorization, departure and deletion to existing common mechanisms.
+
+<!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
+| Implementation anchor | Responsibility declared in source |
+| --- | --- |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded organization lock, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L597) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L255) | Delete the definition in its owning space; SQL cascades its favorites and publications. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 
-SQL records the immutable space tree and direct role grants.
-What the schema enforces by itself:
-
-| Rule | Mechanism |
+| Evidence | What it checks |
 | --- | --- |
-| A personal space has its own kind and an owner, with no parent | `space_personal_identity`: `(kind = 'personal') = (personal_owner IS NOT NULL)` and `kind <> 'personal' OR parent_id IS NULL` |
-| Unique organization names | unique index on `name` where `kind = 'organization'` |
-| A document's folder is in the document's space | composite foreign key `(folder_id, space_id)` |
-| A sub-folder is in its parent's space | composite foreign key `(parent_id, space_id)` |
-| A document-bearing folder subtree cannot be deleted | document foreign key refuses deletion while referenced; the API maps that conflict to HTTP 409 |
-| Space references exist | `organization_id` and `parent_id` foreign keys to `space.id`; the organization root references itself |
-| Placement never changes | `before update` triggers on `space` kind, owner, organization and parent, `folder`, `document` |
-| At most one bootstrap marker | `platform_bootstrap` single row (`singleton` key); permanent closure and claimant-only retry are enforced by the bootstrap code |
+| [Backend prompt tests](../../apps/control-plane/tests/support/prompts.rs) | Four spaces, direct rights, independent field updates, categories, favorites, departure and deletion. |
+| [Browser journey](../../apps/frontend/tests/prompts-browser.mjs) | Real UI, Control Plane and disposable PostgreSQL/Keycloak; four spaces, consumers and role isolation. No model generation. |
+| [Editor tests](../../apps/frontend/src/rework/components/pages/PromptsPage/PromptsPage.test.tsx) | Omitted edits survive a refreshed server response; no stale form is reused. |
+| [Scenario](../../apps/frontend/src/rework/features/pipeline/scenarios/promptsScenario.test.ts) and [launcher tests](../../apps/frontend/src/rework/components/pages/admin/SelfTestPage/SelfTestPage.test.tsx) | Explicit space selection, generated requests, pagination and cleanup with simulated HTTP. |
+
+The generator checks anchor existence, adjacent comments and link freshness;
+it does not prove the function's behavior. Test presence is not an execution result
+or deployed acceptance. [SQL publication constraints](../../apps/control-plane/migrations/0016_prompt_publications.sql)
+remain separate from the source prompt's ownership.
+
+### Pod capability offers
+
+A pod supplies offers; organization policy authorizes them; an agent selects among
+usable offers. Local restrictions narrow the organization ceiling. Permission
+changes affect new admissions, not an already admitted turn. See the
+[capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use)
+and [catalogue implementation](../../apps/control-plane/src/agents/catalog.rs).
+
+### Model storage
+
+[Model governance](A13-models.md) owns the source/offer/policy mapping. Credentials
+stay on the trusted execution path; the browser receives public choices.
+
+### Chat model preparation and turn admission
+
+| Selection | Rule |
+| --- | --- |
+| Precedence | Explicit chat choice, otherwise instance recommendation, otherwise organization default. No choice means refusal. |
+| Eligibility | A model is identified by source and upstream ID; observation does not grant permission. An unknown, forbidden or unusable choice produces a diagnostic, never an arbitrary substitute. |
+| Fallback | Only confirmed withdrawal can use the approved fallback, within the same source and provisioning account, and only when still permitted and usable. Failed discovery alone is not withdrawal. |
+| Administrative writes | A new selection requires successful observation at the current source revision; a retained legacy profile requires explicit reselection unless a recommendation exists. |
+| Browser preparation | Public choices and diagnostics; no credential and no grant to execute. |
+| Turn admission | Control Plane makes a fresh decision; the runtime validates the trusted binding against local provisioning and retains it through the turn. |
+
+[Model governance](A13-models.md) supplies the wire contracts and runtime limits;
+[managed turn authority](A6-security.md#managed-agent-turn-authority) explains identity
+and conversation binding. An enabled agent is not a model-readiness guarantee.
 
 ### Constraints and operational indexes
 
-Primary keys and unique constraints create their own indexes. The additional
-indexes support the actual traversal, quota and retry paths:
-
-| Area | Constraints and indexes |
-| --- | --- |
-| Spaces | `space_organization_name` makes organization names unique. `space_deletion_manifest` indexes rows participating in deletion. `space_organization` and `space_parent` support foreign-key reference checks during deletion. `space_personal_identity` requires an owner exactly for kind `personal` and forbids its parent; `space_personal_owner` keeps one active personal space per owner and organization and serves its lookup. |
-| Folders and documents | Composite foreign keys keep folders/documents in their containing space. Partial unique indexes with `NULLS NOT DISTINCT` prevent duplicate active sibling names, including at the root. `folder_deletion_manifest` and `document_deletion_manifest` index retired rows by deletion receipt. Placement triggers prevent moves. |
-| Original documents | Size is between 0 and 104857600 bytes (100 MiB); SHA-256 is 64 lowercase hexadecimal characters. Object keys, sizes and hashes belong to immutable `document_content` rows. `document.current_content_id` selects the current primary; `storage_budget` maintains transactional used/reserved counters. |
-| Deletion receipts | Deadline cannot precede request time; completion timestamp agrees with status. `deletion_due` selects unfinished work; `deletion_overlap` supports overlap detection. |
-| Upload receipts | Status is `pending`, `stored` or `failed`; stored status requires a document, and pending status has no completion timestamp. Partial indexes protect active names and index active quota, unacknowledged receipts, cleanup and expiration. |
-| Processing attempts | One active and one successful attempt per document are enforced by partial unique indexes. Additional indexes cover history, delivery and cleanup. Checks bound counters and the generations array (at most 64). Triggers verify the original's space/digest and prevent changes to processing identity or terminal outcome. |
-| Pending uploads | Delete triggers on `space` and `folder` refuse removal while pending uploads reference them, despite those historical IDs having no foreign keys. |
-| Installation state | `platform_bootstrap` and `document_storage` admit only the singleton key `true`. |
-| Consent and identities | Terms versions have length 1..128. `user_identity_username` indexes `(username, id)` without imposing username uniqueness. The four `user_identity_*_prefix` indexes on `lower(field) text_pattern_ops` serve the local prefix search. |
-
-SQL constraints do not replace typed permission checks or application mutation locks.
-In particular, parent kinds and organization agreement are validated by the
-application; foreign keys guarantee existence, not those domain rules. Sibling
-space names and membership eligibility are enforced by the application. See [security](03-security.md) and [organizations](04-organizations.md).
-For deployment and schema inspection, see
-[SQLx schema initialization](A3-manager-operations.md#sqlx-schema-initialization).
+The [migration chain](../../apps/control-plane/migrations/) and generated ER diagram
+are the authority for keys, constraints and indexes. The [quality guarantees](09-quality.md)
+record the architectural invariants, separately from measured capacity.
 
 ## Permission storage and evaluation
 
-`platform_role_grant` and `space_role_grant` store direct roles. Immutable
-`space.organization_id` and `space.parent_id` define the bounded hierarchy.
-`agent_template_policy` records each organization's enabled template defaults.
-The typed evaluator in [`authorization.rs`](../../apps/control-plane/src/authorization.rs)
-implements the role matrix using only grants on the requested space.
-Personal spaces have no parent and inherit no content permission.
-
-`POST /authorize/space` and `/authorize/platform` return `{allowed}`.
-`POST /authorize/scope` returns `{space_id, space_ids}`: an explicit anchor and
-only its authorized readable corpus spaces. `levels` can narrow that corpus;
-an empty list yields no corpus. These responses are not cached. Authorization
-for a later write is evaluated again inside its SQL transaction.
-
-Knowledge Flow uses its own authenticated service account and verified
-`person`, `run`, `agent` delegation query fields. The person's current admission
-and rights are evaluated; the workload acquires no content privilege.
+PostgreSQL stores placement and direct grants. [The typed evaluator](../../apps/control-plane/src/authorization.rs)
+returns decisions used by all business handlers; [roles](../../apps/control-plane/src/roles.rs)
+define permissions. Mutations recheck authority under the shared organization lock.
+No role inheritance, second permission engine or author-specific prompt grant is introduced.
 
 ## Provisioning declarations
 
-The ZIP has exactly five root files. `manifest.json` declares
-`{"format_version":2,"users_schema_version":2,"source_platform":"swift"}`. The
-other files are arrays:
-
-| File | Declaration |
-| --- | --- |
-| `users.json` | Unique lowercase `username` without surrounding whitespace or control characters, optional `email`, `first_name`, `last_name`, `password`, default-empty `platform_roles` |
-| `organizations.json` | `ref`, `name`, `roles`; at least one organization |
-| `teams.json` | `ref`, `name`, `organization` reference, `roles` |
-| `projects.json` | `ref`, `name`, `team` reference, `roles`; empty array accepted |
-
-A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
-`owner`, and on organizations `organization_admin`. Roles accumulate and equivalent grants are
-deduplicated. Admin and owner confer no implicit content role. Every new space
-requires a declared owner, and every new organization a declared admin. Every child-role
-holder requires a declared or existing direct parent content role. Existing direct roles are read from PostgreSQL; no space grant is synthesized. The demo explicitly declares
-organization membership for team-role holders.
-
-References are nonempty and unique across the entire bundle. Parents and role
-subjects must be declared. Space names are nonempty and unique within each parent;
-homonyms under distinct parents remain distinct. Role names are exact, without
-aliases: `platform_admin`, `platform_observer`, `feature_manager`, `prompt_editor` and
-`organization_admin`. Unknown fields/roles,
-duplicate JSON keys, usernames, references and sibling names are rejected. Legacy
-`teams`/`team_roles` user fields are not accepted. Old JSON and Python version-1 ZIPs,
-unknown versions/sections and multidisk formats return `not_yet_supported`.
-Malformed archives, unsupported compression, encryption and symlinks are rejected.
-
-Missing identities require a nonempty password and are created enabled with a
-non-temporary credential. Absent or empty email uses `<username>@example.com`;
-optional first/last names are passed when supplied. Existing identity fields remain intact.
-Usernames are rejected when noncanonical, never silently normalized. Preflight checks
-effective emails of missing identities, case-insensitively within the bundle and
-against Keycloak's exact email search. A known conflict refuses the whole import
-before any identity creation. The supported realm disallows duplicate emails;
-concurrent external changes remain subject to the additive replay contract.
+The [provisioning journey](02.1-user-journeys.md#provisioning-the-business-account)
+and [organization contract](A8-organizations.md#provisioning-people-and-spaces)
+explain account and role import. The [declaration parser](../../apps/control-plane/src/blueprint.rs)
+owns the ZIP contract; [component instructions](../../apps/control-plane/README.md)
+provide commands and examples.
 
 ## Space deletion contract
 
-`DELETE /spaces/{id}` returns a `Receipt`: operation/target/organization identifiers,
-root-parent recovery snapshot, actor subject, frozen request/due timestamps and
-mode/rule, status, safe error code, SQL deletion counters (`documents_deleted`,
-`folders_deleted`, `spaces_deleted`) and completion time.
-It returns 202 while pending and 200 on completed replay. `GET /deletions/{operation_id}`
-returns that receipt after a fresh platform capability check. No names, bearer,
-content or canonical grants are retained in it.
-
-Statuses are `queued`, `running`, `retrying`, `blocked`, `completed`. Disabled
-lifecycle refuses new requests with 503 while preserving reads and replay. Overlap,
-retired targets, personal-only deletion and document-bearing scopes return 409.
-Unsupported documents or unexpected references discovered during cleanup block the
-receipt; later sweeps resume after the cause is corrected. Completion requires all
-manifest rows and their role grants absent.
-
-`deletion` records each deletion and `space.deletion_id` its manifest. The receipt has no
-foreign key to its target, and survives physical deletion. Its parent snapshot is
-operational recovery metadata. SQL retains immutable placement on space rows;
-PostgreSQL stores direct grants and placement.
+Retirement closes new access before physical cleanup. A durable receipt survives
+the deleted target; cleanup resumes after failure. Author departure is a role
+change, not space deletion. See [lifecycle authority](A6-security.md#space-retirement-and-cleanup-authority)
+and [the lifecycle implementation](../../apps/control-plane/src/lifecycle/mod.rs).

@@ -17,9 +17,11 @@ import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Select from "@shared/molecules/Select/Select";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { useNavigate } from "react-router-dom";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import {
   useMySpacesQuery,
   useMeQuery,
@@ -33,17 +35,7 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 
-/**
- * Home view of the main nav panel (mainNavPanel): the app's team switcher,
- * moved off the former far-left avatar rail. Lists the personal space and every
- * team the user belongs to; each row navigates into that space. The search box
- * filters the "Vos équipes" list only — the personal space is a fixed home
- * anchor, not one of the user's teams.
- *
- * Reached via the mainNavBar Home icon (`/home`). Team/roles come from
- * `useFrontendBootstrap` (`available_teams[].my_relations`, #2298) — no per-team
- * fetch.
- */
+/** Home navigation uses Control Plane memberships and current space permissions. */
 export default function HomeNavPanel() {
   const { t } = useTranslation();
   const { defaultTeamAvatarFile } = useFrontendProperties();
@@ -65,7 +57,12 @@ export default function HomeNavPanel() {
       active.current = undefined;
     };
   }, [me.data?.user_id]);
-  const org = spaces.data?.find((space) => space.kind === "organization");
+  const [selectedOrganization, setSelectedOrganization] = useState<string>();
+  const organizations = spaces.isError
+    ? []
+    : (spaces.currentData ?? []).filter((space) => space.kind === "organization");
+  const org = organizations.find((space) => space.id === selectedOrganization) ?? organizations[0];
+  const organizationContent = useSpaceAccess(spaces.isError ? undefined : org?.id, "read");
   const canOpen =
     !spaces.isError &&
     !me.isError &&
@@ -135,7 +132,6 @@ export default function HomeNavPanel() {
     return list;
   }, [visibleTeams, sortMode, recency]);
 
-  const organization = spaces.currentData?.find((space) => space.kind === "organization");
   const sortOptions: TeamSortOption<TeamSortMode>[] = [
     { value: "recent", label: t("rework.home.sort.recent") },
     { value: "alpha", label: t("rework.home.sort.alpha") },
@@ -143,8 +139,27 @@ export default function HomeNavPanel() {
 
   return (
     <div className={styles.panel}>
-      {/* Home of the person's organization; without one, just the section. */}
-      <SpaceHeader eyebrow={organization?.name} title={t("rework.home.title")} />
+      <SpaceHeader eyebrow={org?.name} title={t("rework.home.title")} />
+      {organizations.length > 1 && (
+        <Select
+          size="small"
+          compact
+          label={t("rework.userSettings.spaceKinds.organization")}
+          value={org?.id}
+          options={organizations.map((space) => ({ key: space.id, value: space.id, label: space.name }))}
+          onChange={setSelectedOrganization}
+          disabled={opening}
+        />
+      )}
+
+      {org && organizationContent.allowed && (
+        <TeamSelectionListItem
+          redirection={`/team/${org.id}/prompts`}
+          name={t("rework.home.organizationPrompts")}
+          roles={org.roles}
+          avatarName={org.name}
+        />
+      )}
 
       {canOpen && (
         <div className={styles.personalSpace}>

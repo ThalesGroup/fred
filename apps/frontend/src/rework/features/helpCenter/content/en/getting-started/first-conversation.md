@@ -44,8 +44,8 @@ its general knowledge, not from your content.
 - **If nothing may be missed, say so**: "list _every_ deadline". The agent then
   reads the whole document instead of pulling out the passages it judges most
   relevant.
-- **Reuse your team's prompts** rather than rephrasing every time (see
-  [Prompts](/help/en/features/prompts)).
+- **Reuse the prompts offered in the conversation** rather than rephrasing
+  every time (see [Prompts](/help/en/features/prompts)).
 
 Trouble during a conversation? See
 [Common problems](/help/en/troubleshooting/common-problems).

@@ -27,16 +27,16 @@ export default function MarketplaceTopPrompts(_props: { period: HomePeriod }) {
       </div>
       <ServiceNotice icon="info" title={t("rework.promptPublication.metricsUnavailable")} />
       <PromptMarketplaceScope>
-        {(organizationId) => <PublishedCards key={organizationId} organizationId={organizationId} />}
+        {(marketplaceSpaceId) => <PublishedCards key={marketplaceSpaceId} marketplaceSpaceId={marketplaceSpaceId} />}
       </PromptMarketplaceScope>
     </section>
   );
 }
 
-function PublishedCards({ organizationId }: { organizationId: string }) {
+function PublishedCards({ marketplaceSpaceId }: { marketplaceSpaceId: string }) {
   const { t } = useTranslation();
   const query = usePublishedPromptsQuery(
-    { organizationId },
+    { marketplaceSpaceId },
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(query.refetch, false);
@@ -64,8 +64,8 @@ function PublishedCards({ organizationId }: { organizationId: string }) {
                 }
               }}
             >
-              <span className={styles.team} title={prompt.team_name}>
-                {prompt.team_name}
+              <span className={styles.team} title={prompt.source_space_name}>
+                {prompt.source_space_name}
               </span>
               <span className={styles.name} title={prompt.display_name}>
                 {prompt.display_name}
@@ -81,7 +81,7 @@ function PublishedCards({ organizationId }: { organizationId: string }) {
       )}
       <PromptViewDialog
         open={!!viewingId && prompts.some((prompt) => prompt.prompt_id === viewingId)}
-        organizationId={organizationId}
+        marketplaceSpaceId={marketplaceSpaceId}
         promptId={viewingId}
         onClose={() => setViewingId(undefined)}
       />

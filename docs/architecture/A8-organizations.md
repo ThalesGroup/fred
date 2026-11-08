@@ -167,7 +167,7 @@ functional validation exercise must be repeated after rebuilding Control Plane a
 ## Organization supervision
 
 Supervision is a stateless read module inside Control Plane, exposed by two GET
-routes in [the HTTP catalogue](A2-manager-contracts.md#organization-supervision-api).
+routes in [the REST inventory](A12-control-plane-api.md#organizations-routes).
 It introduces no process, statistics table, cache or worker and performs no physical
 S3/OpenSearch read. Standard `AdmittedUser` admission can refresh the existing local
 identity snapshot; the supervision module itself makes no writes.
@@ -233,9 +233,7 @@ concurrent creation below the cursor requires restarting the traversal.
 Grouped SQL reads share one REPEATABLE READ READ ONLY transaction. It ends before
 grant enumeration. Collection timestamps bound observations, not an atomic
 SQL snapshot; concurrent mutations can change visibility between reads.
-There is no distributed lock or consistency repair. The
-[read budget](09-quality.md#organization-supervision-read-budget) separates SQL
-and SQL costs and cardinalities.
+There is no distributed lock or consistency repair.
 
 Source trace: [handlers and aggregation](../../apps/control-plane/src/supervision/mod.rs),
 [wire models](../../apps/control-plane/src/supervision/models.rs),

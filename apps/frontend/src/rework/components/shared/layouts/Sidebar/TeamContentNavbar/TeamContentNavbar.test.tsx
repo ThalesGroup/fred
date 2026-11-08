@@ -50,7 +50,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePromptPublicationTeamsQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
+  usePromptPublicationSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
   useWikiAvailabilityQuery: (
     args: { spaceId: string },
@@ -436,4 +436,18 @@ it("gives an owner the Weaver settings entry without reading content or conversa
     h.canManage = false;
     h.canRead = true;
   }
+});
+
+it.each(["organization", "team", "project"])("offers the same prompts entry for a %s reader", (kind) => {
+  h.pathname = "/team/team-1/prompts";
+  h.memberships = [{ id: "team-1", kind, name: "Space", roles: ["member"] }];
+  h.canRead = true;
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(html).toContain('href="/team/team-1/prompts"');
+  if (kind === "organization") {
+    expect(html).not.toContain('href="/team/team-1/agents"');
+    expect(html).not.toContain("data-chat-list");
+  }
+  h.canRead = false;
+  expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/prompts"');
 });

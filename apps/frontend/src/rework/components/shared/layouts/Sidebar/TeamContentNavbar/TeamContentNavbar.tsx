@@ -17,7 +17,7 @@ import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useEffect } from "react";
 import {
   useMySpacesQuery,
-  usePromptPublicationTeamsQuery,
+  usePromptPublicationSpacesQuery,
   useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
@@ -71,7 +71,7 @@ export default function TeamContentNavbar() {
         agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
       )
     : undefined;
-  const publicationTeams = usePromptPublicationTeamsQuery(
+  const publicationTeams = usePromptPublicationSpacesQuery(
     {},
     {
       skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
@@ -86,6 +86,8 @@ export default function TeamContentNavbar() {
   const content = useSpaceAccess(space?.id, "read");
   const canOpenTeamSettings = manage.allowed;
   const canReadContent = content.allowed;
+  // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
+  const hasAgentWorkspace = space?.kind !== "organization";
 
   const { bootstrap } = useFrontendBootstrap(agentManagement);
 
@@ -196,12 +198,16 @@ export default function TeamContentNavbar() {
 
   const navigationItems: NavigationMenuItemProps[] = canReadContent
     ? [
-        {
-          type: "link",
-          label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
-          icon: { category: "outlined", type: agentIconName as IconType, filled: true },
-          linkProps: { to: `/team/${teamId}/agents` },
-        },
+        ...(hasAgentWorkspace
+          ? ([
+              {
+                type: "link",
+                label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+                icon: { category: "outlined", type: agentIconName as IconType, filled: true },
+                linkProps: { to: `/team/${teamId}/agents` },
+              },
+            ] satisfies NavigationMenuItemProps[])
+          : []),
         {
           type: "link",
           label: t("rework.sidebar.team.menu.resources"),
@@ -292,7 +298,7 @@ export default function TeamContentNavbar() {
           <div className={styles.teamPanelIdentity}>
             {teamAvatar}
             <div className={styles.teamPanelTitle}>
-              {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.teamLabel")}</span>}
+              {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.spaceLabel")}</span>}
               <span className={styles.teamPanelName}>
                 {isPersonalTeam ? t("rework.sidebar.team.userTeam") : (space?.name ?? selectedTeam?.name)}
               </span>
@@ -338,7 +344,7 @@ export default function TeamContentNavbar() {
           <>
             <NavigationMenu items={navigationItems} />
             <Separator margin={"var(--spacing-m)"} />
-            {canReadContent && <ChatList teamId={teamId} spaceId={space?.id} />}
+            {canReadContent && hasAgentWorkspace && <ChatList teamId={teamId} spaceId={space?.id} />}
           </>
         )}
       </div>

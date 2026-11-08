@@ -68,6 +68,8 @@ erDiagram
 "control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
 "control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
 "control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
+"control_plane.prompt_publication" }o--|| "control_plane.space" : "marketplace_space_id"
+"control_plane.prompt_publication" }o--|| "control_plane.prompt" : "prompt_id"
 
 "control_plane.deletion" {
   uuid id
@@ -427,7 +429,6 @@ erDiagram
   text updated_by
   uuid category_id FK
   text__ tags
-  boolean published
 }
 "control_plane.prompt_favorite" {
   text user_id
@@ -648,4 +649,10 @@ erDiagram
   timestamp_with_time_zone expires_at
   timestamp_with_time_zone reviewed_at
   text reviewed_by
+}
+"control_plane.prompt_publication" {
+  uuid prompt_id FK
+  uuid marketplace_space_id FK
+  text published_by
+  timestamp_with_time_zone published_at
 }

@@ -7,6 +7,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import JSZip from "jszip";
+import { promptsJourney } from "./prompts-browser.mjs";
 import { documentStorageJourney } from "./document-storage-browser.mjs";
 import { assertAccountAtBottom } from "./assert-app-layout.mjs";
 
@@ -32,6 +33,7 @@ const expect = baseExpect.configure({ timeout: 60_000 });
 
 async function login(username, password, path = "/admin/provisioning") {
   const context = await browser.newContext({ locale: "en", viewport: { width: 1280, height: 900 } });
+  if (process.env.CONTROL_PLANE_BROWSER_PROMPTS_ONLY === "1") context.setDefaultTimeout(30_000);
   await context.route(/\/(knowledge-flow|fred-agents|agentic-backend|runtime)\/v1\//, async (route) => {
     unavailableServices.push(new URL(route.request().url()).pathname);
     await route.fulfill({
@@ -102,7 +104,9 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
   }
   if (username !== "root") await acceptTerms(page);
-  await expect(page.getByRole("heading", { name: path === "/home" ? /^Hello / : "Provisioning" })).toBeVisible();
+  if (process.env.CONTROL_PLANE_BROWSER_PROMPTS_ONLY !== "1") {
+    await expect(page.getByRole("heading", { name: path === "/home" ? /^Hello / : "Provisioning" })).toBeVisible();
+  }
   return { context, page, bearer };
 }
 
@@ -274,7 +278,11 @@ try {
   await server.waitForRequestsIdle();
   browser = await chromium.launch({ headless: true });
   const root = await login("root", "it-root", "/admin");
-  if (process.env.CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY === "1") {
+  if (process.env.CONTROL_PLANE_BROWSER_PROMPTS_ONLY === "1") {
+    await importFile(root.page, bundle);
+    await promptsJourney({ login, root, origin, expect });
+    assert.deepEqual(pageErrors, [], "Browser application errors");
+  } else if (process.env.CONTROL_PLANE_BROWSER_DOCUMENTS_ONLY === "1") {
     await importFile(root.page, bundle);
     const carl = await login("carl", "Azerty123_", "/home");
     const opening = carl.page.waitForResponse((r) => r.url().endsWith("/me/personal-space"));

@@ -56,6 +56,7 @@ const PROMPT_B_DETAIL = promptFixture({
   text: "Other prompt text",
 });
 let promptBReady = false;
+let refreshedPrompt: Prompt | undefined;
 let context: MySpace[] = SPACES;
 let stamp = 1;
 const answered = (allowed: boolean) => ({
@@ -68,11 +69,13 @@ const answered = (allowed: boolean) => ({
 });
 let catalogError = false;
 let publishedFailure = false;
+let publishingAllowed = true;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
 const spaceAccess = vi.fn();
 const update = vi.fn();
+const setPublication = vi.fn();
 const remove = vi.fn();
 const create = vi.fn();
 const addFavorite = vi.fn(() => ({ unwrap: async () => undefined }));
@@ -89,16 +92,19 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     options.skip
       ? {}
       : {
-          currentData: { ...PROMPT_DETAIL, team_name: "Source" },
+          currentData: { ...PROMPT_DETAIL, source_space_name: "Source" },
           isError: publishedFailure,
           isFetching: false,
           refetch: vi.fn(),
         },
-  usePromptPublicationTeamsQuery: () => ({
-    currentData: { items: context.filter((space) => space.kind === "team"), next_cursor: null },
+  usePromptPublicationSpacesQuery: () => ({
+    currentData: {
+      items: publishingAllowed ? context.map((space) => ({ ...space, marketplace_space_ids: ["org"] })) : [],
+      next_cursor: null,
+    },
     refetch: vi.fn(),
   }),
-  useSetPromptPublicationMutation: () => [vi.fn(() => ({ unwrap: async () => undefined })), { isLoading: false }],
+  useSetPromptPublicationMutation: () => [setPublication, { isLoading: false }],
   useListPromptCategoriesQuery: () => ({
     currentData: { items: [{ id: "cat-a", space_id: SPACE_A, name: "Analysis" }], next_cursor: null },
     refetch: vi.fn(),
@@ -123,7 +129,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     const currentData = opts.skip
       ? undefined
       : args.promptId === PROMPT_DETAIL.prompt_id
-        ? PROMPT_DETAIL
+        ? (refreshedPrompt ?? PROMPT_DETAIL)
         : promptBReady
           ? PROMPT_B_DETAIL
           : undefined;
@@ -207,7 +213,10 @@ beforeEach(async () => {
   stamp = 1;
   route.teamId = SPACE_A;
   promptBReady = false;
+  refreshedPrompt = undefined;
   catalogError = false;
+  publishingAllowed = true;
+  PROMPT_DETAIL.published_in = [];
   createCalls.length = 0;
   createRejectsWith = null;
   deleteRejectsWith = null;
@@ -223,6 +232,7 @@ beforeEach(async () => {
     };
   });
   update.mockImplementation(() => ({ unwrap: async () => PROMPT_DETAIL }));
+  setPublication.mockImplementation(() => ({ unwrap: async () => undefined }));
   remove.mockImplementation(() => ({
     unwrap: async () => {
       if (deleteRejectsWith) throw deleteRejectsWith;
@@ -725,10 +735,10 @@ describe("Weaver prompt metadata and preferences", () => {
 describe("Published prompt access", () => {
   it("hides cached text and copy actions after a detail refusal", () => {
     publishedFailure = false;
-    act(() => root.render(<PromptViewDialog open organizationId="org" promptId="prompt-1" onClose={() => {}} />));
+    act(() => root.render(<PromptViewDialog open marketplaceSpaceId="org" promptId="prompt-1" onClose={() => {}} />));
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(PROMPT_DETAIL.text);
     publishedFailure = true;
-    act(() => root.render(<PromptViewDialog open organizationId="org" promptId="prompt-1" onClose={() => {}} />));
+    act(() => root.render(<PromptViewDialog open marketplaceSpaceId="org" promptId="prompt-1" onClose={() => {}} />));
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog?.textContent).not.toContain(PROMPT_DETAIL.text);
     expect(dialog?.textContent).toContain("chatbot.commandTurn.previewError");
@@ -752,4 +762,108 @@ describe("Source prompt access refusal", () => {
     expect(container.textContent).not.toContain(PROMPT_DETAIL.display_name);
     expect(container.textContent).toContain("rework.weaverAgents.scopeUnavailable");
   });
+});
+
+describe("Prompt management in every space kind", () => {
+  it.each(["organization", "team", "project", "personal"] as const)(
+    "uses the same page, catalog and editor in a %s space",
+    async (kind) => {
+      context = [{ ...SPACES[0], kind }];
+      catalogRead.mockClear();
+      await render();
+      expect(catalogRead).toHaveBeenCalledWith({ spaceId: SPACE_A });
+      expect(spaceAccess).toHaveBeenCalledWith({ space_id: SPACE_A, permission: "write" });
+      cardAction("edit");
+      typeInto(fieldByLabel("form.name")!, "Revised title");
+      await save();
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spaceId: SPACE_A,
+          promptId: PROMPT_DETAIL.prompt_id,
+          updatePromptRequest: expect.objectContaining({ display_name: "Revised title" }),
+        }),
+      );
+      click(button("rework.teams.prompts.create"));
+      typeInto(fieldByLabel("form.name")!, "Weekly");
+      typeInto(fieldByLabel("weaverPrompts.logicalName")!, "weekly");
+      setText("Instructions");
+      await save();
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ spaceId: SPACE_A }));
+      spaceAccess.mockImplementation(({ permission }) => answered(permission === "read"));
+      await render();
+      expect(button("rework.teams.prompts.create")).toBeUndefined();
+      expect(container.querySelector('[role="button"]')).not.toBeNull();
+      const star = container.querySelector('button[aria-label="rework.teams.prompts.favorite.add"]');
+      await act(async () => click(star));
+      expect(addFavorite).toHaveBeenCalledWith({ spaceId: SPACE_A, promptId: PROMPT_DETAIL.prompt_id });
+    },
+  );
+});
+
+it.each(["organization", "team", "project", "personal"] as const)(
+  "requires confirmation and an explicit destination when publishing from %s",
+  async (kind) => {
+    context = [{ ...SPACES[0], kind }];
+    await render();
+    cardAction("publish");
+    expect(setPublication).not.toHaveBeenCalled();
+    expect(confirmation.last?.message).toBe("rework.teams.prompts.publishDialog.message");
+    await act(async () => confirmation.last?.onConfirm());
+    expect(setPublication).toHaveBeenCalledExactlyOnceWith({
+      spaceId: SPACE_A,
+      promptId: PROMPT_DETAIL.prompt_id,
+      marketplaceSpaceId: "org",
+      promptPublicationRequest: { published: true },
+    });
+  },
+);
+
+it("shows publication status to a reader without offering publication actions", async () => {
+  publishingAllowed = false;
+  PROMPT_DETAIL.published_in = ["org"];
+  spaceAccess.mockImplementation(({ permission }) => answered(permission === "read"));
+  await render();
+  expect(container.textContent).toContain("rework.teams.prompts.card.publishedChip");
+  expect(container.textContent).not.toContain("rework.teams.prompts.createPrompt");
+  const card = container.querySelector('[role="button"]')!;
+  expect(
+    Array.from(card.querySelectorAll("button")).find((button) => button.textContent?.includes("more_vert")),
+  ).toBeUndefined();
+  expect(document.body.textContent).not.toContain("card.menu.publish");
+  expect(document.body.textContent).not.toContain("card.menu.unpublish");
+});
+
+it("preserves untouched fields after another editor's changes refresh the detail query", async () => {
+  cardAction("edit");
+  typeInto(fieldByLabel("form.name")!, "My title");
+  refreshedPrompt = {
+    ...PROMPT_DETAIL,
+    description: "Another editor's description",
+    text: "Another editor's text",
+    tags: ["new-tag"],
+    category_id: null,
+  };
+  await render();
+  await save();
+  expect(update).toHaveBeenCalledExactlyOnceWith({
+    spaceId: SPACE_A,
+    promptId: PROMPT_DETAIL.prompt_id,
+    updatePromptRequest: {
+      display_name: "My title",
+      description: undefined,
+      text: undefined,
+      tags: undefined,
+      category_id: undefined,
+    },
+  });
+});
+
+it("omits an edit reverted to the opening value even after a server refresh", async () => {
+  cardAction("edit");
+  typeInto(fieldByLabel("form.name")!, "Temporary title");
+  refreshedPrompt = { ...PROMPT_DETAIL, display_name: "Someone else's title" };
+  await render();
+  typeInto(fieldByLabel("form.name")!, PROMPT_DETAIL.display_name);
+  await save();
+  expect(update.mock.calls[0][0].updatePromptRequest.display_name).toBeUndefined();
 });

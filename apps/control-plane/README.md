@@ -24,14 +24,13 @@ make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
 
-## Organization supervision (API only)
+## Organization supervision
 
-The existing Control Plane serves organization totals and team detail, gated by
-organization attachment. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
-defines counters, privacy boundaries, pagination and failure behavior; the
-[read budget](../../docs/architecture/09-quality.md#organization-supervision-read-budget)
-documents SQL costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
-is generated from the handlers. There is no supervision UI or separate service.
+Control Plane serves organization totals and team detail, gated by organization
+attachment. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
+defines counters, privacy boundaries, pagination and the UI. The generated
+[REST inventory](../../docs/architecture/A12-control-plane-api.md#organizations-routes)
+lists its operations; supervision does not require a separate service.
 
 ## Embedded Rust agent
 
@@ -1138,10 +1137,17 @@ it bootstraps through the UI, accepts CGU, imports the actual Make ZIP, replays 
 imports a project variant, then switches accounts in the same browser. It checks
 consent isolation, empty root memberships, persisted hierarchy/roles, reports,
 refusals, unsupported direct URLs and keyboard logout through the existing account
-menu. Any control-plane, knowledge-flow or agent-runtime call fails the test. Screenshots are
+menu. Control Plane is real; unavailable Knowledge Flow and external runtime
+requests receive explicit failures. Screenshots are
 written under the frontend's ignored `target/` directory. The manager's
 `make test-browser` invokes the same journey and integration suite when frontend
 dependencies and Chromium are already installed.
+
+From `apps/control-plane`, `make test-prompts-browser` reuses this fixture for prompt management in four spaces,
+home search, the prompt self-test launcher, composer insertion and role isolation.
+Prompt and authorization HTTP responses are real; no model generation is exercised.
+It writes screenshots and `prompts-browser-progress.log` under the same ignored
+frontend `target/` directory.
 
 ## Existing local state
 

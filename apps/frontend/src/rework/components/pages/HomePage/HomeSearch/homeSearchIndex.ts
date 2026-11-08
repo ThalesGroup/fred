@@ -35,9 +35,8 @@ export interface TeamEntry {
   /** Custom team avatar; when absent the row falls back to coloured initials. */
   avatarImageUrl?: string | null;
 }
-export interface TeamPromptGroup {
-  teamId: string;
-  teamName: string;
+export interface SpacePromptGroup {
+  spaceName: string;
   prompts: PromptSummary[];
 }
 
@@ -63,10 +62,10 @@ export interface PromptHit {
   description: string;
   logicalName: string;
   tags: string[];
-  /** Set for team prompts — drives the PromptViewDialog team variant. */
-  teamId: string;
-  /** Author/owner team name — the dialog chip + a result sublabel. */
-  teamName: string;
+  /** Canonical space returned by Weaver, used to read the selected prompt. */
+  spaceId: string;
+  /** Owning space name, used by the dialog chip and result sublabel. */
+  spaceName: string;
 }
 export type SearchHit = AgentHit | TeamHit | PromptHit;
 
@@ -83,10 +82,10 @@ export interface HomeSearchResults {
 }
 
 /** Project complete space catalogs into the common search-result shape. */
-export function unifyPrompts(teamGroups: TeamPromptGroup[]): PromptHit[] {
+export function unifyPrompts(spaceGroups: SpacePromptGroup[]): PromptHit[] {
   const seen = new Set<string>();
   const out: PromptHit[] = [];
-  for (const group of teamGroups) {
+  for (const group of spaceGroups) {
     for (const prompt of group.prompts) {
       if (seen.has(prompt.prompt_id)) continue;
       seen.add(prompt.prompt_id);
@@ -97,8 +96,8 @@ export function unifyPrompts(teamGroups: TeamPromptGroup[]): PromptHit[] {
         description: prompt.description ?? "",
         logicalName: prompt.logical_name,
         tags: prompt.tags,
-        teamId: group.teamId,
-        teamName: group.teamName,
+        spaceId: prompt.space_id,
+        spaceName: group.spaceName,
       });
     }
   }

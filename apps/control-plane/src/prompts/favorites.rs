@@ -23,6 +23,8 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     ))
 }
 
+/// Change only the caller's favorite after checking Read permission in the space mutation transaction.
+/// This preference grants no access and does not modify the prompt's content or attribution.
 async fn set_favorite(
     s: &AppState,
     actor: &str,
@@ -30,9 +32,8 @@ async fn set_favorite(
     prompt_id: Uuid,
     favorite: bool,
 ) -> AppResult<StatusCode> {
-    let (mut tx, space) =
+    let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, actor, space_id, Permission::Read).await?;
-    super::require_prompt_space(space.kind)?;
     let exists: bool = sqlx::query_scalar(
         "select exists(select 1 from prompt where space_id=$1 and prompt_id=$2)",
     )

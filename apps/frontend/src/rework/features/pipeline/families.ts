@@ -55,7 +55,7 @@ export interface SelfTestFamily {
 }
 
 /** Every family, in page order. The hooks run unconditionally, so the order never changes. */
-export function useSelfTestFamilies(): SelfTestFamily[] {
+export function useSelfTestFamilies(promptSpaceId: string | undefined): SelfTestFamily[] {
   const deps = usePipelineDeps();
   const platform = useScenarioRun(platformScenario, usePlatformDeps());
   const identity = useAuthzProbeRun();
@@ -63,7 +63,7 @@ export function useSelfTestFamilies(): SelfTestFamily[] {
   const knowledgeDeps = useKnowledgeDeps(deps);
   const knowledge = useScenarioRun(knowledgeScenario, knowledgeDeps);
   const agents = useScenarioRun(agentsScenario, useAgentsDeps(deps));
-  const prompts = useScenarioRun(promptsScenario, usePromptsDeps(deps));
+  const prompts = useScenarioRun(promptsScenario, usePromptsDeps(promptSpaceId));
   const conversations = useScenarioRun(conversationsScenario, useConversationsDeps(deps));
   const teams = useScenarioRun(teamsScenario, useTeamsDeps());
   const web = useScenarioRun(webResearchScenario, deps);

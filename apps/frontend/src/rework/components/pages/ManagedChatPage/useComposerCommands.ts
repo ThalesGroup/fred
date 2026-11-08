@@ -165,7 +165,6 @@ export interface ComposerCommandsMenu {
 export function useComposerCommands(params: {
   enabled?: boolean;
   skillsEnabled?: boolean;
-  promptsEnabled?: boolean;
   skillCatalog?: SkillCatalog;
   skillsLoading?: boolean;
   skillsFailed?: boolean;
@@ -260,7 +259,7 @@ export function useComposerCommands(params: {
     paramsRef.current.setInput(value);
   }, []);
 
-  const teamQueried = enabled && !!teamId && params.promptsEnabled !== false;
+  const teamQueried = enabled && !!teamId;
   const teamCatalog = usePromptCatalogQuery({ spaceId: teamId }, { skip: !teamQueried });
   const prompts = !teamQueried
     ? []

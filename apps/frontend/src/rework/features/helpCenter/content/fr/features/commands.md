@@ -7,8 +7,9 @@ icon: bolt
 
 # Les commandes
 
-Une **commande** est un raccourci vers un prompt, le vôtre ou celui d'une
-équipe. Dans une conversation, tapez `/` puis son nom : à l'envoi, l'agent
+Une **commande** est un raccourci vers un prompt de l'espace de la conversation
+ou de votre espace personnel dans la même organisation. Dans une conversation,
+tapez `/` puis son nom : à l'envoi, l'agent
 reçoit directement le texte du prompt, sans passer par la bibliothèque.
 
 C'est utile pour les demandes que vous refaites souvent : une relecture, un
@@ -16,23 +17,22 @@ résumé, une recherche cadrée.
 
 ## Donner une commande à un prompt
 
-Sur la page **Prompts**, chaque prompt peut porter une commande : un mot court,
-en minuscules, sans accent ni espace : `resume`, `relecture`, `note-interne`.
-Le champ se trouve juste sous le titre du prompt.
+À la création, chaque prompt reçoit un **nom de commande** obligatoire,
+unique dans son espace : de 1 à 64 lettres minuscules non accentuées, chiffres,
+tirets ou caractères `_`, sans espace ni `/`. Par exemple : `resume`,
+`relecture`, `note-interne`.
 
-> Dans votre espace personnel, vous pouvez donner une commande à n'importe
-> lequel de vos prompts : elle vous suit dans toutes vos conversations. Dans
-> une équipe, il faut le rôle **Éditeur**, comme pour créer un prompt ; tout
-> membre de l'équipe peut ensuite l'utiliser.
+Le nom de commande est immuable. Le titre et le contenu restent modifiables
+par les éditeurs de l'espace. Pour obtenir une variante avec une autre
+commande, dupliquez le prompt et choisissez un nouveau nom disponible.
+Il n'y a pas de suffixe ajouté automatiquement en cas de doublon.
 
-Une commande est propre à un espace : deux équipes peuvent avoir chacune leur
-`/resume`, et vous le vôtre, mais dans une même équipe ou dans votre espace
-personnel elle ne peut désigner qu'un seul prompt. Un prompt sans commande
-reste utilisable normalement depuis la bibliothèque.
-
-Quand vous importez un prompt dont la commande est déjà prise dans l'espace
-d'accueil, un suffixe est ajouté (`/resume-2`) pour que les deux restent
-joignables.
+La bibliothèque gère les espaces organisation, équipe, projet et personnel,
+mais le menu `/` n'agrège pas toutes ces bibliothèques : il propose celle de
+l'espace de la conversation et, s'il est disponible, votre espace personnel
+de la même organisation. Les publications du marketplace n'y sont pas ajoutées.
+Deux espaces peuvent chacun avoir un `/resume` ; dans un même espace, ce nom
+ne désigne qu'un seul prompt. Voir [Les prompts](/help/fr/features/prompts).
 
 ## Lancer une commande
 
@@ -47,10 +47,10 @@ premier celles dont le nom commence ainsi.
 
 La liste est rangée en trois parties, chacune sous son titre :
 
-1. **Équipe « nom de l'équipe »** : les commandes de l'équipe de la
+1. **Équipe « nom de l'espace »** : les commandes de l'espace de la
    conversation ;
-2. **Espace personnel** : vos propres commandes, proposées quel que soit
-   l'agent ;
+2. **Espace personnel** : vos commandes dans la même organisation, si
+   cet espace est accessible ;
 3. **Skills plateforme** : les skills que l'agent sait utiliser.
 
 Une partie qui n'a rien à proposer n'apparaît pas. Dans votre espace
@@ -58,10 +58,10 @@ personnel, vos commandes ne sont listées qu'une fois, sous **Espace
 personnel**. Si les commandes ne peuvent pas être chargées, la liste le dit :
 tapez `/` à nouveau pour réessayer.
 
-Si l'équipe et vous avez une commande du même nom, elle apparaît dans les deux
+Si l'espace de la conversation et vous avez une commande du même nom, elle apparaît dans les deux
 parties : choisissez la ligne voulue, c'est ce prompt précis qui sera lancé. Si
-vous tapez le nom sans choisir de ligne, la commande de l'équipe passe en
-premier, puis la vôtre si l'équipe n'en a pas.
+vous tapez le nom sans choisir de ligne, la commande de l'espace de la conversation passe en
+premier, puis la vôtre si cet espace n'en a pas.
 
 - **↓** et **↑** parcourent la liste ;
 - **Entrée**, **Tab** ou un clic ajoutent la commande à votre message, sans
@@ -144,7 +144,5 @@ Les instructions d'un skill restent valables pour la suite de la conversation
 et s'appliquent quand la demande s'y prête. Elles ne donnent à l'agent ni outil
 ni droit supplémentaire.
 
-`/skill` est réservé. Un ancien prompt portant cette commande reste disponible
-dans la bibliothèque et modifiable ; renommez sa commande pour retrouver son
-raccourci. Une nouvelle affectation, un import ou une promotion avec cette
-commande sont refusés.
+`/skill` est réservé et ne peut pas être choisi comme nom de commande d'un
+prompt, à la création comme à la duplication.

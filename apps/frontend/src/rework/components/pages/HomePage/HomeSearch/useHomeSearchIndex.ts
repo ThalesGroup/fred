@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import type { store } from "../../../../../common/store";
 import {
@@ -30,23 +30,20 @@ export function useHomeSearchIndex(active: boolean) {
   const context = useMySpacesQuery(undefined, { skip: !active, refetchOnMountOrArgChange: true });
   const dispatch = useDispatch<typeof store.dispatch>();
   const [refresh, setRefresh] = useState(0);
-  const spaces = useMemo(
-    () => (context.currentData ?? []).filter((space) => space.kind === "team" || space.kind === "personal"),
-    [context.currentData],
-  );
+  const spaces = context.currentData;
   // Structural sharing keeps `spaces` through a refresh that changes nothing: no reindex.
   const scope = useMemo(() => ({ spaces, active, refresh }), [spaces, active, refresh]);
   const [snapshot, setSnapshot] = useState<{ scope: typeof scope; sources: SearchSources; failed: boolean }>();
 
   useEffect(() => {
-    if (!active || !context.currentData || context.isError) return;
+    if (!active || !spaces || context.isError) return;
     let cancelled = false;
     let nextSpace = 0;
     let failed = false;
     const pending = new Set<{ abort: () => void; unsubscribe: () => void }>();
     const sources: SearchSources = {
       agents: [],
-      teams: spaces.map((space) => ({ id: space.id, name: space.name })),
+      teams: [],
       prompts: [],
     };
     const stop = () => {
@@ -63,27 +60,32 @@ export function useHomeSearchIndex(active: boolean) {
     const worker = async () => {
       while (!cancelled && nextSpace < spaces.length) {
         const space = spaces[nextSpace++];
-        const agents = dispatch(
-          api.endpoints.listAgentInstances.initiate({ spaceId: space.id }, { forceRefetch: true }),
-        );
+        // Prompt catalogs support all spaces; agent routes retain their own scope.
+        const agents =
+          space.kind === "team" || space.kind === "personal"
+            ? dispatch(api.endpoints.listAgentInstances.initiate({ spaceId: space.id }, { forceRefetch: true }))
+            : undefined;
+        if (agents) sources.teams.push({ id: space.id, name: space.name });
         const prompts = dispatch(api.endpoints.listPrompts.initiate({ spaceId: space.id }, { forceRefetch: true }));
-        pending.add(agents);
+        if (agents) pending.add(agents);
         pending.add(prompts);
         const results = await Promise.all([agents, prompts]);
         for (const result of results) {
           if (
-            result.error &&
+            result?.error &&
             !("status" in result.error && (result.error.status === 403 || result.error.status === 404))
           )
             failed = true;
         }
         if (!cancelled) {
-          for (const instance of results[0].data?.items ?? []) {
+          for (const instance of (results[0]?.isSuccess && results[0].data?.items) || []) {
             if (instance.status === "enabled")
               sources.agents.push({ instance, teamId: space.id, teamName: space.name });
           }
           sources.prompts.push(
-            ...unifyPrompts([{ teamId: space.id, teamName: space.name, prompts: results[1].data?.items ?? [] }]),
+            ...unifyPrompts([
+              { spaceName: space.name, prompts: (results[1].isSuccess && results[1].data?.items) || [] },
+            ]),
           );
           if (sources.agents.length + sources.prompts.length > 10_000) {
             cancelled = true;
@@ -91,9 +93,9 @@ export function useHomeSearchIndex(active: boolean) {
             setSnapshot({ scope, sources: EMPTY, failed: true });
           }
         }
-        agents.unsubscribe();
+        agents?.unsubscribe();
         prompts.unsubscribe();
-        pending.delete(agents);
+        if (agents) pending.delete(agents);
         pending.delete(prompts);
       }
     };
@@ -106,17 +108,18 @@ export function useHomeSearchIndex(active: boolean) {
       clearTimeout(timeout);
       stop();
     };
-  }, [active, context.currentData, context.isError, dispatch, scope, spaces]);
+  }, [active, context.isError, dispatch, scope, spaces]);
 
   const current = snapshot?.scope === scope && !context.isError ? snapshot : undefined;
+  const retry = useCallback(() => {
+    if (context.isError) void context.refetch();
+    else setRefresh((value) => value + 1);
+  }, [context.isError, context.refetch]);
   return {
     ...(current?.sources ?? EMPTY),
     scope,
     isLoading: active && !context.isError && !current,
     isError: context.isError || Boolean(current?.failed),
-    retry: () => {
-      if (context.isError) void context.refetch();
-      else setRefresh((value) => value + 1);
-    },
+    retry,
   };
 }

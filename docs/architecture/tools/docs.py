@@ -26,7 +26,9 @@ Directives:
     mermaid <path> [tables...] a generated .mmd file, optionally an induced ER subgraph
     routes <path> <base>    the HTTP routes of an axum router
     openapi <path> [groups...] operations and schemas, optionally filtered by route group
+    openapi-index <path>    compact inventory of registered methods, paths and operation IDs
     schemas <path> <names...> selected JSON/OpenAPI schemas and their referenced types
+    source-map <path::function...> Rust functions and their adjacent /// comments
     invariants              each invariant of the dossier and the tests proving it
 
 `check` fails when a block differs from its sources, when an invariant has no test,
@@ -40,6 +42,7 @@ references outside the dossier. Without paths, check also verifies its invariant
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from itertools import takewhile
@@ -72,6 +75,45 @@ def fenced(lang: str, text: str) -> str:
     return f"```{lang}\n{text.rstrip()}\n```\n"
 
 
+def source_map(references: list[str], chapter: Path) -> str:
+    """Resolve explicit Rust function anchors, not behavioral proofs or a call graph.
+
+    This small subset requires /// comments immediately before the signature.
+    Attributes between the comment and function are deliberately unsupported.
+    """
+    if not references or len(set(references)) != len(references):
+        raise ValueError("source-map requires distinct path::function references")
+    lines = [
+        row("Implementation anchor", "Responsibility declared in source"),
+        row("---", "---"),
+    ]
+    for reference in references:
+        path, name = reference.rsplit("::", 1)
+        source = (ROOT / path).read_text()
+        signature = rf"^(?:pub(?:\([^\n)]+\))? )?(?:async )?fn {re.escape(name)}\b"
+        matches = list(re.finditer(signature, source, re.M))
+        if len(matches) != 1:
+            raise ValueError(f"{reference}: expected exactly one Rust function")
+        match = matches[0]
+        comments = list(
+            takewhile(
+                lambda line: line.startswith("///"),
+                reversed(source[: match.start()].splitlines()),
+            )
+        )
+        description = prose(" ".join(line[3:].strip() for line in reversed(comments)))
+        if not description:
+            raise ValueError(
+                f"{reference}: missing adjacent /// responsibility comment"
+            )
+        line = source.count("\n", 0, match.start()) + 1
+        target = Path(os.path.relpath(ROOT / path, chapter.parent)).as_posix()
+        lines.append(
+            row(f"[`{Path(path).name}::{name}`]({target}#L{line})", description)
+        )
+    return "\n".join(lines) + "\n"
+
+
 def routes(path: str, base: str) -> str:
     source = (ROOT / path).read_text()
     rows = []
@@ -89,7 +131,7 @@ def routes(path: str, base: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-METHODS = ["get", "post", "put", "patch", "delete"]
+METHODS = ["get", "post", "put", "patch", "delete", "head", "options", "trace"]
 LIMITS = {
     "minimum": ">=",
     "maximum": "<=",
@@ -292,10 +334,12 @@ def operation_section(path: str, method: str, op: dict) -> list[str]:
     return lines + [""]
 
 
-def openapi(path: str, *selected_groups: str) -> str:
+def openapi(path: str, *selected_groups: str, inventory: bool = False) -> str:
     spec = json.loads((ROOT / path).read_text())
     paths = spec["paths"]
-    shared = takewhile(lambda s: len(set(s)) == 1, zip(*(p.split("/") for p in paths)))
+    shared = takewhile(
+        lambda s: len(set(s)) == 1, zip(*(p.split("/")[:-1] for p in paths))
+    )
     prefix = "/".join(s[0] for s in shared)
     groups: dict[str, list[tuple[str, str, dict]]] = {}
     for route, item in sorted(paths.items()):
@@ -308,11 +352,37 @@ def openapi(path: str, *selected_groups: str) -> str:
             )
     contents = [f"[`/{g}`](#{anchor(f'/{g} routes')})" for g in sorted(groups)]
     lines = [f"Paths are relative to `{prefix}`.", ""]
-    lines += [f"Operations: {' · '.join(contents)}. [Schemas](#schemas).", ""]
+    schemas_link = "" if inventory else " [Schemas](#schemas)."
+    lines += [f"Operations: {' · '.join(contents)}.{schemas_link}", ""]
     for group, operations in sorted(groups.items()):
-        lines += [f"## /{group} routes", ""] + overview(operations)
-        for relative, method, op in operations:
-            lines += operation_section(relative, method, op)
+        lines += [f"## /{group} routes", ""]
+        if inventory:
+            lines += [
+                row("Method", "Path", "Operation", "Authentication"),
+                row("---", "---", "---", "---"),
+            ]
+            for relative, method, op in operations:
+                security = op.get("security", spec.get("security", []))
+                authentication = (
+                    ("Optional" if {} in security else "Required")
+                    if any(security)
+                    else "Public"
+                )
+                lines.append(
+                    row(
+                        method.upper(),
+                        f"`{relative}`",
+                        f"`{op['operationId']}`",
+                        authentication,
+                    )
+                )
+            lines.append("")
+        else:
+            lines += overview(operations)
+            for relative, method, op in operations:
+                lines += operation_section(relative, method, op)
+    if inventory:
+        return "\n".join(lines)
     lines += ["## Schemas", ""]
     for name, schema in sorted(spec["components"]["schemas"].items()):
         lines += schema_section(name, schema)
@@ -450,14 +520,18 @@ def invariants() -> str:
     return "\n".join(lines) + "\n"
 
 
-def render(directive: str) -> str:
+def render(directive: str, chapter: Path | None = None) -> str:
     kind, *args = directive.split()
+    if kind == "source-map":
+        return source_map(args, chapter or DOSSIER / "reference.md")
     if kind == "include":
         return fenced(args[1] if len(args) > 1 else "", (ROOT / args[0]).read_text())
     if kind == "mermaid":
         return mermaid(*args)
     if kind == "routes":
         return routes(args[0], args[1])
+    if kind == "openapi-index":
+        return openapi(*args, inventory=True)
     if kind == "openapi":
         return openapi(*args)
     if kind == "schemas":
@@ -467,16 +541,16 @@ def render(directive: str) -> str:
     raise ValueError(f"unknown directive: {directive}")
 
 
-def regenerate(text: str) -> str:
+def regenerate(text: str, chapter: Path | None = None) -> str:
     return BLOCK.sub(
-        lambda m: m.group(1) + render(m.group("directive")) + m.group(4), text
+        lambda m: m.group(1) + render(m.group("directive"), chapter) + m.group(4), text
     )
 
 
 def generate(paths: list[str]) -> None:
     for chapter in [ROOT / path for path in paths] if paths else chapters():
         text = chapter.read_text()
-        updated = regenerate(text)
+        updated = regenerate(text, chapter)
         if updated != text:
             chapter.write_text(updated)
             print(f"updated {chapter.relative_to(ROOT)}")
@@ -486,7 +560,7 @@ def check(paths: list[str]) -> int:
     problems = []
     for chapter in [ROOT / path for path in paths] if paths else chapters():
         text = chapter.read_text()
-        if regenerate(text) != text:
+        if regenerate(text, chapter) != text:
             problems.append(
                 f"{chapter.relative_to(ROOT)}: generated blocks are stale (make generate)"
             )

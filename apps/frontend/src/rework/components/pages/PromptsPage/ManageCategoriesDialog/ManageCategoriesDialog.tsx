@@ -189,7 +189,9 @@ export default function ManageCategoriesDialog({
     <FullPageModal isOpen={open} onClose={cancel} id="manage-prompt-categories-modal" background="container">
       <div className={styles.card}>
         <div className={styles.header}>
-          <span className={styles.title}>{t("rework.promptCategories.manage.title")}</span>
+          <span id="manage-prompt-categories-modal-title" className={styles.title}>
+            {t("rework.promptCategories.manage.title")}
+          </span>
         </div>
 
         <div className={styles.createRow}>

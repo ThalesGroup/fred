@@ -23,15 +23,22 @@ const agent = (id: string, name: string, role = "", description = ""): ManagedAg
   ({ agent_instance_id: id, display_name: name, role, description, status: "enabled" }) as ManagedAgentInstanceSummary;
 
 const teamPrompt = (id: string, name: string, description = ""): PromptSummary =>
-  ({ prompt_id: id, display_name: name, logical_name: id, tags: ["search-tag"], description }) as PromptSummary;
+  ({
+    prompt_id: id,
+    space_id: "t1",
+    display_name: name,
+    logical_name: id,
+    tags: ["search-tag"],
+    description,
+  }) as PromptSummary;
 
 describe("unifyPrompts", () => {
   it("keeps the canonical space and identity and deduplicates repeated catalog entries", () => {
     const out = unifyPrompts([
-      { teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Shared"), teamPrompt("p1", "Shared")] },
+      { spaceName: "Alpha", prompts: [teamPrompt("p1", "Shared"), teamPrompt("p1", "Shared")] },
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ id: "p1", teamId: "t1", logicalName: "p1", tags: ["search-tag"] });
+    expect(out[0]).toMatchObject({ id: "p1", spaceId: "t1", logicalName: "p1", tags: ["search-tag"] });
   });
 });
 
@@ -46,7 +53,7 @@ describe("filterHomeSearch", () => {
       { id: "t2", name: "Contracts Team", avatarImageUrl: "https://cdn/contracts.png" },
     ],
     prompts: unifyPrompts([
-      { teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Contract summary", "summarize a contract")] },
+      { spaceName: "Alpha", prompts: [teamPrompt("p1", "Contract summary", "summarize a contract")] },
     ]),
   };
 

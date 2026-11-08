@@ -148,7 +148,6 @@ function Host({
   agentInstanceId = "instance-1",
   personalTeamId,
   skillsEnabled = false,
-  promptsEnabled = true,
   sessionId = "session-1",
 }: {
   inlineEditor?: boolean;
@@ -156,7 +155,6 @@ function Host({
   agentInstanceId?: string;
   personalTeamId?: string;
   skillsEnabled?: boolean;
-  promptsEnabled?: boolean;
   sessionId?: string;
 }) {
   const [input, setInput] = useState("");
@@ -164,7 +162,6 @@ function Host({
   const commands = useComposerCommands({
     teamId,
     skillsEnabled,
-    promptsEnabled,
     skillCatalog: skillsEnabled && !skillsPending ? (skillCatalog ?? NO_SKILLS) : undefined,
     skillsLoading: skillsEnabled && skillsPending,
     skillsFailed: skillsEnabled && skillsFailed,
@@ -2859,14 +2856,12 @@ describe("Weaver invocation eligibility", () => {
   );
 });
 
-it("runs an authorized project skill without waiting for the unsupported project prompt catalog", async () => {
-  commandsFetching = true;
-  commandsFailed = true;
+it("runs an authorized project skill alongside the project prompt catalog", async () => {
   skillCatalog = { supported: true, skills: [{ name: "graph", description: "Draw" }] };
-  act(() => root.render(<Host teamId="project" skillsEnabled promptsEnabled={false} />));
+  act(() => root.render(<Host teamId="project" skillsEnabled />));
   type("/graph explain");
   await pressAsync("Enter");
   expect(onRunSkill).toHaveBeenCalledWith(expect.objectContaining({ skills: [{ name: "graph" }] }));
   expect(onSkillError).not.toHaveBeenCalled();
-  expect(listCommands).toHaveBeenCalledWith({ spaceId: "project" }, expect.objectContaining({ skip: true }));
+  expect(listCommands).toHaveBeenCalledWith({ spaceId: "project" }, expect.objectContaining({ skip: false }));
 });

@@ -32,7 +32,7 @@ interface PromptViewDialogProps {
   open: boolean;
   onClose: () => void;
   spaceId?: string;
-  organizationId?: string;
+  marketplaceSpaceId?: string;
   promptId?: string | null;
   categories?: { id: string; name: string }[];
   chipLabel?: string | null;
@@ -44,7 +44,7 @@ interface PromptViewDialogProps {
 export default function PromptViewDialog({
   open,
   spaceId,
-  organizationId,
+  marketplaceSpaceId,
   promptId,
   categories = [],
   chipLabel,
@@ -57,17 +57,17 @@ export default function PromptViewDialog({
   const weaver = useGetPromptQuery(
     { spaceId: spaceId ?? "", promptId: promptId ?? "" },
     {
-      ...crossSessionRefreshOptions(!!organizationId || !open || !spaceId || !promptId),
+      ...crossSessionRefreshOptions(!!marketplaceSpaceId || !open || !spaceId || !promptId),
       refetchOnMountOrArgChange: true,
     },
   );
-  useRefetchOnWindowFocus(weaver.refetch, !!organizationId || !open || !spaceId || !promptId);
+  useRefetchOnWindowFocus(weaver.refetch, !!marketplaceSpaceId || !open || !spaceId || !promptId);
   const published = usePublishedPromptQuery(
-    { organizationId: organizationId ?? "", promptId: promptId ?? "" },
-    { ...crossSessionRefreshOptions(!open || !organizationId || !promptId), refetchOnMountOrArgChange: true },
+    { marketplaceSpaceId: marketplaceSpaceId ?? "", promptId: promptId ?? "" },
+    { ...crossSessionRefreshOptions(!open || !marketplaceSpaceId || !promptId), refetchOnMountOrArgChange: true },
   );
-  useRefetchOnWindowFocus(published.refetch, !open || !organizationId || !promptId);
-  const detail = organizationId
+  useRefetchOnWindowFocus(published.refetch, !open || !marketplaceSpaceId || !promptId);
+  const detail = marketplaceSpaceId
     ? !published.isError && !published.isFetching
       ? published.currentData
       : undefined
@@ -76,17 +76,17 @@ export default function PromptViewDialog({
         ? weaver.currentData
         : undefined
       : undefined;
-  const failed = organizationId ? published.isError : spaceId ? weaver.isError : false;
+  const failed = marketplaceSpaceId ? published.isError : spaceId ? weaver.isError : false;
   const name = detail?.display_name;
   const command = detail?.logical_name;
 
   useEffect(() => {
     setCopied(false);
-  }, [open, promptId, organizationId, spaceId]);
+  }, [open, promptId, marketplaceSpaceId, spaceId]);
 
   const category = categories.find((category) => category.id === detail?.category_id);
-  const resolvedChipLabel = organizationId
-    ? published.currentData?.team_name
+  const resolvedChipLabel = marketplaceSpaceId
+    ? published.currentData?.source_space_name
     : (chipLabel ?? category?.name ?? t("rework.promptCategories.noCategory"));
 
   const handleCopy = () => {

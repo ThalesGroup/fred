@@ -87,12 +87,6 @@ const PAGES: OrganizationAdminPage[] = [
     requires: "admin",
   },
   {
-    to: "/admin/self-test",
-    labelKey: "rework.sidebar.admin.menu.selftest",
-    icon: { category: "outlined", type: "check_circle", filled: false },
-    requires: "admin",
-  },
-  {
     to: "/admin/platform-access",
     labelKey: "rework.platformAccess.title",
     icon: { category: "outlined", type: "lock", filled: false },

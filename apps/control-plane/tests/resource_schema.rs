@@ -546,3 +546,67 @@ async fn assigned_agent_names_are_canonical_local_and_immutable() {
             .unwrap();
     assert_eq!(independent, ("resume".into(), serde_json::json!({})));
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn prompt_publications_enforce_destination_attribution_and_cascades() {
+    let pool = database().await;
+    let sources = spaces(&pool).await;
+    let outside = spaces(&pool).await[0];
+    let mut prompt_ids = Vec::new();
+    for source in sources {
+        let id = prompt(&pool, source, "published").await.unwrap();
+        prompt_ids.push(id);
+        for destination in [outside, sources[1]] {
+            violation(sqlx::query("insert into prompt_publication(prompt_id,marketplace_space_id,published_by) values($1,$2,'alice')")
+                .bind(id).bind(destination).execute(&pool).await.unwrap_err(), "23514");
+        }
+        sqlx::query("insert into prompt_publication(prompt_id,marketplace_space_id,published_by) values($1,$2,'alice')")
+            .bind(id).bind(sources[0]).execute(&pool).await.unwrap();
+        violation(
+            sqlx::query("update prompt_publication set published_by='bob' where prompt_id=$1")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .unwrap_err(),
+            "23514",
+        );
+    }
+    sqlx::query("delete from prompt where prompt_id=$1")
+        .bind(prompt_ids[1])
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from prompt_publication where prompt_id=$1")
+            .bind(prompt_ids[1])
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query("delete from space where id=$1")
+        .bind(sources[2])
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from prompt_publication")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+    sqlx::query("delete from space where organization_id=$1")
+        .bind(sources[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from prompt_publication")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}

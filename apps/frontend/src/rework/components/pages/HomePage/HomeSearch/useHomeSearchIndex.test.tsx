@@ -2,19 +2,26 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { act, useState } from "react";
+import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { configureStore } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MySpace } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { SPACES } from "../../TeamAgentsPage/weaverAgentFixtures";
-import { promptSummaryFixture } from "../../PromptsPage/weaverPromptFixtures";
+import { INSTANCE, SPACES } from "../../TeamAgentsPage/weaverAgentFixtures";
+import { promptFixture, promptSummaryFixture } from "../../PromptsPage/weaverPromptFixtures";
 
 const h = vi.hoisted(() => ({
   context: { currentData: undefined as MySpace[] | undefined, isFetching: false, isError: false },
   refetch: vi.fn(),
+  navigate: vi.fn(),
 }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-router-dom", () => ({ useNavigate: () => h.navigate }));
+vi.mock("../../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentIconName: "smart_toy" }),
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showSuccess: vi.fn() }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useMySpacesQuery: () => ({ ...h.context, refetch: h.refetch }),
@@ -30,6 +37,7 @@ vi.mock("../../../../../security/KeycloakService", () => ({
 vi.mock("../../../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
 import { enhancedControlPlaneApi as api } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useHomeSearchIndex } from "./useHomeSearchIndex";
+import HomeSearch from "./HomeSearch";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const NativeRequest = globalThis.Request;
@@ -43,8 +51,14 @@ const makeStore = () =>
     middleware: (defaults) => defaults().concat(api.middleware),
   });
 const fetch = vi.fn<(request: Request) => Promise<Response>>();
-const response = (items: unknown[] = [], status = 200) =>
-  new Response(JSON.stringify({ items, next_cursor: null }), {
+const ALL_SPACES: MySpace[] = ["organization", "team", "project", "personal"].map((kind) => ({
+  ...SPACES[0],
+  id: kind,
+  name: kind,
+  kind: kind as MySpace["kind"],
+}));
+const response = (items: unknown[] = [], status = 200, next_cursor: string | null = null) =>
+  new Response(JSON.stringify({ items, next_cursor }), {
     status,
     headers: { "Content-Type": "application/json" },
   });
@@ -61,16 +75,17 @@ function Probe() {
     </>
   );
 }
-async function render() {
-  await act(async () =>
-    root.render(
-      <Provider store={store}>
-        <Probe />
-      </Provider>,
-    ),
-  );
+async function render(content: ReactNode = <Probe />) {
+  await act(async () => root.render(<Provider store={store}>{content}</Provider>));
   await act(async () => {
     await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+  });
+}
+async function search(query: string) {
+  const input = host.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, query);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 beforeEach(() => {
@@ -151,4 +166,147 @@ it("surfaces an unavailable catalog without a render or request loop", async () 
   const calls = fetch.mock.calls.length;
   await act(async () => host.querySelector("button")!.click());
   expect(fetch).toHaveBeenCalledTimes(calls);
+});
+
+it("indexes every page in all four spaces without expanding agent calls or navigation", async () => {
+  h.context.currentData = ALL_SPACES;
+  fetch.mockImplementation(async (request) => {
+    const url = new URL(request.url);
+    const spaceId = url.pathname.split("/")[4];
+    if (!url.pathname.endsWith("/prompts")) return response();
+    const page = url.searchParams.has("after") ? "last" : "first";
+    return response(
+      [
+        promptSummaryFixture({
+          prompt_id: `${spaceId}-${page}`,
+          space_id: spaceId,
+          display_name: `${spaceId} ${page}`,
+        }),
+      ],
+      200,
+      page === "first" ? "cursor" : null,
+    );
+  });
+  await render();
+  for (const space of ALL_SPACES) expect(host.textContent).toContain(`${space.id} last`);
+  expect(host.querySelector("p")!.textContent).toBe("team,personal");
+  const agentPaths = fetch.mock.calls
+    .map(([request]) => new URL(request.url).pathname)
+    .filter((path) => !path.endsWith("/prompts"));
+  expect(agentPaths).toEqual([
+    "/control-plane/v1/spaces/team/agent-instances",
+    "/control-plane/v1/spaces/personal/agent-instances",
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(10);
+});
+
+it.each([403, 404])("discards cached prompt and agent results after a catalog refusal (%s)", async (status) => {
+  h.context.currentData = [SPACES[0]];
+  fetch.mockImplementation(async (request) =>
+    response(new URL(request.url).pathname.endsWith("/prompts") ? [promptSummaryFixture()] : [INSTANCE]),
+  );
+  // Another mounted consumer keeps the successful RTK data alive during the failed refresh.
+  const prompts = store.dispatch(api.endpoints.listPrompts.initiate({ spaceId: SPACES[0].id }));
+  const agents = store.dispatch(api.endpoints.listAgentInstances.initiate({ spaceId: SPACES[0].id }));
+  await Promise.all([prompts, agents]);
+  fetch.mockImplementation(async () => response([], status));
+  await render(<HomeSearch />);
+  await search("Real");
+  expect(host.querySelector('[role="option"]')).toBeNull();
+  await search("Saved");
+  expect(host.querySelector('[role="option"]')).toBeNull();
+  expect(api.endpoints.listPrompts.select({ spaceId: SPACES[0].id })(store.getState()).data?.items).toHaveLength(1);
+  prompts.unsubscribe();
+  agents.unsubscribe();
+});
+
+it("does not expose a partial organization catalog after a later page is denied", async () => {
+  h.context.currentData = [ALL_SPACES[0]];
+  fetch.mockImplementation(async (request) =>
+    new URL(request.url).searchParams.has("after")
+      ? response([], 403)
+      : response([promptSummaryFixture({ space_id: "organization" })], 200, "cursor"),
+  );
+  await render(<HomeSearch />);
+  await search("Real");
+  expect(host.querySelector('[role="option"]')).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("does not infer content access from an organization's technical admin role", async () => {
+  h.context.currentData = [{ ...ALL_SPACES[0], roles: ["organization_admin"] }];
+  fetch.mockImplementation(async () => response([], 403));
+  await render(<HomeSearch />);
+  await search("organization");
+  expect(host.querySelector('[role="option"]')).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it.each(SPACES)("preserves agent and space navigation for $kind", async (space) => {
+  h.context.currentData = [space];
+  fetch.mockImplementation(async (request) =>
+    response(new URL(request.url).pathname.endsWith("/agent-instances") ? [INSTANCE] : []),
+  );
+  await render(<HomeSearch />);
+  await search("Saved Agent");
+  await act(async () => host.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+  expect(h.navigate).toHaveBeenLastCalledWith(`/team/${space.id}/managed-chat/${INSTANCE.agent_instance_id}`);
+  await search(space.name);
+  await act(async () => host.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+  expect(h.navigate).toHaveBeenLastCalledWith(`/team/${space.id}/agents`);
+});
+
+it.each(ALL_SPACES)("opens the selected $kind prompt with its canonical space id", async (space) => {
+  h.context.currentData = ALL_SPACES;
+  fetch.mockImplementation(async (request) => {
+    const url = new URL(request.url);
+    const spaceId = url.pathname.split("/")[4];
+    if (url.pathname.endsWith("/agent-instances")) return response();
+    const prompt = promptFixture({
+      prompt_id: `prompt-${spaceId}`,
+      space_id: spaceId,
+      display_name: `Prompt ${spaceId}`,
+    });
+    return url.pathname.endsWith("/prompts")
+      ? response([prompt])
+      : new Response(JSON.stringify(prompt), { headers: { "Content-Type": "application/json" } });
+  });
+  await render(<HomeSearch />);
+  await search(`Prompt ${space.id}`);
+  const option = host.querySelector<HTMLButtonElement>('[role="option"]');
+  expect(option?.textContent).toContain(`Prompt ${space.id}`);
+  await act(async () => option!.click());
+  await act(async () => {
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+  });
+  expect(fetch.mock.calls.map(([request]) => new URL(request.url).pathname)).toContain(
+    `/control-plane/v1/spaces/${space.id}/prompts/prompt-${space.id}`,
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Real prompt text");
+  expect(h.navigate).not.toHaveBeenCalled();
+});
+
+it("removes a prompt preview when its detail is refused after access is revoked", async () => {
+  h.context.currentData = [ALL_SPACES[0]];
+  let revoked = false;
+  fetch.mockImplementation(async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/prompts")) {
+      revoked = true;
+      return response([], 403);
+    }
+    return revoked ? response([], 403) : response([promptSummaryFixture({ space_id: "organization" })]);
+  });
+  await render(<HomeSearch />);
+  await search("Real Name");
+  await act(async () => host.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+  await act(async () => {
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+  });
+  await act(async () => {
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+  });
+  await search("Real");
+  expect(host.querySelector('[role="option"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Real prompt text");
+  expect(fetch).toHaveBeenCalledTimes(3);
 });

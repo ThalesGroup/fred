@@ -18,7 +18,6 @@ import type { PipelineDeps, Reporter, StepReport } from "../types";
 import type { AgentsDeps } from "./agentsScenario";
 import type { ConversationsDeps } from "./conversationsScenario";
 import type { KnowledgeDeps } from "./knowledgeScenario";
-import type { PromptsDeps } from "./promptsScenario";
 import { PROBE, PROMPT_PROBE, SELF_TEST_AGENT_ID } from "./corpus";
 import JSZip from "jszip";
 
@@ -112,50 +111,6 @@ export class FakePlatform {
         this.agents.set(copyId, { ...source, name: free });
         return { agentId: copyId, name: free, errorCode: null };
       },
-    };
-  }
-
-  promptsDeps(): PromptsDeps {
-    const missing = () => Object.assign(new Error("not found"), { status: 404 });
-    return {
-      ...this.deps(),
-      createPrompt: async (args) => {
-        const id = this.id("prompt");
-        this.prompts.set(id, { ...args });
-        return id;
-      },
-      updatePrompt: async (id, args) => {
-        const prompt = this.prompts.get(id);
-        if (!prompt) throw missing();
-        this.prompts.set(id, { ...prompt, ...args });
-      },
-      readPrompt: async (id) => {
-        const prompt = this.prompts.get(id);
-        if (!prompt) throw missing();
-        return { text: prompt.text, categoryId: prompt.categoryId ?? null, favorite: prompt.favorite ?? false };
-      },
-      setFavorite: async (id, favorite) => {
-        const prompt = this.prompts.get(id);
-        if (!prompt) throw missing();
-        prompt.favorite = favorite;
-      },
-      listFavorites: async () => [...this.prompts].filter(([, p]) => p.favorite).map(([id]) => id),
-      listCommands: async () =>
-        [...this.prompts].filter(([, p]) => p.command).map(([id, p]) => ({ promptId: id, command: p.command! })),
-      createCategory: async (name) => {
-        const id = this.id("category");
-        this.categories.set(id, name);
-        return id;
-      },
-      renameCategory: async (id, name) => {
-        if (!this.categories.has(id)) throw missing();
-        this.categories.set(id, name);
-      },
-      listCategories: async () => [...this.categories].map(([id, name]) => ({ id, name })),
-      deleteCategory: async (id) => {
-        this.categories.delete(id);
-      },
-      marketplaceCount: async () => 0,
     };
   }
 

@@ -51,6 +51,7 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
+import { PromptsSelfTestPage } from "@components/pages/admin/SelfTestPage/SelfTestPage";
 import { Protected } from "@core/guards/Protected";
 import { adminIndexPath } from "@core/guards/organizationOwnerPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -367,11 +368,7 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "admin/self-test",
-        element: (
-          <Protected requires="admin">
-            <WeaverFeaturePage feature="diagnostics" />
-          </Protected>
-        ),
+        element: <PromptsSelfTestPage />,
       },
       {
         // Corpus audit (#2112): platform-admin-only surface over the document

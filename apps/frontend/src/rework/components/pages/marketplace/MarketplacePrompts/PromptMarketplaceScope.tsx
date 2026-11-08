@@ -7,38 +7,34 @@ import { useTranslation } from "react-i18next";
 import Select from "@shared/molecules/Select/Select";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { usePromptMarketplacesQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useMarketplacesQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
-/** Publication context is intentionally separate from general space membership:
- * an invitation admits this catalogue without opening other space domains. */
-export default function PromptMarketplaceScope({ children }: { children: (organizationId: string) => ReactNode }) {
+/** Marketplace participation admits published definitions without granting source-space access. */
+export default function PromptMarketplaceScope({ children }: { children: (marketplaceSpaceId: string) => ReactNode }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<string>();
-  const context = usePromptMarketplacesQuery(
-    {},
-    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
-  );
+  const context = useMarketplacesQuery({}, { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true });
   useRefetchOnWindowFocus(context.refetch, false);
   if (context.isError) return <ServiceNotice icon="lock" title={t("rework.manager.unavailable")} />;
   if (!context.currentData) return <Spinner size={20} />;
-  const organizations = context.currentData.items;
-  const organization = organizations.find((item) => item.organization_id === selected) ?? organizations[0];
-  if (!organization) return <ServiceNotice icon="lock" title={t("rework.promptPublication.noAccess")} />;
+  const marketplaces = context.currentData.items;
+  const marketplace = marketplaces.find((item) => item.space_id === selected) ?? marketplaces[0];
+  if (!marketplace) return <ServiceNotice icon="lock" title={t("rework.promptPublication.noAccess")} />;
   return (
     <>
       <Select
         size="small"
         compact
-        label={t("rework.manager.kinds.organization")}
-        value={organization.organization_id}
-        options={organizations.map((item) => ({
-          key: item.organization_id,
-          value: item.organization_id,
+        label={t("rework.promptPublication.marketplace")}
+        value={marketplace.space_id}
+        options={marketplaces.map((item) => ({
+          key: item.space_id,
+          value: item.space_id,
           label: item.name,
         }))}
         onChange={setSelected}
       />
-      {children(organization.organization_id)}
+      {children(marketplace.space_id)}
     </>
   );
 }

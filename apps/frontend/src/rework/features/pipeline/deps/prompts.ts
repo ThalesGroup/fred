@@ -13,102 +13,47 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { legacyControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { PromptsDeps } from "../scenarios/promptsScenario";
-import type { PipelineDeps } from "../types";
-import { FRESH, useApiDispatch } from "./api";
+import { useApiRead, useApiDispatch } from "./api";
 
-/** Extends the shared base deps, so the page keeps one set of product hooks. */
-export function usePromptsDeps(base: PipelineDeps): PromptsDeps {
+/** Prompt validation uses the same generated requests and complete catalogs as the product. */
+export function usePromptsDeps(spaceId: string | undefined): PromptsDeps {
   const dispatch = useApiDispatch();
+  const read = useApiRead();
   return useMemo(() => {
-    const cp = legacyControlPlaneApi.endpoints;
-    const teamId = base.teamId;
-    const body = (args: { name: string; text: string; categoryId?: string; command?: string }) => ({
-      name: args.name,
-      text: args.text,
-      category_id: args.categoryId ?? null,
-      command: args.command ?? null,
-    });
+    const cp = enhancedControlPlaneApi.endpoints;
     return {
-      ...base,
-      createPrompt: async (args) =>
-        (
-          await dispatch(
-            cp.postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost.initiate({ teamId, createPromptRequest: body(args) }),
-          ).unwrap()
-        ).id,
-      updatePrompt: async (promptId, args) => {
-        await dispatch(
-          cp.putTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPut.initiate({
-            teamId,
-            promptId,
-            updatePromptRequest: body(args),
-          }),
-        ).unwrap();
+      resolveSpaceId: async () => {
+        if (!spaceId) throw new Error("Select a Weaver space in the Prompts section before running this scenario");
+        const spaces = await read(cp.mySpaces, undefined);
+        if (!spaces.some((space) => space.id === spaceId))
+          throw new Error("Selected prompt scenario space is no longer available; select a Weaver space again");
+        return spaceId;
       },
-      readPrompt: async (promptId) => {
-        const prompt = await dispatch(
-          cp.getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet.initiate({ teamId, promptId }, FRESH),
-        ).unwrap();
-        return { text: prompt.text, categoryId: prompt.category_id ?? null, favorite: prompt.is_favorite ?? false };
+      createPrompt: (args) => dispatch(cp.createPrompt.initiate(args)).unwrap(),
+      updatePrompt: (args) => dispatch(cp.updatePrompt.initiate(args)).unwrap(),
+      readPrompt: (args) => read(cp.getPrompt, args),
+      deletePrompt: async (args) => {
+        await dispatch(cp.deletePrompt.initiate(args)).unwrap();
       },
-      setFavorite: async (promptId, favorite) => {
-        const endpoint = favorite
-          ? cp.addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut
-          : cp.removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete;
-        await dispatch(endpoint.initiate({ teamId, promptId })).unwrap();
+      listPrompts: async (spaceId) => (await read(cp.listPrompts, { spaceId })).items,
+      setFavorite: async (spaceId, promptId, favorite) => {
+        const endpoint = favorite ? cp.addPromptFavorite : cp.removePromptFavorite;
+        await dispatch(endpoint.initiate({ spaceId, promptId })).unwrap();
       },
-      listFavorites: async () =>
-        (await dispatch(cp.getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet.initiate({ teamId }, FRESH)).unwrap())
-          .filter((p) => p.is_favorite)
-          .map((p) => p.id),
-      listCommands: async () =>
-        (
-          await dispatch(
-            cp.getTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGet.initiate({ teamId }, FRESH),
-          ).unwrap()
-        ).map((c) => ({ promptId: c.prompt_id, command: c.command })),
-      createCategory: async (name) =>
-        (
-          await dispatch(
-            cp.postTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPost.initiate({
-              teamId,
-              createPromptCategoryRequest: { name },
-            }),
-          ).unwrap()
-        ).id,
-      renameCategory: async (categoryId, name) => {
-        await dispatch(
-          cp.putTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPut.initiate({
-            teamId,
-            categoryId,
-            updatePromptCategoryRequest: { name },
-          }),
-        ).unwrap();
+      createCategory: (args) => dispatch(cp.createPromptCategory.initiate(args)).unwrap(),
+      renameCategory: (args) => dispatch(cp.renamePromptCategory.initiate(args)).unwrap(),
+      listCategories: async (spaceId) => (await read(cp.listPromptCategories, { spaceId })).items,
+      deleteCategory: async (args) => {
+        await dispatch(cp.deletePromptCategory.initiate(args)).unwrap();
       },
-      listCategories: async () =>
-        (
-          await dispatch(
-            cp.getTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGet.initiate({ teamId }, FRESH),
-          ).unwrap()
-        ).map((c) => ({ id: c.id, name: c.name })),
-      deleteCategory: async (categoryId) => {
-        await dispatch(
-          cp.deleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDelete.initiate({
-            teamId,
-            categoryId,
-          }),
-        ).unwrap();
-      },
-      marketplaceCount: async () => {
-        const weaver = enhancedControlPlaneApi.endpoints;
-        const spaces = await dispatch(weaver.mySpaces.initiate(undefined, FRESH)).unwrap();
-        const organizationId = spaces.find((space) => space.id === teamId)?.organization_id;
+      marketplaceCount: async (spaceId) => {
+        const spaces = await read(cp.mySpaces, undefined);
+        const organizationId = spaces.find((space) => space.id === spaceId)?.organization_id;
         if (!organizationId) throw new Error("Prompt marketplace organization unavailable");
-        return (await dispatch(weaver.publishedPrompts.initiate({ organizationId }, FRESH)).unwrap()).items.length;
+        return (await read(cp.publishedPrompts, { marketplaceSpaceId: organizationId })).items.length;
       },
     };
-  }, [base, dispatch]);
+  }, [spaceId, dispatch, read]);
 }

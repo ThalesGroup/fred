@@ -48,7 +48,7 @@ la réponse vient de ses connaissances générales, pas de vos contenus.
 - **Si rien ne doit être oublié**, dites-le : « liste _toutes_ les échéances ».
   L'agent parcourt alors le document en entier au lieu d'en remonter les
   passages qu'il juge les plus pertinents.
-- **Réutilisez les prompts** de la bibliothèque de votre équipe plutôt que de
+- **Réutilisez les prompts** proposés dans la conversation plutôt que de
   reformuler chaque fois (voir [Les prompts](/help/fr/features/prompts)).
 
 Un souci pendant une conversation ? Voir

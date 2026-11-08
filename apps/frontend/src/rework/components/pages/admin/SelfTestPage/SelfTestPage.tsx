@@ -17,13 +17,51 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import { useSelfTestFamilies } from "../../../../features/pipeline/families";
+import { Navigate } from "react-router-dom";
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { usePromptsDeps } from "../../../../features/pipeline/deps/prompts";
+import { promptsScenario } from "../../../../features/pipeline/scenarios/promptsScenario";
+import { useScenarioRun } from "../../../../features/pipeline/useScenarioRun";
+import { useSelfTestFamilies, type SelfTestFamily } from "../../../../features/pipeline/families";
 import { AuthorizationExtras } from "./AuthorizationExtras";
+import { PromptSpaceSelect } from "./PromptSpaceSelect";
 import { FamilySection } from "./FamilySection";
 import { buildCombinedReport } from "./report";
 import styles from "./SelfTestPage.module.css";
 
 export default function SelfTestPage() {
+  const [promptSpaceId, setPromptSpaceId] = useState<string>();
+  const families = useSelfTestFamilies(promptSpaceId);
+  return <SelfTestView families={families} promptSpaceId={promptSpaceId} setPromptSpaceId={setPromptSpaceId} />;
+}
+
+/** Weaver exposes only received families; their writes still require the selected space's rights. */
+export function PromptsSelfTestPage() {
+  const access = useManagerPlatformAdmin();
+  const { t } = useTranslation();
+  const [promptSpaceId, setPromptSpaceId] = useState<string>();
+  const run = useScenarioRun(promptsScenario, usePromptsDeps(promptSpaceId));
+  if (access.isLoading || (access.isFetching && !access.currentData)) return null;
+  if (access.isError) return <ServiceNotice icon="info" title={t("rework.manager.unavailable")} />;
+  if (!access.isAdmin) return <Navigate to="/unauthorized" replace />;
+  return (
+    <SelfTestView
+      families={[{ id: "prompts", icon: "notes", run }]}
+      promptSpaceId={promptSpaceId}
+      setPromptSpaceId={setPromptSpaceId}
+    />
+  );
+}
+
+function SelfTestView({
+  families,
+  promptSpaceId,
+  setPromptSpaceId,
+}: {
+  families: SelfTestFamily[];
+  promptSpaceId: string | undefined;
+  setPromptSpaceId: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const mounted = useRef(true);
   useEffect(() => {
@@ -32,7 +70,6 @@ export default function SelfTestPage() {
       mounted.current = false;
     };
   }, []);
-  const families = useSelfTestFamilies();
   const [extrasRunning, setExtrasRunning] = useState(false);
   const [runningAll, setRunningAll] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -116,6 +153,8 @@ export default function SelfTestPage() {
                 title={t("rework.selftest.authz.notice.title")}
                 description={t("rework.selftest.authz.notice.description")}
               />
+            ) : family.id === "prompts" ? (
+              <PromptSpaceSelect value={promptSpaceId} onChange={setPromptSpaceId} disabled={busy} />
             ) : undefined
           }
         >

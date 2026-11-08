@@ -112,6 +112,12 @@ function PlatformAdminNavbar() {
           icon: { category: "outlined", type: "monitoring", filled: false },
           linkProps: { to: "/admin/monitor" },
         },
+        {
+          type: "link",
+          label: t("rework.selftest.page.title"),
+          icon: { category: "outlined", type: "rocket_launch", filled: false },
+          linkProps: { to: "/admin/self-test" },
+        },
       ]}
     />
   );

@@ -12,7 +12,7 @@ ER_COMPONENTS   ?= control-plane
 ER_MODE         ?= write
 MODEL_REFERENCE := docs/architecture/A13-models.md
 MODEL_CONTRACTS := $(MODEL_REFERENCE) docs/architecture/A12-control-plane-api.md docs/architecture/A2-manager-contracts.md
-MODEL_PAGES     := docs/architecture/01-system-overview.md docs/architecture/02.3-agent-administration.md docs/architecture/08-operations.md $(MODEL_REFERENCE)
+MODEL_PAGES     := docs/architecture/06-resources.md docs/architecture/01-system-overview.md docs/architecture/02.3-agent-administration.md docs/architecture/08-operations.md $(MODEL_REFERENCE)
 RENDER_PAGES    ?= $(wildcard *.md)
 
 .DEFAULT_GOAL := help
@@ -81,7 +81,7 @@ check: check-er openapi ## Check generated blocks, invariant references and diag
 check-models: check-er openapi ## Check the LLM reference and its reading path (no provider calls)
 	$(PYTHON) -m unittest discover -s tools -p 'test_*.py'
 	$(PYTHON) tools/docs.py check $(MODEL_CONTRACTS)
-	$(PYTHON) tools/docs.py links $(MODEL_PAGES) docs/architecture/README.md docs/architecture/A2-manager-contracts.md
+	$(PYTHON) tools/docs.py links $(addprefix docs/architecture/,$(wildcard *.md))
 	$(MAKE) --no-print-directory render RENDER_PAGES="$(notdir $(MODEL_PAGES))"
 
 render: ## Render selected Markdown diagrams in disposable output

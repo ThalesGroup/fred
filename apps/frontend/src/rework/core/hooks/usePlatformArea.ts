@@ -3,11 +3,16 @@
 
 import { isPromptPublicationRoute } from "../utils/weaverContentRoute";
 import { useLocation } from "react-router-dom";
-import { useMySpacesQuery, usePromptMarketplacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useMySpacesQuery, useMarketplacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useManagerPlatformAdmin } from "./useManagerPlatformAdmin";
 
 /** Pages of the platform admin space; every other admin page belongs to the organization. */
-const PLATFORM_ADMIN_ROUTES = new Set(["/admin/organizations", "/admin/provisioning", "/admin/monitor"]);
+const PLATFORM_ADMIN_ROUTES = new Set([
+  "/admin/organizations",
+  "/admin/provisioning",
+  "/admin/monitor",
+  "/admin/self-test",
+]);
 
 export const isPlatformAdminRoute = (pathname: string) => PLATFORM_ADMIN_ROUTES.has(pathname.replace(/\/$/, ""));
 
@@ -21,7 +26,7 @@ export function usePlatformArea(skip = false) {
   const spaces = useMySpacesQuery(undefined, { skip: skip || !manager.isAdmin });
   // Last known membership: a failed refetch keeps it; an error before any data means none.
   const member = !!spaces.data?.length;
-  const publications = usePromptMarketplacesQuery(
+  const publications = useMarketplacesQuery(
     {},
     {
       skip: skip || !manager.isAdmin || member,

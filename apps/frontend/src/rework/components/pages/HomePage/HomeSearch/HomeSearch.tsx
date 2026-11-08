@@ -22,6 +22,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+import { enhancedControlPlaneApi as api } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import {
   filterHomeSearch,
@@ -33,11 +34,11 @@ import {
 import { useHomeSearchIndex } from "./useHomeSearchIndex.ts";
 import styles from "./HomeSearch.module.scss";
 
-type PromptDialogState = { teamId: string; promptId: string; teamName: string };
+type PromptDialogState = { spaceId: string; promptId: string; spaceName: string };
 
 /**
  * Home "Spotlight" — one search field over agents, teams and prompts. There is
- * no global search endpoint, so `useHomeSearchIndex` aggregates per team (lazily,
+ * no global search endpoint, so `useHomeSearchIndex` aggregates per space (lazily,
  * on first focus) and the pure `filterHomeSearch` ranks/caps the matches. The
  * field mimics the chat composer's look. Selecting a result: agent → new
  * conversation, team → its agents page, prompt → the read-only view dialog
@@ -49,7 +50,7 @@ export default function HomeSearch() {
   const { agentIconName } = useFrontendProperties();
 
   const [query, setQuery] = useState("");
-  // Latches on first focus so the (lazy, per-team) aggregation only ever starts
+  // Latches on first focus so the (lazy, per-space) aggregation only ever starts
   // once the user actually engages the search.
   const [active, setActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -60,12 +61,21 @@ export default function HomeSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Land on Home ready to type: focus the spotlight on mount. This also latches
-  // `active` (via onFocus) so the per-team aggregation warms up right away.
+  // `active` (via onFocus) so the per-space aggregation warms up right away.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   const sources = useHomeSearchIndex(active);
+  // Observe the dialog's existing request; a refusal must also clear the search preview.
+  const { error: promptError } = api.endpoints.getPrompt.useQueryState(
+    { spaceId: promptDialog?.spaceId ?? "", promptId: promptDialog?.promptId ?? "" },
+    { skip: !promptDialog },
+  );
+  const { retry } = sources;
+  useEffect(() => {
+    if (promptError && "status" in promptError && (promptError.status === 403 || promptError.status === 404)) retry();
+  }, [promptError, retry]);
   useEffect(() => {
     setPromptDialog(null);
   }, [sources.scope]);
@@ -96,7 +106,7 @@ export default function HomeSearch() {
   };
 
   const openPrompt = (hit: PromptHit) =>
-    setPromptDialog({ teamId: hit.teamId, promptId: hit.id, teamName: hit.teamName });
+    setPromptDialog({ spaceId: hit.spaceId, promptId: hit.id, spaceName: hit.spaceName });
 
   const activate = (hit: SearchHit) => {
     if (hit.kind === "agent") {
@@ -155,7 +165,7 @@ export default function HomeSearch() {
 
   const sublabelFor = (hit: SearchHit): string | undefined => {
     if (hit.kind === "agent") return hit.teamName;
-    if (hit.kind === "prompt") return hit.teamName ?? undefined;
+    if (hit.kind === "prompt") return hit.spaceName;
     return undefined;
   };
 
@@ -253,9 +263,9 @@ export default function HomeSearch() {
       <PromptViewDialog
         open={!!promptDialog}
         onClose={() => setPromptDialog(null)}
-        spaceId={promptDialog?.teamId}
+        spaceId={promptDialog?.spaceId}
         promptId={promptDialog?.promptId}
-        chipLabel={promptDialog?.teamName}
+        chipLabel={promptDialog?.spaceName}
       />
     </div>
   );
