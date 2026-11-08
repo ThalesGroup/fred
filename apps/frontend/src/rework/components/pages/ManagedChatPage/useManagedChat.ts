@@ -32,7 +32,7 @@ import type { EffectiveChatModel } from "../../../../slices/controlPlane/control
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
-import { useChatAttachments } from "./useChatAttachments";
+import { splitSessionAttachments, toDraftChip, useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext, toTurnAttachments } from "./runtimeContextBuilder";
 import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
@@ -694,6 +694,24 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isTurnActive,
   });
   isLoadingHistoryRef.current = isLoadingHistory;
+
+  // Unsent rows are drafts of this conversation's composer; the drawer only lists sent ones.
+  const { sent: sentAttachments, drafts: draftAttachments } = useMemo(
+    () =>
+      isHistorySettled && sessionId
+        ? splitSessionAttachments(attachments.persistedAttachments, messages)
+        : { sent: [], drafts: [] },
+    [attachments.persistedAttachments, isHistorySettled, messages, sessionId],
+  );
+  const composerAttachments = useMemo(() => {
+    const localIds = new Set(attachments.attachments.map((attachment) => attachment.id));
+    const restored = sessionId
+      ? draftAttachments
+          .filter((draft) => !localIds.has(draft.attachmentId))
+          .map((draft) => toDraftChip(draft, sessionId))
+      : [];
+    return [...attachments.attachments, ...restored];
+  }, [attachments.attachments, draftAttachments, sessionId]);
   reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
@@ -957,7 +975,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           ? []
           : interrupted?.action === "restart"
             ? (submittedDraftRef.current?.attachments ?? [])
-            : toTurnAttachments(attachments.attachments);
+            : toTurnAttachments(composerAttachments);
         // Titled once, on the first exchange; renaming afterwards is the user's call.
         const autoTitle =
           !titleRenamedRef.current && !latestMessagesRef.current.some((message) => message.role === "user");
@@ -991,7 +1009,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
     },
     [
-      attachments.attachments,
+      composerAttachments,
       attachments.hasUploadingAttachments,
       input,
       inputCharacterCount,
@@ -1017,7 +1035,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const handleSend = useCallback(async () => {
     if (executionDisabledRef.current) return;
     if (waitResponse || pendingMessages.length > 0) {
-      if (attachments.attachments.length > 0) {
+      if (composerAttachments.length > 0) {
         showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
         return;
       }
@@ -1035,7 +1053,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     waitResponse,
     pendingMessages.length,
     setPendingMessages,
-    attachments.attachments.length,
+    composerAttachments.length,
     inputTooLong,
     showWarn,
     t,
@@ -1566,8 +1584,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     hitlFreeText,
     setHitlFreeText: setSelectedHitlFreeText,
     selectedLibraryIds: composer.selectedLibraryIds,
-    attachments: attachments.attachments,
-    persistedAttachments: attachments.persistedAttachments,
+    attachments: composerAttachments,
+    persistedAttachments: sentAttachments,
     isHydratingAttachments: attachments.isHydratingAttachments,
     attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,

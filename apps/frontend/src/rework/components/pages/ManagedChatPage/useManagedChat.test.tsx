@@ -221,7 +221,8 @@ const chatAttachmentsValue = {
   deletePersistedAttachment: vi.fn(),
   clearReadyAttachments: vi.fn(),
 };
-vi.mock("./useChatAttachments", () => ({
+vi.mock("./useChatAttachments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useChatAttachments")>()),
   useChatAttachments: () => chatAttachmentsValue,
 }));
 
@@ -1717,6 +1718,43 @@ describe("useManagedChat — session write reliability", () => {
     });
     rerender();
   };
+
+  it("shows unsent attachments in their conversation's composer only, and sent ones in the drawer", () => {
+    const row = (attachmentId: string) => ({
+      attachmentId,
+      name: `${attachmentId}.pdf`,
+      mime: "application/pdf",
+      summaryMd: "",
+      createdAt: "2026-11-08T10:02:00Z",
+    });
+    chatAttachmentsValue.persistedAttachments = [row("sent"), row("draft")];
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "sent",
+        rank: 0,
+        timestamp: "2026-11-08T10:01:00Z",
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "question" }],
+        metadata: { extras: { attachments: [{ attachment_id: "sent", name: "sent.pdf" }] } },
+      } as ChatMessage,
+    ];
+    try {
+      mount();
+      bindSession("session-1");
+      expect(latest.attachments.map((attachment) => [attachment.id, attachment.status])).toEqual([["draft", "ready"]]);
+      expect(latest.persistedAttachments.map((attachment) => attachment.attachmentId)).toEqual(["sent"]);
+
+      // The attachment list is per conversation: session-2 has none.
+      chatAttachmentsValue.persistedAttachments = [];
+      chatSseMessages = [];
+      bindSession("session-2");
+      expect(latest.attachments).toEqual([]);
+    } finally {
+      chatAttachmentsValue.persistedAttachments = [];
+    }
+  });
 
   it("queues, edits, and removes text while the agent is working", async () => {
     chatSseWaitResponse = true;
