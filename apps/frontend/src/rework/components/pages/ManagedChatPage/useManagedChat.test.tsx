@@ -199,7 +199,7 @@ vi.mock("./useComposerSettings", () => ({
   },
 }));
 
-const sessionHistoryValue = { isLoading: false, isSettled: true };
+const sessionHistoryValue = { isLoading: false, isSettled: true, isUnavailable: false };
 let historyToLoad: { sessionId: string; messages: ChatMessage[] } | undefined;
 vi.mock("./useSessionHistory", () => ({
   useSessionHistory: ({ sessionId, onLoaded }: { sessionId: string; onLoaded: (messages: ChatMessage[]) => void }) => {
@@ -214,7 +214,6 @@ const chatAttachmentsValue = {
   attachments: [] as unknown[],
   persistedAttachments: [] as unknown[],
   isHydratingAttachments: false,
-  attachmentsMarkdown: null as string | null,
   hasUploadingAttachments: false,
   addFiles: vi.fn(),
   removeAttachment: vi.fn(),
@@ -635,15 +634,12 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[0][2]).toMatchObject({ chat_profile_id: "chat.large", reasoning: false });
   });
 
-  it("sends only this turn's ready attachments, beside the unchanged markdown", async () => {
-    const markdown = "## Attached files for this conversation\n- old.pdf\n- brief.pdf";
-    chatAttachmentsValue.attachmentsMarkdown = markdown;
+  it("sends only this turn's ready attachments", async () => {
     chatAttachmentsValue.attachments = [
       { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1, isImage: false, taskIds: [] },
       { id: "a-2", name: "photo.png", mime: "image/png", status: "ready", size: 1, isImage: true, taskIds: [] },
       { id: "a-3", name: "broken.txt", mime: "text/plain", status: "error", size: 1, isImage: false, taskIds: [] },
     ];
-    chatAttachmentsValue.persistedAttachments = [{ attachmentId: "old", name: "old.pdf", summaryMd: "" }];
     try {
       mount();
       act(() => latest.setInput("question"));
@@ -654,21 +650,18 @@ describe("useManagedChat — session write reliability", () => {
       });
 
       expect(sendMock.mock.calls[0][2]).toMatchObject({
-        attachments_markdown: markdown,
         attachments: [
           { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
           { attachment_id: "a-2", name: "photo.png", mime: "image/png" },
         ],
       });
     } finally {
-      chatAttachmentsValue.attachmentsMarkdown = null;
       chatAttachmentsValue.attachments = [];
       chatAttachmentsValue.persistedAttachments = [];
     }
   });
 
   it("sends nothing for ready attachments without text: the runtime needs an input", async () => {
-    chatAttachmentsValue.attachmentsMarkdown = "## Attached files for this conversation\n- brief.pdf";
     chatAttachmentsValue.attachments = [
       { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1, isImage: false, taskIds: [] },
     ];
@@ -679,7 +672,6 @@ describe("useManagedChat — session write reliability", () => {
       });
       expect(sendMock).not.toHaveBeenCalled();
     } finally {
-      chatAttachmentsValue.attachmentsMarkdown = null;
       chatAttachmentsValue.attachments = [];
     }
   });
@@ -1719,6 +1711,72 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
   };
 
+  const attachmentRow = (attachmentId: string) => ({
+    attachmentId,
+    name: `${attachmentId}.pdf`,
+    mime: "application/pdf",
+    summaryMd: "",
+    createdAt: "2026-11-08T10:02:00Z",
+  });
+  const userTurnListing = (attachmentId: string) =>
+    ({
+      session_id: "session-1",
+      exchange_id: "sent",
+      rank: 0,
+      timestamp: "2026-11-08T10:01:00Z",
+      role: "user",
+      channel: "final",
+      parts: [{ type: "text", text: "question" }],
+      metadata: { extras: { attachments: [{ attachment_id: attachmentId, name: `${attachmentId}.pdf` }] } },
+    }) as ChatMessage;
+
+  it("sends restored drafts with the next message, and lists them beside the sent files for the agent", async () => {
+    chatAttachmentsValue.persistedAttachments = [attachmentRow("sent"), attachmentRow("draft")];
+    chatSseMessages = [userTurnListing("sent")];
+    try {
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("next question"));
+      rerender();
+      await act(async () => {
+        await latest.handleSend();
+      });
+      const context = sendMock.mock.calls[0][2] as { attachments: unknown[]; attachments_markdown: string };
+      expect(context.attachments).toEqual([{ attachment_id: "draft", name: "draft.pdf", mime: "application/pdf" }]);
+      expect(context.attachments_markdown).toContain("sent.pdf");
+      expect(context.attachments_markdown).toContain("draft.pdf");
+    } finally {
+      chatAttachmentsValue.persistedAttachments = [];
+      chatSseMessages = [];
+    }
+  });
+
+  it("treats every attachment as sent when the history could not load", () => {
+    chatAttachmentsValue.persistedAttachments = [attachmentRow("sent")];
+    sessionHistoryValue.isUnavailable = true;
+    try {
+      mount();
+      bindSession("session-1");
+      expect(latest.attachments).toEqual([]);
+      expect(latest.persistedAttachments.map((attachment) => attachment.attachmentId)).toEqual(["sent"]);
+    } finally {
+      chatAttachmentsValue.persistedAttachments = [];
+      sessionHistoryValue.isUnavailable = false;
+    }
+  });
+
+  it("refuses a dropped file while a message waits in the queue", async () => {
+    chatAttachmentsValue.addFiles.mockClear();
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("later"));
+    await act(async () => latest.handleSend());
+    expect(latest.pendingMessages).toHaveLength(1);
+    act(() => latest.handleAddAttachments([new File(["x"], "late.pdf")], "drop"));
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+  });
+
   it("shows unsent attachments in their conversation's composer only, and sent ones in the drawer", () => {
     const row = (attachmentId: string) => ({
       attachmentId,
@@ -1777,7 +1835,6 @@ describe("useManagedChat — session write reliability", () => {
 
   it("queues text when files already belong to the conversation", async () => {
     chatSseWaitResponse = true;
-    chatAttachmentsValue.attachmentsMarkdown = "## Attached files for this conversation\n- report.txt";
     try {
       mount();
       bindSession("session-1");
@@ -1786,7 +1843,6 @@ describe("useManagedChat — session write reliability", () => {
       expect(latest.pendingMessages.map((message) => message.text)).toEqual(["focus on Marseille"]);
       expect(sendMock).not.toHaveBeenCalled();
     } finally {
-      chatAttachmentsValue.attachmentsMarkdown = null;
     }
   });
 

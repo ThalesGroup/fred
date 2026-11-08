@@ -136,10 +136,17 @@ export function excludeDeletedAttachments(
   return persisted.filter((attachment) => !deletedAttachmentIds.has(attachment.attachmentId));
 }
 
-// A row is sent once a user message lists it. Rows older than the latest user message
-// count as sent too: messages stored before the per-message list carry none.
+// A row is sent once a user message lists it. Rows older than the latest composer message
+// count as sent too: messages stored before the per-message list carry none. HITL answers,
+// steered text and the optimistic row (browser clock) never carried composer files.
 export function splitSessionAttachments(persisted: SessionAttachment[], messages: ChatMessage[]) {
   const userMessages = messages.filter((message) => message.role === "user");
+  const composerMessages = userMessages.filter(
+    (message) =>
+      message.channel === "final" &&
+      !message.metadata?.extras?.steered_message_id &&
+      !message.metadata?.extras?.optimistic_user,
+  );
   const listedIds = new Set(
     userMessages.flatMap((message) => {
       const listed: unknown = message.metadata?.extras?.attachments;
@@ -148,7 +155,7 @@ export function splitSessionAttachments(persisted: SessionAttachment[], messages
         : [];
     }),
   );
-  const latestUserMessageAt = Math.max(...userMessages.map((message) => Date.parse(message.timestamp)));
+  const latestUserMessageAt = Math.max(...composerMessages.map((message) => Date.parse(message.timestamp)));
   const isSent = (attachment: SessionAttachment) =>
     listedIds.has(attachment.attachmentId) || Date.parse(attachment.createdAt ?? "") < latestUserMessageAt;
   return {
@@ -408,18 +415,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
 
   const clearReadyAttachments = useCallback(() => {
     setAttachments((prev) =>
-      prev.filter((attachment) => attachment.status === "uploading" || attachment.status === "ingesting"),
-    );
-  }, []);
-
-  const attachmentsMarkdown = useMemo(
-    () =>
-      buildAttachmentsMarkdown(
-        persistedAttachments,
-        attachments.filter((attachment) => attachment.status === "ready"),
+      prev.filter(
+        (attachment) =>
+          attachment.sessionId !== sessionId || attachment.status === "uploading" || attachment.status === "ingesting",
       ),
-    [attachments, persistedAttachments],
-  );
+    );
+  }, [sessionId]);
 
   // True while any attachment is still uploading/ingesting. Used to block message
   // send until every attachment has finished, so the agent never answers before
@@ -433,7 +434,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     attachments,
     persistedAttachments,
     isHydratingAttachments,
-    attachmentsMarkdown,
     hasUploadingAttachments,
     addFiles,
     removeAttachment,

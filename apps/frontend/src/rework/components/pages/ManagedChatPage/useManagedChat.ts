@@ -32,7 +32,12 @@ import type { EffectiveChatModel } from "../../../../slices/controlPlane/control
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
-import { splitSessionAttachments, toDraftChip, useChatAttachments } from "./useChatAttachments";
+import {
+  buildAttachmentsMarkdown,
+  splitSessionAttachments,
+  toDraftChip,
+  useChatAttachments,
+} from "./useChatAttachments";
 import { buildComposerRuntimeContext, toTurnAttachments } from "./runtimeContextBuilder";
 import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
@@ -696,13 +701,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   isLoadingHistoryRef.current = isLoadingHistory;
 
   // Unsent rows are drafts of this conversation's composer; the drawer only lists sent ones.
-  const { sent: sentAttachments, drafts: draftAttachments } = useMemo(
-    () =>
-      isHistorySettled && sessionId
-        ? splitSessionAttachments(attachments.persistedAttachments, messages)
-        : { sent: [], drafts: [] },
-    [attachments.persistedAttachments, isHistorySettled, messages, sessionId],
-  );
+  // Without its history the split cannot be made: offering sent files for removal would delete them.
+  const { sent: sentAttachments, drafts: draftAttachments } = useMemo(() => {
+    if (historyUnavailable) return { sent: attachments.persistedAttachments, drafts: [] };
+    return isHistorySettled && sessionId
+      ? splitSessionAttachments(attachments.persistedAttachments, messages)
+      : { sent: [], drafts: [] };
+  }, [attachments.persistedAttachments, historyUnavailable, isHistorySettled, messages, sessionId]);
   const composerAttachments = useMemo(() => {
     const localIds = new Set(attachments.attachments.map((attachment) => attachment.id));
     const restored = sessionId
@@ -712,6 +717,16 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       : [];
     return [...attachments.attachments, ...restored];
   }, [attachments.attachments, draftAttachments, sessionId]);
+  // A composer send also carries its drafts; any other turn only knows the sent files.
+  const sentAttachmentsMarkdown = useMemo(() => buildAttachmentsMarkdown(sentAttachments, []), [sentAttachments]);
+  const composerTurnAttachmentsMarkdown = useMemo(
+    () =>
+      buildAttachmentsMarkdown(
+        [...sentAttachments, ...draftAttachments],
+        attachments.attachments.filter((attachment) => attachment.status === "ready"),
+      ),
+    [attachments.attachments, draftAttachments, sentAttachments],
+  );
   reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
@@ -773,10 +788,15 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const handleAddAttachments = useCallback(
     (files: File[], source: AttachmentSource) => {
       if (executionDisabledRef.current) return;
+      // A queued message sends no files, and would make a later drop look already sent.
+      if (pendingMessages.length > 0) {
+        showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
+        return;
+      }
       const sid = ensureSessionForAttachments();
       void attachments.addFiles(files, source, sid);
     },
-    [attachments.addFiles, ensureSessionForAttachments],
+    [attachments.addFiles, ensureSessionForAttachments, pendingMessages.length, showWarn, t],
   );
 
   // The composer's context for one turn, shared by send and HITL resume so a
@@ -830,7 +850,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
             searchPolicy: composer.searchPolicy,
             ragScope: composer.ragScope,
             boundLibraryIds,
-            attachmentsMarkdown: attachments.attachmentsMarkdown,
+            attachmentsMarkdown: sentAttachmentsMarkdown,
             ...(reasoningShown ? { reasoning: composer.reasoning } : {}),
             askUser: composer.askUser,
             chatProfileId: composer.chatProfileId,
@@ -841,7 +861,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       };
     },
     [
-      attachments.attachmentsMarkdown,
+      sentAttachmentsMarkdown,
       chatControls,
       composer.selectedLibraryIds,
       composer.selectedDocumentUids,
@@ -969,6 +989,9 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
         if (queued) delete runtimeContext.attachments_markdown;
+        else if (interrupted?.action !== "restart" && composerTurnAttachmentsMarkdown != null) {
+          runtimeContext.attachments_markdown = composerTurnAttachmentsMarkdown;
+        }
         // Only this turn's files: earlier ones already sit on their own turns. A
         // restart re-sends the interrupted turn's files, already cleared from the composer.
         const turnAttachments = queued
@@ -1010,6 +1033,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     },
     [
       composerAttachments,
+      composerTurnAttachmentsMarkdown,
       attachments.hasUploadingAttachments,
       input,
       inputCharacterCount,
@@ -1586,7 +1610,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     selectedLibraryIds: composer.selectedLibraryIds,
     attachments: composerAttachments,
     persistedAttachments: sentAttachments,
-    isHydratingAttachments: attachments.isHydratingAttachments,
+    isHydratingAttachments: attachments.isHydratingAttachments || (!isHistorySettled && !historyUnavailable),
     attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,
     removeAttachment,

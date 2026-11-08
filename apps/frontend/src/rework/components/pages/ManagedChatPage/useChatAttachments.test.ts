@@ -87,6 +87,17 @@ describe("splitSessionAttachments", () => {
     expect(ids(drafts)).toEqual(["b"]);
   });
 
+  it("ignores HITL answers, steered text and the optimistic row for the legacy cutoff", () => {
+    const hitlAnswer = { ...userMessage("2026-11-08T12:00:00Z"), channel: "hitl_response" } as ChatMessage;
+    const steered = { ...userMessage("2026-11-08T12:00:00Z"), metadata: { extras: { steered_message_id: "m" } } };
+    const optimistic = { ...userMessage("2026-11-08T12:00:00Z"), metadata: { extras: { optimistic_user: true } } };
+    const { drafts } = splitSessionAttachments(
+      [row("dropped", "2026-11-08T11:00:00Z")],
+      [userMessage("2026-11-08T10:00:00Z"), hitlAnswer, steered as ChatMessage, optimistic as ChatMessage],
+    );
+    expect(ids(drafts)).toEqual(["dropped"]);
+  });
+
   it("counts rows older than the latest user message as sent, for messages stored without the list", () => {
     const { sent, drafts } = splitSessionAttachments(
       [row("old", "2026-11-08T09:00:00Z"), row("new", "2026-11-08T11:00:00Z")],

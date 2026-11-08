@@ -190,7 +190,8 @@ describe("useChatAttachments — composer files stay in their conversation", () 
 
     render("session-2");
     expect(latest.attachments).toEqual([]);
-    expect(latest.attachmentsMarkdown).toBeNull();
+    // A send in session-2 clears its own ready chips only.
+    act(() => latest.clearReadyAttachments());
 
     render("session-1");
     expect(latest.attachments.map((attachment) => attachment.name)).toEqual(["a.pdf"]);

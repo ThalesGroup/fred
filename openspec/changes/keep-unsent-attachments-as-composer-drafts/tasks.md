@@ -13,5 +13,5 @@
 
 ## Evidence
 
-- `vitest run` (apps/frontend): 417 files, 5140 tests passed, 8 skipped. New: `splitSessionAttachments` (no messages, listed id, legacy rule), hook keeps a file in its own conversation, `useManagedChat` shows drafts in the composer and sent rows in the drawer.
+- `vitest run` (apps/frontend): 417 files, 5144 tests passed, 8 skipped (after the independent review fixes). New: `splitSessionAttachments` (no messages, listed id, legacy rule), hook keeps a file in its own conversation, `useManagedChat` shows drafts in the composer and sent rows in the drawer, sends restored drafts, treats every row as sent without history, refuses a drop while a message is queued; the legacy cutoff ignores HITL answers, steered and optimistic rows; a send leaves other conversations chips alone.
 - `tsc --noEmit`, `prettier --write`, `eslint` on touched files: clean. Run directly, not through `make`, because a dev Vite server was running.
