@@ -9,7 +9,7 @@
 
 - [x] 2.1 Unit tests: switch conversation with a draft (a), leave and come back (b), legacy conversation without attachment metadata.
 - [x] 2.2 `make code-quality` and `make test` in `apps/frontend`.
-- [ ] 2.3 Manual UI check of (a) and (b) with the developer.
+- [x] 2.3 Manual UI check of (a) and (b) with the developer (2026-11-08: both fixed).
 
 ## Evidence
 
