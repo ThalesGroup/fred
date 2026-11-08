@@ -107,6 +107,7 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
 )
+from knowledge_flow_backend.features.ingestion.attachment_preview import PreviewBusyError, delete_preview, read_owned_preview, store_preview
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
@@ -853,8 +854,20 @@ class IngestionController:
 
         del storage_key
         backend = await self._delete_fast_vectors(document_uid=document_uid)
+        await asyncio.to_thread(delete_preview, ApplicationContext.get_instance().get_content_store(), document_uid)
         await self._delete_attachment_tabular_dataset(user=user, document_uid=document_uid, is_platform_bypass=is_platform_bypass)
         return backend
+
+    @staticmethod
+    async def _store_attachment_preview(*, document_uid: str, image: bytes) -> None:
+        # Best effort: without a preview the agent still answers from the description.
+        try:
+            if await asyncio.to_thread(store_preview, ApplicationContext.get_instance().get_content_store(), document_uid, image):
+                logger.info("[FAST TEXT][INGEST] Stored image preview doc_uid=%s bytes=%d", document_uid, len(image))
+            else:
+                logger.warning("[FAST TEXT][INGEST] Image preview not stored, over the size cap: doc_uid=%s bytes=%d", document_uid, len(image))
+        except Exception:
+            logger.warning("[FAST TEXT][INGEST] Could not store image preview doc_uid=%s", document_uid, exc_info=True)
 
     async def _delete_attachment_tabular_dataset(self, *, user: KeycloakUser, document_uid: str, is_platform_bypass: bool) -> None:
         """
@@ -1735,6 +1748,8 @@ class IngestionController:
                     except Exception:
                         logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
                         raise HTTPException(status_code=500, detail="Failed to store vectors")
+                    if result.preview_image:
+                        await self._store_attachment_preview(document_uid=document_uid, image=result.preview_image)
                 else:
                     logger.info(
                         "[FAST TEXT][INGEST] Skipped vector chunking for CSV doc_uid=%s user=%s file=%s (tabular dataset covers search and SQL)",
@@ -1791,6 +1806,35 @@ class IngestionController:
                 summary_truncated=summary_truncated,
                 tabular_available=tabular_available,
             )
+
+        @router.get(
+            "/fast/preview/{document_uid}",
+            tags=["Processing"],
+            summary="Read the image preview of a fast-ingested chat image",
+            description="Return the bounded PNG or JPEG kept for a chat image attachment, to its uploader only.",
+            response_class=Response,
+            responses={
+                200: {"content": {"image/png": {}, "image/jpeg": {}}},
+                404: {"description": "No preview readable by this caller"},
+                503: {"description": "Too many preview reads in progress, try later"},
+            },
+        )
+        async def get_fast_preview(
+            document_uid: str,
+            session_id: str = Query(..., description="Conversation the attachment belongs to"),
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> Response:
+            # 404 for "not yours" too: a delegated caller reads any 403 as lost authority.
+            # A plain 503 (no denial cause) makes the runtime skip the image, nothing more.
+            try:
+                preview = await read_owned_preview(ApplicationContext.get_instance().get_content_store(), self.vector_store, document_uid, user.uid, session_id)
+            except PreviewBusyError:
+                logger.warning("[FAST TEXT][PREVIEW] Busy, preview not read: doc_uid=%s", document_uid)
+                raise HTTPException(status_code=503, detail="Preview temporarily unavailable")
+            if preview is None:
+                raise HTTPException(status_code=404, detail="Preview not found")
+            image, media_type = preview
+            return Response(content=image, media_type=media_type, headers={"Cache-Control": "private, no-store"})
 
         @router.delete(
             "/fast/delete/{document_uid}",

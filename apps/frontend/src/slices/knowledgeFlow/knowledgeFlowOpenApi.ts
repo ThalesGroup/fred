@@ -525,6 +525,20 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGet: build.query<
+      GetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetApiResponse,
+      GetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fast/preview/${queryArg.documentUid}`,
+        params: {
+          session_id: queryArg.sessionId,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     deleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDelete: build.mutation<
       DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse,
       DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiArg
@@ -1832,6 +1846,16 @@ export type FastIngestKnowledgeFlowV1FastIngestPostApiArg = {
   run?: string | null;
   agent?: string | null;
   bodyFastIngestKnowledgeFlowV1FastIngestPost: BodyFastIngestKnowledgeFlowV1FastIngestPost;
+};
+export type GetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetApiResponse =
+  /** status 200 Successful Response */ Blob;
+export type GetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetApiArg = {
+  documentUid: string;
+  /** Conversation the attachment belongs to */
+  sessionId: string;
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
 };
 export type DeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteApiResponse =
   /** status 200 Successful Response */ any;
@@ -3498,6 +3522,8 @@ export const {
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
+  useGetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetQuery,
+  useLazyGetFastPreviewKnowledgeFlowV1FastPreviewDocumentUidGetQuery,
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,
   useWriteDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsPostMutation,
   useRemoveDocumentKnowledgeFlowV1LibrariesLibraryIdDocumentsDeleteMutation,
