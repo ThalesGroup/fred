@@ -283,11 +283,19 @@ cannot bypass those controls. Published previews require current read authority.
 
 Implementation references for [conversation documents](05-documents.md#55-documents-authored-in-a-conversation).
 
-| Conversation deliverables | Implementation entry |
+| Conversation storage | Implementation entry |
 | --- | --- |
 | Deep workspace and explicit publication tools | [`ConversationFilesystemService`](../../libs/fred-runtime/fred_runtime/conversation_filesystem.py) and [`ConversationFilesMiddleware`](../../libs/fred-runtime/fred_runtime/deep/conversation_files.py) |
 | Runtime adapter to the Control Plane catalogue | [`FredWorkspaceFs`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py) |
 | Catalogue, upload receipts and conversation-bound reads | [`documents/conversation.rs`](../../apps/control-plane/src/documents/conversation.rs); [storage contract](../../apps/control-plane/README.md#conversation-file-catalogue) |
+| Object erasure before final metadata removal | [`lifecycle/cleanup.rs`](../../apps/control-plane/src/lifecycle/cleanup.rs), [`documents/cleanup.rs`](../../apps/control-plane/src/documents/cleanup.rs) and runtime [`session_fence.py`](../../libs/fred-runtime/fred_runtime/runtime_support/session_fence.py) |
+| Space-owned Wiki and conversation provenance | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql) |
+
+<!-- generated: source-map apps/control-plane/src/wiki/lifecycle.rs::purge -->
+| Implementation anchor | Responsibility declared in source |
+| --- | --- |
+| [`lifecycle.rs::purge`](../../apps/control-plane/src/wiki/lifecycle.rs#L19) | Returns true after a bounded batch, asking the existing receipt to resume. A published revision's session_id is attribution, never a cascading owner. |
+<!-- end generated -->
 
 The document editor below belongs to the Agent Pod capability and its frontend
 integration; it is separate from Deep's workspace and delivered-file catalogue.

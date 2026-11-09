@@ -50,7 +50,24 @@ flowchart TB
 | Conversation | Current space and available personal space of the same organization. Insert text into the draft, or resolve the slash command at send time. |
 | Agent configuration | The agent's own space. Copy the selected text; later library edits do not update the saved instructions. |
 
-The marketplace is a separate consumer, not an additional source in these pickers.
+### Publishing a prompt
+
+The organization marketplace shares approved snapshots. It is separate from the
+libraries above: installing a publication creates a prompt in the destination space.
+
+```mermaid
+flowchart TB
+    source["Source prompt"] -->|"Submit a snapshot"| proposal["Proposal for review"]
+    proposal -->|"Approve"| catalogue["Current catalogue publication"]
+    catalogue -->|"Install without overwriting"| copy["Independent prompt<br/>in another space"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class source,proposal,catalogue,copy neutral
+```
+
+Approving an update replaces the catalogue's current publication; installed copies
+keep their content. Withdrawing a publication prevents new installations and
+preserves existing copies. Source edits do not alter submitted snapshots.
+
 The [small evidence map](A2-manager-contracts.md#prompt-implementation-anchors) links
 three responsibilities and the relevant checks. The [REST inventory](A12-control-plane-api.md#spaces-routes)
 provides the exact routes; the [user guide](../../apps/frontend/src/rework/features/helpCenter/content/en/features/prompts.md)

@@ -36,7 +36,7 @@ are outside this catalogue.
 | `folder`, `document`, `document_content`, `document_current` | Document placement, stored-content references and current content; bytes live in object storage. |
 | `document_upload`, `document_processing`, `document_storage` | Upload receipts, processing attempts and installation storage inventory. |
 | `powerpoint_file`, `capability_preparation` | [Managed PowerPoint originals and prepared data](A9-documents.md#powerpoint-builder-data). |
-| `wiki_page`, `wiki_revision` | Page identity and revision references within the managed document model. |
+| `wiki_page`, `wiki_revision` | Space-owned editorial content, separate from the file catalogue; published provenance survives conversation deletion. |
 | `deletion` | Durable cleanup receipt, deliberately surviving removal of its target. |
 | `platform_bootstrap`, `platform_role_grant` | Bootstrap receipt and canonical direct platform grants. |
 | `user_identity`, `terms_acceptance` | Observed directory profile and personal consent; neither grants content access. |
@@ -70,7 +70,7 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded organization lock, then decide against current facts. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded shared content guard, then decide against current facts. |
 | [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L597) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L252) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
@@ -85,7 +85,11 @@ write authorization, departure and deletion to existing common mechanisms.
 The generator checks anchor existence, adjacent comments and link freshness;
 it does not prove the function's behavior. Test presence is not an execution result
 or deployed acceptance. [SQL publication constraints](../../apps/control-plane/migrations/0018_marketplace.sql)
-remain separate from the source prompt's ownership.
+remain separate from the source prompt's ownership. The
+[marketplace transactions](../../apps/control-plane/src/marketplaces/store.rs)
+implement snapshot approval, withdrawal and installation receipts; the
+[audience policy](../../apps/control-plane/src/marketplaces.rs) limits publication
+to the source's organization.
 
 ### Pod capability offers
 

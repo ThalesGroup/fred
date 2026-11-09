@@ -62,24 +62,27 @@ retry and cleanup contracts, and implementation references.
 
 ## 5.5. Documents authored in a conversation
 
-Fred gives agents persistent file storage scoped to their conversation. Deep
-uses it to prepare working files and publish deliverables whose identity survives
-content updates. Access
-remains private to the conversation owner, even in a shared team.
+Fred gives agents a persistent filesystem scoped to their conversation. Deep
+publishes downloadable copies with stable identities; changing a working file
+does not update its published copy. These files stay private to the conversation
+owner, even in a shared team.
 
 **Legend:** ⬜ Concepts
 
 ```mermaid
 flowchart TB
-    work["Working files"] -->|"Explicit publication"| delivery["Conversation deliverables"]
-    delivery -->|"Download"| owner["Conversation owner"]
+    work["Work with an agent"] --> private["Private conversation<br/>Messages, working files, deliverables"]
+    work -->|"Approve Wiki publication"| wiki["Published space Wiki"]
+    private -->|"Delete conversation"| purge["Access withdrawn<br/>Asynchronous purge"]
+    wiki -->|"Delete source conversation"| kept["Page and provenance retained"]
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class work,delivery,owner neutral
+    class work,private,wiki,purge,kept neutral
 ```
 
-Changing a working file does not change its published copy. Delivery neither
-shares the file in the space's drive nor makes it searchable. The document editor
-also supports drafting with the assistant and Word or Markdown export.
+Deletion withdraws access immediately; physical cleanup runs in the background.
+Published Wiki knowledge belongs to the space. A downloadable deliverable is
+neither a drive document nor searchable knowledge. The document editor also
+supports drafting with the assistant and Word or Markdown export.
 
 See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
 for the responsible components and export behavior.
