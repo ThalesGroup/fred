@@ -48,14 +48,9 @@ before startup; the latter indexes sessions awaiting retirement receipts.
 
 ## From scratch (fred-deployment-factory)
 
-**Host run, after `make docker-up` in fred-deployment-factory**, from the repository root:
-
-```sh
-make setup-env          # once: config/.env of each application
-make docker-bootstrap   # database roles and schemas, this schema, worker contract
-make run
-```
-
+**Host run**, from fred-deployment-factory: `make docker-up`, then
+`make docker-app FRED=weaver APP=fred DIR=<this checkout> KEY_FILE=<Mistral key file>`
+([first start](../../deploy/k3d/README.md#first-start)).
 `config/configuration_prod.yaml` points to the Docker Compose services. Against
 another fresh database, run `make initialize-schema` here with `DATABASE_URL`
 pointing to its `fred_cp` login.

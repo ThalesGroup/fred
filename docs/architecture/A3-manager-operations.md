@@ -280,11 +280,11 @@ flowchart LR
 
 | | Host run | k3d release |
 | --- | --- | --- |
-| Start | `make run` in `apps/control-plane` | `make k3d-app FRED=weaver APP=fred DIR=../fred` in the factory |
-| Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
+| Start | `make docker-app FRED=weaver APP=fred DIR=../fred` in the factory | `make k3d-app FRED=weaver APP=fred DIR=../fred` in the factory |
+| Configuration | `config/configuration_prod.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `temporal:7233`, `keycloak:8080` |
-| Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
+| Token issuer accepted | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) | The same |
 | Public URL | `http://localhost:8222/control-plane/v1` | `http://weaver.localhost:8088/control-plane/v1` |
 | Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
 

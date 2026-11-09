@@ -50,32 +50,39 @@ and recreate the operator-owned Secrets.
 Never reset a database containing data to keep. See the
 [DBA procedure](../postgres/README.md) for managed installations and role cleanup.
 
-## First start on k3d
+## First start
 
-The path a new contributor follows, from an empty cluster to an assistant that
-answers from a team's documents. Weaver runs on k3d only; the factory's Docker
-Compose setup does not support it yet.
+The path a new contributor follows, from empty infrastructure to an assistant that
+answers from a team's documents. Only step 1 differs between k3d, deployed as in
+production, and Docker Compose, the fast loop that runs this checkout on the host.
 
 **Prerequisites.** Sibling checkouts of `fred` (branch `weaver`) and
 `fred-deployment-factory`, the tools listed in the factory README, the line
 `127.0.0.1 keycloak weaver.localhost` in `/etc/hosts`, and a Mistral
-API key.
+API key in a file holding only the key.
 
-**1. Cluster and Fred.** From the factory checkout:
+**1. Infrastructure and Fred.** From the factory checkout, one of:
 
 ```sh
-make k3d-up   # the infrastructure, and the namespace, database and identities of each line
+# k3d: http://weaver.localhost:8088
+make k3d-up
 kubectl --context k3d-fred -n fred-weaver create secret generic fred-model-credentials \
   --from-file=OPENAI_API_KEY=/absolute/path/to/mistral-key
 make k3d-app FRED=weaver APP=fred DIR=/absolute/path/to/this/checkout
-kubectl --context k3d-fred -n fred-weaver get deploy
+
+# Docker Compose: http://localhost:5173
+make docker-up
+make docker-app FRED=weaver APP=fred DIR=/absolute/path/to/this/checkout \
+  KEY_FILE=/absolute/path/to/mistral-key
 ```
 
-`control-plane-backend`, `knowledge-flow-backend`, `knowledge-flow-worker`,
-`fred-agents`, `fred-agents-worker` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
-command that reads the bootstrap token.
+Both run the same six processes: `control-plane-backend`, `fred-agents`,
+`fred-agents-worker`, `knowledge-flow-backend`, `knowledge-flow-worker` and `frontend`
+(the k3d monitor needs Kubernetes). Both print how to read the bootstrap token.
+On Docker Compose, the VS Code task **Fred (make run)** runs the same processes once
+`make docker-app` has prepared the checkout.
 
-**2. Platform admin.** Open <http://weaver.localhost:8088>, sign in with the intended
+**2. Platform admin.** Open the address above, sign in with the intended
 admin identity (register only if needed), activate platform administration with the
 bootstrap token, then accept the terms of use ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
 

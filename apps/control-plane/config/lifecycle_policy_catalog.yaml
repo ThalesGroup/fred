@@ -2,5 +2,6 @@ version: v1
 space_policies:
   purge:
     default:
-      retention: P7D
+      # One minute, as on k3d (values-weaver.yaml): local spaces are purged quickly.
+      retention: PT1M
     rules: []

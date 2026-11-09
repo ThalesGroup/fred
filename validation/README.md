@@ -136,7 +136,7 @@ remains future work.
 
 | Var | Default | Meaning |
 |---|---|---|
-| `FRED_REALM_URL` | `http://localhost:8080/realms/app` | Keycloak realm URL |
+| `FRED_REALM_URL` | `http://keycloak:8080/realms/app` | Keycloak realm URL |
 | `FRED_CLIENT_ID` | `app` | Public client used for the password grant |
 | `FRED_USER_PASSWORD` | `Azerty123_` | Fallback password, used only for a user the fixture has no per-user password for (each of the 15 fixture users normally carries its own `password` field - see `factory_config.FactoryUser.password`) |
 | `FRED_CONTROL_PLANE_URL` | `http://localhost:8222/control-plane/v1` | Control-plane API base. In localhost auth/isolation mode this is the direct control-plane app, not the runtime/frontend origin. |
@@ -216,7 +216,7 @@ above before running either target.
 
 | Target | Control Plane | Knowledge Flow | Runtime origin | Keycloak realm |
 | --- | --- | --- | --- | --- |
-| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v2` | `localhost:8000` | `localhost:8080/realms/app` |
+| `integration-test-docker` | `localhost:8222/control-plane/v1` | `localhost:8111/knowledge-flow/v2` | `localhost:8000` | `keycloak:8080/realms/app` |
 | `integration-test-k3d` | `localhost:8088/control-plane/v1` | `localhost:8088/knowledge-flow/v2` | `localhost:8088` | `keycloak:8080/realms/app` |
 
 All these default URLs use HTTP. A named profile replaces previously exported
@@ -230,7 +230,7 @@ profile. The targets are also available via `make -C validation`.
 `FRED_*` variables and command-line assignments. Without overrides it defaults to:
 
 ```text
-FRED_REALM_URL=http://localhost:8080/realms/app
+FRED_REALM_URL=http://keycloak:8080/realms/app
 FRED_CONTROL_PLANE_URL=http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE=http://localhost:8000
 FRED_KNOWLEDGE_FLOW_URL=http://localhost:8111/knowledge-flow/v2

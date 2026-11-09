@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
 # The worker on the host, against the Docker Compose backing services of
 # fred-deployment-factory, as its k3d Weaver values with localhost addresses.
-# make docker-bootstrap exports the control plane's worker contract from this file.
+# make docker-prepare exports the control plane's worker contract from this file.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -262,10 +262,10 @@ scheduler:
     connect_timeout_seconds: 5
     ingestion_workflow_parallelism: 3
     ingestion_max_concurrent_workflow_tasks: 3
-    ingestion_max_concurrent_activities: 3
+    ingestion_max_concurrent_activities: 1
 chat_model:
   provider: openai
-  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: mistral-small-latest # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
     base_url: https://api.mistral.ai/v1
 embedding_model:
@@ -333,7 +333,7 @@ storage:
 # Secrets in .env: MANAGER_WORKER_CLIENT_SECRET, MANAGER_DERIVED_ACCESS_KEY/SECRET_KEY.
 manager_processing:
   url: http://localhost:8222/control-plane/v1
-  issuer: http://localhost:8080/realms/app
+  issuer: http://keycloak:8080/realms/app
   audience: control-plane
   client_id: knowledge-flow-worker
   endpoint: http://localhost:8333

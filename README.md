@@ -16,12 +16,12 @@ shared identity, permissions and organization governance.
   dossier de travail du 3 novembre 2026, décisions, commits sources et pistes de portage.
 - [Architecture and user journeys](docs/architecture/README.md): the maintained
   explanation of current Fred behavior.
-- [First local deployment](deploy/k3d/README.md#first-start-on-k3d): prerequisites,
+- [First local deployment](deploy/k3d/README.md#first-start): prerequisites,
   startup and provisioning commands; `make bundle-demo` generates the Acme/Globex demo.
 - [Nova coexistence exercise](apps/control-plane/tests/fixtures/import_export/nova_migration/README.md):
   generate the isolated Weaver bundle with `make bundle-migration`.
-- [Local development](scripts/README-local-delegation.md): run components against
-  the local infrastructure.
+- [Local development](deploy/k3d/README.md#first-start): the same first start runs
+  Fred on k3d or, from this checkout, on Docker Compose.
 - [Coding conventions](docs/CONVENTIONS.md) and [agent instructions](AGENTS.md).
 
 ## Components

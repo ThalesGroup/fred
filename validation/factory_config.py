@@ -33,7 +33,7 @@ import yaml
 
 # --- endpoints (env vars, local docker-compose defaults) ---------------------
 
-REALM_URL = os.getenv("FRED_REALM_URL", "http://localhost:8080/realms/app")
+REALM_URL = os.getenv("FRED_REALM_URL", "http://keycloak:8080/realms/app")
 CLIENT_ID = os.getenv("FRED_CLIENT_ID", "app")
 # Fallback password, used only for a fixture entry that (unexpectedly) carries no
 # per-user `password` field of its own. The fixture's 15 demo users all set one

@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--realm-url",
-        default=os.getenv("FRED_REALM_URL", "http://localhost:8080/realms/app"),
+        default=os.getenv("FRED_REALM_URL", "http://keycloak:8080/realms/app"),
     )
     parser.add_argument("--client-id", default=os.getenv("FRED_CLIENT_ID", "app"))
     parser.add_argument("--username", default=os.getenv("FRED_USERNAME"))

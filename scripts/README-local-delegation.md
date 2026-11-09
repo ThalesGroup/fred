@@ -6,7 +6,7 @@ Fred and deployment-factory branches containing this setup. No secrets or genera
 service-account identities belong in Git.
 
 The `configuration_prod.yaml` files already turn both directions on, as the k3d
-values do, so `make docker-bootstrap` and `make run` need no extra step. The helper
+values do, so `make docker-prepare` and `make run` need no extra step. The helper
 below remains a check of the workload token, and the switch for other configurations.
 
 After `make docker-up` in deployment-factory, prepare Fred once per fresh Keycloak realm:
@@ -56,7 +56,8 @@ delegation settings, it does not force delegation off. Deployments turn on
 receivers in their own configuration, and grant the role in their own realm.
 
 The local prod profiles use `security.profile: c3` and the same canonical issuer
-`http://localhost:8080/realms/app` for browser and workload tokens. These profiles
+`http://keycloak:8080/realms/app` for browser and workload tokens, as on k3d
+(hosts entry `127.0.0.1 keycloak`). These profiles
 are for applications running on the host above Docker infrastructure. A deployed
 pod must use its deployment's canonical realm URL, not its own localhost. Changing
 the issuer requires regenerating local delegation and restarting the applications.

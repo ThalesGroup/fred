@@ -103,7 +103,7 @@ LOCAL_SECRET_KEYS := FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY
 WEAVER_DATABASE := fred_weaver
 
 .PHONY: setup-env
-setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
+setup-env: ## Create each backend's .env from its .env.template (idempotent) and fill in the local Docker Compose secrets; KEY_FILE=<file> sets the Mistral key
 	@set -e; \
 	for dir in $(ENV_APPS); do \
 		if [ ! -f "$$dir/config/.env" ]; then \
@@ -136,21 +136,19 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent), fi
 		sed -i 's|^CONFIG_FILE=.*|CONFIG_FILE="./config/configuration_prod.yaml"|' apps/knowledge-flow-backend/config/.env; \
 		echo "************ Fixed knowledge-flow-backend CONFIG_FILE to configuration_prod.yaml ************"; \
 	fi
-	@# The model provider key (Mistral in the local configurations), once for every application:
-	@# fred-agents' key if it has one, else asked -- not asked in a non-interactive shell.
-	@api_key="$$(sed -n -E 's/^OPENAI_API_KEY="?([^"]+)"?$$/\1/p' apps/fred-agents/config/.env)"; \
-	if [ -z "$$api_key" ] && [ -t 0 ]; then \
-		read -p "Enter the Mistral API key for local dev (blank to skip, add it later yourself): " api_key; \
-	fi; \
+	@# The model provider key (Mistral in the local configurations), the same for every application:
+	@# KEY_FILE, a file holding only the key, as for k3d's fred-model-credentials; else fred-agents' key.
+	@if [ -n "$(KEY_FILE)" ]; then api_key="$$(tr -d '[:space:]' < "$(KEY_FILE)")"; pattern='.*'; \
+	else api_key="$$(sed -n -E 's/^OPENAI_API_KEY="?([^"]+)"?$$/\1/p' apps/fred-agents/config/.env)"; pattern='(\"\")?'; fi; \
 	if [ -n "$$api_key" ]; then \
 		for dir in $(ENV_APPS); do \
-			sed -i -E "s/^OPENAI_API_KEY=(\"\")?$$/OPENAI_API_KEY=\"$$api_key\"/" "$$dir/config/.env"; \
+			sed -i -E "s/^OPENAI_API_KEY=$$pattern$$/OPENAI_API_KEY=\"$$api_key\"/" "$$dir/config/.env"; \
 		done; \
 	fi
 	@echo "✓ setup-env done. Review apps/*/config/.env yourself for anything beyond local docker-compose defaults (Azure, proxy, Prometheus, ...)."
 
-.PHONY: docker-bootstrap
-docker-bootstrap: ## After make docker-up in fred-deployment-factory: database roles and schemas, Control Plane schema, worker contract (replayable)
+.PHONY: docker-prepare
+docker-prepare: ## What k3d's install hooks do, against Docker Compose: database roles and schemas, Control Plane schema, worker contract (replayable)
 	@# What the chart's postgresBootstrap hook and migration Jobs do on k3d, against app-postgres.
 	docker exec -i app-postgres psql -X -q -v ON_ERROR_STOP=1 -U admin -d $(WEAVER_DATABASE) \
 		-v database=$(WEAVER_DATABASE) < deploy/postgres/bootstrap.sql
@@ -162,7 +160,7 @@ docker-bootstrap: ## After make docker-up in fred-deployment-factory: database r
 	@mkdir -p apps/control-plane/target
 	cd apps/knowledge-flow-worker && .venv/bin/python -m knowledge_flow_worker.features.scheduler.export_contract \
 		--configuration config/configuration_worker.yaml > ../control-plane/target/worker-contract.json
-	@echo "✓ docker-bootstrap done. Start Fred with make run."
+	@echo "✓ docker-prepare done."
 
 ##@ Run
 

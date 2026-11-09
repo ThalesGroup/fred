@@ -30,7 +30,7 @@ FRED_RUNTIME_SRC ?= ../libs/fred-runtime
 FRED_CONTROL_PLANE_URL   ?= http://localhost:8222/control-plane/v1
 FRED_RUNTIME_PUBLIC_BASE ?= http://localhost:8000
 FRED_KNOWLEDGE_FLOW_URL  ?= http://localhost:8111/knowledge-flow/v2
-FRED_REALM_URL           ?= http://localhost:8080/realms/app
+FRED_REALM_URL           ?= http://keycloak:8080/realms/app
 
 VALIDATION_REPORT    ?= report.md
 VALIDATION_JUNIT_XML ?= report.xml
@@ -39,7 +39,7 @@ VALIDATION_ARGS      ?=
 .PHONY: integration-test-docker integration-test-k3d
 # Select a complete profile even after another profile's URLs were exported.
 # Explicit command-line FRED_* assignments still take precedence.
-integration-test-docker: FRED_REALM_URL = http://localhost:8080/realms/app
+integration-test-docker: FRED_REALM_URL = http://keycloak:8080/realms/app
 integration-test-docker: FRED_CONTROL_PLANE_URL = http://localhost:8222/control-plane/v1
 integration-test-docker: FRED_KNOWLEDGE_FLOW_URL = http://localhost:8111/knowledge-flow/v2
 integration-test-docker: FRED_RUNTIME_PUBLIC_BASE = http://localhost:8000
