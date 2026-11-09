@@ -57,7 +57,6 @@ from control_plane_backend.product.agent_copy import (
     copy_agent_instance,
     list_agent_copy_targets,
 )
-from control_plane_backend.product.home_agents import list_home_agents
 from control_plane_backend.product.creation_assistant import (
     creation_assistant_runtime_settings,
     draft_agent,
@@ -66,6 +65,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.product.home_agents import list_home_agents
 from control_plane_backend.product.schemas import (
     AgentCopyRequest,
     AgentCopyResponse,
@@ -82,8 +82,8 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
-    InactiveSessionsResponse,
     HomeAgentsResponse,
+    InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     MarketplaceImportRequest,

@@ -4,11 +4,11 @@ Revision ID: d7a2f591c034
 Revises: b8e1f4a2c6d9
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
-revision = "d7a2f591c034"
-down_revision = "b8e1f4a2c6d9"
+revision = "d7a2f591c034"  # pragma: allowlist secret
+down_revision = "b8e1f4a2c6d9"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

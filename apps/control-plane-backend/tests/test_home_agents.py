@@ -14,15 +14,13 @@
 
 from types import SimpleNamespace
 from typing import cast
-
-from fred_core import KeycloakUser
-from control_plane_backend.product.dependencies import ProductServiceDependencies
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
-
+from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.home_agents import list_home_agents
+from fred_core import KeycloakUser
+from sqlalchemy.exc import SQLAlchemyError
 
 
 @pytest.mark.asyncio
