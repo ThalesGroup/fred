@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Use descriptive branch names without codex"
+title: "Clarify Epic links and descriptive branch names"
 impact: none
 configuration: none
 configuration_reason: "Only repository contributor guidance changes; deployment configuration is unaffected."
@@ -8,7 +8,7 @@ no_action_reason: "Application code, published artifacts and deployment behavior
 ---
 ## Applicability
 
-This change applies to contributors creating new branches. Existing deployments are unaffected.
+This change applies to contributors creating issues and branches. Existing deployments are unaffected.
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Confirm new topic branches use descriptive names without `codex`.
+Confirm new issues are checked against open GitHub Epics and new topic branches use descriptive names without `codex`.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Revert the contributor guidance change. No data rollback is needed.
 
 ## Limitations
 
-Existing branch names are not changed by this guidance.
+Existing issue and branch names are not changed by this guidance.
