@@ -566,7 +566,9 @@ async fn update_agent_instance(
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
-    // Apply omissions to the current row, not the snapshot read before discovery.
+    // Lock before reading: concurrent partial edits must compose on the current row.
+    sqlx::query("select agent_instance_id from agent_instance where space_id=$1 and agent_instance_id=$2 for update")
+        .bind(space_id).bind(agent_instance_id).execute(&mut *tx).await?;
     let mut current = super::get_for_space(&mut *tx, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;

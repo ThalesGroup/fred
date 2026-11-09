@@ -272,9 +272,25 @@ async fn write_conversation_file(
             "The multipart filename must match the destination path",
         ));
     }
-    let attempt = storage
+    let reserved = storage
         .reserve_output(&writer, &query, key, &parent, &name, &spool)
-        .await?;
+        .await;
+    // Session rows serialize one conversation, but request keys span conversations.
+    let attempt = if reserved.is_err()
+        && sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from document_upload where actor=$1 and request_key=$2)",
+        )
+        .bind(writer.person)
+        .bind(key)
+        .fetch_one(&storage.pool)
+        .await?
+    {
+        storage
+            .reserve_output(&writer, &query, key, &parent, &name, &spool)
+            .await?
+    } else {
+        reserved?
+    };
     if attempt.status == "stored" {
         return Ok(Json(FileWrite {
             document_id: attempt.target_document_id,

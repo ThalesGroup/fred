@@ -608,7 +608,7 @@ async fn set_organization_agent_default(
         .iter()
         .find(|item| item.id == agent_id)
         .ok_or(AppError::NotFound)?;
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),

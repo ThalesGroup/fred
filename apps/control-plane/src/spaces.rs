@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Space and role mutations. Each one checks the caller's right and "a role on a space
-//! requires a direct content role on its parent", then writes, all under one
-//! transaction-scoped advisory lock per organization: no concurrent mutation can
-//! interleave between check and write. Placement and direct grants commit atomically in PostgreSQL.
+//! Content writes share the transaction-scoped organization advisory lock; governance
+//! takes it exclusively. Authorization is checked under that lock and retained through
+//! commit, ordering content with revocation without serializing independent writers.
+//! Governance also protects cross-row placement and direct-role invariants.
 
 use std::time::Duration;
 
@@ -469,7 +469,7 @@ pub async fn create_space(
     let name = validate_space_name(&name)?;
     let parent = load(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
-    let (mut tx, parent) = authorized_mutation(pool, caller, parent.id, Permission::Manage).await?;
+    let (mut tx, parent) = governance_mutation(pool, caller, parent.id, Permission::Manage).await?;
     if !holds_parent_content(&mut tx, owner, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -510,7 +510,7 @@ pub async fn create_personal_space(
     caller: &str,
     organization_id: Uuid,
 ) -> AppResult<(Space, bool)> {
-    let (mut tx, org) = authorized_mutation(
+    let (mut tx, org) = governance_mutation(
         pool,
         caller,
         MutationTarget::Organization(organization_id),
@@ -670,7 +670,7 @@ impl From<Uuid> for MutationTarget {
     }
 }
 
-/// Acquire the bounded organization lock, then decide against current facts.
+/// Acquire the bounded shared content guard, then decide against current facts.
 pub async fn authorized_mutation(
     pool: &PgPool,
     caller: &str,
@@ -678,27 +678,54 @@ pub async fn authorized_mutation(
     permission: impl Into<SpacePermission>,
 ) -> AppResult<(Transaction<'static, Postgres>, Space)> {
     let target = target.into();
-    let id = match target {
-        MutationTarget::Space(id) | MutationTarget::Organization(id) => id,
-    };
-    let mut tx = mutation_transaction(pool, id).await?;
+    let tx = storage_transaction(pool, target.id(), true).await?;
+    authorize_mutation(tx, caller, target, permission.into()).await
+}
+
+/// Governance queues exclusively behind content already admitted.
+pub async fn governance_mutation(
+    pool: &PgPool,
+    caller: &str,
+    target: impl Into<MutationTarget>,
+    permission: impl Into<SpacePermission>,
+) -> AppResult<(Transaction<'static, Postgres>, Space)> {
+    let target = target.into();
+    let space = load(pool, target.id()).await?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("set local lock_timeout = '5s'")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("set local statement_timeout = '15s'")
+        .execute(&mut *tx)
+        .await?;
+    // Rare governance holds a connection while queued, so new shared writers cannot starve it.
+    lock_organization_id(&mut tx, space.organization).await?;
+    authorize_mutation(tx, caller, target, permission.into()).await
+}
+
+impl MutationTarget {
+    fn id(&self) -> Uuid {
+        match *self {
+            Self::Space(id) | Self::Organization(id) => id,
+        }
+    }
+}
+
+async fn authorize_mutation(
+    mut tx: Transaction<'static, Postgres>,
+    caller: &str,
+    target: MutationTarget,
+    permission: SpacePermission,
+) -> AppResult<(Transaction<'static, Postgres>, Space)> {
     let space = match target {
-        MutationTarget::Space(_) => {
+        MutationTarget::Space(id) => {
             authorization::authorize(&mut *tx, caller, id, permission).await?
         }
-        MutationTarget::Organization(_) => {
+        MutationTarget::Organization(id) => {
             authorization::authorize_organization(&mut *tx, caller, id, permission).await?
         }
     };
     Ok((tx, space))
-}
-
-/// Retry without retaining a SQL connection while another mutation owns the lock.
-async fn mutation_transaction(
-    pool: &PgPool,
-    space_id: Uuid,
-) -> AppResult<Transaction<'static, Postgres>> {
-    storage_transaction(pool, space_id, false).await
 }
 
 /// Shared organization guard for file writes; exclusive governance still fences retirement.

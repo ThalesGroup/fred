@@ -123,13 +123,40 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
         };
         let body = json!({"source_space_id":personal.id,"source_resource_id":resource,"kind":kind,"expected_revision":revision});
         let key = Uuid::new_v4();
-        let (left, right) = tokio::join!(
-            post(&app, &identity, "bob", &proposals, key, body.clone()),
-            post(&app, &identity, "bob", &proposals, key, body.clone())
-        );
+        // Force both requests past their absent-key read before either inserts its proposal.
+        let mut gate = e.pool.begin().await.unwrap();
+        sqlx::query("lock table marketplace_proposal in share mode")
+            .execute(&mut *gate)
+            .await
+            .unwrap();
+        let submissions = async {
+            tokio::join!(
+                post(&app, &identity, "bob", &proposals, key, body.clone()),
+                post(&app, &identity, "bob", &proposals, key, body.clone())
+            )
+        };
+        tokio::pin!(submissions);
+        tokio::select! {
+            result = &mut submissions => panic!("submissions bypassed the insert gate: {result:?}"),
+            () = wait_for_relation_waiters(&e.pool, "marketplace_proposal", 2) => {}
+        }
+        gate.rollback().await.unwrap();
+        let (left, right) = submissions.await;
         assert_eq!(left.0, 200, "{}", left.1);
         assert_eq!(right.0, 200, "{}", right.1);
-        assert_eq!(left.1["proposal_id"], right.1["proposal_id"]);
+        assert_eq!(left.1, right.1);
+        let entries: i64 = sqlx::query_scalar(
+            "select count(*) from marketplace_entry where marketplace_space_id=$1 and kind=$2",
+        )
+        .bind(org.id)
+        .bind(kind)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            entries, 1,
+            "the losing submission must roll back its speculative entry"
+        );
         let p = left.1;
         let path = format!("{proposals}/{}", p["proposal_id"].as_str().unwrap());
         let entry = format!("{root}/entries/{}", p["entry_id"].as_str().unwrap());
@@ -364,7 +391,9 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
             204
         );
         assert_eq!(
-            post(&app, &identity, "bob", &proposals, key, body).await.1["package"],
+            post(&app, &identity, "bob", &proposals, key, body.clone())
+                .await
+                .1["package"],
             p["package"]
         );
         assert_eq!(
@@ -544,25 +573,47 @@ async fn marketplace_revocation_and_competing_decisions_use_current_space_rights
     let second_path = format!("{proposals}/{}", second["proposal_id"].as_str().unwrap());
     let d1 = format!("{first_path}/decision");
     let d2 = format!("{second_path}/decision");
-    let (a, b) = tokio::join!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &d1,
-            json!({"approve":true,"expected_publication_version":0})
-        ),
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &d2,
-            json!({"approve":true,"expected_publication_version":0})
+    let mut gate = e.pool.begin().await.unwrap();
+    sqlx::query("select entry_id from marketplace_entry where entry_id=$1 for update")
+        .bind(Uuid::parse_str(first["entry_id"].as_str().unwrap()).unwrap())
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let decisions = async {
+        tokio::join!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &d1,
+                json!({"approve":true,"expected_publication_version":0})
+            ),
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &d2,
+                json!({"approve":true,"expected_publication_version":0})
+            )
         )
-    );
+    };
+    tokio::pin!(decisions);
+    tokio::select! {
+        result = &mut decisions => panic!("decisions bypassed the entry guard: {result:?}"),
+        () = wait_for_content_waiters(&e.pool, "^select e.entry_id from marketplace_entry") => {}
+    }
+    gate.rollback().await.unwrap();
+    let (a, b) = decisions.await;
     assert!(matches!((a.0, b.0), (200, 409) | (409, 200)), "{a:?} {b:?}");
+    let version: i64 =
+        sqlx::query_scalar("select publication_version from marketplace_entry where entry_id=$1")
+            .bind(Uuid::parse_str(first["entry_id"].as_str().unwrap()).unwrap())
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(version, 1, "exactly one proposal publishes");
     spaces::revoke(&e.pool, "alice", personal.id, Role::Editor, "bob")
         .await
         .unwrap();
@@ -901,5 +952,94 @@ async fn marketplace_native_ralph_uses_local_owner_and_independent_installation(
             .await
             .1,
         installed
+    );
+}
+
+async fn wait_for_relation_waiters(pool: &PgPool, relation: &str, count: i64) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar("select count(*) from pg_locks where database=(select oid from pg_database where datname=current_database()) and relation=$1::text::regclass and not granted")
+                .bind(relation).fetch_one(pool).await.unwrap();
+            if waiting >= count { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("both submissions must reach the insert gate");
+}
+
+async fn wait_for_content_waiters(pool: &PgPool, pattern: &str) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar("select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query ~ $1")
+                .bind(pattern).fetch_one(pool).await.unwrap();
+            if waiting == 2 { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("both content requests must reach their row guards");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn concurrent_put_skill_accepts_only_one_expected_revision() {
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let root = format!("/spaces/{}/skills", team.id);
+    let files = |text: &str| json!({"SKILL.md":format!("---\nname: sample\ndescription: Sample\nlicense: MIT\n---\n{text}")});
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &root,
+            json!({"name":"sample","files":files("Original")})
+        )
+        .await
+        .0,
+        204
+    );
+    let (_, rows) = request(&app, &identity, Some("alice"), "GET", &root, Value::Null).await;
+    let path = format!("{root}/{}", rows[0]["skill_id"].as_str().unwrap());
+    let revision = &rows[0]["revision"];
+    let mut gate = e.pool.begin().await.unwrap();
+    sqlx::query("select skill_id from skill where space_id=$1 for update")
+        .bind(team.id)
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let replacements = async {
+        tokio::join!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &path,
+                json!({"expected_revision":revision,"files":files("Left")})
+            ),
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &path,
+                json!({"expected_revision":revision,"files":files("Right")})
+            )
+        )
+    };
+    tokio::pin!(replacements);
+    tokio::select! {
+        result = &mut replacements => panic!("replacements bypassed the row guard: {result:?}"),
+        () = wait_for_content_waiters(&e.pool, "^(select revision from skill|select id from space|insert into skill)") => {}
+    }
+    gate.rollback().await.unwrap();
+    let (a, b) = replacements.await;
+    assert!(matches!((a.0, b.0), (204, 409) | (409, 204)), "{a:?} {b:?}");
+    let (_, saved) = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
+    assert_eq!(
+        saved["files"],
+        files(if a.0 == 204 { "Left" } else { "Right" })
     );
 }

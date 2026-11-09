@@ -209,7 +209,12 @@ async fn update_prompt(
     )?;
     let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    // Read after acquiring the shared mutation lock: independent field edits compose.
+    // Lock before reading: concurrent partial edits must compose on the current row.
+    sqlx::query("select prompt_id from prompt where space_id=$1 and prompt_id=$2 for update")
+        .bind(space_id)
+        .bind(prompt_id)
+        .execute(&mut *tx)
+        .await?;
     let mut current = super::get_for_space(&mut *tx, space_id, prompt_id, &user.uid)
         .await?
         .ok_or(AppError::NotFound)?;

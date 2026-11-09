@@ -495,7 +495,7 @@ async fn refresh_organization_capabilities(
     }
     // No SQL connection or organization lock survives the bounded pod request.
     let snapshot = fetch(source).await;
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),
@@ -535,7 +535,7 @@ async fn set_organization_capability_default(
     ApiPath((organization_id, runtime_id, capability_id)): ApiPath<(Uuid, String, String)>,
     ApiJson(body): ApiJson<SetDefaultOnRequest>,
 ) -> AppResult<StatusCode> {
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),

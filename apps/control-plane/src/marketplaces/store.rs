@@ -168,7 +168,7 @@ pub(crate) async fn submit(
     let request_hash = hash(&(catalogue, request))?;
     let mut prepared: Option<super::agent::AgentExport> = None;
     loop {
-        let mut tx = spaces::storage_transaction(pool, catalogue, false).await?;
+        let mut tx = spaces::storage_transaction(pool, catalogue, true).await?;
         require_audience(&mut tx, actor, catalogue).await?;
         if let Some((id, recorded_hash)) = sqlx::query_as::<_, (Uuid, String)>(
         "select proposal_id,request_hash from marketplace_proposal where submitted_by=$1 and request_key=$2")
@@ -236,12 +236,16 @@ pub(crate) async fn submit(
             entry
         };
         let id = Uuid::new_v4();
-        sqlx::query("insert into marketplace_proposal(proposal_id,entry_id,marketplace_space_id,kind,proposing_space_id,
+        let inserted = sqlx::query("insert into marketplace_proposal(proposal_id,entry_id,marketplace_space_id,kind,proposing_space_id,
         origin_name,submitted_by,request_key,request_hash,package,package_hash,display_name,description)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)")
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict (submitted_by,request_key) do nothing")
         .bind(id).bind(entry).bind(catalogue).bind(request.kind.as_str()).bind(source.id).bind(source.name)
-        .bind(actor).bind(key).bind(request_hash).bind(Json(&package)).bind(package_hash).bind(title).bind(description)
+        .bind(actor).bind(key).bind(&request_hash).bind(Json(&package)).bind(package_hash).bind(title).bind(description)
         .execute(&mut *tx).await?;
+        if inserted.rows_affected() == 0 {
+            tx.rollback().await?;
+            continue;
+        }
         let row = proposal(&mut tx, actor, catalogue, id).await?;
         tx.commit().await?;
         return Ok(MarketplaceProposal {
@@ -269,6 +273,8 @@ pub(crate) async fn decide(
     }
     let (mut tx, _) =
         spaces::authorized_mutation(pool, actor, catalogue, Permission::Write).await?;
+    sqlx::query("select e.entry_id from marketplace_entry e join marketplace_proposal p using(entry_id) where p.proposal_id=$1 and e.marketplace_space_id=$2 for update of e")
+        .bind(id).bind(catalogue).execute(&mut *tx).await?;
     let row = proposal(&mut tx, actor, catalogue, id).await?;
     let state = if request.approve {
         ProposalState::Approved
@@ -310,8 +316,10 @@ pub(crate) async fn cancel(
     catalogue: Uuid,
     id: Uuid,
 ) -> AppResult<ProposalSummary> {
-    let mut tx = spaces::storage_transaction(pool, catalogue, false).await?;
+    let mut tx = spaces::storage_transaction(pool, catalogue, true).await?;
     require_audience(&mut tx, actor, catalogue).await?;
+    sqlx::query("select e.entry_id from marketplace_entry e join marketplace_proposal p using(entry_id) where p.proposal_id=$1 and e.marketplace_space_id=$2 for update of e")
+        .bind(id).bind(catalogue).execute(&mut *tx).await?;
     let row = proposal(&mut tx, actor, catalogue, id).await?;
     if !can_write(&mut tx, actor, row.proposing_space_id).await? {
         return Err(AppError::Forbidden);
@@ -343,7 +351,7 @@ pub(crate) async fn withdraw(
     let (mut tx, _) =
         spaces::authorized_mutation(pool, actor, catalogue, Permission::Write).await?;
     let (current, published): (i64, Option<Uuid>) = sqlx::query_as(
-        "select publication_version,published_proposal_id from marketplace_entry where entry_id=$1 and marketplace_space_id=$2")
+        "select publication_version,published_proposal_id from marketplace_entry where entry_id=$1 and marketplace_space_id=$2 for update")
         .bind(entry).bind(catalogue).fetch_optional(&mut *tx).await?.ok_or(AppError::NotFound)?;
     if published.is_none() && current == expected.saturating_add(1) {
         tx.commit().await?;
@@ -404,58 +412,71 @@ pub(crate) async fn install(
         }
         let (package, package_hash): (Json<MarketplacePackage>, String) = sqlx::query_as(
         "select p.package,p.package_hash from marketplace_entry e join marketplace_proposal p on p.proposal_id=e.published_proposal_id
-        where e.entry_id=$1 and e.marketplace_space_id=$2 and p.proposal_id=$3")
+        where e.entry_id=$1 and e.marketplace_space_id=$2 and p.proposal_id=$3 for share of e")
         .bind(entry).bind(catalogue).bind(request.proposal_id).fetch_optional(&mut *tx).await?
         .ok_or_else(|| conflict("publication_changed", "The selected publication is no longer current."))?;
         let kind = package.0.kind();
-        let resource = match (&package.0, &request.options) {
-            (
-                MarketplacePackage::Prompt(content),
-                InstallOptions::Prompt {
-                    logical_name,
-                    category_id,
-                },
-            ) => {
-                let mut body = prompts::CreatePromptRequest {
-                    logical_name: logical_name.clone(),
-                    display_name: content.display_name.clone(),
-                    description: content.description.clone(),
-                    tags: content.tags.clone(),
-                    text: content.text.clone(),
-                    category_id: *category_id,
-                };
-                prompts::validate_logical_name(&body.logical_name)?;
-                prompts::validate_content(
-                    Some(&mut body.display_name),
-                    body.description.as_deref(),
-                    Some(&body.text),
-                    Some(&mut body.tags),
-                )?;
-                prompts::create(&mut *tx, destination.id, &body, actor)
-                    .await?
-                    .metadata
-                    .prompt_id
-            }
-            (MarketplacePackage::Skill(content), InstallOptions::Skill) => {
-                skills::save(
-                    &mut tx,
-                    destination.id,
-                    actor,
-                    &content.name,
-                    &content.files,
-                    None,
-                    false,
-                )
-                .await?;
-                sqlx::query_scalar("select skill_id from skill where space_id=$1 and name=$2")
-                    .bind(destination.id)
-                    .bind(&content.name)
-                    .fetch_one(&mut *tx)
-                    .await?
-            }
-            (MarketplacePackage::Agent(content), InstallOptions::Agent { .. }) => {
-                if let Some(prepared) = prepared.take() {
-                    let prepared = prepared?;
+        if let (MarketplacePackage::Agent(content), InstallOptions::Agent { .. }) =
+            (&package.0, &request.options)
+            && prepared.is_none()
+        {
+            tx.commit().await?;
+            prepared = Some(
+                super::agent::prepare_install(s, user, authorization_header, key, request, content)
+                    .await,
+            );
+            continue;
+        }
+        let result: AppResult<InstallationReceipt> = async {
+            let resource = match (&package.0, &request.options) {
+                (
+                    MarketplacePackage::Prompt(content),
+                    InstallOptions::Prompt {
+                        logical_name,
+                        category_id,
+                    },
+                ) => {
+                    let mut body = prompts::CreatePromptRequest {
+                        logical_name: logical_name.clone(),
+                        display_name: content.display_name.clone(),
+                        description: content.description.clone(),
+                        tags: content.tags.clone(),
+                        text: content.text.clone(),
+                        category_id: *category_id,
+                    };
+                    prompts::validate_logical_name(&body.logical_name)?;
+                    prompts::validate_content(
+                        Some(&mut body.display_name),
+                        body.description.as_deref(),
+                        Some(&body.text),
+                        Some(&mut body.tags),
+                    )?;
+                    prompts::create(&mut *tx, destination.id, &body, actor)
+                        .await?
+                        .metadata
+                        .prompt_id
+                }
+                (MarketplacePackage::Skill(content), InstallOptions::Skill) => {
+                    skills::save(
+                        &mut tx,
+                        destination.id,
+                        actor,
+                        &content.name,
+                        &content.files,
+                        None,
+                        false,
+                    )
+                    .await?;
+                    sqlx::query_scalar("select skill_id from skill where space_id=$1 and name=$2")
+                        .bind(destination.id)
+                        .bind(&content.name)
+                        .fetch_one(&mut *tx)
+                        .await?
+                }
+                (MarketplacePackage::Agent(_), InstallOptions::Agent { .. }) => {
+                    let prepared = prepared.take().ok_or_else(|| {
+                        anyhow::anyhow!("Missing agent installation preflight")
+                    })??;
                     crate::agent_instances::http::save_created(
                         &mut tx,
                         user,
@@ -465,38 +486,37 @@ pub(crate) async fn install(
                     )
                     .await?
                     .agent_instance_id
-                } else {
-                    tx.commit().await?;
-                    // A racing successful install is looked up before a preflight error is returned.
-                    prepared = Some(
-                        super::agent::prepare_install(
-                            s,
-                            user,
-                            authorization_header,
-                            key,
-                            request,
-                            content,
-                        )
-                        .await,
-                    );
+                }
+                _ => {
+                    return Err(AppError::Unprocessable(
+                        "Installation options do not match the published kind".into(),
+                    ));
+                }
+            };
+            let id = Uuid::new_v4();
+            sqlx::query("insert into marketplace_installation(installation_id,actor,request_key,request_hash,entry_id,proposal_id,package_hash,
+            kind,space_id,resource_id,live_space_id,prompt_id,skill_id,agent_instance_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$9,$11,$12,$13)")
+            .bind(id).bind(actor).bind(key).bind(&request_hash).bind(entry).bind(request.proposal_id).bind(package_hash)
+            .bind(kind.as_str()).bind(destination.id).bind(resource)
+            .bind((kind == MarketplaceKind::Prompt).then_some(resource))
+            .bind((kind == MarketplaceKind::Skill).then_some(resource))
+            .bind((kind == MarketplaceKind::Agent).then_some(resource)).execute(&mut *tx).await?;
+            receipt(&mut tx, actor, destination.id, id).await
+        }
+        .await;
+        let receipt = match result {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                tx.rollback().await?;
+                // A duplicate resource can fail before the request-key insert. Replay its receipt.
+                let recorded: bool = sqlx::query_scalar("select exists(select 1 from marketplace_installation where actor=$1 and request_key=$2)")
+                    .bind(actor).bind(key).fetch_one(pool).await?;
+                if recorded {
                     continue;
                 }
-            }
-            _ => {
-                return Err(AppError::Unprocessable(
-                    "Installation options do not match the published kind".into(),
-                ));
+                return Err(error);
             }
         };
-        let id = Uuid::new_v4();
-        sqlx::query("insert into marketplace_installation(installation_id,actor,request_key,request_hash,entry_id,proposal_id,package_hash,
-        kind,space_id,resource_id,live_space_id,prompt_id,skill_id,agent_instance_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$9,$11,$12,$13)")
-        .bind(id).bind(actor).bind(key).bind(request_hash).bind(entry).bind(request.proposal_id).bind(package_hash)
-        .bind(kind.as_str()).bind(destination.id).bind(resource)
-        .bind((kind == MarketplaceKind::Prompt).then_some(resource))
-        .bind((kind == MarketplaceKind::Skill).then_some(resource))
-        .bind((kind == MarketplaceKind::Agent).then_some(resource)).execute(&mut *tx).await?;
-        let receipt = receipt(&mut tx, actor, destination.id, id).await?;
         tx.commit().await?;
         return Ok(receipt);
     }

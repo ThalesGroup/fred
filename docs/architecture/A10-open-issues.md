@@ -6,10 +6,10 @@ are considerations for a later decision, not planned implementation.
 
 ## OI-1. Document write concurrency
 
-**Decision retained, 2026-10-25:** keep the organization-wide write lock for now.
-Its presence is established by the code; a material performance problem under
-the intended workload has not been established by this discussion. Short critical
-sections are a design intent, not a measured latency guarantee.
+**Decision retained, 2026-11-09:** content writes share the organization lock;
+governance takes it exclusively. Independent content transactions can proceed
+concurrently, with SQL constraints and local row guards protecting their writes.
+Throughput and latency under the intended workload remain unmeasured.
 
 ### Guarantee and scope
 
@@ -21,29 +21,31 @@ folder lifecycle ordering (I22), alongside SQL constraints and transaction-local
 The protocol protects durable outcomes; removing it is not equivalent to
 accepting a temporarily stale display. Permissions and durable outcomes share PostgreSQL.
 
-Ordinary ingestion releases the organization lock between upload reservation,
-original publication and final indexing publication. File transfer, object
-verification, extraction and embeddings are outside it. Folder mutations and
-other participating organization mutations share this boundary. Rare revocations
-do not eliminate contention between ordinary writes.
+Content takes the organization lock in shared mode, including upload reservation,
+original publication and final indexing publication. File transfer, verification,
+extraction and embeddings remain outside these transactions. Governance, including
+revocation, retirement and folder rename/deletion, takes the lock exclusively.
+It waits in PostgreSQL's blocking lock queue, preventing a continuous stream of
+new shared writers from starving it. Governance still waits for content writes
+already in progress to finish; those writes remain valid under I5.
 
-With four Control Plane replicas sharing the same stores, only one participating
-section per organization holds that lock at a time. Reads and standalone
-authorization checks do not acquire it; four Agent Pods requesting such checks
-do not themselves create four exclusive writers. Their dependency load can still
-affect latency. Organizations have distinct locks, but not complete performance
-isolation: processing admission and stage claims share a storage-capacity row,
-and administrative operations also use platform-wide coordination. Provisioning
-an organization/role bundle holds locks across multiple changes, unlike a
-document batch's separate reservation and publication steps.
+This rule is shared by every Control Plane replica. Reads and standalone
+authorization checks do not acquire the lock. Organizations have distinct locks,
+but not complete performance isolation: processing admission still locks the
+shared storage-capacity row, and administrative operations also use platform-wide
+coordination. Local row locks and quota counters can still serialize content.
+Existing direct-lock paths, including cleanup and PowerPoint preparation callbacks,
+retain their exclusive guard.
 
 ### Evidence needed before changing the design
 
 The useful distinction is lock **holding time** versus **waiting time**. Many
 small sections can create a queue without any unusually large query. SQL permission checks and quota calculations occur within the document write sections.
-The five-second acquisition limit in `authorized_write` bounds waiting to enter,
-not the duration of the acquired section or of the entire request. A saturated
-path can return 503; no strict acquisition fairness is promised.
+Content acquisition retries for up to five seconds without holding a connection
+between attempts. Governance retains a connection while waiting, bounded by a
+five-second SQL lock timeout. Neither bounds the whole request. A saturated path
+can still return 503; PostgreSQL queue ordering prevents new shared writers from
+bypassing a waiting exclusive acquisition.
 
 Assess a representative mix of ingestion, folder edits, reads and authorization
 checks, with one and four Control Plane replicas. The discussion's reference
@@ -53,11 +55,11 @@ or total batch size. Compare same-organization and different-organization traffi
 Record holding and waiting time distributions, publication throughput, request
 latency and timeout/503 rates, together with SQL pool and query latency.
 Separate ordinary load, bursts and degraded dependencies. No new measurement or
-performance campaign accompanies this documentation change.
+performance campaign accompanies this change.
 
 ### Alternatives only if the evidence warrants them
 
-A lock per space could let independent teams publish concurrently. It would
+A lock per space could reduce governance interference with unrelated teams. It would
 still need coordination for ancestor revocations, team/project shared quotas,
 space retirement and cross-organization membership rules. Optimistic version
 checks or a hybrid with a shorter final coordination step are other possibilities.
@@ -67,7 +69,7 @@ No alternative or weaker guarantee is selected here.
 ### Implementation references
 
 - [Organization write boundary](../../apps/control-plane/src/spaces.rs):
-  `authorized_write`, `authorize_locked`, `lock_organization`.
+  `authorized_mutation`, `governance_mutation`, `lock_organization`.
 - [Original reservation and publication](../../apps/control-plane/src/documents/upload.rs):
   `reserve`, `publish`; [final indexing publication](../../apps/control-plane/src/processing/publication.rs): `commit`.
 - [Shared processing capacity](../../apps/control-plane/src/processing/store.rs):

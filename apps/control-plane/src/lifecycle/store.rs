@@ -157,7 +157,20 @@ impl Lifecycle {
             if conversation.is_some_and(|(space, _)| space != space_id) {
                 return Err(AppError::NotFound);
             }
-            let tx = crate::documents::authorized_mutation(pool, actor, space_id, session).await?;
+            let (mut tx, _) = spaces::governance_mutation(
+                pool,
+                actor,
+                space_id,
+                if session.is_some() {
+                    Permission::Read
+                } else {
+                    Permission::Write
+                },
+            )
+            .await?;
+            if let Some(session) = session {
+                crate::sessions::owned(&mut *tx, space_id, actor, session).await?;
+            }
             tx.commit().await?;
             return Ok(receipt);
         }
@@ -176,7 +189,20 @@ impl Lifecycle {
         if conversation.is_some_and(|(space, _)| space != space_id) {
             return Err(AppError::NotFound);
         }
-        let mut tx = crate::documents::authorized_mutation(pool, actor, space_id, session).await?;
+        let (mut tx, _) = spaces::governance_mutation(
+            pool,
+            actor,
+            space_id,
+            if session.is_some() {
+                Permission::Read
+            } else {
+                Permission::Write
+            },
+        )
+        .await?;
+        if let Some(session) = session {
+            crate::sessions::owned(&mut *tx, space_id, actor, session).await?;
+        }
         let document: Option<Uuid> = sqlx::query_scalar(
             "select id from document where id = $1 and deletion_id is null for update",
         )
@@ -236,7 +262,7 @@ impl Lifecycle {
         session_id: Uuid,
     ) -> AppResult<Receipt> {
         let (mut tx, space) =
-            spaces::authorized_mutation(pool, actor, space_id, Permission::Read).await?;
+            spaces::governance_mutation(pool, actor, space_id, Permission::Read).await?;
         let retired: Option<(Option<Uuid>, String)> = sqlx::query_as(
             "select deletion_id, runtime_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
         )

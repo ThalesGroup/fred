@@ -115,7 +115,7 @@ fn validate_title(title: Option<&str>) -> AppResult<()> {
     Ok(())
 }
 
-async fn owned<'e>(
+pub(crate) async fn owned<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space_id: Uuid,
     user_id: &str,

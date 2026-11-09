@@ -533,7 +533,7 @@ async fn rename_folder(
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let (mut tx, _) =
-        spaces::authorized_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
+        spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
     db::rename_folder(&mut *tx, id, &spaces::folder_name(&req.name)?).await?;
     tx.commit().await?;
@@ -560,7 +560,7 @@ async fn delete_folder(
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let (mut tx, _) =
-        spaces::authorized_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
+        spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
     db::delete_folder(&mut *tx, id).await?;
     tx.commit().await?;

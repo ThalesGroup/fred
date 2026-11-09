@@ -191,6 +191,16 @@ async fn writer(
     upload::token_current(user)?;
     let (mut tx, space) =
         spaces::authorized_mutation(pool, &user.uid, space, Permission::Write).await?;
+    if let Some(agent) = agent {
+        sqlx::query("select agent_instance_id from agent_instance where agent_instance_id=$1 and space_id=$2 for update")
+            .bind(agent).bind(space.id).execute(&mut *tx).await?;
+    } else {
+        // The current organization template may be absent: lock its stable owner before replacement.
+        sqlx::query("select id from space where id=$1 for no key update")
+            .bind(space.id)
+            .execute(&mut *tx)
+            .await?;
+    }
     target(&mut *tx, &space, agent).await?;
     Ok((tx, space))
 }
@@ -250,76 +260,108 @@ impl Storage {
         })
         .await
         .map_err(|_| unavailable())??;
-        let (mut tx, space) =
-            spaces::authorized_mutation(&self.pool, &user.uid, space_id, Permission::Write).await?;
-        if draft {
-            let exists: bool = sqlx::query_scalar(
-                "select exists(select 1 from agent_instance where agent_instance_id=$1)",
-            )
-            .bind(agent)
-            .fetch_one(&mut *tx)
-            .await?;
-            if exists || agent.is_none() {
-                return Err(AppError::Conflict("Draft identity already exists".into()));
-            }
-        } else {
-            target(&mut *tx, &space, agent).await?;
-        }
-        if spool.size > 50 * 1024 * 1024 {
-            return Err(super::invalid("PowerPoint file exceeds 50 MB"));
-        }
-        onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &user.uid).await?;
-        let existing: Option<FileRow> =
-            sqlx::query_as("select * from powerpoint_file where actor=$1 and request_key=$2")
-                .bind(&user.uid)
-                .bind(key)
-                .fetch_optional(&mut *tx)
-                .await?;
-        let row = if let Some(row) = existing {
-            if row.file.space_id != space_id
-                || row.file.agent_instance_id != agent
-                || row.file.name != spool.name
-                || row.file.mime != spool.mime
-                || row.file.size != spool.size
-                || row.file.sha256 != spool.sha256()
-                || row.expected_file_id != change.expected_file_id
-                || row.file.runtime_id.as_deref() != Some(runtime)
-            {
-                return Err(conflict(
-                    "idempotency_conflict",
-                    "The request key identifies different content or ownership",
-                ));
-            }
-            if row.file.published_at.is_some() {
-                return Ok(row.file);
-            }
-            if row.file.status != PowerPointFileStatus::Pending || row.expires_at <= Utc::now() {
-                return Err(conflict(
-                    "upload_expired",
-                    "This attempt is retired; use a new request key",
-                ));
-            }
-            row
-        } else {
-            unchanged(
-                change.expected_file_id,
-                current(&mut *tx, space_id, agent, runtime).await?.as_ref(),
-            )?;
-            let (owner, _) = self.quota(&space)?;
-            self.ensure_budgets(&mut tx, &space).await?;
+        let mut replayed = false;
+        let row = loop {
+            let (mut tx, space) =
+                spaces::authorized_mutation(&self.pool, &user.uid, space_id, Permission::Write)
+                    .await?;
+            let result: AppResult<FileRow> = async {
+                if draft {
+                    let exists: bool = sqlx::query_scalar(
+                        "select exists(select 1 from agent_instance where agent_instance_id=$1)",
+                    )
+                    .bind(agent)
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    if exists || agent.is_none() {
+                        return Err(AppError::Conflict("Draft identity already exists".into()));
+                    }
+                } else {
+                    target(&mut *tx, &space, agent).await?;
+                }
+                if spool.size > 50 * 1024 * 1024 {
+                    return Err(super::invalid("PowerPoint file exceeds 50 MB"));
+                }
+                onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &user.uid).await?;
+                let existing: Option<FileRow> =
+                    sqlx::query_as("select * from powerpoint_file where actor=$1 and request_key=$2")
+                        .bind(&user.uid)
+                        .bind(key)
+                        .fetch_optional(&mut *tx)
+                        .await?;
+                let row = if let Some(row) = existing {
+                    if row.file.space_id != space_id
+                        || row.file.agent_instance_id != agent
+                        || row.file.name != spool.name
+                        || row.file.mime != spool.mime
+                        || row.file.size != spool.size
+                        || row.file.sha256 != spool.sha256()
+                        || row.expected_file_id != change.expected_file_id
+                        || row.file.runtime_id.as_deref() != Some(runtime)
+                    {
+                        return Err(conflict(
+                            "idempotency_conflict",
+                            "The request key identifies different content or ownership",
+                        ));
+                    }
+                    if row.file.published_at.is_some() {
+                        return Ok(row);
+                    }
+                    if row.file.status != PowerPointFileStatus::Pending || row.expires_at <= Utc::now() {
+                        return Err(conflict(
+                            "upload_expired",
+                            "This attempt is retired; use a new request key",
+                        ));
+                    }
+                    row
+                } else {
+                    unchanged(
+                        change.expected_file_id,
+                        current(&mut *tx, space_id, agent, runtime).await?.as_ref(),
+                    )?;
+                    let (owner, _) = self.quota(&space)?;
+                    self.ensure_budgets(&mut tx, &space).await?;
 
-            self.require_cleanup_capacity(&mut *tx).await?;
-            let id = Uuid::new_v4();
-            let object_key = format!("{}{id}/input/{}", self.prefix, spool.name);
-            if object_key.len() > 1024 {
-                return Err(super::invalid("The object key is too long"));
+                    self.require_cleanup_capacity(&mut *tx).await?;
+                    let id = Uuid::new_v4();
+                    let object_key = format!("{}{id}/input/{}", self.prefix, spool.name);
+                    if object_key.len() > 1024 {
+                        return Err(super::invalid("The object key is too long"));
+                    }
+                    sqlx::query_as("insert into powerpoint_file (id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,expected_file_id,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id) values ($1,$2,$3,$4,$5,$6,$5,$15,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),clock_timestamp()+make_interval(secs=>$14),$16) returning *")
+                        .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space_id).bind(agent).bind(owner).bind(change.expected_file_id)
+                        .bind(&spool.name).bind(&spool.mime).bind(spool.size).bind(spool.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(if draft {None}else{agent}).bind(runtime)
+                        .fetch_one(&mut *tx).await?
+                };
+                Ok(row)
             }
-            sqlx::query_as("insert into powerpoint_file (id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,expected_file_id,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id) values ($1,$2,$3,$4,$5,$6,$5,$15,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),clock_timestamp()+make_interval(secs=>$14),$16) returning *")
-                .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space_id).bind(agent).bind(owner).bind(change.expected_file_id)
-                .bind(&spool.name).bind(&spool.mime).bind(spool.size).bind(spool.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(if draft {None}else{agent}).bind(runtime)
-                .fetch_one(&mut *tx).await?
+            .await;
+            match result {
+                Ok(row) => {
+                    tx.commit().await?;
+                    break row;
+                }
+                Err(error) => {
+                    tx.rollback().await?;
+                    if !replayed
+                        && sqlx::query_scalar::<_, bool>(
+                            "select exists(select 1 from powerpoint_file where actor=$1 and request_key=$2)",
+                        )
+                        .bind(&user.uid)
+                        .bind(key)
+                        .fetch_one(&self.pool)
+                        .await?
+                    {
+                        replayed = true;
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
         };
-        tx.commit().await?;
+        if row.file.published_at.is_some() {
+            return Ok(row.file);
+        }
         // Immutable conditional PUT permits replay after a lost response or a crash.
         // SQL has released its locks and connection for the entire network transfer.
         let (_, written) = self

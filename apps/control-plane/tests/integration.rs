@@ -97,6 +97,106 @@ async fn org_and_team(e: &Env) -> (Space, Space) {
     (org, team)
 }
 
+// Proves: independent content writers share I5's organization boundary.
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn content_writes_in_two_teams_do_not_wait_for_each_other() {
+    let e = env().await;
+    let (org, first) = org_and_team(&e).await;
+    let second = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "Other".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    for space in [first.id, second.id] {
+        grant(&e, space, Role::Editor, "alice").await;
+    }
+    let (mut held, _) = spaces::authorized_mutation(&e.pool, "alice", first.id, Permission::Write)
+        .await
+        .unwrap();
+    let folder = Uuid::new_v4();
+    sqlx::query("insert into folder(id,space_id,name,path) values($1,$2,'First',$3)")
+        .bind(folder)
+        .bind(first.id)
+        .bind(format!("/{folder}/"))
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let other = tokio::time::timeout(
+        Duration::from_secs(1),
+        spaces::create_folder(&e.pool, "alice", second.id, None, "Second".into()),
+    )
+    .await
+    .expect("another team must not wait for the first content transaction")
+    .unwrap();
+    held.commit().await.unwrap();
+    assert_eq!(other.space_id, second.id);
+}
+
+// Proves: I5 and PostgreSQL queue ordering, using separate connections for each contender.
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn queued_governance_fences_new_content_but_preserves_admitted_writes() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Editor, "bob").await;
+    let (mut admitted, _) = spaces::authorized_mutation(&e.pool, "bob", team.id, Permission::Write)
+        .await
+        .unwrap();
+    let pool = e.pool.clone();
+    let revoke = tokio::spawn(async move {
+        let (mut tx, _) = spaces::governance_mutation(&pool, "alice", team.id, Permission::Manage)
+            .await
+            .unwrap();
+        sqlx::query(
+            "delete from space_role_grant where space_id=$1 and subject='bob' and role='editor'",
+        )
+        .bind(team.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    });
+    wait_for_advisory_waiter(&e.pool).await;
+    let key = i64::from_be_bytes(org.id.as_bytes()[..8].try_into().unwrap());
+    let mut newcomer = e.pool.begin().await.unwrap();
+    let acquired: bool = sqlx::query_scalar("select pg_try_advisory_xact_lock_shared($1)")
+        .bind(key)
+        .fetch_one(&mut *newcomer)
+        .await
+        .unwrap();
+    assert!(
+        !acquired,
+        "a queued exclusive lock must prevent a new shared acquisition"
+    );
+    newcomer.rollback().await.unwrap();
+    let pool = e.pool.clone();
+    let waiting_content = tokio::spawn(async move {
+        spaces::create_folder(&pool, "bob", team.id, None, "Too late".into()).await
+    });
+    let folder = Uuid::new_v4();
+    sqlx::query("insert into folder(id,space_id,name,path) values($1,$2,'Admitted',$3)")
+        .bind(folder)
+        .bind(team.id)
+        .bind(format!("/{folder}/"))
+        .execute(&mut *admitted)
+        .await
+        .unwrap();
+    admitted.commit().await.unwrap();
+    revoke.await.unwrap();
+    assert!(matches!(
+        waiting_content.await.unwrap(),
+        Err(AppError::Forbidden)
+    ));
+    assert_eq!(db::folder(&e.pool, folder).await.unwrap().space_id, team.id);
+}
+
 async fn grant(e: &Env, space: Uuid, role: Role, user: &str) {
     spaces::grant(&e.pool, &e.subjects(), "alice", space, role, user)
         .await
@@ -3690,7 +3790,11 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
             };
             content_request(app, &token, method, &path, &body).await
         });
-        wait_for_write_retry(&e.pool, since).await;
+        if method == "POST" {
+            wait_for_write_retry(&e.pool, since).await;
+        } else {
+            wait_for_advisory_waiter(&e.pool).await;
+        }
         db::delete_folder(&mut *deleting, folder.id).await.unwrap();
         deleting.commit().await.unwrap();
         assert_eq!(pending.await.unwrap(), 404);

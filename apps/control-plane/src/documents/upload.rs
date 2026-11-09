@@ -174,9 +174,24 @@ impl Storage {
                     "The file transfer exceeded its deadline",
                 )
             })??;
-        let (fresh, row) = self
+        let reserved = self
             .reserve(user, &space, destination, key, &spool, choices)
-            .await?;
+            .await;
+        // A concurrent key/name conflict rolls back before replaying the winning reservation.
+        let (fresh, row) = if reserved.is_err()
+            && sqlx::query_scalar::<_, bool>(
+                "select exists(select 1 from document_upload where actor=$1 and request_key=$2)",
+            )
+            .bind(&user.uid)
+            .bind(key)
+            .fetch_one(&self.pool)
+            .await?
+        {
+            self.reserve(user, &space, destination, key, &spool, choices)
+                .await?
+        } else {
+            reserved?
+        };
         if !fresh {
             return Ok((false, row.receipt));
         }

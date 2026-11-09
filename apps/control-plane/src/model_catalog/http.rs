@@ -127,7 +127,7 @@ async fn replace_organization_model_policy(
     ApiPath(organization_id): ApiPath<Uuid>,
     ApiJson(request): ApiJson<ReplaceModelPolicy>,
 ) -> AppResult<Json<OrganizationModelPolicy>> {
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),
@@ -158,7 +158,7 @@ async fn refresh_model_source(
     AdmittedUser(user): AdmittedUser,
     ApiPath((organization_id, source_id)): ApiPath<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),
@@ -186,7 +186,7 @@ async fn refresh_model_source(
     tx.commit().await?;
     // No SQL connection or transaction survives the bounded discovery call.
     let result = discovery::discover(source).await;
-    let (mut tx, _) = spaces::authorized_mutation(
+    let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
         spaces::MutationTarget::Organization(organization_id),

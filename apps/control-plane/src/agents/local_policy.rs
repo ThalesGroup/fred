@@ -156,7 +156,7 @@ async fn replace_space_capability_policy(
         ));
     }
     let (mut tx, space) =
-        spaces::authorized_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
+        spaces::governance_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
     require_local(space.kind)?;
     inventory::require_source(&s, &runtime)?;
     if catalog::observation(&mut *tx, &runtime).await?.is_none() {
