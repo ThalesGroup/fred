@@ -28,6 +28,7 @@ import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailMo
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { hitToSource } from "../../../../utils/conversationUtils";
+import { uiPartsOf } from "../../../../utils/traceUtils";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
@@ -73,6 +74,12 @@ export const AssistantTurn = memo(function AssistantTurn({
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
+  // Tool results carry references before the final frame copies them to uiParts.
+  // History restores that final copy; both paths stay scoped to this turn.
+  const artifactParts = useMemo(
+    () => [...uiParts, ...traceMessages.filter((message) => message.channel === "tool_result").flatMap(uiPartsOf)],
+    [uiParts, traceMessages],
+  );
 
   useEffect(() => {
     if (activeSourceIndex == null) return;
@@ -132,6 +139,7 @@ export const AssistantTurn = memo(function AssistantTurn({
         ref={contentRef}
         text={text}
         isStreaming={isStreaming}
+        uiParts={artifactParts}
         onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
       />
 

@@ -32,6 +32,7 @@ import { getStreamingMarkdownState, type PendingStreamingFence } from "./streami
 interface MarkdownRendererProps {
   text: string;
   imageRenderer?: React.ComponentType<{ src?: string; alt?: string }>;
+  linkRenderer?: React.ComponentType<React.AnchorHTMLAttributes<HTMLAnchorElement>>;
   /** Keep document-provided diagrams inert, including their external assets. */
   diagramsAsCode?: boolean;
   /** Present local file references as labels instead of application routes. */
@@ -199,6 +200,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   {
     text,
     imageRenderer,
+    linkRenderer,
     diagramsAsCode = false,
     localLinksAsText = false,
     onSourceClick,
@@ -223,6 +225,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   const components = useMemo(
     () => ({
       ...(imageRenderer ? { img: imageRenderer } : {}),
+      ...(linkRenderer ? { a: linkRenderer } : {}),
       ...(localLinksAsText
         ? {
             a: ({ href, children, title }: { href?: string; children?: React.ReactNode; title?: string }) =>
@@ -289,7 +292,16 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
           }
         : {}),
     }),
-    [onSourceClick, headingAnchors, inline, linksInNewTab, localLinksAsText, imageRenderer, diagramsAsCode],
+    [
+      onSourceClick,
+      headingAnchors,
+      inline,
+      linksInNewTab,
+      localLinksAsText,
+      imageRenderer,
+      linkRenderer,
+      diagramsAsCode,
+    ],
   );
 
   function pendingFenceLanguage(fence: PendingStreamingFence): string {

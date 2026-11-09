@@ -282,8 +282,15 @@ cannot bypass those controls. Published previews require current read authority.
 ## Documents authored in a conversation
 
 Implementation references for [conversation documents](05-documents.md#55-documents-authored-in-a-conversation).
-These components belong to the Agent Pod capability and its frontend integration,
-separately from the Control Plane drive path described above.
+
+| Conversation deliverables | Implementation entry |
+| --- | --- |
+| Deep workspace and explicit publication tools | [`ConversationFilesystemService`](../../libs/fred-runtime/fred_runtime/conversation_filesystem.py) and [`ConversationFilesMiddleware`](../../libs/fred-runtime/fred_runtime/deep/conversation_files.py) |
+| Runtime adapter to the Control Plane catalogue | [`FredWorkspaceFs`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py) |
+| Catalogue, upload receipts and conversation-bound reads | [`documents/conversation.rs`](../../apps/control-plane/src/documents/conversation.rs); [storage contract](../../apps/control-plane/README.md#conversation-file-catalogue) |
+
+The document editor below belongs to the Agent Pod capability and its frontend
+integration; it is separate from Deep's workspace and delivered-file catalogue.
 
 | Concern | Implementation entry |
 | --- | --- |

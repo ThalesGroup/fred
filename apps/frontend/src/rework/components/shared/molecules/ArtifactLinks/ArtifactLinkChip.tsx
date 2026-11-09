@@ -12,15 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { LinkPart } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { RawUiPart } from "@rework/types/parts";
 import Icon from "@shared/atoms/Icon/Icon";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { downloadAuthed } from "../../../../../utils/downloadUtils";
+import { downloadAuthed, sameOriginDownloadUrl } from "../../../../../utils/downloadUtils";
 import styles from "./ArtifactLinks.module.css";
 
 interface ArtifactLinkChipProps {
   link: LinkPart;
+  /** Markdown label: use the same download and error handling inline. */
+  children?: ReactNode;
+  title?: string;
+}
+
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const CONVERSATION_FILE = new RegExp(
+  `^/control-plane/v1/spaces/${UUID}/sessions/${UUID}/files/(${UUID})/(?:content|preview)$`,
+);
+
+/** Match the exact stored reference, never infer download authority from prose. */
+export function conversationArtifactForHref(href: string, parts: readonly RawUiPart[]): LinkPart | undefined {
+  const url = sameOriginDownloadUrl(href);
+  if (!url || url.search || url.hash) return undefined;
+  const documentId = CONVERSATION_FILE.exec(url.pathname)?.[1];
+  if (!documentId) return undefined;
+  const part = parts.find(
+    (part) =>
+      part.type === "link" &&
+      part.kind === "download" &&
+      part.document_uid === documentId &&
+      typeof part.href === "string" &&
+      sameOriginDownloadUrl(part.href)?.href === url.href,
+  );
+  return part as LinkPart | undefined;
 }
 
 /**
@@ -30,7 +57,7 @@ interface ArtifactLinkChipProps {
  * without a token. Extracted from ArtifactLinks so the part-renderer registry
  * (#1977) can render one part per dispatch.
  */
-export function ArtifactLinkChip({ link }: ArtifactLinkChipProps) {
+export function ArtifactLinkChip({ link, children, title }: ArtifactLinkChipProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
 
@@ -42,6 +69,21 @@ export function ArtifactLinkChip({ link }: ArtifactLinkChipProps) {
       showError({ summary: t("chatbot.artifactLinks.downloadFailed", { name }) });
     });
   };
+
+  if (children !== undefined) {
+    return (
+      <a
+        href={link.href}
+        title={title}
+        onClick={(event) => {
+          event.preventDefault();
+          onDownload();
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
 
   return (
     <button

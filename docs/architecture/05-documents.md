@@ -62,14 +62,24 @@ retry and cleanup contracts, and implementation references.
 
 ## 5.5. Documents authored in a conversation
 
-The Agent Pod's document-writing capability stores the working content as
-Markdown, associated with its conversation and user. The editor and the
-assistant update that content. Reading, editing and exporting it require the
-authenticated user to match its recorded owner.
+Fred gives agents persistent file storage scoped to their conversation. Deep
+uses it to prepare working files and publish deliverables whose identity survives
+content updates. Access
+remains private to the conversation owner, even in a shared team.
 
-Export produces a downloadable Word or Markdown file. It does not publish the
-document into a space's drive or make it searchable by other assistants. Word's
-author metadata identifies the exporter; it does not change ownership or access.
+**Legend:** ⬜ Concepts
+
+```mermaid
+flowchart TB
+    work["Working files"] -->|"Explicit publication"| delivery["Conversation deliverables"]
+    delivery -->|"Download"| owner["Conversation owner"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class work,delivery,owner neutral
+```
+
+Changing a working file does not change its published copy. Delivery neither
+shares the file in the space's drive nor makes it searchable. The document editor
+also supports drafting with the assistant and Word or Markdown export.
 
 See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
 for the responsible components and export behavior.

@@ -234,6 +234,7 @@ PORTS.md
 
 # Useful when switching between branches that have different node_modules directories (main & swift)
 frontend/node_modules
+/node_modules/
 
 # ML model files downloaded at runtime (see scripts/download_models.py)
 apps/knowledge-flow-backend/models/

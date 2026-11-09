@@ -16,6 +16,18 @@ import { handlePlatformAccessResponse } from "../common/platformAccess";
 import JSZip from "jszip";
 import { KeyCloakService } from "../security/KeycloakService";
 
+/** Fred APIs are served through the UI's same-origin gateway, including in dev. */
+export function sameOriginDownloadUrl(href: string): URL | null {
+  try {
+    const url = new URL(href, window.location.href);
+    return /^(https?:)$/.test(url.protocol) && url.origin === window.location.origin && !url.username && !url.password
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Downloads a file by creating a temporary link and clicking it
  */
@@ -35,11 +47,15 @@ export const downloadFile = (blob: Blob, filename: string) => {
  * `downloadAuthed` (single file) and `downloadManyAsZip` (bulk: every file
  * needs its own blob before they can be zipped together).
  *
- * Artifact URLs are provided by their owning backend and require authentication — a plain anchor navigation carries no token and fails.
+ * Structured artifact URLs still need a destination check before attaching a token.
  */
 export const fetchAuthedBlob = async (url: string): Promise<Blob> => {
-  const response = await fetch(url, {
+  const destination = sameOriginDownloadUrl(url);
+  if (!destination) throw new Error("Untrusted download destination");
+  const response = await fetch(destination.href, {
     headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
+    // Do not forward credentials to a redirect target, even on the same origin.
+    redirect: "error",
   });
   await handlePlatformAccessResponse(response);
   if (!response.ok) {
