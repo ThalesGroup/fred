@@ -2729,7 +2729,12 @@
       },
       "recentAgents": {
         "title": "Derniers agents consultés",
-        "suggestedTitle": "Agents disponibles pour vous"
+        "suggestedTitle": "Agents disponibles pour vous",
+        "loading": "Chargement des agents...",
+        "error": "Impossible de charger les agents.",
+        "retry": "Réessayer",
+        "historyUnavailable": "Vos agents récents sont indisponibles. Voici les agents accessibles.",
+        "empty": "Aucun agent disponible."
       },
       "topAgents": {
         "title": "Les agents que vous avez le plus utilisés",

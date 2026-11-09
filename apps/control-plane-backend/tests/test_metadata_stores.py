@@ -1199,3 +1199,206 @@ async def test_platform_bootstrap_store_advisory_lock_is_a_no_op_on_sqlite(
         assert entered
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_home_agents_rank_filter_and_backfill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+    from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+    from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+    from sqlalchemy import select
+
+    engine = await _make_sqlite_engine(tmp_path, "home.sqlite3")
+    try:
+        async with AsyncSession(engine) as session:
+            for agent_id, team, enabled, suspension in [
+                ("z-recent", "other", True, None),
+                ("a-recent", "default", True, None),
+                ("b-personal", "personal-alice", True, None),
+                ("c-default", "default", True, None),
+                ("d-default", "default", True, None),
+                ("e-default", "default", True, None),
+                ("a-disabled", "default", False, None),
+                ("a-suspended", "default", True, "capability_pending"),
+                ("a-denied", "denied", True, None),
+                ("a-not-suggested", "other", True, None),
+            ]:
+                session.add(
+                    AgentInstanceRow(
+                        agent_instance_id=agent_id,
+                        team_id=team,
+                        template_id="template",
+                        source_runtime_id="runtime",
+                        source_agent_id="agent",
+                        display_name=agent_id,
+                        enabled=enabled,
+                        suspension_reason=suspension,
+                        tuning_json="{}",
+                    )
+                )
+            await session.flush()
+            for sid, agent, team, user, date, deleted in [
+                ("recent", "z-recent", "other", "alice", 5, False),
+                ("duplicate", "z-recent", "other", "alice", 2, False),
+                ("second", "a-recent", "default", "alice", 4, False),
+                ("denied", "a-denied", "denied", "alice", 6, False),
+                ("someone-else", "e-default", "default", "bob", 7, False),
+                ("deleted", "d-default", "default", "alice", 8, True),
+                ("missing", "gone", "default", "alice", 9, False),
+            ]:
+                session.add(
+                    SessionMetadataRow(
+                        session_id=sid,
+                        agent_instance_id=agent,
+                        team_id=team,
+                        user_id=user,
+                        last_activity_at=datetime(2026, 1, date, tzinfo=timezone.utc),
+                        deleted_at=datetime(2026, 2, 1, tzinfo=timezone.utc)
+                        if deleted
+                        else None,
+                    )
+                )
+            await session.commit()
+        store = AgentInstanceStore(engine)
+        teams = ["default", "other", "personal-alice"]
+        suggestions = ["default", "personal-alice"]
+        rows = await store.list_home_agents("alice", teams, suggestions)
+        assert [r.agent_instance_id for r in rows] == [
+            "z-recent",
+            "a-recent",
+            "b-personal",
+            "c-default",
+            "d-default",
+        ]
+        personal = await store.list_home_agents(
+            "alice", ["personal-alice"], suggestions
+        )
+        assert [r.agent_instance_id for r in personal] == ["b-personal"]
+        fallback = await store.list_home_agents(
+            "alice", teams, suggestions, include_history=False
+        )
+        assert [r.agent_instance_id for r in fallback] == [
+            "a-recent",
+            "b-personal",
+            "c-default",
+            "d-default",
+            "e-default",
+        ]
+
+        sessions = SessionMetadataStore(engine)
+        await sessions.create(
+            SessionMetadataRecord(
+                session_id="empty",
+                team_id=TeamId("default"),
+                agent_instance_id="c-default",
+                user_id="alice",
+                title="Empty",
+            )
+        )
+        await sessions.update_metadata(
+            "empty", TeamId("default"), "alice", title="Renamed"
+        )
+        async with AsyncSession(engine) as session:
+            assert (
+                await session.scalar(
+                    select(SessionMetadataRow.last_activity_at).where(
+                        SessionMetadataRow.session_id == "empty"
+                    )
+                )
+                is None
+            )
+        assert (
+            await sessions.update_metadata(
+                "empty", TeamId("default"), "bob", updated_at=datetime.now(timezone.utc)
+            )
+            is None
+        )
+        await sessions.update_metadata(
+            "empty",
+            TeamId("default"),
+            "alice",
+            updated_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        async with AsyncSession(engine) as session:
+            date = await session.scalar(
+                select(SessionMetadataRow.last_activity_at).where(
+                    SessionMetadataRow.session_id == "empty"
+                )
+            )
+            assert date is not None and date.year < 2099
+        assert (await store.list_home_agents("alice", teams, suggestions))[
+            0
+        ].agent_instance_id == "c-default"
+        import control_plane_backend.sessions.store as session_store
+
+        monkeypatch.setattr(
+            session_store, "_utcnow", lambda: datetime(2000, 1, 1, tzinfo=timezone.utc)
+        )
+        await sessions.update_metadata(
+            "empty",
+            TeamId("default"),
+            "alice",
+            updated_at=datetime(1999, 1, 1, tzinfo=timezone.utc),
+        )
+        async with AsyncSession(engine) as session:
+            assert (
+                await session.scalar(
+                    select(SessionMetadataRow.last_activity_at).where(
+                        SessionMetadataRow.session_id == "empty"
+                    )
+                )
+                == date
+            )
+            for i, agent in enumerate(
+                [
+                    "z-recent",
+                    "a-recent",
+                    "b-personal",
+                    "c-default",
+                    "d-default",
+                    "e-default",
+                ]
+            ):
+                session.add(
+                    SessionMetadataRow(
+                        session_id=f"rank-{i}",
+                        agent_instance_id=agent,
+                        team_id="other"
+                        if i == 0
+                        else "personal-alice"
+                        if i == 2
+                        else "default",
+                        user_id="alice",
+                        last_activity_at=datetime(2100, 1, i + 1, tzinfo=timezone.utc),
+                    )
+                )
+            await session.commit()
+        assert [
+            r.agent_instance_id
+            for r in await store.list_home_agents("alice", teams, suggestions)
+        ] == ["e-default", "d-default", "c-default", "b-personal", "a-recent"]
+        import asyncio
+
+        replica_engine = create_async_engine(engine.url)
+        try:
+            replica = AgentInstanceStore(replica_engine)
+            results = await asyncio.gather(
+                *[
+                    (store if i % 2 else replica).list_home_agents(
+                        "alice", teams, suggestions
+                    )
+                    for i in range(50)
+                ]
+            )
+            assert all(
+                [r.agent_instance_id for r in rows]
+                == ["e-default", "d-default", "c-default", "b-personal", "a-recent"]
+                for rows in results
+            )
+        finally:
+            await replica_engine.dispose()
+
+    finally:
+        await engine.dispose()

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, select, update
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -323,6 +323,14 @@ class SessionMetadataStore:
             values["title"] = title
         if updated_at is not None:
             values["updated_at"] = updated_at
+            now = _utcnow()
+            values["last_activity_at"] = case(
+                (
+                    SessionMetadataRow.last_activity_at > now,
+                    SessionMetadataRow.last_activity_at,
+                ),
+                else_=now,
+            )
         if not values:
             return await self.get(session_id, session)
         async with use_session(self._sessions, session) as s:

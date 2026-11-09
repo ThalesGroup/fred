@@ -24,7 +24,7 @@ from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -306,6 +306,65 @@ class AgentInstanceStore:
                 .scalars()
                 .all()
             )
+        return [_row_to_record(row) for row in rows]
+
+    async def list_home_agents(
+        self,
+        user_id: str,
+        team_ids: list[str],
+        suggestion_team_ids: list[str],
+        *,
+        include_history: bool = True,
+    ) -> list[AgentInstanceRecord]:
+        """Return five launchable instances, recent activity before suggestions.
+
+        Pass only teams authorized for agent use; filtering precedes LIMIT.
+        """
+        q = select(AgentInstanceRow).where(
+            AgentInstanceRow.team_id.in_(team_ids),
+            AgentInstanceRow.enabled.is_(True),
+            AgentInstanceRow.suspension_reason.is_(None),
+        )
+        if include_history:
+            recent = (
+                select(
+                    SessionMetadataRow.agent_instance_id,
+                    SessionMetadataRow.team_id,
+                    func.max(SessionMetadataRow.last_activity_at).label("last_used"),
+                )
+                .where(
+                    SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.team_id.in_(team_ids),
+                    SessionMetadataRow.deleted_at.is_(None),
+                    SessionMetadataRow.last_activity_at.is_not(None),
+                )
+                .group_by(
+                    SessionMetadataRow.agent_instance_id, SessionMetadataRow.team_id
+                )
+                .subquery()
+            )
+            q = (
+                q.outerjoin(
+                    recent,
+                    (AgentInstanceRow.agent_instance_id == recent.c.agent_instance_id)
+                    & (AgentInstanceRow.team_id == recent.c.team_id),
+                )
+                .where(
+                    or_(
+                        recent.c.last_used.is_not(None),
+                        AgentInstanceRow.team_id.in_(suggestion_team_ids),
+                    )
+                )
+                .order_by(recent.c.last_used.desc().nulls_last())
+            )
+        else:
+            q = q.where(AgentInstanceRow.team_id.in_(suggestion_team_ids))
+        q = q.order_by(
+            func.lower(AgentInstanceRow.display_name),
+            AgentInstanceRow.agent_instance_id,
+        ).limit(5)
+        async with use_session(self._sessions) as s:
+            rows = (await s.scalars(q)).all()
         return [_row_to_record(row) for row in rows]
 
     async def list_all(

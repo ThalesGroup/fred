@@ -5273,3 +5273,23 @@ The capability routes those panels call (ppt_builder `/platform*`) live on the p
 and are gated by the pod's capability-manager check
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
 `openspec/specs/ppt-builder/spec.md`.
+
+
+## Home agent launchers (2026-11-09)
+
+`GET /control-plane/v1/me/home-agents` returns `HomeAgentsResponse`: at most
+five existing `ManagedAgentInstanceSummary` items in `agents`, plus
+`history_unavailable` (normally false). Current `CAN_USE_TEAM_AGENTS` access,
+enabled state and suspension are checked before the limit. Known activity in
+the caller's non-deleted conversations ranks first, descending; case-insensitive
+name and instance id break ties. Remaining places use accessible platform-default
+teams and the caller's personal space, alphabetically. The endpoint needs SQL
+and authorization, not OpenSearch or live runtime catalogs.
+
+An explicit `updated_at` session PATCH also stamps a separate, monotonic
+server-side `session_metadata.last_activity_at`. The existing browser calls
+this at send time and after persistence; it indicates reported conversation
+activity, not a server-verified successful turn. Title/context edits alone do
+not establish activity. Legacy dates remain unknown until new activity.
+History-query SQL failure retries suggestions only and marks history unavailable;
+failed suggestions or authorization remain request errors.

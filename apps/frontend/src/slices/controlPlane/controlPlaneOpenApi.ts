@@ -893,6 +893,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: build.query<
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse,
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/me/home-agents` }),
+    }),
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
@@ -2859,6 +2865,9 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
 };
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse =
+  /** status 200 Successful Response */ HomeAgentsResponse;
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg = void;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
@@ -4973,6 +4982,10 @@ export type CreateSessionRequest = {
   agent_instance_id?: string | null;
   title?: string | null;
 };
+export type HomeAgentsResponse = {
+  agents: ManagedAgentInstanceSummary[];
+  history_unavailable?: boolean;
+};
 export type InactiveSessionItem = {
   session_id: string;
   team_id: string;
@@ -6415,6 +6428,8 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useLazyGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,

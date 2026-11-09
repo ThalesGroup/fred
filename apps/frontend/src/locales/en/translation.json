@@ -2729,7 +2729,12 @@
       },
       "recentAgents": {
         "title": "Recently used agents",
-        "suggestedTitle": "Agents available to you"
+        "suggestedTitle": "Agents available to you",
+        "loading": "Loading agents...",
+        "error": "Agents could not be loaded.",
+        "retry": "Retry",
+        "historyUnavailable": "Recent agents are unavailable. Showing accessible agents.",
+        "empty": "No agents available."
       },
       "topAgents": {
         "title": "Your most-used agents",
