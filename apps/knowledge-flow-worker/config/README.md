@@ -1,8 +1,9 @@
 # Knowledge Flow worker configuration
 
 The worker has its own configuration and generated schema. `configuration.yaml`
-and `configuration_worker.yaml` provide the local processor settings; neither
-supplies deployment-specific `manager_processing` endpoints or credentials.
+provides the local processor settings. `configuration_worker.yaml` adds
+`manager_processing` against the Docker Compose backing services of
+fred-deployment-factory; its credentials stay in `.env`.
 Choose a configuration with `CONFIG_FILE`, and environment references with
 `ENV_FILE`. Copy `.env.template` locally and supply the required values.
 

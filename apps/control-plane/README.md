@@ -48,15 +48,17 @@ before startup; the latter indexes sessions awaiting retirement receipts.
 
 ## From scratch (fred-deployment-factory)
 
-**Host run, after `make docker-up` or `make k3d-up`:**
-
-With `DATABASE_URL` pointing to a fresh control-plane database, initialize the
-complete schema before starting the API:
+**Host run, after `make docker-up` in fred-deployment-factory**, from the repository root:
 
 ```sh
-cargo run --locked -- initialize-schema
+make setup-env          # once: config/.env of each application
+make docker-bootstrap   # database roles and schemas, this schema, worker contract
 make run
 ```
+
+`config/configuration_prod.yaml` points to the Docker Compose services. Against
+another fresh database, run `make initialize-schema` here with `DATABASE_URL`
+pointing to its `fred_cp` login.
 
 API startup only verifies the installed schema fingerprint. The explicit
 initialization command creates the schema atomically, or does nothing when the

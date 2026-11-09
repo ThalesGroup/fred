@@ -68,6 +68,10 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 
 PORT ?= 8000
 
+.PHONY: run-worker
+run-worker: dev ## Run the capability preparation worker (Temporal, scheduler.enabled)
+	VIRTUAL_ENV= $(UV) run python -m fred_agents --mode worker
+
 .PHONY: cli
 cli: dev ## Open the interactive CLI for a running agent pod
 	ENV_FILE=$(CURDIR)/config/.env VIRTUAL_ENV= $(UV) run fred-agents-cli

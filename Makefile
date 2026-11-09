@@ -95,6 +95,13 @@ integration-test-k3d: ## Validate an existing local k3d deployment through its i
 delegation: ## Prepare local delegation after docker-up, without editing tracked YAML (ARGS=--dry-run or --reset)
 	uv run scripts/populate_local_delegation.py $(ARGS)
 
+# The local defaults of fred-deployment-factory's Docker Compose services.
+LOCAL_PASSWORD := Azerty123_
+LOCAL_SECRET_KEYS := FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY \
+	KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET \
+	MANAGER_WORKER_CLIENT_SECRET FRED_CONTENT_SECRET_KEY KF_ARTIFACT_SECRET_KEY MANAGER_DERIVED_SECRET_KEY
+WEAVER_DATABASE := fred_weaver
+
 .PHONY: setup-env
 setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
 	@set -e; \
@@ -107,17 +114,21 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent), fi
 		fi; \
 	done
 	@# fred-deployment-factory's docker-compose fixes these to the same value everywhere
-	@# (Postgres/OpenSearch/MinIO passwords, every Keycloak client secret) -- only
+	@# (Postgres/OpenSearch/S3 passwords, every Keycloak client secret) -- only
 	@# ever fills a placeholder that's still literally empty, never overwrites a real value.
 	@for dir in $(ENV_APPS); do \
 		f="$$dir/config/.env"; \
 		[ -f "$$f" ] || continue; \
-		for key in FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
-			if grep -q "^$$key=\"\"" "$$f" 2>/dev/null; then \
-				sed -i "s/^$$key=\"\"/$$key=\"Azerty123_\"/" "$$f"; \
-			fi; \
+		for key in $(LOCAL_SECRET_KEYS); do \
+			sed -i -E "s/^$$key=(\"\")?$$/$$key=\"$(LOCAL_PASSWORD)\"/" "$$f"; \
 		done; \
 	done
+	@# The root platform-admin bootstrap secret: generated once, at least 16 characters.
+	@f=apps/control-plane/config/.env; \
+	if grep -qE '^FRED_BOOTSTRAP_TOKEN=("")?$$' "$$f" 2>/dev/null; then \
+		sed -i -E "s/^FRED_BOOTSTRAP_TOKEN=(\"\")?$$/FRED_BOOTSTRAP_TOKEN=\"$$(openssl rand -hex 24)\"/" "$$f"; \
+		echo "************ Generated FRED_BOOTSTRAP_TOKEN in $$f ************"; \
+	fi
 	@# knowledge-flow-backend's own .env.template still defaults CONFIG_FILE to configuration.yaml
 	@# (doc drift vs. the other two apps) -- only fix it if it's still exactly that stale
 	@# template default, never touch a value a developer deliberately set to something else.
@@ -125,16 +136,33 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent), fi
 		sed -i 's|^CONFIG_FILE=.*|CONFIG_FILE="./config/configuration_prod.yaml"|' apps/knowledge-flow-backend/config/.env; \
 		echo "************ Fixed knowledge-flow-backend CONFIG_FILE to configuration_prod.yaml ************"; \
 	fi
-	@# Prompt once (not per app) for a model provider key, only if neither fred-agents app
-	@# already has one -- skipped entirely in a non-interactive shell (no stdin to read).
-	@if [ -t 0 ] && ! grep -qE '^(OPENAI_API_KEY|ANTHROPIC_API_KEY)="[^"]+"' apps/fred-agents/config/.env 2>/dev/null; then \
-		read -p "Enter an OpenAI API key for local dev (blank to skip, add it later yourself): " api_key; \
-		if [ -n "$$api_key" ]; then \
-			sed -i "s/^OPENAI_API_KEY=\"\"/OPENAI_API_KEY=\"$$api_key\"/" apps/fred-agents/config/.env; \
-			[ -f apps/knowledge-flow-backend/config/.env ] && sed -i "s/^OPENAI_API_KEY=\"\"/OPENAI_API_KEY=\"$$api_key\"/" apps/knowledge-flow-backend/config/.env; \
-		fi; \
+	@# The model provider key (Mistral in the local configurations), once for every application:
+	@# fred-agents' key if it has one, else asked -- not asked in a non-interactive shell.
+	@api_key="$$(sed -n -E 's/^OPENAI_API_KEY="?([^"]+)"?$$/\1/p' apps/fred-agents/config/.env)"; \
+	if [ -z "$$api_key" ] && [ -t 0 ]; then \
+		read -p "Enter the Mistral API key for local dev (blank to skip, add it later yourself): " api_key; \
+	fi; \
+	if [ -n "$$api_key" ]; then \
+		for dir in $(ENV_APPS); do \
+			sed -i -E "s/^OPENAI_API_KEY=(\"\")?$$/OPENAI_API_KEY=\"$$api_key\"/" "$$dir/config/.env"; \
+		done; \
 	fi
 	@echo "✓ setup-env done. Review apps/*/config/.env yourself for anything beyond local docker-compose defaults (Azure, proxy, Prometheus, ...)."
+
+.PHONY: docker-bootstrap
+docker-bootstrap: ## After make docker-up in fred-deployment-factory: database roles and schemas, Control Plane schema, worker contract (replayable)
+	@# What the chart's postgresBootstrap hook and migration Jobs do on k3d, against app-postgres.
+	docker exec -i app-postgres psql -X -q -v ON_ERROR_STOP=1 -U admin -d $(WEAVER_DATABASE) \
+		-v database=$(WEAVER_DATABASE) < deploy/postgres/bootstrap.sql
+	@docker exec -i app-postgres psql -X -q -v ON_ERROR_STOP=1 -U admin -d $(WEAVER_DATABASE) -c \
+		"$(foreach role,fred_cp fred_kf fred_runtime fred_monitor,ALTER ROLE $(role) PASSWORD '$(LOCAL_PASSWORD)';)"
+	DATABASE_URL=postgresql://fred_cp:$(LOCAL_PASSWORD)@localhost:5432/$(WEAVER_DATABASE) \
+		$(MAKE) -C apps/control-plane initialize-schema
+	$(MAKE) -C apps/knowledge-flow-worker dev
+	@mkdir -p apps/control-plane/target
+	cd apps/knowledge-flow-worker && .venv/bin/python -m knowledge_flow_worker.features.scheduler.export_contract \
+		--configuration config/configuration_worker.yaml > ../control-plane/target/worker-contract.json
+	@echo "✓ docker-bootstrap done. Start Fred with make run."
 
 ##@ Run
 
@@ -155,12 +183,13 @@ run-control-plane: ## Run control-plane backend API only
 	$(MAKE) -C apps/control-plane run
 
 .PHONY: run
-run: ## Start control-plane, fred-agents, knowledge-flow, and frontend together in one terminal (Ctrl+C stops all four)
+run: ## Start every Fred application, the workers included, in one terminal (Ctrl+C stops them all)
 	@set -e; \
 	for dir in $(RUN_DIRS); do \
 		echo "************ Starting $$dir ************"; \
 		$(MAKE) -C $$dir run & \
 	done; \
+	$(MAKE) -C apps/fred-agents run-worker & \
 	wait
 
 .PHONY: dev

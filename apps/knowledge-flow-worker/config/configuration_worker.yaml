@@ -1,4 +1,7 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+# The worker on the host, against the Docker Compose backing services of
+# fred-deployment-factory, as its k3d Weaver values with localhost addresses.
+# make docker-bootstrap exports the control plane's worker contract from this file.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -25,6 +28,9 @@ observability:
     process_metrics_interval_sec: 0
     prometheus:
       port: 9112
+    opensearch:
+      enabled: true
+      index: weaver-kpi
 
 processing:
   path_base_model: "." # Use "/app" for docker
@@ -249,8 +255,9 @@ scheduler:
   backend: "temporal"
   temporal:
     host: "localhost:7233"
-    namespace: "default"
-    task_queue: "ingestion"
+    namespace: "fred-weaver"
+    # Must match the control plane's scheduler.processing.temporal.task_queue.
+    task_queue: "manager-ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
     ingestion_workflow_parallelism: 3
@@ -283,7 +290,7 @@ storage:
   postgres:
     host: localhost
     port: 5432
-    database: fred
+    database: fred_weaver
     pool_size: 2
     max_overflow: 0
     pool_timeout: 30
@@ -319,5 +326,20 @@ storage:
       max_selected_datasets: 50
   vector_store:
     type: opensearch
-    index: vector-index-mistral
+    index: document-vectors
+    bulk_size: 1000
+
+# The control plane's documents: originals read through it, results written to its bucket.
+# Secrets in .env: MANAGER_WORKER_CLIENT_SECRET, MANAGER_DERIVED_ACCESS_KEY/SECRET_KEY.
+manager_processing:
+  url: http://localhost:8222/control-plane/v1
+  issuer: http://localhost:8080/realms/app
+  audience: control-plane
+  client_id: knowledge-flow-worker
+  endpoint: http://localhost:8333
+  allow_insecure: true
+  bucket: app-content-documents
+  vector_store:
+    type: opensearch
+    index: document-vectors
     bulk_size: 1000

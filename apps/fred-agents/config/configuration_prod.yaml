@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+# fred-agents on the host, against the Docker Compose backing services of
+# fred-deployment-factory, as its k3d Weaver values with localhost addresses.
 app:
   gcu_version: v1
   # Must match this pod's entry in the control-plane's runtime_catalog_sources:
@@ -56,9 +58,9 @@ security:
     # names. Turn it on only if another backend calls this one for a person; it
     # then needs act_for_people as well.
     #
-    # Both are off by default. Locally, make delegation turns the right one on
-    # through config/.delegation.local.json after checking a freshly issued token.
-    act_for_people: false
+    # The factory's Keycloak post-install grants the agentic service account
+    # delegation_caller, as on k3d.
+    act_for_people: true
     accept_delegated_calls: false
 
 ai:
@@ -75,6 +77,9 @@ observability:
       # Docker Prometheus reaches this host-run exporter through host.docker.internal.
       address: "0.0.0.0"
       port: 9000
+    opensearch:
+      enabled: true
+      index: weaver-kpi
   tracer: logging    # null | logging | langfuse (needs LANGFUSE_* keys in .env)
   langfuse:
     host: "http://localhost:3001"
@@ -92,7 +97,7 @@ storage:
   postgres:
     host: localhost
     port: 5432
-    database: fred
+    database: fred_weaver
     pool_size: 20
     max_overflow: 20
     username: fred_runtime
@@ -108,8 +113,12 @@ storage:
     access_key: "admin"
     secure: false
 
+# Used by the capability preparation worker (python -m fred_agents --mode worker).
 scheduler:
-  enabled: false
+  enabled: true
+  temporal:
+    host: "localhost:7233"
+    namespace: "fred-weaver"
 
 # Execution still runs in the pod; match the control-plane connection exactly.
 inference_credentials:

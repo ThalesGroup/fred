@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+# Knowledge Flow API on the host, against the Docker Compose backing services of
+# fred-deployment-factory, as its k3d Weaver values with localhost addresses.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -21,17 +23,15 @@ app:
   log_format: text
   reload: false
   reload_dir: "."
-  # Must mirror the control-plane's own configuration_prod.yaml: that backend
-  # DISPLAYS the quota from these values, this one ENFORCES it from them. Left
-  # unset here they default to None, so `_evaluate_quota` skips the personal
-  # check entirely and any team without an explicit DB limit is unlimited —
-  # the UI shows "x / 5 GB" while uploads sail past it.
 observability:
   kpi:
     prometheus:
       # Docker Prometheus reaches this host-run exporter through host.docker.internal.
       address: "0.0.0.0"
       port: 9111
+    opensearch:
+      enabled: true
+      index: weaver-kpi
 
 security:
   profile: c3
@@ -54,7 +54,7 @@ security:
     accept_delegated_calls: true
 chat_model:
   provider: openai
-  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: mistral-small-latest # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
     base_url: https://api.mistral.ai/v1
 embedding_model:
@@ -171,7 +171,7 @@ storage:
   postgres:
     host: localhost
     port: 5432
-    database: fred
+    database: fred_weaver
     pool_size: 2
     max_overflow: 0
     pool_timeout: 30
@@ -207,11 +207,19 @@ storage:
       max_selected_datasets: 50
   vector_store:
     type: opensearch
-    # Must match the index the worker writes to (configuration_worker.yaml),
+    # Must match the index the worker writes to (its configuration_prod.yaml),
     # otherwise the API searches an empty index and every RAG query returns 0.
-    index: vector-index-mistral
+    index: document-vectors
     bulk_size: 1000
-control_plane_url: "http://localhost:8001"
+control_plane_url: "http://localhost:8222/control-plane/v1"
+
+# Verified reads of the artifacts the control plane publishes.
+published_artifacts:
+  endpoint: http://localhost:8333
+  allow_insecure: true
+  bucket: app-content-documents
+  access_key_env: KF_ARTIFACT_ACCESS_KEY
+  secret_key_env: KF_ARTIFACT_SECRET_KEY # pragma: allowlist secret (env var name only)
 
 use_gpu: false
 text_splitter:

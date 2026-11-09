@@ -14,6 +14,11 @@ include ../../scripts/makefiles/help.mk
 
 ##@ Dev Helpers
 
+.PHONY: initialize-schema
+initialize-schema: dev ## Create or check the schema at DATABASE_URL, after deploy/postgres/bootstrap.sql
+	@test -n "$$DATABASE_URL" || { echo 'Set DATABASE_URL to the fred_cp login of the database' >&2; exit 2; }
+	$(CARGO) run --locked -- initialize-schema
+
 .PHONY: generate-openapi
 generate-openapi: ## Generate OpenAPI JSON without configuration or running services
 	@set -e; tmp=$$(mktemp openapi.json.XXXXXX); \

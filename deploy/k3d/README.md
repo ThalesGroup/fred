@@ -285,7 +285,7 @@ Later discoveries do not extend the explicit permitted list. The old factory
 `models_catalog` remains excluded from this Weaver overlay. The isolated automated
 tests do not establish real k3d/provider validation; that remains a developer check.
 
-The host equivalent is `apps/control-plane/config/configuration.yaml`, with the
+The host equivalent is `apps/control-plane/config/configuration_prod.yaml`, with the
 existing Mistral key supplied through the control plane's environment or local
 `.env`. The pod's `configuration.yaml` and `configuration_prod.yaml` retain only
 the matching inference credential binding.

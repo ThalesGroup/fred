@@ -321,6 +321,14 @@ pub fn schema() -> serde_json::Value {
 mod tests {
     use super::*;
 
+    // The host configuration for fred-deployment-factory's Docker Compose services.
+    #[test]
+    fn docker_compose_configuration_is_valid() {
+        let config: Configuration =
+            serde_yaml_ng::from_str(include_str!("../config/configuration_prod.yaml")).unwrap();
+        config.validate().unwrap();
+    }
+
     #[test]
     fn knowledge_flow_requires_configured_directory() {
         for mode in ["enabled", "local", "missing", "disabled"] {

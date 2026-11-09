@@ -5,6 +5,10 @@ and prepare the app `.env` files, including model-provider credentials. Use matc
 Fred and deployment-factory branches containing this setup. No secrets or generated
 service-account identities belong in Git.
 
+The `configuration_prod.yaml` files already turn both directions on, as the k3d
+values do, so `make docker-bootstrap` and `make run` need no extra step. The helper
+below remains a check of the workload token, and the switch for other configurations.
+
 After `make docker-up` in deployment-factory, prepare Fred once per fresh Keycloak realm:
 
 ```bash
