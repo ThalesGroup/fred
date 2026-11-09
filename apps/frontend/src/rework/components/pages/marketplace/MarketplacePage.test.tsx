@@ -204,9 +204,11 @@ async function mount(element: React.ReactNode, search = "") {
   });
 }
 const button = (label: string) =>
-  Array.from(document.querySelectorAll("button")).find(
-    (item) => item.textContent?.trim() === `rework.localMarketplace.${label}`,
-  )!;
+  Array.from(document.querySelectorAll("button"))
+    .reverse()
+    .find(
+      (item) => item.textContent?.trim().endsWith(`rework.localMarketplace.${label}`) && !item.closest("[hidden]"),
+    )!;
 async function ready(label: string) {
   await vi.waitFor(async () => {
     await act(async () => {});
@@ -242,8 +244,11 @@ it("admits an organization participant without source-library requests and keeps
     await act(async () => {});
     expect(host.querySelectorAll("article")).toHaveLength(2);
   });
-  expect(host.textContent).toContain("entry-1");
-  expect(host.textContent).toContain("entry-2");
+  expect(host.textContent).not.toContain("entry-1");
+  expect(host.textContent).not.toContain("entry-2");
+  const cards = host.querySelectorAll("article");
+  await act(async () => cards[1].querySelector("button")!.click());
+  await vi.waitFor(() => expect(calls.some((call) => call.url.endsWith("/entries/entry-2"))).toBe(true));
   expect(calls.every((call) => !/\/prompts|\/me\/spaces|authorize/.test(new URL(call.url).pathname))).toBe(true);
   expect(calls.some((call) => new URL(call.url).searchParams.get("after") === "entry-1")).toBe(true);
 });
@@ -255,7 +260,9 @@ it("examines only the frozen package and takes decision/cancellation actions fro
   expect(document.body.textContent).toContain("FROZEN TEXT");
   expect(button("approve")).toBeUndefined();
   expect(button("reject")).toBeUndefined();
-  expect(calls.every((call) => new URL(call.url).pathname === `${base}/proposals/proposal-1`)).toBe(true);
+  expect(
+    calls.every((call) => [`${base}/proposals/proposal-1`, `${base}/proposals`].includes(new URL(call.url).pathname)),
+  ).toBe(true);
 });
 
 it("reloads a conflicting publication but never approves the new version without a fresh review and click", async () => {
@@ -350,7 +357,7 @@ it.each([false, true])(
       proposal_id: "proposal-1",
       options: { kind: "prompt", logical_name: "saved", category_id: null },
     });
-    const link = document.querySelector('a[href^="/team/"]');
+    const link = document.querySelector('a[href^="/team/"][href*="resource="]');
     if (resourceDeleted) expect(link).toBeNull();
     else expect(link?.getAttribute("href")).toBe("/team/destination/prompts?resource=new-prompt");
   },
@@ -416,11 +423,17 @@ it("surfaces name conflicts without overwriting, silently renaming or retrying",
   await choose("destination", "destination");
   await ready("install");
   await click("install");
-  await ready("retry");
-  expect(document.body.textContent).toContain("Local identifier already exists");
+  await ready("correctRequest");
+  expect(button("retry")).toBeUndefined();
+  expect(document.body.textContent).toContain("rework.localMarketplace.nameConflict");
+  await click("correctRequest");
+  await ready("install");
+  expect(
+    (document.querySelector('select[aria-label="rework.localMarketplace.destination"]') as HTMLSelectElement).value,
+  ).toBe("destination");
   expect(writes("/installations")).toHaveLength(1);
   expect((await writes("/installations")[0].json()).options.logical_name).toBe("saved");
-  expect(document.querySelector('a[href^="/team/"]')).toBeNull();
+  expect(document.querySelector('a[href^="/team/"][href*="resource="]')).toBeNull();
 });
 
 it.each(["skill", "agent"] as const)(
@@ -461,7 +474,11 @@ it.each(["skill", "agent"] as const)(
         "data:application/octet-stream;base64,YWJj",
       );
     }
-    expect(calls.every((request) => new URL(request.url).pathname === `${base}/proposals/proposal-1`)).toBe(true);
+    expect(
+      calls.every((request) =>
+        [`${base}/proposals/proposal-1`, `${base}/proposals`].includes(new URL(request.url).pathname),
+      ),
+    ).toBe(true);
   },
 );
 
@@ -509,7 +526,7 @@ it("keeps the real prompt proposal dialog stable through mounting, focus and dis
   await openPromptProposal();
   await ready("submit");
   await settledDiscovery();
-  const dialog = document.querySelector('[aria-labelledby="marketplace-proposal-title"]');
+  const dialog = document.querySelector('[role="dialog"]');
   expect(dialog).not.toBeNull();
   (document.querySelector('select[aria-label="rework.localMarketplace.catalogue"]') as HTMLElement).focus();
   const focused = document.activeElement;
@@ -523,7 +540,7 @@ it("keeps the real prompt proposal dialog stable through mounting, focus and dis
   };
   await act(async () => window.dispatchEvent(new Event("focus")));
   await vi.waitFor(() => expect(release).toBeDefined());
-  expect(document.querySelector('[aria-labelledby="marketplace-proposal-title"]')).toBe(dialog);
+  expect(document.querySelector('[role="dialog"]')).toBe(dialog);
   expect(document.activeElement).toBe(focused);
   await act(async () => release!());
   await settledDiscovery();
@@ -533,7 +550,7 @@ it("keeps the real prompt proposal dialog stable through mounting, focus and dis
     store.dispatch(api.util.invalidateTags(["Marketplaces"]));
   });
   await vi.waitFor(() => expect(release).toBeDefined());
-  expect(document.querySelector('[aria-labelledby="marketplace-proposal-title"]')).toBe(dialog);
+  expect(document.querySelector('[role="dialog"]')).toBe(dialog);
   expect(document.activeElement).toBe(focused);
   await act(async () => release!());
   await settledDiscovery();
@@ -630,9 +647,7 @@ it.each([false, true])(
     const persisted = Array.from({ length: sessionStorage.length }, (_, index) =>
       JSON.parse(sessionStorage.getItem(sessionStorage.key(index)!)!),
     );
-    expect(persisted).toHaveLength(1);
-    expect(Object.keys(persisted[0]).sort()).toEqual(["args", "key"]);
-    expect(persisted[0].args).toEqual({ marketplaceSpaceId: catalogue, submitProposalRequest: acceptedBody });
+    expect(persisted).toHaveLength(0);
   },
 );
 
@@ -710,10 +725,7 @@ it.each([false, true])(
     expect(retried.headers.get("Idempotency-Key")).toBe(first.headers.get("Idempotency-Key"));
     expect(await retried.clone().json()).toEqual(await first.clone().json());
     const persisted = JSON.parse(sessionStorage.getItem(sessionStorage.key(0)!)!);
-    expect(persisted).toEqual({
-      key: first.headers.get("Idempotency-Key"),
-      args: { marketplaceSpaceId: catalogue, entryId: "entry-1", installRequest: await first.clone().json() },
-    });
+    expect(persisted).toBeNull();
   },
 );
 
@@ -739,7 +751,7 @@ it("lets the backend deny an unresolved proposal after source rights are revoked
   await click("retry");
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(document.body.textContent).toContain("Replay denied");
+    expect(document.body.textContent).toContain("rework.localMarketplace.forbidden");
   });
   expect(document.querySelector('a[href*="proposal="]')).toBeNull();
   expect(writes("/proposals")).toHaveLength(2);
@@ -819,8 +831,8 @@ it.each(["allowed", "replay-denied", "receipt-denied"])(
         access === "allowed"
           ? "rework.localMarketplace.openResource"
           : access === "replay-denied"
-            ? "Installation replay denied"
-            : "Receipt access denied",
+            ? "rework.localMarketplace.forbidden"
+            : "rework.localMarketplace.forbidden",
       );
     });
     expect(writes("/installations")).toHaveLength(2);
@@ -830,7 +842,7 @@ it.each(["allowed", "replay-denied", "receipt-denied"])(
     expect(installations.size).toBe(1);
     expect(button("install")).toBeUndefined();
     expect(button("newOperation")).toBeUndefined();
-    const link = document.querySelector('a[href^="/team/"]');
+    const link = document.querySelector('a[href^="/team/"][href*="resource="]');
     if (access === "allowed") expect(link?.getAttribute("href")).toBe("/team/destination/prompts?resource=new-prompt");
     else expect(link).toBeNull();
     const recoveryCalls = calls.slice(reloadStart).map((request) => new URL(request.url).pathname);
@@ -895,7 +907,7 @@ it("regression: confirmed proposal revocation on focus must remove the open deta
   await act(async () => window.dispatchEvent(new Event("focus")));
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(document.body.textContent).toContain("rework.localMarketplace.empty");
+    expect(document.body.textContent).toContain("rework.localMarketplace.noProposals");
   });
   expect(button("approve")).toBeUndefined();
   expect(document.body.textContent).not.toContain("FROZEN TEXT");
@@ -953,7 +965,7 @@ it("regression: a publication withdrawn in the refreshed list must not offer a f
   await act(async () => window.dispatchEvent(new Event("focus")));
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(document.body.textContent).toContain("rework.localMarketplace.empty");
+    expect(document.body.textContent).toContain("rework.localMarketplace.noPublications");
   });
   expect(button("install")).toBeUndefined();
 });
@@ -1149,11 +1161,11 @@ it.each([false, true])(
     await vi.waitFor(async () => {
       await act(async () => {});
       expect(document.body.textContent).toContain(
-        denied ? "Catalogue replay revoked" : "rework.localMarketplace.submitted",
+        denied ? "rework.localMarketplace.forbidden" : "rework.localMarketplace.submitted",
       );
     });
     expect(writes("/proposals")).toHaveLength(2);
-    expect(sessionStorage.getItem(sessionStorage.key(0)!)).toBe(savedBefore);
+    expect(sessionStorage.getItem(sessionStorage.key(0)!)).toBe(denied ? savedBefore : null);
     expect(button("newOperation")).toBeUndefined();
     expect(!!document.querySelector('a[href*="proposal="]')).toBe(!denied);
     expect(calls.some((request) => gone && new URL(request.url).pathname.includes("source/"))).toBe(false);
@@ -1254,7 +1266,7 @@ it("does not resurrect a refused package while the next verification is pending"
   });
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(document.body.textContent).toContain("Revoked");
+    expect(document.body.textContent).toContain("rework.localMarketplace.forbidden");
   });
   expect(document.body.textContent).not.toContain("FROZEN TEXT");
   const pending = deferredResponse();
@@ -1285,4 +1297,217 @@ it.each([false, true])("blocks an old installation command after identity change
   identity.current = "B";
   await click(retry ? "retry" : "install");
   expect(writes("/installations")).toHaveLength(retry ? 1 : 0);
+});
+
+it.each([false, true])(
+  "does not revive a successful installation on reopening or reload (new publication=%s)",
+  async (updated) => {
+    const detail = <MarketplaceDetailDialog marketplaceSpaceId={catalogue} entryId="entry-1" onClose={() => {}} />;
+    await mount(detail);
+    await vi.waitFor(() => expect(document.querySelector('option[value="destination"]')).not.toBeNull());
+    await choose("destination", "destination");
+    await ready("install");
+    await click("install");
+    await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.openResource"));
+    expect(sessionStorage.length).toBe(0);
+    if (updated)
+      override = async (request) =>
+        request.url.endsWith("/entries/entry-1")
+          ? json({
+              ...snapshot,
+              proposal_id: "proposal-2",
+              publication_version: 5,
+              display_name: "Updated publication",
+            })
+          : undefined;
+    await reload(detail);
+    await vi.waitFor(() => expect(document.querySelector('option[value="destination"]')).not.toBeNull());
+    expect(button("retry")).toBeUndefined();
+    expect(document.body.textContent).not.toContain("rework.localMarketplace.resumeAttempt");
+    expect(writes("/installations")).toHaveLength(1);
+    await choose("destination", "destination");
+    await ready("install");
+    await click("install");
+    await vi.waitFor(() => expect(writes("/installations")).toHaveLength(2));
+    expect((await writes("/installations")[1].json()).proposal_id).toBe(updated ? "proposal-2" : "proposal-1");
+    expect(writes("/installations")[1].headers.get("Idempotency-Key")).not.toBe(
+      writes("/installations")[0].headers.get("Idempotency-Key"),
+    );
+  },
+);
+
+it("removes completed proposals from recovery after reload", async () => {
+  await mount(<MarketplaceProposalDialog source={source} sourceName="Research summary" onClose={() => {}} />);
+  await ready("submit");
+  await click("submit");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.submitted"));
+  expect(sessionStorage.length).toBe(0);
+  await reload(<MarketplacePage kind="prompt" />);
+  await ready("inspect");
+  expect(button("resumeProposal")).toBeUndefined();
+  expect(writes("/proposals")).toHaveLength(1);
+});
+
+it("keeps the destination and permits a different identifier after a definitive conflict", async () => {
+  override = async (request) =>
+    request.url.endsWith("/installations") && (await request.json()).options.logical_name === "saved"
+      ? json({ code: "conflict", detail: "conflicting name or resource reference" }, 409)
+      : undefined;
+  await mount(<MarketplaceDetailDialog marketplaceSpaceId={catalogue} entryId="entry-1" onClose={() => {}} />);
+  await vi.waitFor(() => expect(document.querySelector('option[value="destination"]')).not.toBeNull());
+  await choose("destination", "destination");
+  await ready("install");
+  await click("install");
+  await ready("correctRequest");
+  expect(sessionStorage.length).toBe(0);
+  expect(button("retry")).toBeUndefined();
+  await click("correctRequest");
+  await act(async () => {
+    const input = document.querySelector('input[value="saved"]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "saved-atlas");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await ready("install");
+  await click("install");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.openResource"));
+  const requests = writes("/installations");
+  expect(requests).toHaveLength(2);
+  expect(requests[1].headers.get("Idempotency-Key")).not.toBe(requests[0].headers.get("Idempotency-Key"));
+  expect((await requests[1].json()).options.logical_name).toBe("saved-atlas");
+  expect(calls.some((request) => ["PUT", "DELETE", "PATCH"].includes(request.method))).toBe(false);
+});
+
+it.each([false, true])(
+  "refreshes the catalogue after approval despite another request in flight (old catalogue read=%s)",
+  async (oldRead) => {
+    const unrelated = deferredResponse();
+    const stale = deferredResponse();
+    let updated = false;
+    let delayOldRead = false;
+    override = async (request) => {
+      if (request.url.endsWith("/spaces/slow/skills")) return unrelated.promise;
+      if (request.url.endsWith("/decision")) updated = true;
+      if (new URL(request.url).pathname === `${base}/entries`) {
+        if (delayOldRead) {
+          delayOldRead = false;
+          return stale.promise;
+        }
+        return page([{ ...snapshot, display_name: updated ? "New current publication" : "Old publication" }]);
+      }
+    };
+    const listing = store.dispatch(
+      api.endpoints.marketplaceEntries.initiate({ marketplaceSpaceId: catalogue, kind: "prompt" }),
+    );
+    await listing;
+    await mount(<MarketplaceDetailDialog marketplaceSpaceId={catalogue} proposalId="proposal-1" onClose={() => {}} />);
+    await ready("approve");
+    const slow = store.dispatch(api.endpoints.listSkills.initiate({ spaceId: "slow" }));
+    if (oldRead) {
+      delayOldRead = true;
+      void store.dispatch(
+        api.endpoints.marketplaceEntries.initiate(
+          { marketplaceSpaceId: catalogue, kind: "prompt" },
+          { forceRefetch: true },
+        ),
+      );
+      await vi.waitFor(() => expect(delayOldRead).toBe(false));
+    }
+    await click("approve");
+    await vi.waitFor(() => expect(writes("/decision")).toHaveLength(1));
+    if (oldRead) await act(async () => stale.resolve(page([{ ...snapshot, display_name: "Old publication" }])));
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(
+        api.endpoints.marketplaceEntries.select({ marketplaceSpaceId: catalogue, kind: "prompt" })(store.getState())
+          .data?.items[0].display_name,
+      ).toBe("New current publication");
+    });
+    await act(async () => unrelated.resolve(json([])));
+    await slow;
+    slow.unsubscribe();
+    listing.unsubscribe();
+  },
+);
+
+it.each(["reject", "cancelProposal"])("refreshes the server decision after %s", async (action) => {
+  proposal.actions = { can_decide: true, can_cancel: true };
+  override = async (request) => {
+    if (request.method === "PUT" && /\/(decision|cancellation)$/.test(request.url)) {
+      proposal = {
+        ...proposal,
+        state: action === "reject" ? "rejected" : "cancelled",
+        actions: { can_decide: false, can_cancel: false },
+      };
+      return json(proposal);
+    }
+  };
+  await mount(<MarketplaceDetailDialog marketplaceSpaceId={catalogue} proposalId="proposal-1" onClose={() => {}} />);
+  await ready(action);
+  await click(action);
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(button(action)).toBeUndefined();
+    expect(document.body.textContent).toContain(
+      `rework.localMarketplace.states.${action === "reject" ? "rejected" : "cancelled"}`,
+    );
+  });
+});
+
+it("keeps the selected listing when correcting a rejected update proposal", async () => {
+  override = async (request) =>
+    request.method === "POST" && request.url.endsWith("/proposals")
+      ? json({ code: "invalid_request", detail: "Invalid proposal" }, 422)
+      : undefined;
+  await mount(<MarketplaceProposalDialog source={source} onClose={() => {}} />);
+  await ready("submit");
+  await choose("proposalTarget", "entry-1");
+  await click("submit");
+  await ready("correctRequest");
+  await click("correctRequest");
+  await ready("submit");
+  expect(
+    (document.querySelector('select[aria-label="rework.localMarketplace.proposalTarget"]') as HTMLSelectElement).value,
+  ).toBe("entry-1");
+});
+
+it("reconciles an uncertain older installation without silently installing the new publication", async () => {
+  let updated = false;
+  override = async (request) => {
+    if (request.url.endsWith("/installations") && !updated) throw new TypeError("Accepted, response lost");
+    if (updated && request.url.endsWith("/entries/entry-1"))
+      return json({ ...snapshot, proposal_id: "proposal-2", display_name: "New publication" });
+  };
+  const detail = <MarketplaceDetailDialog marketplaceSpaceId={catalogue} entryId="entry-1" onClose={() => {}} />;
+  await mount(detail);
+  await vi.waitFor(() => expect(document.querySelector('option[value="destination"]')).not.toBeNull());
+  await choose("destination", "destination");
+  await ready("install");
+  await click("install");
+  await ready("retry");
+  updated = true;
+  await reload(detail);
+  await ready("retry");
+  expect(document.body.textContent).toContain("rework.localMarketplace.earlierInstallation");
+  expect(button("install")).toBeUndefined();
+  await click("retry");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.openResource"));
+  const sent = writes("/installations");
+  expect(sent).toHaveLength(2);
+  expect(sent[1].headers.get("Idempotency-Key")).toBe(sent[0].headers.get("Idempotency-Key"));
+  expect(await sent[1].json()).toEqual(await sent[0].json());
+  expect(sessionStorage.length).toBe(0);
+});
+
+it("clears an acknowledged request even when its dialog unmounted before completion", async () => {
+  const completion = deferredResponse();
+  override = async (request) =>
+    request.method === "POST" && request.url.endsWith("/proposals") ? completion.promise : undefined;
+  await mount(<MarketplaceProposalDialog source={source} onClose={() => {}} />);
+  await ready("submit");
+  await click("submit");
+  await vi.waitFor(() => expect(writes("/proposals")).toHaveLength(1));
+  expect(sessionStorage.length).toBe(1);
+  await mount(<></>);
+  await act(async () => completion.resolve(json(proposal)));
+  await vi.waitFor(() => expect(sessionStorage.length).toBe(0));
 });

@@ -78,23 +78,23 @@ async fn move_request_captures_source_and_checks_destination() {
     violation(request(&pool, doc, other, None).await.unwrap_err(), "23514");
     violation(
         request(&pool, doc, team, Some(target)).await.unwrap_err(),
-        "23503",
+        "23514",
     );
     violation(
         request(&pool, doc, project, Some(Uuid::new_v4()))
             .await
             .unwrap_err(),
-        "23503",
+        "23514",
     );
     violation(
         request(&pool, doc, Uuid::new_v4(), None).await.unwrap_err(),
-        "23503",
+        "23514",
     );
     violation(
         request(&pool, Uuid::new_v4(), project, None)
             .await
             .unwrap_err(),
-        "23503",
+        "23514",
     );
     let operation = request(&pool, doc, project, Some(target)).await.unwrap();
     let stored: (Uuid, Option<Uuid>, Uuid, Option<Uuid>, Option<Uuid>) = sqlx::query_as("select source_space_id,source_folder_id,destination_space_id,destination_folder_id,generation_id from document_move where id=$1")
@@ -238,7 +238,7 @@ async fn schema_preparation_does_not_move_existing_documents_or_weaken_immutabil
             .execute(&pool)
             .await
             .unwrap_err(),
-        "P0001",
+        "23514",
     );
     sqlx::query("delete from document where id=$1")
         .bind(doc)

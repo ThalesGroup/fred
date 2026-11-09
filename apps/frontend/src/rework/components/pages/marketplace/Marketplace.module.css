@@ -1,8 +1,6 @@
 /* Copyright Thales 2026; SPDX-License-Identifier: Apache-2.0 */
 .page,
-.content,
-.dialog,
-.card {
+.content {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
@@ -20,26 +18,26 @@
   gap: var(--spacing-s);
 }
 .grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--content-prose-max-width) / 2)), 1fr));
   gap: var(--spacing-m);
 }
-.card {
-  flex: 1 1 var(--content-prose-max-width);
-  border-radius: var(--radius-m);
-  background: var(--surface-container);
-  padding: var(--spacing-m);
-  color: var(--on-surface);
+.detailDialog {
+  width: min(var(--content-prose-max-width), calc(100vw - var(--spacing-xl)));
 }
-.dialog {
-  border-radius: var(--radius-m);
-  background: var(--surface-container);
-  padding: var(--spacing-l);
-  width: var(--content-prose-max-width);
-  max-width: 100%;
-  max-height: 100%;
-  overflow: auto;
-  color: var(--on-surface);
+.content p,
+.content h3,
+.page h2 {
+  margin: 0;
+}
+.content {
+  font: var(--font-body-medium);
+}
+.history {
+  padding-left: var(--spacing-m);
+}
+.history li {
+  margin-block: var(--spacing-s);
 }
 .text {
   margin: 0;
@@ -51,4 +49,13 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
   overflow-wrap: anywhere;
+}
+
+.content h3 {
+  font: var(--font-title-small);
+}
+
+.content a {
+  color: var(--primary);
+  text-decoration: underline;
 }

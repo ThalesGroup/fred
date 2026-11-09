@@ -22,6 +22,8 @@ import {
   type SpaceCheck,
 } from "./controlPlaneOpenApi";
 
+import { KeyCloakService } from "../../security/KeycloakService";
+
 type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.QueryDefinition;
 type CatalogPage<Item> = { items: Item[]; next_cursor: string | null };
 
@@ -88,6 +90,59 @@ const wikiTags = (_result: unknown, _error: unknown, { spaceId }: { spaceId: str
 const marketplaceTags = (_result: unknown, _error: unknown, { marketplaceSpaceId }: { marketplaceSpaceId: string }) => [
   { type: "MarketplaceContent" as const, id: marketplaceSpaceId },
 ];
+
+type MarketplaceMutationContext = Pick<
+  Parameters<
+    NonNullable<(typeof controlPlaneApi.endpoints.decideMarketplaceProposal.Types.MutationDefinition)["onQueryStarted"]>
+  >[1],
+  "dispatch" | "getState"
+> & { queryFulfilled: Promise<unknown> };
+
+// RTK's delayed tag invalidation can wait behind unrelated long-running requests.
+// Refresh the visible catalogue after the command, and after any older read finishes.
+async function refreshMarketplace(
+  { marketplaceSpaceId }: { marketplaceSpaceId: string },
+  { dispatch, getState, queryFulfilled }: MarketplaceMutationContext,
+) {
+  const actor = KeyCloakService.GetSessionIdentity();
+  try {
+    await queryFulfilled;
+  } catch {
+    /* A lost response can still have committed. */
+  }
+  if (actor !== KeyCloakService.GetSessionIdentity()) return;
+  const state = getState() as Parameters<typeof controlPlaneApi.util.selectCachedArgsForQuery>[0];
+  await Promise.all([
+    ...controlPlaneApi.util
+      .selectCachedArgsForQuery(state, "marketplaceEntries")
+      .filter(
+        (args) =>
+          args.marketplaceSpaceId === marketplaceSpaceId &&
+          (!("__cpSessionIdentity" in args) || args.__cpSessionIdentity === actor),
+      )
+      .map(async (args) => {
+        await dispatch(controlPlaneApi.util.getRunningQueryThunk("marketplaceEntries", args));
+        if (actor === KeyCloakService.GetSessionIdentity())
+          await dispatch(
+            controlPlaneApi.endpoints.marketplaceEntries.initiate(args, { subscribe: false, forceRefetch: true }),
+          );
+      }),
+    ...controlPlaneApi.util
+      .selectCachedArgsForQuery(state, "marketplaceProposals")
+      .filter(
+        (args) =>
+          args.marketplaceSpaceId === marketplaceSpaceId &&
+          (!("__cpSessionIdentity" in args) || args.__cpSessionIdentity === actor),
+      )
+      .map(async (args) => {
+        await dispatch(controlPlaneApi.util.getRunningQueryThunk("marketplaceProposals", args));
+        if (actor === KeyCloakService.GetSessionIdentity())
+          await dispatch(
+            controlPlaneApi.endpoints.marketplaceProposals.initiate(args, { subscribe: false, forceRefetch: true }),
+          );
+      }),
+  ]);
+}
 
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
@@ -186,10 +241,26 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     marketplaceEntry: { keepUnusedDataFor: 0, providesTags: marketplaceTags },
     marketplaceProposal: { keepUnusedDataFor: 0, providesTags: marketplaceTags },
-    submitMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
-    decideMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
-    cancelMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
-    withdrawMarketplaceEntry: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
+    submitMarketplaceProposal: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: marketplaceTags,
+      onQueryStarted: refreshMarketplace,
+    },
+    decideMarketplaceProposal: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: marketplaceTags,
+      onQueryStarted: refreshMarketplace,
+    },
+    cancelMarketplaceProposal: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: marketplaceTags,
+      onQueryStarted: refreshMarketplace,
+    },
+    withdrawMarketplaceEntry: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: marketplaceTags,
+      onQueryStarted: refreshMarketplace,
+    },
     installMarketplaceEntry: {
       extraOptions: { retryUnauthorized: false },
       invalidatesTags: (_result, _error, { installRequest }) => [

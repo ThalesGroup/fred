@@ -562,6 +562,24 @@ async fn delete_folder(
     let (mut tx, _) =
         spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
+    // The exclusive organization guard also excludes new uploads in descendants.
+    let pending: bool = sqlx::query_scalar(
+        "with recursive subtree as (
+            select id from folder where id=$1
+            union all
+            select f.id from folder f join subtree p on f.parent_id=p.id
+        ) select exists(select 1 from document_upload u join subtree f on f.id=u.folder_id
+            where u.space_id=$2 and u.status='pending')",
+    )
+    .bind(id)
+    .bind(folder.space_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if pending {
+        return Err(AppError::Conflict(
+            "folder has pending document uploads".into(),
+        ));
+    }
     db::delete_folder(&mut *tx, id).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)

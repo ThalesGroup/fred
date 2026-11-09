@@ -33,6 +33,11 @@ er: ## Regenerate generated/<component>.er.mmd from each component's migrations
 		for migration in $(ROOT)/apps/$$c/migrations/*.sql; do \
 			docker exec -i -e PGOPTIONS="-c search_path=control_plane -c role=fred_cp" $$pg psql -U postgres -q -1 -v ON_ERROR_STOP=1 < "$$migration"; \
 		done; \
+		docker exec -i $$pg psql -X -U postgres -qAt -v ON_ERROR_STOP=1 < tools/triggers.sql > "$$tmp"; \
+		$(PYTHON) tools/docs.py tidy-triggers "$$tmp"; \
+		if [ "$(ER_MODE)" = check ]; then \
+			cmp "$$tmp" generated/$$c.triggers.json || { echo "Stale trigger catalogue: run make er" >&2; exit 1; }; \
+		else cp "$$tmp" generated/$$c.triggers.json; fi; \
 		addr=$$(docker port $$pg 5432/tcp | head -n1); \
 		docker run --rm --network host $(TBLS_IMAGE) out -t mermaid \
 			"postgres://postgres:docs@$$addr/postgres?sslmode=disable" > "$$tmp"; \

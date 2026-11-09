@@ -1,0 +1,303 @@
+[
+  {
+    "comment": "assertion: immutability - agent identity, placement and creation provenance; edit attribution",
+    "function": "protect_agent_definition",
+    "table": "agent_instance",
+    "trigger": "agent_definition",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: mark agent capability preparations obsolete",
+    "function": "invalidate_capability_preparation",
+    "table": "agent_instance",
+    "trigger": "capability_agent_retirement",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "effect: retire the agent PowerPoint files and schedule cleanup",
+    "function": "retire_powerpoint_owner",
+    "table": "agent_instance",
+    "trigger": "powerpoint_agent_retirement",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - template policy belongs to an organization",
+    "function": "require_organization_space",
+    "table": "agent_template_policy",
+    "trigger": "agent_template_policy_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: adjust local and organization used storage bytes",
+    "function": "account_document",
+    "table": "document",
+    "trigger": "document_account",
+    "when": "BEFORE INSERT OR DELETE / ROW"
+  },
+  {
+    "comment": "effect: schedule cleanup of retired or superseded file contents",
+    "function": "retire_document_contents",
+    "table": "document",
+    "trigger": "document_contents_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - published owned current content and fixed source identity",
+    "function": "protect_document_current",
+    "table": "document",
+    "trigger": "document_current_valid",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - document placement",
+    "function": "forbid_document_move",
+    "table": "document",
+    "trigger": "document_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "effect: aggregate local and organization used storage byte changes",
+    "function": "account_document_updates",
+    "table": "document",
+    "trigger": "document_updates_account",
+    "when": "AFTER UPDATE / STATEMENT"
+  },
+  {
+    "comment": "assertion: immutability - content bytes and publication; no current-content cleanup",
+    "function": "protect_document_content",
+    "table": "document_content",
+    "trigger": "document_content_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - preview belongs to its primary content",
+    "function": "protect_document_preview",
+    "table": "document_content",
+    "trigger": "document_preview_valid",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "assertion: consistency - live same-organization move endpoints, frozen request and valid transitions",
+    "function": "protect_document_move",
+    "table": "document_move",
+    "trigger": "document_move_identity",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - processing identity and terminal outcome",
+    "function": "protect_processing_identity",
+    "table": "document_processing",
+    "trigger": "document_processing_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - ingestion only accepts source documents",
+    "function": "require_processing_source",
+    "table": "document_processing",
+    "trigger": "processing_source",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: adjust local and organization reserved storage bytes",
+    "function": "account_document_upload",
+    "table": "document_upload",
+    "trigger": "document_upload_account",
+    "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - upload target matches its declared destination",
+    "function": "require_upload_placement",
+    "table": "document_upload",
+    "trigger": "upload_placement",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - folder placement",
+    "function": "forbid_folder_move",
+    "table": "folder",
+    "trigger": "folder_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - no folder removal with pending uploads",
+    "function": "protect_pending_document_uploads",
+    "table": "folder",
+    "trigger": "folder_pending_uploads",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - marketplace identity and successive publication versions",
+    "function": "protect_marketplace_entry",
+    "table": "marketplace_entry",
+    "trigger": "marketplace_entry_identity",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - installation receipt and snapshot provenance",
+    "function": "protect_marketplace_installation",
+    "table": "marketplace_installation",
+    "trigger": "marketplace_installation_immutable",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - submitted package, attribution and final decision",
+    "function": "protect_marketplace_proposal",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_proposal_immutable",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - capability policy belongs to an organization",
+    "function": "require_organization_space",
+    "table": "organization_capability",
+    "trigger": "organization_capability_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - model initialization belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_initialization",
+    "trigger": "model_initialization_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - model policy belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_policy",
+    "trigger": "model_policy_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: record organization model-policy initialization",
+    "function": "remember_model_policy_initialization",
+    "table": "organization_model_policy",
+    "trigger": "remember_model_policy",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
+    "comment": "assertion: consistency - model source belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_source",
+    "trigger": "model_source_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - settings reference the effective organization file",
+    "function": "protect_powerpoint_settings",
+    "table": "organization_powerpoint_settings",
+    "trigger": "powerpoint_settings_file",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - PowerPoint settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_powerpoint_settings",
+    "trigger": "powerpoint_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: mark file capability preparations obsolete",
+    "function": "invalidate_capability_preparation",
+    "table": "powerpoint_file",
+    "trigger": "capability_file_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "effect: adjust local and organization used and reserved storage bytes",
+    "function": "account_powerpoint_file",
+    "table": "powerpoint_file",
+    "trigger": "powerpoint_file_account",
+    "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - PowerPoint identity and terminal retirement; live upload owner",
+    "function": "protect_powerpoint_file",
+    "table": "powerpoint_file",
+    "trigger": "powerpoint_file_identity",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: clear organization settings referencing a retired or ineffective file",
+    "function": "retire_powerpoint_settings",
+    "table": "powerpoint_file",
+    "trigger": "powerpoint_settings_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - prompt identity and creation provenance",
+    "function": "protect_prompt_definition",
+    "table": "prompt",
+    "trigger": "prompt_definition",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - same-organization conversation association and immutable ownership",
+    "function": "protect_session_association",
+    "table": "session_metadata",
+    "trigger": "session_association",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - retired conversation identifiers cannot be reused",
+    "function": "forbid_session_recreation",
+    "table": "session_metadata",
+    "trigger": "session_identity_not_reused",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "effect: retire the space PowerPoint files and schedule cleanup",
+    "function": "retire_powerpoint_owner",
+    "table": "space",
+    "trigger": "powerpoint_space_retirement",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - organization root and project team parent",
+    "function": "require_space_hierarchy",
+    "table": "space",
+    "trigger": "space_hierarchy",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
+    "comment": "assertion: immutability - space identity and hierarchy",
+    "function": "forbid_space_move",
+    "table": "space",
+    "trigger": "space_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - no space removal with pending uploads",
+    "function": "protect_pending_document_uploads",
+    "table": "space",
+    "trigger": "space_pending_uploads",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - local capability policy belongs to a team or project",
+    "function": "require_local_capability_space",
+    "table": "space_capability_policy",
+    "trigger": "space_capability_policy_kind",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal owner and organization admin scope",
+    "function": "require_space_role_scope",
+    "table": "space_role_grant",
+    "trigger": "space_role_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - immutable budget owner and valid local or organization scope",
+    "function": "require_storage_budget_scope",
+    "table": "storage_budget",
+    "trigger": "storage_budget_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - wiki revision content and provenance",
+    "function": "protect_wiki_revision",
+    "table": "wiki_revision",
+    "trigger": "wiki_revision_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  }
+]

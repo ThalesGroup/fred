@@ -228,6 +228,7 @@ pub async fn delete<'e>(
     agent_instance_id: Uuid,
 ) -> sqlx::Result<bool> {
     let result =
+        // The database also retires PowerPoint files and marks agent preparations obsolete.
         sqlx::query("delete from agent_instance where space_id = $1 and agent_instance_id = $2")
             .bind(space_id)
             .bind(agent_instance_id)

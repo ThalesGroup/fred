@@ -15,9 +15,11 @@ impl Storage {
             return Ok(());
         }
         // Revoke publication of admitted uploads, without pretending their PUT ended.
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload u set status='failed',error_code='destination_deleted',completed_at=clock_timestamp() where status='pending' and (exists(select 1 from session_metadata s where s.session_id=u.session_id and s.deletion_id=$1) or exists(select 1 from space s where s.id=u.space_id and s.deletion_id=$1))")
             .bind(deletion).execute(&self.pool).await?;
         self.cleanup_contents(Some(deletion), None).await?;
+        // The database runs local and organization used-byte accounting.
         sqlx::query("update document d set original_cleaned_at=clock_timestamp() where d.deletion_id=$1 and d.original_cleaned_at is null and not exists(select 1 from document_content c where c.document_id=d.id and c.cleaned_at is null) and not exists(select 1 from document_upload u where u.target_document_id=d.id and u.put_pending)")
             .bind(deletion).execute(&self.pool).await?;
         let uploads: Vec<(Uuid, String)> = sqlx::query_as("select u.id,u.object_key from document_upload u where u.status='failed' and not u.put_pending and u.cleaned_at is null and (exists(select 1 from session_metadata s where s.session_id=u.session_id and s.deletion_id=$1) or exists(select 1 from space s where s.id=u.space_id and s.deletion_id=$1)) order by u.id limit $2")
@@ -28,6 +30,7 @@ impl Storage {
                 self.objects.absent(&key).await?,
                 "upload cleanup incomplete"
             );
+            // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set cleaned_at=clock_timestamp() where id=$1 and not put_pending")
                 .bind(upload).execute(&self.pool).await?;
         }
@@ -87,6 +90,7 @@ impl Storage {
             self.expire_or_defer(id, org).await?;
         }
         // Publication and expiry arbitrate on the same row; retirement is terminal.
+        // The database releases quota, obsoletes preparations and clears retired template settings.
         sqlx::query("update powerpoint_file set status='retired',error_code='upload_expired' where id in (select id from powerpoint_file where status='pending' and expires_at<=clock_timestamp() order by cleanup_due_at,id limit $1 for update skip locked)")
             .bind(batch).execute(&self.pool).await?;
         let files: Vec<(Uuid, String)> = sqlx::query_as("select id,object_key from powerpoint_file where status='retired' and cleaned_at is null and cleanup_due_at<=clock_timestamp() order by cleanup_due_at,id limit $1")
@@ -102,6 +106,7 @@ impl Storage {
                 Ok(true) => self.objects.delete(&key).await.is_ok(),
                 Err(_) => false,
             };
+            // The database runs local and organization used-byte and reservation accounting.
             sqlx::query("update powerpoint_file set cleaned_at=case when $2 then clock_timestamp() else null end,error_code=case when $2 then null else 'cleanup_failed' end,cleanup_attempts=cleanup_attempts+1,cleanup_due_at=clock_timestamp()+make_interval(secs=>least(3600,30*power(2,least(cleanup_attempts,7)))) where id=$1 and status='retired'")
                 .bind(id).bind(deleted).execute(&self.pool).await?;
         }
@@ -118,11 +123,13 @@ impl Storage {
                 Ok(true) => self.objects.delete(&key).await.is_ok(),
                 Err(_) => false,
             };
+            // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set cleaned_at=case when $2 then clock_timestamp() else null end,cleanup_attempts=cleanup_attempts+1,cleanup_due_at=clock_timestamp()+make_interval(secs=>least(3600,30*power(2,least(cleanup_attempts,7)))) where id=$1 and status='failed'")
                 .bind(id).bind(deleted).execute(&self.pool).await?;
             tracing::info!(operation_id=%id,outcome=if deleted {"cleaned"}else{"retry"},"document cleanup");
         }
         // Receipts bound the technical retention window; there is no user revision archive.
+        // The database runs local and organization reservation accounting.
         sqlx::query("delete from document_upload where id in (select u.id from document_upload u join document_content c on c.id=u.content_id where u.purpose<>'source' and u.status='stored' and c.cleaned_at is not null and c.published_at<clock_timestamp()-make_interval(days=>$1) order by c.published_at,c.id limit $2)")
             .bind(self.config.limits.receipt_retention_days as i32).bind(batch).execute(&self.pool).await?;
         sqlx::query("delete from document_content where id in (select c.id from document_content c join document d on d.id=c.document_id where c.cleaned_at is not null and c.id is distinct from d.current_content_id and not exists(select 1 from document_upload u where u.content_id=c.id) and not exists(select 1 from document_content p where p.source_content_id=c.id) order by c.cleanup_after,c.id limit $1)")
@@ -174,6 +181,7 @@ impl Storage {
         // A complete rescan is essential: a timed-out Put can finish after Delete.
         sqlx::query("update document_storage set inventory_cursor=$2,inventory_bytes=case when $2::text is null then 0 else inventory_bytes+$3 end,orphan_bytes=case when $2::text is null then inventory_bytes+$3 else greatest(orphan_bytes,inventory_bytes+$3) end,inventory_completed_at=case when $2::text is null then clock_timestamp() else inventory_completed_at end where singleton and lease_owner=$1")
             .bind(owner).bind(page.next).bind(retained_orphans).execute(&self.pool).await?;
+        // The database runs local and organization reservation accounting.
         sqlx::query("delete from document_upload where id in (select id from document_upload where status='failed' and not put_pending and session_id is null and cleaned_at is not null and completed_at<clock_timestamp()-make_interval(days=>$1) order by completed_at,id limit $2)")
             .bind(self.config.limits.receipt_retention_days as i32).bind(batch).execute(&self.pool).await?;
         Ok(())
@@ -187,6 +195,7 @@ impl Storage {
             if !contention {
                 return Err(error);
             }
+            // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set cleanup_due_at=clock_timestamp()+interval '30 seconds' where id=$1 and status='pending'")
                 .bind(id).execute(&self.pool).await?;
             tracing::warn!(operation_id=%id,outcome="deferred", "document expiration lock contention");
@@ -203,6 +212,7 @@ impl Storage {
             .execute(&mut *tx)
             .await?;
         crate::spaces::lock_organization_id(&mut tx, organization).await?;
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload set status='failed',error_code='upload_expired',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at<=clock_timestamp() and cleanup_due_at<=clock_timestamp()")
             .bind(id).execute(&mut *tx).await?;
         tx.commit().await?;

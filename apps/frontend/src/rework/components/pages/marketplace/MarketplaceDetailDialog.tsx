@@ -5,11 +5,15 @@ import { useStore } from "react-redux";
 import type { AppState } from "../../../../common/store";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
+import Disclosure from "@shared/atoms/Disclosure/Disclosure";
+import Chip from "@shared/atoms/Chip/Chip";
+import { formatDateTime } from "@rework/utils/formatDateTime";
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import Select from "@shared/molecules/Select/Select";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
@@ -17,6 +21,7 @@ import {
   enhancedControlPlaneApi,
   useMarketplaceEntryQuery,
   useMarketplaceProposalQuery,
+  useMarketplaceProposalsQuery,
   useDecideMarketplaceProposalMutation,
   useCancelMarketplaceProposalMutation,
   useWithdrawMarketplaceEntryMutation,
@@ -31,7 +36,14 @@ import type {
   InstallationReceipt,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import MarketplacePackageView from "./MarketplacePackageView";
-import { installationPath, marketplaceError, useMarketplaceAttempt, useMarketplaceSession } from "./marketplace";
+import {
+  installationPath,
+  marketplaceError,
+  marketplaceName,
+  type AttemptContext,
+  useMarketplaceAttempt,
+  useMarketplaceSession,
+} from "./marketplace";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./Marketplace.module.css";
 
@@ -44,6 +56,7 @@ type DetailProps = {
   entryId?: string;
   proposalId?: string;
   onClose: () => void;
+  installFirst?: boolean;
 };
 
 export default function MarketplaceDetailDialog(props: DetailProps) {
@@ -61,7 +74,7 @@ export default function MarketplaceDetailDialog(props: DetailProps) {
   );
 }
 
-function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: DetailProps) {
+function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, installFirst = false }: DetailProps) {
   const active = useMarketplaceSession();
   const store = useStore<AppState>();
   const { t } = useTranslation();
@@ -108,9 +121,9 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
         );
     return current.isSuccess && current.requestId === query.requestId && current.data === detail;
   };
-  const installAttempt = async (args: InstallationRequest) => {
+  const installAttempt = async (args: InstallationRequest, context?: AttemptContext) => {
     if (!active() || (!attempt.started && !verified())) return;
-    await attempt.run(args, (request, key) => install({ ...request, "Idempotency-Key": key }).unwrap());
+    await attempt.run(args, (request, key) => install({ ...request, "Idempotency-Key": key }).unwrap(), context);
   };
   const [decide] = useDecideMarketplaceProposalMutation();
   const [cancel] = useCancelMarketplaceProposalMutation();
@@ -128,7 +141,10 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
     setError(undefined);
     try {
       await action();
-      if (active() && close) onClose();
+      if (active()) {
+        if (close) onClose();
+        else void query.refetch();
+      }
     } catch (failure) {
       if (!active()) return;
       setError(failure);
@@ -143,20 +159,30 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
   };
   const proposal = proposalId && detail && "actions" in detail ? detail : undefined;
   const entry = entryId && detail && "can_withdraw" in detail ? detail : undefined;
+  const history = useMarketplaceProposalsQuery(sessionQueryArgs({ marketplaceSpaceId, kind: detail?.kind }), {
+    skip: !detail,
+    refetchOnMountOrArgChange: true,
+  });
+  const related = history.isError
+    ? []
+    : (history.currentData?.items ?? [])
+        .filter((item) => item.entry_id === detail?.entry_id)
+        .sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
   return (
-    <FullPageModal
-      isOpen
-      onClose={busy || attempt.busy ? () => {} : onClose}
-      id="marketplace-detail"
-      background="scrim"
+    <Dialog
+      open
+      title={detail?.display_name ?? t("rework.localMarketplace.inspect")}
+      onCancel={busy || attempt.busy ? () => {} : onClose}
+      hideConfirm
+      confirmLabel=""
+      onConfirm={() => {}}
+      cancelLabel={t("rework.localMarketplace.close")}
+      dense
+      className={styles.detailDialog}
     >
-      <div className={styles.dialog}>
-        <h2 id="marketplace-detail-title">{detail?.display_name ?? t("rework.localMarketplace.inspect")}</h2>
-        <Button size="small" color="on-surface" variant="text" disabled={busy || attempt.busy} onClick={onClose}>
-          {t("rework.localMarketplace.close")}
-        </Button>
+      <div className={styles.content}>
         {query.isFetching && detail && <p role="status">{t("common.loading")}</p>}
-        {error != null && <p role="alert">{marketplaceError(error, t)}</p>}
+        {error != null && <p role="alert">{marketplaceError(error, t, undefined, true)}</p>}
         {query.isError ? (
           <p role="alert">{marketplaceError(query.error, t)}</p>
         ) : !detail ? (
@@ -164,28 +190,43 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
         ) : (
           <>
             <p>{detail.description}</p>
-            <p className={styles.identity}>
-              {detail.origin_name} · {t("rework.localMarketplace.entryIdentity")} {detail.entry_id} ·{" "}
-              {t("rework.localMarketplace.proposalIdentity")} {detail.proposal_id}
-            </p>
-            <MarketplacePackageView value={detail.package} />
+            <div className={styles.actions}>
+              <Chip
+                label={t(
+                  proposal ? `rework.localMarketplace.states.${proposal.state}` : "rework.localMarketplace.published",
+                )}
+              />
+              <span className={styles.identity}>
+                {marketplaceName(detail.origin_name, t)} ·{" "}
+                {formatDateTime(proposal ? proposal.submitted_at : entry?.published_at)}
+              </span>
+            </div>
+            {proposal && <p>{t("rework.localMarketplace.proposalSnapshot")}</p>}
+            <Disclosure title={t("rework.localMarketplace.inspect")} defaultOpen={!installFirst}>
+              <MarketplacePackageView value={detail.package} />
+            </Disclosure>
             {proposal && (
               <>
-                <p>
-                  {t(`rework.localMarketplace.states.${proposal.state}`)} · {proposal.submitted_by} ·{" "}
-                  {proposal.submitted_at}
-                </p>
                 {proposal.decided_at && (
-                  <p>
-                    {proposal.decided_by} · {proposal.decided_at}
+                  <p className={styles.identity}>
+                    {t("rework.localMarketplace.decidedAt", { date: formatDateTime(proposal.decided_at) })}
                   </p>
                 )}
                 {proposal.decision_reason && <p className={styles.text}>{proposal.decision_reason}</p>}
-                <p>{t("rework.localMarketplace.reviewVersion", { version: proposal.publication_version })}</p>
-                <p className={styles.identity}>
-                  {t("rework.localMarketplace.currentPublication")}:{" "}
-                  {proposal.published_proposal_id ?? t("rework.localMarketplace.none")}
+                <p>
+                  {t(
+                    proposal.published_proposal_id === proposal.proposal_id
+                      ? "rework.localMarketplace.currentPublication"
+                      : proposal.published_proposal_id
+                        ? "rework.localMarketplace.otherPublication"
+                        : "rework.localMarketplace.noCurrentPublication",
+                  )}
                 </p>
+                {proposal.published_proposal_id && proposal.published_proposal_id !== proposal.proposal_id && (
+                  <Link to={`?catalogue=${marketplaceSpaceId}&entry=${proposal.entry_id}`}>
+                    {t("rework.localMarketplace.viewCurrentPublication")}
+                  </Link>
+                )}
                 {proposal.actions.can_decide && (
                   <>
                     <TextArea
@@ -227,7 +268,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                   <Button
                     size="small"
                     color="error"
-                    variant="text"
+                    variant="outlined"
                     disabled={busy || reviewAgain || query.isFetching}
                     onClick={() =>
                       void mutate(() => cancel({ marketplaceSpaceId, proposalId: proposal.proposal_id }).unwrap())
@@ -238,47 +279,44 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                 )}
               </>
             )}
-            {entry && entry.can_withdraw && (
-              <Button
-                size="small"
-                color="error"
-                variant="text"
-                disabled={busy || reviewAgain || query.isFetching}
-                onClick={() =>
-                  setConfirmWithdrawal(
-                    () => () =>
-                      void mutate(
-                        () =>
-                          withdraw({
-                            marketplaceSpaceId,
-                            entryId: entry.entry_id,
-                            withdrawRequest: { expected_publication_version: entry.publication_version },
-                          }).unwrap(),
-                        true,
-                      ),
-                  )
-                }
-              >
-                {t("rework.localMarketplace.withdraw")}
-              </Button>
-            )}
           </>
         )}
         {entryId && (entry || attempt.started || attempt.error != null) && (
           <section className={styles.content}>
             <h3>{t("rework.localMarketplace.install")}</h3>
-            {!attempt.started && entry && (
-              <InstallForm
-                key={entry.proposal_id}
-                entry={entry}
-                checking={query.isFetching}
-                onInstall={installAttempt}
-              />
+            {entry && (
+              <div hidden={attempt.started}>
+                <InstallForm
+                  key={entry.proposal_id}
+                  entry={entry}
+                  checking={query.isFetching}
+                  onInstall={installAttempt}
+                />
+              </div>
+            )}
+            {attempt.busy && <p role="status">{t("common.loading")}</p>}
+            {attempt.context && (
+              <p className={styles.identity}>
+                {attempt.context.name !== detail?.display_name && `${attempt.context.name} · `}
+                {attempt.context.destination} · {formatDateTime(attempt.context.startedAt)}
+              </p>
+            )}
+            {attempt.args && entry && attempt.args.installRequest.proposal_id !== entry.proposal_id && (
+              <p>{t("rework.localMarketplace.earlierInstallation")}</p>
             )}
             {attempt.started && !attempt.busy && !attempt.canReset && (
               <p role="status">{t("rework.localMarketplace.resumeAttempt")}</p>
             )}
-            {attempt.error != null && <p role="alert">{marketplaceError(attempt.error, t)}</p>}
+            {attempt.error != null && (
+              <p role="alert">
+                {marketplaceError(
+                  attempt.error,
+                  t,
+                  attempt.context?.destination ?? t("rework.localMarketplace.destination"),
+                  true,
+                )}
+              </p>
+            )}
             {attempt.result ? (
               <>
                 <p role="status">{t("rework.localMarketplace.installed")}</p>
@@ -295,7 +333,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                   {t("rework.localMarketplace.refresh")}
                 </Button>
               </>
-            ) : attempt.args ? (
+            ) : attempt.args && !attempt.canReset ? (
               <Button
                 size="small"
                 color="primary"
@@ -306,20 +344,89 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                 {t("rework.localMarketplace.retry")}
               </Button>
             ) : null}
-            {entry && attempt.canReset && (
+            {entry && attempt.canReset && normalizeApiError(attempt.error).code !== "publication_changed" && (
               <Button
                 size="small"
-                color="on-surface"
-                variant="text"
+                color="primary"
+                variant="outlined"
                 disabled={query.isFetching}
                 onClick={() => {
                   if (verified()) attempt.reset();
                 }}
               >
-                {t("rework.localMarketplace.newOperation")}
+                {t(
+                  attempt.result ? "rework.localMarketplace.installAnother" : "rework.localMarketplace.correctRequest",
+                )}
               </Button>
             )}
           </section>
+        )}
+        {detail && (
+          <Disclosure title={t("rework.localMarketplace.history")}>
+            {history.isError ? (
+              <p role="alert">{marketplaceError(history.error, t)}</p>
+            ) : !history.currentData ? (
+              <p role="status">{t("common.loading")}</p>
+            ) : (
+              <ul className={styles.history}>
+                {related.map((item) => (
+                  <li key={item.proposal_id}>
+                    <Link to={`?catalogue=${marketplaceSpaceId}&proposal=${item.proposal_id}`}>
+                      {item.display_name} · {formatDateTime(item.submitted_at)}
+                    </Link>
+                    <Chip label={t(`rework.localMarketplace.states.${item.state}`)} />
+                    {item.published_proposal_id === item.proposal_id && (
+                      <span>{t("rework.localMarketplace.currentPublication")}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className={styles.identity}>{t("rework.localMarketplace.historyHint")}</p>
+          </Disclosure>
+        )}
+        {entry && entry.can_withdraw && (
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            disabled={busy || reviewAgain || query.isFetching}
+            onClick={() =>
+              setConfirmWithdrawal(
+                () => () =>
+                  void mutate(
+                    () =>
+                      withdraw({
+                        marketplaceSpaceId,
+                        entryId: entry.entry_id,
+                        withdrawRequest: { expected_publication_version: entry.publication_version },
+                      }).unwrap(),
+                    true,
+                  ),
+              )
+            }
+          >
+            {t("rework.localMarketplace.withdraw")}
+          </Button>
+        )}
+        {detail && (
+          <Disclosure title={t("rework.localMarketplace.diagnostics")}>
+            <CodeBlock
+              language="json"
+              code={JSON.stringify(
+                {
+                  marketplace_space_id: marketplaceSpaceId,
+                  entry_id: detail.entry_id,
+                  proposal_id: detail.proposal_id,
+                  publication_version: detail.publication_version,
+                  submitted_by: proposal?.submitted_by,
+                  decided_by: proposal?.decided_by,
+                },
+                null,
+                2,
+              )}
+            />
+          </Disclosure>
         )}
         {(reviewAgain ||
           query.isError ||
@@ -357,7 +464,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
           setConfirmWithdrawal(undefined);
         }}
       />
-    </FullPageModal>
+    </Dialog>
   );
 }
 
@@ -368,7 +475,7 @@ function InstallForm({
 }: {
   entry: MarketplaceEntryDetail;
   checking: boolean;
-  onInstall: (args: InstallationRequest) => Promise<void>;
+  onInstall: (args: InstallationRequest, context: AttemptContext) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const spaces = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), { refetchOnMountOrArgChange: true });
@@ -402,7 +509,7 @@ function InstallForm({
         options={destinations.map((space) => ({
           key: space.id,
           value: space.id,
-          label: `${space.name} (${space.id})`,
+          label: `${space.kind === "personal" ? t("rework.userSettings.personalSpace") : space.name} · ${t(`rework.localMarketplace.spaceKinds.${space.kind}`)}`,
         }))}
         onChange={(id) => {
           setSpaceId(id);
@@ -456,20 +563,27 @@ function InstallForm({
           (entry.kind === "agent" && !displayName.trim())
         }
         onClick={() =>
-          void onInstall({
-            marketplaceSpaceId: entry.marketplace_space_id,
-            entryId: entry.entry_id,
-            installRequest: {
-              destination_space_id: spaceId,
-              proposal_id: entry.proposal_id,
-              options:
-                entry.kind === "prompt"
-                  ? { kind: "prompt", logical_name: logicalName, category_id: category || null }
-                  : entry.kind === "agent"
-                    ? { kind: "agent", logical_name: logicalName || null, display_name: displayName }
-                    : { kind: "skill" },
+          void onInstall(
+            {
+              marketplaceSpaceId: entry.marketplace_space_id,
+              entryId: entry.entry_id,
+              installRequest: {
+                destination_space_id: spaceId,
+                proposal_id: entry.proposal_id,
+                options:
+                  entry.kind === "prompt"
+                    ? { kind: "prompt", logical_name: logicalName, category_id: category || null }
+                    : entry.kind === "agent"
+                      ? { kind: "agent", logical_name: logicalName || null, display_name: displayName }
+                      : { kind: "skill" },
+              },
             },
-          })
+            {
+              name: entry.display_name,
+              destination:
+                destination?.kind === "personal" ? t("rework.userSettings.personalSpace") : (destination?.name ?? ""),
+            },
+          )
         }
       >
         {t("rework.localMarketplace.install")}

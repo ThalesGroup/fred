@@ -277,6 +277,7 @@ impl Processing {
             .bind(super::dispatch::WAKE_CHANNEL)
             .execute(&mut **tx)
             .await?;
+        // The database runs local and organization reservation accounting.
         sqlx::query(
             "update document_upload set acknowledged_at=null where id=$1 and status='stored' and actor=$2",
         )

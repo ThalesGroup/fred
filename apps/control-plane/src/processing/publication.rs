@@ -135,6 +135,7 @@ impl Processing {
                 .bind(g.id).execute(&mut *tx).await?;
             sqlx::query("update document_processing set status='succeeded',stage='done',error_code=null,revision=revision+1,completed_at=clock_timestamp() where id=$1")
                 .bind(r.summary.id).execute(&mut *tx).await?;
+            // The database runs local and organization used-byte accounting.
             sqlx::query("update document set published_generation=$2,retrievable=case when retrieval_id is null then $3 else retrievable end where id=$1")
                 .bind(r.summary.document_id).bind(g.id).bind(value).execute(&mut *tx).await?;
         } else {

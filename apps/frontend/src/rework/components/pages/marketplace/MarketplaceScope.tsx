@@ -42,7 +42,7 @@ function SessionScope({ children }: { children: (marketplaceSpaceId: string) => 
         options={marketplaces.map((item) => ({
           key: item.space_id,
           value: item.space_id,
-          label: `${item.name} (${item.space_id})`,
+          label: item.name,
         }))}
         onChange={(id) => setParams({ catalogue: id })}
       />

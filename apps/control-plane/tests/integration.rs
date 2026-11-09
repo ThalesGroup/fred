@@ -3756,6 +3756,68 @@ async fn content_request(
     app.oneshot(request).await.unwrap().status().as_u16()
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn folder_and_space_deletion_reject_pending_upload_before_triggers() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let app = content_app(&e, &identity).await;
+    let folder = spaces::create_folder(&e.pool, "alice", team.id, None, "Parent".into())
+        .await
+        .unwrap();
+    let child = spaces::create_folder(&e.pool, "alice", team.id, Some(folder.id), "Child".into())
+        .await
+        .unwrap();
+    sqlx::query("insert into storage_budget(space_id,scope,limit_bytes,used_bytes,reserved_bytes) values($1,'organization_total',100,0,0),($2,'local',100,0,0) on conflict do nothing")
+        .bind(org.id).bind(team.id).execute(&e.pool).await.unwrap();
+    let upload = Uuid::new_v4();
+    sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,reserved_bytes) values($1,$1,'alice',$2,$3,$4,$3,'Pending','text/plain',1,repeat('a',64),$1::text,'pending',now()+interval '1 hour',1)")
+        .bind(upload).bind(org.id).bind(team.id).bind(child.id).execute(&e.pool).await.unwrap();
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    assert!(matches!(
+        lifecycle.accept(&e.pool, "root", team.id).await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(
+        sqlx::query_scalar::<_, bool>("select deletion_id is null from space where id=$1")
+            .bind(team.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap()
+    );
+    for id in [folder.id, child.id] {
+        assert_eq!(
+            content_request(
+                app.clone(),
+                &identity.token("alice"),
+                "DELETE",
+                &format!("/folders/{id}"),
+                ""
+            )
+            .await,
+            409
+        );
+        assert!(db::folder(&e.pool, id).await.is_ok());
+    }
+    sqlx::query("update document_upload set status='failed',completed_at=now(),error_code='fixture' where id=$1")
+        .bind(upload).execute(&e.pool).await.unwrap();
+    assert_eq!(
+        content_request(
+            app,
+            &identity.token("alice"),
+            "DELETE",
+            &format!("/folders/{}", folder.id),
+            ""
+        )
+        .await,
+        204
+    );
+}
+
 // Proves: I22
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]

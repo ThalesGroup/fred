@@ -1419,6 +1419,66 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
+async fn session_creation_rechecks_agent_after_concurrent_deletion() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Concurrent")).await;
+    let agent: Uuid = serde_json::from_value(instance["agent_instance_id"].clone()).unwrap();
+    let mut deleting = e.pool.begin().await.unwrap();
+    let pid: i32 = sqlx::query_scalar("select pg_backend_pid()")
+        .fetch_one(&mut *deleting)
+        .await
+        .unwrap();
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(agent)
+        .execute(&mut *deleting)
+        .await
+        .unwrap();
+    let sid = Uuid::new_v4();
+    let path = format!("/spaces/{}/sessions", team.id);
+    let creation = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &path,
+        json!({"session_id":sid,"agent_instance_id":agent,"agent_configuration_revision":1}),
+    );
+    let release = async {
+        // Wait for the application's explicit source lock, not the trigger's late lock.
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar(
+                    "select exists(select 1 from pg_stat_activity where datname=current_database()
+                     and $1=any(pg_blocking_pids(pid)) and query like 'select agent_instance_id%for share')")
+                    .bind(pid).fetch_one(&e.pool).await.unwrap();
+                if waiting { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        deleting.commit().await.unwrap();
+    };
+    let ((status, body), ()) = tokio::join!(creation, release);
+    assert_eq!(status, 404, "{body}");
+    assert_eq!(body["code"], "not_found");
+    assert!(
+        !sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from session_metadata where session_id=$1)"
+        )
+        .bind(sid)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap()
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
 async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;

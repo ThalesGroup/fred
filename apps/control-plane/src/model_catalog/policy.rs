@@ -355,6 +355,7 @@ pub(super) async fn replace(
         .revision
         .checked_add(1)
         .ok_or_else(|| AppError::Conflict("model policy revision exhausted".into()))?;
+    // The database also records that the organization model policy has been initialized.
     sqlx::query(
         "insert into organization_model_policy
              (organization_id, revision, default_source_id, default_upstream_model_id,

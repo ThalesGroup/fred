@@ -223,6 +223,7 @@ impl Storage {
             .put_file(key, spool.file, spool.size, &spool.digest)
             .await;
         if certain {
+            // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set put_pending=false where id=$1")
                 .bind(id)
                 .execute(&self.pool)
@@ -461,11 +462,13 @@ impl Storage {
                 "The encoded document path exceeds the object-store key limit",
             ));
         }
+        // The database runs local and organization reservation accounting.
         let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending,reserved_bytes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true,$11) returning *, null::uuid as document_id")
             .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
             .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
         if let Some(previous) = predecessor {
+            // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set successor_key=$2, acknowledged_at=clock_timestamp() where id=$1").bind(previous.id).bind(key).execute(&mut *tx).await?;
         }
         tx.commit().await?;
@@ -496,16 +499,20 @@ impl Storage {
         if let Destination::Folder(id) = destination {
             db::folder(&mut *tx, id).await?;
         }
+        // The database runs local and organization reservation accounting.
         let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *, id as document_id")
             .bind(row.id).fetch_one(&mut *tx).await?;
+        // The database runs local and organization used-byte accounting.
         sqlx::query("insert into document (id,space_id,folder_id,session_id,name,created_by,quota_owner) values ($1,$2,$3,$4,$5,$6,$7)")
             .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.actor).bind(row.quota_owner).execute(&mut *tx).await?;
         sqlx::query("insert into document_content (id,document_id,kind,mime,size,sha256,object_key,published_at) values ($1,$1,'primary',$2,$3,$4,$5,clock_timestamp())")
             .bind(row.id).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.object_key).execute(&mut *tx).await?;
+        // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query("update document set current_content_id=$1 where id=$1")
             .bind(row.id)
             .execute(&mut *tx)
             .await?;
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload set target_document_id=$1,content_id=$1 where id=$1")
             .bind(row.id)
             .execute(&mut *tx)
@@ -532,6 +539,7 @@ impl Storage {
     }
 
     pub(crate) async fn fail(&self, id: Uuid, code: &str) -> AppResult<()> {
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload set status='failed',error_code=$2,completed_at=clock_timestamp() where id=$1 and status='pending'")
             .bind(id).bind(code).execute(&self.pool).await?;
         Ok(())

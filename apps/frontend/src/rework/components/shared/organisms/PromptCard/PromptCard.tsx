@@ -19,6 +19,7 @@ import { OptionModel } from "@models/Option.model.ts";
 import type { PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTranslation } from "react-i18next";
 import Chip from "@shared/atoms/Chip/Chip";
+import ResourceCard from "./ResourceCard";
 import styles from "./PromptCard.module.scss";
 
 type MoreAction = "edit" | "duplicate" | "propose" | "delete";
@@ -98,19 +99,7 @@ export default function PromptCard({
   };
 
   return (
-    <div
-      className={styles.card}
-      data-has-favorite={Boolean(onToggleFavorite || unavailableReason)}
-      onClick={onView}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onView();
-        }
-      }}
-    >
+    <ResourceCard onOpen={onView} hasFavorite={Boolean(onToggleFavorite || unavailableReason)}>
       {/* ── Favorite star + more menu (top-right) ── */}
       {(onToggleFavorite || unavailableReason || options.length > 0) && (
         // The card itself is a button; stop these clicks from opening the
@@ -180,6 +169,6 @@ export default function PromptCard({
         )}
         {preview && <p className={styles.preview}>"{preview}"</p>}
       </div>
-    </div>
+    </ResourceCard>
   );
 }

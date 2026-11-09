@@ -29,6 +29,71 @@ class ReferenceChecks(unittest.TestCase):
     def schema(self, definitions):
         self.write("schema.json", json.dumps({"$defs": definitions}))
 
+    def trigger(
+        self, name="identity", comment="assertion: immutability - stable identity", **values
+    ):
+        return {
+            "table": "document",
+            "trigger": name,
+            "function": "protect_document",
+            "when": "BEFORE UPDATE / ROW",
+            "comment": comment,
+            **values,
+        }
+
+    def test_trigger_catalogue_renders_families_sorted_then_tables_and_escapes_prose(self):
+        self.write(
+            "triggers.json",
+            json.dumps([
+                self.trigger("quota", "effect: update budgets"),
+                self.trigger("scope", "assertion: consistency - same space"),
+                self.trigger("z", table="z"),
+                self.trigger("identity", "assertion: immutability - bytes | identity"),
+            ]),
+        )
+        rendered = docs.render("triggers triggers.json")
+        self.assertLess(rendered.index("`identity`"), rendered.index("`z`"))
+        self.assertLess(rendered.index("`z`"), rendered.index("2. Cross-row consistency"))
+        self.assertLess(
+            rendered.index("2. Cross-row consistency"), rendered.index("3. Effects")
+        )
+        self.assertIn(r"bytes \| identity", rendered)
+        self.assertIn("BEFORE UPDATE / ROW", rendered)
+        self.assertIn("`protect_document`", rendered)
+
+    def test_trigger_catalogue_rejects_missing_or_malformed_comments(self):
+        for comment in [
+            None, "", "undocumented", "effect:", "assertion: ",
+            "assertion: unknown - identity", "effect: writes\nmore",
+        ]:
+            with self.subTest(comment=comment):
+                self.write("triggers.json", json.dumps([self.trigger(comment=comment)]))
+                with self.assertRaisesRegex(ValueError, "document.identity"):
+                    docs.render("triggers triggers.json")
+        entry = self.trigger()
+        del entry["comment"]
+        self.write("triggers.json", json.dumps([entry]))
+        with self.assertRaises(ValueError):
+            docs.tidy_triggers("triggers.json")
+
+    def test_trigger_catalogue_drift_fails_check_without_rewriting(self):
+        self.write("triggers.json", json.dumps([self.trigger()]))
+        chapter = self.write(
+            "reference.md",
+            "<!-- generated: triggers triggers.json -->\n<!-- end generated -->\n",
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            docs.generate(["reference.md"])
+        original = chapter.read_bytes()
+        self.assertEqual(docs.check(["reference.md"]), 0)
+        self.write(
+            "triggers.json",
+            json.dumps([self.trigger(), self.trigger("quota", "effect: update budgets")]),
+        )
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(docs.check(["reference.md"]), 1)
+        self.assertEqual(chapter.read_bytes(), original)
+
     def test_schema_closure_includes_nested_and_recursive_references_once(self):
         self.schema(
             {

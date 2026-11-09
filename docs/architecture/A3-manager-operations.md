@@ -12,6 +12,12 @@ Structured stdout, in the format shared by every Fred process. Rust services use
 first two. The monitor selects its output with `MONITOR_LOG_FORMAT` and
 `MONITOR_LOG_LEVEL`.
 
+An `event="invariant_violation"` error log reports a defect, not a user conflict.
+Its `constraint` and `table` fields locate the rule in the
+[storage catalogue](A2-manager-contracts.md#storage-assertions-and-effects) or a
+CHECK in the migration chain; the fix belongs in the check that should have
+refused the write upstream.
+
 | `app.log_format` | Output |
 | --- | --- |
 | `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`control-plane`), `service_role` (`api` for `serve`, `migration` for `initialize-schema`, `job` for another command), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |

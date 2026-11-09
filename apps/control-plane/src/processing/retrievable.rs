@@ -178,6 +178,7 @@ impl Processing {
             if !tabular {
                 return Err(conflict("document_not_indexed"));
             }
+            // The database runs local and organization used-byte accounting.
             let updated = sqlx::query_as("update document d set retrievable=$2,retrieval_id=null,retrieval_actor=null,retrieval_target=null,retrieval_phase=null,retrieval_confirmed=null from document_content c where d.id=$1 and c.id=d.current_content_id returning d.*,c.mime,c.size,c.sha256")
                 .bind(id).bind(input.retrievable).fetch_one(&mut *tx).await?;
             tx.commit().await?;
@@ -202,6 +203,7 @@ impl Processing {
                     phase: ProjectionPhase::Ready,
                     confirmed: false,
                 };
+                // The database runs local and organization used-byte accounting.
                 sqlx::query("update document set retrieval_id=$2,retrieval_actor=$3,retrieval_target=$4,retrieval_phase=$5,retrieval_confirmed=false where id=$1")
                     .bind(id).bind(c.id).bind(&c.actor).bind(c.target).bind(c.phase).execute(&mut *tx).await?;
                 c
@@ -267,6 +269,7 @@ impl Processing {
         input: RetrievalConfirmation,
     ) -> AppResult<()> {
         if matches!(input.step, RetrievalStep::Applied) {
+            // The database runs local and organization used-byte accounting.
             let changed = sqlx::query("update document set retrieval_phase='applied' where id=$1 and retrieval_id=$2 and retrieval_target=$3 and retrieval_phase in ('writing','applied')")
                 .bind(id).bind(input.operation_id).bind(input.retrievable).execute(&self.pool).await?.rows_affected();
             return if changed == 1 {
@@ -287,9 +290,11 @@ impl Processing {
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &c.actor).await?;
         // The atomic phase fence survives worker/API restarts and Temporal history expiry.
         let changed = match input.step {
+            // The database runs local and organization used-byte accounting.
             RetrievalStep::Claim => sqlx::query("update document set retrieval_phase='writing' where id=$1 and retrieval_id=$2 and retrieval_phase='ready' and not retrieval_confirmed and deletion_id is null")
                 .bind(id).bind(input.operation_id).execute(&mut *tx).await?.rows_affected(),
             RetrievalStep::Applied => return Err(invalid()),
+            // The database runs local and organization used-byte accounting.
             RetrievalStep::Confirm => sqlx::query("update document set retrievable=$3,retrieval_confirmed=true where id=$1 and retrieval_id=$2 and retrieval_phase='applied'")
                 .bind(id).bind(input.operation_id).bind(input.retrievable).execute(&mut *tx).await?.rows_affected(),
         };

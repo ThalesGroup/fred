@@ -1,11 +1,13 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { formatDateTime } from "@rework/utils/formatDateTime";
 import Button from "@shared/atoms/Button/Button";
 import Select from "@shared/molecules/Select/Select";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import {
   useMarketplacesQuery,
   useMarketplaceProposalSpacesQuery,
@@ -19,7 +21,7 @@ import type {
   MarketplaceProposal,
   ProposalSummary,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { marketplaceError, useMarketplaceAttempt } from "./marketplace";
+import { marketplaceError, marketplaceName, useMarketplaceAttempt } from "./marketplace";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./Marketplace.module.css";
@@ -28,6 +30,7 @@ type ProposalProps = {
   source: Omit<SubmitProposalRequest, "entry_id">;
   onClose: () => void;
   recoveryOnly?: boolean;
+  sourceName?: string;
 };
 
 export default function MarketplaceProposalDialog(props: ProposalProps) {
@@ -44,7 +47,7 @@ export default function MarketplaceProposalDialog(props: ProposalProps) {
   );
 }
 
-function ProposalContext({ source, onClose, recoveryOnly = false }: ProposalProps) {
+function ProposalContext({ source, onClose, recoveryOnly = false, sourceName }: ProposalProps) {
   const { t } = useTranslation();
   const attempt = useMarketplaceAttempt<Omit<SubmitMarketplaceProposalApiArg, "Idempotency-Key">, MarketplaceProposal>([
     "proposal",
@@ -65,60 +68,56 @@ function ProposalContext({ source, onClose, recoveryOnly = false }: ProposalProp
     choices.find((item) => item.space_id === catalogue)?.space_id ??
     choices[0]?.space_id;
   return (
-    <FullPageModal isOpen onClose={attempt.busy ? () => {} : onClose} id="marketplace-proposal" background="scrim">
-      <div className={styles.dialog}>
-        <h2 id="marketplace-proposal-title">{t("rework.localMarketplace.propose")}</h2>
+    <Dialog
+      open
+      onCancel={attempt.busy ? () => {} : onClose}
+      title={sourceName ?? attempt.context?.name ?? t("rework.localMarketplace.propose")}
+      hideConfirm
+      confirmLabel=""
+      onConfirm={() => {}}
+      cancelLabel={t("rework.localMarketplace.close")}
+      dense
+    >
+      <div className={styles.content}>
         <p>{t("rework.localMarketplace.snapshotExplanation")}</p>
-        {attempt.started && selected ? (
-          <ProposalForm
-            source={source}
-            marketplaceSpaceId={selected}
-            attempt={attempt}
-            checkingAccess={false}
-            canStart={
-              !recoveryOnly &&
-              !spaces.isError &&
-              !catalogues.isError &&
-              !spaces.isFetching &&
-              !catalogues.isFetching &&
-              choices.some((item) => item.space_id === selected)
-            }
-          />
-        ) : recoveryOnly ? null : spaces.isError || catalogues.isError ? (
+        {!attempt.started && recoveryOnly ? null : !attempt.started && (spaces.isError || catalogues.isError) ? (
           <p role="alert">{t("rework.localMarketplace.failed")}</p>
-        ) : !spaces.currentData || !catalogues.currentData ? (
+        ) : !attempt.started && (!spaces.currentData || !catalogues.currentData) ? (
           <p role="status">{t("common.loading")}</p>
-        ) : !selected || !choices.some((item) => item.space_id === selected) ? (
+        ) : !selected || (!attempt.started && !choices.some((item) => item.space_id === selected)) ? (
           <p>{t("rework.localMarketplace.noSource")}</p>
         ) : (
           <>
-            <Select
-              size="small"
-              label={t("rework.localMarketplace.catalogue")}
-              value={selected}
-              disabled={attempt.started}
-              options={choices.map((item) => ({
-                key: item.space_id,
-                value: item.space_id,
-                label: `${item.name} (${item.space_id})`,
-              }))}
-              onChange={setCatalogue}
-            />
+            {!attempt.started && (
+              <Select
+                size="small"
+                label={t("rework.localMarketplace.catalogue")}
+                value={selected}
+                options={choices.map((item) => ({ key: item.space_id, value: item.space_id, label: item.name }))}
+                onChange={setCatalogue}
+              />
+            )}
             <ProposalForm
               key={selected}
+              sourceName={sourceName}
+              catalogueName={catalogues.currentData?.items.find((item) => item.space_id === selected)?.name}
               source={source}
               marketplaceSpaceId={selected}
               attempt={attempt}
               checkingAccess={spaces.isFetching || catalogues.isFetching}
-              canStart
+              canStart={
+                !recoveryOnly &&
+                !spaces.isError &&
+                !catalogues.isError &&
+                !spaces.isFetching &&
+                !catalogues.isFetching &&
+                choices.some((item) => item.space_id === selected)
+              }
             />
           </>
         )}
-        <Button size="small" color="on-surface" variant="text" disabled={attempt.busy} onClick={onClose}>
-          {t("rework.localMarketplace.close")}
-        </Button>
       </div>
-    </FullPageModal>
+    </Dialog>
   );
 }
 
@@ -128,11 +127,15 @@ function ProposalForm({
   attempt,
   checkingAccess,
   canStart,
+  sourceName,
+  catalogueName,
 }: {
   source: Omit<SubmitProposalRequest, "entry_id">;
   marketplaceSpaceId: string;
   checkingAccess: boolean;
   canStart: boolean;
+  sourceName?: string;
+  catalogueName?: string;
   attempt: ReturnType<
     typeof useMarketplaceAttempt<Omit<SubmitMarketplaceProposalApiArg, "Idempotency-Key">, MarketplaceProposal>
   >;
@@ -149,8 +152,10 @@ function ProposalForm({
   });
   const [submit] = useSubmitMarketplaceProposalMutation();
   const existing = new Map<string, Pick<ProposalSummary, "entry_id" | "display_name" | "origin_name">>([
+    ...[...(proposals.currentData?.items ?? [])]
+      .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at))
+      .map((item) => [item.entry_id, item] as const),
     ...(entries.currentData?.items ?? []).map((item) => [item.entry_id, item] as const),
-    ...(proposals.currentData?.items ?? []).map((item) => [item.entry_id, item] as const),
   ]);
   return (
     <div className={styles.content}>
@@ -165,7 +170,10 @@ function ProposalForm({
             ...[...existing.values()].map((item) => ({
               key: item.entry_id,
               value: item.entry_id,
-              label: `${item.display_name} - ${item.origin_name} (${item.entry_id})`,
+              label: t("rework.localMarketplace.updateEntry", {
+                name: item.display_name,
+                origin: marketplaceName(item.origin_name, t),
+              }),
             })),
           ]}
           onChange={setEntryId}
@@ -173,10 +181,15 @@ function ProposalForm({
       )}
       <p>{t(entryId ? "rework.localMarketplace.replaceExplanation" : "rework.localMarketplace.newExplanation")}</p>
       {(entries.isError || proposals.isError) && <p role="alert">{t("rework.localMarketplace.targetsError")}</p>}
+      {attempt.context && (
+        <p className={styles.identity}>
+          {attempt.context.name} · {attempt.context.destination} · {formatDateTime(attempt.context.startedAt)}
+        </p>
+      )}
       {attempt.started && !attempt.busy && !attempt.canReset && (
         <p role="status">{t("rework.localMarketplace.resumeAttempt")}</p>
       )}
-      {attempt.error != null && <p role="alert">{marketplaceError(attempt.error, t)}</p>}
+      {attempt.error != null && <p role="alert">{marketplaceError(attempt.error, t, undefined, true)}</p>}
       {attempt.result ? (
         <>
           <p role="status">{t("rework.localMarketplace.submitted")}</p>
@@ -186,7 +199,7 @@ function ProposalForm({
             {t("rework.localMarketplace.followProposal")}
           </Link>
         </>
-      ) : (
+      ) : !attempt.canReset ? (
         <Button
           size="small"
           color="primary"
@@ -203,15 +216,19 @@ function ProposalForm({
                 submitProposalRequest: { ...source, entry_id: entryId || undefined },
               },
               (args, key) => submit({ ...args, "Idempotency-Key": key }).unwrap(),
+              {
+                name: sourceName ?? t(`rework.localMarketplace.kinds.${source.kind}`),
+                destination: catalogueName ?? t("rework.localMarketplace.catalogue"),
+              },
             )
           }
         >
           {t(attempt.started ? "rework.localMarketplace.retry" : "rework.localMarketplace.submit")}
         </Button>
-      )}
-      {canStart && attempt.canReset && (
+      ) : null}
+      {canStart && attempt.canReset && normalizeApiError(attempt.error).code !== "source_changed" && (
         <Button size="small" color="on-surface" variant="text" onClick={attempt.reset}>
-          {t("rework.localMarketplace.newOperation")}
+          {t(attempt.result ? "rework.localMarketplace.newOperation" : "rework.localMarketplace.correctRequest")}
         </Button>
       )}
     </div>

@@ -201,6 +201,7 @@ impl Processing {
                 }
             })
             .collect();
+        // The database runs local and organization used-byte accounting.
         let purges: Vec<DuePurge> = sqlx::query_as(concat!(
             "with due as materialized (select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document_current d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
             purge_due!(),
@@ -241,6 +242,7 @@ impl Processing {
             if cleaned.cursor != 0 || cleaned.next_cursor != 0 {
                 return Err(conflict("cleanup_cursor"));
             }
+            // The database runs local and organization used-byte accounting.
             let purged = sqlx::query(concat!(
                 "update document d set purge_after = clock_timestamp(), purged_at = case when $2 then clock_timestamp() end where d.id = $1 and ",
                 purge_due!()

@@ -403,13 +403,13 @@ async fn session_requires_real_same_organization_association() {
         session(&pool, project, Uuid::new_v4(), None)
             .await
             .unwrap_err(),
-        "23503",
+        "23514",
     );
     violation(
         session(&pool, Uuid::new_v4(), instance, None)
             .await
             .unwrap_err(),
-        "23503",
+        "23514",
     );
     let chat = session(&pool, project, instance, None).await.unwrap();
     assert_eq!(

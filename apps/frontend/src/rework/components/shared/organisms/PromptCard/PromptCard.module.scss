@@ -29,6 +29,10 @@
   min-width: 0;
   color: var(--on-surface);
 
+  &[data-interactive="false"] {
+    cursor: default;
+  }
+
   &:hover {
     border-color: var(--outline-variant);
     background: var(--state-on-surface-hover);

@@ -328,6 +328,7 @@ impl Storage {
                     if object_key.len() > 1024 {
                         return Err(super::invalid("The object key is too long"));
                     }
+                    // The database runs local and organization used-byte and reservation accounting.
                     sqlx::query_as("insert into powerpoint_file (id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,expected_file_id,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id) values ($1,$2,$3,$4,$5,$6,$5,$15,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),clock_timestamp()+make_interval(secs=>$14),$16) returning *")
                         .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space_id).bind(agent).bind(owner).bind(change.expected_file_id)
                         .bind(&spool.name).bind(&spool.mime).bind(spool.size).bind(spool.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(if draft {None}else{agent}).bind(runtime)
@@ -375,6 +376,7 @@ impl Storage {
             .map_err(|_| unavailable())?;
         // Staging never replaces the saved attachment. Acceptance belongs to the
         // configuration transaction after bounded capability preflight.
+        // The database runs local and organization used-byte and reservation accounting.
         let file = sqlx::query_as("update powerpoint_file set upload_ready=true where id=$1 and status='pending' and expires_at>clock_timestamp() returning *")
             .bind(row.file.id).fetch_optional(&self.pool).await?.ok_or_else(|| conflict("upload_expired", "The upload expired before acceptance"))?;
         Ok(file)
@@ -471,9 +473,11 @@ impl Storage {
         // Replayed removal is harmless, but cannot remove a subsequent replacement.
         if row.is_some() {
             unchanged(change.expected_file_id, row.as_ref())?;
+            // The database releases quota, obsoletes preparations and clears retired template settings.
             sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where id=$1")
                 .bind(row.map(|r| r.file.id)).execute(&mut *tx).await?;
         }
+        // The database releases quota, obsoletes preparations and clears retired template settings.
         sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and status in ('pending','stored')")
             .bind(space).bind(agent).bind(runtime).execute(&mut *tx).await?;
         if agent.is_none() {

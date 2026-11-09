@@ -76,6 +76,7 @@ impl Storage {
                 return Err(crate::processing::conflict("processing_active"));
             }
         }
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload set acknowledged_at=coalesce(acknowledged_at,clock_timestamp()) where actor=$1 and request_key=$2 and status<>'pending'")
             .bind(actor).bind(key).execute(&mut *tx).await?;
         tx.commit().await?;

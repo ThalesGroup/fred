@@ -87,14 +87,24 @@ impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         match &e {
             sqlx::Error::RowNotFound => AppError::NotFound,
-            sqlx::Error::Database(db)
-                if db.code().as_deref() == Some("P0001")
-                    && db.message() == "storage quota exceeded" =>
-            {
+            sqlx::Error::Database(db) if db.code().as_deref() == Some("FR001") => {
                 AppError::problem(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "quota_exceeded",
                     "The destination storage quota is exhausted",
+                )
+            }
+            sqlx::Error::Database(db) if db.code().as_deref() == Some("23514") => {
+                tracing::error!(
+                    event = "invariant_violation",
+                    constraint = db.constraint().unwrap_or("unknown"),
+                    table = db.table().unwrap_or("unknown"),
+                    "storage invariant violated"
+                );
+                AppError::problem(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "invariant_violation",
+                    "internal error",
                 )
             }
             // Unique and foreign-key violations are caller errors: duplicate name, non-empty folder...

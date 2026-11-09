@@ -120,6 +120,7 @@ pub async fn batch(
         tx.commit().await?;
         return Ok(());
     }
+    // The database runs local and organization reservation accounting.
     sqlx::query("delete from document_upload u where u.status='failed' and not u.put_pending and u.cleaned_at is not null and (u.session_id=$2 or u.space_id in (select id from space where deletion_id=$1))")
         .bind(id).bind(receipt.target_id).execute(&mut *tx).await?;
     let remaining: i64 = sqlx::query_scalar("select count(*) from document where deletion_id = $1")
@@ -153,11 +154,13 @@ pub async fn batch(
                 .bind(&ready)
                 .execute(&mut *tx)
                 .await?;
+            // The database runs local and organization reservation accounting.
             sqlx::query("delete from document_upload where target_document_id = any($1) and status = 'stored'")
                 .bind(&ready)
                 .execute(&mut *tx)
                 .await?;
             let deleted =
+                // The database runs local and organization used-byte accounting.
                 sqlx::query("delete from document where id = any($1) and deletion_id = $2")
                     .bind(&ready)
                     .bind(id)
@@ -331,6 +334,7 @@ pub async fn batch(
             return Err(anyhow::anyhow!("organization is not last").into());
         }
         // Storage sweeps perform network cleanup outside this SQL transaction.
+        // The database releases quota, obsoletes preparations and clears retired template settings.
         sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and status<>'retired'")
             .bind(space).execute(&mut *tx).await?;
         let files_pending: bool = sqlx::query_scalar(
@@ -345,10 +349,12 @@ pub async fn batch(
             tx.commit().await?;
             return Ok(());
         }
+        // The database also retires PowerPoint files and marks agent preparations obsolete.
         sqlx::query("delete from agent_instance where space_id = $1")
             .bind(space)
             .execute(&mut *tx)
             .await?;
+        // The database also retires the space PowerPoint files and schedules their cleanup.
         sqlx::query("delete from space where id = $1 and deletion_id = $2")
             .bind(space)
             .bind(id)

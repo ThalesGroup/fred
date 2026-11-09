@@ -270,6 +270,9 @@ async fn create_session(
         if retired {
             return Err(AppError::NotFound);
         }
+        // Agent deletion is a concurrent content mutation: keep the checked source until commit.
+        sqlx::query("select agent_instance_id from agent_instance where space_id=$1 and agent_instance_id=$2 for share")
+            .bind(space_id).bind(body.agent_instance_id).fetch_one(&mut *tx).await?;
         let instance = agent_instances::get_for_space(&mut *tx, space_id, body.agent_instance_id)
             .await?
             .ok_or(AppError::NotFound)?;

@@ -5,7 +5,12 @@ import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { formatDateTime } from "@rework/utils/formatDateTime";
+import ResourceCard from "@shared/organisms/PromptCard/ResourceCard";
+import cardStyles from "@shared/organisms/PromptCard/PromptCard.module.scss";
 import Chip from "@shared/atoms/Chip/Chip";
+import TablePagination from "@shared/molecules/TablePagination/TablePagination";
 import Select from "@shared/molecules/Select/Select";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
@@ -23,7 +28,7 @@ import type {
 import MarketplaceScope from "./MarketplaceScope";
 import MarketplaceDetailDialog from "./MarketplaceDetailDialog";
 import MarketplaceProposalDialog from "./MarketplaceProposalDialog";
-import { marketplaceError, savedProposalRequests, useMarketplaceSession } from "./marketplace";
+import { marketplaceError, marketplaceName, savedProposalRequests, useMarketplaceSession } from "./marketplace";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./Marketplace.module.css";
 
@@ -73,6 +78,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
   return (
     <div className={styles.page}>
       <PageHeader title={t(`rework.localMarketplace.kinds.${kind}`)} />
+      <p className={styles.identity}>{t(`rework.localMarketplace.${proposals ? "proposalsHint" : "catalogueHint"}`)}</p>
       <div className={styles.toolbar}>
         <Select
           size="small"
@@ -119,7 +125,8 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
         <Button
           size="small"
           color="primary"
-          variant="text"
+          variant="outlined"
+          icon={{ category: "outlined", type: "refresh" }}
           disabled={query.isFetching}
           onClick={() => {
             if (active())
@@ -134,10 +141,11 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
       {recoveries.length > 0 && (
         <section aria-label={t("rework.localMarketplace.savedProposals")}>
           <h2>{t("rework.localMarketplace.savedProposals")}</h2>
-          {recoveries.map(({ submitProposalRequest: source }) => (
+          {recoveries.map(({ args: { submitProposalRequest: source }, context }) => (
             <div key={JSON.stringify([source.source_space_id, source.source_resource_id])}>
               <span className={styles.identity}>
-                {source.source_space_id} · {source.source_resource_id}
+                {context?.name ?? t(`rework.localMarketplace.kinds.${kind}`)} ·{" "}
+                {context?.destination ?? t("rework.localMarketplace.catalogue")} · {formatDateTime(context?.startedAt)}
               </span>
               <Button
                 size="small"
@@ -161,53 +169,101 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
       ) : query.isFetching || !query.currentData ? (
         <p role="status">{t("common.loading")}</p>
       ) : !rows.length ? (
-        <p>{t("rework.localMarketplace.empty")}</p>
+        <PageEmptyState
+          icon="storefront"
+          message={t(
+            search || state
+              ? "rework.localMarketplace.empty"
+              : `rework.localMarketplace.${proposals ? "noProposals" : "noPublications"}`,
+          )}
+          description={t("rework.localMarketplace.catalogueHint")}
+        />
       ) : (
         <>
           <div className={styles.grid}>
             {rows.slice(currentPage * 20, (currentPage + 1) * 20).map((item) => (
-              <article className={styles.card} key={proposals ? item.proposal_id : item.entry_id}>
-                <h2>{item.display_name}</h2>
-                <p>{item.description}</p>
-                <p>{item.origin_name}</p>
-                <p className={styles.identity}>
-                  {t("rework.localMarketplace.entryIdentity")} {item.entry_id}
-                </p>
-                {"state" in item && <Chip label={t(`rework.localMarketplace.states.${item.state}`)} />}
-                <Button
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  onClick={() => open(proposals ? item.proposal_id : item.entry_id)}
-                >
-                  {t("rework.localMarketplace.inspect")}
-                </Button>
-              </article>
+              <ResourceCard key={proposals ? item.proposal_id : item.entry_id}>
+                <div className={cardStyles.header}>
+                  <span className={cardStyles.category} title={marketplaceName(item.origin_name, t)}>
+                    {marketplaceName(item.origin_name, t)}
+                  </span>
+                  <h2 className={cardStyles.name} title={item.display_name}>
+                    {item.display_name}
+                  </h2>
+                </div>
+                {item.description && item.description !== item.display_name && (
+                  <p className={cardStyles.description} title={item.description}>
+                    {item.description}
+                  </p>
+                )}
+                <div className={styles.actions}>
+                  <Chip
+                    label={t(
+                      "state" in item
+                        ? `rework.localMarketplace.states.${item.state}`
+                        : "rework.localMarketplace.published",
+                    )}
+                  />
+                  <span className={styles.identity}>
+                    {formatDateTime("submitted_at" in item ? item.submitted_at : item.published_at)}
+                  </span>
+                </div>
+                {"state" in item && item.state === "approved" && (
+                  <span className={styles.identity}>
+                    {t(
+                      item.published_proposal_id === item.proposal_id
+                        ? "rework.localMarketplace.currentPublication"
+                        : "rework.localMarketplace.previousProposal",
+                    )}
+                  </span>
+                )}
+                <div className={styles.actions}>
+                  <Button
+                    size="small"
+                    color="primary"
+                    variant={proposals ? "filled" : "outlined"}
+                    onClick={() => open(proposals ? item.proposal_id : item.entry_id)}
+                  >
+                    {t("rework.localMarketplace.inspect")}
+                  </Button>
+                  {!proposals && (
+                    <Button
+                      size="small"
+                      color="primary"
+                      variant="filled"
+                      icon={{ category: "outlined", type: "download" }}
+                      onClick={() =>
+                        setParams({ catalogue: marketplaceSpaceId, entry: item.entry_id, install: "true" })
+                      }
+                    >
+                      {t("rework.localMarketplace.install")}
+                    </Button>
+                  )}
+                </div>
+              </ResourceCard>
             ))}
           </div>
-          <div className={styles.actions}>
-            <Button
-              size="small"
-              color="primary"
-              variant="text"
-              disabled={currentPage === 0}
-              onClick={() => setPage(currentPage - 1)}
-            >
-              {t("rework.localMarketplace.previous")}
-            </Button>
-            <span>
-              {t("rework.localMarketplace.page", { page: currentPage + 1, count: Math.ceil(rows.length / 20) })}
-            </span>
-            <Button
-              size="small"
-              color="primary"
-              variant="text"
-              disabled={(currentPage + 1) * 20 >= rows.length}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              {t("rework.localMarketplace.next")}
-            </Button>
-          </div>
+          {rows.length > 20 && (
+            <TablePagination
+              totalItems={rows.length}
+              currentPage={currentPage}
+              pageCount={Math.ceil(rows.length / 20)}
+              rowsPerPage={20}
+              rowsPerPageOptions={[]}
+              onFirst={() => setPage(0)}
+              onPrev={() => setPage(currentPage - 1)}
+              onNext={() => setPage(currentPage + 1)}
+              onLast={() => setPage(Math.ceil(rows.length / 20) - 1)}
+              labels={{
+                totalItems: (count) => t("dataTable.pagination.totalItems", { count }),
+                pageNumber: (page, pageCount) => t("dataTable.pagination.pageNumber", { page, pageCount }),
+                first: t("dataTable.pagination.first"),
+                prev: t("dataTable.pagination.prev"),
+                next: t("dataTable.pagination.next"),
+                last: t("dataTable.pagination.last"),
+              }}
+            />
+          )}
         </>
       )}
       {(params.get("entry") || params.get("proposal")) && (
@@ -216,6 +272,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           marketplaceSpaceId={marketplaceSpaceId}
           entryId={params.get("entry") ?? undefined}
           proposalId={params.get("proposal") ?? undefined}
+          installFirst={params.has("install")}
           onClose={close}
         />
       )}

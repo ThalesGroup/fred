@@ -10,8 +10,6 @@ export default function MarketplacePackageView({ value }: { value: MarketplacePa
   if (value.kind === "prompt")
     return (
       <section>
-        <h3>{value.content.display_name}</h3>
-        <p>{value.content.description}</p>
         <p>
           {value.content.logical_name} · {value.content.tags.join(", ")}
         </p>
@@ -23,7 +21,6 @@ export default function MarketplacePackageView({ value }: { value: MarketplacePa
   if (value.kind === "skill")
     return (
       <section>
-        <h3>{value.content.name}</h3>
         {Object.entries(value.content.files).map(([path, text]) => (
           <details key={path}>
             <summary>{path}</summary>

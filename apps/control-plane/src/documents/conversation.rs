@@ -381,6 +381,7 @@ impl Storage {
             id
         } else {
             let id = Uuid::new_v4();
+            // The database runs local and organization used-byte accounting.
             sqlx::query("insert into document(id,space_id,session_id,name,parent_path,purpose,created_by,quota_owner) values($1,$2,$3,$4,$5,'output',$6,$7)")
                 .bind(id).bind(writer.space).bind(writer.session).bind(name).bind(parent).bind(writer.person).bind(owner).execute(&mut *tx).await?;
             id
@@ -418,6 +419,7 @@ impl Storage {
                 "The encoded file path exceeds the object-store key limit",
             ));
         }
+        // The database runs local and organization reservation accounting.
         let row=sqlx::query_as("insert into document_upload(id,request_key,actor,organization_id,space_id,session_id,quota_owner,name,parent_path,mime,size,sha256,object_key,status,expires_at,put_pending,target_document_id,expected_content_id,purpose,reserved_bytes) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),true,$15,$16,$17,$18) returning *")
             .bind(id).bind(key).bind(writer.person).bind(placement.organization).bind(writer.space).bind(writer.session).bind(owner).bind(name).bind(parent).bind(&file.mime).bind(file.size).bind(file.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(doc).bind(expected).bind(purpose).bind(reserved).fetch_one(&mut *tx).await?;
         tx.commit().await?;
@@ -439,6 +441,7 @@ impl Storage {
                 "The source content changed while writing",
             ));
         }
+        // The database runs local and organization reservation accounting.
         let count=sqlx::query("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and not put_pending and expires_at>clock_timestamp()")
             .bind(attempt.id).execute(&mut *tx).await?.rows_affected();
         if count != 1 {
@@ -451,8 +454,10 @@ impl Storage {
             .bind(attempt.id).bind(attempt.target_document_id).bind(if query.source_content_id.is_some() {"preview"} else {"primary"}).bind(query.source_content_id)
             .bind(&attempt.object_key).bind(&attempt.mime).bind(attempt.size).bind(&attempt.sha256).execute(&mut *tx).await?;
         if query.source_content_id.is_none() {
+            // The database adjusts used storage bytes and schedules obsolete content cleanup.
             sqlx::query("update document set current_content_id=$2,updated_at=clock_timestamp() where id=$1").bind(attempt.target_document_id).bind(attempt.id).execute(&mut *tx).await?;
         }
+        // The database runs local and organization reservation accounting.
         sqlx::query("update document_upload set content_id=$2 where id=$1")
             .bind(attempt.id)
             .bind(attempt.id)

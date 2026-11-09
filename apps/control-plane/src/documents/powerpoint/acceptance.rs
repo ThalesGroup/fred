@@ -121,9 +121,11 @@ pub(crate) async fn attach(
         }
     }
     // The previous organization's effective file stays available during replacement.
+    // The database releases quota, obsoletes preparations and clears retired template settings.
     sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and status='stored' and ($2::uuid is not null or not effective or $4)")
         .bind(space).bind(agent).bind(runtime).bind(change.file_id.is_none()).execute(&mut **tx).await?;
     if let Some(file) = change.file_id {
+        // The database runs local and organization used-byte and reservation accounting.
         sqlx::query("update powerpoint_file set status='stored',published_at=clock_timestamp(),live_agent_id=$2 where id=$1")
             .bind(file).bind(agent).execute(&mut **tx).await?;
     }

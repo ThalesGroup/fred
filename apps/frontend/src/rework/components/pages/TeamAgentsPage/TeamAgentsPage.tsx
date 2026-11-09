@@ -323,6 +323,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
       )}
       {proposing && canManageAgents && (
         <MarketplaceProposalDialog
+          sourceName={proposing.display_name}
           source={{
             kind: "agent",
             source_space_id: spaceId,

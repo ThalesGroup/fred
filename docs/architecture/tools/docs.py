@@ -29,6 +29,7 @@ Directives:
     openapi-index <path>    compact inventory of registered methods, paths and operation IDs
     schemas <path> <names...> selected JSON/OpenAPI schemas and their referenced types
     source-map <path::function...> Rust functions and their adjacent /// comments
+    triggers <path>         PostgreSQL trigger catalogue with mandatory comments
     invariants              each invariant of the dossier and the tests proving it
 
 `check` fails when a block differs from its sources, when an invariant has no test,
@@ -182,6 +183,52 @@ def type_of(schema: dict) -> str:
 
 def row(*cells: str) -> str:
     return "| " + " | ".join(cells) + " |"
+
+
+def triggers(path: str) -> str:
+    """Render the catalogue exported by er's already initialized PostgreSQL."""
+    entries = json.loads((ROOT / path).read_text())
+    lines = [
+        row("Family", "Table", "Trigger / function", "When", "Why"),
+        row(*["---"] * 5),
+    ]
+    classified = []
+    for entry in entries:
+        comment = entry.get("comment") or ""
+        match = re.fullmatch(
+            r"assertion: (immutability|consistency) - (\S[^\n]*)|effect: (\S[^\n]*)",
+            comment,
+        )
+        if not match:
+            raise ValueError(
+                f"{entry['table']}.{entry['trigger']}: missing or malformed trigger comment"
+            )
+        family = {
+            "immutability": "1. Immutability",
+            "consistency": "2. Cross-row consistency",
+        }.get(match[1], "3. Effects")
+        why = match[2] or match[3]
+        classified.append((family, entry["table"], entry["trigger"], entry, why))
+    for family, table, name, entry, why in sorted(classified, key=lambda item: item[:3]):
+        lines.append(
+            row(
+                family,
+                f"`{table}`",
+                f"`{name}` / `{entry['function']}`",
+                prose(entry["when"]),
+                prose(why),
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def tidy_triggers(path: str) -> None:
+    triggers(path)  # Validate even when the rendered block has not changed yet.
+    file = ROOT / path
+    entries = sorted(
+        json.loads(file.read_text()), key=lambda entry: (entry["table"], entry["trigger"])
+    )
+    file.write_text(json.dumps(entries, indent=2, sort_keys=True) + "\n")
 
 
 def fields(schema: dict) -> list[str]:
@@ -522,6 +569,8 @@ def invariants() -> str:
 
 def render(directive: str, chapter: Path | None = None) -> str:
     kind, *args = directive.split()
+    if kind == "triggers":
+        return triggers(*args)
     if kind == "source-map":
         return source_map(args, chapter or DOSSIER / "reference.md")
     if kind == "include":
@@ -599,6 +648,8 @@ if __name__ == "__main__":
         sys.exit(check(rest))
     elif command == "links":
         sys.exit(links(rest))
+    elif command == "tidy-triggers":
+        tidy_triggers(rest[0])
     elif command == "tidy-er":
         tidy_er(rest[0])
     else:

@@ -177,8 +177,10 @@ pub(crate) async fn confirm(s: &AppState, id: Uuid, input: ResultConfirmation) -
             sqlx::query("update capability_preparation set state='obsolete' where file_id=$1 and id<>$2 and state='ready'")
                 .bind(row.file_id).bind(id).execute(&mut *tx).await?;
             // An organization replacement keeps its previous file until this transaction.
+            // The database releases quota, obsoletes preparations and clears retired template settings.
             sqlx::query("update powerpoint_file set status='retired',effective=false,cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=(select space_id from powerpoint_file where id=$1) and runtime_id=$2 and agent_instance_id is null and effective and id<>$1")
                 .bind(row.file_id).bind(&row.runtime_id).execute(&mut *tx).await?;
+            // The database checks whether template settings must be cleared.
             sqlx::query("update powerpoint_file set effective=true where id=$1")
                 .bind(row.file_id)
                 .execute(&mut *tx)

@@ -241,6 +241,7 @@ impl Lifecycle {
         let operation = Uuid::new_v4();
         let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
             .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query(
             "update document set deletion_id = $2, purge_after = clock_timestamp() where id = $1",
         )
@@ -297,6 +298,7 @@ impl Lifecycle {
             .execute(&mut *tx)
             .await?;
         // Its attachments retire with it and free their quota; cleanup purges them as documents.
+        // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query("update document set deletion_id = $3, purge_after = clock_timestamp() where session_id = $1 and space_id = $2 and deletion_id is null")
             .bind(session_id)
             .bind(space_id)
@@ -379,6 +381,7 @@ async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> 
     }
     // Attachments retire with the space and release quota immediately. Existing
     // document/session receipts keep their own retention and cleanup ownership.
+    // The database adjusts used storage bytes and schedules obsolete content cleanup.
     sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and session_id is not null and deletion_id is null")
         .bind(operation).bind(id).execute(&mut **tx).await?;
     sqlx::query("update space set deletion_id = $1 where id = $2")

@@ -474,6 +474,7 @@ function SpacePrompts({
       )}
       {proposing && (
         <MarketplaceProposalDialog
+          sourceName={proposing.display_name}
           source={{
             kind: "prompt",
             source_space_id: spaceId,

@@ -205,6 +205,7 @@ function SkillFiles({
       )}
       {proposing && revision && (
         <MarketplaceProposalDialog
+          sourceName={name}
           source={{ kind: "skill", source_space_id: spaceId, source_resource_id: skillId, expected_revision: revision }}
           onClose={() => setProposing(false)}
         />

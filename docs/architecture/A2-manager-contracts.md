@@ -49,6 +49,71 @@ The [complete ER diagram](generated/control-plane.er.mmd) is generated from the
 migration chain. It remains available for database inspection without duplicating
 all columns in the architectural reading path.
 
+### Storage assertions and effects
+
+[Chapter 9](09-quality.md#structural-invariants-in-postgresql) explains the three
+kinds of rule. This catalogue serves diagnosis and maintenance.
+
+| Kind | SQL signal | Control Plane response |
+| --- | --- | --- |
+| Assertion: immutability or consistency | `23514`, rule named in `constraint` | 500 `invariant_violation` without detail; the error log carries `constraint` and `table` |
+| Business refusal: storage quota | `FR001` | 422 `quota_exceeded` |
+| Effect | None | Related rows change in the same transaction |
+
+Declarative CHECK constraints raise the same assertion signal. Every trigger needs
+a comment starting with `assertion: immutability - `, `assertion: consistency - `
+or `effect: `. `make -C docs/architecture check-models` rejects a missing or
+malformed comment and a stale table. `document_move` is schema preparation: no
+application path writes it yet.
+
+<!-- generated: triggers docs/architecture/generated/control-plane.triggers.json -->
+| Family | Table | Trigger / function | When | Why |
+| --- | --- | --- | --- | --- |
+| 1. Immutability | `agent_instance` | `agent_definition` / `protect_agent_definition` | BEFORE INSERT OR UPDATE / ROW | agent identity, placement and creation provenance; edit attribution |
+| 1. Immutability | `document` | `document_immutable` / `forbid_document_move` | BEFORE UPDATE / ROW | document placement |
+| 1. Immutability | `document_content` | `document_content_immutable` / `protect_document_content` | BEFORE UPDATE / ROW | content bytes and publication; no current-content cleanup |
+| 1. Immutability | `document_processing` | `document_processing_identity` / `protect_processing_identity` | BEFORE UPDATE / ROW | processing identity and terminal outcome |
+| 1. Immutability | `folder` | `folder_immutable` / `forbid_folder_move` | BEFORE UPDATE / ROW | folder placement |
+| 1. Immutability | `marketplace_entry` | `marketplace_entry_identity` / `protect_marketplace_entry` | BEFORE INSERT OR UPDATE / ROW | marketplace identity and successive publication versions |
+| 1. Immutability | `marketplace_installation` | `marketplace_installation_immutable` / `protect_marketplace_installation` | BEFORE INSERT OR UPDATE / ROW | installation receipt and snapshot provenance |
+| 1. Immutability | `marketplace_proposal` | `marketplace_proposal_immutable` / `protect_marketplace_proposal` | BEFORE INSERT OR UPDATE / ROW | submitted package, attribution and final decision |
+| 1. Immutability | `powerpoint_file` | `powerpoint_file_identity` / `protect_powerpoint_file` | BEFORE INSERT OR UPDATE / ROW | PowerPoint identity and terminal retirement; live upload owner |
+| 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
+| 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |
+| 1. Immutability | `space` | `space_immutable` / `forbid_space_move` | BEFORE UPDATE / ROW | space identity and hierarchy |
+| 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE UPDATE / ROW | wiki revision content and provenance |
+| 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
+| 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | published owned current content and fixed source identity |
+| 2. Cross-row consistency | `document_content` | `document_preview_valid` / `protect_document_preview` | BEFORE INSERT / ROW | preview belongs to its primary content |
+| 2. Cross-row consistency | `document_move` | `document_move_identity` / `protect_document_move` | BEFORE INSERT OR UPDATE / ROW | live same-organization move endpoints, frozen request and valid transitions |
+| 2. Cross-row consistency | `document_processing` | `processing_source` / `require_processing_source` | BEFORE INSERT OR UPDATE / ROW | ingestion only accepts source documents |
+| 2. Cross-row consistency | `document_upload` | `upload_placement` / `require_upload_placement` | BEFORE INSERT OR UPDATE / ROW | upload target matches its declared destination |
+| 2. Cross-row consistency | `folder` | `folder_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no folder removal with pending uploads |
+| 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
+| 2. Cross-row consistency | `organization_model_initialization` | `model_initialization_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model initialization belongs to an organization |
+| 2. Cross-row consistency | `organization_model_policy` | `model_policy_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model policy belongs to an organization |
+| 2. Cross-row consistency | `organization_model_source` | `model_source_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model source belongs to an organization |
+| 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_file` / `protect_powerpoint_settings` | BEFORE INSERT OR UPDATE / ROW | settings reference the effective organization file |
+| 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | PowerPoint settings belong to an organization |
+| 2. Cross-row consistency | `session_metadata` | `session_association` / `protect_session_association` | BEFORE INSERT OR UPDATE / ROW | same-organization conversation association and immutable ownership |
+| 2. Cross-row consistency | `space` | `space_hierarchy` / `require_space_hierarchy` | AFTER INSERT / ROW | organization root and project team parent |
+| 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
+| 2. Cross-row consistency | `space_capability_policy` | `space_capability_policy_kind` / `require_local_capability_space` | BEFORE INSERT OR UPDATE / ROW | local capability policy belongs to a team or project |
+| 2. Cross-row consistency | `space_role_grant` | `space_role_scope` / `require_space_role_scope` | BEFORE INSERT OR UPDATE / ROW | personal owner and organization admin scope |
+| 2. Cross-row consistency | `storage_budget` | `storage_budget_scope` / `require_storage_budget_scope` | BEFORE INSERT OR UPDATE / ROW | immutable budget owner and valid local or organization scope |
+| 3. Effects | `agent_instance` | `capability_agent_retirement` / `invalidate_capability_preparation` | BEFORE DELETE / ROW | mark agent capability preparations obsolete |
+| 3. Effects | `agent_instance` | `powerpoint_agent_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the agent PowerPoint files and schedule cleanup |
+| 3. Effects | `document` | `document_account` / `account_document` | BEFORE INSERT OR DELETE / ROW | adjust local and organization used storage bytes |
+| 3. Effects | `document` | `document_contents_retirement` / `retire_document_contents` | AFTER UPDATE / ROW | schedule cleanup of retired or superseded file contents |
+| 3. Effects | `document` | `document_updates_account` / `account_document_updates` | AFTER UPDATE / STATEMENT | aggregate local and organization used storage byte changes |
+| 3. Effects | `document_upload` | `document_upload_account` / `account_document_upload` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization reserved storage bytes |
+| 3. Effects | `organization_model_policy` | `remember_model_policy` / `remember_model_policy_initialization` | AFTER INSERT / ROW | record organization model-policy initialization |
+| 3. Effects | `powerpoint_file` | `capability_file_retirement` / `invalidate_capability_preparation` | AFTER UPDATE / ROW | mark file capability preparations obsolete |
+| 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
+| 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |
+| 3. Effects | `space` | `powerpoint_space_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the space PowerPoint files and schedule cleanup |
+<!-- end generated -->
+
 ### Resource identity and conversation placement
 
 | Identity | Meaning |
