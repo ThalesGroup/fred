@@ -466,9 +466,8 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
 };
-export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse = /** status 202 Successful Response */ {
-  [key: string]: string;
-};
+export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse =
+  /** status 202 Successful Response */ ChatMessage;
 export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   sessionId: string;
   messageId: string;
@@ -795,14 +794,14 @@ export type RuntimeExecuteRequest =
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
       occurrence_id?: string | null;
+      /** Identity of a previously submitted in-thread message starting its ordinary turn. */
+      pending_message_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
       /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
       runtime_context: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
-      /** Identity of the active chat turn for mid-turn message delivery. */
-      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -839,14 +838,14 @@ export type RuntimeExecuteRequest =
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
       occurrence_id?: string | null;
+      /** Identity of a previously submitted in-thread message starting its ordinary turn. */
+      pending_message_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
       /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
       runtime_context?: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
-      /** Identity of the active chat turn for mid-turn message delivery. */
-      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -857,6 +856,7 @@ export type RuntimeExecuteRequest =
 export type AssistantDeltaRuntimeEvent = {
   delta: string;
   kind?: "assistant_delta";
+  rank?: number | null;
   sequence?: number;
 };
 export type HumanChoiceOption = {
@@ -954,6 +954,8 @@ export type AwaitingHumanRuntimeEvent = {
   context_tokens?: number | null;
   kind?: "awaiting_human";
   model_name?: string | null;
+  pause_metadata_rank?: number | null;
+  rank?: number | null;
   request: HumanInputRequest;
   sequence?: number;
   sources?: VectorSearchHit[];
@@ -973,12 +975,14 @@ export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_una
 export type RuntimeErrorEvent = {
   kind?: "execution_error";
   message: string;
+  rank?: number | null;
   reason?: RuntimeStopReason | null;
   sequence?: number;
 };
 export type ExecutionInterruptedRuntimeEvent = {
   interruption_id: string;
   kind?: "execution_interrupted";
+  rank?: number | null;
   request: HumanInputRequest;
   sequence?: number;
 };
@@ -989,6 +993,7 @@ export type FinalRuntimeEvent = {
   finish_reason?: FinishReason | null;
   kind?: "final";
   model_name?: string | null;
+  rank?: number | null;
   sequence?: number;
   sources?: VectorSearchHit[];
   token_usage?: {
@@ -1007,11 +1012,13 @@ export type NodeErrorRuntimeEvent = {
   error_message: string;
   kind?: "node_error";
   node_id: string;
+  rank?: number | null;
   routed_to: string;
   sequence?: number;
 };
 export type SessionTitleRuntimeEvent = {
   kind?: "session_title";
+  rank?: number | null;
   sequence?: number;
   title: string;
 };
@@ -1030,6 +1037,7 @@ export type SkillLoadAttribution = {
 export type StatusRuntimeEvent = {
   detail?: string | null;
   kind?: "status";
+  rank?: number | null;
   sequence?: number;
   skill_load?: SkillLoadAttribution | null;
   status: string;
@@ -1038,11 +1046,13 @@ export type SteeredUserMessageRuntimeEvent = {
   content: string;
   kind?: "steered_user_message";
   message_id: string;
+  rank?: number | null;
   sequence?: number;
 };
 export type ThoughtDeltaEvent = {
   delta: string;
   kind?: "thought_delta";
+  rank?: number | null;
   sequence?: number;
   thought_id: string;
 };
@@ -1050,12 +1060,14 @@ export type ThoughtEndEvent = {
   conclusion?: string | null;
   duration_ms?: number | null;
   kind?: "thought_end";
+  rank?: number | null;
   sequence?: number;
   thought_id: string;
 };
 export type ThoughtStartEvent = {
   kind?: "thought_start";
   phase: "planning" | "tool_use" | "observation" | "reflection" | "synthesis";
+  rank?: number | null;
   sequence?: number;
   source?: "authored" | "model_native";
   thought_id: string;
@@ -1067,6 +1079,7 @@ export type ToolCallRuntimeEvent = {
   };
   call_id: string;
   kind?: "tool_call";
+  rank?: number | null;
   sequence?: number;
   tool_name: string;
 };
@@ -1076,6 +1089,7 @@ export type ToolResultRuntimeEvent = {
   is_error?: boolean;
   kind?: "tool_result";
   latency_ms?: number | null;
+  rank?: number | null;
   sequence?: number;
   sources?: VectorSearchHit[];
   tool_name?: string | null;
@@ -1091,6 +1105,7 @@ export type ToolResultRuntimeEvent = {
 export type TurnPersistedEvent = {
   exchange_id?: string | null;
   kind?: "turn_persisted";
+  rank?: number | null;
   sequence?: number;
   session_id: string;
 };

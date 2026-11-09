@@ -48,6 +48,7 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     FinalRuntimeEvent,
     RuntimeEvent,
+    SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
@@ -164,6 +165,38 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_steered_user_delivery_does_not_add_a_model_call() -> None:
+    final = AIMessage(
+        content="Done.",
+        usage_metadata={"input_tokens": 15, "output_tokens": 3, "total_tokens": 18},
+    )
+    events = [
+        (
+            "custom",
+            SteeredUserMessageRuntimeEvent(message_id="m1", content="Change course"),
+        ),
+        ("messages", (AIMessageChunk(content="Done."), {})),
+        ("updates", {"agent": {"messages": [final]}}),
+    ]
+    collected = await _run_stream(events)
+    assert [
+        event.message_id
+        for event in collected
+        if isinstance(event, SteeredUserMessageRuntimeEvent)
+    ] == ["m1"]
+    assert [
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    ] == ["Done."]
+    final_event = next(
+        event for event in collected if isinstance(event, FinalRuntimeEvent)
+    )
+    assert final_event.token_usage is not None
+    assert final_event.token_usage["total_tokens"] == 18
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LiveTurn, PendingMessage, TurnStatus } from "./backgroundTurns";
+import type { LiveTurn, TurnStatus } from "./backgroundTurns";
 
 const storageKey = "chat.background-indicators";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,7 +25,7 @@ describe("background indicator persistence", () => {
   let registry: typeof import("./backgroundTurns");
   let container: HTMLDivElement;
   let root: Root;
-  let current: { status: TurnStatus; unread: boolean; queue: PendingMessage[] };
+  let current: { status: TurnStatus; unread: boolean };
 
   beforeEach(async () => {
     sessionStorage.clear();
@@ -43,8 +43,7 @@ describe("background indicator persistence", () => {
   });
 
   function Probe({ id }: { id: string }) {
-    const [queue] = registry.usePendingMessages(id);
-    current = { status: registry.useTurnStatus(id), unread: registry.useSessionUnread(id), queue };
+    current = { status: registry.useTurnStatus(id), unread: registry.useSessionUnread(id) };
     return null;
   }
   function show(id: string) {
@@ -63,7 +62,6 @@ describe("background indicator persistence", () => {
       teamId: "team-1",
       agentInstanceId: "agent-1",
       controller: new AbortController(),
-      steeringTurnId: id,
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -79,21 +77,16 @@ describe("background indicator persistence", () => {
     });
   }
 
-  it("restores known waiting and unread indicators without live turns, queues or notifications", async () => {
+  it("restores known waiting and unread indicators without live turns or notifications", async () => {
     finish(turn("waiting", { awaitingInput: true }));
     finish(turn("answer"));
     registry.registerTurn(turn("running"));
-    const write = vi.spyOn(Storage.prototype, "setItem");
-    registry.updatePendingMessages("answer", [{ id: "q", text: "private queued text", status: "waiting" }]);
-    expect(write).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(storageKey)).not.toContain("private queued text");
-
     await reload();
     const settled = vi.fn();
     registry.subscribeBackgroundSettled(settled);
     expect(show("waiting")).toMatchObject({ status: "awaiting_input", unread: true });
-    expect(show("answer")).toEqual({ status: null, unread: true, queue: [] });
-    expect(show("running")).toEqual({ status: null, unread: false, queue: [] });
+    expect(show("answer")).toEqual({ status: null, unread: true });
+    expect(show("running")).toEqual({ status: null, unread: false });
     expect(settled).not.toHaveBeenCalled();
   });
 

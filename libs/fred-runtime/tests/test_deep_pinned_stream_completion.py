@@ -107,9 +107,13 @@ class _RecordingAgent:
         self.model_updates: list[object] = []
 
     async def ainvoke(
-        self, input: object, *, config: Mapping[str, object] | None = None
+        self,
+        input: object,
+        *,
+        config: Mapping[str, object] | None = None,
+        durability: str = "async",
     ) -> dict[str, list[BaseMessage]]:
-        return await self.graph.ainvoke(input, config=config)
+        return await self.graph.ainvoke(input, config=config, durability=durability)
 
     async def astream(
         self,
@@ -118,9 +122,14 @@ class _RecordingAgent:
         config: Mapping[str, object] | None = None,
         stream_mode: str | list[str],
         subgraphs: bool = False,
+        durability: str = "async",
     ) -> AsyncIterator[object]:
         async for raw in self.graph.astream(
-            input, config=config, stream_mode=stream_mode, subgraphs=subgraphs
+            input,
+            config=config,
+            stream_mode=stream_mode,
+            subgraphs=subgraphs,
+            durability=durability,
         ):
             mode, update = split_stream_event_mode(raw)
             if mode == "updates" and isinstance(update, dict) and "model" in update:
