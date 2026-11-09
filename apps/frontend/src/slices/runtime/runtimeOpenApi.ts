@@ -692,6 +692,11 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type TurnAttachment = {
+  attachment_id: string;
+  mime?: string | null;
+  name: string;
+};
 export type TurnCommandPrompt = {
   command: string;
   draft_offset: number;
@@ -718,6 +723,7 @@ export type RuntimeContext = {
   agent_instance_id?: string | null;
   /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
   ask_user?: boolean | null;
+  attachments?: TurnAttachment[] | null;
   attachments_markdown?: string | null;
   /** Set on a conversation's first turn: the runtime then generates a short title from this turn's input and streams it as a `session_title` event. Later renames belong to the user. */
   auto_title?: boolean | null;

@@ -144,6 +144,7 @@ export const ConversationThread = memo(function ConversationThread({
               skillDescription={msg.skillName ? skillSummaries?.get(msg.skillName)?.description : undefined}
               onOpenSkill={onOpenSkill}
               onOpenCommand={onOpenCommandPrompt}
+              attachments={msg.attachments}
             />
           );
         }

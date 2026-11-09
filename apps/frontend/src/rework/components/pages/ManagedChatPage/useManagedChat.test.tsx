@@ -624,6 +624,67 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[0][2]).toMatchObject({ chat_profile_id: "chat.large", reasoning: false });
   });
 
+  it("sends only this turn's ready attachments, beside the unchanged markdown", async () => {
+    const markdown = "## Attached files for this conversation\n- old.pdf\n- brief.pdf";
+    chatAttachmentsValue.attachmentsMarkdown = markdown;
+    chatAttachmentsValue.attachments = [
+      { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1, isImage: false, taskIds: [] },
+      { id: "a-2", name: "photo.png", mime: "image/png", status: "ready", size: 1, isImage: true, taskIds: [] },
+      { id: "a-3", name: "broken.txt", mime: "text/plain", status: "error", size: 1, isImage: false, taskIds: [] },
+    ];
+    chatAttachmentsValue.persistedAttachments = [{ attachmentId: "old", name: "old.pdf", summaryMd: "" }];
+    try {
+      mount();
+      act(() => latest.setInput("question"));
+      rerender();
+
+      await act(async () => {
+        await latest.handleSend();
+      });
+
+      expect(sendMock.mock.calls[0][2]).toMatchObject({
+        attachments_markdown: markdown,
+        attachments: [
+          { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+          { attachment_id: "a-2", name: "photo.png", mime: "image/png" },
+        ],
+      });
+    } finally {
+      chatAttachmentsValue.attachmentsMarkdown = null;
+      chatAttachmentsValue.attachments = [];
+      chatAttachmentsValue.persistedAttachments = [];
+    }
+  });
+
+  it("sends nothing for ready attachments without text: the runtime needs an input", async () => {
+    chatAttachmentsValue.attachmentsMarkdown = "## Attached files for this conversation\n- brief.pdf";
+    chatAttachmentsValue.attachments = [
+      { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1, isImage: false, taskIds: [] },
+    ];
+    try {
+      mount();
+      await act(async () => {
+        await latest.handleSend();
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+    } finally {
+      chatAttachmentsValue.attachmentsMarkdown = null;
+      chatAttachmentsValue.attachments = [];
+    }
+  });
+
+  it("sends no attachments key on a turn without files", async () => {
+    mount();
+    act(() => latest.setInput("question"));
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect("attachments" in (sendMock.mock.calls[0][2] as Record<string, unknown>)).toBe(false);
+  });
+
   it("sends no reasoning value when the chosen model cannot reason, and no choice when none is made", async () => {
     chatSseChatControls = [{ capability_id: "platform", widget: "reasoning_toggle", params: {} }];
     hostEffectiveModel = {
@@ -1848,6 +1909,35 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[1][0]).toBe("original request");
     expect(sendMock.mock.calls[1][4]).toEqual({ action: "restart" });
     expect(sendMock.mock.calls[2][5]).toBe("m1");
+  });
+
+  it("restart re-sends the interrupted turn's attachments", async () => {
+    chatAttachmentsValue.attachments = [
+      { id: "a-1", name: "brief.pdf", mime: "application/pdf", status: "ready", size: 1, isImage: false, taskIds: [] },
+    ];
+    try {
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("question"));
+      rerender();
+      await act(async () => {
+        await latest.handleSend();
+      });
+      chatAttachmentsValue.attachments = [];
+      act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+      rerender();
+
+      await act(async () => {
+        latest.handleHitlAnswer("restart");
+        await Promise.resolve();
+      });
+
+      expect(sendMock.mock.calls[1][2]).toMatchObject({
+        attachments: [{ attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" }],
+      });
+    } finally {
+      chatAttachmentsValue.attachments = [];
+    }
   });
 
   it("submits Other text alone after a single question choice", async () => {

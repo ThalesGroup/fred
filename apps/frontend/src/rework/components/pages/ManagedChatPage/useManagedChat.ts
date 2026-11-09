@@ -33,10 +33,15 @@ import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
-import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
+import { buildComposerRuntimeContext, toTurnAttachments } from "./runtimeContextBuilder";
 import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
-import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type {
+  ChatMessage,
+  SkillInvocation,
+  TurnAttachment,
+  TurnCommand,
+} from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { markSessionRead, setSessionAwaitingInput } from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
@@ -103,13 +108,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
   const confirmedSessionIdsRef = useRef<Set<string>>(new Set());
   const failedContextWriteIdsRef = useRef<Set<string>>(new Set());
-  // `text`/`command` are what went on the wire, so a Restart re-sends the same turn.
+  // `text`/`command`/`attachments` are what went on the wire, so a Restart re-sends the same turn.
   const submittedDraftRef = useRef<{
     sessionId: string;
     draft: string;
     text: string;
     command?: TurnCommand;
     skills?: SkillInvocation[];
+    attachments?: TurnAttachment[];
   } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
@@ -792,7 +798,6 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       pendingMessageId?: string,
     ): Promise<boolean> => {
       const resumingPending = Boolean(pendingMessageId);
-      const attachmentContext = resumingPending ? "" : attachments.attachmentsMarkdown;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
@@ -800,14 +805,15 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         hitlHoldsComposer(pendingHitl, sessionId) || hitlHoldsComposer(hitlResumeOwnerRef.current, sessionId);
       if (
         executionDisabledRef.current ||
-        (!text && !attachmentContext) ||
+        // The runtime rejects a turn without text, attachments or not.
+        !text ||
         waitResponse ||
         awaitingAgentQuestion ||
         (!resumingPending && attachments.hasUploadingAttachments) ||
         (!resumingPending && inputTooLong)
       ) {
         console.debug(
-          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
+          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
         return false;
       }
@@ -899,6 +905,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
         if (resumingPending) delete runtimeContext.attachments_markdown;
+        // Only this turn's files: earlier ones already sit on their own turns. A
+        // restart re-sends the interrupted turn's files, already cleared from the composer.
+        const turnAttachments = resumingPending
+          ? []
+          : interrupted?.action === "restart"
+            ? (submittedDraftRef.current?.attachments ?? [])
+            : toTurnAttachments(attachments.attachments);
         // Titled once, on the first exchange; renaming afterwards is the user's call.
         const autoTitle =
           !titleRenamedRef.current && !latestMessagesRef.current.some((message) => message.role === "user");
@@ -912,6 +925,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           text,
           command: turnCommand,
           skills,
+          attachments: turnAttachments,
         };
         return send(
           text,
@@ -920,6 +934,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
             ...runtimeContext,
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
+            ...(turnAttachments.length ? { attachments: turnAttachments } : {}),
             ...(autoTitle ? { auto_title: true } : {}),
           },
           turnOptions,
@@ -931,7 +946,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
     },
     [
-      attachments.attachmentsMarkdown,
+      attachments.attachments,
       attachments.hasUploadingAttachments,
       input,
       inputCharacterCount,

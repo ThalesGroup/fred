@@ -174,7 +174,8 @@ control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
-`removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
+`removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
+surface, for chips inside a user message bubble; the default stays outlined. Tooltip preserves hover/keyboard descriptions and viewport
 placement but dismisses on Escape; the panel portals to the themed root where
 available. Checkbox preserves native input props, refs, checked and disabled
 behavior, and exposes indeterminate as a mixed state.

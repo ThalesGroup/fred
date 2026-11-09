@@ -311,6 +311,34 @@ describe("explicit skill selection on user turns", () => {
     expect(turn.command).toEqual(command);
     expect(turn.command?.prompts).toHaveLength(2);
   });
+  it.each([false, true])("carries the turn's attachments to the thread (optimistic: %s)", (optimistic) => {
+    const [turn] = toThreadMessages(
+      [
+        {
+          ...user(),
+          metadata: {
+            extras: {
+              optimistic_user: optimistic,
+              attachments: [
+                { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+                { attachment_id: "a-2", name: "notes.txt" },
+                { name: "no-id.txt" },
+              ],
+            },
+          },
+        },
+      ],
+      optimistic,
+    );
+    expect(turn.attachments).toEqual([
+      { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+      { attachment_id: "a-2", name: "notes.txt" },
+    ]);
+  });
+  it("leaves attachments undefined on a message stored without them", () => {
+    const [turn] = toThreadMessages([user()], false);
+    expect(turn.attachments).toBeUndefined();
+  });
   it("ignores malformed invocation hints", () => {
     for (const extras of [
       { optimistic_user: true, skill_invocation: { name: 42 } },

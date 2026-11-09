@@ -136,6 +136,7 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    TurnAttachment,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
@@ -3643,6 +3644,7 @@ async def _write_turn_history(
     turn_command: CommandDescriptor | None = None,
     skill_invocation: SkillInvocation | dict[str, Any] | None = None,
     skill_invocations: list[SkillInvocation | dict[str, Any]] | None = None,
+    attachments: list[TurnAttachment | dict[str, Any]] | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
     team_id: str | None = None,
@@ -3774,22 +3776,22 @@ async def _write_turn_history(
             user_message = make_user_text(
                 session_id, exchange_id, rank, request_message, command=turn_command
             )
+            extras: dict[str, Any] = {}
             if skill_invocations:
-                extras = {
-                    "skill_invocations": [
-                        SkillInvocation.model_validate(item).model_dump(mode="json")
-                        for item in skill_invocations
-                    ]
-                }
-                user_message.metadata = user_message.metadata.model_copy(
-                    update={"extras": extras}
-                )
+                extras["skill_invocations"] = [
+                    SkillInvocation.model_validate(item).model_dump(mode="json")
+                    for item in skill_invocations
+                ]
             elif skill_invocation is not None:
-                extras = {
-                    "skill_invocation": SkillInvocation.model_validate(
-                        skill_invocation
-                    ).model_dump(mode="json")
-                }
+                extras["skill_invocation"] = SkillInvocation.model_validate(
+                    skill_invocation
+                ).model_dump(mode="json")
+            if attachments:
+                extras["attachments"] = [
+                    TurnAttachment.model_validate(item).model_dump(mode="json")
+                    for item in attachments
+                ]
+            if extras:
                 user_message.metadata = user_message.metadata.model_copy(
                     update={"extras": extras}
                 )
@@ -4516,6 +4518,7 @@ async def _stream(
                     turn_command=_turn_command(ctx),
                     skill_invocation=ctx.get("skill"),
                     skill_invocations=ctx.get("skills"),
+                    attachments=ctx.get("attachments"),
                     payloads=collected,
                     history_store=history_store,
                     team_id=resolved_team_id,
@@ -7415,6 +7418,7 @@ def _build_agent_router(
                     turn_command=_turn_command(internal_req.context or {}),
                     skill_invocation=(internal_req.context or {}).get("skill"),
                     skill_invocations=(internal_req.context or {}).get("skills"),
+                    attachments=(internal_req.context or {}).get("attachments"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -7556,6 +7560,7 @@ def _build_agent_router(
                     turn_command=_turn_command(internal_req.context or {}),
                     skill_invocation=(internal_req.context or {}).get("skill"),
                     skill_invocations=(internal_req.context or {}).get("skills"),
+                    attachments=(internal_req.context or {}).get("attachments"),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,

@@ -31,8 +31,19 @@
   padding: var(--spacing-2xs) var(--spacing-xs);
   /* Never stretched by a column flex parent: the remove button stays by the label. */
   width: fit-content;
-  max-width: 18rem;
+  /* Never wider than its container either, so a long label truncates in a narrow one. */
+  max-width: min(18rem, 100%);
   color: var(--on-surface);
+}
+
+.chip[data-appearance="tonal"] {
+  border-color: transparent;
+  background: var(--state-on-secondary-container-selected);
+  color: var(--on-secondary-container);
+}
+
+.chip[data-appearance="tonal"] .leading {
+  color: var(--on-secondary-container);
 }
 
 .chip[data-tone="error"] {

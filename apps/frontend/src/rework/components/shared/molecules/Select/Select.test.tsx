@@ -291,7 +291,7 @@ describe("Select keyboard navigation — disabled options", () => {
     Object.defineProperty(document.documentElement, "clientHeight", { value: 700, configurable: true });
     Object.defineProperty(window, "innerHeight", { value: 717, configurable: true, writable: true });
 
-    const anchor = container.querySelector("div") as HTMLDivElement;
+    const anchor = trigger();
     anchor.getBoundingClientRect = () =>
       ({ top: 650, bottom: 690, left: 100, right: 180, width: 80, height: 40, x: 100, y: 650 }) as DOMRect;
 
@@ -385,5 +385,57 @@ describe("Select does not leak the keys it handles to its host", () => {
 
     host.stop();
     expect(host.seen).toEqual(["Escape"]);
+  });
+});
+
+describe("Select search", () => {
+  const options = [
+    { value: "a", key: "a", label: "Élève" },
+    { value: "b", key: "b", label: "Onboarding" },
+    { value: "c", key: "c", label: "Outillage" },
+  ];
+  const search = { placeholder: "Search", noMatchMessage: "Nothing" };
+
+  function searchField(): HTMLInputElement {
+    return document.querySelector('input[aria-label="Search"]') as HTMLInputElement;
+  }
+
+  function type(text: string) {
+    act(() => {
+      const input = searchField();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  function labels(): string[] {
+    return [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? "");
+  }
+
+  it("filters ignoring case and accents, and focuses the field on open", () => {
+    render(<Select size="small" options={options} search={search} onChange={vi.fn()} />);
+    act(() => trigger().click());
+    expect(document.activeElement).toBe(searchField());
+    type("ELEVE");
+    expect(labels()).toEqual(["Élève"]);
+  });
+
+  it("selects the first match with Enter and gives focus back to the trigger", () => {
+    const onChange = vi.fn();
+    render(<Select size="small" options={options} search={search} onChange={onChange} />);
+    act(() => trigger().click());
+    type("out");
+    act(() => {
+      searchField().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    });
+    expect(onChange).toHaveBeenCalledWith("c");
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("says when nothing matches", () => {
+    render(<Select size="small" options={options} search={search} onChange={vi.fn()} />);
+    act(() => trigger().click());
+    type("zzz");
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("Nothing");
   });
 });

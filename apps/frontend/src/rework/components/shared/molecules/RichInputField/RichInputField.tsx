@@ -330,7 +330,8 @@ export function RichInputField({
 
   const hasText = value.trim().length > 0;
   const showStop = showSendButton && !!onInterrupt;
-  const showSend = showSendButton && !disabled && hasText;
+  // Always shown, greyed while there is no text, so it is clear why nothing can be sent.
+  const showSend = showSendButton && !disabled;
   const canUseVoiceInput = enableVoiceInput && !!onTranscribeAudio;
   const hasDefaultAction = canUseVoiceInput || showStop || showSend;
   const showBottomRow = !!(topSlot || leftSlot || rightSlot || hasDefaultAction);
@@ -433,7 +434,7 @@ export function RichInputField({
       size="small"
       icon={{ category: "outlined", type: "arrow_upward" }}
       onClick={onSend}
-      disabled={sendDisabled}
+      disabled={sendDisabled || !hasText}
       aria-label={t("chatbot.sendMessage")}
     />
   );

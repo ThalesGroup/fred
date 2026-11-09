@@ -1254,6 +1254,7 @@ export function useChatSse(
               : runtimeContext?.skill
                 ? { skill_invocation: runtimeContext.skill }
                 : {}),
+            ...(runtimeContext?.attachments?.length ? { attachments: runtimeContext.attachments } : {}),
           },
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
