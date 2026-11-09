@@ -499,6 +499,11 @@ Selections persist in `metadata.extras.skill_invocations`; readers retain legacy
 fresh turns do not inherit selection intent. Graph agents and deployments with
 skills disabled reject selections. `/skill <name>` remains a legacy submit form.
 
+The optional `runtime_context.attachments: list[TurnAttachment]` (`attachment_id`,
+`name`, optional `mime`) lists only the files sent with this turn. It is display
+data: the runtime stores it on the user message as `metadata.extras.attachments`
+and the agent never reads it; model input stays `attachments_markdown`.
+
 ### 2.4 Pre-execution authorization gate — `_authorize_and_resolve`
 
 There is no `validate_execution_grant` helper. Every execute / execute-stream /
@@ -7217,23 +7222,37 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### Managed chat stream lifetime (2026-11-02)
+### Managed chat stream lifetime and in-thread updates (2026-11-06)
 
-Ordinary pending messages live per conversation in browser-tab memory and survive
-in-app navigation alongside a background generation. They resume ordinary FIFO
-sends only when that conversation is reopened and its generation and human-input
-holds are resolved. Stop, deletion, reload or a genuine stream interruption clears
-the matching list; there is no queue recovery API or delivery acknowledgement tied
-to history persistence. The existing SQL
-mailbox only coordinates temporary steering across replicas. Injected user
-messages are prefixed in model context as updated user instructions that may add
+Plain-text updates submitted during an active managed ReAct or Deep turn are
+stored directly in `session_history`, with a stable message ID and a fixed
+negative provisional rank. The browser shows them at the end of the thread with
+a clock until delivery; an HTTP acknowledgement does not change their displayed
+rank.
+The first managed turn's opening user message is persisted during admission, so
+the session has an agent instance identity before an update can be submitted.
+The submission and delivery paths require that same instance identity.
+At the next model boundary, after dispatched tool results, the runtime
+injects the updates and promotes each one to a canonical rank before the normal
+model call proceeds. The continuing agent may reason and use tools; it answers
+outstanding questions in its ordinary final response. Managed ReAct and Deep
+turns use synchronous checkpoint durability: the injected update is committed
+before its history row is promoted, so a failed promotion remains
+pending and a delivered update is already in the checkpoint. A competing exchange cannot
+claim a delivery already owned by another exchange. An update that misses the
+boundary remains pending for the next ordinary turn. Graph has no shared
+in-turn model boundary;
+its update starts the next ordinary turn and is promoted at a final answer or
+human-input pause. A Graph interruption can be continued or restarted while an
+update is pending; the update waits for the next ordinary turn.
+
+Injected updates are prefixed in model context as instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
 acknowledge and finish without further tool calls; the SSE delivery keeps the
 original text. This is model guidance; the Stop button cancels the stream.
-Cancellation completes generator teardown and stops lease renewal; expired steering rows are
-reclaimed every minute in bounded batches. The
+Cancellation completes generator teardown and stops lease renewal. The
 [managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
-defines the lifecycle and normal HITL behavior.
+defines the full lifecycle and normal HITL behavior.
 
 ### 8.119 Generated conversation title (2026-10-29)
 
@@ -7400,3 +7419,9 @@ attributed by `history_text_normalization` metadata, without changing live tool
 arguments. Scope checks and database schemas are retained.
 The `document-tool-reliability` specification owns the acceptance contract; see
 the corresponding migration note for validation and compatibility limits.
+
+### Turn attachments on user messages (2026-11-06)
+
+`RuntimeContext` gains optional `attachments` (see §2.3), stored on the user row
+as `metadata.extras.attachments`. Older pods ignore it; older rows render as
+before. The `managed-conversations` specification owns the acceptance contract.

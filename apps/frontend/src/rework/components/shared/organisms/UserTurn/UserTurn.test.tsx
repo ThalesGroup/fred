@@ -103,6 +103,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("shows a quiet pending clock that can retry when the turn is idle", async () => {
+  const retry = vi.fn();
+  render(<UserTurn text="New instruction" steeringState="pending" onRetryPending={retry} />);
+  const clock = container.querySelector<HTMLButtonElement>('button[aria-label="chatbot.steering.retry"]');
+  expect(clock?.textContent).toContain("schedule");
+  await click(clock!);
+  expect(retry).toHaveBeenCalledTimes(1);
+});
+
+it("shows no delivery indicator once the message is incorporated", () => {
+  render(<UserTurn text="New instruction" />);
+  expect(container.querySelector('[role="status"][aria-label="chatbot.steering.pending"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="chatbot.steering.retry"]')).toBeNull();
+});
+
 describe("UserTurn copy affordance (#2359)", () => {
   it.each(["forward", "backward"])(
     "copies a %s selection across user and assistant messages with native separators and canonical skills",
@@ -521,5 +536,44 @@ describe("UserTurn copy affordance (#2359)", () => {
     expect(reported).not.toHaveBeenCalled();
     expect(iconOf(copyButton())).toBe("content_copy");
     reported.mockRestore();
+  });
+});
+
+describe("UserTurn attachments", () => {
+  it("shows the turn's files as read-only chips in the bubble, above the message text", () => {
+    render(
+      <UserTurn
+        text="Summarise these"
+        attachments={[
+          { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+          { attachment_id: "a-2", name: "photo.png", mime: "image/png" },
+        ]}
+      />,
+    );
+    const list = container.querySelector("ul[aria-label='chatbot.attachmentChip.ariaLabel']")!;
+    const items = Array.from(list.querySelectorAll("li"));
+    expect(items.map((item) => item.querySelector("[title]")?.getAttribute("title"))).toEqual([
+      "brief.pdf",
+      "photo.png",
+    ]);
+    expect(items.map((item) => item.querySelector(".material-symbols-outlined")?.textContent)).toEqual([
+      "picture_as_pdf",
+      "image",
+    ]);
+    expect(list.querySelector("button")).toBeNull();
+    const text = Array.from(container.querySelectorAll("p, [data-skill-message]")).find((node) =>
+      node.textContent?.includes("Summarise these"),
+    )!;
+    expect(list.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Inside the bubble, beside its text, with the chip variant made for it.
+    expect(list.parentElement!.contains(text)).toBe(true);
+    expect(
+      Array.from(list.querySelectorAll("[data-appearance]")).map((chip) => chip.getAttribute("data-appearance")),
+    ).toEqual(["tonal", "tonal"]);
+  });
+
+  it("renders no chip row when the turn carries no attachments", () => {
+    render(<UserTurn text="Hello" />);
+    expect(container.querySelector("ul")).toBeNull();
   });
 });

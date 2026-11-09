@@ -32,8 +32,6 @@ interface WikiArticleProps {
   isRules: boolean;
   onEdit: () => void;
   onOpenHistory: () => void;
-  onDelete: () => void;
-  onRename: () => void;
   onClearReview: () => void;
   onNavigate: (slug: string) => void;
   /** The wiki's own root — the breadcrumb's first crumb. */
@@ -68,8 +66,6 @@ export function WikiArticle({
   isRules,
   onEdit,
   onOpenHistory,
-  onDelete,
-  onRename,
   onClearReview,
   onNavigate,
   onNavigateRoot,
@@ -131,24 +127,6 @@ export function WikiArticle({
                 onClick={onOpenHistory}
                 aria-label={t("rework.wiki.article.history")}
               />
-              {canEdit && !isRules && (
-                <IconButton
-                  icon={{ category: "outlined", type: "drive_file_rename_outline" }}
-                  variant="icon"
-                  size="small"
-                  onClick={onRename}
-                  aria-label={t("rework.wiki.article.rename")}
-                />
-              )}
-              {canEdit && !isRules && (
-                <IconButton
-                  icon={{ category: "outlined", type: "delete" }}
-                  variant="icon"
-                  size="small"
-                  onClick={onDelete}
-                  aria-label={t("rework.wiki.article.delete")}
-                />
-              )}
             </div>
             {canEdit && (
               <Button color="primary" variant="filled" size="small" onClick={onEdit}>

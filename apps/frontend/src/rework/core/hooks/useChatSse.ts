@@ -47,7 +47,6 @@ import type {
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
   detachTurn,
-  updatePendingMessages,
   readTurnMessages,
   registerTurn,
   settleTurn,
@@ -274,8 +273,6 @@ export type ChatSseCallbacks = {
   onBackgroundTurnSettled?: (sessionId: string, messages: ChatMessage[]) => void;
   /** The conversation title the runtime generated on the first turn, streamed once ready. */
   onSessionTitle?: (title: string, sessionId: string) => void;
-  onSteeredMessage?: (messageId: string, sessionId: string) => void;
-  onStreamInterrupted?: (sessionId: string) => void;
   onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
@@ -369,8 +366,8 @@ export function useChatSse(
   // send in that session restarts instead. Survives session switches.
   const stoppedSessionsRef = useRef(new Set<string>());
   const turnSessionRef = useRef<string | null>(null);
-  const activeSteeringTurnIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const steeringSubmissionsRef = useRef(new Map<string, Promise<"accepted" | "rejected" | "uncertain">>());
   // The streamed turn this view renders, if any (see backgroundTurns.ts).
   const liveTurnRef = useRef<LiveTurn | null>(null);
   const callbacksRef = useRef<ChatSseCallbacks>(params);
@@ -387,7 +384,6 @@ export function useChatSse(
       },
       callbacks: () => callbacksRef.current,
       finish: (turn) => {
-        if (activeSteeringTurnIdRef.current === turn.steeringTurnId) activeSteeringTurnIdRef.current = null;
         if (liveTurnRef.current === turn) liveTurnRef.current = null;
         // Stop and a replacing send take the slot before aborting. Still owning
         // it after an abort means abortTurn() on deletion: release the composer here.
@@ -411,7 +407,6 @@ export function useChatSse(
       abortRef.current?.abort();
     }
     abortRef.current = null;
-    activeSteeringTurnIdRef.current = null;
     preflightOwnerRef.current = null;
   }, [host]);
   // Chat-turn controls (CAPAB-01 #1976, RFC §3.3/§3.7) — supersedes the retired
@@ -458,13 +453,12 @@ export function useChatSse(
   }, [setAll, releaseCurrentTurn]);
 
   const startTurn = useCallback(
-    (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
+    (sessionId: string, controller: AbortController): LiveTurn => {
       const turn: LiveTurn = {
         sessionId,
         teamId,
         agentInstanceId,
         controller,
-        steeringTurnId,
         thoughts: new Map(),
         host,
         messages: [],
@@ -486,7 +480,6 @@ export function useChatSse(
       turn.host = host;
       liveTurnRef.current = turn;
       abortRef.current = turn.controller;
-      activeSteeringTurnIdRef.current = turn.steeringTurnId;
       turnSessionRef.current = sessionId;
       setAll(turn.messages);
       setWaitResponse(true);
@@ -507,14 +500,12 @@ export function useChatSse(
     console.debug("[useChatSse] abort() called — clearing waitResponse");
     abortRef.current?.abort();
     abortRef.current = null;
-    activeSteeringTurnIdRef.current = null;
     // Otherwise an explicit Stop during preflight would leave the lock held
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
     if (turnSessionRef.current) {
       stoppedSessionsRef.current.add(turnSessionRef.current);
-      updatePendingMessages(turnSessionRef.current, []);
     }
     setWaitResponse(false);
   }, []);
@@ -533,18 +524,16 @@ export function useChatSse(
     ) => {
       const { exchangeId, turn, rankRef, deltaRankRef } = ctx;
       const { sessionId, thoughts } = turn;
-      const {
-        onAwaitingHuman,
-        onBindDraftAgentToSessionId,
-        onTurnPersisted,
-        onSessionTitle,
-        onSteeredMessage,
-        onTurnRejected,
-        onError,
-      } = turnCallbacks(turn);
+      const { onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onSessionTitle, onTurnRejected, onError } =
+        turnCallbacks(turn);
       const ts = new Date().toISOString();
 
       const emit = (msg: ChatMessage) => writeTurnMessages(turn, upsertOne(readTurnMessages(turn), msg));
+      const takeRank = (rank?: number | null) => {
+        const resolved = rank ?? rankRef.current;
+        rankRef.current = Math.max(rankRef.current, resolved + 1);
+        return resolved;
+      };
 
       // Emit one streaming "thought" trace message. The start/delta/end handlers
       // share the same envelope and differ only in rank, accumulated text, and extras.
@@ -562,18 +551,20 @@ export function useChatSse(
 
       switch (event.kind) {
         case "steered_user_message": {
-          updatePendingMessages(sessionId, (current) => current.filter((message) => message.id !== event.message_id));
+          const existing = readTurnMessages(turn).find(
+            (message) => message.metadata?.extras?.steered_message_id === event.message_id,
+          );
+          const rank = takeRank(event.rank);
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
-            timestamp: ts,
+            rank,
+            timestamp: existing?.timestamp ?? ts,
             role: "user",
             channel: "final",
             parts: [{ type: "text", text: event.content }],
-            metadata: { extras: { steered_message_id: event.message_id } },
+            metadata: { extras: { steered_message_id: event.message_id, steering_state: "delivered" } },
           });
-          onSteeredMessage?.(event.message_id, sessionId);
           break;
         }
         case "assistant_delta": {
@@ -602,7 +593,7 @@ export function useChatSse(
           // instead of waiting on that dead event.
           onTurnPersisted?.(sessionId);
           // Authoritative frame — replaces any accumulated delta at the same rank.
-          const rank = deltaRankRef.current ?? rankRef.current++;
+          const rank = takeRank(event.rank);
           const parts: ChatMessage["parts"] = [{ type: "text", text: event.content ?? "" }];
           if (event.ui_parts?.length) {
             for (const p of event.ui_parts) {
@@ -641,7 +632,7 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
             role: "assistant",
             channel: "tool_call",
@@ -678,7 +669,7 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
             role: "tool",
             channel: "tool_result",
@@ -699,7 +690,7 @@ export function useChatSse(
             emit({
               session_id: sessionId,
               exchange_id: exchangeId,
-              rank: rankRef.current++,
+              rank: takeRank(event.pause_metadata_rank),
               timestamp: ts,
               role: "system",
               channel: "system_note",
@@ -730,7 +721,7 @@ export function useChatSse(
             emit({
               session_id: sessionId,
               exchange_id: exchangeId,
-              rank: rankRef.current++,
+              rank: takeRank(event.rank),
               timestamp: ts,
               role: "system",
               channel: "hitl_request",
@@ -823,7 +814,8 @@ export function useChatSse(
         }
 
         case "thought_start": {
-          const rank = rankRef.current++;
+          if (event.phase === "tool_use") break;
+          const rank = takeRank(event.rank);
           console.debug(
             `[useChatSse] thought_start id=${event.thought_id} phase=${event.phase} title="${event.title ?? ""}"`,
           );
@@ -879,9 +871,6 @@ export function useChatSse(
         case "execution_error": {
           turn.completed = false;
           turn.awaitingInput = false;
-          updatePendingMessages(sessionId, (current) =>
-            current.map((message) => (message.status === "offered" ? { ...message, status: "uncertain" } : message)),
-          );
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughts.entries()) {
@@ -935,7 +924,7 @@ export function useChatSse(
               emit({
                 session_id: sessionId,
                 exchange_id: exchangeId,
-                rank: rankRef.current++,
+                rank: takeRank(event.rank),
                 timestamp: ts,
                 role: "system",
                 channel: "system_note",
@@ -986,7 +975,20 @@ export function useChatSse(
 
       onAccepted?.();
 
-      const rankRef = { current: readTurnMessages(turn).length + 1 };
+      const visibleRanks = readTurnMessages(turn)
+        .filter((message) => message.rank >= 0)
+        .map((message) => message.rank);
+      const resumeAnswers = (body.resume_payload as { answers?: unknown[] } | null | undefined)?.answers;
+      const openingSlots = body.pending_message_id
+        ? 1
+        : body.resume_payload
+          ? Array.isArray(resumeAnswers)
+            ? resumeAnswers.length
+            : 1
+          : 0;
+      const rankRef = {
+        current: Math.max(-1, ...visibleRanks) + 1 + openingSlots,
+      };
       const deltaRankRef: { current: number | null } = { current: null };
 
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
@@ -1006,7 +1008,6 @@ export function useChatSse(
         if (!ended || !terminal) {
           turn.interrupted = true;
           if (!abortRef.current || abortRef.current.signal === signal) {
-            turnCallbacks(turn).onStreamInterrupted?.(turn.sessionId);
           }
         }
       }
@@ -1021,6 +1022,7 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       interrupted?: InterruptedRunChoice,
+      pendingMessageId?: string,
     ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
       const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
@@ -1043,7 +1045,6 @@ export function useChatSse(
         abortRef.current.abort();
       }
       const ac = new AbortController();
-      const steeringTurnId = uuidv4();
       abortRef.current = ac;
       preflightOwnerRef.current = ac;
       // Immediately non-reentrant, not only once prepare-execution succeeds —
@@ -1227,16 +1228,17 @@ export function useChatSse(
         preflightOwnerRef.current = null;
       }
       turnSessionRef.current = effectiveSessionId;
-      activeSteeringTurnIdRef.current = steeringTurnId;
-      const turn = startTurn(effectiveSessionId, ac, steeringTurnId);
+      const turn = startTurn(effectiveSessionId, ac);
       // A continue sends no message: the composer keeps the user's draft.
-      if (!continuing) onTurnStarted?.();
+      if (!continuing && !pendingMessageId) onTurnStarted?.();
 
       // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
         session_id: effectiveSessionId,
         exchange_id: exchangeId,
-        rank: messagesRef.current.length,
+        rank:
+          Math.max(-1, ...messagesRef.current.filter((message) => message.rank >= 0).map((message) => message.rank)) +
+          1,
         timestamp: new Date().toISOString(),
         role: "user",
         channel: "final",
@@ -1252,11 +1254,12 @@ export function useChatSse(
               : runtimeContext?.skill
                 ? { skill_invocation: runtimeContext.skill }
                 : {}),
+            ...(runtimeContext?.attachments?.length ? { attachments: runtimeContext.attachments } : {}),
           },
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
       };
-      if (!continuing) {
+      if (!continuing && !pendingMessageId) {
         messagesRef.current = upsertOne(messagesRef.current, userMsg);
         setMessages([...messagesRef.current]);
       }
@@ -1276,7 +1279,7 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             input,
             session_id: sessionId,
-            steering_turn_id: steeringTurnId,
+            ...(pendingMessageId ? { pending_message_id: pendingMessageId } : {}),
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
@@ -1446,7 +1449,6 @@ export function useChatSse(
       // exchange_id before groupTraceEntries can pair a call with its result
       // by call_id).
       const exchangeId = pending.exchange_id;
-      const steeringTurnId = uuidv4();
       const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
@@ -1455,8 +1457,7 @@ export function useChatSse(
       const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
       setWaitResponse(true);
-      activeSteeringTurnIdRef.current = steeringTurnId;
-      const turn = startTurn(sessionId, ac, steeringTurnId);
+      const turn = startTurn(sessionId, ac);
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
       // 401/502/503 means the resume never ran, so the caller must be told
@@ -1470,7 +1471,6 @@ export function useChatSse(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
-            steering_turn_id: steeringTurnId,
             // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
             // validated against the currently pending occurrence backend-side).
             interrupt_id: batchAnswers ? null : (hitlPayload?.interrupt_id ?? null),
@@ -1714,9 +1714,53 @@ export function useChatSse(
   const steerActiveTurn = useCallback(
     async (sessionId: string, messageId: string, input: string): Promise<"accepted" | "rejected" | "uncertain"> => {
       let requestStarted = false;
+      const currentTurn = liveTurnRef.current;
+      const turn = currentTurn?.sessionId === sessionId ? currentTurn : null;
+      const read = () => (turn ? readTurnMessages(turn) : messagesRef.current);
+      const write = (next: ChatMessage[]) => (turn ? writeTurnMessages(turn, next) : setAll(next));
+      const unresolvedEarlier = () =>
+        read().some(
+          (message) =>
+            message.metadata?.extras?.steered_message_id !== messageId &&
+            message.metadata?.extras?.steering_state === "pending" &&
+            message.metadata?.extras?.steering_submission === "uncertain",
+        );
+      if (unresolvedEarlier()) return "rejected";
+      const current = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+      const provisionalRank =
+        Math.min(
+          0,
+          ...read()
+            .filter((message) => message.metadata?.extras?.steering_state === "pending")
+            .map((message) => message.rank),
+        ) - 1;
+      const optimistic: ChatMessage = {
+        session_id: sessionId,
+        exchange_id: `pending:${messageId}`,
+        rank: provisionalRank,
+        timestamp: new Date().toISOString(),
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: input }],
+        metadata: {
+          extras: { steered_message_id: messageId, steering_state: "pending", steering_submission: "submitting" },
+        },
+      };
+      if (!current) write(upsertOne(read(), optimistic));
+      const dropOptimistic = () => {
+        if (!current) write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+      };
+      const precedingSubmission = steeringSubmissionsRef.current.get(sessionId);
+      let finishSubmission!: (outcome: "accepted" | "rejected" | "uncertain") => void;
+      const submission = new Promise<"accepted" | "rejected" | "uncertain">((resolve) => (finishSubmission = resolve));
+      steeringSubmissionsRef.current.set(sessionId, submission);
+      let outcome: "accepted" | "rejected" | "uncertain" = "rejected";
       try {
-        const steeringTurnId = activeSteeringTurnIdRef.current;
-        if (!steeringTurnId) return "rejected";
+        await precedingSubmission;
+        if (unresolvedEarlier()) {
+          dropOptimistic();
+          return outcome;
+        }
         const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
         const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
         const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
@@ -1725,7 +1769,6 @@ export function useChatSse(
         const steeringRequest: RuntimeExecuteRequest = {
           agent_instance_id: agentInstanceId,
           session_id: sessionId,
-          steering_turn_id: steeringTurnId,
           input,
           runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
         };
@@ -1737,13 +1780,64 @@ export function useChatSse(
           },
           body: JSON.stringify(steeringRequest),
         });
-        if (response.ok) return "accepted";
-        return response.status < 500 ? "rejected" : "uncertain";
+        if (response.ok) {
+          const persisted = (await response.json()) as ChatMessage;
+          const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+          if (latest?.metadata?.extras?.steering_state === "pending") {
+            write(upsertOne(read(), { ...persisted, rank: latest.rank, timestamp: latest.timestamp }));
+          }
+          return (outcome = "accepted");
+        }
+        if (response.status >= 500) {
+          requestStarted = true;
+          throw new Error("Submission outcome unknown");
+        }
+        if (
+          !current &&
+          read().some(
+            (message) =>
+              message.metadata?.extras?.steered_message_id === messageId &&
+              message.metadata.extras?.steering_submission,
+          )
+        ) {
+          write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+        }
+        return outcome;
       } catch {
-        return requestStarted ? "uncertain" : "rejected";
+        if (requestStarted) {
+          const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+          if (latest?.metadata?.extras?.steering_state === "pending" && latest.metadata.extras?.steering_submission) {
+            write(
+              upsertOne(read(), {
+                ...latest,
+                metadata: {
+                  ...latest.metadata,
+                  extras: { ...latest.metadata.extras, steering_submission: "uncertain" },
+                },
+              }),
+            );
+          }
+          return (outcome = "uncertain");
+        }
+        if (
+          !current &&
+          read().some(
+            (message) =>
+              message.metadata?.extras?.steered_message_id === messageId &&
+              message.metadata.extras?.steering_submission,
+          )
+        ) {
+          write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+        }
+        return outcome;
+      } finally {
+        finishSubmission(outcome);
+        if (steeringSubmissionsRef.current.get(sessionId) === submission) {
+          steeringSubmissionsRef.current.delete(sessionId);
+        }
       }
     },
-    [teamId, agentInstanceId, prepareExecution],
+    [teamId, agentInstanceId, prepareExecution, setAll],
   );
 
   return {
