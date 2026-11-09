@@ -395,12 +395,6 @@ def test_frame_order_is_fixed() -> None:
     ]
 
 
-def test_steering_receives_conversation_language() -> None:
-    frame = _frame(binding=_binding(language="fr"))
-    assert isinstance(frame[2], TurnSteeringMiddleware)
-    assert frame[2]._language == "fr"
-
-
 def test_frame_without_ranked_event_consumer_skips_steering() -> None:
     frame = _frame(binding=_binding(steering_enabled=False))
     assert not any(isinstance(item, TurnSteeringMiddleware) for item in frame)

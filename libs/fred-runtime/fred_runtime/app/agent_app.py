@@ -79,10 +79,7 @@ from fred_core.history.history_schema import (
     HitlResponsePart,
     TextPart,
 )
-from fred_core.history.postgres_history_store import (
-    PostgresHistoryStore,
-    steered_reply_id,
-)
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -1336,6 +1333,13 @@ class _AgentExecuteRequest(BaseModel):
             and not self.message.strip()
         ):
             raise ValueError("message is required when resume_payload is not set")
+        if self.pending_message_id and (
+            not self.agent_instance_id
+            or self.resume_payload is not None
+            or self.interrupted_action is not None
+            or not self.message.strip()
+        ):
+            raise ValueError("pending_message_id requires an ordinary text turn")
         return self
 
 
@@ -2620,6 +2624,7 @@ def _mark_run_terminal(credentials: OutboundCredentialProvider | None) -> None:
 def _stream_finisher(
     stream: AsyncGenerator[str, None],
     credentials: OutboundCredentialProvider | None,
+    cleanup_unstarted: Callable[[], Awaitable[None]] | None = None,
 ) -> BackgroundTask:
     """End a streamed run when its response ends, however the response ended.
 
@@ -2633,7 +2638,11 @@ def _stream_finisher(
         try:
             # Closing the stream closes the run: its children are cancelled
             # first, then its own cleanup runs.
-            await complete_cleanup(stream.aclose())
+            try:
+                await complete_cleanup(stream.aclose())
+            finally:
+                if cleanup_unstarted is not None:
+                    await complete_cleanup(cleanup_unstarted())
         finally:
             _discard_run_record(credentials)
 
@@ -3369,7 +3378,6 @@ def _opening_history_count(
 @dataclass(frozen=True)
 class _HistoryPositions:
     row: int | None = None
-    steered_deliveries: tuple[int, ...] = ()
     pause_metadata: int | None = None
     hitl_request: int | None = None
 
@@ -3407,13 +3415,6 @@ class _HistoryRanker:
             if payload.get("message_id") == self.pending_message_id:
                 return _HistoryPositions(row=self.opening_rank)
             return _HistoryPositions(row=self._take())
-        if kind == RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value:
-            delivery_ranks = tuple(
-                self._take() for _ in payload.get("deliveries") or ()
-            )
-            return _HistoryPositions(
-                row=self._take(), steered_deliveries=delivery_ranks
-            )
         if kind == "status" and isinstance(payload.get("skill_load"), dict):
             load_id = payload["skill_load"].get("load_id")
             if isinstance(load_id, str) and load_id not in self.skill_load_ids:
@@ -3458,10 +3459,15 @@ async def _initial_history_ranker(
     history_store: HistoryStorePort | None,
     session_id: str | None,
     request: _AgentExecuteRequest,
+    opening_rank_override: int | None = None,
 ) -> tuple[int | None, _HistoryRanker | None]:
     if not session_id or history_store is None:
         return None, None
-    base_rank = await history_store.next_rank(session_id)
+    base_rank = (
+        opening_rank_override
+        if opening_rank_override is not None
+        else await history_store.next_rank(session_id)
+    )
     return base_rank, _HistoryRanker(
         base_rank + _opening_history_count(request.message, request.resume_payload),
         opening_rank=base_rank,
@@ -3470,23 +3476,88 @@ async def _initial_history_ranker(
     )
 
 
+async def _claim_initial_opening(
+    history_store: HistoryStorePort | None,
+    request: _AgentExecuteRequest,
+    session_id: str | None,
+    user_id: str,
+    team_id: str | None,
+    exchange_id: str,
+) -> bool:
+    if (
+        not isinstance(history_store, PostgresHistoryStore)
+        or not session_id
+        or not request.agent_instance_id
+        or not request.message
+        or request.resume_payload is not None
+        or request.interrupted_action is not None
+        or request.pending_message_id is not None
+    ):
+        return False
+    from fred_core.history.history_schema import make_user_text
+
+    try:
+        return await history_store.claim_initial_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            team_id=team_id,
+            agent_instance_id=request.agent_instance_id,
+            message=make_user_text(session_id, exchange_id, 0, request.message),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 async def _require_pending_opening_message(
     request: _AgentExecuteRequest, session_id: str | None, user_id: str
 ) -> None:
-    if not request.pending_message_id:
+    if request.resume_payload is not None:
         return
     if not session_id:
-        raise RuntimeError("Pending user message has no session")
-    pending = await turn_messages.require_history().pending_steered_message(
-        session_id, user_id, request.pending_message_id
+        if not request.pending_message_id:
+            return
+        raise HTTPException(
+            status_code=409, detail="Pending user message has no session"
+        )
+    if not request.agent_instance_id:
+        try:
+            history = turn_messages.require_history()
+        except RuntimeError:
+            return
+    else:
+        history = turn_messages.require_history()
+    pending_messages = await history.pending_steered_messages(session_id, user_id)
+    if not pending_messages and not request.pending_message_id:
+        return
+    if not request.agent_instance_id:
+        raise HTTPException(status_code=409, detail="A managed update is pending")
+    instance_pending = await history.pending_steered_messages(
+        session_id, user_id, request.agent_instance_id
     )
+    pending = pending_messages[0] if pending_messages else None
     if (
         pending is None
+        or not instance_pending
+        or instance_pending[0].rank != pending.rank
+    ):
+        raise HTTPException(
+            status_code=409, detail="A different agent owns the pending update"
+        )
+    if request.interrupted_action is not None:
+        return
+    extras = (pending.metadata.model_extra or {}).get("extras") if pending else None
+    pending_id = extras.get("steered_message_id") if isinstance(extras, dict) else None
+    if (
+        pending is None
+        or pending_id != request.pending_message_id
         or not pending.parts
         or not isinstance(pending.parts[0], TextPart)
         or pending.parts[0].text != request.message
     ):
-        raise RuntimeError("Pending user message is unavailable")
+        raise HTTPException(
+            status_code=409,
+            detail="The oldest pending user message must start the next turn",
+        )
 
 
 async def _rank_runtime_event(
@@ -3511,71 +3582,25 @@ async def _rank_runtime_event(
     if payload.get("kind") == RuntimeEventKind.STEERED_USER_MESSAGE.value:
         if not session_id:
             raise RuntimeError("Steered message has no session")
-        delivered = await turn_messages.require_history().deliver_steered_message(
-            session_id=session_id,
-            user_id=user_id,
-            message_id=payload["message_id"],
-            rank=positions.require_row(),
-            exchange_id=exchange_id,
-            expected_content=payload["content"],
-        )
-        if delivered is None:
-            raise RuntimeError("Steered message disappeared before delivery")
-        payload["rank"] = delivered.rank
-    elif payload.get("kind") == RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value:
-        if not session_id:
-            raise RuntimeError("Steered assistant reply has no session")
-        reply_id = steered_reply_id(tuple(payload["message_ids"]))
         scope = RunScope.current()
-        if scope is None:
-            raise RuntimeError("Steered reply has no active run scope")
+        receipt_key = f"steered-user:{payload['message_id']}"
         try:
-            (
-                delivered,
-                persisted,
-            ) = await turn_messages.require_history().persist_steered_assistant_message(
+            delivered = await turn_messages.require_history().deliver_steered_message(
                 session_id=session_id,
                 user_id=user_id,
-                exchange_id=exchange_id,
+                message_id=payload["message_id"],
                 rank=positions.require_row(),
-                message_ids=tuple(payload["message_ids"]),
-                content=payload["content"],
-                token_usage=payload.get("token_usage"),
-                deliveries=tuple(
-                    (item["message_id"], item["content"], rank)
-                    for item, rank in zip(
-                        payload.get("deliveries") or (),
-                        positions.steered_deliveries,
-                        strict=True,
-                    )
-                ),
+                exchange_id=exchange_id,
+                expected_content=payload["content"],
             )
-            reply_part = persisted.parts[0]
-            if not isinstance(reply_part, TextPart):
-                raise RuntimeError("Steered assistant reply is not text")
-            reply_extras = (persisted.metadata.model_extra or {}).get("extras") or {}
-            payload["rank"] = persisted.rank
-            payload["content"] = reply_part.text
-            payload["message_ids"] = reply_extras.get(
-                "steered_reply_for", payload["message_ids"]
-            )
-            payload["deliveries"] = []
-            for item in delivered:
-                user_part = item.parts[0]
-                if not isinstance(user_part, TextPart):
-                    raise RuntimeError("Steered user message is not text")
-                payload["deliveries"].append(
-                    {
-                        "message_id": (item.metadata.model_extra or {})
-                        .get("extras", {})
-                        .get("steered_message_id"),
-                        "content": user_part.text,
-                        "rank": item.rank,
-                    }
-                )
-            scope.complete_event_receipt(reply_id, payload)
+            if delivered is None:
+                raise RuntimeError("Steered message disappeared before delivery")
+            payload["rank"] = delivered.rank
+            if scope is not None and scope.has_event_receipt(receipt_key):
+                scope.complete_event_receipt(receipt_key, payload)
         except Exception as exc:
-            scope.fail_event_receipt(reply_id, exc)
+            if scope is not None:
+                scope.fail_event_receipt(receipt_key, exc)
             raise
     return payload
 
@@ -3628,6 +3653,7 @@ async def _write_turn_history(
     previously_pending_occurrence_ids: tuple[str, ...] = (),
     base_rank: int | None = None,
     pending_message_id: str | None = None,
+    prewritten_initial: bool = False,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -3678,6 +3704,10 @@ async def _write_turn_history(
     from fred_core.store.vector_search import VectorSearchHit
 
     if _ran_no_turn(payloads):
+        if prewritten_initial and isinstance(history_store, PostgresHistoryStore):
+            await history_store.release_initial_user_message(
+                session_id, user_id, exchange_id or ""
+            )
         return
     if base_rank is None:
         try:
@@ -3836,7 +3866,6 @@ async def _write_turn_history(
 
         if kind in {
             RuntimeEventKind.STEERED_USER_MESSAGE.value,
-            RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value,
         }:
             continue
         elif kind == "status" and isinstance(payload.get("skill_load"), dict):
@@ -4396,6 +4425,9 @@ async def _stream(
     platform_prompt: str | None = None,
     title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
+    exchange_id: str | None = None,
+    prewritten_initial: bool = False,
+    on_start: Callable[[], None] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -4416,16 +4448,15 @@ async def _stream(
     ctx = request.context or {}
     session_id: str | None = ctx.get("session_id")
     user_id: str = ctx.get("user_id") or "unknown"
-    exchange_id = await _resolve_exchange_id(
+    exchange_id = exchange_id or await _resolve_exchange_id(
         resume_payload=request.resume_payload,
         session_id=session_id,
         history_store=get_runtime_context().config.history_store,
     )
     history_store = get_runtime_context().config.history_store
     base_rank, ranker = await _initial_history_ranker(
-        history_store, session_id, request
+        history_store, session_id, request, 0 if prewritten_initial else None
     )
-    await _require_pending_opening_message(request, session_id, user_id)
     turn_start = time.monotonic()
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
@@ -4458,9 +4489,11 @@ async def _stream(
         title_model_profile_id=title_model_profile_id,
         credential_provider=credential_provider,
         owns_run_record=True,
-        steering_enabled=True,
+        steering_enabled=bool(request.agent_instance_id),
     )
     try:
+        if on_start is not None:
+            on_start()
         async for runtime_payload in payloads:
             for payload in expander.expand(runtime_payload):
                 payload = await _rank_runtime_event(
@@ -4493,6 +4526,7 @@ async def _stream(
                     previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
                     base_rank=base_rank,
                     pending_message_id=request.pending_message_id,
+                    prewritten_initial=prewritten_initial,
                 )
             )
 
@@ -7299,6 +7333,19 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            prewritten_initial = await _claim_initial_opening(
+                get_runtime_context().config.history_store,
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+                target.team_id,
+                exchange_id,
+            )
         except Exception:
             _discard_run_record(target.credential_provider)
             raise
@@ -7306,9 +7353,8 @@ def _build_agent_router(
         user_id_str = request.effective_user_id() or "unknown"
         history_store = get_runtime_context().config.history_store
         base_rank, ranker = await _initial_history_ranker(
-            history_store, session_id, internal_req
+            history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
-        await _require_pending_opening_message(internal_req, session_id, user_id_str)
         payloads: list[dict[str, Any]] = []
         expander = _TurnEventExpander(target.definition, internal_req)
         async for runtime_payload in _iterate_runtime_event_payloads(
@@ -7334,7 +7380,7 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             credential_provider=target.credential_provider,
             owns_run_record=True,
-            steering_enabled=True,
+            steering_enabled=bool(internal_req.agent_instance_id),
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7379,6 +7425,7 @@ def _build_agent_router(
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                     base_rank=base_rank,
                     pending_message_id=request.pending_message_id,
+                    prewritten_initial=prewritten_initial,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -7428,6 +7475,19 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            prewritten_initial = await _claim_initial_opening(
+                get_runtime_context().config.history_store,
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+                target.team_id,
+                exchange_id,
+            )
         except Exception:
             _discard_run_record(target.credential_provider)
             raise
@@ -7435,9 +7495,8 @@ def _build_agent_router(
         user_id_str = request.effective_user_id() or "unknown"
         history_store = get_runtime_context().config.history_store
         base_rank, ranker = await _initial_history_ranker(
-            history_store, session_id, internal_req
+            history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
-        await _require_pending_opening_message(internal_req, session_id, user_id_str)
         payloads: list[dict[str, Any]] = []
         expander = _TurnEventExpander(target.definition, internal_req)
         async for runtime_payload in _iterate_runtime_event_payloads(
@@ -7463,7 +7522,7 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             credential_provider=target.credential_provider,
             owns_run_record=True,
-            steering_enabled=True,
+            steering_enabled=bool(internal_req.agent_instance_id),
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7507,6 +7566,7 @@ def _build_agent_router(
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                     base_rank=base_rank,
                     pending_message_id=request.pending_message_id,
+                    prewritten_initial=prewritten_initial,
                 )
         return _build_eval_trace(
             payloads=payloads,
@@ -7545,8 +7605,14 @@ def _build_agent_router(
         user_id = (
             authenticated_user.uid if authenticated_user is not None else "unknown"
         )
+        history = turn_messages.require_history()
+        if (
+            await history.session_agent_instance_id(session_id)
+            != request.agent_instance_id
+        ):
+            raise HTTPException(status_code=409, detail="session_agent_mismatch")
         try:
-            return await turn_messages.require_history().submit_steered_message(
+            return await history.submit_steered_message(
                 session_id=session_id,
                 user_id=user_id,
                 team_id=request.effective_team_id() or "personal",
@@ -7619,10 +7685,47 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            exchange_id = None
+            prewritten_initial = False
+            if internal_req.agent_instance_id:
+                exchange_id = await _resolve_exchange_id(
+                    resume_payload=internal_req.resume_payload,
+                    session_id=request.effective_session_id(),
+                    history_store=get_runtime_context().config.history_store,
+                )
+                prewritten_initial = await _claim_initial_opening(
+                    get_runtime_context().config.history_store,
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                    target.team_id,
+                    exchange_id,
+                )
         except Exception:
             _discard_run_record(target.credential_provider)
             raise
         provider = target.credential_provider
+        stream_started = False
+
+        def mark_stream_started() -> None:
+            nonlocal stream_started
+            stream_started = True
+
+        async def cleanup_unstarted() -> None:
+            if not stream_started and prewritten_initial:
+                history = get_runtime_context().config.history_store
+                if isinstance(history, PostgresHistoryStore):
+                    await history.release_initial_user_message(
+                        request.effective_session_id() or "",
+                        request.effective_user_id() or "unknown",
+                        exchange_id or "",
+                    )
+
         stream = _stream(
             target.definition,
             internal_req,
@@ -7646,11 +7749,14 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             title_model_profile_id=target.title_model_profile_id,
             credential_provider=provider,
+            exchange_id=exchange_id,
+            prewritten_initial=prewritten_initial,
+            on_start=mark_stream_started,
         )
         return _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
-            background=_stream_finisher(stream, provider),
+            background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
 
     return router

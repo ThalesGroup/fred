@@ -811,6 +811,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         );
         return false;
       }
+      if (
+        !resumingPending &&
+        !interrupted &&
+        latestMessagesRef.current.some((message) => message.metadata?.extras?.steering_state === "pending")
+      ) {
+        showWarn({ summary: t("chatbot.steering.waiting") });
+        return false;
+      }
       if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return false;
@@ -966,16 +974,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
       return;
     }
-    if (messages.some((message) => message.metadata?.extras?.steering_state === "pending")) {
-      showWarn({ summary: t("chatbot.steering.waiting") });
-      return;
-    }
     await sendTurn(text);
   }, [
     sendTurn,
     input,
     waitResponse,
-    messages,
     sessionId,
     steerActiveTurn,
     attachments.attachments.length,

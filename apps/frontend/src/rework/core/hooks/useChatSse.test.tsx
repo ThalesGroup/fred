@@ -544,15 +544,115 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("keeps pending messages in send order when steering responses arrive out of order", async () => {
+  it("submits steers in send order when the first preparation is delayed", async () => {
     let finishStream!: (response: Response) => void;
-    const firstResponse = deferred<Response>();
-    const secondResponse = deferred<Response>();
+    const firstPreparation = deferred<unknown>();
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
-      .mockImplementationOnce(() => firstResponse.promise)
-      .mockImplementationOnce(() => secondResponse.promise);
+      .mockImplementation((_url, options) => {
+        const messageId = new URL(String(_url), "http://localhost").searchParams.get("message_id");
+        const input = JSON.parse(String(options?.body)).input;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              session_id: "session-1",
+              exchange_id: `pending:${messageId}`,
+              rank: messageId === "m1" ? -1 : -2,
+              timestamp: "2026-11-06T12:00:00Z",
+              role: "user",
+              channel: "final",
+              parts: [{ type: "text", text: input }],
+              metadata: { extras: { steered_message_id: messageId, steering_state: "pending" } },
+            }),
+            { status: 202 },
+          ),
+        );
+      });
+    mount();
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("original", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    prepareExecutionImpl = () => firstPreparation.promise;
+    let firstSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    let secondSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    await act(async () => {
+      firstSteer = latest.steerActiveTurn("session-1", "m1", "first update");
+      secondSteer = latest.steerActiveTurn("session-1", "m2", "second update");
+    });
+    const pendingTexts = () =>
+      toThreadMessages(latest.messages, true)
+        .filter((message) => message.role === "user" && message.steeringState === "pending")
+        .map((message) => message.text);
+    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    expect(prepareExecutionCalls).toHaveLength(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      firstPreparation.resolve({
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
+        chat_controls: [],
+        capability_base_urls: {},
+      });
+      expect(await firstSteer).toBe("accepted");
+      expect(await secondSteer).toBe("accepted");
+    });
+    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    expect(fetchSpy.mock.calls[1][0]).toContain("message_id=m1");
+    expect(fetchSpy.mock.calls[2][0]).toContain("message_id=m2");
+    expect(prepareExecutionCalls).toHaveLength(3);
+    finishStream(new Response("", { status: 200 }));
+    await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("continues with the next steer after the first preparation fails", async () => {
+    let finishStream!: (response: Response) => void;
+    const firstPreparation = deferred<unknown>();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
+      .mockResolvedValue(
+        new Response(JSON.stringify({ session_id: "session-1", metadata: { extras: {} } }), { status: 202 }),
+      );
+    mount();
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("original", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    let preparationCount = 0;
+    prepareExecutionImpl = () =>
+      preparationCount++ === 0
+        ? firstPreparation.promise
+        : Promise.resolve({ execute_stream_url: "/runtime/agents-v2/agents/execute/stream" });
+    let firstSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    let secondSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    await act(async () => {
+      firstSteer = latest.steerActiveTurn("session-1", "m1", "first update");
+      secondSteer = latest.steerActiveTurn("session-1", "m2", "second update");
+    });
+    expect(preparationCount).toBe(1);
+    await act(async () => {
+      firstPreparation.reject(new Error("preparation failed"));
+      expect(await firstSteer).toBe("rejected");
+      expect(await secondSteer).toBe("accepted");
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[1][0]).toContain("message_id=m2");
+    finishStream(new Response("", { status: 200 }));
+    await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("does not let a later steer overtake a request with an uncertain outcome", async () => {
+    let finishStream!: (response: Response) => void;
+    const firstResponse = deferred<Response>();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
+      .mockImplementationOnce(() => firstResponse.promise);
     mount();
     let sendPromise!: Promise<boolean>;
     await act(async () => {
@@ -564,51 +664,16 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await act(async () => {
       firstSteer = latest.steerActiveTurn("session-1", "m1", "first update");
       secondSteer = latest.steerActiveTurn("session-1", "m2", "second update");
-      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
     });
-    const pendingTexts = () =>
-      toThreadMessages(latest.messages, true)
-        .filter((message) => message.role === "user" && message.steeringState === "pending")
-        .map((message) => message.text);
-    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    expect(prepareExecutionCalls).toHaveLength(2);
     await act(async () => {
-      secondResponse.resolve(
-        new Response(
-          JSON.stringify({
-            session_id: "session-1",
-            exchange_id: "pending:m2",
-            rank: -2,
-            timestamp: "2026-11-06T12:00:01Z",
-            role: "user",
-            channel: "final",
-            parts: [{ type: "text", text: "second update" }],
-            metadata: { extras: { steered_message_id: "m2", steering_state: "pending" } },
-          }),
-          { status: 202 },
-        ),
-      );
-      expect(await secondSteer).toBe("accepted");
+      firstResponse.reject(new Error("response lost"));
+      expect(await firstSteer).toBe("uncertain");
+      expect(await secondSteer).toBe("rejected");
     });
-    expect(pendingTexts()).toEqual(["first update", "second update"]);
-    await act(async () => {
-      firstResponse.resolve(
-        new Response(
-          JSON.stringify({
-            session_id: "session-1",
-            exchange_id: "pending:m1",
-            rank: -1,
-            timestamp: "2026-11-06T12:00:00Z",
-            role: "user",
-            channel: "final",
-            parts: [{ type: "text", text: "first update" }],
-            metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
-          }),
-          { status: 202 },
-        ),
-      );
-      expect(await firstSteer).toBe("accepted");
-    });
-    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(latest.messages.some((message) => message.metadata?.extras?.steered_message_id === "m2")).toBe(false);
     finishStream(new Response("", { status: 200 }));
     await act(async () => await sendPromise);
     fetchSpy.mockRestore();
@@ -649,6 +714,11 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(
       latest.messages.find((message) => message.metadata?.extras?.steered_message_id === "message-1")?.metadata?.extras,
     ).toMatchObject({ steering_submission: "uncertain" });
+    await act(async () => {
+      expect(await latest.steerActiveTurn("session-1", "message-2", "later update")).toBe("rejected");
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(latest.messages.some((message) => message.metadata?.extras?.steered_message_id === "message-2")).toBe(false);
     const provisionalRank = latest.messages.find(
       (message) => message.metadata?.extras?.steered_message_id === "message-1",
     )?.rank;
@@ -739,14 +809,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       { kind: "tool_call", call_id: "c1", tool_name: "lookup", arguments: {}, rank: 1 },
       { kind: "thought_start", thought_id: "hidden", phase: "tool_use" },
       { kind: "tool_result", call_id: "c1", content: "done", rank: 2 },
-      {
-        kind: "steered_assistant_message",
-        message_ids: ["m1"],
-        content: "I will focus there.",
-        rank: 4,
-        deliveries: [{ message_id: "m1", content: "change course", rank: 3 }],
-      },
-      { kind: "final", content: "changed", rank: 5 },
+      { kind: "steered_user_message", message_id: "m1", content: "change course", rank: 3 },
+      { kind: "final", content: "changed", rank: 4 },
     ];
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -763,10 +827,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       [2, "tool_result"],
       [3, "final"],
       [4, "final"],
-      [5, "final"],
     ]);
-    expect(latest.messages.find((message) => message.rank === 4)?.parts).toEqual([
-      { type: "text", text: "I will focus there." },
+    expect(latest.messages.find((message) => message.rank === 3)?.parts).toEqual([
+      { type: "text", text: "change course" },
     ]);
     fetchSpy.mockRestore();
   });

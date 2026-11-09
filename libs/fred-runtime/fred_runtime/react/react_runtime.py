@@ -38,7 +38,7 @@ import uuid
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
 from dataclasses import replace
-from typing import cast
+from typing import Literal, TypedDict, cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
@@ -67,7 +67,6 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     StatusRuntimeEvent,
-    SteeredAssistantMessageRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
@@ -342,6 +341,10 @@ async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
         logger.debug("[V2][REACT] agent stream close failed: %s", type(exc).__name__)
 
 
+class _DurabilityOptions(TypedDict, total=False):
+    durability: Literal["sync"]
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -390,6 +393,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # construct this same executor) so per-turn logs never say "ReActRuntime"
         # for a Deep turn.
         self._runtime_class_name = runtime_class_name
+
+    def _durability_options(self) -> _DurabilityOptions:
+        return (
+            {"durability": "sync"}
+            if self._binding.portable_context.baggage.get("steering_enabled") == "true"
+            else {}
+        )
 
     async def _input_with_skill(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -455,6 +465,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config),
+                **self._durability_options(),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -583,7 +594,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         recovery_marker_seen = False
         recovery_buffer: list[str] = []
         recovery_buffer_chars = 0
-        steered_reply_streaming = False
 
         def _assistant_delta(text: str) -> AssistantDeltaRuntimeEvent | None:
             nonlocal sequence
@@ -746,11 +756,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
+            # A steer is promoted only after its graph state is durable.
+            durability = self._durability_options()
             if self._services.skills is None:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
+                    **durability,
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
@@ -758,6 +771,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
                     subgraphs=True,
+                    **durability,
                 )
             while True:
                 try:
@@ -765,22 +779,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 except StopAsyncIteration:
                     break
                 mode, update = _split_stream_event_mode(raw_event)
-
-                if (
-                    mode == "custom"
-                    and isinstance(update, dict)
-                    and update.get("kind") == "_steered_reply_start"
-                ):
-                    steered_reply_streaming = True
-                    continue
-
-                if mode == "custom" and isinstance(
-                    update, SteeredAssistantMessageRuntimeEvent
-                ):
-                    steered_reply_streaming = False
-                    yield update.model_copy(update={"sequence": sequence})
-                    sequence += 1
-                    continue
 
                 if mode == "custom" and (
                     isinstance(update, SteeredUserMessageRuntimeEvent)
@@ -792,8 +790,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     continue
 
                 if mode == "messages":
-                    if steered_reply_streaming:
-                        continue
                     # Token usage is deliberately not read here: "updates" mode
                     # (below) delivers the same completed AIMessage exactly
                     # once per model call and is the sole accumulation point —
@@ -908,15 +904,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     continue
 
                 for message in _extract_messages_from_update(update):
-                    if isinstance(message, AIMessage) and message.additional_kwargs.get(
-                        "steered_reply_for"
-                    ):
-                        _, token_usage, _ = _runtime_metadata_from_message(message)
-                        total_token_usage = _sum_token_usage(
-                            total_token_usage, token_usage
-                        )
-                        observe_model_call(token_usage)
-                        continue
                     if isinstance(message, ToolMessage):
                         # Approval feedback is model context, not an executed tool result.
                         if message.additional_kwargs.get("fred_tool_approval_rejected"):

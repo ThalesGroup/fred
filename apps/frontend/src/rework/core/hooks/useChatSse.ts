@@ -35,7 +35,6 @@ import type {
   ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
   SessionTitleRuntimeEvent,
-  SteeredAssistantMessageRuntimeEvent,
   SteeredUserMessageRuntimeEvent,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
@@ -184,7 +183,6 @@ async function verifyTokenStillUsable(): Promise<string | null> {
 
 type AnyRuntimeEvent =
   | ({ kind: "steered_user_message" } & SteeredUserMessageRuntimeEvent)
-  | ({ kind: "steered_assistant_message" } & SteeredAssistantMessageRuntimeEvent)
   | ({ kind: "assistant_delta" } & AssistantDeltaRuntimeEvent)
   | ({ kind: "awaiting_human" } & AwaitingHumanRuntimeEvent)
   | ({ kind: "final" } & FinalRuntimeEvent)
@@ -369,6 +367,7 @@ export function useChatSse(
   const stoppedSessionsRef = useRef(new Set<string>());
   const turnSessionRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const steeringSubmissionsRef = useRef(new Map<string, Promise<"accepted" | "rejected" | "uncertain">>());
   // The streamed turn this view renders, if any (see backgroundTurns.ts).
   const liveTurnRef = useRef<LiveTurn | null>(null);
   const callbacksRef = useRef<ChatSseCallbacks>(params);
@@ -565,34 +564,6 @@ export function useChatSse(
             channel: "final",
             parts: [{ type: "text", text: event.content }],
             metadata: { extras: { steered_message_id: event.message_id, steering_state: "delivered" } },
-          });
-          break;
-        }
-        case "steered_assistant_message": {
-          for (const delivery of event.deliveries ?? []) {
-            const existing = readTurnMessages(turn).find(
-              (message) => message.metadata?.extras?.steered_message_id === delivery.message_id,
-            );
-            emit({
-              session_id: sessionId,
-              exchange_id: exchangeId,
-              rank: takeRank(delivery.rank),
-              timestamp: existing?.timestamp ?? ts,
-              role: "user",
-              channel: "final",
-              parts: [{ type: "text", text: delivery.content }],
-              metadata: { extras: { steered_message_id: delivery.message_id, steering_state: "delivered" } },
-            });
-          }
-          emit({
-            session_id: sessionId,
-            exchange_id: exchangeId,
-            rank: takeRank(event.rank),
-            timestamp: ts,
-            role: "assistant",
-            channel: "final",
-            parts: [{ type: "text", text: event.content }],
-            metadata: { extras: { steered_reply_for: event.message_ids } },
           });
           break;
         }
@@ -1746,6 +1717,14 @@ export function useChatSse(
       const turn = currentTurn?.sessionId === sessionId ? currentTurn : null;
       const read = () => (turn ? readTurnMessages(turn) : messagesRef.current);
       const write = (next: ChatMessage[]) => (turn ? writeTurnMessages(turn, next) : setAll(next));
+      const unresolvedEarlier = () =>
+        read().some(
+          (message) =>
+            message.metadata?.extras?.steered_message_id !== messageId &&
+            message.metadata?.extras?.steering_state === "pending" &&
+            message.metadata?.extras?.steering_submission === "uncertain",
+        );
+      if (unresolvedEarlier()) return "rejected";
       const current = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
       const provisionalRank =
         Math.min(
@@ -1767,7 +1746,20 @@ export function useChatSse(
         },
       };
       if (!current) write(upsertOne(read(), optimistic));
+      const dropOptimistic = () => {
+        if (!current) write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+      };
+      const precedingSubmission = steeringSubmissionsRef.current.get(sessionId);
+      let finishSubmission!: (outcome: "accepted" | "rejected" | "uncertain") => void;
+      const submission = new Promise<"accepted" | "rejected" | "uncertain">((resolve) => (finishSubmission = resolve));
+      steeringSubmissionsRef.current.set(sessionId, submission);
+      let outcome: "accepted" | "rejected" | "uncertain" = "rejected";
       try {
+        await precedingSubmission;
+        if (unresolvedEarlier()) {
+          dropOptimistic();
+          return outcome;
+        }
         const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
         const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
         const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
@@ -1793,7 +1785,7 @@ export function useChatSse(
           if (latest?.metadata?.extras?.steering_state === "pending") {
             write(upsertOne(read(), { ...persisted, rank: latest.rank, timestamp: latest.timestamp }));
           }
-          return "accepted";
+          return (outcome = "accepted");
         }
         if (response.status >= 500) {
           requestStarted = true;
@@ -1809,7 +1801,7 @@ export function useChatSse(
         ) {
           write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
         }
-        return "rejected";
+        return outcome;
       } catch {
         if (requestStarted) {
           const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
@@ -1824,7 +1816,7 @@ export function useChatSse(
               }),
             );
           }
-          return "uncertain";
+          return (outcome = "uncertain");
         }
         if (
           !current &&
@@ -1836,7 +1828,12 @@ export function useChatSse(
         ) {
           write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
         }
-        return "rejected";
+        return outcome;
+      } finally {
+        finishSubmission(outcome);
+        if (steeringSubmissionsRef.current.get(sessionId) === submission) {
+          steeringSubmissionsRef.current.delete(sessionId);
+        }
       }
     },
     [teamId, agentInstanceId, prepareExecution, setAll],

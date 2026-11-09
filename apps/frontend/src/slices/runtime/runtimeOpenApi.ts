@@ -384,9 +384,6 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "status";
         } & StatusRuntimeEvent)
       | ({
-          kind: "steered_assistant_message";
-        } & SteeredAssistantMessageRuntimeEvent)
-      | ({
           kind: "steered_user_message";
         } & SteeredUserMessageRuntimeEvent)
       | ({
@@ -1038,22 +1035,6 @@ export type StatusRuntimeEvent = {
   sequence?: number;
   skill_load?: SkillLoadAttribution | null;
   status: string;
-};
-export type SteeredUserMessageDelivery = {
-  content: string;
-  message_id: string;
-  rank?: number | null;
-};
-export type SteeredAssistantMessageRuntimeEvent = {
-  content: string;
-  deliveries?: SteeredUserMessageDelivery[];
-  kind?: "steered_assistant_message";
-  message_ids: string[];
-  rank?: number | null;
-  sequence?: number;
-  token_usage?: {
-    [key: string]: number;
-  } | null;
 };
 export type SteeredUserMessageRuntimeEvent = {
   content: string;

@@ -168,7 +168,7 @@ During an active managed ReAct or Deep turn, submitting plain text SHALL create 
 
 ### Requirement: In-thread messages reach a safe model boundary
 
-The runtime SHALL give an eligible submitted message to the active ReAct or Deep agent once, after dispatched tool results and before the next model decision. At that boundary it SHALL persist a definitive canonical rank and delivered state. Conversation history SHALL remain ordered by rank, with each tool call/result group intact. Messages missing the boundary SHALL remain pending for the next eligible turn.
+The runtime SHALL deliver each eligible update once to the active ReAct or Deep agent after dispatched tool results and before the next model decision. Delivery SHALL persist a canonical rank and clear pending state independently of model output. Rank-ordered history SHALL keep tool call/result groups intact. The agent SHALL apply updates in order and answer outstanding questions in its ordinary final response. Updates missing a boundary SHALL remain pending for the next eligible turn.
 
 #### Scenario: Delivery after tool results
 
@@ -176,12 +176,86 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 - **WHEN** all dispatched results are available and the agent resumes model work
 - **THEN** the agent receives the message once after those results
 - **AND** its definitive rank places it after the completed tool batch in reloaded history
+- **AND** the pending clock disappears before the next model decision
+
+#### Scenario: Two updates before a model decision
+
+- **GIVEN** two updates are submitted while a tool batch is running
+- **WHEN** the agent resumes model work
+- **THEN** both messages are delivered once in submission order
+- **AND** the next model decision can call tools without first producing an assistant reply
+- **AND** the final response accounts for both updates
+
+#### Scenario: Slow preparation of the first update
+
+- **GIVEN** the user sends two updates to the same active session in order
+- **WHEN** preparation of the first request takes longer than the interval between sends
+- **THEN** both messages appear immediately in send order
+- **AND** their persisted provisional ranks and model delivery retain that order after reload
+- **AND** a definitely rejected first submission does not prevent the second from being sent
+- **AND** an uncertain first POST prevents later submissions from overtaking it until its identity is resolved
+
+#### Scenario: First-turn steering belongs to its agent instance
+
+- **GIVEN** a managed agent starts the first turn in a new session
+- **WHEN** a user submits an update before that turn finishes
+- **THEN** its opening user message already identifies the session's agent instance in shared history
+- **AND** an update naming another instance is rejected without creating a pending clock
+- **AND** only the owning instance can incorporate and deliver the update
+
+#### Scenario: Progress question during a long task
+
+- **WHEN** the user asks for progress while a turn is active
+- **THEN** the message is delivered at the next eligible boundary without requiring an immediate assistant reply
+- **AND** the ordinary final response addresses the question if it remains relevant
+
+#### Scenario: Checkpoint precedes delivery
+
+- **GIVEN** an update reaches a ReAct or Deep model boundary
+- **WHEN** the runtime promotes the update in shared history
+- **THEN** the graph checkpoint already contains that user message under its stable identity
+- **AND** a failed promotion leaves the update pending and prevents the model call
+- **AND** a later boundary can retry promotion without injecting the message twice
+
+#### Scenario: Concurrent delivery from two exchanges
+
+- **GIVEN** two runtime replicas read the same pending update
+- **WHEN** one exchange delivers it first
+- **THEN** another exchange SHALL NOT claim or process the same update
+- **AND** a retry in the owning exchange retains the original rank
+
+#### Scenario: Delivery fails
+
+- **GIVEN** an update is waiting at a model boundary
+- **WHEN** the runtime cannot persist its delivery
+- **THEN** the message remains pending with its clock and the model does not proceed with that update
 
 #### Scenario: End before another model call
 
 - **GIVEN** a submitted message is still pending
 - **WHEN** the active turn ends without another model decision
 - **THEN** the message remains visible and is submitted as the next ordinary turn
+
+#### Scenario: A newer command while an older update is pending
+
+- **GIVEN** an update missed the active turn and remains pending
+- **WHEN** the user tries to start a new ordinary turn through the composer, a command, a skill, or the execution API
+- **THEN** the oldest pending update opens the next turn first
+- **AND** the newer turn cannot overtake it in model context
+- **AND** the execution API reports HTTP 409 before opening a stream
+
+#### Scenario: Opening identity cannot accompany a resume
+
+- **WHEN** a caller combines a pending message identity with a human-input resume or interruption action
+- **THEN** the request is rejected before execution
+- **AND** the pending clock is not cleared without the model receiving that message
+
+#### Scenario: Graph interruption recovery with an update pending
+
+- **GIVEN** a Graph turn is interrupted while a user update is pending
+- **WHEN** the user continues or restarts the interrupted work
+- **THEN** recovery is allowed for the same agent instance without promoting the update
+- **AND** the pending update retains its identity and opens the next eligible ordinary turn
 
 #### Scenario: Human-input pause and another pod
 
@@ -195,51 +269,6 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 - **GIVEN** a pending message starts the next ordinary Graph turn
 - **WHEN** Graph reaches a human-input pause before a final answer
 - **THEN** the message receives its definitive opening rank and no longer appears pending
-
-### Requirement: In-progress updates receive separate assistant replies
-
-The agent SHALL send a concise, user-facing assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. Continuation SHALL retain that reply and direct the agent to complete any part of the update it did not fully answer, with tools available, unless the update stops the task. If two completed reply calls produce no usable answer, the agent SHALL send an explicit, localized failure notice through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
-
-#### Scenario: Progress question during a tool call
-
-- **GIVEN** the agent has dispatched a tool call
-- **WHEN** the user asks for progress and the tool results arrive
-- **THEN** the agent sends a separate assistant status message before any further tool calls
-- **AND** the chat keeps that message separate from the later final answer after reload
-
-#### Scenario: Update needs more work than the immediate reply
-
-- **GIVEN** an update asks a substantive question requiring more tool work
-- **WHEN** the immediate reply explains the current progress
-- **THEN** the next model decision retains that reply and the unanswered update in context
-- **AND** the agent is directed to complete the remaining request with tools available
-
-#### Scenario: Reply failure before delivery
-
-- **GIVEN** a steered user message is waiting at a model boundary
-- **WHEN** the reply model call fails or the reply cannot be persisted
-- **THEN** the message remains pending with its clock and can be retried
-
-#### Scenario: Reply has no visible text
-
-- **GIVEN** a steered user message is waiting at a model boundary
-- **WHEN** the model returns only reasoning, no assistant message, or an unexpected tool call on two attempts
-- **THEN** the agent sends a visible failure notice in the conversation language through the normal reply and delivery path
-- **AND** the original task continues without losing or duplicating the user message
-
-#### Scenario: Reply is tool data or the completed task
-
-- **GIVEN** a steered user message is waiting at a model boundary
-- **WHEN** the reply model emits tool arguments as a JSON object or a long answer to the original task
-- **THEN** the runtime retries instead of displaying that output as the interim assistant reply
-- **AND** the original task continues after a usable reply or the localized failure notice
-
-#### Scenario: Checkpoint recovery after reply persistence
-
-- **GIVEN** the assistant reply was persisted before the graph checkpoint committed
-- **WHEN** the same exchange resumes on another replica
-- **THEN** the user update and assistant reply are injected once in rank order without another reply
-- **AND** the reply's model usage contributes once to the resumed turn total without a second history badge
 
 ### Requirement: In-thread submission survives concurrency and failure
 

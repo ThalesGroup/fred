@@ -1692,6 +1692,30 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[1][5]).toBe("m1");
   });
 
+  it("does not let a command or skill overtake a pending steer", async () => {
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "pending:m1",
+        rank: -1,
+        timestamp: "2026-11-06T12:00:00Z",
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "first update" }],
+        metadata: {
+          extras: { steered_message_id: "m1", steering_state: "pending", steering_submission: "uncertain" },
+        },
+      },
+    ];
+    mount();
+    bindSession("session-1");
+    await act(async () => {
+      await latest.runCommand({ text: "new command", command: { command: "test" } });
+      await latest.runSkill({ text: "new skill", skills: [{ name: "test" }] });
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   const toolApprovalEvent = {
     ...awaitingHumanEvent,
     payload: {
@@ -1794,6 +1818,36 @@ describe("useManagedChat — session write reliability", () => {
     expect(restart[0]).toBe("assembled prompt");
     expect(restart[2]).toMatchObject({ command });
     expect(restart[4]).toEqual({ action: "restart" });
+  });
+
+  it("restarts an interrupted run while an update waits for the next turn", async () => {
+    mount();
+    bindSession("session-1");
+    await act(async () => latest.runCommand({ text: "original request", command: { command: "plan" } }));
+    chatSseMessages = [
+      {
+        session_id: "session-1",
+        exchange_id: "pending:m1",
+        rank: -1,
+        timestamp: "2026-11-06T12:00:00Z",
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: "later update" }],
+        metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+      },
+    ];
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("restart");
+      await Promise.resolve();
+    });
+
+    expect(sendMock).toHaveBeenCalledTimes(3);
+    expect(sendMock.mock.calls[1][0]).toBe("original request");
+    expect(sendMock.mock.calls[1][4]).toEqual({ action: "restart" });
+    expect(sendMock.mock.calls[2][5]).toBe("m1");
   });
 
   it("submits Other text alone after a single question choice", async () => {

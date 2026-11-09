@@ -48,7 +48,7 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     FinalRuntimeEvent,
     RuntimeEvent,
-    SteeredAssistantMessageRuntimeEvent,
+    SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
@@ -168,35 +168,25 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
 
 
 @pytest.mark.asyncio
-async def test_steered_reply_streams_once_and_counts_both_model_calls() -> None:
-    reply = AIMessage(
-        content="Checking sources.",
-        additional_kwargs={"steered_reply_for": ["m1"]},
-        usage_metadata={"input_tokens": 10, "output_tokens": 2, "total_tokens": 12},
-    )
+async def test_steered_user_delivery_does_not_add_a_model_call() -> None:
     final = AIMessage(
         content="Done.",
         usage_metadata={"input_tokens": 15, "output_tokens": 3, "total_tokens": 18},
     )
     events = [
-        ("custom", {"kind": "_steered_reply_start"}),
-        ("messages", (AIMessageChunk(content="Checking sources."), {})),
         (
             "custom",
-            SteeredAssistantMessageRuntimeEvent(
-                message_ids=("m1",), content="Checking sources."
-            ),
+            SteeredUserMessageRuntimeEvent(message_id="m1", content="Change course"),
         ),
-        ("updates", {"agent": {"messages": [reply]}}),
         ("messages", (AIMessageChunk(content="Done."), {})),
         ("updates", {"agent": {"messages": [final]}}),
     ]
     collected = await _run_stream(events)
     assert [
-        event.content
+        event.message_id
         for event in collected
-        if isinstance(event, SteeredAssistantMessageRuntimeEvent)
-    ] == ["Checking sources."]
+        if isinstance(event, SteeredUserMessageRuntimeEvent)
+    ] == ["m1"]
     assert [
         event.delta
         for event in collected
@@ -206,7 +196,7 @@ async def test_steered_reply_streams_once_and_counts_both_model_calls() -> None:
         event for event in collected if isinstance(event, FinalRuntimeEvent)
     )
     assert final_event.token_usage is not None
-    assert final_event.token_usage["total_tokens"] == 30
+    assert final_event.token_usage["total_tokens"] == 18
 
 
 @pytest.mark.asyncio

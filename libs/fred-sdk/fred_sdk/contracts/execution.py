@@ -446,6 +446,16 @@ class RuntimeExecuteRequest(BaseModel):
             raise ValueError(
                 "occurrence_id is only valid together with resume_payload."
             )
+        if self.pending_message_id is not None and (
+            self.agent_instance_id is None
+            or self.resume_payload is not None
+            or self.interrupted_action is not None
+            or not self.input.strip()
+            or not self.effective_session_id()
+        ):
+            raise ValueError(
+                "pending_message_id requires an ordinary text turn in the same session."
+            )
         check_session_id(self.session_id)
         if self.runtime_context is not None:
             check_session_id(self.runtime_context.session_id)

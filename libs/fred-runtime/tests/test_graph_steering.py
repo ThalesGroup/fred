@@ -12,8 +12,8 @@ from fred_core.history.postgres_history_store import (
 from fred_runtime.app.agent_app import (
     _AgentExecuteRequest,
     _HistoryRanker,
-    _TurnEventExpander,
     _rank_runtime_event,
+    _TurnEventExpander,
     _write_turn_history,
 )
 from fred_runtime.graph.graph_runtime import GraphRuntime

@@ -121,6 +121,9 @@ class RunScope:
         self._event_receipts[key] = receipt
         return receipt
 
+    def has_event_receipt(self, key: str) -> bool:
+        return key in self._event_receipts
+
     def complete_event_receipt(self, key: str, payload: dict[str, Any]) -> None:
         receipt = self._event_receipts.pop(key, None)
         if receipt is None or receipt.done():

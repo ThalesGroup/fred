@@ -57,8 +57,6 @@ class MistralReasoningReplayChatOpenAI(ChatOpenAI):
         # Responses API or an unexpected payload shape: leave it as built.
         if not isinstance(wire, list) or len(wire) != len(messages):
             return payload
-        if "max_completion_tokens" in payload:
-            payload["max_tokens"] = payload.pop("max_completion_tokens")
         for source, entry in zip(messages, wire, strict=True):
             if isinstance(source, AIMessage) and isinstance(source.content, list):
                 content = native_reasoning_content(source.content)

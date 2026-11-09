@@ -82,7 +82,7 @@ def _binding(
     *, steering_enabled: bool = True, language: str | None = None
 ) -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(language=language),
+        runtime_context=RuntimeContext(language=language, user_id="user-1"),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -132,7 +132,7 @@ def test_middleware_keeps_recovery_outside_model_observability() -> None:
     ]
 
 
-def test_steering_receives_conversation_language() -> None:
+def test_steering_receives_user_identity() -> None:
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -141,7 +141,7 @@ def test_steering_receives_conversation_language() -> None:
         available_tool_names=set(),
     )
     assert isinstance(middleware[1], TurnSteeringMiddleware)
-    assert middleware[1]._language == "fr"
+    assert middleware[1]._user_id == "user-1"
 
 
 def test_middleware_keeps_hitl_before_filesystem_guards() -> None:

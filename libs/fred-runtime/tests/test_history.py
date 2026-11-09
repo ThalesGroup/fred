@@ -755,11 +755,6 @@ def test_write_turn_history_reserves_directly_persisted_steering_rows() -> None:
                     "message_id": "m1",
                     "content": "new direction",
                 },
-                {
-                    "kind": "steered_assistant_message",
-                    "message_ids": ["m1"],
-                    "content": "I will adjust the search.",
-                },
                 {"kind": "final", "content": "updated"},
             ],
             history_store=store,
@@ -772,7 +767,7 @@ def test_write_turn_history_reserves_directly_persisted_steering_rows() -> None:
         Role.tool,
         Role.assistant,
     ]
-    assert [message.rank for message in messages] == [0, 1, 2, 5]
+    assert [message.rank for message in messages] == [0, 1, 2, 4]
 
 
 def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:

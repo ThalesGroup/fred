@@ -7223,15 +7223,23 @@ Plain-text updates submitted during an active managed ReAct or Deep turn are
 stored directly in `session_history`, with a stable message ID and a fixed
 negative provisional rank. The browser shows them at the end of the thread with
 a clock until delivery; an HTTP acknowledgement does not change their displayed
-rank. At the next model boundary, after dispatched tool results, the runtime
-injects the updates and obtains a separate visible assistant reply. Promotion
-to canonical ranks and reply persistence commit together before normal work
-resumes. Checkpoint recovery reconciles those rows by identity and rank. The
-reply's model usage is stored for recovery but counted in the turn total, not
-again as a separate history badge. An update that misses the boundary remains
-pending for the next ordinary turn. Graph has no shared in-turn model boundary;
+rank.
+The first managed turn's opening user message is persisted during admission, so
+the session has an agent instance identity before an update can be submitted.
+The submission and delivery paths require that same instance identity.
+At the next model boundary, after dispatched tool results, the runtime
+injects the updates and promotes each one to a canonical rank before the normal
+model call proceeds. The continuing agent may reason and use tools; it answers
+outstanding questions in its ordinary final response. Managed ReAct and Deep
+turns use synchronous checkpoint durability: the injected update is committed
+before its history row is promoted, so a failed promotion remains
+pending and a delivered update is already in the checkpoint. A competing exchange cannot
+claim a delivery already owned by another exchange. An update that misses the
+boundary remains pending for the next ordinary turn. Graph has no shared
+in-turn model boundary;
 its update starts the next ordinary turn and is promoted at a final answer or
-human-input pause.
+human-input pause. A Graph interruption can be continued or restarted while an
+update is pending; the update waits for the next ordinary turn.
 
 Injected updates are prefixed in model context as instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
