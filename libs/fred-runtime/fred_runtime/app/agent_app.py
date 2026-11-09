@@ -139,6 +139,8 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
+    AgentTuningExportRequest,
+    AgentTuningExportResult,
     DeepAgentDefinition,
     ExecutionCategory,
     GraphAgentDefinition,
@@ -210,6 +212,8 @@ from fred_runtime.capabilities import (
 )
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
+    ExternalAssetSaveUnavailable,
+    export_tuning_values,
     prepare_capability_copy,
     prepare_capability_export,
 )
@@ -5115,6 +5119,24 @@ def _build_agent_router(
             if include_non_public or getattr(definition, "public", True)
         ]
 
+    @router.post("/templates/{agent_id}/export-tuning")
+    async def export_agent_tuning(
+        agent_id: str,
+        body: AgentTuningExportRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> AgentTuningExportResult:
+        await _require_space(http_request, body.space_id)
+        definition = registry.get(agent_id)
+        if definition is None:
+            raise HTTPException(404, "agent_template_unavailable")
+        try:
+            return AgentTuningExportResult(
+                values=export_tuning_values(list(definition.fields), body.values)
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
         """
@@ -5351,30 +5373,6 @@ def _build_agent_router(
             )
         return capability_registry.capability(capability_id)
 
-    def _copy_save_ctx(
-        http_request: Request,
-        caller: KeycloakUser | None,
-        capability_id: str,
-        team_id: str,
-        agent_instance_id: str,
-    ) -> SaveContext:
-        user_id = (caller.uid if caller is not None else None) or "anonymous"
-        auth = http_request.headers.get("Authorization", "")
-        return SaveContext(
-            identity=CapabilityIdentity(
-                user_id=user_id,
-                team_id=team_id,
-                agent_instance_id=agent_instance_id,
-            ),
-            services=_build_capability_save_services(
-                capability_id=capability_id,
-                user_id=user_id,
-                team_id=team_id,
-                access_token=auth.removeprefix("Bearer ").strip() or None,
-                agent_instance_id=agent_instance_id,
-            ),
-        )
-
     @router.post("/capabilities/{capability_id}/copy-config")
     async def copy_capability_config(
         capability_id: str,
@@ -5382,47 +5380,28 @@ def _build_agent_router(
         http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> CapabilityConfigCopyResult:
-        """
-        Prepare one capability's stored config for a copied agent instance.
+        """Validate a complete snapshot for a writable destination space.
 
-        POST <base_url>/agents/capabilities/{capability_id}/copy-config
-        Body: CapabilityConfigCopyRequest — the source envelope, the source and
-        target team and agent instance, and optionally the configuration files
-        inline (`asset_files`, from `export-config`) instead of the source's.
-
-        Why this endpoint exists:
-        - only the pod knows a capability's hidden and nested settings, so the
-          pod resets its scope-private settings when the scope changes and
-          re-submits its configuration files to the capability's own save in
-          the target, with the caller's token on both sides
-        - 404 when the capability is not installed here, 422 when it rejects
-          the config for the target; the control plane then copies the agent
-          without it. `notices` says what an editor must redo in the target.
+        There is no source lookup or legacy file write. The content owner stages
+        validated originals; unsupported configurations reject the whole import.
         """
 
         capability = _installed_capability(http_request, capability_id)
-        # Control-plane requires agent editing in both teams for a copy. A
-        # snapshot import sends its files inline and never reads the source.
-        if body.asset_files is None:
-            await _require_space(http_request, body.source_team_id)
-        await _require_space(http_request, body.target_team_id)
+        await _require_space(http_request, body.target_space_id)
         try:
             return await prepare_capability_copy(
                 capability,
                 body,
-                source_ctx=_copy_save_ctx(
-                    http_request,
-                    caller,
-                    capability_id,
-                    body.source_team_id,
-                    body.source_agent_instance_id,
-                ),
-                target_ctx=_copy_save_ctx(
-                    http_request,
-                    caller,
-                    capability_id,
-                    body.target_team_id,
-                    body.target_agent_instance_id,
+                target_ctx=SaveContext(
+                    identity=CapabilityIdentity(
+                        user_id=(caller.uid if caller is not None else None)
+                        or "anonymous",
+                        space_id=body.target_space_id,
+                        agent_instance_id=body.target_agent_instance_id,
+                    ),
+                    services=RuntimeServices(
+                        agent_assets=ExternalAssetSaveUnavailable()
+                    ),
                 ),
             )
         except CapabilityCopyRejectedError as exc:
@@ -5438,30 +5417,19 @@ def _build_agent_router(
         http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> CapabilityConfigExportResult:
-        """
-        Export one capability's stored config as it would leave its team.
+        """Export a complete configuration snapshot from a writable space.
 
-        POST <base_url>/agents/capabilities/{capability_id}/export-config
-        Body: CapabilityConfigExportRequest — the envelope, its team and agent
-        instance. Response: the upgraded envelope with scope-private settings
-        reset and every `AssetKey` file base64-encoded, so a later `copy-config`
-        with `asset_files` never reads that team. 404 when the capability is not
-        installed here, 422 when the config or one of its files cannot be read.
+        The content owner supplies original bytes by slot. The capability upgrades
+        and classifies its fields, removes private references and names its assets.
+        No runtime storage adapter reads the source or persists the snapshot.
         """
 
         capability = _installed_capability(http_request, capability_id)
-        await _require_space(http_request, body.team_id)
+        await _require_space(http_request, body.space_id)
         try:
             return await prepare_capability_export(
                 capability,
                 body,
-                source_ctx=_copy_save_ctx(
-                    http_request,
-                    caller,
-                    capability_id,
-                    body.team_id,
-                    body.agent_instance_id,
-                ),
             )
         except CapabilityCopyRejectedError as exc:
             raise HTTPException(

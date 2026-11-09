@@ -61,7 +61,6 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     utoipa_axum::router::OpenApiRouter::new()
         .merge(super::categories::routes())
         .merge(super::favorites::routes())
-        .merge(super::publication::routes())
         .routes(utoipa_axum::routes!(list_prompts, create_prompt))
         .routes(utoipa_axum::routes!(
             get_prompt,

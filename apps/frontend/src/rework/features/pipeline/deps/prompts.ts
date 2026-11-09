@@ -52,7 +52,7 @@ export function usePromptsDeps(spaceId: string | undefined): PromptsDeps {
         const spaces = await read(cp.mySpaces, undefined);
         const organizationId = spaces.find((space) => space.id === spaceId)?.organization_id;
         if (!organizationId) throw new Error("Prompt marketplace organization unavailable");
-        return (await read(cp.publishedPrompts, { marketplaceSpaceId: organizationId })).items.length;
+        return (await read(cp.marketplaceEntries, { marketplaceSpaceId: organizationId, kind: "prompt" })).items.length;
       },
     };
   }, [spaceId, dispatch, read]);

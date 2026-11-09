@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { sessionQueryArgs } from "../../../slices/controlPlane/controlPlaneApi";
 import { isPromptPublicationRoute } from "../utils/weaverContentRoute";
 import { useLocation } from "react-router-dom";
 import { useMySpacesQuery, useMarketplacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -26,13 +27,10 @@ export function usePlatformArea(skip = false) {
   const spaces = useMySpacesQuery(undefined, { skip: skip || !manager.isAdmin });
   // Last known membership: a failed refetch keeps it; an error before any data means none.
   const member = !!spaces.data?.length;
-  const publications = useMarketplacesQuery(
-    {},
-    {
-      skip: skip || !manager.isAdmin || member,
-      refetchOnMountOrArgChange: true,
-    },
-  );
+  const publications = useMarketplacesQuery(sessionQueryArgs({}), {
+    skip: skip || !manager.isAdmin || member,
+    refetchOnMountOrArgChange: true,
+  });
   const promptReader = !publications.isError && !!publications.currentData?.items.length;
   return {
     platformArea:

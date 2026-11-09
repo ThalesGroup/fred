@@ -27,25 +27,8 @@ import {
   UserSummary,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
-import TeamMarketplaceState from "./TeamMarketplaceState.tsx";
 
-type MoreMenuAction = "edit" | "toggle" | "duplicate" | "copyTo" | "publish" | "unpublish" | "delete";
-
-/** What the viewer may do with this agent on the marketplace, decided by the page. */
-export interface AgentCardMarketplace {
-  /** The team can publish (switch on, public team): every card of the page shows the bar. */
-  showBar: boolean;
-  /** Editors only, never in the personal space; greyed with the reason as tooltip. */
-  publishAction?: { kind: "publish" | "republish"; disabledReason?: string };
-  /** Editors and the team admin, while the agent is published. */
-  canRemove: boolean;
-  /** Editors and the team admin see Modified and Removed. */
-  showDetailedState: boolean;
-  canHide: boolean;
-  onPublish: () => void;
-  onRemove: () => void;
-  onHide: () => void;
-}
+type MoreMenuAction = "edit" | "toggle" | "duplicate" | "copyTo" | "propose" | "delete";
 
 export interface AgentCardProps {
   instance: Pick<
@@ -61,7 +44,6 @@ export interface AgentCardProps {
     | "updated_at"
     | "suspension_reason"
     | "catalog_warnings"
-    | "marketplace"
   > & { logical_name?: string; preparation_state?: string; preparation_error?: string | null };
   templateDisplayName?: string;
   runtimeId?: string;
@@ -80,7 +62,7 @@ export interface AgentCardProps {
   onDuplicate: () => void;
   onCopyTo: () => void;
   onDelete: () => void;
-  marketplace?: AgentCardMarketplace;
+  onPropose?: () => void;
 }
 
 function formatShortDate(dateStr: string | null | undefined): string | undefined {
@@ -111,7 +93,7 @@ export default function AgentCard({
   onDuplicate,
   onCopyTo,
   onDelete,
-  marketplace,
+  onPropose,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
@@ -197,8 +179,7 @@ export default function AgentCard({
       onToggleEnabled();
     } else if (action === "duplicate") onDuplicate();
     else if (action === "copyTo") onCopyTo();
-    else if (action === "publish") marketplace?.onPublish();
-    else if (action === "unpublish") marketplace?.onRemove();
+    else if (action === "propose") onPropose?.();
     else if (action === "delete") onDelete();
   };
 
@@ -238,25 +219,13 @@ export default function AgentCard({
       },
     );
   }
-  if (marketplace?.publishAction) {
-    const { kind, disabledReason } = marketplace.publishAction;
+  if (onPropose) {
     menuOptions.push({
-      key: "publish",
-      value: "publish",
-      label: t(
-        kind === "republish" ? "rework.agentMarketplace.menu.republish" : "rework.agentMarketplace.menu.publish",
-      ),
+      key: "propose",
+      value: "propose",
+      label: t("rework.localMarketplace.propose"),
       icon: { category: "outlined", type: "storefront" },
-      disabled: Boolean(disabledReason),
-      tooltip: disabledReason,
-    });
-  }
-  if (marketplace?.canRemove) {
-    menuOptions.push({
-      key: "unpublish",
-      value: "unpublish",
-      label: t("rework.agentMarketplace.menu.remove"),
-      icon: { category: "outlined", type: "do_not_disturb_on" },
+      disabled: managementBusy,
     });
   }
   if (canManageAgents) {
@@ -333,15 +302,6 @@ export default function AgentCard({
           )}
         </div>
       </div>
-
-      {marketplace?.showBar && (
-        <TeamMarketplaceState
-          marketplace={instance.marketplace}
-          showDetailedState={marketplace.showDetailedState}
-          canHide={marketplace.canHide}
-          onHide={marketplace.onHide}
-        />
-      )}
     </div>
   );
 }

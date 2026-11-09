@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { sessionQueryArgs } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useEffect } from "react";
 import {
   useMySpacesQuery,
-  usePromptPublicationSpacesQuery,
+  useMarketplaceProposalSpacesQuery,
   useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
@@ -71,13 +72,10 @@ export default function TeamContentNavbar() {
         agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
       )
     : undefined;
-  const publicationTeams = usePromptPublicationSpacesQuery(
-    {},
-    {
-      skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
-      refetchOnMountOrArgChange: true,
-    },
-  );
+  const publicationTeams = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), {
+    skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
+    refetchOnMountOrArgChange: true,
+  });
   const publicationTeam = !publicationTeams.isError
     ? publicationTeams.currentData?.items.find((team) => team.id === teamId)
     : undefined;

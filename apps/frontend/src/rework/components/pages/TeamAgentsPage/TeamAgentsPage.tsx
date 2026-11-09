@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard";
@@ -35,6 +35,7 @@ import { isAgentNameConflict, normalizeAgentName, takenAgentNames } from "./agen
 import { useMediaQuery } from "@core/hooks/useMediaQuery";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { agentErrorText, createAgentRequest, resolveAgentSpace, updateAgentRequest } from "./weaverAgents";
+import MarketplaceProposalDialog from "../marketplace/MarketplaceProposalDialog";
 import styles from "./TeamAgentsPage.module.css";
 
 export default function TeamAgentsPage() {
@@ -88,7 +89,9 @@ function SpaceAgents({ space }: { space: MySpace }) {
   const managedInstances = instances.isError ? [] : (instances.currentData?.items ?? []);
   const templates = catalog.isError ? [] : (catalog.data ?? []);
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string>();
+  const [params] = useSearchParams();
+  const [editingId, setEditingId] = useState<string | undefined>(params.get("resource") ?? undefined);
+  const [proposing, setProposing] = useState<ManagedAgentInstanceSummary>();
   const [refusedNames, setRefusedNames] = useState<ReadonlySet<string>>(new Set());
   const [search, setSearch] = useState("");
   const sort = useCurrentUserPreference("agent_sort", "name") as AgentSortValue;
@@ -312,20 +315,22 @@ function SpaceAgents({ space }: { space: MySpace }) {
                 onDelete={() => handleDelete(instance)}
                 onDuplicate={() => {}}
                 onCopyTo={() => {}}
-                marketplace={{
-                  showBar: false,
-                  publishAction: offersManagement ? { kind: "publish", disabledReason: unavailable } : undefined,
-                  canRemove: false,
-                  showDetailedState: false,
-                  canHide: false,
-                  onPublish: () => {},
-                  onRemove: () => {},
-                  onHide: () => {},
-                }}
+                onPropose={canManageAgents && !busy ? () => setProposing(instance) : undefined}
               />
             ))}
           </div>
         </div>
+      )}
+      {proposing && canManageAgents && (
+        <MarketplaceProposalDialog
+          source={{
+            kind: "agent",
+            source_space_id: spaceId,
+            source_resource_id: proposing.agent_instance_id,
+            expected_revision: String(proposing.configuration_revision),
+          }}
+          onClose={() => setProposing(undefined)}
+        />
       )}
       {editingId && offersManagement && detail.isFetching && <Spinner size={20} />}
       {editingId && offersManagement && detail.isError && <AgentNotice error={detail.error} />}

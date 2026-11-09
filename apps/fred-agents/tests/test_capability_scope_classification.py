@@ -99,3 +99,79 @@ def test_mcp_catalog_settings_are_classified(catalog: Path) -> None:
     assert not offenders, (
         f"{offenders} hold identifiers but declare no scope_private: true/false."
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["export", "import"])
+async def test_document_access_snapshot_uses_its_typed_scope_classification(operation):
+    from fred_capability_document_access.capability import DocumentAccessCapability
+    from fred_runtime.capabilities.copy import (
+        prepare_capability_copy,
+        prepare_capability_export,
+    )
+    from fred_sdk.contracts.capability import (
+        CapabilityConfigCopyRequest,
+        CapabilityConfigExportRequest,
+        CapabilityIdentity,
+        SaveContext,
+        StoredCapabilityConfig,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    capability = DocumentAccessCapability()
+    source = StoredCapabilityConfig(
+        schema_version=capability.manifest.version,
+        config={
+            "library_tag_ids": ["00000000-0000-4000-8000-000000000001"],
+            "document_uids": ["00000000-0000-4000-8000-000000000002"],
+            "bind_libraries": True,
+            "default_top_k": 12,
+            "attachments": False,
+        },
+    )
+    if operation == "export":
+        result = await prepare_capability_export(
+            capability,
+            CapabilityConfigExportRequest(
+                config=source,
+                space_id="source",
+                agent_instance_id="original",
+            ),
+        )
+        assert result.files == {}
+        imported = await prepare_capability_copy(
+            capability,
+            CapabilityConfigCopyRequest(
+                config=StoredCapabilityConfig(
+                    schema_version=result.schema_version, config=result.config
+                ),
+                target_space_id="target",
+                target_agent_instance_id="copy",
+                asset_files=result.files,
+            ),
+            target_ctx=SaveContext(
+                identity=CapabilityIdentity(user_id="editor", space_id="target"),
+                services=RuntimeServices(),
+            ),
+        )
+        assert imported.config == result.config
+    else:
+        result = await prepare_capability_copy(
+            capability,
+            CapabilityConfigCopyRequest(
+                config=source,
+                target_space_id="target",
+                target_agent_instance_id="copy",
+                asset_files={},
+            ),
+            target_ctx=SaveContext(
+                identity=CapabilityIdentity(user_id="editor", space_id="target"),
+                services=RuntimeServices(),
+            ),
+        )
+    assert result.config["library_tag_ids"] == []
+    assert result.config["document_uids"] is None
+    assert result.config["bind_libraries"] is False
+    assert result.config["default_top_k"] == 12
+    assert result.config["attachments"] is False
+    assert source.config["bind_libraries"] is True

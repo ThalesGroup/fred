@@ -206,10 +206,17 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /spaces/{space_id}/prompts/{prompt_id}/favorite",
         "delete /spaces/{space_id}/prompts/{prompt_id}/favorite",
         "get /me/marketplaces",
-        "get /me/prompt-publication-spaces",
-        "get /spaces/{marketplace_space_id}/published-prompts",
-        "get /spaces/{marketplace_space_id}/published-prompts/{prompt_id}",
-        "put /spaces/{space_id}/prompts/{prompt_id}/publications/{marketplace_space_id}",
+        "get /me/marketplace-proposal-spaces",
+        "get /spaces/{marketplace_space_id}/marketplace/entries",
+        "get /spaces/{marketplace_space_id}/marketplace/entries/{entry_id}",
+        "get /spaces/{marketplace_space_id}/marketplace/proposals",
+        "post /spaces/{marketplace_space_id}/marketplace/proposals",
+        "get /spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}",
+        "put /spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/decision",
+        "put /spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/cancellation",
+        "put /spaces/{marketplace_space_id}/marketplace/entries/{entry_id}/withdrawal",
+        "post /spaces/{marketplace_space_id}/marketplace/entries/{entry_id}/installations",
+        "get /spaces/{space_id}/marketplace-installations/{installation_id}",
         "get /spaces/{space_id}/prompts",
         "post /spaces/{space_id}/prompts",
         "get /spaces/{space_id}/prompts/{prompt_id}",
@@ -923,73 +930,31 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
 }
 
 #[test]
-fn prompt_publication_contract_has_no_snapshot_import_or_usage_fields() {
+fn marketplace_contract_has_typed_snapshots_and_no_direct_publication() {
     let api = schema();
     let schemas = &api["components"]["schemas"];
-    assert_eq!(
-        schemas["PromptMetadata"]["properties"]["published_in"]["type"],
-        "array"
-    );
     assert!(
-        schemas["PromptMetadata"]["required"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("published_in"))
+        schemas["PromptMetadata"]["properties"]
+            .get("published_in")
+            .is_none()
     );
     assert_eq!(
-        schemas["PromptPublicationRequest"]["additionalProperties"],
+        schemas["SubmitProposalRequest"]["additionalProperties"],
         false
     );
     assert_eq!(
-        schemas["PromptPublicationRequest"]["required"],
-        json!(["published"])
-    );
-    assert_eq!(
-        schemas["PromptPublicationRequest"]["properties"]
-            .as_object()
+        schemas["MarketplacePackage"]["oneOf"]
+            .as_array()
             .unwrap()
             .len(),
-        1
+        3
     );
-    for name in [
-        "PublishedPromptPage",
-        "MarketplacePage",
-        "PromptPublicationSpacePage",
-    ] {
+    for name in ["MarketplaceEntryPage", "ProposalPage", "ProposalSpacePage"] {
         assert_eq!(schemas[name]["properties"]["items"]["maxItems"], 100);
-        assert_eq!(schemas[name]["properties"]["next_cursor"]["format"], "uuid");
     }
-    assert!(
-        schemas["PromptMetadata"]["properties"]
-            .get("published")
-            .is_none()
-    );
-    assert_eq!(
-        schemas["Marketplace"]["properties"]["space_id"]["format"],
-        "uuid"
-    );
-    assert!(
-        schemas["Marketplace"]["properties"]
-            .get("organization_id")
-            .is_none()
-    );
-    let paths = api["paths"].as_object().unwrap();
-    for obsolete in [
-        "/me/prompt-marketplaces",
-        "/me/prompt-publication-teams",
-        "/organizations/{organization_id}/published-prompts",
-        "/spaces/{space_id}/prompts/{prompt_id}/publication",
-    ] {
-        assert!(
-            !paths.contains_key(obsolete),
-            "obsolete contract {obsolete}"
-        );
+    for path in api["paths"].as_object().unwrap().keys() {
+        assert!(!path.contains("published-prompts") && !path.contains("/publications/"));
     }
-    assert!(
-        !paths
-            .keys()
-            .any(|path| path.contains("/marketplace/prompts"))
-    );
 }
 
 #[test]

@@ -259,7 +259,7 @@ async fn select_capabilities(
 }
 
 /// The effective selection: enrollment always stores it, so absence is corrupt data.
-pub(super) fn saved_selection(tuning: &Value) -> AppResult<Vec<String>> {
+pub(crate) fn saved_selection(tuning: &Value) -> AppResult<Vec<String>> {
     Ok(Vec::<String>::deserialize(
         tuning
             .get("selected_capability_ids")
@@ -269,7 +269,7 @@ pub(super) fn saved_selection(tuning: &Value) -> AppResult<Vec<String>> {
 }
 
 /// Every selected capability must belong to the template's pod inventory.
-pub(super) fn require_inventory(
+pub(crate) fn require_inventory(
     template: &AgentTemplateSummary,
     selected: &[String],
 ) -> AppResult<()> {
@@ -373,6 +373,20 @@ pub(crate) fn capability_request(
     authorization: Option<&HeaderValue>,
     operation: &str,
 ) -> AppResult<reqwest::RequestBuilder> {
+    pod_request(
+        platform,
+        runtime_id,
+        authorization,
+        &format!("capabilities/{operation}"),
+    )
+}
+
+pub(crate) fn pod_request(
+    platform: &PlatformConfig,
+    runtime_id: &str,
+    authorization: Option<&HeaderValue>,
+    operation: &str,
+) -> AppResult<reqwest::RequestBuilder> {
     let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
     let source = platform
         .runtime_catalog_sources
@@ -390,7 +404,7 @@ pub(crate) fn capability_request(
         .as_ref()
         .map_err(|_| unavailable())?;
     let mut request = client.post(format!(
-        "{}/agents/capabilities/{operation}",
+        "{}/agents/{operation}",
         source.base_url.trim_end_matches('/')
     ));
     if let Some(authorization) = authorization {

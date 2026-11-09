@@ -69,7 +69,7 @@ only and remain available after roles are removed; see [A7](A7-action-role-matri
 A person is an **organization participant** when they hold a business role
 (`owner`, `member`, `editor` or `analyst`) on an active collective space in that
 organization; its organization and parent must also be active. This same predicate
-admits access to their personal space and the organization's published-prompt marketplace. Technical
+admits access to their personal space and the organization's published-snapshot marketplace. Technical
 `platform_admin` and `organization_admin` roles alone do not. The roles can
 accumulate: an admin who also holds a business role remains eligible. Personal content
 still belongs only to its own member/editor, never to other business owners.

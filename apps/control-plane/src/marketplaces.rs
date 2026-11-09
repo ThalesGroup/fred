@@ -21,6 +21,10 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 const PAGE_SIZE: usize = 100;
+mod agent;
+mod http;
+pub mod models;
+mod store;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PageQuery {
@@ -28,7 +32,9 @@ struct PageQuery {
 }
 
 pub(crate) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
-    utoipa_axum::router::OpenApiRouter::new().routes(utoipa_axum::routes!(marketplaces))
+    utoipa_axum::router::OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(marketplaces))
+        .merge(http::routes())
 }
 
 /// Only the source's organization marketplace is enabled in this increment.
@@ -110,9 +116,19 @@ pub(crate) async fn read_snapshot(
     sqlx::query("set local statement_timeout = '15s'")
         .execute(&mut *tx)
         .await?;
-    let facts = authorization::load_facts(&mut *tx, actor, marketplace_space).await?;
+    require_audience(&mut tx, actor, marketplace_space).await?;
+    Ok(tx)
+}
+
+pub(crate) async fn require_audience(
+    conn: &mut sqlx::PgConnection,
+    actor: &str,
+    marketplace_space: Uuid,
+) -> AppResult<()> {
+    let facts = authorization::load_facts(conn, actor, marketplace_space).await?;
     if facts.space.kind != SpaceKind::Organization || !facts.organization_participant {
         return Err(AppError::NotFound);
     }
-    Ok(tx)
+    facts.require_active()?;
+    Ok(())
 }

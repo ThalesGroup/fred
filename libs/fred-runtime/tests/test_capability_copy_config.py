@@ -31,6 +31,7 @@ from _tracer_capability import TracerEchoCapability
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.capabilities.copy import (
     CapabilityCopyRejectedError,
+    export_tuning_values,
     prepare_capability_copy,
     prepare_capability_export,
 )
@@ -48,8 +49,9 @@ from fred_sdk.contracts.capability import (
     StoredCapabilityConfig,
     UploadedFile,
 )
+from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.runtime import AgentAssetPort, RuntimeServices
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError
 from test_capability_endpoints_1974 import _app_with_capabilities
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
@@ -115,6 +117,17 @@ class _DeckCapability(AgentCapability[_DeckConfig, _DeckConfig, EmptyModel]):
         return config
 
 
+class _PreflightDeckCapability(_DeckCapability):
+    async def validate_config(self, config, uploads, ctx):
+        assert uploads["template"][0].content == b"pptx-bytes"
+        assert ctx.identity.space_id == "team-b"
+        return config
+
+
+def _forbid_legacy_services(**kwargs):
+    raise AssertionError("Snapshot operations must not use legacy storage")
+
+
 def _request(
     target_team: str, asset_files: dict[str, str] | None = None
 ) -> CapabilityConfigCopyRequest:
@@ -123,11 +136,11 @@ def _request(
             schema_version="1.0.0",
             config={"title": "Weekly", "library_tag_ids": ["lib-a"]},
         ),
-        source_team_id="team-a",
-        source_agent_instance_id="agent-1",
-        target_team_id=target_team,
+        target_space_id=target_team,
         target_agent_instance_id="agent-2",
-        asset_files=asset_files,
+        asset_files=asset_files
+        if asset_files is not None
+        else {"deck.pptx": _b64(b"pptx-bytes")},
     )
 
 
@@ -145,13 +158,11 @@ def _reset_calls():
 
 @pytest.mark.asyncio
 async def test_other_scope_resets_scope_private_and_recreates_files() -> None:
-    source = _MemoryAssets({"deck.pptx": b"pptx-bytes"})
     target = _MemoryAssets()
 
     stored = await prepare_capability_copy(
         _DeckCapability(),
         _request("team-b"),
-        source_ctx=_ctx("team-a", source),
         target_ctx=_ctx("team-b", target),
     )
 
@@ -169,18 +180,16 @@ async def test_other_scope_resets_scope_private_and_recreates_files() -> None:
 
 
 @pytest.mark.asyncio
-async def test_same_scope_keeps_scope_private_settings() -> None:
-    source = _MemoryAssets({"deck.pptx": b"pptx-bytes"})
+async def test_import_always_resets_private_settings() -> None:
 
     stored = await prepare_capability_copy(
         _DeckCapability(),
         _request("team-a"),
-        source_ctx=_ctx("team-a", source),
         target_ctx=_ctx("team-a", _MemoryAssets()),
     )
 
-    assert stored.config["library_tag_ids"] == ["lib-a"]
-    assert stored.notices == []
+    assert stored.config["library_tag_ids"] == []
+    assert stored.notices == ["copied to team-a"]
 
 
 @pytest.mark.asyncio
@@ -188,8 +197,7 @@ async def test_missing_configuration_file_rejects_the_capability() -> None:
     with pytest.raises(CapabilityCopyRejectedError, match="deck.pptx"):
         await prepare_capability_copy(
             _DeckCapability(),
-            _request("team-b"),
-            source_ctx=_ctx("team-a", _MemoryAssets()),
+            _request("team-b", {}),
             target_ctx=_ctx("team-b", _MemoryAssets()),
         )
 
@@ -199,8 +207,7 @@ async def test_capability_rejection_in_target_is_typed() -> None:
     with pytest.raises(CapabilityCopyRejectedError, match="unreadable template"):
         await prepare_capability_copy(
             _DeckCapability(),
-            _request("team-b"),
-            source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"broken"})),
+            _request("team-b", {"deck.pptx": _b64(b"broken")}),
             target_ctx=_ctx("team-b", _MemoryAssets()),
         )
 
@@ -213,18 +220,13 @@ def _post(client, capability_id: str, request: CapabilityConfigCopyRequest):
 
 
 def test_endpoint_returns_the_target_envelope(tmp_path, monkeypatch) -> None:
-    files = {
-        "team-a": _MemoryAssets({"deck.pptx": b"pptx-bytes"}),
-        "team-b": _MemoryAssets(),
-    }
     monkeypatch.setattr(
-        agent_app_module,
-        "_build_capability_save_services",
-        lambda **kwargs: RuntimeServices(agent_assets=files[kwargs["team_id"]]),
+        agent_app_module, "_build_capability_save_services", _forbid_legacy_services
     )
-    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    client = _app_with_capabilities(tmp_path, monkeypatch, _PreflightDeckCapability())
     try:
-        response = _post(client, "deck_copy", _request("team-b"))
+        body = _request("team-b", {"deck.pptx": _b64(b"pptx-bytes")})
+        response = _post(client, "deck_copy", body)
         assert response.status_code == 200
         assert response.json() == {
             "schema_version": "1.0.0",
@@ -233,9 +235,8 @@ def test_endpoint_returns_the_target_envelope(tmp_path, monkeypatch) -> None:
                 "library_tag_ids": [],
                 "template_key": "deck.pptx",
             },
-            "notices": ["copied to team-b"],
+            "notices": [],
         }
-        assert files["team-b"].files == {"deck.pptx": b"pptx-bytes"}
     finally:
         client.__exit__(None, None, None)
 
@@ -248,17 +249,25 @@ def test_endpoint_unknown_capability_is_404(tmp_path, monkeypatch) -> None:
         client.__exit__(None, None, None)
 
 
-def test_endpoint_rejection_is_422(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "files,reason",
+    [
+        ({}, "deck.pptx"),
+        (
+            {"deck.pptx": base64.b64encode(b"pptx-bytes").decode()},
+            "unsupported external asset save",
+        ),
+    ],
+)
+def test_endpoint_rejection_is_422(tmp_path, monkeypatch, files, reason) -> None:
     monkeypatch.setattr(
-        agent_app_module,
-        "_build_capability_save_services",
-        lambda **kwargs: RuntimeServices(agent_assets=_MemoryAssets()),
+        agent_app_module, "_build_capability_save_services", _forbid_legacy_services
     )
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
-        response = _post(client, "deck_copy", _request("team-b"))
+        response = _post(client, "deck_copy", _request("team-b", files))
         assert response.status_code == 422
-        assert "deck.pptx" in response.json()["detail"]
+        assert reason in response.json()["detail"]
     finally:
         client.__exit__(None, None, None)
 
@@ -275,7 +284,6 @@ async def test_inline_files_replace_the_source_read() -> None:
         _DeckCapability(),
         _request("team-b", asset_files={"deck.pptx": _b64(b"snapshot-bytes")}),
         # The source holds no file: the copy must not read it.
-        source_ctx=_ctx("team-a", _MemoryAssets()),
         target_ctx=_ctx("team-b", target),
     )
 
@@ -292,7 +300,6 @@ async def test_missing_or_invalid_inline_file_rejects_the_capability(
         await prepare_capability_copy(
             _DeckCapability(),
             _request("team-b", asset_files=asset_files),
-            source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
             target_ctx=_ctx("team-b", _MemoryAssets()),
         )
 
@@ -303,7 +310,8 @@ def _export_request() -> CapabilityConfigExportRequest:
             schema_version="1.0.0",
             config={"title": "Weekly", "library_tag_ids": ["lib-a"]},
         ),
-        team_id="team-a",
+        files_by_slot={"template": [_b64(b"pptx-bytes")]},
+        space_id="team-a",
         agent_instance_id="agent-1",
     )
 
@@ -313,7 +321,6 @@ async def test_export_resets_scope_private_and_inlines_files() -> None:
     exported = await prepare_capability_export(
         _DeckCapability(),
         _export_request(),
-        source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
     )
 
     assert exported.schema_version == "1.0.0"
@@ -331,7 +338,6 @@ async def test_exported_config_copies_without_the_source() -> None:
     exported = await prepare_capability_export(
         _DeckCapability(),
         _export_request(),
-        source_ctx=_ctx("team-a", _MemoryAssets({"deck.pptx": b"pptx-bytes"})),
     )
     target = _MemoryAssets()
 
@@ -341,13 +347,10 @@ async def test_exported_config_copies_without_the_source() -> None:
             config=StoredCapabilityConfig(
                 schema_version=exported.schema_version, config=exported.config
             ),
-            source_team_id="team-a",
-            source_agent_instance_id="entry-1",
-            target_team_id="team-b",
+            target_space_id="team-b",
             target_agent_instance_id="agent-2",
             asset_files=exported.files,
         ),
-        source_ctx=_ctx("team-a", _MemoryAssets()),
         target_ctx=_ctx("team-b", target),
     )
 
@@ -355,26 +358,23 @@ async def test_exported_config_copies_without_the_source() -> None:
     assert target.files == {"deck.pptx": b"pptx-bytes"}
 
 
-def _post_export(client, capability_id: str):
+def _post_export(client, capability_id: str, *, inline: bool = False):
+    body = _export_request()
+    if not inline:
+        body.files_by_slot = {}
     return client.post(
         f"/pod/v1/agents/capabilities/{capability_id}/export-config",
-        json=_export_request().model_dump(mode="json"),
+        json=body.model_dump(mode="json"),
     )
 
 
 def test_export_endpoint_returns_config_and_files(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        agent_app_module,
-        "_build_capability_save_services",
-        lambda **kwargs: RuntimeServices(
-            agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"})
-            if kwargs["team_id"] == "team-a"
-            else _MemoryAssets()
-        ),
+        agent_app_module, "_build_capability_save_services", _forbid_legacy_services
     )
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
-        response = _post_export(client, "deck_copy")
+        response = _post_export(client, "deck_copy", inline=True)
         assert response.status_code == 200
         assert response.json() == {
             "schema_version": "1.0.0",
@@ -415,23 +415,131 @@ def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
 def test_copy_does_not_accept_legacy_model_routing_from_query(
     tmp_path, monkeypatch
 ) -> None:
-    routing_by_team: dict[str, object] = {}
-
-    def _services(**kwargs):
-        routing_by_team[kwargs["team_id"]] = kwargs.get("routing")
-        return RuntimeServices(agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"}))
-
-    monkeypatch.setattr(agent_app_module, "_build_capability_save_services", _services)
-    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    monkeypatch.setattr(
+        agent_app_module, "_build_capability_save_services", _forbid_legacy_services
+    )
+    client = _app_with_capabilities(tmp_path, monkeypatch, _PreflightDeckCapability())
     try:
         response = client.post(
             "/pod/v1/agents/capabilities/deck_copy/copy-config",
-            json=_request("team-b").model_dump(mode="json"),
+            json=_request("team-b", {"deck.pptx": _b64(b"pptx-bytes")}).model_dump(
+                mode="json"
+            ),
             params={"template_agent_id": "deck", "chat_default_profile_id": "p1"},
         )
         assert response.status_code == 200
-        target = routing_by_team["team-b"]
-        assert target is None
-        assert routing_by_team["team-a"] is None
     finally:
         client.__exit__(None, None, None)
+
+
+def test_exported_tuning_filters_private_fields_and_rejects_unclassified_values():
+    fields = [
+        FieldSpec(title="Setting", key="prompt", type="string"),
+        FieldSpec(title="Setting", key="library_id", type="string", scope_private=True),
+        FieldSpec(title="Setting", key="api_token", type="string", scope_private=True),
+    ]
+    assert export_tuning_values(
+        fields,
+        {"prompt": "Instructions", "library_id": "private", "api_token": "credential"},
+    ) == {"prompt": "Instructions"}
+    for specs, values in [
+        (fields, {"unknown": "opaque"}),
+        (
+            [FieldSpec(title="Setting", key="library_id", type="string")],
+            {"library_id": "private"},
+        ),
+        (
+            [FieldSpec(title="Setting", key="api_token", type="string")],
+            {"api_token": "credential"},
+        ),
+        (
+            [FieldSpec(title="Setting", key="configuration", type="object")],
+            {"configuration": {"library_id": "private"}},
+        ),
+    ]:
+        with pytest.raises(CapabilityCopyRejectedError):
+            export_tuning_values(specs, values)
+
+
+def test_import_contract_rejects_live_source_identity():
+    request = _request("team-b").model_dump()
+    request["source_space_id"] = "team-a"
+    with pytest.raises(ValidationError):
+        CapabilityConfigCopyRequest.model_validate(request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["export", "import"])
+@pytest.mark.parametrize(
+    "classification", ["unknown", "unclassified", "private", "public"]
+)
+async def test_dynamic_fields_keep_their_own_export_and_import_classification(
+    operation, classification
+):
+    class DynamicConfig(BaseModel):
+        model_config = ConfigDict(extra="allow")
+        library_id: ScopePrivate[str | None] = None
+
+    specs = [FieldSpec(key="library_id", type="string", title="Typed private setting")]
+    if classification != "unknown":
+        specs.append(
+            FieldSpec(
+                key="source_id",
+                type="string",
+                title="Dynamic setting",
+                scope_private={"private": True, "public": False}.get(classification),
+            )
+        )
+
+    class DynamicCapability(AgentCapability[DynamicConfig, DynamicConfig, EmptyModel]):
+        ConfigModel = DynamicConfig
+        manifest = CapabilityManifest(
+            id="dynamic",
+            version="1",
+            name="Dynamic",
+            description="Dynamic settings",
+            icon="settings",
+            config_fields=specs,
+        )
+
+    async def prepare():
+        capability = DynamicCapability()
+        source = StoredCapabilityConfig(
+            schema_version="1",
+            config={
+                "library_id": "source-library",
+                "source_id": "source-value",
+            },
+        )
+        if operation == "export":
+            return await prepare_capability_export(
+                capability,
+                CapabilityConfigExportRequest(
+                    config=source,
+                    space_id="source",
+                    agent_instance_id="original",
+                ),
+            )
+        return await prepare_capability_copy(
+            capability,
+            CapabilityConfigCopyRequest(
+                config=source,
+                target_space_id="target",
+                target_agent_instance_id="copy",
+                asset_files={},
+            ),
+            target_ctx=_ctx("target", _MemoryAssets()),
+        )
+
+    if classification in {"unknown", "unclassified"}:
+        message = (
+            "Unknown dynamic" if classification == "unknown" else "declare their scope"
+        )
+        with pytest.raises(CapabilityCopyRejectedError, match=message):
+            await prepare()
+    else:
+        result = await prepare()
+        assert result.config["library_id"] is None
+        assert result.config["source_id"] == (
+            None if classification == "private" else "source-value"
+        )

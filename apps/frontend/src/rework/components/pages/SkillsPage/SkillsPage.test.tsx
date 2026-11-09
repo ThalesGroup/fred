@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsPage from "./SkillsPage";
 
 const h = vi.hoisted(() => ({ read: true, write: false, install: vi.fn(), refetch: vi.fn() }));
-vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "space-1" }) }));
+vi.mock("react-router-dom", () => ({
+  useParams: () => ({ teamId: "space-1" }),
+  useSearchParams: () => [new URLSearchParams()],
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@core/hooks/useSpaceAccess", () => ({
   useSpaceAccess: (_: string, permission: string) => ({

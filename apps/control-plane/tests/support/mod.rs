@@ -358,6 +358,18 @@ pub async fn request(
     path: &str,
     body: Value,
 ) -> (u16, Value) {
+    request_with_headers(app, identity, actor, method, path, body, &[]).await
+}
+
+pub async fn request_with_headers(
+    app: &Router,
+    identity: &IdentityServer,
+    actor: Option<&str>,
+    method: &str,
+    path: &str,
+    body: Value,
+    headers: &[(&str, String)],
+) -> (u16, Value) {
     use axum::{
         body::{Body, to_bytes},
         http::Request,
@@ -368,6 +380,9 @@ pub async fn request(
         .method(method)
         .uri(path)
         .header("content-type", "application/json");
+    for (name, value) in headers {
+        req = req.header(*name, value);
+    }
     if let Some(actor) = actor {
         req = req.header("authorization", format!("Bearer {}", identity.token(actor)));
     }

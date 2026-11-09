@@ -1882,52 +1882,6 @@
           "confirm": "Repair documents",
           "cancel": "Cancel"
         }
-      },
-      "marketplaces": {
-        "title": "Marketplaces",
-        "subtitle": "Choose which teams may publish their agents to the agents marketplace, and how many agents each team may publish.",
-        "agentsSection": "Agents",
-        "defaultTitle": "Publishing",
-        "defaultHint": "Lets the team's editors publish their agents to the marketplace.",
-        "defaultChoice": {
-          "disabled": "Disabled",
-          "enabled": "Enabled"
-        },
-        "quota": "Max agents",
-        "quotaAria": "Max agents for {{team}}",
-        "defaultQuotaAria": "Default max agents",
-        "quotaInvalid": "Enter a whole number of at least 1.",
-        "resetQuota": "Back to the default value ({{count}})",
-        "resetQuotaAria": "Put the max agents of {{team}} back to Default",
-        "customizeQuota": "Customize",
-        "customizeQuotaAria": "Customize the max agents of {{team}}",
-        "rowControlAria": "Publishing for {{team}}",
-        "choice": {
-          "disabled": "Off",
-          "default": "Default",
-          "enabled": "On"
-        },
-        "col": {
-          "team": "Team",
-          "publishing": "Publishing",
-          "quota": "Max agents",
-          "published": "Published"
-        },
-        "loading": "Loading marketplace settings…",
-        "loadError": "Could not load the marketplace settings.",
-        "noTeams": "No team exists yet.",
-        "savedToast": "Marketplace settings saved.",
-        "saveError": "Could not save the marketplace settings.",
-        "impactError": "Could not check what this change would remove.",
-        "offConfirm": {
-          "title": "Turn publishing off?",
-          "teamMessage": "{{team}} will no longer be able to publish agents.",
-          "defaultMessage": "Teams that follow Default will no longer be able to publish agents.",
-          "agents_one": "{{count}} agent will be removed from the marketplace.",
-          "agents_other": "{{count}} agents will be removed from the marketplace.",
-          "confirm": "Turn off",
-          "cancel": "Cancel"
-        }
       }
     },
     "agentCard": {
@@ -2641,113 +2595,6 @@
         },
         "title": "Community teams",
         "yourTeams": "Your teams"
-      },
-      "prompts": {
-        "title": "Community prompts",
-        "searchPlaceholder": "Search a prompt...",
-        "clearSearch": "Clear search",
-        "loading": "Loading prompts...",
-        "empty": "No prompt has been published to the marketplace yet.",
-        "emptySearch": "No prompt matches this search.",
-        "import": {
-          "title": "Import this prompt into a team",
-          "subtitle": "Select the spaces to import “{{name}}” into.",
-          "confirm": "Import",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team owner for that role.",
-          "successToast": "Prompt imported ({{count}})",
-          "errorToast": "Import failed ({{count}})"
-        },
-        "unpublish": {
-          "title": "Remove this prompt from the marketplace?",
-          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
-          "confirm": "Remove",
-          "successToast": "Prompt removed from the marketplace",
-          "errorToast": "Failed to remove prompt"
-        }
-      },
-      "agents": {
-        "title": "Community agents",
-        "searchPlaceholder": "Search an agent...",
-        "clearSearch": "Clear search",
-        "loading": "Loading agents...",
-        "likeError": "Could not save your like",
-        "teamFilter": {
-          "chip": "Team: {{team}}",
-          "clear": "Remove the filter on {{team}}"
-        },
-        "empty": {
-          "title": "No agent shared yet",
-          "description": "When a team publishes one of its agents, it appears here. You can then see what it does, like it, and import your own copy into your spaces."
-        },
-        "emptySearch": {
-          "title": "No agent matches",
-          "description": "Try other words, or remove the team filter."
-        },
-        "card": {
-          "byTeam": "By",
-          "filterByTeam": "Filter by team {{team}}",
-          "like_one": "Like this agent ({{count}} like)",
-          "like_other": "Like this agent ({{count}} likes)",
-          "import_one": "Import this agent ({{count}} import)",
-          "import_other": "Import this agent ({{count}} imports)",
-          "updatedOn": "Updated on {{date}}",
-          "details": "View details"
-        },
-        "detail": {
-          "import": "Import",
-          "close": "Close",
-          "loadError": "Could not load this agent. It may no longer be published.",
-          "publishedBy": "Published by {{team}} · updated on {{date}}",
-          "likesSinceUpdateTooltip_one": "Including {{count}} since the update of {{date}}",
-          "likesSinceUpdateTooltip_other": "Including {{count}} since the update of {{date}}",
-          "capabilitiesTitle": "What it can do",
-          "noCapabilities": "It answers questions, without any extra function.",
-          "instructionsTitle": "Instructions",
-          "noInstructions": "No instructions.",
-          "filesTitle": "Configuration files",
-          "filesHint": "Your copy receives these files when you import the agent."
-        },
-        "remove": {
-          "title": "Remove from the marketplace?",
-          "message": "\"{{name}}\" will no longer be listed. The team {{team}} sees that a platform administrator removed it, with your message if you write one.",
-          "reasonLabel": "Message to the team (optional)",
-          "reasonHint": "For example: outdated instructions.",
-          "confirm": "Remove"
-        },
-        "import": {
-          "title": "Import {{name}}",
-          "subtitle": "Select the spaces to import this agent into.",
-          "confirm": "Import",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can import an agent into one — ask a team owner for that role.",
-          "typeNotEnabled": "Agent type not enabled in this team",
-          "loses_one": "Loses {{count}} capability",
-          "loses_other": "Loses {{count}} capabilities",
-          "losesTitle": "Not available in this team:",
-          "independent": "Your copy will be independent: updates made by {{team}} will not reach it.",
-          "info": {
-            "copiedLabel": "Imported",
-            "copied": "The agent's name, description, instructions and settings",
-            "resetLabel": "To choose again",
-            "reset": "Libraries, folders and documents, which belonged to the publishing team",
-            "recreatedLabel": "Recreated",
-            "recreated": "Configuration files, such as a PowerPoint template",
-            "notCopiedLabel": "Not imported",
-            "notCopied": "Conversations, and capabilities not enabled in the team"
-          },
-          "resultTitle": "Import of {{name}}",
-          "importedInto": "Imported into {{team}}",
-          "failedInto": "Not imported into {{team}}",
-          "renamed": "Named \"{{name}}\": the name was already taken there.",
-          "toReconfigure": "To reconfigure there: the libraries, documents and folders the agent should use.",
-          "dropped": "Without: {{capabilities}}",
-          "notice": "{{capability}}: {{message}}",
-          "errorToast": "Import failed",
-          "errors": {
-            "marketplace_publishing_team": "An agent cannot be imported into the team that published it.",
-            "agent_name_conflict": "An agent with this name already exists in this space.",
-            "generic": "Something went wrong for this space. Try again later."
-          }
-        }
       }
     },
     "helpCenter": {
@@ -3224,8 +3071,7 @@
           "teams": "Teams",
           "platformPrompt": "Platform prompts",
           "announcements": "Announcements",
-          "uiSettings": "User interface",
-          "marketplaces": "Marketplaces"
+          "uiSettings": "User interface"
         },
         "platformTitle": "Platform",
         "title": "Administration",
@@ -3777,13 +3623,7 @@
           "label": "Team visibility",
           "support": "Determines whether the team is visible on the marketplace to every user.",
           "public": "Public",
-          "private": "Private",
-          "privateConfirm": {
-            "title": "Make the team private?",
-            "message_one": "{{count}} published agent of this team will be removed from the marketplace. Making the team public again does not publish it again.",
-            "message_other": "{{count}} published agents of this team will be removed from the marketplace. Making the team public again does not publish them again.",
-            "confirm": "Make private"
-          }
+          "private": "Private"
         },
         "teamAvatar": {
           "title": "Team avatar",
@@ -4014,15 +3854,10 @@
       "prompts": {
         "card": {
           "uses": "Uses: {{count}}",
-          "publishedChip": "Published",
           "menu": {
             "edit": "Edit",
             "duplicate": "Duplicate",
-            "publish": "Publish to marketplace",
-            "unpublish": "Remove from marketplace",
-            "delete": "Delete",
-            "import": "Import into...",
-            "removeFromMarketplace": "Remove from marketplace"
+            "delete": "Delete"
           }
         },
         "clearSearch": "Clear search",
@@ -4071,25 +3906,6 @@
           "confirm": "Duplicate",
           "successToast": "Prompt duplicated",
           "errorToast": "Failed to duplicate prompt"
-        },
-        "publishDialog": {
-          "title": "Publish this prompt to the marketplace?",
-          "message": "This prompt will be visible to people with an active business role in your organization, including guests. Changes to its definition will be immediately visible in the marketplace.",
-          "confirm": "Publish",
-          "successToast": "Prompt published to the marketplace",
-          "errorToast": "Failed to publish prompt"
-        },
-        "unpublishDialog": {
-          "title": "Remove this prompt from the marketplace?",
-          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
-          "confirm": "Remove",
-          "successToast": "Prompt removed from the marketplace",
-          "errorToast": "Failed to remove prompt"
-        },
-        "editPublishedDialog": {
-          "title": "Save changes?",
-          "message": "This prompt is published. Your changes will immediately be visible to authorized readers in your organization.",
-          "confirm": "Save"
         },
         "titlePersonal": "Your personal prompts",
         "favorite": {
@@ -5006,98 +4822,6 @@
         "grants_acknowledged": "Grants acknowledged"
       }
     },
-    "agentMarketplace": {
-      "barLabel": "Marketplace",
-      "published": "Published",
-      "publishedTooltip": "This agent is published on the marketplace",
-      "publish": "Publish",
-      "likes_one": "{{count}} like",
-      "likes_other": "{{count}} likes",
-      "imports_one": "{{count}} import",
-      "imports_other": "{{count}} imports",
-      "modified": {
-        "label": "Marketplace update needed",
-        "tooltip": "This agent changed since publication. The marketplace still shows the previous version until an editor updates it."
-      },
-      "removed": {
-        "label": "Removed from the marketplace",
-        "date": "Removed on {{date}}",
-        "message": "Message from the platform administrator: {{message}}",
-        "hide": "Hide",
-        "reasons": {
-          "deactivated": "The agent was deactivated.",
-          "suspended": "The agent was suspended: a capability it uses is no longer available to the team.",
-          "switch_off": "Publishing agents was turned off for this team.",
-          "team_private": "The team became private.",
-          "removed_by_platform_admin": "A platform administrator removed it.",
-          "unknown": "The agent is no longer published."
-        }
-      },
-      "menu": {
-        "publish": "Publish to the marketplace",
-        "republish": "Update on the marketplace",
-        "remove": "Remove from the marketplace"
-      },
-      "blocked": {
-        "templateNotPublic": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
-        "teamPrivate": "Private teams cannot publish agents. Make the team public to publish it.",
-        "quotaReached": "Your team has reached its quota of published agents. Remove one from the marketplace to publish this one."
-      },
-      "publishDialog": {
-        "title": "Publish {{name}} to the marketplace?",
-        "titleRepublish": "Update {{name}} on the marketplace?",
-        "visibility": "Its configuration (name, description, instructions and settings) becomes visible to every user of the organization, who can import a copy of it. Settings tied to your team, such as libraries and documents, are not shared.",
-        "visibilityRepublish": "Its current configuration (name, description, instructions and settings) will replace the published version on the marketplace. Everyone in the organization can import a copy. Settings tied to your team, such as libraries and documents, are not shared.",
-        "files": "Anyone who imports this agent receives a copy of its files ({{names}}).",
-        "quota_one": "Your team has published {{count}} agent out of {{quota}} allowed.",
-        "quota_other": "Your team has published {{count}} agents out of {{quota}} allowed.",
-        "quotaLast_one": "Your team has published {{count}} agent out of {{quota}} allowed. This will be the last one.",
-        "quotaLast_other": "Your team has published {{count}} agents out of {{quota}} allowed. This will be the last one.",
-        "learnMore": "Learn more about the marketplace",
-        "understand": "I understand",
-        "confirm": "Publish",
-        "confirmRepublish": "Update"
-      },
-      "proposal": {
-        "title": "Update on the marketplace?",
-        "titleReactivated": "Publish again to the marketplace?",
-        "saved": "You changed {{name}}. The marketplace still shows its previous version.",
-        "reactivated": "{{name}} was removed from the marketplace when it was deactivated. Publish it again?",
-        "update": "Update",
-        "publish": "Publish",
-        "ignore": "Ignore"
-      },
-      "removeDialog": {
-        "title": "Remove from the marketplace?",
-        "message": "\"{{name}}\" will no longer be listed on the marketplace. It stays in your team unchanged, and its likes and imports are kept if you publish it again.",
-        "confirm": "Remove"
-      },
-      "deactivateDialog": {
-        "title": "Deactivate this published agent?",
-        "message": "\"{{name}}\" will also be removed from the marketplace. Reactivating it does not publish it again.",
-        "confirm": "Deactivate"
-      },
-      "deleteRemoves": "It will also be removed from the marketplace.",
-      "publishSuccess": "{{name}} published to the marketplace",
-      "publishError": "Could not publish this agent",
-      "removeSuccess": "{{name}} removed from the marketplace",
-      "removeError": "Could not remove this agent from the marketplace",
-      "hideError": "Could not hide this state",
-      "errors": {
-        "marketplace_version_conflict": "Someone changed this agent's publication in the meantime. The card now shows its current state.",
-        "marketplace_quota_reached": "Your team has reached its quota of published agents.",
-        "marketplace_team_private": "Private teams cannot publish agents.",
-        "marketplace_switch_off": "Publishing agents is not enabled for this team.",
-        "marketplace_template_not_public": "This agent uses an agent type reserved to platform administrators: it cannot be published.",
-        "marketplace_agent_inactive": "A deactivated or suspended agent cannot be published.",
-        "marketplace_personal_space": "Agents of your personal space cannot be published.",
-        "marketplace_forbidden": "You are not allowed to do this.",
-        "marketplace_agent_not_found": "This agent no longer exists.",
-        "marketplace_entry_not_found": "This agent is not published.",
-        "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
-        "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
-      }
-    },
     "manager": {
       "notAdmitted": "Your account does not yet have access to Weaver. Contact your organization owner.",
       "spaces": "Your spaces",
@@ -5244,13 +4968,8 @@
       "replicas": "{{ready}}/{{desired}} replicas ready"
     },
     "promptPublication": {
-      "marketplace": "Marketplace",
-      "noAccess": "No active business role gives you access to a prompt marketplace.",
-      "importUnavailable": "Import is not available yet.",
-      "title": "Published prompts",
       "metricsUnavailable": "Published prompts are available. Usage ranking, counters and charts are not yet available.",
-      "usageUnavailable": "Usage unavailable",
-      "libraries": "Prompt libraries you can publish from"
+      "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
       "title": "Manage {{name}}",
@@ -5298,6 +5017,79 @@
       "save": "Save package",
       "cancel": "Cancel",
       "failed": "The operation failed. Check the package format and reload if it changed."
+    },
+    "localMarketplace": {
+      "savedProposals": "Saved proposal attempts",
+      "resumeProposal": "Resume proposal",
+      "catalogue": "Organization catalogue",
+      "noAccess": "No catalogue is available.",
+      "propose": "Propose to the marketplace",
+      "snapshotExplanation": "Submission freezes the current saved content for review. Later changes or deletion of the source do not change the proposal.",
+      "noSource": "This source cannot be proposed to a catalogue with your current access.",
+      "proposalTarget": "Publication to propose",
+      "newEntry": "New independent entry",
+      "newExplanation": "Create a distinct entry, even if another publication has the same name.",
+      "replaceExplanation": "Propose a replacement for this entry. Its current publication stays available until approval.",
+      "targetsError": "Unable to load existing entries. Reload before submitting.",
+      "failed": "The operation could not be completed.",
+      "uncertain": "The outcome is uncertain. Retry the same attempt to recover its result before starting another operation.",
+      "sourceChanged": "The source changed. Close this dialog, refresh the library and review it before submitting again.",
+      "reviewAgain": "The publication changed. Reload and review it again before deciding.",
+      "reviewAgainAction": "Reload for a new review",
+      "submit": "Submit proposal",
+      "submitted": "Proposal submitted for review.",
+      "followProposal": "Follow this proposal",
+      "retry": "Retry the same attempt",
+      "newOperation": "Start another operation",
+      "close": "Close",
+      "configuration": "Agent configuration",
+      "downloadFile": "Download the submitted file",
+      "inspect": "Inspect content",
+      "entryIdentity": "Entry:",
+      "proposalIdentity": "Proposal:",
+      "reviewVersion": "Publication version examined: {{version}}",
+      "currentPublication": "Current published proposal",
+      "none": "None",
+      "reason": "Decision reason",
+      "approve": "Approve and publish",
+      "reject": "Reject",
+      "cancelProposal": "Cancel proposal",
+      "withdraw": "Withdraw publication",
+      "withdrawExplanation": "Withdraw this publication? Already installed copies remain independent and available in their spaces.",
+      "install": "Install a copy",
+      "installExplanation": "Install this exact publication as an independent copy. Existing resources are never overwritten. There are no automatic updates.",
+      "noDestination": "No compatible writable destination is available.",
+      "destination": "Destination space",
+      "logicalName": "Local identifier",
+      "displayName": "Local display name",
+      "installed": "Installation recorded.",
+      "openResource": "Open the created resource",
+      "resourceDeleted": "The installed resource has been deleted. This receipt does not recreate it.",
+      "refresh": "Refresh",
+      "view": "Show",
+      "publications": "Publications",
+      "proposals": "Proposals",
+      "state": "Decision",
+      "all": "All states",
+      "search": "Search name, description, origin or identity",
+      "clearSearch": "Clear search",
+      "empty": "No matching items.",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {{page}} of {{count}}",
+      "kinds": {
+        "prompt": "Prompts",
+        "skill": "Skills",
+        "agent": "Agents"
+      },
+      "states": {
+        "pending": "Pending review",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "cancelled": "Cancelled"
+      },
+      "resumeAttempt": "A previous attempt needs verification. Resume it to retrieve its result from the server before starting another operation.",
+      "attemptStorageUnavailable": "The attempt could not be saved or recovered in this browser. No new request was sent. Restore browser storage and reload before retrying."
     }
   },
   "runtime": {

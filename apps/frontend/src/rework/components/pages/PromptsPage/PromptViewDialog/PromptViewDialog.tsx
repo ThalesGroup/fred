@@ -20,10 +20,7 @@ import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useState } from "react";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useTranslation } from "react-i18next";
-import {
-  useGetPromptQuery,
-  usePublishedPromptQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useGetPromptQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Chip from "@shared/atoms/Chip/Chip";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./PromptViewDialog.module.scss";
@@ -32,19 +29,16 @@ interface PromptViewDialogProps {
   open: boolean;
   onClose: () => void;
   spaceId?: string;
-  marketplaceSpaceId?: string;
   promptId?: string | null;
   categories?: { id: string; name: string }[];
   chipLabel?: string | null;
 }
 
 /** Read-only view of one prompt, reached by clicking a `PromptCard`. Editing
- * stays reachable only through the card's more-menu (team library); on the
- * marketplace the only action is copy-to-clipboard. */
+ * stays reachable through the library card menu. */
 export default function PromptViewDialog({
   open,
   spaceId,
-  marketplaceSpaceId,
   promptId,
   categories = [],
   chipLabel,
@@ -57,37 +51,22 @@ export default function PromptViewDialog({
   const weaver = useGetPromptQuery(
     { spaceId: spaceId ?? "", promptId: promptId ?? "" },
     {
-      ...crossSessionRefreshOptions(!!marketplaceSpaceId || !open || !spaceId || !promptId),
+      ...crossSessionRefreshOptions(!open || !spaceId || !promptId),
       refetchOnMountOrArgChange: true,
     },
   );
-  useRefetchOnWindowFocus(weaver.refetch, !!marketplaceSpaceId || !open || !spaceId || !promptId);
-  const published = usePublishedPromptQuery(
-    { marketplaceSpaceId: marketplaceSpaceId ?? "", promptId: promptId ?? "" },
-    { ...crossSessionRefreshOptions(!open || !marketplaceSpaceId || !promptId), refetchOnMountOrArgChange: true },
-  );
-  useRefetchOnWindowFocus(published.refetch, !open || !marketplaceSpaceId || !promptId);
-  const detail = marketplaceSpaceId
-    ? !published.isError && !published.isFetching
-      ? published.currentData
-      : undefined
-    : spaceId
-      ? !weaver.isError && !weaver.isFetching
-        ? weaver.currentData
-        : undefined
-      : undefined;
-  const failed = marketplaceSpaceId ? published.isError : spaceId ? weaver.isError : false;
+  useRefetchOnWindowFocus(weaver.refetch, !open || !spaceId || !promptId);
+  const detail = spaceId && !weaver.isError && !weaver.isFetching ? weaver.currentData : undefined;
+  const failed = weaver.isError;
   const name = detail?.display_name;
   const command = detail?.logical_name;
 
   useEffect(() => {
     setCopied(false);
-  }, [open, promptId, marketplaceSpaceId, spaceId]);
+  }, [open, promptId, spaceId]);
 
   const category = categories.find((category) => category.id === detail?.category_id);
-  const resolvedChipLabel = marketplaceSpaceId
-    ? published.currentData?.source_space_name
-    : (chipLabel ?? category?.name ?? t("rework.promptCategories.noCategory"));
+  const resolvedChipLabel = chipLabel ?? category?.name ?? t("rework.promptCategories.noCategory");
 
   const handleCopy = () => {
     if (!detail) return;

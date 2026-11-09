@@ -518,7 +518,7 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
         &identity,
         Some("alice"),
         "GET",
-        "/me/prompt-publication-spaces",
+        "/me/marketplace-proposal-spaces",
         Value::Null,
     )
     .await;
@@ -554,7 +554,6 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
         let id = prompt["prompt_id"].as_str().unwrap();
         assert!(ids.insert(id.to_owned()));
         assert_eq!(prompt["space_id"], space.id.to_string());
-        assert_eq!(prompt["published_in"], json!([]));
         let path = format!("{catalog}/{id}");
         let favorite = format!("{path}/favorite");
         for (method, route, body) in [
@@ -642,116 +641,12 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
                 );
             }
         }
-        let publication = format!("{path}/publications/{}", org.id);
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("reader"),
-                "PUT",
-                &publication,
-                json!({"published":true})
-            )
-            .await
-            .0,
-            403
-        );
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("technical-admin"),
-                "PUT",
-                &publication,
-                json!({"published":true})
-            )
-            .await
-            .0,
-            403
-        );
-        let marketplace_detail = format!("/spaces/{}/published-prompts/{id}", org.id);
-        for _ in 0..2 {
-            assert_eq!(
-                request(
-                    &app,
-                    &identity,
-                    Some("alice"),
-                    "PUT",
-                    &publication,
-                    json!({"published":true})
-                )
-                .await
-                .0,
-                204
-            );
-        }
-        let (_, public) = request(
-            &app,
-            &identity,
-            Some("reader"),
-            "GET",
-            &marketplace_detail,
-            Value::Null,
-        )
-        .await;
-        assert_eq!(public["text"], prompt["text"]);
-        assert_eq!(public["published_in"], json!([org.id]));
-        assert_eq!(public["updated_at"], prompt["updated_at"]);
-        let (published_by, published_at): (String, chrono::DateTime<chrono::Utc>) = sqlx::query_as(
-            "select published_by,published_at from prompt_publication where prompt_id=$1",
-        )
-        .bind(Uuid::parse_str(id).unwrap())
-        .fetch_one(&e.pool)
-        .await
-        .unwrap();
-        assert_eq!(published_by, "alice");
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "PUT",
-                &publication,
-                json!({"published":true})
-            )
-            .await
-            .0,
-            204
-        );
-        assert_eq!(
-            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
-                "select published_at from prompt_publication where prompt_id=$1"
-            )
-            .bind(Uuid::parse_str(id).unwrap())
-            .fetch_one(&e.pool)
-            .await
-            .unwrap(),
-            published_at
-        );
         if space.kind == SpaceKind::Personal {
             assert_eq!(
                 request(&app, &identity, Some("reader"), "GET", &path, Value::Null)
                     .await
                     .0,
                 403
-            );
-            let secret = create(&app, &identity, space.id, creation("unpublished")).await;
-            assert_eq!(
-                request(
-                    &app,
-                    &identity,
-                    Some("reader"),
-                    "GET",
-                    &format!(
-                        "/spaces/{}/published-prompts/{}",
-                        org.id,
-                        secret["prompt_id"].as_str().unwrap()
-                    ),
-                    Value::Null
-                )
-                .await
-                .0,
-                404
             );
         }
         if space.kind != SpaceKind::Team {
@@ -839,30 +734,6 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
                 .0,
             404
         );
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("reader"),
-                "GET",
-                &marketplace_detail,
-                Value::Null
-            )
-            .await
-            .0,
-            404
-        );
-        assert_eq!(
-            sqlx::query_scalar::<_, i64>(
-                "select count(*) from prompt_publication where prompt_id=$1"
-            )
-            .bind(Uuid::parse_str(id).unwrap())
-            .fetch_one(&e.pool)
-            .await
-            .unwrap(),
-            0
-        );
-
         assert_eq!(
             request(
                 &app,
@@ -1608,413 +1479,7 @@ async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
 // Proves: I8, I20, I23
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn publication_uses_current_definition_and_organization_participation() {
-    let e = env().await;
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
-    let (org, team) = org_and_team(&e).await;
-    grant(&e, team.id, Role::Editor, "alice").await;
-    let other = support::member_organization(&e.pool, "Other", "carol")
-        .await
-        .unwrap();
-    for (actor, role) in [
-        ("owner-only", "owner"),
-        ("technical-only", "organization_admin"),
-    ] {
-        sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,$2,$3)")
-            .bind(org.id)
-            .bind(actor)
-            .bind(role)
-            .execute(&e.pool)
-            .await
-            .unwrap();
-    }
-    for actor in ["alice", "owner-only", "technical-only", "carol"] {
-        admit(&e, actor).await;
-    }
-    grant(&e, org.id, Role::Member, "team-owner").await;
-    grant(&e, team.id, Role::Owner, "team-owner").await;
-    admit(&e, "team-owner").await;
-    let identity = IdentityServer::start().await;
-    let app = app(&e, &identity).await;
-    let prompt = create(&app, &identity, team.id, creation("publication")).await;
-    assert_eq!(prompt["published_in"], json!([]));
-    let id = prompt["prompt_id"].as_str().unwrap();
-    let private = format!("{}/{id}", collection(team.id));
-    let publication = format!("{private}/publications/{}", org.id);
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &format!("{private}/publications/{}", other.id),
-            json!({"published":true})
-        )
-        .await
-        .0,
-        400
-    );
-    let catalog = format!("/spaces/{}/published-prompts", org.id);
-    let detail = format!("{catalog}/{id}");
-
-    let (status, page) = request(
-        &app,
-        &identity,
-        Some("owner-only"),
-        "GET",
-        &catalog,
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, 200);
-    assert_eq!(page["items"], json!([]));
-    for (actor, expected_marketplace, expected_team) in [
-        ("alice", true, true),
-        ("owner-only", true, false),
-        ("technical-only", false, false),
-    ] {
-        let (status, marketplaces) = request(
-            &app,
-            &identity,
-            Some(actor),
-            "GET",
-            "/me/marketplaces",
-            Value::Null,
-        )
-        .await;
-        assert_eq!(status, 200);
-        assert_eq!(
-            marketplaces["items"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|item| item["space_id"] == org.id.to_string()),
-            expected_marketplace
-        );
-        let (status, teams) = request(
-            &app,
-            &identity,
-            Some(actor),
-            "GET",
-            "/me/prompt-publication-spaces",
-            Value::Null,
-        )
-        .await;
-        assert_eq!(status, 200);
-        assert_eq!(
-            teams["items"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|item| item["id"] == team.id.to_string()),
-            expected_team
-        );
-    }
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("team-owner"),
-            "GET",
-            &private,
-            Value::Null
-        )
-        .await
-        .0,
-        403
-    );
-    // Organization participation opens the marketplace, never private team content.
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("owner-only"),
-            "GET",
-            &private,
-            Value::Null
-        )
-        .await
-        .0,
-        403
-    );
-    for (actor, expected) in [
-        ("owner-only", 403),
-        ("team-owner", 403),
-        ("technical-only", 403),
-        ("carol", 404),
-    ] {
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some(actor),
-                "PUT",
-                &publication,
-                json!({"published":true})
-            )
-            .await
-            .0,
-            expected
-        );
-    }
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &publication,
-            json!({"published":true})
-        )
-        .await
-        .0,
-        204
-    );
-    for actor in ["owner-only", "team-owner", "alice"] {
-        assert_eq!(
-            request(&app, &identity, Some(actor), "GET", &detail, Value::Null)
-                .await
-                .0,
-            200
-        );
-    }
-    for actor in ["technical-only", "carol"] {
-        for path in [&catalog, &detail] {
-            assert_eq!(
-                request(&app, &identity, Some(actor), "GET", path, Value::Null)
-                    .await
-                    .0,
-                404
-            );
-        }
-    }
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("carol"),
-            "GET",
-            &format!("/spaces/{}/published-prompts/{id}", other.id),
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PATCH",
-            &private,
-            json!({"text":"Current text"})
-        )
-        .await
-        .0,
-        200
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("owner-only"),
-            "GET",
-            &detail,
-            Value::Null
-        )
-        .await
-        .1["text"],
-        "Current text"
-    );
-
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &publication,
-            json!({"published":false})
-        )
-        .await
-        .0,
-        204
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("owner-only"),
-            "GET",
-            &detail,
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
-    assert_eq!(
-        request(&app, &identity, Some("alice"), "GET", &private, Value::Null)
-            .await
-            .0,
-        200
-    );
-
-    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
-        .await
-        .unwrap();
-    let personal_prompt = create(&app, &identity, personal.id, creation("private")).await;
-    let personal_id = personal_prompt["prompt_id"].as_str().unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &format!(
-                "/spaces/{}/prompts/{personal_id}/publications/{}",
-                personal.id, org.id
-            ),
-            json!({"published":true})
-        )
-        .await
-        .0,
-        204
-    );
-    // Removing the last collective role removes admission, even with old consent.
-    sqlx::query("delete from space_role_grant where subject='owner-only'")
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    let (status, body) = request(
-        &app,
-        &identity,
-        Some("owner-only"),
-        "GET",
-        &catalog,
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, 403);
-    assert_eq!(body["detail"], "user_not_admitted");
-    // Admission through another organization still grants no marketplace visibility here.
-    spaces::grant(
-        &e.pool,
-        &e.subjects(),
-        "carol",
-        other.id,
-        Role::Member,
-        "owner-only",
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("owner-only"),
-            "GET",
-            &catalog,
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
-    let project = spaces::create_space(
-        &e.pool,
-        "alice",
-        SpaceKind::Project,
-        team.id,
-        "Published project".into(),
-        "alice",
-    )
-    .await
-    .unwrap();
-    grant(&e, project.id, Role::Editor, "alice").await;
-    let project_prompt = create(&app, &identity, project.id, creation("published-project")).await;
-    let project_id = project_prompt["prompt_id"].as_str().unwrap();
-    for route in [
-        &publication,
-        &format!(
-            "/spaces/{}/prompts/{project_id}/publications/{}",
-            project.id, org.id
-        ),
-    ] {
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "PUT",
-                route,
-                json!({"published":true})
-            )
-            .await
-            .0,
-            204
-        );
-    }
-    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
-    lifecycle.config.enabled = true;
-    lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
-    for hidden in [id, project_id] {
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "GET",
-                &format!("{catalog}/{hidden}"),
-                Value::Null
-            )
-            .await
-            .0,
-            404
-        );
-    }
-    let (_, remaining) =
-        request(&app, &identity, Some("alice"), "GET", &catalog, Value::Null).await;
-    assert!(
-        remaining["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|row| row["prompt_id"] != id && row["prompt_id"] != project_id)
-    );
-    for actor in ["alice", "technical-only"] {
-        let (status, body) = request(
-            &app,
-            &identity,
-            Some(actor),
-            "PUT",
-            &publication,
-            json!({"published": true}),
-        )
-        .await;
-        assert_eq!(status, 409);
-        assert_eq!(body["code"], "space_pending_deletion");
-    }
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("carol"),
-            "PUT",
-            &publication,
-            json!({"published": true})
-        )
-        .await
-        .0,
-        404
-    );
-    e.pool.close().await;
-}
-
-#[tokio::test]
-#[ignore = "needs disposable Postgres: make test-integration"]
-async fn prompts_and_publications_survive_the_authors_departure() {
+async fn prompts_survive_the_authors_departure() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     let project = spaces::create_space(
@@ -2051,20 +1516,6 @@ async fn prompts_and_publications_survive_the_authors_departure() {
         )
         .await;
         assert_eq!(status, 201, "{prompt}");
-        let id = prompt["prompt_id"].as_str().unwrap();
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("bob"),
-                "PUT",
-                &format!("{}/{id}/publications/{}", collection(space.id), org.id),
-                json!({"published":true})
-            )
-            .await
-            .0,
-            204
-        );
         definitions.push((space, prompt));
     }
     let (status, private) = request(
@@ -2098,10 +1549,8 @@ async fn prompts_and_publications_survive_the_authors_departure() {
     for (space, prompt) in definitions {
         let id = prompt["prompt_id"].as_str().unwrap();
         let source = format!("{}/{id}", collection(space.id));
-        let public = format!("/spaces/{}/published-prompts/{id}", org.id);
         for (method, route, body) in [
             ("GET", source.as_str(), Value::Null),
-            ("GET", public.as_str(), Value::Null),
             ("PATCH", source.as_str(), json!({"text":"denied"})),
             ("DELETE", source.as_str(), Value::Null),
         ] {
@@ -2111,19 +1560,14 @@ async fn prompts_and_publications_survive_the_authors_departure() {
                 "{method} {route}: {status} {error}"
             );
         }
-        let (status, published) =
-            request(&app, &identity, Some("alice"), "GET", &public, Value::Null).await;
-        assert_eq!(status, 200, "{published}");
-        assert_eq!(published["text"], prompt["text"]);
-        assert_eq!(published["created_by"], "bob");
-        assert_eq!(published["updated_at"], prompt["updated_at"]);
-        let publisher: String =
-            sqlx::query_scalar("select published_by from prompt_publication where prompt_id=$1")
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("select text from prompt where prompt_id=$1")
                 .bind(Uuid::parse_str(id).unwrap())
                 .fetch_one(&e.pool)
                 .await
-                .unwrap();
-        assert_eq!(publisher, "bob");
+                .unwrap(),
+            prompt["text"]
+        );
         // Existing editors continue managing collective definitions; no personal access is added.
         assert_eq!(
             request(
@@ -2156,19 +1600,6 @@ async fn prompts_and_publications_survive_the_authors_departure() {
         .await
         .0,
         403
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &format!("/spaces/{}/published-prompts/{id}", org.id),
-            Value::Null
-        )
-        .await
-        .0,
-        404
     );
     assert_eq!(
         sqlx::query_scalar::<_, String>("select text from prompt where prompt_id=$1")

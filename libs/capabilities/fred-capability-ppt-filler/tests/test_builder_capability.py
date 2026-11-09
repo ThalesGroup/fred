@@ -521,3 +521,23 @@ def test_agent_corrections_override_common_fields_without_erasing_other_fields()
     assert config.effective_overrides() == [
         PatternOverride(pattern_id="slide:1", label="Agent", included=False)
     ]
+
+
+@pytest.mark.asyncio
+async def test_copy_freezes_effective_template_corrections():
+    from dataclasses import replace
+
+    config = PptBuilderConfig(
+        common_template_config=capability_mod.CommonTemplateConfig(
+            overrides=[
+                PatternOverride(pattern_id="slide:1", label="Shared", included=False),
+            ]
+        ),
+        overrides=[PatternOverride(pattern_id="slide:1", label="Local")],
+    )
+    result = await PptBuilderCapability().validate_config(
+        config, {}, replace(_save_ctx(), copied_from_another_scope=True)
+    )
+    assert result.common_template_config is None
+    assert result.overrides == config.effective_overrides()
+    assert result.analysis_id is None

@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 mod defaults;
 pub mod http;
-mod package;
+pub(crate) mod package;
 use package::Files;
 
 #[derive(Clone, Deserialize, Serialize, ToSchema)]

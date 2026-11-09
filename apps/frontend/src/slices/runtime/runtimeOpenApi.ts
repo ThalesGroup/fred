@@ -208,6 +208,16 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    exportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPost: build.mutation<
+      ExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostApiResponse,
+      ExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/templates/${queryArg.agentId}/export-tuning`,
+        method: "POST",
+        body: queryArg.agentTuningExportRequest,
+      }),
+    }),
     listWebResearchActivityPodV1AgentsWebResearchActivityGet: build.query<
       ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiResponse,
       ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiArg
@@ -395,6 +405,12 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
+};
+export type ExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostApiResponse =
+  /** status 200 Successful Response */ AgentTuningExportResult;
+export type ExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostApiArg = {
+  agentId: string;
+  agentTuningExportRequest: AgentTuningExportRequest;
 };
 export type ListWebResearchActivityPodV1AgentsWebResearchActivityGetApiResponse =
   /** status 200 Successful Response */ WebResearchActivity[];
@@ -615,15 +631,13 @@ export type CapabilityConfigCopyResult = {
   schema_version: string;
 };
 export type CapabilityConfigCopyRequest = {
-  /** Configuration files by asset key, base64-encoded. When set, the pod reads the files from here instead of the source agent instance, so a copy can be prepared from an exported snapshot. */
-  asset_files?: {
+  /** Complete configuration files by asset key, base64-encoded. No live source is read. */
+  asset_files: {
     [key: string]: string;
-  } | null;
+  };
   config: StoredCapabilityConfig;
-  source_agent_instance_id: string;
-  source_team_id: string;
   target_agent_instance_id: string;
-  target_team_id: string;
+  target_space_id: string;
 };
 export type CapabilityConfigExportResult = {
   config?: {
@@ -637,7 +651,10 @@ export type CapabilityConfigExportResult = {
 export type CapabilityConfigExportRequest = {
   agent_instance_id: string;
   config: StoredCapabilityConfig;
-  team_id: string;
+  files_by_slot?: {
+    [key: string]: string[];
+  };
+  space_id: string;
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -1397,6 +1414,33 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
+export type AgentTuningExportResult = {
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
+export type AgentTuningExportRequest = {
+  space_id: string;
+  values?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  };
+};
 export type WebResearchActivity = {
   agent_instance_id: string | null;
   correlation_id: string;
@@ -1452,6 +1496,7 @@ export const {
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
+  useExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostMutation,
   useListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,
   useLazyListWebResearchActivityPodV1AgentsWebResearchActivityGetQuery,
   useEraseWebResearchActivityPodV1AgentsWebResearchActivityUsersUserIdDeleteMutation,

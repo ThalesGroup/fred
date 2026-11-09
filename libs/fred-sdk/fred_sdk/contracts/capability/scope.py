@@ -33,11 +33,11 @@ from __future__ import annotations
 import copy
 import re
 import types
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar, Union, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretBytes, SecretStr
 from pydantic.fields import FieldInfo
 
 from ..models import FieldSpec
@@ -68,7 +68,7 @@ Public = Annotated[T, _PublicMarker()]
 
 # Identifier-like names: the guard requires these string fields to be classified.
 _REFERENCE_NAME = re.compile(
-    r"(^|_)(id|ids|uid|uids|key|keys|folder|folders|library|libraries|tag|tags|path|paths)$"
+    r"(^|_)(id|ids|uid|uids|key|keys|folder|folders|library|libraries|tag|tags|path|paths|password|secret|token|credential|credentials)$"
 )
 
 
@@ -146,7 +146,7 @@ def asset_keys(model: BaseModel) -> dict[str, list[str]]:
 
 
 def _is_text(annotation: Any) -> bool:
-    if annotation is str:
+    if annotation in (str, SecretStr, SecretBytes):
         return True
     origin = get_origin(annotation)
     if origin is Annotated:
@@ -168,10 +168,16 @@ def _nested_models(annotation: Any) -> Iterator[type[BaseModel]]:
         yield from _nested_models(arg)
 
 
+def _is_opaque(annotation: Any) -> bool:
+    if annotation is Any or get_origin(annotation) in (dict, Mapping):
+        return True
+    return any(_is_opaque(arg) for arg in get_args(annotation))
+
+
 def unclassified_reference_fields(model_type: type[BaseModel]) -> list[str]:
     """
-    Dotted paths of identifier-like text fields declared neither scope-private,
-    public nor asset key. The capability guard test fails on any result.
+    Dotted paths of references, credentials or opaque fields without an explicit
+    scope-private, public or asset-key classification. Export fails on any result.
     """
 
     found: list[str] = []
@@ -188,10 +194,9 @@ def unclassified_reference_fields(model_type: type[BaseModel]) -> list[str]:
                 or _has(info, _PublicMarker)
                 or _asset_slot(info) is not None
             )
-            if (
-                not classified
-                and _REFERENCE_NAME.search(name)
-                and _is_text(info.annotation)
+            if not classified and (
+                (_REFERENCE_NAME.search(name) and _is_text(info.annotation))
+                or _is_opaque(info.annotation)
             ):
                 found.append(path)
             for nested in _nested_models(info.annotation):
@@ -208,9 +213,15 @@ def unclassified_reference_specs(field_specs: Sequence[FieldSpec]) -> list[str]:
         spec.key
         for spec in field_specs
         if spec.scope_private is None
-        and _REFERENCE_NAME.search(spec.key.rsplit(".", 1)[-1])
         and (
-            spec.type == "string"
-            or (spec.type == "array" and spec.item_type == "string")
+            spec.type == "object"
+            or (spec.type == "array" and spec.item_type == "object")
+            or (
+                _REFERENCE_NAME.search(spec.key.rsplit(".", 1)[-1])
+                and (
+                    spec.type == "string"
+                    or (spec.type == "array" and spec.item_type == "string")
+                )
+            )
         )
     ]

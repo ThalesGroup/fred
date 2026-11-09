@@ -79,11 +79,11 @@ def _validate(client, team_id: str | None = "team-1"):
 
 
 def _copy(client, asset_files: dict[str, str] | None = None):
+    if asset_files is None:
+        asset_files = {}
     request = CapabilityConfigCopyRequest(
         config=StoredCapabilityConfig(schema_version=_VERSION, config={}),
-        source_team_id="team-1",
-        source_agent_instance_id="agent-1",
-        target_team_id="team-2",
+        target_space_id="team-2",
         target_agent_instance_id="agent-2",
         asset_files=asset_files,
     )
@@ -99,7 +99,7 @@ def _export(client):
         "/pod/v1/agents/capabilities/tracer_echo/export-config",
         json={
             "config": {"schema_version": _VERSION, "config": {}},
-            "team_id": "team-1",
+            "space_id": "team-1",
             "agent_instance_id": "agent-1",
         },
         headers=_HEADERS,
@@ -130,7 +130,6 @@ def test_a_member_passes_with_the_permission_of_each_route(
         ]
         assert checks == [
             ("write", "team-1"),
-            ("write", "team-1"),
             ("write", "team-2"),
             ("write", "team-1"),
         ]
@@ -150,7 +149,7 @@ def test_cp_config_only_validation_needs_no_fabricated_team(
 
 
 @pytest.mark.usefixtures("_pod_inbound_security")
-def test_a_snapshot_import_checks_the_target_team_only(tmp_path, monkeypatch) -> None:
+def test_a_snapshot_import_checks_the_target_space_only(tmp_path, monkeypatch) -> None:
     client, rebac = _secured(tmp_path, monkeypatch, member=True)
     try:
         assert _copy(client, asset_files={}).status_code == 200

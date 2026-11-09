@@ -63,8 +63,12 @@ their presentation with processing unavailable in this view.
 
 | Action | Authority | Boundary |
 | --- | --- | --- |
-| Read published prompts | Active organization participation through a direct business role on an active collective space | Owner, member, editor or analyst; technical Admin alone does not qualify. |
-| Publish / withdraw | Write on the prompt's source space | Only the source organization's marketplace is enabled; no source-library access is granted to its audience. |
+| Read published snapshots | Active organization participation through a direct business role on an active collective space | Owner, member, editor or analyst; technical Admin alone does not qualify. |
+| Submit | Write on the source space and catalogue audience | Source organization only; capture an independent snapshot. |
+| Examine a proposal | Write on its proposing space or catalogue space | Current rights; attribution alone gives no access. |
+| Cancel a pending proposal | Write on its proposing space | No publication change. |
+| Approve / reject / withdraw | Write on the catalogue space | Decisions inspect only the snapshot; no source-library access is granted. |
+| Install | Catalogue audience and Write on destination | Same organization; ordinary resource placement and offer restrictions. |
 
 Personal-space eligibility uses the same participation predicate. Business roles stay
 local; invitations currently have no persisted grants. [Common refusal ordering](A2-manager-contracts.md#control-plane-http-surface)

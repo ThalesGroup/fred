@@ -4,7 +4,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, SkillLoadAttribution } from "../../../../../slices/runtime/runtimeOpenApi";
 import { toThreadMessages } from "@rework/components/pages/ManagedChatPage/toThreadMessages";
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import { AssistantTurn } from "./AssistantTurn";
@@ -33,11 +33,27 @@ function message(rank: number, overrides: Partial<ChatMessage>): ChatMessage {
   };
 }
 
+const skillSpaceName = "Review team";
+
 function load(rank: number, name: string, origin: "user" | "agent", child = false): ChatMessage {
   return message(rank, {
     role: "system",
     channel: "system_note",
-    metadata: { extras: { skill_load: { name, origin, child, load_id: `pin:${name}` } } },
+    metadata: {
+      extras: {
+        skill_load: {
+          name,
+          skill_id: `skill-${name}`,
+          space_id: "review-team",
+          space_name: skillSpaceName,
+          revision: "catalog-revision",
+          agent_id: "agent",
+          origin,
+          child,
+          load_id: `pin:${name}`,
+        } satisfies SkillLoadAttribution,
+      },
+    },
   });
 }
 
@@ -85,7 +101,7 @@ async function render(messages: ChatMessage[], streaming: boolean) {
 
 function skill(name: string): HTMLButtonElement | undefined {
   return [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
-    button.getAttribute("aria-label")?.endsWith(`chatbot.skills.loaded: ${name}`),
+    button.getAttribute("aria-label")?.endsWith(`chatbot.skills.loaded: ${name} · ${skillSpaceName}`),
   );
 }
 

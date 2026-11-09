@@ -41,8 +41,8 @@ flowchart TB
 | Organization | Categories are space-local; a used category cannot be deleted. Tags and favorites filter the library. |
 | Editing | Only edited fields are sent. Independent field edits compose; the last committed edit wins on a field changed by both editors. |
 | Departure | Removing the author's access preserves the prompt. Collective-space editors keep their ordinary rights. Personal content stays private; no automatic transfer. |
-| Deletion | Explicit prompt deletion removes its favorites and publications; definitive deletion of its owning space removes the prompt. |
-| Publication boundary | An explicit publication exposes the chosen definition to its marketplace audience; it grants no access to the rest of the source space. |
+| Deletion | Prompt deletion removes its favorites. Submitted snapshots and independent installations survive deletion of the original prompt or its space. |
+| Publication boundary | An approved snapshot exposes the submitted definition to its marketplace audience; it grants no access to the rest of the source space. |
 
 | Consumer | Library and effect |
 | --- | --- |

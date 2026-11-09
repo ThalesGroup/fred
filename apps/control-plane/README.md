@@ -187,7 +187,7 @@ Their instructions, references, MIT attribution and license were preserved from
 Swift `d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`. Fresh installations expose these
 installation templates at `/skills/defaults`; nothing is activated automatically.
 Installing creates an independent space-owned package. Subsequent distribution
-updates do not overwrite space edits. No marketplace publication is implemented.
+updates do not overwrite space edits.
 
 `/spaces/{id}/skills` lists owned packages and accepts POST creation.
 GET/PUT/DELETE on `/{skill_id}` manages an existing package by its immutable UUID
@@ -1306,3 +1306,53 @@ The existing MDX editor and draft safeguards remain the UI implementation.
 This increment has not been applied to PostgreSQL or received in k3d. Run the
 migration chain and the human/agent lifecycle journeys before treating it as
 functionally validated; static compilation does not validate SQL execution.
+
+
+## Local marketplace API
+
+The `0018_marketplace.sql` migration replaces live prompt publications with a
+common snapshot circuit for prompts, skills and reusable agent configurations.
+These backend paths are covered by local SQL/HTTP tests; frontend reception and
+platform validation remain separate from those checks.
+
+An entry belongs to an organization catalogue and points to at most one approved
+proposal. Proposals contain immutable packages and immutable decision attribution;
+approval moves the pointer with an expected publication version. Refusing a new
+proposal preserves the current publication. Retrying a terminal decision never
+restores an older publication. Withdrawal only clears the current pointer.
+
+Submission requires the source space's existing Write permission and the
+catalogue's existing organization-participation audience. Source-space or
+catalogue-space writers may examine a proposal; source writers cancel pending
+proposals, and catalogue writers decide and withdraw. Attribution grants nothing.
+Revocation closes access. Source resource deletion has no effect on the snapshot;
+source-space deletion detaches its authorization relation while catalogue editors
+retain access. Technical roles never grant content access.
+
+`/me/marketplace-proposal-spaces` returns writable spaces with supported resource
+kinds and their catalogue destinations, for submission and installation choices.
+`/spaces/{catalogue}/marketplace/entries` and `/proposals` return authorized pages
+of at most 100 rows using `next_cursor`; filters apply before pagination. Details
+return the exact frozen package. Proposal `can_decide`/`can_cancel` and entry
+`can_withdraw` are backend decisions. PUT decision, cancellation and withdrawal
+use the corresponding item subpaths. POST submissions and entry installations
+require a UUID `Idempotency-Key`; a different request with an accepted key returns
+`idempotency_conflict`. The typed OpenAPI contract is the integration reference.
+
+Installation uses ordinary resource validators and creation services. Its receipt
+at `/spaces/{space}/marketplace-installations/{id}` retains historical provenance
+without granting access or keeping resources alive. A replay after local deletion
+returns `resource_exists=false`; it does not recreate the resource. Publication
+replacement, withdrawal and source deletion do not modify installed resources.
+Names never identify publications and installation never replaces a homonym.
+
+Agent exports use the pod's template-field and capability owners, reset private
+settings and include configuration originals. Imports carry no source identity;
+local template, capability and model policies are checked again on commit.
+Configuration is bounded to 2 MiB, 32 capabilities and 128 files totalling 32 MiB;
+the serialized package limit is 48 MiB. Skill limits remain those of the normal
+package validator. Pod calls occur outside SQL transactions; final submission
+checks the source revision and resolved configuration again. Existing PowerPoint
+upload receipts, quotas, original storage and capability preparation are reused.
+An unsupported file owner or configuration rejects the whole operation rather
+than dropping a capability. No Swift storage adapter or second workflow is used.

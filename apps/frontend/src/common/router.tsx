@@ -23,7 +23,6 @@ import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/Announc
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
-import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import { GcuPageContent } from "@components/pages/GcuPage/GcuPage.tsx";
@@ -31,8 +30,7 @@ import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import HomePage from "@components/pages/HomePage/HomePage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
-import MarketplacePrompts from "@components/pages/marketplace/MarketplacePrompts/MarketplacePrompts.tsx";
-import MarketplaceAgents from "@components/pages/marketplace/MarketplaceAgents/MarketplaceAgents.tsx";
+import MarketplacePage from "@components/pages/marketplace/MarketplacePage";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import SkillsPage from "@components/pages/SkillsPage/SkillsPage";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
@@ -249,12 +247,13 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "marketplace/prompts",
-        element: <MarketplacePrompts />,
+        element: <MarketplacePage kind="prompt" />,
       },
       {
         path: "marketplace/agents",
-        element: <MarketplaceAgents />,
+        element: <MarketplacePage kind="agent" />,
       },
+      { path: "marketplace/skills", element: <MarketplacePage kind="skill" /> },
       {
         path: "admin",
         element: <AdminIndexRoute />,
@@ -362,14 +361,8 @@ const applicationRoutes: RouteObject[] = [
         ),
       },
       {
-        // Agents marketplace settings; same platform-admin gate as the backend's
-        // `can_manage_platform` on /admin/marketplace-settings.
         path: "admin/marketplaces",
-        element: (
-          <Protected requires="admin">
-            <MarketplacesPage />
-          </Protected>
-        ),
+        element: <Navigate to="/marketplace/prompts" replace />,
       },
       {
         path: "admin/self-test",

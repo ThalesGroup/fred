@@ -684,7 +684,6 @@ class PptBuilderCapability(
         ctx: SaveContext,
     ) -> PptBuilderConfig:
         """Bounded preflight only. Accepted preparation is owned by CP/Temporal."""
-        del ctx
         files = list(uploads.get(TEMPLATE_SLOT, ()))
         if files:
             content = files[0].content
@@ -706,6 +705,9 @@ class PptBuilderCapability(
                 "analysis_id": None,
                 "template_key": None,
                 "common_template_config": None,
+                "overrides": config.effective_overrides()
+                if ctx.copied_from_another_scope
+                else config.overrides,
             }
         )
 

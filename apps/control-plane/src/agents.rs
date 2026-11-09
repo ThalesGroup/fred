@@ -197,6 +197,48 @@ fn native_catalog() -> RuntimeCatalog {
     }
 }
 
+/// Export through the native configuration owner, without a pod transport.
+pub(crate) fn export_native_tuning(
+    runtime_id: &str,
+    agent_id: &str,
+    values: &serde_json::Value,
+) -> Option<AppResult<serde_json::Value>> {
+    if runtime_id != NATIVE_RUNTIME_ID {
+        return None;
+    }
+    Some((|| {
+        let template = native_catalog()
+            .templates
+            .into_iter()
+            .find(|template| template.template_agent_id == agent_id)
+            .ok_or(AppError::NotFound)?;
+        let fields = template.metadata["default_tuning"]["fields"]
+            .as_array()
+            .context("invalid native tuning fields")?;
+        let values = values
+            .as_object()
+            .ok_or_else(|| AppError::Unprocessable("Invalid native tuning values.".into()))?;
+        let mut exported = serde_json::Map::new();
+        for (key, value) in values {
+            let field = fields
+                .iter()
+                .find(|field| field["key"].as_str() == Some(key));
+            match field.and_then(|field| field["scope_private"].as_bool()) {
+                Some(false) => {
+                    exported.insert(key.clone(), value.clone());
+                }
+                Some(true) => {}
+                None => {
+                    return Err(AppError::Unprocessable(
+                        "Unknown or unclassified native tuning field.".into(),
+                    ));
+                }
+            }
+        }
+        Ok(serde_json::json!({"values": exported}))
+    })())
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentCapabilityKind {

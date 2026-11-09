@@ -1,10 +1,11 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
@@ -30,14 +31,13 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useMySpacesQuery,
-  usePromptPublicationSpacesQuery,
+  useMarketplaceProposalSpacesQuery,
   usePromptCatalogQuery,
   useListPromptCategoriesQuery,
   useGetPromptQuery,
   useCreatePromptMutation,
   useUpdatePromptMutation,
   useDeletePromptMutation,
-  useSetPromptPublicationMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   CreatePromptRequest,
@@ -48,6 +48,7 @@ import type {
 import { agentErrorText } from "../TeamAgentsPage/weaverAgents";
 import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog";
+import MarketplaceProposalDialog from "../marketplace/MarketplaceProposalDialog";
 import styles from "./PromptsPage.module.scss";
 
 const emptyForm: CreatePromptRequest = {
@@ -66,10 +67,10 @@ export default function PromptsPage() {
     ...crossSessionRefreshOptions(false),
     refetchOnMountOrArgChange: true,
   });
-  const publication = usePromptPublicationSpacesQuery(
-    {},
-    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
-  );
+  const publication = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
   useRefetchOnWindowFocus(context.refetch, false);
   useRefetchOnWindowFocus(publication.refetch, false);
   const publishingSpace = !publication.isError
@@ -85,13 +86,7 @@ export default function PromptsPage() {
   if (!context.currentData || (!ordinarySpace && !publication.currentData && !publication.isError))
     return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
-  return (
-    <SpacePrompts
-      key={space.id}
-      space={space}
-      marketplaceSpaceId={!publication.isFetching ? publishingSpace?.marketplace_space_ids[0] : undefined}
-    />
-  );
+  return <SpacePrompts key={space.id} space={space} marketplaceSpaceId={publishingSpace?.marketplace_space_ids[0]} />;
 }
 
 function SpacePrompts({
@@ -159,7 +154,8 @@ function SpacePrompts({
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<string>();
-  const [viewingId, setViewingId] = useState<string>();
+  const [params] = useSearchParams();
+  const [viewingId, setViewingId] = useState<string | undefined>(params.get("resource") ?? undefined);
   const [duplicating, setDuplicating] = useState<PromptSummary>();
   const [form, setForm] = useState<CreatePromptRequest>(emptyForm);
   // Compare edits with the values shown at opening, even if the query refreshes.
@@ -170,8 +166,8 @@ function SpacePrompts({
   const [create, creating] = useCreatePromptMutation();
   const [update, updating] = useUpdatePromptMutation();
   const [remove, removing] = useDeletePromptMutation();
-  const [setPublication, publishing] = useSetPromptPublicationMutation();
-  const busy = creating.isLoading || updating.isLoading || removing.isLoading || publishing.isLoading;
+  const [proposing, setProposing] = useState<PromptMetadata>();
+  const busy = creating.isLoading || updating.isLoading || removing.isLoading;
   const detail = useGetPromptQuery(
     { spaceId, promptId: editingId ?? "" },
     {
@@ -245,21 +241,9 @@ function SpacePrompts({
     Boolean(categoryCatalog.currentData) &&
     !categoryCatalog.isError &&
     (mode === "create" || (!!initialForm && !detail.isFetching && !detail.isError));
-  const save = async (confirmed = false) => {
+  const save = async () => {
     if (!canManage || busy || !ready || !validName || !validTitle || !validDescription || !validText || !validTags)
       return;
-    if (mode === "edit" && detail.currentData?.published_in.length && !confirmed) {
-      const version = dialogVersion.current;
-      showConfirmationDialog({
-        title: t("rework.teams.prompts.editPublishedDialog.title"),
-        message: t("rework.teams.prompts.editPublishedDialog.message"),
-        confirmButtonLabel: t("rework.teams.prompts.editPublishedDialog.confirm"),
-        onConfirm: async () => {
-          if (live.current && canManageRef.current && dialogVersion.current === version) await save(true);
-        },
-      });
-      return;
-    }
     const version = dialogVersion.current;
     try {
       if (mode === "edit" && editingId && initialForm) {
@@ -285,30 +269,6 @@ function SpacePrompts({
     } catch (error) {
       if (live.current && dialogVersion.current === version) saveError(error);
     }
-  };
-  const changePublication = (prompt: PromptMetadata, published: boolean) => {
-    if (!canPublish || busy || !marketplaceSpaceId) return;
-    const key = published ? "publishDialog" : "unpublishDialog";
-    showConfirmationDialog({
-      criticalAction: !published,
-      title: t(`rework.teams.prompts.${key}.title`),
-      message: t(`rework.teams.prompts.${key}.message`),
-      confirmButtonLabel: t(`rework.teams.prompts.${key}.confirm`),
-      onConfirm: async () => {
-        if (!live.current || !canPublishRef.current) return;
-        try {
-          await setPublication({
-            spaceId,
-            promptId: prompt.prompt_id,
-            marketplaceSpaceId,
-            promptPublicationRequest: { published },
-          }).unwrap();
-          if (live.current) showSuccess({ summary: t(`rework.teams.prompts.${key}.successToast`) });
-        } catch (error) {
-          notifyError(error);
-        }
-      },
-    });
   };
   const handleDelete = (prompt: PromptMetadata) => {
     if (!canManage || busy) return;
@@ -429,7 +389,6 @@ function SpacePrompts({
           </>
         }
       />
-      <ServiceNotice icon="info" title={t("rework.weaverPrompts.deferred")} />
       {canFavorite && (
         <FavoritesFilterChip
           label={t("rework.teams.prompts.favorite.filter")}
@@ -500,9 +459,7 @@ function SpacePrompts({
               categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
               canManage={offersManage && !busy}
               publishable={canPublish && !busy}
-              published={prompt.published_in.length > 0}
-              onPublish={() => changePublication(prompt, true)}
-              onUnpublish={() => changePublication(prompt, false)}
+              onPropose={() => setProposing(prompt)}
               onToggleFavorite={canFavorite ? () => void toggleFavorite(prompt) : undefined}
               onView={() => setViewingId(prompt.prompt_id)}
               onEdit={() => open(prompt)}
@@ -514,6 +471,17 @@ function SpacePrompts({
             />
           ))}
         </div>
+      )}
+      {proposing && (
+        <MarketplaceProposalDialog
+          source={{
+            kind: "prompt",
+            source_space_id: spaceId,
+            source_resource_id: proposing.prompt_id,
+            expected_revision: proposing.updated_at,
+          }}
+          onClose={() => setProposing(undefined)}
+        />
       )}
       <FullPageModal isOpen={mode !== null} onClose={close} id="prompt-form-modal" background="container">
         <div className={styles.modalCard}>

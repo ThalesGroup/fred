@@ -157,6 +157,16 @@ impl PreparationPod {
             "default_capability_ids":["ppt_builder"],"available_capabilities":[{"id":"ppt_builder","kind":"tool","config_fields":[]}],
             "default_tuning":{"role":"Assistant","description":"Test","usage_statement":"Test","tags":[],"values":{},"fields":[]}
         }]))}));
+        let app=app.route("/agents/templates/assistant/export-tuning",axum::routing::post(|| async {axum::Json(json!({"values":{}}))}))
+            .route("/agents/capabilities/ppt_builder/export-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
+                assert!(body["config"]["config"]["analysis_id"].is_string());
+                axum::Json(json!({"schema_version":"1","config":{"template_key":"template.pptx","use_vision":false},"files":{"template.pptx":body["files_by_slot"]["template"][0]}}))
+            }))
+            .route("/agents/capabilities/ppt_builder/copy-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
+                assert!(body.get("source_space_id").is_none());
+                assert!(body["asset_files"]["template.pptx"].is_string());
+                axum::Json(json!({"schema_version":"1","config":{"use_vision":false},"notices":[]}))
+            }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let task = tokio::spawn(async move {
@@ -1811,6 +1821,9 @@ async fn powerpoint_sql_ownership_constraints() {
     let org = crate::support::member_organization(&pool, "Existing organization", "alice")
         .await
         .unwrap();
+    // Raw schema inserts require the budgets normally initialized by storage admission.
+    sqlx::query("insert into storage_budget(space_id,scope,limit_bytes,used_bytes,reserved_bytes) values($1,'local',100000,0,0),($1,'organization_total',100000,0,0)")
+        .bind(org.id).execute(&pool).await.unwrap();
     let agent = Uuid::new_v4();
     sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'fixture','assistant','Existing agent','{}','alice',$1::text)").bind(agent).bind(org.id).execute(&pool).await.unwrap();
     assert!(
@@ -2366,4 +2379,150 @@ async fn powerpoint_dispatch_replays_one_workflow_and_reconciles_disappeared_wor
     .unwrap();
     assert_eq!(state.0, "failed");
     assert!(state.1.unwrap().contains("Retry or replace"));
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
+    let d = Documents::start(100_000).await;
+    let source = d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let org = control_plane::spaces::load(&d.e.pool, space)
+        .await
+        .unwrap()
+        .organization;
+    crate::grant(&d.e, org, Role::Editor, "moderator").await;
+    let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={source}");
+    let (status, original) = d
+        .ppt(
+            "writer",
+            &path,
+            b"frozen configuration original",
+            Uuid::new_v4(),
+        )
+        .await;
+    assert_eq!(status, 200, "{original}");
+    let revision: i64 = sqlx::query_scalar(
+        "select configuration_revision from agent_instance where agent_instance_id=$1",
+    )
+    .bind(source)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    let proposals = format!("/spaces/{org}/marketplace/proposals");
+    let submission = json!({"source_space_id":space,"source_resource_id":source,"kind":"agent","expected_revision":revision.to_string()});
+    let (status, proposal) = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &proposals,
+            Body::from(submission.to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 200, "{proposal}");
+    assert!(
+        proposal["package"]["content"]["capabilities"]["ppt_builder"]["config"]
+            .get("analysis_id")
+            .is_none()
+    );
+    assert_eq!(
+        d.json(
+            "moderator",
+            "PUT",
+            &format!(
+                "{proposals}/{}/decision",
+                proposal["proposal_id"].as_str().unwrap()
+            ),
+            json!({"approve":true,"expected_publication_version":0})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        d.json(
+            "writer",
+            "DELETE",
+            &format!("/spaces/{space}/agent-instances/{source}"),
+            json!({})
+        )
+        .await
+        .0,
+        202
+    );
+    let path = format!(
+        "/spaces/{org}/marketplace/entries/{}/installations",
+        proposal["entry_id"].as_str().unwrap()
+    );
+    let install = json!({"proposal_id":proposal["proposal_id"],"destination_space_id":space,"options":{"kind":"agent","display_name":"Independent original","logical_name":"independent-original"}});
+    let key = Uuid::new_v4();
+    let (a, b) = tokio::join!(
+        async {
+            json_response(
+                d.request(
+                    "writer",
+                    "POST",
+                    &path,
+                    Body::from(install.to_string()),
+                    "application/json",
+                    Some(key),
+                )
+                .await,
+            )
+            .await
+        },
+        async {
+            json_response(
+                d.request(
+                    "writer",
+                    "POST",
+                    &path,
+                    Body::from(install.to_string()),
+                    "application/json",
+                    Some(key),
+                )
+                .await,
+            )
+            .await
+        }
+    );
+    assert_eq!(a.0, 200, "{}", a.1);
+    assert_eq!(a, b);
+    let agent: Uuid = a.1["resource_id"].as_str().unwrap().parse().unwrap();
+    let local_path = format!("/spaces/{space}/agent-instances/{agent}");
+    assert_eq!(
+        d.json("writer", "GET", &local_path, json!(null)).await.1["preparation_state"],
+        "pending"
+    );
+    let (file,prep):(Uuid,Uuid)=sqlx::query_as("select f.id,p.id from powerpoint_file f join capability_preparation p on p.file_id=f.id where f.agent_instance_id=$1 and f.status='stored'").bind(agent).fetch_one(&d.e.pool).await.unwrap();
+    assert_ne!(file.to_string(), original["id"]);
+    assert_eq!(d.confirm_ppt(prep, None).await.0, 204);
+    assert_eq!(
+        d.json("writer", "GET", &local_path, json!(null)).await.1["preparation_state"],
+        "ready"
+    );
+    let downloaded = d
+        .request(
+            "writer",
+            "GET",
+            &format!(
+                "/spaces/{space}/powerpoint-template/{file}/content?agent_instance_id={agent}"
+            ),
+            Body::empty(),
+            "application/json",
+            None,
+        )
+        .await;
+    assert_eq!(downloaded.status(), 200);
+    assert_eq!(
+        to_bytes(downloaded.into_body(), 1000)
+            .await
+            .unwrap()
+            .as_ref(),
+        b"frozen configuration original"
+    );
 }

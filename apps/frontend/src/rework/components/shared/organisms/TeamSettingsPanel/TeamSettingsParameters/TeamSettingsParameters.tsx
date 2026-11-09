@@ -20,7 +20,6 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
-import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog.tsx";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
@@ -200,16 +199,9 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
       updateTeamRequest: { visibility: newVisibility },
     });
   };
-  // Going private removes the team's published agents: say how many first.
-  const publishedCount = team.marketplace?.published_count ?? 0;
-  const [confirmPrivate, setConfirmPrivate] = useState(false);
   const handleSelectVisibility = (index: number) => {
     const newVisibility = VISIBILITIES[index];
     if (newVisibility === visibility) {
-      return;
-    }
-    if (newVisibility === "private" && publishedCount > 0) {
-      setConfirmPrivate(true);
       return;
     }
     applyVisibility(newVisibility);
@@ -338,19 +330,6 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           )}
         </div>
       </div>
-      <ConfirmationDialog
-        open={confirmPrivate}
-        criticalAction
-        title={t("rework.teamSettings.parameters.visibility.privateConfirm.title")}
-        message={t("rework.teamSettings.parameters.visibility.privateConfirm.message", { count: publishedCount })}
-        confirmLabel={t("rework.teamSettings.parameters.visibility.privateConfirm.confirm")}
-        cancelLabel={t("common.cancel")}
-        onConfirm={() => {
-          setConfirmPrivate(false);
-          applyVisibility("private");
-        }}
-        onCancel={() => setConfirmPrivate(false)}
-      />
       {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
       <TeamSettingsRetention team={team} />
       {/*

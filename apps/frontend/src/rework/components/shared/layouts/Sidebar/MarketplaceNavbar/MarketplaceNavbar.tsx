@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useLocation } from "react-router-dom";
 import styles from "./MarketplaceNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
@@ -20,13 +19,10 @@ import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/N
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
-import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
-  const { pathname } = useLocation();
-  const organization = useMySpacesQuery().currentData?.find((space) => space.kind === "organization");
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -48,15 +44,17 @@ export default function MarketplaceNavbar() {
       icon: { category: "outlined", type: "chat", filled: true },
       linkProps: { to: "/marketplace/prompts" },
     },
+    {
+      type: "link",
+      label: t("rework.localMarketplace.kinds.skill"),
+      icon: { category: "outlined", type: "description", filled: true },
+      linkProps: { to: "/marketplace/skills" },
+    },
   ];
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
-      {/* The marketplace of the person's organization; without one, just the section. */}
-      <SpaceHeader
-        eyebrow={pathname.startsWith("/marketplace/prompts") ? undefined : organization?.name}
-        title={t("rework.sidebar.marketplace.title")}
-      />
+      <SpaceHeader title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );

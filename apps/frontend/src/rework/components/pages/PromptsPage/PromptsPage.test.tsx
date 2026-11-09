@@ -29,10 +29,12 @@ vi.mock("react-i18next", () => ({
 }));
 import { SPACES, SPACE_A, SPACE_B } from "../TeamAgentsPage/weaverAgentFixtures";
 import { promptFixture, promptSummaryFixture } from "./weaverPromptFixtures";
-import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 import type { Prompt, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 const route = vi.hoisted(() => ({ teamId: "" }));
-vi.mock("react-router-dom", () => ({ useParams: () => route }));
+vi.mock("react-router-dom", () => ({ useParams: () => route, useSearchParams: () => [new URLSearchParams()] }));
+vi.mock("../marketplace/MarketplaceProposalDialog", () => ({
+  default: ({ source }: { source: unknown }) => <div data-proposal>{JSON.stringify(source)}</div>,
+}));
 // The dialog itself is not rendered: the test reads what the page asked for
 // and confirms by calling `onConfirm` directly.
 type ConfirmationOptions = { title: string; message: string; confirmButtonLabel?: string; onConfirm: () => unknown };
@@ -68,14 +70,12 @@ const answered = (allowed: boolean) => ({
   refetch: vi.fn(),
 });
 let catalogError = false;
-let publishedFailure = false;
 let publishingAllowed = true;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
 const spaceAccess = vi.fn();
 const update = vi.fn();
-const setPublication = vi.fn();
 const remove = vi.fn();
 const create = vi.fn();
 const addFavorite = vi.fn(() => ({ unwrap: async () => undefined }));
@@ -88,23 +88,13 @@ vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () =>
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => ({}),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePublishedPromptQuery: (_args: unknown, options: { skip: boolean }) =>
-    options.skip
-      ? {}
-      : {
-          currentData: { ...PROMPT_DETAIL, source_space_name: "Source" },
-          isError: publishedFailure,
-          isFetching: false,
-          refetch: vi.fn(),
-        },
-  usePromptPublicationSpacesQuery: () => ({
+  useMarketplaceProposalSpacesQuery: () => ({
     currentData: {
       items: publishingAllowed ? context.map((space) => ({ ...space, marketplace_space_ids: ["org"] })) : [],
       next_cursor: null,
     },
     refetch: vi.fn(),
   }),
-  useSetPromptPublicationMutation: () => [setPublication, { isLoading: false }],
   useListPromptCategoriesQuery: () => ({
     currentData: { items: [{ id: "cat-a", space_id: SPACE_A, name: "Analysis" }], next_cursor: null },
     refetch: vi.fn(),
@@ -216,7 +206,6 @@ beforeEach(async () => {
   refreshedPrompt = undefined;
   catalogError = false;
   publishingAllowed = true;
-  PROMPT_DETAIL.published_in = [];
   createCalls.length = 0;
   createRejectsWith = null;
   deleteRejectsWith = null;
@@ -232,7 +221,6 @@ beforeEach(async () => {
     };
   });
   update.mockImplementation(() => ({ unwrap: async () => PROMPT_DETAIL }));
-  setPublication.mockImplementation(() => ({ unwrap: async () => undefined }));
   remove.mockImplementation(() => ({
     unwrap: async () => {
       if (deleteRejectsWith) throw deleteRejectsWith;
@@ -732,21 +720,6 @@ describe("Weaver prompt metadata and preferences", () => {
   });
 });
 
-describe("Published prompt access", () => {
-  it("hides cached text and copy actions after a detail refusal", () => {
-    publishedFailure = false;
-    act(() => root.render(<PromptViewDialog open marketplaceSpaceId="org" promptId="prompt-1" onClose={() => {}} />));
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(PROMPT_DETAIL.text);
-    publishedFailure = true;
-    act(() => root.render(<PromptViewDialog open marketplaceSpaceId="org" promptId="prompt-1" onClose={() => {}} />));
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).not.toContain(PROMPT_DETAIL.text);
-    expect(dialog?.textContent).toContain("chatbot.commandTurn.previewError");
-    expect(dialog?.querySelector('[aria-label="rework.teams.prompts.view.copyAria"]')).toBeNull();
-    publishedFailure = false;
-  });
-});
-
 describe("Source prompt access refusal", () => {
   it("removes the open form and cached cards after a rejected edit", async () => {
     update.mockImplementationOnce(() => ({
@@ -801,37 +774,29 @@ describe("Prompt management in every space kind", () => {
 });
 
 it.each(["organization", "team", "project", "personal"] as const)(
-  "requires confirmation and an explicit destination when publishing from %s",
+  "proposes the selected saved revision from %s",
   async (kind) => {
     context = [{ ...SPACES[0], kind }];
     await render();
-    cardAction("publish");
-    expect(setPublication).not.toHaveBeenCalled();
-    expect(confirmation.last?.message).toBe("rework.teams.prompts.publishDialog.message");
-    await act(async () => confirmation.last?.onConfirm());
-    expect(setPublication).toHaveBeenCalledExactlyOnceWith({
-      spaceId: SPACE_A,
-      promptId: PROMPT_DETAIL.prompt_id,
-      marketplaceSpaceId: "org",
-      promptPublicationRequest: { published: true },
-    });
+    const card = container.querySelector('[role="button"]')!;
+    act(() => (card.querySelector('[aria-label^="rework.weaverPrompts.actions"]') as HTMLElement).click());
+    act(() =>
+      (
+        Array.from(document.querySelectorAll('[role="option"]')).find((item) =>
+          item.textContent?.includes("localMarketplace.propose"),
+        ) as HTMLElement
+      ).click(),
+    );
+    expect(container.querySelector("[data-proposal]")?.textContent).toBe(
+      JSON.stringify({
+        kind: "prompt",
+        source_space_id: SPACE_A,
+        source_resource_id: PROMPT_DETAIL.prompt_id,
+        expected_revision: PROMPT_DETAIL.updated_at,
+      }),
+    );
   },
 );
-
-it("shows publication status to a reader without offering publication actions", async () => {
-  publishingAllowed = false;
-  PROMPT_DETAIL.published_in = ["org"];
-  spaceAccess.mockImplementation(({ permission }) => answered(permission === "read"));
-  await render();
-  expect(container.textContent).toContain("rework.teams.prompts.card.publishedChip");
-  expect(container.textContent).not.toContain("rework.teams.prompts.createPrompt");
-  const card = container.querySelector('[role="button"]')!;
-  expect(
-    Array.from(card.querySelectorAll("button")).find((button) => button.textContent?.includes("more_vert")),
-  ).toBeUndefined();
-  expect(document.body.textContent).not.toContain("card.menu.publish");
-  expect(document.body.textContent).not.toContain("card.menu.unpublish");
-});
 
 it("preserves untouched fields after another editor's changes refresh the detail query", async () => {
   cardAction("edit");

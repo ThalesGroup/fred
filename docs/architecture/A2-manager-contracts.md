@@ -28,7 +28,8 @@ are outside this catalogue.
 | SQL group | Authority and lifecycle |
 | --- | --- |
 | `space`, `space_role_grant` | Placement and direct business roles; grants disappear with their space. |
-| `prompt`, `prompt_category`, `prompt_favorite`, `prompt_publication` | Space-owned definitions and categories; caller preferences; explicit publication relationships. |
+| `prompt`, `prompt_category`, `prompt_favorite` | Space-owned definitions and categories; caller preferences. |
+| `marketplace_entry`, `marketplace_proposal`, `marketplace_installation` | Frozen packages, catalogue decisions and independent-installation receipts; see the [backend contract](../../apps/control-plane/README.md#local-marketplace-api). |
 | `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
 | `runtime_catalog`, `runtime_capability`, template/capability policies | Observed pod offers and their authorization ceilings. |
 | Model source, offer and policy tables | [Organization model governance](A13-models.md). |
@@ -71,7 +72,7 @@ write authorization, departure and deletion to existing common mechanisms.
 | --- | --- |
 | [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded organization lock, then decide against current facts. |
 | [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L597) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
-| [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L255) | Delete the definition in its owning space; SQL cascades its favorites and publications. The HTTP caller checks Write permission in the space mutation transaction. |
+| [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L252) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 
 | Evidence | What it checks |
@@ -83,7 +84,7 @@ write authorization, departure and deletion to existing common mechanisms.
 
 The generator checks anchor existence, adjacent comments and link freshness;
 it does not prove the function's behavior. Test presence is not an execution result
-or deployed acceptance. [SQL publication constraints](../../apps/control-plane/migrations/0016_prompt_publications.sql)
+or deployed acceptance. [SQL publication constraints](../../apps/control-plane/migrations/0018_marketplace.sql)
 remain separate from the source prompt's ownership.
 
 ### Pod capability offers

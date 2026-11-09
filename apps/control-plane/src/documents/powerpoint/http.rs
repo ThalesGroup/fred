@@ -152,7 +152,7 @@ async fn upload(
             PowerPointChange {
                 expected_file_id: change.expected_file_id,
             },
-            multipart,
+            super::PowerPointUpload::Multipart(multipart),
             change.template_id.is_some(),
         )
         .await?;

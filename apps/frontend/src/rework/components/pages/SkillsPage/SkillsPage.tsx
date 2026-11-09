@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import Button from "@shared/atoms/Button/Button";
@@ -19,6 +19,7 @@ import {
   useDeleteSkillMutation,
   usePutSkillMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import MarketplaceProposalDialog from "../marketplace/MarketplaceProposalDialog";
 import styles from "./SkillsPage.module.css";
 
 export default function SkillsPage() {
@@ -38,7 +39,8 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
   const write = useSpaceAccess(spaceId, "write");
   const list = useListSkillsQuery({ spaceId }, { skip: !read.allowed, refetchOnMountOrArgChange: true });
   const defaults = useDefaultSkillsQuery(undefined, { skip: !write.allowed });
-  const [selected, setSelected] = useState<string>();
+  const [params] = useSearchParams();
+  const [selected, setSelected] = useState<string | undefined>(params.get("resource") ?? undefined);
   const detail = useGetSkillQuery(
     { spaceId, skillId: selected ?? "" },
     { skip: !selected || !read.allowed, refetchOnMountOrArgChange: true },
@@ -174,6 +176,7 @@ function SkillFiles({
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const [proposing, setProposing] = useState(false);
   const [path, setPath] = useState("SKILL.md");
   const [draft, setDraft] = useState(files);
   const [editing, setEditing] = useState(false);
@@ -200,8 +203,23 @@ function SkillFiles({
       ) : (
         <MarkdownRenderer text={draft[path]} fullWidth localLinksAsText />
       )}
+      {proposing && revision && (
+        <MarketplaceProposalDialog
+          source={{ kind: "skill", source_space_id: spaceId, source_resource_id: skillId, expected_revision: revision }}
+          onClose={() => setProposing(false)}
+        />
+      )}
       {editable && (
         <div className={styles.actions}>
+          <Button
+            size="small"
+            color="primary"
+            variant="text"
+            disabled={editing || !revision}
+            onClick={() => setProposing(true)}
+          >
+            {t("rework.localMarketplace.propose")}
+          </Button>
           <Button
             size="small"
             variant="text"

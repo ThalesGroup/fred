@@ -90,6 +90,30 @@ pub(super) fn token_current(user: &CurrentUser) -> AppResult<()> {
 }
 
 impl Storage {
+    /// Catalogue originals use the upload's anonymous spool, quota and durable receipt.
+    pub(super) async fn spool_snapshot(&self, filename: &str, bytes: &[u8]) -> AppResult<Spool> {
+        if bytes.len() as u64 > self.config.limits.file_bytes || bytes.len() > 32 * 1024 * 1024 {
+            return Err(invalid("Configuration file exceeds the upload limit"));
+        }
+        let name = name(filename)?;
+        let path = self.temp.path().to_owned();
+        let file = tokio::task::spawn_blocking(move || tempfile::tempfile_in(path))
+            .await
+            .map_err(|_| unavailable())?
+            .map_err(|_| unavailable())?;
+        let mut file = tokio::fs::File::from_std(file);
+        file.write_all(bytes).await.map_err(|_| unavailable())?;
+        file.flush().await.map_err(|_| unavailable())?;
+        Ok(Spool {
+            file,
+            name,
+            mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                .into(),
+            size: bytes.len() as i64,
+            digest: Sha256::digest(bytes).into(),
+        })
+    }
+
     /// Uploads retain a pod-local permit through verification/publication, not a SQL lock.
     pub async fn upload(
         &self,

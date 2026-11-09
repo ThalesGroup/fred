@@ -7,9 +7,10 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { usePublishedPromptsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog";
-import PromptMarketplaceScope from "../../marketplace/MarketplacePrompts/PromptMarketplaceScope";
+import { useMarketplaceEntriesQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { sessionQueryArgs } from "../../../../../slices/controlPlane/controlPlaneApi";
+import MarketplaceDetailDialog from "../../marketplace/MarketplaceDetailDialog";
+import MarketplaceScope from "../../marketplace/MarketplaceScope";
 import type { HomePeriod } from "../HomePage";
 import styles from "./MarketplaceTopPrompts.module.scss";
 
@@ -26,19 +27,19 @@ export default function MarketplaceTopPrompts(_props: { period: HomePeriod }) {
         <h2 className={styles.title}>{t("rework.home.topPrompts.title")}</h2>
       </div>
       <ServiceNotice icon="info" title={t("rework.promptPublication.metricsUnavailable")} />
-      <PromptMarketplaceScope>
+      <MarketplaceScope>
         {(marketplaceSpaceId) => <PublishedCards key={marketplaceSpaceId} marketplaceSpaceId={marketplaceSpaceId} />}
-      </PromptMarketplaceScope>
+      </MarketplaceScope>
     </section>
   );
 }
 
 function PublishedCards({ marketplaceSpaceId }: { marketplaceSpaceId: string }) {
   const { t } = useTranslation();
-  const query = usePublishedPromptsQuery(
-    { marketplaceSpaceId },
-    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
-  );
+  const query = useMarketplaceEntriesQuery(sessionQueryArgs({ marketplaceSpaceId, kind: "prompt" }), {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
   useRefetchOnWindowFocus(query.refetch, false);
   const [viewingId, setViewingId] = useState<string>();
   if (query.isError) return <ServiceNotice icon="lock" title={t("rework.manager.unavailable")} />;
@@ -52,20 +53,20 @@ function PublishedCards({ marketplaceSpaceId }: { marketplaceSpaceId: string }) 
         <div className={styles.grid}>
           {prompts.map((prompt) => (
             <div
-              key={prompt.prompt_id}
+              key={prompt.entry_id}
               className={styles.card}
               role="button"
               tabIndex={0}
-              onClick={() => setViewingId(prompt.prompt_id)}
+              onClick={() => setViewingId(prompt.entry_id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setViewingId(prompt.prompt_id);
+                  setViewingId(prompt.entry_id);
                 }
               }}
             >
-              <span className={styles.team} title={prompt.source_space_name}>
-                {prompt.source_space_name}
+              <span className={styles.team} title={prompt.origin_name}>
+                {prompt.origin_name}
               </span>
               <span className={styles.name} title={prompt.display_name}>
                 {prompt.display_name}
@@ -79,12 +80,13 @@ function PublishedCards({ marketplaceSpaceId }: { marketplaceSpaceId: string }) 
           ))}
         </div>
       )}
-      <PromptViewDialog
-        open={!!viewingId && prompts.some((prompt) => prompt.prompt_id === viewingId)}
-        marketplaceSpaceId={marketplaceSpaceId}
-        promptId={viewingId}
-        onClose={() => setViewingId(undefined)}
-      />
+      {viewingId && (
+        <MarketplaceDetailDialog
+          marketplaceSpaceId={marketplaceSpaceId}
+          entryId={viewingId}
+          onClose={() => setViewingId(undefined)}
+        />
+      )}
     </>
   );
 }

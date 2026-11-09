@@ -253,29 +253,53 @@ async fn create_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<CreateAgentInstanceRequest>,
 ) -> AppResult<(StatusCode, Json<ManagedAgentInstanceSummary>)> {
+    let instance = prepare_create(
+        &s,
+        &user,
+        space_id,
+        headers.get(header::AUTHORIZATION),
+        &mut body,
+    )
+    .await?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    let record = save_created(&mut tx, &user, &space, &instance, body.powerpoint.as_ref()).await?;
+    let summary = record_to_summary(record)?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(summary)))
+}
+
+/// Shared creation preflight: no SQL transaction survives discovery or capability calls.
+pub(crate) async fn prepare_create(
+    s: &AppState,
+    user: &crate::auth::CurrentUser,
+    space_id: Uuid,
+    authorization_header: Option<&axum::http::HeaderValue>,
+    body: &mut CreateAgentInstanceRequest,
+) -> AppResult<NewAgentInstance> {
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     if !authorization::can_use_agent(&s.pool, body.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    tuning::validate_request(&mut body)?;
+    tuning::validate_request(body)?;
     // Discovery and pod validation never retain a SQL connection or transaction.
     let (template, default_tuning) =
         agents::enrollable_template(&s.agent_catalog, space.organization, body.template_id).await?;
     let usable = usable_capability_ids(&s.pool, &space, &template.source_runtime_id).await?;
     let tuning = tuning::enroll(
         &s.agent_catalog,
-        headers.get(header::AUTHORIZATION),
+        authorization_header,
         default_tuning,
         &template,
         &usable,
-        &body,
+        body,
     )
     .await?;
     let draft_id = if let Some(change) = &body.powerpoint {
         crate::documents::powerpoint::acceptance::preflight(
-            &s,
-            &user,
+            s,
+            user,
             crate::documents::powerpoint::PowerPointTarget {
                 space_id,
                 agent: None,
@@ -283,49 +307,57 @@ async fn create_agent_instance(
             },
             change,
             crate::documents::powerpoint::acceptance::slice(&tuning),
-            headers.get(header::AUTHORIZATION),
+            authorization_header,
         )
         .await?
     } else {
         None
     };
-    let instance = NewAgentInstance {
+    Ok(NewAgentInstance {
         agent_instance_id: draft_id.unwrap_or_else(Uuid::new_v4),
         space_id,
         template_id: template.template_id,
         source_runtime_id: template.source_runtime_id,
         source_agent_id: template.source_agent_id,
-        logical_name: body.logical_name,
-        display_name: body.display_name,
-        description: body.description,
+        logical_name: body.logical_name.clone(),
+        display_name: body.display_name.clone(),
+        description: body.description.clone(),
         enabled: true,
         created_by: user.uid.clone(),
         tuning,
-    };
-    let (mut tx, space) =
-        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    })
+}
+
+/// Ordinary creation and catalogue installation commit through the same validators.
+pub(crate) async fn save_created(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user: &crate::auth::CurrentUser,
+    space: &crate::domain::Space,
+    instance: &NewAgentInstance,
+    powerpoint: Option<&crate::capability_preparation::FileChange>,
+) -> AppResult<AgentInstance> {
+    let space_id = space.id;
+    let usable = usable_capability_ids(&mut **tx, space, &instance.source_runtime_id).await?;
+    for id in tuning::saved_selection(&instance.tuning)? {
+        if !usable.contains(&id) {
+            return Err(agents::enablement::not_enabled(&id));
+        }
+    }
     require_instance_space(space.kind)?;
-    if !authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
+    if !authorization::can_use_agent(&mut **tx, instance.template_id, space).await? {
         return Err(AppError::NotFound);
     }
-    models::validate_write(&mut tx, space.organization, &instance.tuning, true).await?;
+    models::validate_write(tx, space.organization, &instance.tuning, true).await?;
 
-    let record = super::create(&mut *tx, &instance)
+    let record = super::create(&mut **tx, instance)
         .await
         .map_err(instance_write_error)?;
-    crate::documents::powerpoint::acceptance::saved_agent(
-        &mut tx,
-        &user,
-        &record,
-        body.powerpoint.as_ref(),
-    )
-    .await?;
-    let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)
+    crate::documents::powerpoint::acceptance::saved_agent(&mut *tx, user, &record, powerpoint)
+        .await?;
+    let record = super::get_for_space(&mut **tx, space_id, record.agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let summary = record_to_summary(record)?;
-    tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(summary)))
+    Ok(record)
 }
 
 #[derive(Deserialize)]

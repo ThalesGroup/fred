@@ -36,7 +36,6 @@ describe("organizationOwnerPages", () => {
       "/admin/platform-prompt",
       "/admin/annonces",
       "/admin/interface",
-      "/admin/marketplaces",
       "/admin/migration",
       "/admin/corpus-audit",
       "/admin/platform-access",

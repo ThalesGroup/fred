@@ -76,7 +76,7 @@ function BusinessMainNavBar() {
       icon: "storefront",
       label: t("rework.mainNav.marketplace"),
       active: pathname.startsWith("/marketplace"),
-      onClick: () => navigate(organization.currentData?.length === 0 ? "/marketplace/prompts" : "/marketplace/teams"),
+      onClick: () => navigate("/marketplace/prompts"),
     },
     {
       key: "help",

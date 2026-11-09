@@ -46,6 +46,23 @@ pub(crate) struct PowerPointTarget<'a> {
     pub runtime: &'a str,
 }
 
+pub(crate) enum PowerPointUpload {
+    Multipart(Multipart),
+    Snapshot { name: String, bytes: Vec<u8> },
+}
+
+/// Same original selection as ordinary agent usage; callers authorize the usage space.
+pub(crate) async fn snapshot_file(
+    conn: &mut sqlx::PgConnection,
+    space: &Space,
+    agent: Uuid,
+    runtime: &str,
+) -> AppResult<Option<PowerPointFile>> {
+    Ok(resolved_original(conn, space, Some(agent), runtime)
+        .await?
+        .map(|row| row.file))
+}
+
 #[derive(Serialize, ToSchema, sqlx::FromRow)]
 pub struct PowerPointFile {
     pub id: Uuid,
@@ -178,6 +195,21 @@ async fn writer(
     Ok((tx, space))
 }
 
+async fn resolved_original(
+    conn: &mut sqlx::PgConnection,
+    space: &Space,
+    agent: Option<Uuid>,
+    runtime: &str,
+) -> AppResult<Option<FileRow>> {
+    let own = current(&mut *conn, space.id, agent, runtime).await?;
+    if own.is_some() || agent.is_none() {
+        return Ok(own);
+    }
+    crate::lifecycle::store::require_active(&mut *conn, space.organization).await?;
+    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and runtime_id=$2 and agent_instance_id is null and status='stored' and effective")
+        .bind(space.organization).bind(runtime).fetch_optional(conn).await?)
+}
+
 impl Storage {
     pub(crate) async fn upload_powerpoint(
         &self,
@@ -185,7 +217,7 @@ impl Storage {
         usage: PowerPointTarget<'_>,
         key: Uuid,
         change: PowerPointChange,
-        multipart: Multipart,
+        input: PowerPointUpload,
         draft: bool,
     ) -> AppResult<PowerPointFile> {
         let PowerPointTarget {
@@ -208,9 +240,16 @@ impl Storage {
         if !draft {
             target(&self.pool, &space, agent).await?;
         }
-        let spool = tokio::time::timeout(self.deadline(), self.spool(multipart))
-            .await
-            .map_err(|_| unavailable())??;
+        let spool = tokio::time::timeout(self.deadline(), async {
+            match input {
+                PowerPointUpload::Multipart(multipart) => self.spool(multipart).await,
+                PowerPointUpload::Snapshot { name, bytes } => {
+                    self.spool_snapshot(&name, &bytes).await
+                }
+            }
+        })
+        .await
+        .map_err(|_| unavailable())??;
         let (mut tx, space) =
             spaces::authorized_mutation(&self.pool, &user.uid, space_id, Permission::Write).await?;
         if draft {
@@ -334,15 +373,7 @@ impl Storage {
                 return Err(AppError::NotFound);
             }
         }
-        let own = current(&mut *tx, space_id, agent, runtime).await?;
-        let row = if own.is_some() || agent.is_none() {
-            own
-        } else {
-            // Explicit business exception for this file only, not ancestor content rights.
-            crate::lifecycle::store::require_active(&mut *tx, space.organization).await?;
-            sqlx::query_as("select * from powerpoint_file where space_id=$1 and runtime_id=$2 and agent_instance_id is null and status='stored' and effective")
-                .bind(space.organization).bind(runtime).fetch_optional(&mut *tx).await?
-        };
+        let row = resolved_original(&mut tx, &space, agent, runtime).await?;
         tx.commit().await?;
         Ok(row)
     }

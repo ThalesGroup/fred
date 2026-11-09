@@ -4881,6 +4881,8 @@ async fn role_grants_require_a_valid_known_subject() {
     );
 }
 
+#[path = "support/marketplace.rs"]
+mod marketplace;
 #[path = "support/prompts.rs"]
 mod prompts;
 

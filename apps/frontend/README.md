@@ -588,3 +588,51 @@ late generated results from other tabs. Navigation and identity guards are share
 with the existing managed chat flow. See the
 [Control Plane contract](../control-plane/README.md#automatic-conversation-titles)
 for atomicity, eligibility and rollout requirements.
+
+## Local marketplace
+
+The prompts, skills and agents marketplace pages use the generated Control Plane
+snapshot API described in [Local marketplace API](../control-plane/README.md#local-marketplace-api).
+Catalogue access comes from `/me/marketplaces`, independently of library access.
+Resource libraries offer a common proposal dialog; it explicitly distinguishes a
+new entry from a replacement of an identified entry. Catalogue pages expose the
+server-authorized proposals, frozen packages, decisions and withdrawal actions.
+
+Installation creates an independent resource in a compatible writable space.
+The receipt is checked before offering navigation to its resource; agents reuse
+the library's existing capability-preparation status. A deleted resource is not
+recreated by retrying its installation. No installed-copy synchronization exists.
+Submission and installation keep only their request and idempotency key in
+`sessionStorage`, scoped by the authenticated issuer/subject and source resource
+or catalogue entry. Closing/reopening the dialog or reloading the same tab offers
+an explicit retry of that exact request, even if the source revision has changed.
+The catalogue's saved proposal attempts also open this dialog when the source
+resource or space no longer exists. Recovery sends the saved request and key
+without consulting source eligibility or reconstructing a new proposal; the
+backend checks current replay rights. A new proposal still requires a currently
+eligible source. No package, permission or result is persisted. Replaying asks the server for the
+current proposal or installation receipt; a new operation is offered explicitly
+only after a result or a definite refusal. Installation recovery and receipt
+access do not depend on the current publication detail: a saved request can be
+replayed after withdrawal, under the backend's current authorization checks.
+A new installation still requires an available publication. Storage failure blocks a new send.
+This recovery lasts for the tab's storage lifetime, not after it is cleared.
+Discovery revalidation keeps an open prompt proposal mounted. Open marketplace
+details revalidate on window focus, explicit catalogue refresh and the existing
+60-second polling interval, including details opened from Home. Verification
+blocks fresh commands without discarding the open form or a saved attempt;
+a confirmed detail refusal removes its package and actions. Identity changes
+renew subscriptions and clear local review state; retained callbacks and late
+responses cannot operate in the replacement context. Publication conflicts
+require an explicit new review and never automatically repeat a decision.
+
+RTK catalogue traversal follows all cursors with the existing bounded resource
+catalogue reader (100 pages, 60 seconds); a failed or incomplete traversal never
+appears as a complete list. The UI filters that result and displays 20 items per
+page. Catalogue, source and destination selectors use identities, not names.
+
+Library prompt favorites and the teams marketplace remain separate features.
+The retired Swift agent likes, direct publication/import and publishing-quota
+screens are not mapped to local catalogue entries; the snapshot API has no likes
+contract. Functional reception on a deployment is separate from local frontend
+checks.

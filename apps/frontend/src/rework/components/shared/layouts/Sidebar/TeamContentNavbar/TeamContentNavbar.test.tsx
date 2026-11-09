@@ -50,7 +50,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePromptPublicationSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
+  useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
   useWikiAvailabilityQuery: (
     args: { spaceId: string },

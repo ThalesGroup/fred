@@ -105,7 +105,7 @@ async function serve(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   if (path === "/control-plane/v1/me/spaces") return json(spaces);
-  if (path === `/control-plane/v1/spaces/${spaces.find((s) => s.id === SPACE_ID)?.organization_id}/published-prompts`)
+  if (path === `/control-plane/v1/spaces/${spaces.find((s) => s.id === SPACE_ID)?.organization_id}/marketplace/entries`)
     return page([], url);
   if (path === `${basePath}/prompt-categories`) {
     if (request.method === "GET") return page([...categories.values()], url);
@@ -265,7 +265,7 @@ describe("promptsScenario through Weaver requests", () => {
       );
       expect(
         calls
-          .filter((call) => call.path.includes("/spaces/") && !call.path.endsWith("/published-prompts"))
+          .filter((call) => call.path.includes("/spaces/") && !call.path.includes("/marketplace/entries"))
           .every((call) => call.path.startsWith(`${basePath}/`)),
       ).toBe(true);
       const created = calls.find((call) => call.method === "POST" && call.path.endsWith("/prompts"))!
@@ -292,7 +292,9 @@ describe("promptsScenario through Weaver requests", () => {
       });
       expect(calls.some((call) => call.path.includes("/prompts?after="))).toBe(true);
       expect(calls.some((call) => call.path.includes("/prompt-categories?after="))).toBe(true);
-      expect(calls.some((call) => call.path === "/control-plane/v1/spaces/org/published-prompts")).toBe(true);
+      expect(calls.some((call) => call.path === "/control-plane/v1/spaces/org/marketplace/entries?kind=prompt")).toBe(
+        true,
+      );
       expect(reports.steps.find((step) => step.id === "prompt-command")?.detail).toBe(`/${created.logical_name}`);
     },
   );
@@ -521,7 +523,7 @@ describe("prompt selection from the real self-test launcher", () => {
             (call) =>
               call.path.startsWith(`${basePath}/`) ||
               call.path ===
-                `/control-plane/v1/spaces/${spaces.find((space) => space.id === SPACE_ID)!.organization_id}/published-prompts`,
+                `/control-plane/v1/spaces/${spaces.find((space) => space.id === SPACE_ID)!.organization_id}/marketplace/entries?kind=prompt`,
           ),
       ).toBe(true);
       expectOnlyExistingData();

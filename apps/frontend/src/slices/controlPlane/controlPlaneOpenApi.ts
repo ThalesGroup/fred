@@ -330,6 +330,14 @@ const injectedRtkApi = api.injectEndpoints({
     me: build.query<MeApiResponse, MeApiArg>({
       query: () => ({ url: `/control-plane/v1/me` }),
     }),
+    marketplaceProposalSpaces: build.query<MarketplaceProposalSpacesApiResponse, MarketplaceProposalSpacesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/marketplace-proposal-spaces`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
     marketplaces: build.query<MarketplacesApiResponse, MarketplacesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/me/marketplaces`,
@@ -346,14 +354,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/me/personal-space`,
         method: "POST",
         body: queryArg.createPersonalSpace,
-      }),
-    }),
-    promptPublicationSpaces: build.query<PromptPublicationSpacesApiResponse, PromptPublicationSpacesApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/me/prompt-publication-spaces`,
-        params: {
-          after: queryArg.after,
-        },
       }),
     }),
     mySpaces: build.query<MySpacesApiResponse, MySpacesApiArg>({
@@ -511,17 +511,74 @@ const injectedRtkApi = api.injectEndpoints({
     summary: build.query<SummaryApiResponse, SummaryApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/storage` }),
     }),
-    publishedPrompts: build.query<PublishedPromptsApiResponse, PublishedPromptsApiArg>({
+    marketplaceEntries: build.query<MarketplaceEntriesApiResponse, MarketplaceEntriesApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/published-prompts`,
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/entries`,
         params: {
           after: queryArg.after,
+          kind: queryArg.kind,
         },
       }),
     }),
-    publishedPrompt: build.query<PublishedPromptApiResponse, PublishedPromptApiArg>({
+    marketplaceEntry: build.query<MarketplaceEntryApiResponse, MarketplaceEntryApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/published-prompts/${queryArg.promptId}`,
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/entries/${queryArg.entryId}`,
+      }),
+    }),
+    installMarketplaceEntry: build.mutation<InstallMarketplaceEntryApiResponse, InstallMarketplaceEntryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/entries/${queryArg.entryId}/installations`,
+        method: "POST",
+        body: queryArg.installRequest,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+      }),
+    }),
+    withdrawMarketplaceEntry: build.mutation<WithdrawMarketplaceEntryApiResponse, WithdrawMarketplaceEntryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/entries/${queryArg.entryId}/withdrawal`,
+        method: "PUT",
+        body: queryArg.withdrawRequest,
+      }),
+    }),
+    marketplaceProposals: build.query<MarketplaceProposalsApiResponse, MarketplaceProposalsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/proposals`,
+        params: {
+          after: queryArg.after,
+          kind: queryArg.kind,
+          state: queryArg.state,
+          proposing_space_id: queryArg.proposingSpaceId,
+        },
+      }),
+    }),
+    submitMarketplaceProposal: build.mutation<SubmitMarketplaceProposalApiResponse, SubmitMarketplaceProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/proposals`,
+        method: "POST",
+        body: queryArg.submitProposalRequest,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+      }),
+    }),
+    marketplaceProposal: build.query<MarketplaceProposalApiResponse, MarketplaceProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/proposals/${queryArg.proposalId}`,
+      }),
+    }),
+    cancelMarketplaceProposal: build.mutation<CancelMarketplaceProposalApiResponse, CancelMarketplaceProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/proposals/${queryArg.proposalId}/cancellation`,
+        method: "PUT",
+      }),
+    }),
+    decideMarketplaceProposal: build.mutation<DecideMarketplaceProposalApiResponse, DecideMarketplaceProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.marketplaceSpaceId}/marketplace/proposals/${queryArg.proposalId}/decision`,
+        method: "PUT",
+        body: queryArg.proposalDecisionRequest,
       }),
     }),
     listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
@@ -613,6 +670,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.runtimeId}`,
         method: "PUT",
         body: queryArg.replaceSpaceCapabilityPolicy,
+      }),
+    }),
+    marketplaceInstallation: build.query<MarketplaceInstallationApiResponse, MarketplaceInstallationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/marketplace-installations/${queryArg.installationId}`,
       }),
     }),
     resolvePowerpointTemplate: build.query<ResolvePowerpointTemplateApiResponse, ResolvePowerpointTemplateApiArg>({
@@ -757,13 +819,6 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/favorite`,
         method: "DELETE",
-      }),
-    }),
-    setPromptPublication: build.mutation<SetPromptPublicationApiResponse, SetPromptPublicationApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/publications/${queryArg.marketplaceSpaceId}`,
-        method: "PUT",
-        body: queryArg.promptPublicationRequest,
       }),
     }),
     listSessions: build.query<ListSessionsApiResponse, ListSessionsApiArg>({
@@ -1372,6 +1427,10 @@ export type ImportBlueprintApiArg = {
 };
 export type MeApiResponse = /** status 200 Success */ Me;
 export type MeApiArg = void;
+export type MarketplaceProposalSpacesApiResponse = /** status 200 undefined */ ProposalSpacePage;
+export type MarketplaceProposalSpacesApiArg = {
+  after?: string;
+};
 export type MarketplacesApiResponse = /** status 200 undefined */ MarketplacePage;
 export type MarketplacesApiArg = {
   after?: string;
@@ -1383,10 +1442,6 @@ export type CreatePersonalSpaceApiResponse = /** status 200 Existing personal sp
   | /** status 201 Created personal space */ Space;
 export type CreatePersonalSpaceApiArg = {
   createPersonalSpace: CreatePersonalSpace;
-};
-export type PromptPublicationSpacesApiResponse = /** status 200 undefined */ PromptPublicationSpacePage;
-export type PromptPublicationSpacesApiArg = {
-  after?: string;
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
@@ -1521,15 +1576,59 @@ export type SummaryApiResponse = /** status 200 undefined */ StorageSummary;
 export type SummaryApiArg = {
   id: string;
 };
-export type PublishedPromptsApiResponse = /** status 200 undefined */ PublishedPromptPage;
-export type PublishedPromptsApiArg = {
+export type MarketplaceEntriesApiResponse = /** status 200 undefined */ MarketplaceEntryPage;
+export type MarketplaceEntriesApiArg = {
   marketplaceSpaceId: string;
   after?: string;
+  kind?: MarketplaceKind;
 };
-export type PublishedPromptApiResponse = /** status 200 undefined */ PublishedPrompt;
-export type PublishedPromptApiArg = {
+export type MarketplaceEntryApiResponse = /** status 200 undefined */ MarketplaceEntryDetail;
+export type MarketplaceEntryApiArg = {
   marketplaceSpaceId: string;
-  promptId: string;
+  entryId: string;
+};
+export type InstallMarketplaceEntryApiResponse = /** status 200 undefined */ InstallationReceipt;
+export type InstallMarketplaceEntryApiArg = {
+  marketplaceSpaceId: string;
+  entryId: string;
+  "Idempotency-Key": string;
+  installRequest: InstallRequest;
+};
+export type WithdrawMarketplaceEntryApiResponse = unknown;
+export type WithdrawMarketplaceEntryApiArg = {
+  marketplaceSpaceId: string;
+  entryId: string;
+  withdrawRequest: WithdrawRequest;
+};
+export type MarketplaceProposalsApiResponse = /** status 200 undefined */ ProposalPage;
+export type MarketplaceProposalsApiArg = {
+  marketplaceSpaceId: string;
+  after?: string;
+  kind?: MarketplaceKind;
+  state?: ProposalState;
+  proposingSpaceId?: string;
+};
+export type SubmitMarketplaceProposalApiResponse = /** status 200 undefined */ MarketplaceProposal;
+export type SubmitMarketplaceProposalApiArg = {
+  marketplaceSpaceId: string;
+  "Idempotency-Key": string;
+  submitProposalRequest: SubmitProposalRequest;
+};
+export type MarketplaceProposalApiResponse = /** status 200 undefined */ MarketplaceProposal;
+export type MarketplaceProposalApiArg = {
+  marketplaceSpaceId: string;
+  proposalId: string;
+};
+export type CancelMarketplaceProposalApiResponse = /** status 200 undefined */ ProposalSummary;
+export type CancelMarketplaceProposalApiArg = {
+  marketplaceSpaceId: string;
+  proposalId: string;
+};
+export type DecideMarketplaceProposalApiResponse = /** status 200 undefined */ ProposalSummary;
+export type DecideMarketplaceProposalApiArg = {
+  marketplaceSpaceId: string;
+  proposalId: string;
+  proposalDecisionRequest: ProposalDecisionRequest;
 };
 export type ListAgentInstancesApiResponse = /** status 200 undefined */ AgentInstancePage;
 export type ListAgentInstancesApiArg = {
@@ -1616,6 +1715,11 @@ export type ReplaceSpaceCapabilityPolicyApiArg = {
   spaceId: string;
   runtimeId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
+};
+export type MarketplaceInstallationApiResponse = /** status 200 undefined */ InstallationReceipt;
+export type MarketplaceInstallationApiArg = {
+  spaceId: string;
+  installationId: string;
 };
 export type ResolvePowerpointTemplateApiResponse = /** status 200 undefined */ PowerPointResolution;
 export type ResolvePowerpointTemplateApiArg = {
@@ -1723,13 +1827,6 @@ export type RemovePromptFavoriteApiResponse = unknown;
 export type RemovePromptFavoriteApiArg = {
   spaceId: string;
   promptId: string;
-};
-export type SetPromptPublicationApiResponse = unknown;
-export type SetPromptPublicationApiArg = {
-  spaceId: string;
-  promptId: string;
-  marketplaceSpaceId: string;
-  promptPublicationRequest: PromptPublicationRequest;
 };
 export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
 export type ListSessionsApiArg = {
@@ -2605,6 +2702,16 @@ export type Me = {
   user_id: string;
   username: string;
 };
+export type MarketplaceKind = "prompt" | "skill" | "agent";
+export type ProposalSpace = Space & {
+  marketplace_space_ids: string[];
+  /** Ordinary resource placement in this writable space, for proposal and installation pickers. */
+  resource_kinds: MarketplaceKind[];
+};
+export type ProposalSpacePage = {
+  items: ProposalSpace[];
+  next_cursor: string | null;
+};
 export type Marketplace = {
   name: string;
   space_id: string;
@@ -2627,13 +2734,6 @@ export type OnboardingStatus = {
 };
 export type CreatePersonalSpace = {
   organization_id: string;
-};
-export type PromptPublicationSpace = Space & {
-  marketplace_space_ids: string[];
-};
-export type PromptPublicationSpacePage = {
-  items: PromptPublicationSpace[];
-  next_cursor: string | null;
 };
 export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
 export type MySpace = Space & {
@@ -2990,50 +3090,164 @@ export type SpaceMembers = {
   items: SpaceMember[];
   next_cursor: string | null;
 };
-export type PromptMetadata = {
-  category_id: string | null;
-  created_at: string;
-  created_by: string;
-  description: string | null;
+export type MarketplaceEntrySummary = {
+  can_withdraw: boolean;
+  description: string;
   display_name: string;
-  /** Immutable space-local identity. The slash command is "/" + logical_name. */
-  logical_name: string;
-  prompt_id: string;
-  /** Marketplaces carrying an explicit publication of this definition. */
-  published_in: string[];
-  space_id: string;
-  tags: string[];
-  updated_at: string;
-  updated_by: string;
+  entry_id: string;
+  kind: MarketplaceKind;
+  marketplace_space_id: string;
+  origin_name: string;
+  package_hash: string;
+  proposal_id: string;
+  publication_version: number;
+  published_at: string;
 };
-export type PromptSummary = PromptMetadata & {
-  is_favorite: boolean;
-  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
-  text_preview: string;
-};
-export type PublishedPromptSummary = PromptSummary & {
-  /** Advisory UI decision; writes always recheck the current source-space Write permission. */
-  can_publish: boolean;
-  source_space_name: string;
-};
-export type PublishedPromptPage = {
-  items: PublishedPromptSummary[];
-  /** Exclusive immutable UUID cursor. Pages are current reads, not a snapshot
-    across requests; restart to see concurrent publications before the cursor. */
+export type MarketplaceEntryPage = {
+  items: MarketplaceEntrySummary[];
   next_cursor: string | null;
 };
-export type Prompt = PromptMetadata & {
-  is_favorite: boolean;
-  /** Current full text, preserved verbatim. */
+export type PromptPackage = {
+  description?: string | null;
+  display_name: string;
+  logical_name: string;
+  tags: string[];
   text: string;
 };
-export type PublishedPrompt = Prompt & {
-  source_space_name: string;
+export type SkillPackage = {
+  files: {
+    [key: string]: string;
+  };
+  name: string;
+};
+export type ExportedCapability = {
+  config: {
+    [key: string]: any;
+  };
+  /** Exported configuration files, indexed by asset key and encoded as base64. */
+  files: {
+    [key: string]: string;
+  };
+  schema_version: string;
 };
 export type ModelOptions = {
   max_tokens?: number | null;
   temperature?: number | null;
   top_p?: number | null;
+};
+export type AgentPackage = {
+  capabilities: {
+    [key: string]: ExportedCapability;
+  };
+  description?: string | null;
+  display_name: string;
+  logical_name: string;
+  model_options: ModelOptions;
+  recommended_model?: ModelOfferKey | null;
+  role: string;
+  runtime_id: string;
+  template_agent_id: string;
+  /** Only fields certified exportable by the owning pod, never opaque saved tuning. */
+  tuning_field_values: {
+    [key: string]: any;
+  };
+  usage_statement: string;
+};
+export type MarketplacePackage =
+  | {
+      content: PromptPackage;
+      kind: "prompt";
+    }
+  | {
+      content: SkillPackage;
+      kind: "skill";
+    }
+  | {
+      content: AgentPackage;
+      kind: "agent";
+    };
+export type MarketplaceEntryDetail = MarketplaceEntrySummary & {
+  package: MarketplacePackage;
+};
+export type InstallationReceipt = {
+  entry_id: string;
+  installation_id: string;
+  installed_at: string;
+  kind: MarketplaceKind;
+  package_hash: string;
+  proposal_id: string;
+  resource_exists: boolean;
+  resource_id: string;
+  space_id: string;
+};
+export type InstallOptions =
+  | {
+      category_id?: string | null;
+      kind: "prompt";
+      logical_name: string;
+    }
+  | {
+      kind: "skill";
+    }
+  | {
+      display_name: string;
+      kind: "agent";
+      logical_name?: string | null;
+    };
+export type InstallRequest = {
+  destination_space_id: string;
+  options: InstallOptions;
+  proposal_id: string;
+};
+export type WithdrawRequest = {
+  expected_publication_version: number;
+};
+export type ProposalActions = {
+  can_cancel: boolean;
+  can_decide: boolean;
+};
+export type ProposalState = "pending" | "approved" | "rejected" | "cancelled";
+export type ProposalSummary = {
+  actions: ProposalActions;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  decision_reason?: string | null;
+  description: string;
+  display_name: string;
+  entry_id: string;
+  kind: MarketplaceKind;
+  marketplace_space_id: string;
+  origin_name: string;
+  package_hash: string;
+  proposal_id: string;
+  proposing_space_id?: string | null;
+  /** Current catalogue version, independent of this proposal's terminal decision. */
+  publication_version: number;
+  published_proposal_id?: string | null;
+  state: ProposalState;
+  submitted_at: string;
+  submitted_by: string;
+};
+export type ProposalPage = {
+  items: ProposalSummary[];
+  next_cursor: string | null;
+};
+export type MarketplaceProposal = ProposalSummary & {
+  package: MarketplacePackage;
+};
+export type SubmitProposalRequest = {
+  /** Absent creates an independent entry. Set explicitly for a replacement proposal. */
+  entry_id?: string | null;
+  /** Prompt updated_at, skill revision, or agent configuration_revision as a string. */
+  expected_revision: string;
+  kind: MarketplaceKind;
+  source_resource_id: string;
+  source_space_id: string;
+};
+export type ProposalDecisionRequest = {
+  approve: boolean;
+  expected_publication_version: number;
+  reason?: string | null;
 };
 export type AgentInstanceStatus = "enabled" | "disabled";
 export type ManagedAgentInstanceSummary = {
@@ -3462,12 +3676,36 @@ export type PromptCategoryRequest = {
   /** NFC-normalized, trimmed, nonblank, without control characters. */
   name: string;
 };
+export type PromptMetadata = {
+  category_id: string | null;
+  created_at: string;
+  created_by: string;
+  description: string | null;
+  display_name: string;
+  /** Immutable space-local identity. The slash command is "/" + logical_name. */
+  logical_name: string;
+  prompt_id: string;
+  space_id: string;
+  tags: string[];
+  updated_at: string;
+  updated_by: string;
+};
+export type PromptSummary = PromptMetadata & {
+  is_favorite: boolean;
+  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
+  text_preview: string;
+};
 export type PromptPage = {
   /** At most 100 entries, ordered by immutable logical_name in ASCII order. */
   items: PromptSummary[];
   /** Pass as `after` until null, including for search, pickers and command menus.
     Pages are not a snapshot; restart to include concurrent inserts before the cursor. */
   next_cursor: string | null;
+};
+export type Prompt = PromptMetadata & {
+  is_favorite: boolean;
+  /** Current full text, preserved verbatim. */
+  text: string;
 };
 export type CreatePromptRequest = {
   /** Optional category belonging to this same space. */
@@ -3494,9 +3732,6 @@ export type UpdatePromptRequest = {
   tags?: string[] | null;
   /** Omitted/null keeps the value; a nonblank string replaces it verbatim. */
   text?: string | null;
-};
-export type PromptPublicationRequest = {
-  published: boolean;
 };
 export type SessionDetails = {
   agent_configuration_changed: boolean;
@@ -3795,13 +4030,13 @@ export const {
   useImportBlueprintMutation,
   useMeQuery,
   useLazyMeQuery,
+  useMarketplaceProposalSpacesQuery,
+  useLazyMarketplaceProposalSpacesQuery,
   useMarketplacesQuery,
   useLazyMarketplacesQuery,
   useOnboardingStatusQuery,
   useLazyOnboardingStatusQuery,
   useCreatePersonalSpaceMutation,
-  usePromptPublicationSpacesQuery,
-  useLazyPromptPublicationSpacesQuery,
   useMySpacesQuery,
   useLazyMySpacesQuery,
   useMyUsageQuery,
@@ -3843,10 +4078,19 @@ export const {
   useRevokeMutation,
   useSummaryQuery,
   useLazySummaryQuery,
-  usePublishedPromptsQuery,
-  useLazyPublishedPromptsQuery,
-  usePublishedPromptQuery,
-  useLazyPublishedPromptQuery,
+  useMarketplaceEntriesQuery,
+  useLazyMarketplaceEntriesQuery,
+  useMarketplaceEntryQuery,
+  useLazyMarketplaceEntryQuery,
+  useInstallMarketplaceEntryMutation,
+  useWithdrawMarketplaceEntryMutation,
+  useMarketplaceProposalsQuery,
+  useLazyMarketplaceProposalsQuery,
+  useSubmitMarketplaceProposalMutation,
+  useMarketplaceProposalQuery,
+  useLazyMarketplaceProposalQuery,
+  useCancelMarketplaceProposalMutation,
+  useDecideMarketplaceProposalMutation,
   useListAgentInstancesQuery,
   useLazyListAgentInstancesQuery,
   useCreateAgentInstanceMutation,
@@ -3863,6 +4107,8 @@ export const {
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
+  useMarketplaceInstallationQuery,
+  useLazyMarketplaceInstallationQuery,
   useResolvePowerpointTemplateQuery,
   useLazyResolvePowerpointTemplateQuery,
   useUploadPowerpointTemplateMutation,
@@ -3887,7 +4133,6 @@ export const {
   useUpdatePromptMutation,
   useAddPromptFavoriteMutation,
   useRemovePromptFavoriteMutation,
-  useSetPromptPublicationMutation,
   useListSessionsQuery,
   useLazyListSessionsQuery,
   useCreateSessionMutation,

@@ -151,7 +151,7 @@ Keycloak subjects in the configured realm, which import also verifies. Revocatio
 deleted identity so stale grants can be removed. The check proves existence at
 lookup time; external IAM deletion is not transactional with PostgreSQL.
 
-Personal-space eligibility and the published-prompt marketplace share one
+Personal-space eligibility and the published-snapshot marketplace share one
 organization-participant predicate: a direct business role on an active collective
 space, with active organization and parent. The Rust matrix supplies the role sets
 bound by SQL lists. Invitations supply no rights and have no persisted tables.

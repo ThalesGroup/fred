@@ -18,13 +18,14 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ spaces: [] as { kind: string; name: string }[] | undefined }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentIconName: "smart_toy", agentsNicknamePlural: "agents" }),
 }));
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useMySpacesQuery: () => ({ currentData: h.spaces }),
+  useMySpacesQuery: () => {
+    throw new Error("Marketplace navigation must not require organization-library access");
+  },
 }));
 
 import MarketplaceNavbar from "./MarketplaceNavbar";
@@ -44,26 +45,21 @@ const render = () => {
   const eyebrow = host.querySelector("h2")?.previousElementSibling?.textContent;
   const text = host.textContent;
   const button = host.querySelector("[aria-haspopup]");
+  const links = Array.from(host.querySelectorAll("a"), (link) => link.getAttribute("href"));
   act(() => root.unmount());
-  return { heading, eyebrow, text, button };
+  return { heading, eyebrow, text, button, links };
 };
 
 describe("MarketplaceNavbar", () => {
-  it("names the marketplace and the person's organization, read-only", () => {
-    h.spaces = [
-      { kind: "team", name: "Design" },
-      { kind: "organization", name: "Acme" },
-    ];
+  it("names the marketplace without inferring a catalogue from library access", () => {
     const { heading, eyebrow, button } = render();
     expect(heading).toBe("rework.sidebar.marketplace.title");
-    expect(eyebrow).toBe("Acme");
+    expect(eyebrow).toBeUndefined();
     expect(button).toBeNull();
   });
 
-  it("keeps the marketplace name alone without an organization", () => {
-    h.spaces = [];
-    const { heading, eyebrow } = render();
-    expect(heading).toBe("rework.sidebar.marketplace.title");
-    expect(eyebrow).toBeUndefined();
+  it("offers all three publication kinds and retains the teams marketplace", () => {
+    const { links } = render();
+    expect(links).toEqual(["/marketplace/teams", "/marketplace/agents", "/marketplace/prompts", "/marketplace/skills"]);
   });
 });

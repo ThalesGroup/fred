@@ -69,12 +69,6 @@ const PAGES: OrganizationAdminPage[] = [
     requires: "features",
   },
   {
-    to: "/admin/marketplaces",
-    labelKey: "rework.sidebar.admin.menu.marketplaces",
-    icon: { category: "outlined", type: "storefront", filled: false },
-    requires: "admin",
-  },
-  {
     to: "/admin/migration",
     labelKey: "rework.sidebar.admin.menu.migration",
     icon: { category: "outlined", type: "sync_alt", filled: false },

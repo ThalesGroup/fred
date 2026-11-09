@@ -263,11 +263,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     });
     expect(button("rework.agentCard.chat").disabled).toBe(false);
     await click("rework.agentCard.moreMenu");
-    for (const text of [
-      "rework.agentCard.duplicate",
-      "rework.agentCard.copyTo",
-      "rework.agentMarketplace.menu.publish",
-    ]) {
+    for (const text of ["rework.agentCard.duplicate", "rework.agentCard.copyTo"]) {
       expect(button(text).getAttribute("aria-disabled")).toBe("true");
       await click(text);
     }

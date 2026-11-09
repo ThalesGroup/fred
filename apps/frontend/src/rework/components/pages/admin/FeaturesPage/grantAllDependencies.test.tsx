@@ -303,7 +303,9 @@ describe("organization agent default", () => {
 
   it("uses the organization mutation and waits for server data to change the switch", async () => {
     renderOrganization(false);
-    expect(container.querySelectorAll('[role="radio"]').length).toBe(5);
+    expect(container.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toBe(
+      "rework.admin.capabilities.kindFilter.agent",
+    );
     await act(async () => defaultOnSwitch()!.click());
     expect(h.organizationWrites).toEqual([
       {

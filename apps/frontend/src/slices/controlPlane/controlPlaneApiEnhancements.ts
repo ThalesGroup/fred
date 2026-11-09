@@ -5,11 +5,13 @@ import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "
 import {
   controlPlaneApi,
   type PromptSummary,
-  type PublishedPromptSummary,
-  type PublishedPromptsApiArg,
+  type MarketplaceEntrySummary,
+  type MarketplaceEntriesApiArg,
+  type ProposalSummary,
+  type MarketplaceProposalsApiArg,
   type Marketplace,
-  type PromptPublicationSpace,
-  type PromptPublicationSpacesApiArg,
+  type ProposalSpace,
+  type MarketplaceProposalSpacesApiArg,
   type MarketplacesApiArg,
   type ListPromptsApiArg,
   type ListPromptCategoriesApiArg,
@@ -83,6 +85,10 @@ const wikiTags = (_result: unknown, _error: unknown, { spaceId }: { spaceId: str
   { type: "Wiki" as const, id: spaceId },
 ];
 
+const marketplaceTags = (_result: unknown, _error: unknown, { marketplaceSpaceId }: { marketplaceSpaceId: string }) => [
+  { type: "MarketplaceContent" as const, id: marketplaceSpaceId },
+];
+
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
@@ -98,8 +104,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationModels",
     "AgentInstances",
     "Prompts",
-    "PublishedPrompts",
-    "PublishedPrompt",
+    "MarketplaceContent",
+    "Skills",
     "Marketplaces",
     "PromptCategories",
     "AgentTemplates",
@@ -134,11 +140,11 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     grant: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess"],
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
     },
     revoke: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess"],
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
     },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
@@ -151,50 +157,53 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       );
       Object.assign(endpoint, { query: undefined });
     },
-    promptPublicationSpaces(endpoint) {
+    marketplaceProposalSpaces(endpoint) {
       endpoint.keepUnusedDataFor = 0;
-      endpoint.providesTags = ["Marketplaces"];
-      endpoint.queryFn = catalogQuery<PromptPublicationSpace, PromptPublicationSpacesApiArg>(
+      endpoint.providesTags = ["Marketplaces", "SpaceAccess"];
+      endpoint.queryFn = catalogQuery<ProposalSpace, MarketplaceProposalSpacesApiArg>(
         endpoint.query!,
         (space) => space.id,
       );
       Object.assign(endpoint, { query: undefined });
     },
-    publishedPrompts(endpoint) {
+    marketplaceEntries(endpoint) {
       endpoint.keepUnusedDataFor = 0;
-      endpoint.providesTags = (_result, _error, { marketplaceSpaceId }) => [
-        { type: "PublishedPrompts", id: marketplaceSpaceId },
-      ];
-      endpoint.queryFn = catalogQuery<PublishedPromptSummary, PublishedPromptsApiArg>(
+      endpoint.providesTags = marketplaceTags;
+      endpoint.queryFn = catalogQuery<MarketplaceEntrySummary, MarketplaceEntriesApiArg>(
         endpoint.query!,
-        (prompt) => prompt.prompt_id,
+        (entry) => entry.entry_id,
       );
       Object.assign(endpoint, { query: undefined });
     },
-    publishedPrompt: {
-      keepUnusedDataFor: 0,
-      providesTags: (_result, _error, { marketplaceSpaceId }) => [{ type: "PublishedPrompt", id: marketplaceSpaceId }],
-      async onQueryStarted({ marketplaceSpaceId }, { dispatch, queryFulfilled }) {
-        try {
-          await queryFulfilled;
-        } catch {
-          // Revalidate previews after a detail refusal. Use a distinct list tag
-          // so a missing detail never triggers an endless self-refetch loop.
-          dispatch(enhancedControlPlaneApi.util.invalidateTags([{ type: "PublishedPrompts", id: marketplaceSpaceId }]));
-        }
-      },
+    marketplaceProposals(endpoint) {
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = marketplaceTags;
+      endpoint.queryFn = catalogQuery<ProposalSummary, MarketplaceProposalsApiArg>(
+        endpoint.query!,
+        (proposal) => proposal.proposal_id,
+      );
+      Object.assign(endpoint, { query: undefined });
     },
-    setPromptPublication: {
+    marketplaceEntry: { keepUnusedDataFor: 0, providesTags: marketplaceTags },
+    marketplaceProposal: { keepUnusedDataFor: 0, providesTags: marketplaceTags },
+    submitMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
+    decideMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
+    cancelMarketplaceProposal: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
+    withdrawMarketplaceEntry: { extraOptions: { retryUnauthorized: false }, invalidatesTags: marketplaceTags },
+    installMarketplaceEntry: {
       extraOptions: { retryUnauthorized: false },
-      // A refused mutation also revalidates previously displayed access/content.
-      invalidatesTags: (_result, _error, { spaceId, promptId }) => [
-        "PublishedPrompts",
-        "PublishedPrompt",
-        "Marketplaces",
-        { type: "Prompts", id: spaceId },
-        { type: "Prompts", id: `${spaceId}:${promptId}` },
+      invalidatesTags: (_result, _error, { installRequest }) => [
+        { type: "Prompts", id: installRequest.destination_space_id },
+        { type: "Skills", id: installRequest.destination_space_id },
+        { type: "AgentInstances", id: installRequest.destination_space_id },
       ],
     },
+    marketplaceInstallation: { keepUnusedDataFor: 0, providesTags: ["Prompts", "Skills", "AgentInstances"] },
+    listSkills: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    deleteSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    installSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     listPrompts(endpoint) {
       const query = endpoint.query!;
       endpoint.keepUnusedDataFor = 0;
@@ -283,8 +292,6 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
-              "PublishedPrompts",
-              "PublishedPrompt",
               { type: "Prompts", id: spaceId },
               { type: "Prompts", id: `${spaceId}:${promptId}` },
             ],
@@ -295,8 +302,6 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
-              "PublishedPrompts",
-              "PublishedPrompt",
               { type: "Prompts", id: spaceId },
               { type: "Prompts", id: `${spaceId}:${promptId}` },
             ],
@@ -556,10 +561,17 @@ export const {
   useGrantMutation,
   useRevokeMutation,
   useMarketplacesQuery,
-  usePromptPublicationSpacesQuery,
-  usePublishedPromptsQuery,
-  usePublishedPromptQuery,
-  useSetPromptPublicationMutation,
+  useMarketplaceProposalSpacesQuery,
+  useMarketplaceEntriesQuery,
+  useMarketplaceEntryQuery,
+  useMarketplaceProposalsQuery,
+  useMarketplaceProposalQuery,
+  useSubmitMarketplaceProposalMutation,
+  useDecideMarketplaceProposalMutation,
+  useCancelMarketplaceProposalMutation,
+  useWithdrawMarketplaceEntryMutation,
+  useInstallMarketplaceEntryMutation,
+  useMarketplaceInstallationQuery,
   useListPromptsQuery: usePromptCatalogQuery,
   useListPromptCategoriesQuery,
   useCreatePromptCategoryMutation,

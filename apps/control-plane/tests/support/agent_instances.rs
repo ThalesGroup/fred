@@ -101,6 +101,24 @@ impl Catalog {
                 }
             }),
         );
+        let export_state = state.clone();
+        let app=app.route("/agents/templates/custom/export-tuning", post(move |Json(body): Json<Value>| {
+            let shared=export_state.clone();
+            async move {
+                let gate=shared.lock().await.gate.take();
+                if let Some(gate)=gate {gate.entered.notify_one(); gate.release.notified().await;}
+                Json(json!({"values":body["values"]}))
+            }
+        })).route("/agents/capabilities/tool/export-config", post(|Json(body): Json<Value>| async move {
+            Json(json!({"schema_version":"1", "config":{"endpoint":body["config"]["config"]["endpoint"]}, "files":{}}))
+        })).route("/agents/capabilities/tool/copy-config", post(|Json(body): Json<Value>| async move {
+            assert!(body.get("source_space_id").is_none());
+            assert_eq!(body["asset_files"],json!({}));
+            Json(json!({"schema_version":"1","config":body["config"]["config"],"notices":[]}))
+        })).route("/agents/capabilities/tool/validate-config", post(|axum::Form(form): axum::Form<std::collections::BTreeMap<String,String>>| async move {
+            let config:Value=serde_json::from_str(&form["config"]).unwrap();
+            Json(json!({"schema_version":"1","config":config}))
+        }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -1997,3 +2015,331 @@ async fn manual_session_title_write_cancels_attempt_even_when_text_is_identical(
 
 #[path = "pod_skills.rs"]
 mod pod_skills;
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn marketplace_agents_install_frozen_configuration_with_current_offers() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Editor, "bob").await;
+    let (personal, _) = spaces::create_personal_space(&e.pool, "bob", org.id)
+        .await
+        .unwrap();
+    let identity = Arc::new(support::IdentityServer::start().await);
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    enable_capability(&e, org.id, "tool").await;
+    let mut body = creation(template, "Agent snapshot");
+    body["capability_ids"] = json!(["tool"]);
+    body["capability_config_values"] =
+        json!({"tool":{"endpoint":"https://example.test/initial","library_id":"private"}});
+    body["tuning_field_values"] = json!({"prompts.system":"Original instruction"});
+    let (status, source) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &collection(personal.id),
+        body,
+    )
+    .await;
+    assert_eq!(status, 201, "{source}");
+    let source_path = item(personal.id, &source);
+    let revision = saved(&e, personal.id, &source).await.configuration_revision;
+    let proposals = format!("/spaces/{}/marketplace/proposals", org.id);
+    let submission = json!({"source_space_id":personal.id,"source_resource_id":source["agent_instance_id"],"kind":"agent","expected_revision":revision.to_string()});
+    let key = Uuid::new_v4().to_string();
+    let (status, proposal) = support::request_with_headers(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &proposals,
+        submission.clone(),
+        &[("Idempotency-Key", key.clone())],
+    )
+    .await;
+    assert_eq!(status, 200, "{proposal}");
+    assert_eq!(
+        proposal["package"]["content"]["capabilities"]["tool"]["config"],
+        json!({"endpoint":"https://example.test/initial"})
+    );
+    // A changed source during pod export is never committed under a stale revision.
+    let gate = Arc::new(support::Gate::default());
+    catalog.state.lock().await.gate = Some(gate.clone());
+    let pending = {
+        let app = app.clone();
+        let identity = identity.clone();
+        let proposals = proposals.clone();
+        let submission = submission.clone();
+        tokio::spawn(async move {
+            support::request_with_headers(
+                &app,
+                &identity,
+                Some("bob"),
+                "POST",
+                &proposals,
+                submission,
+                &[("Idempotency-Key", Uuid::new_v4().to_string())],
+            )
+            .await
+        })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(5), gate.entered.notified())
+        .await
+        .unwrap();
+    let changed = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PATCH",
+            &source_path,
+            json!({"description":"Changed during export"}),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(changed.0, 200, "{}", changed.1);
+    gate.release.notify_one();
+    let rejected = pending.await.unwrap();
+    assert_eq!(rejected.0, 409, "{}", rejected.1);
+    assert_eq!(rejected.1["code"], "source_changed");
+    let proposal_path = format!("{proposals}/{}", proposal["proposal_id"].as_str().unwrap());
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &source_path,
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &proposal_path,
+            Value::Null
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &format!("{proposal_path}/decision"),
+            json!({"approve":true,"expected_publication_version":0})
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("{proposal_path}/decision"),
+            json!({"approve":true,"expected_publication_version":0})
+        )
+        .await
+        .0,
+        200
+    );
+    let entry = format!(
+        "/spaces/{}/marketplace/entries/{}",
+        org.id,
+        proposal["entry_id"].as_str().unwrap()
+    );
+    let installation = format!("{entry}/installations");
+    let install = json!({"proposal_id":proposal["proposal_id"],"destination_space_id":team.id,"options":{"kind":"agent","display_name":"Installed","logical_name":"installed"}});
+    let install_key = Uuid::new_v4().to_string();
+    let headers = [("Idempotency-Key", install_key.clone())];
+    // An enabled publication grants neither its template nor its capabilities.
+    enable(&e, org.id, "custom", false).await;
+    assert_eq!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &installation,
+            install.clone(),
+            &headers
+        )
+        .await
+        .0,
+        404
+    );
+    enable(&e, org.id, "custom", true).await;
+    sqlx::query("delete from organization_capability where organization_id=$1 and runtime_id='fixture' and capability_id='tool'").bind(org.id).execute(&e.pool).await.unwrap();
+    assert_eq!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &installation,
+            install.clone(),
+            &headers
+        )
+        .await
+        .0,
+        422
+    );
+    sqlx::query("insert into organization_capability (organization_id,runtime_id,capability_id,enabled_by) values ($1,'fixture','tool','fixture')").bind(org.id).execute(&e.pool).await.unwrap();
+    // Policy revocation during external preflight is rechecked in the final transaction.
+    let gate = Arc::new(support::Gate::default());
+    catalog.state.lock().await.gate = Some(gate.clone());
+    let pending = {
+        let app = app.clone();
+        let identity = identity.clone();
+        let installation = installation.clone();
+        let install = install.clone();
+        let key = install_key.clone();
+        tokio::spawn(async move {
+            support::request_with_headers(
+                &app,
+                &identity,
+                Some("bob"),
+                "POST",
+                &installation,
+                install,
+                &[("Idempotency-Key", key)],
+            )
+            .await
+        })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(5), gate.entered.notified())
+        .await
+        .unwrap();
+    enable(&e, org.id, "custom", false).await;
+    gate.release.notify_one();
+    assert_eq!(pending.await.unwrap().0, 404);
+    enable(&e, org.id, "custom", true).await;
+    // Source edits and deletion are irrelevant to the published package and import.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PATCH",
+            &source_path,
+            json!({"tuning_field_values":{"prompts.system":"Changed"}})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "DELETE",
+            &source_path,
+            Value::Null
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &proposals,
+            submission,
+            &[("Idempotency-Key", key)]
+        )
+        .await
+        .1["package"],
+        proposal["package"]
+    );
+    let (a, b) = tokio::join!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &installation,
+            install.clone(),
+            &headers
+        ),
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &installation,
+            install.clone(),
+            &headers
+        )
+    );
+    assert_eq!(a.0, 200, "{}", a.1);
+    assert_eq!(a, b);
+    let installed = format!(
+        "{}/{}",
+        collection(team.id),
+        a.1["resource_id"].as_str().unwrap()
+    );
+    let (status, local) =
+        request(&app, &identity, Some("bob"), "GET", &installed, Value::Null).await;
+    assert_eq!(status, 200, "{local}");
+    assert_eq!(
+        local["tuning_field_values"]["prompts.system"],
+        "Original instruction"
+    );
+    assert_eq!(local["selected_capability_ids"], json!(["tool"]));
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("{entry}/withdrawal"),
+            json!({"expected_publication_version":1})
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &installation,
+            install,
+            &headers
+        )
+        .await,
+        a
+    );
+    assert_eq!(
+        request(&app, &identity, Some("bob"), "GET", &installed, Value::Null)
+            .await
+            .0,
+        200
+    );
+    e.pool.close().await;
+}

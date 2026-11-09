@@ -355,21 +355,16 @@ class CapabilityConfigCopyRequest(BaseModel):
     Body of the pod's `copy-config` operation: one stored capability config,
     prepared for a new agent instance, possibly in another scope.
 
-    Teams are today's only scope; the scopes differ when the team ids differ.
+    Snapshot imports have no live source. Identity uses Weaver spaces.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     config: StoredCapabilityConfig
-    source_team_id: str = Field(min_length=1)
-    source_agent_instance_id: str = Field(min_length=1)
-    target_team_id: str = Field(min_length=1)
+    target_space_id: str = Field(min_length=1)
     target_agent_instance_id: str = Field(min_length=1)
-    asset_files: dict[str, str] | None = Field(
-        default=None,
-        description=(
-            "Configuration files by asset key, base64-encoded. When set, the pod "
-            "reads the files from here instead of the source agent instance, so a "
-            "copy can be prepared from an exported snapshot."
-        ),
+    asset_files: dict[str, str] = Field(
+        description="Complete configuration files by asset key, base64-encoded. No live source is read.",
     )
 
 
@@ -380,9 +375,13 @@ class CapabilityConfigExportRequest(BaseModel):
     reading that instance again.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     config: StoredCapabilityConfig
-    team_id: str = Field(min_length=1)
+    space_id: str = Field(min_length=1)
     agent_instance_id: str = Field(min_length=1)
+    # CP owns originals. Capability models map their slots to their own asset keys.
+    files_by_slot: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class CapabilityConfigExportResult(StoredCapabilityConfig):
@@ -402,6 +401,19 @@ class CapabilityConfigCopyResult(StoredCapabilityConfig):
     """
 
     notices: list[str] = Field(default_factory=list)
+
+
+class AgentTuningExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    space_id: str = Field(min_length=1)
+    values: dict[str, TuningValue] = Field(default_factory=dict)
+
+
+class AgentTuningExportResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    values: dict[str, TuningValue] = Field(default_factory=dict)
 
 
 class AgentTuning(BaseModel):

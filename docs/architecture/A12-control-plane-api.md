@@ -12,7 +12,7 @@ provides a versioned view. Regenerate this inventory with `make -C docs/architec
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
@@ -137,10 +137,10 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
 | GET | `/me` | `me` | Required |
+| GET | `/me/marketplace-proposal-spaces` | `marketplace_proposal_spaces` | Required |
 | GET | `/me/marketplaces` | `marketplaces` | Required |
 | GET | `/me/onboarding` | `onboarding_status` | Required |
 | POST | `/me/personal-space` | `create_personal_space` | Required |
-| GET | `/me/prompt-publication-spaces` | `prompt_publication_spaces` | Required |
 | GET | `/me/spaces` | `my_spaces` | Required |
 | GET | `/me/usage` | `my_usage` | Required |
 
@@ -167,6 +167,12 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | --- | --- | --- | --- |
 | GET | `/powerpoint-uploads/{request_key}` | `powerpoint_upload_receipt` | Required |
 
+## /skills routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/skills/defaults` | `default_skills` | Required |
+
 ## /spaces routes
 
 | Method | Path | Operation | Authentication |
@@ -180,8 +186,15 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | PUT | `/spaces/{id}/roles/{role}/{user}` | `grant` | Required |
 | DELETE | `/spaces/{id}/roles/{role}/{user}` | `revoke` | Required |
 | GET | `/spaces/{id}/storage` | `summary` | Required |
-| GET | `/spaces/{marketplace_space_id}/published-prompts` | `published_prompts` | Required |
-| GET | `/spaces/{marketplace_space_id}/published-prompts/{prompt_id}` | `published_prompt` | Required |
+| GET | `/spaces/{marketplace_space_id}/marketplace/entries` | `marketplace_entries` | Required |
+| GET | `/spaces/{marketplace_space_id}/marketplace/entries/{entry_id}` | `marketplace_entry` | Required |
+| POST | `/spaces/{marketplace_space_id}/marketplace/entries/{entry_id}/installations` | `install_marketplace_entry` | Required |
+| PUT | `/spaces/{marketplace_space_id}/marketplace/entries/{entry_id}/withdrawal` | `withdraw_marketplace_entry` | Required |
+| GET | `/spaces/{marketplace_space_id}/marketplace/proposals` | `marketplace_proposals` | Required |
+| POST | `/spaces/{marketplace_space_id}/marketplace/proposals` | `submit_marketplace_proposal` | Required |
+| GET | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}` | `marketplace_proposal` | Required |
+| PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/cancellation` | `cancel_marketplace_proposal` | Required |
+| PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/decision` | `decide_marketplace_proposal` | Required |
 | GET | `/spaces/{space_id}/agent-instances` | `list_agent_instances` | Required |
 | POST | `/spaces/{space_id}/agent-instances` | `create_agent_instance` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` | Required |
@@ -193,6 +206,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{runtime_id}` | `replace_space_capability_policy` | Required |
+| GET | `/spaces/{space_id}/marketplace-installations/{installation_id}` | `marketplace_installation` | Required |
 | GET | `/spaces/{space_id}/powerpoint-template` | `resolve_powerpoint_template` | Required |
 | PUT | `/spaces/{space_id}/powerpoint-template` | `upload_powerpoint_template` | Required |
 | DELETE | `/spaces/{space_id}/powerpoint-template` | `remove_powerpoint_template` | Required |
@@ -211,7 +225,6 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | DELETE | `/spaces/{space_id}/prompts/{prompt_id}` | `delete_prompt` | Required |
 | PUT | `/spaces/{space_id}/prompts/{prompt_id}/favorite` | `add_prompt_favorite` | Required |
 | DELETE | `/spaces/{space_id}/prompts/{prompt_id}/favorite` | `remove_prompt_favorite` | Required |
-| PUT | `/spaces/{space_id}/prompts/{prompt_id}/publications/{marketplace_space_id}` | `set_prompt_publication` | Required |
 | GET | `/spaces/{space_id}/sessions` | `list_sessions` | Required |
 | POST | `/spaces/{space_id}/sessions` | `create_session` | Required |
 | GET | `/spaces/{space_id}/sessions/{session_id}` | `get_session` | Required |
@@ -228,6 +241,14 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | GET | `/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content` | `download_conversation_file` | Required |
 | GET | `/spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview` | `preview_conversation_file` | Required |
 | POST | `/spaces/{space_id}/sessions/{session_id}/generated-title` | `record_title` | Required |
+| GET | `/spaces/{space_id}/skills` | `list_skills` | Required |
+| POST | `/spaces/{space_id}/skills` | `create_skill` | Required |
+| POST | `/spaces/{space_id}/skills/packages/{name}/install` | `install_skill` | Required |
+| GET | `/spaces/{space_id}/skills/scope` | `skill_scope` | Required |
+| GET | `/spaces/{space_id}/skills/scope/{skill_id}` | `preview_skill` | Required |
+| GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |
+| PUT | `/spaces/{space_id}/skills/{skill_id}` | `put_skill` | Required |
+| DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
 | GET | `/spaces/{space_id}/usage` | `space_usage` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |

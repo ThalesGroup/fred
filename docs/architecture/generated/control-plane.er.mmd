@@ -68,8 +68,15 @@ erDiagram
 "control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
 "control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
 "control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
-"control_plane.prompt_publication" }o--|| "control_plane.space" : "marketplace_space_id"
-"control_plane.prompt_publication" }o--|| "control_plane.prompt" : "prompt_id"
+"control_plane.skill" }o--|| "control_plane.space" : "space_id"
+"control_plane.marketplace_entry" }o--|| "control_plane.space" : "marketplace_space_id"
+"control_plane.marketplace_entry" }o--|| "control_plane.marketplace_proposal" : "entry_id, published_proposal_id, published_state"
+"control_plane.marketplace_proposal" }o--o| "control_plane.space" : "proposing_space_id"
+"control_plane.marketplace_proposal" }o--|| "control_plane.marketplace_entry" : "entry_id, marketplace_space_id, kind"
+"control_plane.marketplace_installation" }o--o| "control_plane.space" : "live_space_id"
+"control_plane.marketplace_installation" }o--o| "control_plane.agent_instance" : "agent_instance_id, live_space_id"
+"control_plane.marketplace_installation" }o--o| "control_plane.prompt" : "prompt_id, live_space_id"
+"control_plane.marketplace_installation" }o--o| "control_plane.skill" : "skill_id, live_space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -296,8 +303,6 @@ erDiagram
   boolean reachable
   timestamp_with_time_zone checked_at
   timestamp_with_time_zone observed_at
-  text skills_revision
-  text skills_availability
 }
 "control_plane.runtime_capability" {
   text runtime_id FK
@@ -650,9 +655,63 @@ erDiagram
   timestamp_with_time_zone reviewed_at
   text reviewed_by
 }
-"control_plane.prompt_publication" {
-  uuid prompt_id FK
+"control_plane.skill" {
+  uuid skill_id
+  uuid space_id FK
+  text name
+  jsonb summary
+  jsonb files
+  text revision
+  text created_by
+  text updated_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone updated_at
+}
+"control_plane.marketplace_entry" {
+  uuid entry_id FK
   uuid marketplace_space_id FK
-  text published_by
+  text kind
+  uuid published_proposal_id FK
+  text published_state FK
+  bigint publication_version
   timestamp_with_time_zone published_at
+  timestamp_with_time_zone withdrawn_at
+  timestamp_with_time_zone created_at
+}
+"control_plane.marketplace_proposal" {
+  uuid proposal_id
+  uuid entry_id FK
+  uuid marketplace_space_id FK
+  text kind FK
+  uuid proposing_space_id FK
+  text origin_name
+  text submitted_by
+  uuid request_key
+  text request_hash
+  jsonb package
+  text package_hash
+  text display_name
+  text description
+  timestamp_with_time_zone submitted_at
+  text state
+  text decided_by
+  timestamp_with_time_zone decided_at
+  text decision_reason
+}
+"control_plane.marketplace_installation" {
+  uuid installation_id
+  text actor
+  uuid request_key
+  text request_hash
+  uuid entry_id
+  uuid proposal_id
+  text package_hash
+  text kind
+  uuid space_id
+  uuid resource_id
+  timestamp_with_time_zone installed_at
+  uuid live_space_id FK
+  uuid prompt_id FK
+  uuid skill_id FK
+  uuid agent_instance_id FK
 }

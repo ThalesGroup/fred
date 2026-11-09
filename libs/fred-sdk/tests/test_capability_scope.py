@@ -149,3 +149,19 @@ def test_guard_checks_catalog_declared_text_fields() -> None:
     ]
 
     assert unclassified_reference_specs(specs) == ["chat_options.bound_library_ids"]
+
+
+def test_export_guard_requires_classification_for_credentials_and_opaque_fields():
+    class Unclassified(BaseModel):
+        api_token: str = ""
+        options: dict[str, object] = {}
+
+    assert unclassified_reference_fields(Unclassified) == ["api_token", "options"]
+    assert unclassified_reference_specs(
+        [
+            FieldSpec(key="options", title="Options", type="object"),
+            FieldSpec(
+                key="portable", title="Portable", type="object", scope_private=False
+            ),
+        ]
+    ) == ["options"]
