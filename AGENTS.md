@@ -154,7 +154,7 @@ For implementation work, identify or create the tracking GitHub issue and use
 a dedicated topic branch. Reuse the current branch when the user identifies it
 as the branch for this work. Keep unrelated local changes out of commits.
 Before creating an issue, search open GitHub Epics for a relevant parent. Link
-the issue to a matching Epic and reference it in the PR when useful. If none
+the issue to a matching Epic. Reference that Epic in the PR when useful. If none
 matches, tell the developer and present the choices: contact the product owner
 (PO) or proceed knowingly without an Epic.
 When creating a branch, choose a descriptive name that does not contain `codex`.
