@@ -1537,10 +1537,9 @@ export function useChatSse(
       activeSteeringTurnIdRef.current = steeringTurnId;
       const turn = startTurn(sessionId, ac, steeringTurnId);
 
-      // Only flipped once the runtime answers 2xx. A fetch rejection or a
-      // 401/502/503 means the resume never ran, so the caller must be told
-      // "not reached" and put the prompt back — the paused checkpoint is
-      // otherwise unanswerable.
+      // A 2xx confirms HTTP admission, not consumption of the interrupt. A
+      // lost response is ambiguous too: reconcile failed attempts with durable
+      // history below, whose resume_status is derived from the SQL claim.
       let acceptedByRuntime = false;
       let obsoletePrompt = false;
 
@@ -1751,7 +1750,12 @@ export function useChatSse(
       } finally {
         settleTurn(turn);
       }
-      if (obsoletePrompt && turn.host === host) onHitlUnavailable?.(pending.session_id);
+      // Setup can fail after 2xx but before claiming the interrupt; conversely,
+      // a network failure can hide a consumed answer. Reload only after settling
+      // the stream so useSessionHistory can apply the authoritative snapshot.
+      if ((obsoletePrompt || (!turn.completed && !turn.awaitingInput)) && turn.host === host) {
+        onHitlUnavailable?.(pending.session_id);
+      }
       // Neither an accepted answer nor a proven obsolete card should be offered again.
       return acceptedByRuntime || obsoletePrompt;
     },

@@ -99,7 +99,6 @@ const preparation = {
   space_id: "space-1",
   agent_instance_id: "agent-1",
   supports_streaming: true,
-  // Resume mechanics are exercised even though current Weaver admission disables HITL.
   supports_hitl: true,
   model_choice: null,
   model_error: null,
@@ -1581,6 +1580,21 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(await latest.sendHitlResume(hitlEvent, "cancel")).toBe(false);
     });
     expect(latest.messages).toHaveLength(0);
+    expect(onHitlUnavailableMock).toHaveBeenCalledWith(hitlEvent.session_id);
+    fetchSpy.mockRestore();
+  });
+
+  it("reconciles an execution error after HTTP admission with durable history", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"execution_error","message":"setup failed"}\n\n'));
+    mount();
+    await act(async () => {
+      await latest.sendHitlResume(hitlEvent, "proceed");
+    });
+    expect(latest.waitResponse).toBe(false);
+    expect(onHitlUnavailableMock).toHaveBeenCalledExactlyOnceWith(hitlEvent.session_id);
+    expect(onErrorMock).toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
 
@@ -1601,12 +1615,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(await latest.sendHitlResume(hitlEvent, "cancel")).toBe(true);
     });
     expect(latest.messages.filter((m) => m.channel === "tool_result")).toHaveLength(1);
+    expect(onHitlUnavailableMock).toHaveBeenCalledTimes(2);
     fetchSpy.mockRestore();
   });
 
   it("sendHitlResume() reports not-reached when the runtime rejects the resume outright", async () => {
-    // A 503 from an unready pod (or a fetch rejection) means the runtime never
-    // took the resume, so the paused checkpoint still needs an answer. The
+    // A 503 does not confirm consumption: history must decide whether the
+    // paused checkpoint still needs an answer. The
     // previous unconditional `return true` reported "reached" here, so the
     // caller never restored the prompt and the interaction was unanswerable.
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
@@ -1647,8 +1662,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       result = await latest.sendHitlResume(hitlEvent, "cancel", undefined, undefined, undefined, false, accepted);
     });
     expect(result).toBe(discard);
-    expect(onHitlUnavailableMock).toHaveBeenCalledTimes(discard ? 1 : 0);
-    if (discard) expect(onHitlUnavailableMock).toHaveBeenCalledWith(hitlEvent.session_id);
+    expect(onHitlUnavailableMock).toHaveBeenCalledTimes(1);
+    expect(onHitlUnavailableMock).toHaveBeenCalledWith(hitlEvent.session_id);
     expect(accepted).not.toHaveBeenCalled();
     expect(latest.messages).toHaveLength(0);
     expect(onErrorMock).toHaveBeenCalledWith(`chatbot.errors.${messageKey}:`);

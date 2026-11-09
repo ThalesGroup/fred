@@ -779,8 +779,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         *,
         thread_id: str,
         checkpoint_ns: str,
-        occurrences: frozenset[tuple[str, str]],
-    ) -> tuple[list[tuple[str, str, Any]], frozenset[tuple[str, str]]] | None:
+        occurrences: frozenset[tuple[str, str | None]],
+    ) -> tuple[list[tuple[str, str, Any]], frozenset[tuple[str, str | None]]] | None:
         """Read only the latest interrupts and blocking claims, without channel blobs."""
         await self._ensure_tables()
         keys = {_hitl_claim_key(*identity): identity for identity in occurrences}

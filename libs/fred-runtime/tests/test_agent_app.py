@@ -4000,6 +4000,14 @@ def test_resume_runtime_setup_failure_leaves_no_claim_and_retry_succeeds(
 
         claim_rows = asyncio.run(_hitl_claim_rows(checkpointer))
         assert claim_rows == []  # setup failed before any claim was acquired
+        history = client.get(
+            f"/pod/v1/agents/sessions/{session_id}/messages",
+            headers={"Authorization": "Bearer test-person-token"},
+        )
+        assert history.status_code == 200, history.text
+        assert not any(
+            p["type"] == "hitl_response" for m in history.json() for p in m["parts"]
+        )
 
         retry = client.post("/pod/v1/agents/execute", json=payload)
 

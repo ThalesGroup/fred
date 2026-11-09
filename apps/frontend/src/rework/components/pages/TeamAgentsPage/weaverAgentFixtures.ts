@@ -21,6 +21,7 @@ export const TEMPLATE: AgentTemplateSummary = {
   default_capability_ids: [],
   available_capabilities: [],
   supports_capabilities: true,
+  supports_hitl: true,
   team_instantiable: true,
   default_tuning_fields: [
     { key: "temperature", type: "number", title: "Temperature", default: 0.8 },

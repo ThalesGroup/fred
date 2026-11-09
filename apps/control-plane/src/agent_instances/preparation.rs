@@ -139,7 +139,7 @@ pub struct ExecutionPreparation {
     #[schema(required = true)]
     pub messages_url_template: Option<String>,
     pub supports_streaming: bool,
-    /// False until the managed Weaver HITL journey is connected.
+    /// Durable resume support advertised by the owning runtime; false when absent.
     pub supports_hitl: bool,
     pub supports_ui_parts: bool,
     #[schema(required = true)]
@@ -340,7 +340,7 @@ async fn prepare_execution(
         execute_stream_url: format!("{base}/agents/execute/stream"),
         messages_url_template: Some(format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
-        supports_hitl: false,
+        supports_hitl: !embedded && template.supports_hitl,
         supports_ui_parts: !embedded,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,
@@ -395,6 +395,7 @@ mod tests {
                 entry("search", None),
             ],
             supports_capabilities: true,
+            supports_hitl: false,
             default_capability_ids: vec![],
         };
         let urls =
@@ -430,6 +431,7 @@ mod tests {
                 json!("search"),
             )])],
             supports_capabilities: true,
+            supports_hitl: false,
             default_capability_ids: vec!["other".into()],
         };
         let saved = |ids: Value| json!({"selected_capability_ids": ids});

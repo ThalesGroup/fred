@@ -292,6 +292,8 @@ pub struct AgentTemplateSummary {
     /// Pod-owned descriptors, including config fields, schemas and routing metadata.
     pub available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
     pub supports_capabilities: bool,
+    /// Owning pod advertises durable, single-use human-interrupt resume support.
+    pub supports_hitl: bool,
     pub default_capability_ids: Vec<String>,
 }
 
@@ -319,6 +321,8 @@ struct TemplateFormMetadata {
     available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
     #[serde(default = "crate::config::yes")]
     supports_capabilities: bool,
+    #[serde(default)]
+    supports_hitl: bool,
     #[serde(default)]
     default_capability_ids: Vec<String>,
     #[serde(default = "crate::config::yes")]
@@ -377,6 +381,7 @@ fn template_summary(
         max_chat_input_chars: metadata.max_chat_input_chars.filter(|limit| *limit > 0),
         available_capabilities: metadata.available_capabilities,
         supports_capabilities: metadata.supports_capabilities,
+        supports_hitl: metadata.supports_hitl,
         default_capability_ids: metadata.default_capability_ids,
     }))
 }

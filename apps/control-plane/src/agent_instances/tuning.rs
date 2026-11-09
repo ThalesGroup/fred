@@ -672,6 +672,7 @@ mod tests {
             max_chat_input_chars: None,
             available_capabilities: vec![],
             supports_capabilities: true,
+            supports_hitl: false,
             default_capability_ids: vec![],
         };
         (platform, template)

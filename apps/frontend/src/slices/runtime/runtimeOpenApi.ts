@@ -1411,6 +1411,7 @@ export type AgentTemplateSummary = {
   kind: ExecutionCategory;
   max_chat_input_chars: number;
   supports_capabilities?: boolean;
+  supports_hitl: boolean;
   template_agent_id: string;
   title: string;
 };

@@ -1221,6 +1221,8 @@ class _AgentExecuteRequest(BaseModel):
 
     _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
     _title_task: asyncio.Task[str | None] | None = PrivateAttr(default=None)
+    # Stamp only after the resume claim starts; HTTP admission alone is not an answer.
+    _hitl_resume_started: bool = PrivateAttr(default=False)
     """
     Input payload for the agent execution endpoints.
 
@@ -1348,6 +1350,8 @@ class _AgentTemplateSummary(BaseModel):
     # grants). False means available_capabilities lists capabilities included
     # with the agent: always active, configurable, never selectable.
     supports_capabilities: bool = True
+    # Managed resume needs the native interrupt protocol and durable single-use claims.
+    supports_hitl: bool
     # This template's declared default capability ids (RFC §2), verbatim from
     # `definition.default_mcp_servers` — MCP-derived and native ids alike, no
     # filtering. `available_mcp_servers` above stays MCP-only (it carries full
@@ -2344,7 +2348,9 @@ async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatM
                 continue
             part = p.model_copy(update={"resume_status": "unknown"})
             requests[m.rank] = part
-            if p.interrupt_id and p.occurrence_id:
+            # Tool approvals may have no occurrence_id. Match the exact pair,
+            # including None, just as resume admission and SQL claims do.
+            if p.interrupt_id:
                 targets.setdefault(m.metadata.agent_id, []).append((m.rank, part))
     checkpointer = get_runtime_context().config.checkpointer
 
@@ -2354,9 +2360,7 @@ async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatM
         if not isinstance(checkpointer, FredSqlCheckpointer):
             return
         identities = frozenset(
-            (p.interrupt_id, p.occurrence_id)
-            for _, p in parts
-            if p.interrupt_id and p.occurrence_id
+            (p.interrupt_id, p.occurrence_id) for _, p in parts if p.interrupt_id
         )
         session_id = messages[-1].session_id
         locations = (
@@ -2743,6 +2747,7 @@ async def _write_turn_history(
     resume_payload: Any | None = None,
     occurrence_id: str | None = None,
     previously_pending_occurrence_ids: tuple[str, ...] = (),
+    resume_started: bool = True,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -2812,7 +2817,7 @@ async def _write_turn_history(
     rank = base_rank
 
     # 1. Opening rows: user text or one HITL response per resumed occurrence.
-    if resume_payload is not None:
+    if resume_payload is not None and resume_started:
         batch = parse_batched_human_answers(resume_payload)
         answer_rows = (
             tuple((item.answer, item.occurrence_id) for item in batch)
@@ -2852,7 +2857,7 @@ async def _write_turn_history(
                     )
                 )
                 rank += 1
-    elif request_message:
+    elif resume_payload is None and request_message:
         user_message = make_user_text(
             session_id, exchange_id, rank, request_message, command=turn_command
         )
@@ -3667,6 +3672,7 @@ async def _stream(
                         resume_payload=request.resume_payload,
                         occurrence_id=request.occurrence_id,
                         previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                        resume_started=request._hitl_resume_started,
                     )
                 )
     finally:
@@ -4639,6 +4645,7 @@ async def _iterate_runtime_event_payloads_inner(
                     interrupt_id=request.interrupt_id,
                     occurrence_id=request.occurrence_id,
                 )
+            request._hitl_resume_started = request.resume_payload is not None
             async for event in executor.stream(graph_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):
@@ -4717,6 +4724,7 @@ async def _iterate_runtime_event_payloads_inner(
                     occurrence_id=request.occurrence_id,
                 )
 
+            request._hitl_resume_started = request.resume_payload is not None
             error_phase = "execution"
             event_stream = cast(
                 AsyncGenerator[RuntimeEvent, None],
@@ -5110,6 +5118,12 @@ def _build_agent_router(
                     definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
+                supports_hitl=isinstance(
+                    definition, (ReActAgentDefinition, GraphAgentDefinition)
+                )
+                and isinstance(
+                    get_runtime_context().config.checkpointer, FredSqlCheckpointer
+                ),
                 default_capability_ids=[
                     ref.id for ref in definition.default_mcp_servers
                 ],
@@ -6121,6 +6135,7 @@ def _build_agent_router(
                     resume_payload=request.resume_payload,
                     occurrence_id=request.occurrence_id,
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                    resume_started=internal_req._hitl_resume_started,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -6237,6 +6252,7 @@ def _build_agent_router(
                     resume_payload=request.resume_payload,
                     occurrence_id=request.occurrence_id,
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                    resume_started=internal_req._hitl_resume_started,
                 )
         return _build_eval_trace(
             payloads=payloads,

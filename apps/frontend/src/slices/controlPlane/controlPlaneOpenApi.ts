@@ -3482,7 +3482,7 @@ export type ExecutionPreparation = {
   skill_detail_url_template?: string | null;
   skills?: SkillCatalog | null;
   space_id: string;
-  /** False until the managed Weaver HITL journey is connected. */
+  /** Durable resume support advertised by the owning runtime; false when absent. */
   supports_hitl: boolean;
   supports_streaming: boolean;
   supports_ui_parts: boolean;
@@ -3613,6 +3613,8 @@ export type AgentTemplateSummary = {
   source_runtime_id: string;
   status: AgentTemplateStatus;
   supports_capabilities: boolean;
+  /** Owning pod advertises durable, single-use human-interrupt resume support. */
+  supports_hitl: boolean;
   tags: string[];
   team_instantiable: boolean;
   template_id: string;

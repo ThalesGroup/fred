@@ -45,7 +45,7 @@ def request(
         rank,
         question="Choose a style",
         choices=[],
-        stage="agent_question",
+        stage="agent_question" if occurrence else "tool_approval",
         interrupt_id=interrupt,
         occurrence_id=occurrence,
     )
@@ -87,8 +87,9 @@ async def seed(cp, thread="session", identities=(("pause", "call"),)):
     "claim_state", [None, "claimed", "expired", "started", "consumed"]
 )
 @pytest.mark.parametrize("graph", [False, True])
+@pytest.mark.parametrize("occurrence", [None, "call"])
 async def test_history_availability_shared_across_readers(
-    tmp_path, monkeypatch, claim_state, graph
+    tmp_path, monkeypatch, claim_state, graph, occurrence
 ):
     url = f"sqlite+aiosqlite:///{tmp_path / 'state.db'}"
     writer_engine = create_async_engine(url)
@@ -97,12 +98,12 @@ async def test_history_availability_shared_across_readers(
     reader = FredSqlCheckpointer(reader_engine, prefix="v2_")
     thread = graph_thread_id("session", "instance") if graph else "session"
     try:
-        await seed(writer, thread, (("pause", "call"), ("pause-2", "sibling")))
+        await seed(writer, thread, (("pause", occurrence), ("pause-2", "sibling")))
         identity = dict(
             thread_id=thread,
             checkpoint_ns="",
             interrupt_id="pause",
-            occurrence_id="call",
+            occurrence_id=occurrence,
         )
         if claim_state:
             token = await writer.aclaim_hitl_resume(**identity)
@@ -119,7 +120,7 @@ async def test_history_availability_shared_across_readers(
                         )
                     )
         context(monkeypatch, reader)
-        messages = [request(), request(1, "sibling", "pause-2")]
+        messages = [request(occurrence=occurrence), request(1, "sibling", "pause-2")]
         before = [m.model_dump() for m in messages]
         annotated = await agent_app._annotate_hitl_availability(messages)
         expected = "pending" if claim_state in (None, "expired") else "unavailable"

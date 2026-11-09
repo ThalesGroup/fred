@@ -1210,6 +1210,109 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
+async fn preparation_uses_live_runtime_hitl_support_and_defaults_to_false() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "HITL")).await;
+    let path = format!("{}/prepare-execution", item(team.id, &instance));
+    for advertised in [None, Some(true), Some(false)] {
+        let mut template = definition();
+        if let Some(value) = advertised {
+            template["supports_hitl"] = json!(value);
+        }
+        catalog.state.lock().await.templates = json!([template]);
+        let (status, prepared) =
+            request(&app, &identity, Some("alice"), "POST", &path, Value::Null).await;
+        assert_eq!(status, 200, "{prepared}");
+        assert_eq!(prepared["supports_hitl"], advertised.unwrap_or(false));
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn wiki_publication_checks_owner_session_and_publishes_once() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    enable_capability(&e, org.id, "team_wiki").await;
+    let instance = create(&app, &identity, team.id, creation(template, "Wiki")).await;
+    let agent = Uuid::parse_str(instance["agent_instance_id"].as_str().unwrap()).unwrap();
+    let session = Uuid::new_v4();
+    let proposal = Uuid::new_v4();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,'fixture','Wiki',1)")
+        .bind(session).bind(team.id).bind(agent).bind(template).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into wiki_revision(revision_id,space_id,content_md,status,author_user_id,author_kind,agent_instance_id,session_id,proposed_title,expires_at) values($1,$2,'Approved text','proposed','alice','agent',$3,$4,'Isolated approval',clock_timestamp()+interval '1 day')")
+        .bind(proposal).bind(team.id).bind(agent).bind(session).execute(&e.pool).await.unwrap();
+    let path = format!(
+        "/spaces/{}/wiki/proposals/{proposal}/publish?session_id={session}",
+        team.id
+    );
+    for actor in [None, Some("bob")] {
+        let (status, _) = request(&app, &identity, actor, "POST", &path, Value::Null).await;
+        assert!(matches!(status, 401 | 403 | 404));
+    }
+    let wrong_session = path.replace(&session.to_string(), &Uuid::new_v4().to_string());
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &wrong_session,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    let count: i64 = sqlx::query_scalar("select count(*) from wiki_page where space_id=$1")
+        .bind(team.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let (a, b) = tokio::join!(
+        request(&app, &identity, Some("alice"), "POST", &path, Value::Null),
+        request(&app, &identity, Some("alice"), "POST", &path, Value::Null),
+    );
+    let mut statuses = [a.0, b.0];
+    statuses.sort();
+    assert_eq!(statuses, [200, 404], "{a:?} {b:?}");
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "POST", &path, Value::Null)
+            .await
+            .0,
+        404
+    );
+    let count: i64 = sqlx::query_scalar(
+        "select count(*) from wiki_page where space_id=$1 and current_revision_id=$2",
+    )
+    .bind(team.id)
+    .bind(proposal)
+    .fetch_one(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    let status: String =
+        sqlx::query_scalar("select status from wiki_revision where revision_id=$1")
+            .bind(proposal)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "published");
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
 async fn preparation_combines_pod_controls_and_reasoning_after_capability_governance() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;

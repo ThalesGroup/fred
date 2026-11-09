@@ -209,6 +209,7 @@ mod tests {
                 .map(|id| BTreeMap::from([("id".into(), json!(id))]))
                 .to_vec(),
             supports_capabilities: true,
+            supports_hitl: false,
             default_capability_ids: vec!["unselected".into()],
         }
     }
