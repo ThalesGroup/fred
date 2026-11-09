@@ -202,6 +202,7 @@ class ExecutionConfig(FrozenModel):
 
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
     session_id: str | None = None
+    pending_message_id: str | None = None
     interrupt_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
@@ -216,6 +217,7 @@ class ExecutionConfig(FrozenModel):
 
 class RuntimeEventBase(FrozenModel):
     sequence: int = Field(default=0, ge=0)
+    rank: int | None = None
 
 
 # Phase discriminator for THOUGHT_START/DELTA/END events.
@@ -432,6 +434,7 @@ class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     model_name: str | None = None
     token_usage: dict[str, int] | None = None
     context_tokens: int | None = None
+    pause_metadata_rank: int | None = None
 
 
 class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):

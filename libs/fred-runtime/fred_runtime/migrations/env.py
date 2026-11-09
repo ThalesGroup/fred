@@ -28,7 +28,6 @@ from fred_runtime.app.web_research_activity import (
     WebResearchActivityRow,
 )
 from fred_runtime.migrations import configure_migration_logging
-from fred_runtime.runtime_support.turn_steering import _turns
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
@@ -44,7 +43,6 @@ if config.config_file_name is not None:
 _runtime_metadata = MetaData()
 cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
-_turns.to_metadata(_runtime_metadata)
 
 
 def _postgres_config():
@@ -68,7 +66,6 @@ if _build_url(_postgres_config).startswith("postgresql"):
     )
     for name in (
         "session_history",
-        "runtime_turn_steering",
         *checkpoint._metadata.tables,
     ):
         table = _runtime_metadata.tables[name]

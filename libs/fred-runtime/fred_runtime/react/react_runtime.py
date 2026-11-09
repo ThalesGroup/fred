@@ -38,7 +38,7 @@ import uuid
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
 from dataclasses import replace
-from typing import cast
+from typing import Literal, TypedDict, cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
@@ -341,6 +341,10 @@ async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
         logger.debug("agent stream close failed: %s", type(exc).__name__)
 
 
+class _DurabilityOptions(TypedDict, total=False):
+    durability: Literal["sync"]
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -389,6 +393,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # construct this same executor) so per-turn logs never say "ReActRuntime"
         # for a Deep turn.
         self._runtime_class_name = runtime_class_name
+
+    def _durability_options(self) -> _DurabilityOptions:
+        return (
+            {"durability": "sync"}
+            if self._binding.portable_context.baggage.get("steering_enabled") == "true"
+            else {}
+        )
 
     async def _input_with_skill(
         self, input_model: ReActInput, config: ExecutionConfig
@@ -455,6 +466,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config, self._binding.portable_context),
+                **self._durability_options(),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -748,11 +760,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
+            # A steer is promoted only after its graph state is durable.
+            durability = self._durability_options()
             if self._services.skills is None:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config, self._binding.portable_context),
                     stream_mode=["messages", "updates", "custom"],
+                    **durability,
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
@@ -760,6 +775,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     config=_to_runnable_config(config, self._binding.portable_context),
                     stream_mode=["messages", "updates", "custom"],
                     subgraphs=True,
+                    **durability,
                 )
             while True:
                 try:

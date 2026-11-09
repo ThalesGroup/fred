@@ -48,12 +48,7 @@ import {
 } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import {
-  markSessionRead,
-  setSessionAwaitingInput,
-  usePendingMessages,
-  type PendingMessage,
-} from "@core/hooks/backgroundTurns";
+import { markSessionRead, setSessionAwaitingInput } from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -136,10 +131,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [dispatch],
   );
   const [input, setInput] = useState("");
-  const [pendingMessages, setPendingMessages] = usePendingMessages(sessionId);
-  const queuedStartRef = useRef<PendingMessage | null>(null);
-  const queueDrainRef = useRef(false);
-  const queueSessionRef = useRef<string | null>(null);
+  const pendingStartRef = useRef<string | null>(null);
   const executionDisabledRef = useRef(false);
   const locallyCreatedSessionIdRef = useRef<string | null>(null);
   const sessionCreatingIdsRef = useRef<Set<string>>(new Set());
@@ -150,6 +142,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const submittedDraftRef = useRef<{
     sessionId: string;
     draft: string;
+    pendingMessageId?: string;
     text: string;
     command?: TurnCommand;
     skills?: SkillInvocation[];
@@ -431,48 +424,24 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const handleChatError = useCallback(
     (msg: string, code?: string) => {
       if (code === "agent_configuration_changed") setConfigurationRefused(true);
-      const resumePreparing = hitlResumePreparingRef.current?.session_id === activeSessionIdRef.current;
-      setPendingMessages((current) => {
-        const queued = queuedStartRef.current;
-        const pending = queued && !current.some((message) => message.id === queued.id) ? [queued, ...current] : current;
-        return pending.map((message) =>
-          (message.status === "offered" && !resumePreparing) || message.id === queued?.id
-            ? { ...message, status: "uncertain" }
-            : message,
-        );
-      });
       showError({ summary: "Agent error", detail: msg });
       refetchSessionRef.current();
     },
-    [showError, setPendingMessages],
+    [showError],
   );
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
   // user's text/attachments on a prepare-execution failure (404/503/network).
   const handleTurnStarted = useCallback(() => {
-    if (queuedStartRef.current) {
-      const id = queuedStartRef.current.id;
-      setPendingMessages((current) => current.filter((message) => message.id !== id));
-      return;
-    }
+    if (submittedDraftRef.current?.pendingMessageId) return;
     setInput("");
-  }, [setPendingMessages]);
-  const handleTurnRejected = useCallback(
-    (_wireDraft: string, rejectedSessionId: string) => {
-      if (activeSessionIdRef.current !== rejectedSessionId) return;
-      if (queuedStartRef.current) {
-        const queued = { ...queuedStartRef.current, status: "uncertain" as const };
-        setPendingMessages((current) =>
-          current.some((message) => message.id === queued.id) ? current : [queued, ...current],
-        );
-        return;
-      }
-      const submitted = submittedDraftRef.current;
-      if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
-      setInput(submitted.draft);
-    },
-    [setPendingMessages],
-  );
+  }, []);
+  const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
+    if (activeSessionIdRef.current !== rejectedSessionId) return;
+    const submitted = submittedDraftRef.current;
+    if (activeSessionIdRef.current !== rejectedSessionId || submitted?.sessionId !== rejectedSessionId) return;
+    if (!submitted.pendingMessageId) setInput(submitted.draft);
+  }, []);
   const isTurnCurrent = useCallback(
     (turnSessionId: string) => {
       const attempt = sendAttemptRef.current;
@@ -486,24 +455,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   );
 
   const isExecutionAllowed = useCallback(() => isScopeCurrent() && !executionDisabledRef.current, [isScopeCurrent]);
-  const handleSteeredMessage = useCallback(
-    (messageId: string, deliveredSessionId: string) => {
-      if (activeSessionIdRef.current !== deliveredSessionId) return;
-      setPendingMessages((current) => current.filter((message) => message.id !== messageId));
-    },
-    [setPendingMessages],
-  );
-  const handleStreamInterrupted = useCallback(
-    (sid: string) => {
-      if (activeSessionIdRef.current !== sid) return;
-      queueSessionRef.current = null;
-      queuedStartRef.current = null;
-      queueDrainRef.current = false;
-      setPendingMessages([]);
-    },
-    [setPendingMessages],
-  );
-
   const reloadHitlHistoryRef = useRef<() => void>(() => {});
   const handleHitlUnavailable = useCallback((sid: string) => {
     if (activeSessionIdRef.current === sid) reloadHitlHistoryRef.current();
@@ -539,8 +490,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       },
       [touchSessionActivity],
     ),
-    onSteeredMessage: handleSteeredMessage,
-    onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
     onHitlUnavailable: handleHitlUnavailable,
     onError: handleChatError,
@@ -618,9 +567,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
     setInput("");
-    queueSessionRef.current = sessionId;
-    queuedStartRef.current = null;
-    queueDrainRef.current = false;
+    pendingStartRef.current = null;
     setRenamedTitle(null);
     // A genuine entry into a (new or different) session — normal
     // rehydration governs from here until the first local mutation.
@@ -906,8 +853,9 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       turnCommand?: TurnCommand,
       interrupted?: InterruptedRunChoice,
       skills?: SkillInvocation[],
-      queued?: boolean,
+      pendingMessageId?: string,
     ): Promise<boolean> => {
+      const resumingPending = Boolean(pendingMessageId);
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
@@ -920,13 +868,21 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         awaitingAgentQuestion ||
         attachments.hasUploadingAttachments ||
         (attachmentPreparationsRef.current[activeSessionIdRef.current ?? ""] ?? 0) > 0 ||
-        (!queued && inputTooLong) ||
+        (!resumingPending && inputTooLong) ||
         modelPreparationError ||
         modelPreparationPending
       ) {
         console.debug(
           `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
+        return false;
+      }
+      if (
+        !resumingPending &&
+        !interrupted &&
+        latestMessagesRef.current.some((message) => message.metadata?.extras?.steering_state === "pending")
+      ) {
+        showWarn({ summary: t("chatbot.steering.waiting") });
         return false;
       }
       if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
@@ -1020,7 +976,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         // for a command, the command line the user actually typed.
         submittedDraftRef.current = {
           sessionId: sid,
-          draft: queued ? text : input,
+          draft: input,
+          pendingMessageId,
           text,
           command: turnCommand,
           skills,
@@ -1035,6 +992,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           },
           turnOptions,
           interrupted,
+          pendingMessageId,
         );
       } catch (error) {
         if (isScopeCurrent() && !attempt.cancelled && activeSessionIdRef.current === attempt.sessionId)
@@ -1073,81 +1031,71 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   const handleSend = useCallback(async () => {
     if (executionDisabledRef.current) return;
-    if (waitResponse || pendingMessages.length > 0) {
-      if (attachments.hasUploadingAttachments) {
-        showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
+    const text = input.trim();
+    if (!text || inputTooLong) return;
+    if (waitResponse) {
+      if (
+        attachments.hasUploadingAttachments ||
+        (attachmentPreparationsRef.current[activeSessionIdRef.current ?? ""] ?? 0) > 0
+      ) {
+        showWarn({ summary: t("chatbot.steering.textOnly") });
         return;
       }
-      const text = input.trim();
-      if (!text || inputTooLong) return;
-      queueSessionRef.current = activeSessionIdRef.current;
-      setPendingMessages((current) => [...current, { id: uuidv4(), text, status: "waiting" }]);
+      const sid = sessionId;
+      if (!sid) return;
+      const messageId = uuidv4();
       setInput("");
+      const result = await steerActiveTurn(sid, messageId, text);
+      if (result === "rejected" && activeSessionIdRef.current === sid) {
+        setInput((current) => current || text);
+        showWarn({ summary: t("chatbot.steering.unavailable") });
+      }
       return;
     }
-    await sendTurn(input.trim());
+    await sendTurn(text);
   }, [
     sendTurn,
     input,
     waitResponse,
-    pendingMessages.length,
+    sessionId,
+    steerActiveTurn,
     attachments.hasUploadingAttachments,
-    setPendingMessages,
     inputTooLong,
     showWarn,
     t,
   ]);
 
-  const editPendingMessage = useCallback(
-    (id: string) => {
-      const message = pendingMessages.find((item) => item.id === id && item.status === "waiting");
-      if (!message) return;
-      setInput(message.text);
-      setPendingMessages((current) => current.filter((item) => item.id !== id));
-    },
-    [pendingMessages, setPendingMessages],
-  );
-  const removePendingMessage = useCallback(
-    (id: string) => {
-      setPendingMessages((current) => current.filter((item) => item.id !== id || item.status === "offered"));
-    },
-    [setPendingMessages],
-  );
   const retryPendingMessage = useCallback(
-    (id: string) => {
-      if (waitResponse) return;
-      setPendingMessages((current) =>
-        current.map((item) => (item.id === id && item.status === "uncertain" ? { ...item, status: "waiting" } : item)),
+    async (messageId: string): Promise<void> => {
+      if (waitResponse || pendingHitlsRef.current.length || executionDisabledRef.current) return;
+      const pending = messages.find(
+        (message) =>
+          message.metadata?.extras?.steered_message_id === messageId &&
+          message.metadata?.extras?.steering_state === "pending",
       );
-    },
-    [waitResponse, setPendingMessages],
-  );
-  const forcePendingMessage = useCallback(
-    async (id: string) => {
-      const message = pendingMessages.find((item) => item.id === id && item.status === "waiting");
-      if (!message || !sessionId || !waitResponse) return;
-      setPendingMessages((current) => current.map((item) => (item.id === id ? { ...item, status: "offered" } : item)));
-      const result = await steerActiveTurn(sessionId, id, message.text);
-      if (result !== "accepted") {
-        setPendingMessages((current) =>
-          current.map((item) =>
-            item.id === id ? { ...item, status: result === "uncertain" ? "uncertain" : "waiting" } : item,
-          ),
-        );
-        if (result === "rejected" && activeSessionIdRef.current === sessionId) {
-          showWarn({ summary: t("chatbot.pendingMessages.forceUnavailable") });
+      const text = pending?.parts?.[0]?.type === "text" ? pending.parts[0].text : null;
+      if (!text || !sessionId) return;
+      pendingStartRef.current = messageId;
+      if (pending?.metadata?.extras?.steering_submission) {
+        const submitted = await steerActiveTurn(sessionId, messageId, text);
+        if (submitted !== "accepted") {
+          if (submitted === "rejected") showWarn({ summary: t("chatbot.steering.unavailable") });
+          return;
         }
       }
+      const accepted = await sendTurn(text, undefined, undefined, undefined, messageId);
+      if (!accepted && activeSessionIdRef.current === sessionId) {
+        showWarn({ summary: t("chatbot.steering.unavailable") });
+      }
     },
-    [pendingMessages, sessionId, waitResponse, steerActiveTurn, showWarn, t, setPendingMessages],
+    [messages, sendTurn, sessionId, showWarn, steerActiveTurn, t, waitResponse],
   );
 
   useEffect(() => {
     if (
+      !sessionId ||
       waitResponse ||
       waitResponseRef.current ||
-      !sessionId ||
-      queueSessionRef.current !== sessionId ||
       executionDisabledRef.current ||
       pendingHitlsRef.current.length > 0 ||
       hitlResumeOwnerRef.current?.session_id === sessionId ||
@@ -1157,42 +1105,26 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       isLoadingHistory
     )
       return;
-    if (pendingMessages.some((message) => message.status === "offered")) {
-      setPendingMessages((current) =>
-        current.map((message) => (message.status === "offered" ? { ...message, status: "waiting" } : message)),
-      );
-      return;
-    }
-    const next = pendingMessages[0];
-    if (!next || next.status !== "waiting" || queueDrainRef.current) return;
-    queueDrainRef.current = true;
-    queuedStartRef.current = next;
-    void sendTurn(next.text, undefined, undefined, undefined, true)
-      .then((accepted) => {
-        if (queuedStartRef.current !== next || activeSessionIdRef.current !== sessionId) return;
-        if (!accepted) {
-          setPendingMessages((current) => {
-            const pending = current.some((message) => message.id === next.id) ? current : [next, ...current];
-            return pending.map((message) => (message.id === next.id ? { ...message, status: "uncertain" } : message));
-          });
-        }
-      })
-      .finally(() => {
-        if (queuedStartRef.current !== next) return;
-        queuedStartRef.current = null;
-        queueDrainRef.current = false;
-      });
+    const pending = messages
+      .filter(
+        (message) =>
+          message.metadata?.extras?.steering_state === "pending" && !message.metadata?.extras?.steering_submission,
+      )
+      .sort((a, b) => b.rank - a.rank)[0];
+    const messageId = pending?.metadata?.extras?.steered_message_id;
+    const text = pending?.parts?.[0]?.type === "text" ? pending.parts[0].text : null;
+    if (typeof messageId !== "string" || !text || pendingStartRef.current === messageId) return;
+    void retryPendingMessage(messageId);
   }, [
-    waitResponse,
     sessionId,
-    pendingHitl,
+    waitResponse,
+    isHistorySettled,
     isLoadingHistory,
-    pendingMessages,
-    sendTurn,
+    messages,
+    retryPendingMessage,
     attachments.hasUploadingAttachments,
     attachmentPreparations,
-    isHistorySettled,
-    setPendingMessages,
+    pendingHitl,
   ]);
   // Read at answer time, like buildTurnContextRef, so the card's handler keeps
   // its identity across keystrokes.
@@ -1209,7 +1141,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const runSkill = useCallback(
     async (run: { text: string; skills: SkillInvocation[] }) => {
       if (waitResponse) {
-        showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
+        showWarn({ summary: t("chatbot.steering.textOnly") });
         return;
       }
       await sendTurn(run.text, undefined, undefined, run.skills);
@@ -1220,7 +1152,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const runCommand = useCallback(
     async (run: { text: string; command: TurnCommand; skills?: SkillInvocation[] }) => {
       if (waitResponse) {
-        showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
+        showWarn({ summary: t("chatbot.steering.textOnly") });
         return;
       }
       await sendTurn(run.text, run.command, undefined, run.skills);
@@ -1465,7 +1397,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     composer.reset(null, []);
     reset();
     setInput("");
-    setPendingMessages([]);
+    pendingStartRef.current = null;
     skipResetOnSessionBindRef.current = false;
     if (!sessionId) void prepareChatControls(null).catch(() => {});
     replacePendingHitls([]);
@@ -1577,11 +1509,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     }),
     supportsHitl: preparation?.supports_hitl === true,
     input,
-    pendingMessages,
-    editPendingMessage,
-    removePendingMessage,
-    forcePendingMessage,
-    retryPendingMessage,
     setInput: setComposerInput,
     inputCharacterCount,
     inputTooLong,
@@ -1633,13 +1560,13 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     isLoadingHistory,
     isHistorySettled,
     handleSend,
+    retryPendingMessage,
     runCommand,
     runSkill,
     handleHitlAnswer,
     handleSendAllHitl,
     handleSkipAllHitl,
     handleAbort: () => {
-      if (sessionId) handleStreamInterrupted(sessionId);
       abort();
     },
     startNewConversation,

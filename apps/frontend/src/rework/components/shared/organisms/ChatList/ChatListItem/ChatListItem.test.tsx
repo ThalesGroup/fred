@@ -81,7 +81,6 @@ describe("ChatListItem deleted agent presentation", () => {
     const turn: LiveTurn = {
       sessionId: "saved",
       controller: new AbortController(),
-      steeringTurnId: "steering",
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -98,7 +97,6 @@ describe("ChatListItem deleted agent presentation", () => {
     const turnOn = (awaitingInput: boolean): LiveTurn => ({
       sessionId: "saved",
       controller: new AbortController(),
-      steeringTurnId: "steering",
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -131,7 +129,6 @@ describe("ChatListItem deleted agent presentation", () => {
     const turn: LiveTurn = {
       sessionId: "saved",
       controller: new AbortController(),
-      steeringTurnId: "running",
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -160,7 +157,6 @@ describe("ChatListItem deleted agent presentation", () => {
     const turn: LiveTurn = {
       sessionId: "saved",
       controller: new AbortController(),
-      steeringTurnId: "steering",
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -187,7 +183,6 @@ describe("ChatListItem deleted agent presentation", () => {
     const question: LiveTurn = {
       sessionId: "saved",
       controller: new AbortController(),
-      steeringTurnId: "question",
       thoughts: new Map(),
       host: null,
       messages: [],

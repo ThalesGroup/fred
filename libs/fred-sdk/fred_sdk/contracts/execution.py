@@ -270,11 +270,11 @@ class RuntimeExecuteRequest(BaseModel):
         default=None,
         description="Session identifier for multi-turn continuity. Keep stable across turns.",
     )
-    steering_turn_id: str | None = Field(
+    pending_message_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=128,
-        description="Identity of the active chat turn for mid-turn message delivery.",
+        description="Identity of a previously submitted in-thread message starting its ordinary turn.",
     )
     interrupt_id: str | None = Field(
         default=None,
@@ -413,6 +413,16 @@ class RuntimeExecuteRequest(BaseModel):
         if self.occurrence_id is not None and self.resume_payload is None:
             raise ValueError(
                 "occurrence_id is only valid together with resume_payload."
+            )
+        if self.pending_message_id is not None and (
+            self.agent_instance_id is None
+            or self.resume_payload is not None
+            or self.interrupted_action is not None
+            or not self.input.strip()
+            or not self.effective_session_id()
+        ):
+            raise ValueError(
+                "pending_message_id requires an ordinary text turn in the same session."
             )
         check_session_id(self.session_id)
         if self.runtime_context is not None:

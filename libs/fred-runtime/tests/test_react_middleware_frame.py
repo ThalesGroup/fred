@@ -123,7 +123,9 @@ class ScriptedModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
 
-def _binding(language: str | None = None) -> BoundRuntimeContext:
+def _binding(
+    language: str | None = None, *, steering_enabled: bool = True
+) -> BoundRuntimeContext:
     return local_binding(
         "agent-frame",
         runtime_context=RuntimeContext(language=language),
@@ -133,6 +135,7 @@ def _binding(language: str | None = None) -> BoundRuntimeContext:
             actor="user-1",
             tenant="team-1",
             environment=PortableEnvironment.DEV,
+            baggage={"steering_enabled": "true"} if steering_enabled else {},
         ),
     )
 
@@ -402,6 +405,11 @@ def test_frame_order_is_fixed() -> None:
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
     ]
+
+
+def test_frame_without_ranked_event_consumer_skips_steering() -> None:
+    frame = _frame(binding=_binding(steering_enabled=False))
+    assert not any(isinstance(item, TurnSteeringMiddleware) for item in frame)
 
 
 def test_frame_reserves_the_capability_slot() -> None:

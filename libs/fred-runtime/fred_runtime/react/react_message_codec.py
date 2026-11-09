@@ -298,9 +298,13 @@ def graph_input_from_react_input(
                 "resume via the unscoped scalar Command(resume=...) form."
             )
         return Command(resume={config.interrupt_id: config.resume_payload})
-    return {
-        "messages": [
-            to_langchain_message(message, sanitize_tool_name=sanitize_tool_name)
-            for message in input_model.messages
-        ]
-    }
+    messages = [
+        to_langchain_message(message, sanitize_tool_name=sanitize_tool_name)
+        for message in input_model.messages
+    ]
+    if config.pending_message_id:
+        for message in reversed(messages):
+            if isinstance(message, HumanMessage):
+                message.id = f"steered:{config.pending_message_id}"
+                break
+    return {"messages": messages}

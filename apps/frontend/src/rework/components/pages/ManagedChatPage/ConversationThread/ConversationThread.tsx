@@ -32,6 +32,7 @@ import { hitlResponseKey } from "../toThreadMessages";
 interface ConversationThreadProps {
   readOnly?: boolean;
   onRetryHitlAvailability?: () => void;
+  onRetryPendingMessage?: (messageId: string) => void;
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
@@ -70,6 +71,7 @@ interface ConversationThreadProps {
 export const ConversationThread = memo(function ConversationThread({
   readOnly = false,
   onRetryHitlAvailability,
+  onRetryPendingMessage,
   messages,
   pendingHitl,
   pendingHitlTabs = [],
@@ -119,6 +121,7 @@ export const ConversationThread = memo(function ConversationThread({
             : msg.role === "hitl_response"
               ? hitlResponseKey(msg.text)
               : null;
+          const retryId = msg.pendingMessageId;
           // Only a real user turn anchors the outline rail — a hitl_response
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.
@@ -127,6 +130,12 @@ export const ConversationThread = memo(function ConversationThread({
               key={msg.id}
               turnId={msg.role === "user" ? msg.id : undefined}
               text={key ? t(key) : msg.text}
+              steeringState={msg.steeringState}
+              onRetryPending={
+                !readOnly && !isStreaming && !pendingHitl && retryId && onRetryPendingMessage
+                  ? () => onRetryPendingMessage(retryId)
+                  : undefined
+              }
               command={msg.command}
               skillNames={msg.skillNames}
               skillInvocations={msg.skillInvocations}

@@ -25,7 +25,6 @@ from fred_runtime.app.web_research_activity import WebResearchActivityStore
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
-from fred_runtime.runtime_support.turn_steering import TurnSteeringMailbox
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import MetaData, Table, select, text
 from sqlalchemy.engine import make_url
@@ -41,7 +40,6 @@ SESSION = "22222222-2222-4222-8222-222222222222"
 OTHER = "33333333-3333-4333-8333-333333333333"
 TABLES = (
     "session_history",
-    "runtime_turn_steering",
     "v2_langgraph_checkpoint",
     "v2_langgraph_checkpoint_blob",
     "v2_langgraph_checkpoint_write",
@@ -174,7 +172,14 @@ async def _seed(runtime, cp, session):
     await cp.aclaim_hitl_resume(
         thread_id=thread, checkpoint_ns="agent", interrupt_id="pause"
     )
-    await TurnSteeringMailbox(runtime).start(session, "agent", "alice", "space", "turn")
+    await PostgresHistoryStore(runtime).submit_steered_message(
+        session_id=session,
+        user_id="alice",
+        space_id="space",
+        agent_instance_id="agent",
+        message_id="pending",
+        content="private update",
+    )
     async with runtime.begin() as conn:
         await conn.execute(
             text(
@@ -285,7 +290,7 @@ async def test_late_writes_fail_in_database_after_runtime_restarts(database):
                         )
                     )
                     .mappings()
-                    .one()
+                    .first()
                 )
         values = dict(row)
         values.pop("conversation_id")

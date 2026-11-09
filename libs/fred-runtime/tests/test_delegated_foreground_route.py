@@ -512,13 +512,13 @@ async def test_a_stream_dropped_before_its_first_frame_releases_the_record(
     the stream ever owned the record the admission wrote."""
     entered = asyncio.Event()
 
-    async def _never_resolves(**kwargs: Any) -> str:
+    async def _never_resolves(*args: Any, **kwargs: Any):
         entered.set()
         await asyncio.Event().wait()
         return "unreachable"  # pragma: no cover
 
     app = _person_pod(monkeypatch, tmp_path)
-    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", _never_resolves)
+    monkeypatch.setattr(agent_app_module, "_initial_history_ranker", _never_resolves)
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
@@ -533,6 +533,25 @@ async def test_a_stream_dropped_before_its_first_frame_releases_the_record(
     assert response.status_code == 200
     assert connection.frames == []
     assert connection.at_end == {"records": 0}
+
+
+@pytest.mark.asyncio
+async def test_unstarted_stream_releases_its_admission_history_claim() -> None:
+    entered = False
+    released = False
+
+    async def stream() -> AsyncGenerator[str, None]:
+        nonlocal entered
+        entered = True
+        yield "frame"
+
+    async def release() -> None:
+        nonlocal released
+        released = True
+
+    await agent_app_module._stream_finisher(stream(), None, release)()
+    assert not entered
+    assert released
 
 
 @pytest.mark.asyncio
@@ -591,6 +610,26 @@ async def test_a_stream_failing_before_its_first_frame_releases_the_record(
         with pytest.raises(RuntimeError, match="synthetic history failure"):
             await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
+        assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+async def test_pending_opening_conflict_returns_http_409_before_stream(
+    monkeypatch, tmp_path
+) -> None:
+    async def conflict(*_args: Any) -> None:
+        raise agent_app_module.HTTPException(
+            status_code=409, detail="Pending user message"
+        )
+
+    app = _person_pod(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent_app_module, "_require_pending_opening_message", conflict)
+    connection = _Connection(app)
+    async with _serving(connection) as client:
+        runtime = _install_delegation()
+        response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
+        assert response.status_code == 409
+        assert response.headers["content-type"].startswith("application/json")
         assert len(runtime.records) == 0
 
 

@@ -66,4 +66,8 @@ mechanisms, adds unjustified concepts, leaves replaced paths active, or bypasses
 these ownership decisions. Explain the integration and removal choices early so
 contributors and maintainers can settle them before substantial implementation.
 
+Docker image checks run when a pull request is ready for review, and are skipped
+while it is a draft. Only affected images are built; a manual run of
+`Check docker images` checks all images.
+
 Follow the [Code of Conduct](CODE_OF_CONDUCT.md).

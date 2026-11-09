@@ -59,7 +59,6 @@ function endOutOfSight(awaitingInput: boolean, flags: Partial<LiveTurn> = {}): v
     sessionId: "saved",
     scope: { actor: "alice-session", spaceId: "space-1", agentInstanceId: "agent-1" },
     controller: new AbortController(),
-    steeringTurnId: "steering",
     thoughts: new Map(),
     host: null,
     messages: [],

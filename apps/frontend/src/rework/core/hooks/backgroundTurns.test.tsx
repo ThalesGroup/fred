@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LiveTurn, PendingMessage, TurnStatus } from "./backgroundTurns";
+import type { LiveTurn, TurnStatus } from "./backgroundTurns";
 
 vi.mock("../../../security/KeycloakService", () => ({
   KeyCloakService: { GetSessionIdentity: () => "test-login" },
@@ -29,13 +29,7 @@ describe("background indicator persistence", () => {
   let registry: typeof import("./backgroundTurns");
   let container: HTMLDivElement;
   let root: Root;
-  let current: {
-    status: TurnStatus;
-    unread: boolean;
-    queue: PendingMessage[];
-  };
-
-  let queueSetter: ReturnType<typeof registry.usePendingMessages>[1];
+  let current: { status: TurnStatus; unread: boolean };
 
   beforeEach(async () => {
     sessionStorage.clear();
@@ -53,9 +47,7 @@ describe("background indicator persistence", () => {
   });
 
   function Probe({ id }: { id: string }) {
-    const [queue, setQueue] = registry.usePendingMessages(id);
-    queueSetter = setQueue;
-    current = { status: registry.useTurnStatus(id), unread: registry.useSessionUnread(id), queue };
+    current = { status: registry.useTurnStatus(id), unread: registry.useSessionUnread(id) };
     return null;
   }
   function show(id: string) {
@@ -72,7 +64,6 @@ describe("background indicator persistence", () => {
     return {
       sessionId: id,
       controller: new AbortController(),
-      steeringTurnId: id,
       thoughts: new Map(),
       host: null,
       messages: [],
@@ -89,28 +80,6 @@ describe("background indicator persistence", () => {
     });
   }
 
-  it("does not expose queued text to a different signed-in session", async () => {
-    const { KeyCloakService } = await import("../../../security/KeycloakService");
-    const identity = vi.spyOn(KeyCloakService, "GetSessionIdentity").mockReturnValue("login-a");
-    registry.updatePendingMessages("shared", [{ id: "q", text: "private", status: "waiting" }]);
-    expect(show("shared").queue).toHaveLength(1);
-    identity.mockReturnValue("login-b");
-    expect(show("shared").queue).toEqual([]);
-  });
-
-  it("rejects an old login's queue callback after a new login has queued text", async () => {
-    const { KeyCloakService } = await import("../../../security/KeycloakService");
-    const identity = vi.spyOn(KeyCloakService, "GetSessionIdentity").mockReturnValue("login-a");
-    show("shared");
-    const oldSetter = queueSetter;
-    identity.mockReturnValue("login-b");
-    const queued = [{ id: "new", text: "new login draft", status: "waiting" as const }];
-    act(() => registry.updatePendingMessages("shared", queued));
-    expect(show("shared").queue).toEqual(queued);
-    act(() => oldSetter([{ id: "old", text: "late private draft", status: "waiting" }]));
-    expect(show("shared").queue).toEqual(queued);
-  });
-
   it("erases identity-scoped conversation caches and rejects late writes", async () => {
     const cache = await import("../../components/pages/ManagedChatPage/sessionHistoryCache");
     cache.clearSessionHistoryCache();
@@ -123,21 +92,16 @@ describe("background indicator persistence", () => {
     cache.clearSessionHistoryCache();
   });
 
-  it("restores known waiting and unread indicators without live turns, queues or notifications", async () => {
+  it("restores known waiting and unread indicators without live turns or notifications", async () => {
     finish(turn("waiting", { awaitingInput: true }));
     finish(turn("answer"));
     registry.registerTurn(turn("running"));
-    const write = vi.spyOn(Storage.prototype, "setItem");
-    registry.updatePendingMessages("answer", [{ id: "q", text: "private queued text", status: "waiting" }]);
-    expect(write).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(storageKey)).not.toContain("private queued text");
-
     await reload();
     const settled = vi.fn();
     registry.subscribeBackgroundSettled(settled);
     expect(show("waiting")).toMatchObject({ status: "awaiting_input", unread: true });
-    expect(show("answer")).toEqual({ status: null, unread: true, queue: [] });
-    expect(show("running")).toEqual({ status: null, unread: false, queue: [] });
+    expect(show("answer")).toEqual({ status: null, unread: true });
+    expect(show("running")).toEqual({ status: null, unread: false });
     expect(settled).not.toHaveBeenCalled();
   });
 

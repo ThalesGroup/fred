@@ -46,6 +46,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "b8c9d0e1f2a3_conversation_ownership.py",  # pragma: allowlist secret
         "c9d0e1f2a3b4_conversation_filesystem.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
+        "d0e1f2a3b4c5_in_thread_steering.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -54,6 +55,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("d0e1f2a3b4c5", "c9d0e1f2a3b4"),  # pragma: allowlist secret
         ("c9d0e1f2a3b4", "b8c9d0e1f2a3"),  # pragma: allowlist secret
         ("b8c9d0e1f2a3", "a7b8c9d0e1f2"),  # pragma: allowlist secret
         ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
@@ -80,11 +82,9 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
-        steering_columns = {
-            row[1]
-            for row in connection.execute("PRAGMA table_info(runtime_turn_steering)")
-        }
-        assert "space_id" in steering_columns and "team_id" not in steering_columns
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
         indexes = {
             row[1] for row in connection.execute("PRAGMA index_list(session_history)")
         }
@@ -106,8 +106,10 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "exchange_id",
         "space_id",
         "agent_instance_id",
+        "message_id",
+        "delivery_state",
     }
-    assert revision == ("c9d0e1f2a3b4",)  # pragma: allowlist secret
+    assert revision == ("d0e1f2a3b4c5",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,7 +303,7 @@ def test_execution_space_migration_does_not_copy_history_ancestry(
         connection.execute(
             "INSERT INTO runtime_turn_steering (session_id, turn_id, agent_instance_id, user_id, team_id, state, pending, seen, expires_at) VALUES ('s', 'turn', 'agent', 'u', 'project-p', 'active', '[]', '[]', '2026-11-02 00:00:00')"
         )
-    command.upgrade(config, "head")
+    command.upgrade(config, "a7b8c9d0e1f2")  # pragma: allowlist secret
     with sqlite3.connect(database) as connection:
         assert connection.execute(
             "SELECT space_id FROM session_history"

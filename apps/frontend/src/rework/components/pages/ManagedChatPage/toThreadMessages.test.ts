@@ -49,6 +49,56 @@ const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } 
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
 
+it("keeps a provisional user message at the bottom while tool trace advances", () => {
+  const pending = msg({
+    role: "user",
+    exchange_id: "",
+    rank: -1,
+    parts: [{ type: "text", text: "Change direction" }],
+    metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+  });
+  const rows = toThreadMessages(
+    [
+      pending,
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Start" }] }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 1,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 2,
+        parts: [{ type: "tool_result", call_id: "c1", ok: true, content: "done" }],
+      }),
+    ],
+    true,
+  );
+  expect(rows[rows.length - 1]).toMatchObject({ role: "user", text: "Change direction", steeringState: "pending" });
+  expect(rows[1].traceMessages).toHaveLength(2);
+});
+
+it("keeps a pending message separate from a legacy exchange with an empty ID", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ exchange_id: "", role: "user", rank: 0, parts: [{ type: "text", text: "Earlier" }] }),
+      msg({ exchange_id: "", rank: 1, parts: [{ type: "text", text: "Earlier reply" }] }),
+      msg({
+        exchange_id: "pending:m1",
+        role: "user",
+        rank: -1,
+        parts: [{ type: "text", text: "Update" }],
+        metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+      }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => row.text)).toEqual(["Earlier", "Earlier reply", "Update"]);
+  expect(rows[2]).toMatchObject({ role: "user", steeringState: "pending" });
+});
+
 it("shows a steered user message in the current exchange", () => {
   const rows = toThreadMessages(
     [
@@ -101,6 +151,36 @@ it("shows a steered user message in the current exchange", () => {
   expect(rows[2].skillName).toBeNull();
   expect(rows[2].id).toBe("e1:steer:4:user");
   expect(rows[3].text).toBe("October notes");
+});
+
+it("keeps an in-progress assistant reply separate from later tool work and final answer", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({ role: "user", rank: 1, parts: [{ type: "text", text: "Where are you?" }] }),
+      msg({
+        role: "assistant",
+        rank: 2,
+        parts: [{ type: "text", text: "I am checking the sources." }],
+        metadata: { extras: { steered_reply_for: ["m1"] } },
+      }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 3,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({ role: "assistant", rank: 4, parts: [{ type: "text", text: "Found it." }] }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => [row.role, row.text])).toEqual([
+    ["user", "Find notes"],
+    ["user", "Where are you?"],
+    ["assistant", "I am checking the sources."],
+    ["assistant", "Found it."],
+  ]);
+  expect(rows[3].traceMessages).toHaveLength(1);
 });
 
 it("preserves the context token anchor across a steered tool segment", () => {
@@ -597,6 +677,19 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     // Only e1's (answered) card renders; e2's dangling one does not duplicate
     // the interactive prompt `reconstructPendingHitl` reconstructs for it.
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(1);
+  });
+
+  it("keeps the active human prompt when an in-thread message is pending", () => {
+    const pending = msg({
+      role: "user",
+      exchange_id: "",
+      rank: -1,
+      parts: [{ type: "text", text: "One more thing" }],
+      metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+    });
+    const history = [hitlRequestMsg("e2"), pending];
+    expect(reconstructPendingHitl(history)?.exchange_id).toBe("e2");
+    expect(toThreadMessages(history, false).filter((row) => row.role === "hitl_request")).toHaveLength(0);
   });
 
   it("pairs several requests and responses by occurrence_id and restores the first unanswered request", () => {

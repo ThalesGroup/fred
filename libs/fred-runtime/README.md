@@ -440,7 +440,7 @@ detail reads, using the same space access rules as the other space resources.
 The runtime consumes only the identity-bound, admitted execution snapshot.
 
 For an existing local database, read the [schema notes](fred_runtime/migrations/README)
-before starting the pod: Alembic owns history/steering, whereas the checkpointer
-owns its separate tables and refuses the old owner schema. No data conversion
+before starting the pod: Alembic owns PostgreSQL history, pending chat updates and checkpoints. SQLite
+initializes its standalone checkpoint tables separately. No data conversion
 from team ancestry is provided. The unused history-to-owner backfill helper has
 been removed; invocation writes supply retention metadata directly.

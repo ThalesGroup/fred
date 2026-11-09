@@ -1,6 +1,6 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `bef0098f4fa37f21121f023725394c212b012604`** (merge `81198bc56`, section 14).
+**Borne Swift intégrée : `3ad093d3459768f0dec4d1deafdf8b83422f6e38`** (fusion décrite section 16 ; parents Weaver `e49f4cb79` et Swift `3ad093d34`).
 Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -1774,3 +1774,76 @@ réintroduire le backend legacy, ses droits ou sa persistance. Le portage antér
 n'a pas déplacé la borne Swift. La recette k3d commune fichiers/PPTX/Deep/Wiki reste
 à faire, notamment confidentialité, conflits de révision, publication HITL,
 suppression/rétention et pièces jointes par message.
+
+## 16. Integration Swift du 9 novembre 2026
+
+Fusion locale autorisée sur `weaver` dans `/home/dimi/Work/weaver/fred`, après
+explication de la valeur produit et confirmation de conserver ces améliorations.
+Références figées après fetch : base Weaver `e49f4cb79adf4b7727fca658232c1a43b8468917`,
+ancienne borne Swift `bef0098f4fa37f21121f023725394c212b012604` (second parent du merge
+`81198bc56`), cible `3ad093d3459768f0dec4d1deafdf8b83422f6e38`. Cette section appartient
+au commit de fusion dont les deux parents sont la base Weaver et cette cible Swift.
+
+| Source nouvelle | Décision et apport |
+| --- | --- |
+| `28d9ee7c7` (#3493) | Adaptation : les précisions envoyées pendant une réponse sont des messages persistants, visibles dans le fil avec leur état. ReAct/Deep les consomment à une frontière de modèle après persistance ; sinon elles ouvrent le prochain tour, y compris à la réouverture. Graph utilise ce repli. Une attente HITL conserve la priorité. |
+| `74a2460f3` | Reprise directe du workflow : les PR en brouillon ne déclenchent plus de builds Docker ; leur passage prêt pour revue déclenche les images concernées. Exécution manuelle inchangée. Documentation portée dans le CONTRIBUTING racine. |
+| `3ad093d34` | Exclusion des obligations Swift d'issue/Epic/PR et de nommage de branche : elles contredisent la collaboration incrémentale Weaver et ne sont pas nécessaires aux améliorations produit. AGENTS.md Weaver conservé. |
+
+L'ancienne file, ses battements et son UI séparée sont remplacés par l'historique.
+Les références à docs/swift, OpenSpec et au test d'ancien contexte agent ne sont
+pas restaurées. Les différés des sections précédentes restent différés ; ce merge
+n'établit aucune réception de ces lots.
+
+Adaptations Weaver : `space_id` canonique contrôlé sur le message et ses retries,
+autorité du tour et fin de délégation conservées, provenance et cascade PostgreSQL
+inchangées, pièces jointes issues du catalogue CP, titres CP et configuration
+refusée conservés. Les réponses HTTP et notifications tardives sont gardées par
+l'identité et le contexte courant. La reprise d'un message conserve le brouillon
+non envoyé. Ralph embarqué ne gagne pas de support steering.
+
+Nouvelle révision runtime `d0e1f2a3b4c5` après `c9d0e1f2a3b4` : identité/état et
+index sur `session_history`, suppression de `runtime_turn_steering`. Aucune migration
+existante réécrite, aucune migration CP ajoutée. Le downgrade PostgreSQL est refusé
+pour ne pas restaurer une table sans propriété de conversation. Installations
+neuves seules ; aucune base applicative modifiée. Voir la
+[note opérateur](deploy/release-notes/changes/weaver-in-thread-steering.md).
+
+Contrats régénérés depuis le code réuni : `UV_NO_SYNC=1 make -o dev generate-openapi`
+dans `libs/fred-runtime`, puis `npx --no-install @rtk-query/codegen-openapi
+src/slices/runtime/runtimeOpenApiConfig.json` dans le frontend avec Node 24.22.2.
+Le client conserve les contrats Weaver, remplace `steering_turn_id` par
+`pending_message_id` sur le protocole Python et reçoit le message durable à l'envoi.
+
+Vérifications locales ciblées :
+- Runtime : `.venv/bin/pytest -q --disable-socket --allow-unix-socket
+  tests/test_turn_steering.py tests/test_graph_steering.py tests/test_history.py
+  tests/test_migrations.py tests/test_delegated_foreground_route.py` : 83 réussites,
+  un avertissement LangChain beta. SQLite/mocks, dont deux connexions concurrentes,
+  chaîne de migrations et nettoyage de délégation. Le blocage simulé avant première
+  trame est placé dans l'initialisation du stream, après admission HTTP désormais
+  synchrone, afin de conserver son scénario de déconnexion.
+- Routes : sélection `managed or space or pending_opening or stream` dans
+  `test_agent_app.py` et `test_delegated_foreground_route.py` : 35 réussites et le
+  scénario ci-dessus initialement en échec, corrigé puis couvert dans les 83.
+  Ces nombres se recouvrent et ne constituent pas deux suites cumulables.
+- Frontend : `npx vitest run src/rework/core/hooks/useChatSse.test.tsx
+  src/rework/components/pages/ManagedChatPage/useManagedChat.test.tsx
+  src/rework/components/pages/ManagedChatPage/toThreadMessages.test.ts` : 274 réussites.
+- Qualité : `UV_NO_SYNC=1 make -o dev code-quality` dans `libs/fred-core`,
+  `libs/fred-runtime`, `libs/fred-sdk`, `apps/fred-agents` ; `make code-quality`
+  dans `apps/frontend` avec Node 24.22.2.
+
+Les contrôles qualité ci-dessus passent après les dernières corrections, ainsi que
+`git diff --cached --check`, la syntaxe YAML du workflow, les liens Markdown modifiés
+et `libs/fred-pod/.venv/bin/python scripts/migration_guides.py check-pr --base
+ e49f4cb79adf4b7727fca658232c1a43b8468917 --worktree` (deux notes valides).
+Diff de production : +1 569 / −1 114 lignes, soit +455. La file et son interface
+supprimées financent une partie de la persistance et des accusés de livraison ;
+l'ajout net sert ce comportement accepté. Hors production : tests +1 955 / −1 404,
+client généré +22 / −7, documentation et CI comptées séparément.
+
+La réception déployée reste à faire : installation PostgreSQL neuve, mise à jour
+pendant modèle/outil, réouverture, HITL, suppression et pièces jointes. Les tests
+hors réseau ne prouvent ni comportement PostgreSQL en production ni latence.
+Aucun service démarré, reset, benchmark, push ou déploiement effectué.

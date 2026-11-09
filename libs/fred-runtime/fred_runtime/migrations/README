@@ -1,10 +1,10 @@
 Fred Runtime owns the immutable Alembic history for session_history and the
-runtime activity/steering tables. The packaged migration runner is
+runtime activity and checkpoint tables. The packaged migration runner is
 `python -m fred_runtime migrate`; it also walks installed capability trees.
 Use the owning application's configured migration command for deployment.
 
 PostgreSQL conversation ownership (revision b8c9d0e1f2a3):
-- Control Plane session_metadata is the lifecycle root. Runtime history, steering,
+- Control Plane session_metadata is the lifecycle root. Runtime history (including pending chat updates)
   and all five v2_ checkpoint tables have generated UUID conversation_id columns
   and immediate, validated ON DELETE CASCADE foreign keys to that root. Derived
   Graph threads use the UUID before their first colon; checkpoint namespaces do
@@ -32,3 +32,10 @@ The runtime's SQL content itself needs no second tombstone, write guard or purge
 The owner index remains retention metadata. Conversation access still uses the
 existing Weaver binding_json provenance and Control Plane checks. Neither NULL
 nor a supplied space_id creates missing provenance or grants access.
+
+In-thread updates (revision d0e1f2a3b4c5) use session_history message_id and
+delivery_state, inheriting the conversation FK. This revision follows c9d0e1f2a3b4
+and removes the former runtime_turn_steering mailbox; its original migrations
+remain immutable. PostgreSQL downgrade is refused because recreating the old
+mailbox without its conversation FK would break ownership. Only fresh Weaver
+installations are supported.

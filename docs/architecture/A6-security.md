@@ -307,13 +307,16 @@ policy changes are observed at the next admission, not by per-model-call refresh
 Cancellation and closed-run checks remain effective within the turn.
 
 The Python SDK carries the admitted space explicitly in `RuntimeContext`,
-`PortableContext` and `CapabilityIdentity`; `team_id` is ancestry only. Steering
-compares that space when accepting messages and resuming a mailbox. History and
+`PortableContext` and `CapabilityIdentity`; `team_id` is ancestry only. The in-thread update store
+checks that space against the conversation history when accepting a message or
+retrying its identity. History and
 checkpoint owner metadata record it without granting access: the existing
 `binding_json` provenance and Control Plane checks still govern conversation
 reads. Missing provenance is never inferred from retention metadata. See the
 [runtime schema notes](../../libs/fred-runtime/fred_runtime/migrations/README)
-for the distinction between steering's renamed space and discarded ancestry.
+for the immutable space migration and the replacement of the steering mailbox
+by conversation-owned history. Deployment acceptance for this replacement remains
+in the [integration record](../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#16-integration-swift-du-9-novembre-2026).
 
 | Boundary | Implementation reference |
 | --- | --- |

@@ -1,12 +1,12 @@
 name: Check docker images
 
 # Keep the PR trigger unfiltered so changes outside an image's directory can
-# still expose a missing Docker COPY. The reusable workflow selects affected
-# builds; a manual run builds all images.
+# still expose a missing Docker COPY. Build affected images once the PR is
+# ready for review; a manual run builds all images.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 # A pull request only needs its newest commit checked, so a push supersedes the
@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   docker-images:
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
     uses: ./.github/workflows/Docker-images.yml
     with:
       publish: false

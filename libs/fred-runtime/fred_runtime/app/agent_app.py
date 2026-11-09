@@ -53,7 +53,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, cast
@@ -83,7 +83,9 @@ from fred_core.history.history_schema import (
     CommandDescriptor,
     HitlRequestPart,
     HitlResponsePart,
+    TextPart,
 )
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -166,6 +168,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEventKind,
     RuntimeServices,
     SessionTitleRuntimeEvent,
+    SteeredUserMessageRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillInvocation
@@ -265,7 +268,7 @@ from fred_runtime.runtime_support.hitl_batch import (
 )
 from fred_runtime.runtime_support.session_fence import SessionWritesPending
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
-from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
+from fred_runtime.runtime_support.turn_steering import turn_messages
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -1242,7 +1245,7 @@ class _AgentExecuteRequest(BaseModel):
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
     context: dict[str, Any] | None = None
-    steering_turn_id: str | None = None
+    pending_message_id: str | None = None
     interrupt_id: str | None = Field(default=None, min_length=1)
     occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
@@ -1301,6 +1304,13 @@ class _AgentExecuteRequest(BaseModel):
             and not self.message.strip()
         ):
             raise ValueError("message is required when resume_payload is not set")
+        if self.pending_message_id and (
+            not self.agent_instance_id
+            or self.resume_payload is not None
+            or self.interrupted_action is not None
+            or not self.message.strip()
+        ):
+            raise ValueError("pending_message_id requires an ordinary text turn")
         return self
 
 
@@ -1323,6 +1333,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         agent_instance_id=r.agent_instance_id,
         message=r.input,
         context=r.to_legacy_context() or None,
+        pending_message_id=r.pending_message_id,
         interrupt_id=r.interrupt_id,
         occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
@@ -2061,6 +2072,7 @@ def _mark_run_terminal(credentials: OutboundCredentialProvider | None) -> None:
 def _stream_finisher(
     stream: AsyncGenerator[str, None],
     credentials: OutboundCredentialProvider | None,
+    cleanup_unstarted: Callable[[], Awaitable[None]] | None = None,
 ) -> BackgroundTask:
     """End a streamed run when its response ends, however the response ended.
 
@@ -2074,7 +2086,11 @@ def _stream_finisher(
         try:
             # Closing the stream closes the run: its children are cancelled
             # first, then its own cleanup runs.
-            await complete_cleanup(stream.aclose())
+            try:
+                await complete_cleanup(stream.aclose())
+            finally:
+                if cleanup_unstarted is not None:
+                    await complete_cleanup(cleanup_unstarted())
         finally:
             _discard_run_record(credentials)
 
@@ -2731,6 +2747,296 @@ def _ran_no_turn(payloads: list[dict[str, Any]]) -> bool:
     )
 
 
+def _opening_history_count(
+    request_message: str | None, resume_payload: Any | None
+) -> int:
+    if resume_payload is None:
+        return int(bool(request_message))
+    batch = parse_batched_human_answers(resume_payload)
+    answers = [item.answer for item in batch] if batch is not None else [resume_payload]
+    count = 0
+    for answer in answers:
+        if isinstance(answer, dict):
+            choice_id = answer.get("choice_id")
+            text = answer.get("text")
+            fallback = answer.get("answer")
+            count += int(
+                answer.get("skipped") is True
+                or isinstance(choice_id, str)
+                and bool(choice_id)
+                or isinstance(text, str)
+                and bool(text)
+                or not choice_id
+                and isinstance(fallback, str)
+                and bool(fallback)
+            )
+        elif isinstance(answer, str):
+            count += int(bool(answer))
+        else:
+            count += 1
+    return count
+
+
+@dataclass(frozen=True)
+class _HistoryPositions:
+    row: int | None = None
+    pause_metadata: int | None = None
+    hitl_request: int | None = None
+
+    def require_row(self) -> int:
+        if self.row is None:
+            raise RuntimeError("History event has no reserved rank")
+        return self.row
+
+
+class _HistoryRanker:
+    """Reserve the same ranks for SSE delivery and persisted trace rows."""
+
+    def __init__(
+        self,
+        next_rank: int,
+        *,
+        opening_rank: int,
+        pending_message_id: str | None,
+        previously_pending_occurrence_ids: tuple[str, ...],
+    ) -> None:
+        self.next_rank = next_rank
+        self.opening_rank = opening_rank
+        self.pending_message_id = pending_message_id
+        self.previously_pending_occurrence_ids = previously_pending_occurrence_ids
+        self.skill_load_ids: set[str] = set()
+
+    def _take(self) -> int:
+        rank = self.next_rank
+        self.next_rank += 1
+        return rank
+
+    def reserve(self, payload: dict[str, Any]) -> _HistoryPositions:
+        kind = payload.get("kind")
+        if kind == RuntimeEventKind.STEERED_USER_MESSAGE.value:
+            if payload.get("message_id") == self.pending_message_id:
+                return _HistoryPositions(row=self.opening_rank)
+            return _HistoryPositions(row=self._take())
+        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+            load_id = payload["skill_load"].get("load_id")
+            if isinstance(load_id, str) and load_id not in self.skill_load_ids:
+                self.skill_load_ids.add(load_id)
+                return _HistoryPositions(row=self._take())
+        if kind in ("tool_call", "tool_result", "node_error"):
+            return _HistoryPositions(row=self._take())
+        if (
+            kind == "thought_start"
+            and payload.get("phase") != "tool_use"
+            and payload.get("thought_id")
+        ):
+            return _HistoryPositions(row=self._take())
+        if kind == "awaiting_human":
+            pause_metadata = None
+            if (
+                isinstance(payload.get("token_usage"), dict)
+                or any(isinstance(item, dict) for item in payload.get("sources") or [])
+                or any(
+                    isinstance(item, dict) and isinstance(item.get("type"), str)
+                    for item in payload.get("ui_parts") or []
+                )
+                or payload.get("model_name") is not None
+                or payload.get("context_tokens") is not None
+            ):
+                pause_metadata = self._take()
+            request = payload.get("request") or {}
+            occurrence_id = request.get("occurrence_id")
+            hitl_request = (
+                self._take()
+                if not occurrence_id
+                or occurrence_id not in self.previously_pending_occurrence_ids
+                else None
+            )
+            return _HistoryPositions(
+                pause_metadata=pause_metadata, hitl_request=hitl_request
+            )
+        return _HistoryPositions()
+
+
+async def _initial_history_ranker(
+    history_store: HistoryStorePort | None,
+    session_id: str | None,
+    request: _AgentExecuteRequest,
+    opening_rank_override: int | None = None,
+) -> tuple[int | None, _HistoryRanker | None]:
+    if not session_id or history_store is None:
+        return None, None
+    base_rank = (
+        opening_rank_override
+        if opening_rank_override is not None
+        else await history_store.next_rank(session_id)
+    )
+    return base_rank, _HistoryRanker(
+        base_rank + _opening_history_count(request.message, request.resume_payload),
+        opening_rank=base_rank,
+        pending_message_id=request.pending_message_id,
+        previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+    )
+
+
+async def _claim_initial_opening(
+    history_store: HistoryStorePort | None,
+    request: _AgentExecuteRequest,
+    session_id: str | None,
+    user_id: str,
+    space_id: str | None,
+    exchange_id: str,
+) -> bool:
+    if (
+        not isinstance(history_store, PostgresHistoryStore)
+        or not session_id
+        or not request.agent_instance_id
+        or not request.message
+        or request.resume_payload is not None
+        or request.interrupted_action is not None
+        or request.pending_message_id is not None
+    ):
+        return False
+    from fred_core.history.history_schema import make_user_text
+
+    try:
+        return await history_store.claim_initial_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            space_id=space_id,
+            agent_instance_id=request.agent_instance_id,
+            message=make_user_text(session_id, exchange_id, 0, request.message),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+async def _require_pending_opening_message(
+    request: _AgentExecuteRequest, session_id: str | None, user_id: str
+) -> None:
+    if request.resume_payload is not None:
+        return
+    if not session_id:
+        if not request.pending_message_id:
+            return
+        raise HTTPException(
+            status_code=409, detail="Pending user message has no session"
+        )
+    if not request.agent_instance_id:
+        try:
+            history = turn_messages.require_history()
+        except RuntimeError:
+            return
+    else:
+        history = turn_messages.require_history()
+    pending_messages = await history.pending_steered_messages(session_id, user_id)
+    if not pending_messages and not request.pending_message_id:
+        return
+    if not request.agent_instance_id:
+        raise HTTPException(status_code=409, detail="A managed update is pending")
+    instance_pending = await history.pending_steered_messages(
+        session_id, user_id, request.agent_instance_id
+    )
+    pending = pending_messages[0] if pending_messages else None
+    if (
+        pending is None
+        or not instance_pending
+        or instance_pending[0].rank != pending.rank
+    ):
+        raise HTTPException(
+            status_code=409, detail="A different agent owns the pending update"
+        )
+    if request.interrupted_action is not None:
+        return
+    extras = (pending.metadata.model_extra or {}).get("extras") if pending else None
+    pending_id = extras.get("steered_message_id") if isinstance(extras, dict) else None
+    if (
+        pending is None
+        or pending_id != request.pending_message_id
+        or not pending.parts
+        or not isinstance(pending.parts[0], TextPart)
+        or pending.parts[0].text != request.message
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The oldest pending user message must start the next turn",
+        )
+
+
+async def _rank_runtime_event(
+    payload: dict[str, Any],
+    ranker: _HistoryRanker | None,
+    *,
+    session_id: str | None,
+    user_id: str,
+    exchange_id: str,
+) -> dict[str, Any]:
+    if ranker is None:
+        return payload
+    positions = ranker.reserve(payload)
+    if positions.row is not None:
+        payload["rank"] = positions.row
+    elif payload.get("kind") == "final":
+        payload["rank"] = ranker.next_rank
+    if positions.hitl_request is not None:
+        payload["rank"] = positions.hitl_request
+    if positions.pause_metadata is not None:
+        payload["pause_metadata_rank"] = positions.pause_metadata
+    if payload.get("kind") == RuntimeEventKind.STEERED_USER_MESSAGE.value:
+        if not session_id:
+            raise RuntimeError("Steered message has no session")
+        scope = RunScope.current()
+        receipt_key = f"steered-user:{payload['message_id']}"
+        try:
+            delivered = await turn_messages.require_history().deliver_steered_message(
+                session_id=session_id,
+                user_id=user_id,
+                message_id=payload["message_id"],
+                rank=positions.require_row(),
+                exchange_id=exchange_id,
+                expected_content=payload["content"],
+            )
+            if delivered is None:
+                raise RuntimeError("Steered message disappeared before delivery")
+            payload["rank"] = delivered.rank
+            if scope is not None and scope.has_event_receipt(receipt_key):
+                scope.complete_event_receipt(receipt_key, payload)
+        except Exception as exc:
+            if scope is not None:
+                scope.fail_event_receipt(receipt_key, exc)
+            raise
+    return payload
+
+
+class _TurnEventExpander:
+    def __init__(
+        self,
+        definition: ReActAgentDefinition | GraphAgentDefinition,
+        request: _AgentExecuteRequest,
+    ) -> None:
+        self._graph_pending_id = (
+            request.pending_message_id
+            if isinstance(definition, GraphAgentDefinition)
+            else None
+        )
+        self._opening_content = request.message or ""
+
+    def expand(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        if self._graph_pending_id and payload.get("kind") in {
+            "final",
+            "awaiting_human",
+        }:
+            message_id = self._graph_pending_id
+            self._graph_pending_id = None
+            return [
+                SteeredUserMessageRuntimeEvent(
+                    message_id=message_id,
+                    content=self._opening_content,
+                ).model_dump(mode="json"),
+                payload,
+            ]
+        return [payload]
+
+
 async def _write_turn_history(
     *,
     session_id: str,
@@ -2748,6 +3054,9 @@ async def _write_turn_history(
     occurrence_id: str | None = None,
     previously_pending_occurrence_ids: tuple[str, ...] = (),
     resume_started: bool = True,
+    base_rank: int | None = None,
+    pending_message_id: str | None = None,
+    prewritten_initial: bool = False,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -2758,9 +3067,8 @@ async def _write_turn_history(
       ``ChatMessage`` rows and writes them in one batch
 
     Why this is a separate async function and not inline:
-    - the streaming endpoint calls it with ``asyncio.create_task`` so the DB
-      write does not block the SSE response to the client
-    - the non-streaming endpoint can ``await`` it directly before returning
+    - streaming and non-streaming execution share the same event mapping
+    - streaming awaits the write before closing so the next turn sees its ranks
 
     How to use it:
     - call after the executor generator is exhausted
@@ -2799,18 +3107,25 @@ async def _write_turn_history(
     from fred_core.store.vector_search import VectorSearchHit
 
     if _ran_no_turn(payloads):
-        return
-    try:
-        base_rank: int = await history_store.next_rank(session_id)
-    except Exception:
-        if delegation_enabled():
-            logger.error("event=turn_history outcome=failed reason=rank_query_failed")
-        else:
-            logger.exception(
-                "Failed to query next_rank session_id=%s",
-                session_id,
+        if prewritten_initial and isinstance(history_store, PostgresHistoryStore):
+            await history_store.release_initial_user_message(
+                session_id, user_id, exchange_id or ""
             )
         return
+    if base_rank is None:
+        try:
+            base_rank = await history_store.next_rank(session_id)
+        except Exception:
+            if delegation_enabled():
+                logger.error(
+                    "event=turn_history outcome=failed reason=rank_query_failed"
+                )
+            else:
+                logger.exception(
+                    "[fred-runtime][history] Failed to query next_rank session_id=%s",
+                    session_id,
+                )
+            return
 
     exchange_id = exchange_id or str(uuid4())
     messages: list[ChatMessage] = []
@@ -2858,31 +3173,27 @@ async def _write_turn_history(
                 )
                 rank += 1
     elif resume_payload is None and request_message:
-        user_message = make_user_text(
-            session_id, exchange_id, rank, request_message, command=turn_command
-        )
-        if skill_invocations:
-            extras = {
-                "skill_invocations": [
+        if pending_message_id is None:
+            user_message = make_user_text(
+                session_id, exchange_id, rank, request_message, command=turn_command
+            )
+            extras: dict[str, Any] = {}
+            if skill_invocations:
+                extras["skill_invocations"] = [
                     SkillInvocation.model_validate(item).model_dump(
                         mode="json", exclude_none=True
                     )
                     for item in skill_invocations
                 ]
-            }
-            user_message.metadata = user_message.metadata.model_copy(
-                update={"extras": extras}
-            )
-        elif skill_invocation is not None:
-            extras = {
-                "skill_invocation": SkillInvocation.model_validate(
+            elif skill_invocation is not None:
+                extras["skill_invocation"] = SkillInvocation.model_validate(
                     skill_invocation
                 ).model_dump(mode="json", exclude_none=True)
-            }
-            user_message.metadata = user_message.metadata.model_copy(
-                update={"extras": extras}
-            )
-        messages.append(user_message)
+            if extras:
+                user_message.metadata = user_message.metadata.model_copy(
+                    update={"extras": extras}
+                )
+            messages.append(user_message)
         rank += 1
 
     # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
@@ -2943,27 +3254,31 @@ async def _write_turn_history(
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
 
-    skill_load_ids: set[str] = set()
+    ranker = _HistoryRanker(
+        rank,
+        opening_rank=base_rank,
+        pending_message_id=pending_message_id,
+        previously_pending_occurrence_ids=previously_pending_occurrence_ids,
+    )
     for payload in payloads:
         kind = payload.get("kind")
+        positions = ranker.reserve(payload)
 
-        if kind == RuntimeEventKind.STEERED_USER_MESSAGE.value:
-            messages.append(
-                make_user_text(session_id, exchange_id, rank, payload["content"])
-            )
-            rank += 1
+        if kind in {
+            RuntimeEventKind.STEERED_USER_MESSAGE.value,
+        }:
+            continue
         elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
 
             attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
-            if attribution.load_id in skill_load_ids:
+            if positions.row is None:
                 continue
-            skill_load_ids.add(attribution.load_id)
             messages.append(
                 ChatMessage(
                     session_id=session_id,
                     exchange_id=exchange_id,
-                    rank=rank,
+                    rank=positions.require_row(),
                     timestamp=datetime.now(timezone.utc),
                     role=Role.system,
                     channel=Channel.system_note,
@@ -2973,33 +3288,30 @@ async def _write_turn_history(
                     ),
                 )
             )
-            rank += 1
         elif kind == "tool_call":
             messages.append(
                 make_tool_call(
                     session_id,
                     exchange_id,
-                    rank,
+                    positions.require_row(),
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
                 )
             )
-            rank += 1
 
         elif kind == "tool_result":
             messages.append(
                 make_tool_result(
                     session_id,
                     exchange_id,
-                    rank,
+                    positions.require_row(),
                     call_id=payload["call_id"],
                     content=payload.get("content", ""),
                     ok=not payload.get("is_error", False),
                     latency_ms=payload.get("latency_ms"),
                 )
             )
-            rank += 1
 
         elif kind == "thought_start":
             # `tool_use` blocks are synthetic bookkeeping the runtime opens around
@@ -3013,12 +3325,11 @@ async def _write_turn_history(
             if not thought_id:
                 continue
             open_thoughts[thought_id] = _OpenThought(
-                rank=rank,
+                rank=positions.require_row(),
                 phase=str(payload.get("phase") or "planning"),
                 title=payload.get("title"),
                 source=payload.get("source"),
             )
-            rank += 1
 
         elif kind == "thought_delta":
             block = open_thoughts.get(str(payload.get("thought_id") or ""))
@@ -3068,11 +3379,12 @@ async def _write_turn_history(
                 or payload.get("model_name") is not None
                 or payload.get("context_tokens") is not None
             ):
+                assert positions.pause_metadata is not None
                 messages.append(
                     ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
-                        rank=rank,
+                        rank=positions.pause_metadata,
                         timestamp=datetime.now(timezone.utc),
                         role=Role.system,
                         channel=Channel.system_note,
@@ -3091,15 +3403,10 @@ async def _write_turn_history(
                         ),
                     )
                 )
-                rank += 1
             # A resumed run re-raises the siblings still waiting, so the same
             # pause is emitted again. One question keeps one row: the run that
             # first surfaced it already wrote it.
-            surfaced_occurrence_id = req.get("occurrence_id")
-            if (
-                surfaced_occurrence_id
-                and surfaced_occurrence_id in previously_pending_occurrence_ids
-            ):
+            if positions.hitl_request is None:
                 continue
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
@@ -3107,7 +3414,7 @@ async def _write_turn_history(
             hitl_message = make_hitl_request(
                 session_id,
                 exchange_id,
-                rank,
+                positions.hitl_request,
                 question=question,
                 choices=[
                     {
@@ -3133,14 +3440,13 @@ async def _write_turn_history(
                 ],
             )
             messages.append(hitl_message)
-            rank += 1
 
         elif kind in {"node_error", "execution_error"}:
             messages.append(
                 ChatMessage(
                     session_id=session_id,
                     exchange_id=exchange_id,
-                    rank=rank,
+                    rank=positions.require_row(),
                     timestamp=datetime.now(timezone.utc),
                     role=Role.assistant if kind == "execution_error" else Role.system,
                     channel=Channel.error,
@@ -3155,7 +3461,6 @@ async def _write_turn_history(
                     ],
                 )
             )
-            rank += 1
 
         elif kind == "final":
             final_content = payload.get("content", "")
@@ -3204,7 +3509,7 @@ async def _write_turn_history(
             make_assistant_final(
                 session_id,
                 exchange_id,
-                rank,
+                ranker.next_rank,
                 text=final_content,
                 model=final_model,
                 usage=final_token_usage,
@@ -3517,6 +3822,9 @@ async def _stream(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
+    exchange_id: str | None = None,
+    prewritten_initial: bool = False,
+    on_start: Callable[[], None] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -3527,18 +3835,21 @@ async def _stream(
 
     History write:
     - events are collected while yielding
-    - after the stream closes, history is written as a fire-and-forget background
-      task so the SSE connection is not held open waiting for the DB write
+    - history is committed before the stream closes so a follow-up turn sees its ranks
 
     Execution scope and team ancestry come from the admitted request context.
     """
     ctx = request.context or {}
     session_id: str | None = ctx.get("session_id")
     user_id: str = ctx.get("user_id") or "unknown"
-    exchange_id = await _resolve_exchange_id(
+    exchange_id = exchange_id or await _resolve_exchange_id(
         resume_payload=request.resume_payload,
         session_id=session_id,
         history_store=get_runtime_context().config.history_store,
+    )
+    history_store = get_runtime_context().config.history_store
+    base_rank, ranker = await _initial_history_ranker(
+        history_store, session_id, request, 0 if prewritten_initial else None
     )
     turn_start = time.monotonic()
 
@@ -3548,38 +3859,7 @@ async def _stream(
         raise AuthorityLostError()
 
     collected: list[dict[str, Any]] = []
-    steering_token = (
-        await turn_steering_mailbox.start(
-            session_id,
-            request.agent_instance_id,
-            user_id,
-            space_id,
-            request.steering_turn_id,
-            resume=request.resume_payload is not None,
-        )
-        if session_id
-        and request.agent_instance_id
-        and space_id
-        and request.steering_turn_id
-        and not isinstance(definition, GraphAgentDefinition)
-        else None
-    )
-    if request.steering_turn_id and steering_token is None:
-        request = request.model_copy(update={"steering_turn_id": None})
-
-    async def renew_lease(active_session_id: str, active_turn_id: str) -> None:
-        while True:
-            await asyncio.sleep(30)
-            try:
-                await turn_steering_mailbox.renew(active_session_id, active_turn_id)
-            except Exception:
-                logger.exception("Failed to renew active turn steering lease")
-
-    steering_heartbeat = (
-        asyncio.create_task(renew_lease(session_id, steering_token))
-        if steering_token is not None and session_id is not None
-        else None
-    )
+    expander = _TurnEventExpander(definition, request)
     payloads = _iterate_runtime_event_payloads(
         definition,
         request,
@@ -3592,71 +3872,27 @@ async def _stream(
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=True,
+        steering_enabled=bool(request.agent_instance_id),
     )
-    occurred_at: datetime | None = None
-    completed = False
     try:
         try:
-            async for payload in payloads:
-                if (
-                    payload.get("kind") == "awaiting_human"
-                    and steering_token is not None
-                    and session_id is not None
-                ):
-                    await turn_steering_mailbox.pause(session_id, steering_token)
-                collected.append(payload)
-                yield _sse(json.dumps(payload, ensure_ascii=False))
-            completed = True
+            if on_start is not None:
+                on_start()
+            async for runtime_payload in payloads:
+                for payload in expander.expand(runtime_payload):
+                    payload = await _rank_runtime_event(
+                        payload,
+                        ranker,
+                        session_id=session_id,
+                        user_id=user_id,
+                        exchange_id=exchange_id,
+                    )
+                    collected.append(payload)
+                    yield _sse(json.dumps(payload, ensure_ascii=False))
         finally:
-
-            async def finish_stream() -> None:
-                nonlocal occurred_at
-                try:
-                    await payloads.aclose()
-                finally:
-                    occurred_at = datetime.now(timezone.utc)
-                    try:
-                        if steering_heartbeat is not None:
-                            steering_heartbeat.cancel()
-                            with suppress(asyncio.CancelledError):
-                                await steering_heartbeat
-                    finally:
-                        if steering_token is not None and session_id is not None:
-                            paused = any(
-                                item.get("kind") == "awaiting_human"
-                                for item in collected
-                            )
-                            failed = any(
-                                item.get("kind") == "execution_error"
-                                for item in collected
-                            )
-                            await turn_steering_mailbox.end(
-                                session_id,
-                                steering_token,
-                                paused=completed and paused and not failed,
-                            )
-
-            await complete_cleanup(finish_stream())
-
-        _emit_turn_completed(
-            container,
-            session_id=session_id,
-            exchange_id=exchange_id,
-            user_id=user_id,
-            team_id=resolved_team_id,
-            agent_instance_id=request.agent_instance_id,
-            agent_instance_name=agent_instance_name,
-            template_agent_id=definition.agent_id,
-            payloads=collected,
-            turn_start=turn_start,
-        )
-
-        # Fire-and-forget: write history after the SSE stream is fully sent.
-        # The client already received all events before this task begins.
-        if session_id:
-            history_store = get_runtime_context().config.history_store
-            if history_store is not None:
-                spawn(
+            await complete_cleanup(payloads.aclose())
+            if session_id and history_store is not None:
+                await complete_cleanup(
                     _write_turn_history(
                         session_id=session_id,
                         user_id=user_id,
@@ -3673,6 +3909,9 @@ async def _stream(
                         occurrence_id=request.occurrence_id,
                         previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
                         resume_started=request._hitl_resume_started,
+                        base_rank=base_rank,
+                        pending_message_id=request.pending_message_id,
+                        prewritten_initial=prewritten_initial,
                     )
                 )
     finally:
@@ -3684,9 +3923,22 @@ async def _stream(
             report_run_usage(
                 request._turn_authority,
                 exchange_id=exchange_id,
-                occurred_at=occurred_at or datetime.now(timezone.utc),
+                occurred_at=datetime.now(timezone.utc),
             )
         )
+
+    _emit_turn_completed(
+        container,
+        session_id=session_id,
+        exchange_id=exchange_id,
+        user_id=user_id,
+        team_id=resolved_team_id,
+        agent_instance_id=request.agent_instance_id,
+        agent_instance_name=agent_instance_name,
+        template_agent_id=definition.agent_id,
+        payloads=collected,
+        turn_start=turn_start,
+    )
 
 
 def _build_capability_save_services(
@@ -4231,6 +4483,7 @@ async def _iterate_runtime_event_payloads(
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
+    steering_enabled: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Own the run's scope and release the run record once.
 
@@ -4250,6 +4503,7 @@ async def _iterate_runtime_event_payloads(
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
+        steering_enabled=steering_enabled,
     )
     started = time.perf_counter()
     outcome = "succeeded"
@@ -4381,6 +4635,7 @@ async def _iterate_runtime_event_payloads_inner(
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
+    steering_enabled: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -4428,7 +4683,7 @@ async def _iterate_runtime_event_payloads_inner(
                 else ctx.get("user_id"),
                 "session_id": ctx.get("session_id"),
                 "exchange_id": exchange_id,
-                "steering_turn_id": request.steering_turn_id,
+                "pending_message_id": request.pending_message_id,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "run_id": getattr(credential_provider, "run_id", None),
@@ -4466,7 +4721,8 @@ async def _iterate_runtime_event_payloads_inner(
                 "occurrence_id": resolved_occurrence_id,
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
-                "steering_turn_id": request.steering_turn_id,
+                "pending_message_id": request.pending_message_id,
+                "steering_enabled": "true" if steering_enabled else None,
                 "is_service_agent": ctx.get("is_service_agent"),
             }.items()
             if isinstance(value, str) and value
@@ -4552,6 +4808,7 @@ async def _iterate_runtime_event_payloads_inner(
     # LangGraph's checkpointer invariant (thread_id required internally) is met.
     execution_config = ExecutionConfig(
         session_id=ctx.get("session_id") or request_id,
+        pending_message_id=request.pending_message_id,
         interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
@@ -6011,7 +6268,6 @@ def _build_agent_router(
             )
         else:
             deleted = await cp.adelete_thread(session_id)
-        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": deleted}
 
     @router.post(
@@ -6067,33 +6323,60 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            prewritten_initial = await _claim_initial_opening(
+                get_runtime_context().config.history_store,
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+                (internal_req.context or {}).get("space_id"),
+                exchange_id,
+            )
         except BaseException:
             if internal_req._turn_authority is not None:
                 internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
+        session_id = request.effective_session_id()
+        user_id_str = request.effective_user_id() or "unknown"
+        history_store = get_runtime_context().config.history_store
+        base_rank, ranker = await _initial_history_ranker(
+            history_store, session_id, internal_req, 0 if prewritten_initial else None
+        )
+        payloads: list[dict[str, Any]] = []
+        expander = _TurnEventExpander(target.definition, internal_req)
         try:
-            payloads = [
-                payload
-                async for payload in _iterate_runtime_event_payloads(
-                    target.definition,
-                    internal_req,
-                    access_token=None
-                    if target.credential_provider
-                    and target.credential_provider.delegated
-                    else access_token,
-                    registry=registry,
-                    exchange_id=exchange_id,
-                    tuning=target.tuning,
-                    capability_registry=_capability_registry_of(http_request),
-                    team_settings=target.team_settings,
-                    platform_prompt=target.platform_prompt,
-                    credential_provider=target.credential_provider,
-                    owns_run_record=True,
-                )
-            ]
+            async for runtime_payload in _iterate_runtime_event_payloads(
+                target.definition,
+                internal_req,
+                access_token=None
+                if target.credential_provider and target.credential_provider.delegated
+                else access_token,
+                registry=registry,
+                exchange_id=exchange_id,
+                tuning=target.tuning,
+                capability_registry=_capability_registry_of(http_request),
+                team_settings=target.team_settings,
+                platform_prompt=target.platform_prompt,
+                credential_provider=target.credential_provider,
+                owns_run_record=True,
+                steering_enabled=bool(internal_req.agent_instance_id),
+            ):
+                for payload in expander.expand(runtime_payload):
+                    payloads.append(
+                        await _rank_runtime_event(
+                            payload,
+                            ranker,
+                            session_id=session_id,
+                            user_id=user_id_str,
+                            exchange_id=exchange_id,
+                        )
+                    )
         finally:
-            # Same detached workload report as the streaming route.
             spawn(
                 report_run_usage(
                     internal_req._turn_authority,
@@ -6101,8 +6384,6 @@ def _build_agent_router(
                     occurred_at=datetime.now(timezone.utc),
                 )
             )
-        session_id: str | None = request.effective_session_id()
-        user_id_str = request.effective_user_id() or "unknown"
         _emit_turn_completed(
             container,
             session_id=session_id,
@@ -6118,7 +6399,6 @@ def _build_agent_router(
         # Write history after generator is fully consumed.
         # Can await here — no SSE response to block.
         if session_id:
-            history_store = get_runtime_context().config.history_store
             if history_store is not None:
                 await _write_turn_history(
                     session_id=session_id,
@@ -6136,6 +6416,9 @@ def _build_agent_router(
                     occurrence_id=request.occurrence_id,
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                     resume_started=internal_req._hitl_resume_started,
+                    base_rank=base_rank,
+                    pending_message_id=request.pending_message_id,
+                    prewritten_initial=prewritten_initial,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -6185,33 +6468,62 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            prewritten_initial = await _claim_initial_opening(
+                get_runtime_context().config.history_store,
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+                (internal_req.context or {}).get("space_id"),
+                exchange_id,
+            )
         except BaseException:
             if internal_req._turn_authority is not None:
                 internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
+        session_id = request.effective_session_id()
+        eval_session_id = session_id or str(uuid4())
+        user_id_str = request.effective_user_id() or "unknown"
+        history_store = get_runtime_context().config.history_store
+        base_rank, ranker = await _initial_history_ranker(
+            history_store, session_id, internal_req, 0 if prewritten_initial else None
+        )
+        payloads: list[dict[str, Any]] = []
+        expander = _TurnEventExpander(target.definition, internal_req)
         try:
-            payloads = [
-                payload
-                async for payload in _iterate_runtime_event_payloads(
-                    target.definition,
-                    internal_req,
-                    access_token=None
-                    if target.credential_provider
-                    and target.credential_provider.delegated
-                    else access_token,
-                    registry=registry,
-                    exchange_id=exchange_id,
-                    tuning=target.tuning,
-                    capability_registry=_capability_registry_of(http_request),
-                    team_settings=target.team_settings,
-                    platform_prompt=target.platform_prompt,
-                    credential_provider=target.credential_provider,
-                    owns_run_record=True,
-                )
-            ]
+            async for runtime_payload in _iterate_runtime_event_payloads(
+                target.definition,
+                internal_req,
+                access_token=None
+                if target.credential_provider and target.credential_provider.delegated
+                else access_token,
+                registry=registry,
+                exchange_id=exchange_id,
+                tuning=target.tuning,
+                capability_registry=_capability_registry_of(http_request),
+                team_settings=target.team_settings,
+                platform_prompt=target.platform_prompt,
+                credential_provider=target.credential_provider,
+                owns_run_record=True,
+                steering_enabled=bool(internal_req.agent_instance_id),
+            ):
+                for payload in expander.expand(runtime_payload):
+                    payloads.append(
+                        await _rank_runtime_event(
+                            payload,
+                            ranker,
+                            session_id=session_id,
+                            user_id=user_id_str,
+                            exchange_id=exchange_id,
+                        )
+                    )
+            eval_session_id = session_id or str(uuid4())
         finally:
-            # Same detached workload report as the streaming route.
             spawn(
                 report_run_usage(
                     internal_req._turn_authority,
@@ -6219,9 +6531,6 @@ def _build_agent_router(
                     occurred_at=datetime.now(timezone.utc),
                 )
             )
-        session_id: str | None = request.effective_session_id()
-        eval_session_id = session_id or str(uuid4())
-        user_id_str = request.effective_user_id() or "unknown"
         _emit_turn_completed(
             container,
             session_id=session_id,
@@ -6235,7 +6544,6 @@ def _build_agent_router(
             turn_start=turn_start,
         )
         if session_id:
-            history_store = get_runtime_context().config.history_store
             if history_store is not None:
                 await _write_turn_history(
                     session_id=session_id,
@@ -6253,6 +6561,9 @@ def _build_agent_router(
                     occurrence_id=request.occurrence_id,
                     previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
                     resume_started=internal_req._hitl_resume_started,
+                    base_rank=base_rank,
+                    pending_message_id=request.pending_message_id,
+                    prewritten_initial=prewritten_initial,
                 )
         return _build_eval_trace(
             payloads=payloads,
@@ -6267,18 +6578,17 @@ def _build_agent_router(
     async def steer_active_turn(
         session_id: str,
         request: RuntimeExecuteRequest,
-        message_id: str = Query(..., min_length=1),
+        message_id: str = Query(..., min_length=1, max_length=128),
         authenticated_user: KeycloakUser | AssertedUser | None = Depends(
             _execution_subject
         ),
         container: PodApplicationContext = Depends(get_pod_container),
-    ) -> dict[str, str]:
+    ) -> ChatMessage:
         _refuse_reserved_session_id(session_id)
         if (
             request.session_id != session_id
             or not request.agent_instance_id
             or not request.input.strip()
-            or not request.steering_turn_id
         ):
             raise HTTPException(status_code=422, detail="invalid_steering_request")
         _enforce_chat_input_limit(request)
@@ -6293,18 +6603,23 @@ def _build_agent_router(
         user_id = (
             authenticated_user.uid if authenticated_user is not None else "unknown"
         )
-        offered = await turn_steering_mailbox.offer(
-            session_id,
-            request.agent_instance_id,
-            user_id,
-            str(request.runtime_context.space_id),
-            request.steering_turn_id,
-            message_id,
-            request.input.strip(),
-        )
-        if not offered:
-            raise HTTPException(status_code=409, detail="active_turn_unavailable")
-        return {"status": "pending"}
+        history = turn_messages.require_history()
+        if (
+            await history.session_agent_instance_id(session_id)
+            != request.agent_instance_id
+        ):
+            raise HTTPException(status_code=409, detail="session_agent_mismatch")
+        try:
+            return await history.submit_steered_message(
+                session_id=session_id,
+                user_id=user_id,
+                space_id=str(request.runtime_context.space_id),
+                agent_instance_id=request.agent_instance_id,
+                message_id=message_id,
+                content=request.input.strip(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.post(
         "/execute/stream",
@@ -6339,8 +6654,8 @@ def _build_agent_router(
 
         TurnPersistedEvent:
         - `TurnPersistedEvent` (kind="turn_persisted") is defined in the contract but
-          is NOT emitted over this stream. History is written fire-and-forget after the
-          stream closes. Do not rely on it as an end-of-turn signal here.
+          is NOT emitted over this stream. History is committed before the stream
+          closes. Do not rely on this event as an end-of-turn signal here.
 
         Security:
         - Caller identity is validated before one delegated Weaver space resolution.
@@ -6366,11 +6681,49 @@ def _build_agent_router(
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
-        except Exception:
+            await _require_pending_opening_message(
+                internal_req,
+                request.effective_session_id(),
+                request.effective_user_id() or "unknown",
+            )
+            exchange_id = None
+            prewritten_initial = False
+            if internal_req.agent_instance_id:
+                exchange_id = await _resolve_exchange_id(
+                    resume_payload=internal_req.resume_payload,
+                    session_id=request.effective_session_id(),
+                    history_store=get_runtime_context().config.history_store,
+                )
+                prewritten_initial = await _claim_initial_opening(
+                    get_runtime_context().config.history_store,
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                    (internal_req.context or {}).get("space_id"),
+                    exchange_id,
+                )
+        except BaseException:
+            if internal_req._turn_authority is not None:
+                internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
         provider = target.credential_provider
-        internal_req.steering_turn_id = request.steering_turn_id
+        stream_started = False
+
+        def mark_stream_started() -> None:
+            nonlocal stream_started
+            stream_started = True
+
+        async def cleanup_unstarted() -> None:
+            if not stream_started and prewritten_initial:
+                history = get_runtime_context().config.history_store
+                if isinstance(history, PostgresHistoryStore):
+                    await history.release_initial_user_message(
+                        request.effective_session_id() or "",
+                        request.effective_user_id() or "unknown",
+                        exchange_id or "",
+                    )
+
         stream = _stream(
             target.definition,
             internal_req,
@@ -6383,11 +6736,14 @@ def _build_agent_router(
             team_settings=target.team_settings,
             platform_prompt=target.platform_prompt,
             credential_provider=provider,
+            exchange_id=exchange_id,
+            prewritten_initial=prewritten_initial,
+            on_start=mark_stream_started,
         )
         return _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
-            background=_stream_finisher(stream, provider),
+            background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
 
     return router
@@ -6517,7 +6873,6 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
-        steering_cleanup_task: asyncio.Task[None] | None = None
         try:
             container.initialize_kpi_writer()
             container.initialize_control_plane_client()
@@ -6547,18 +6902,9 @@ def create_agent_app(
                 )
             await container.initialize_filesystem()
             bind_capability_objects(capability_registry, container.get_filesystem())
-            turn_steering_mailbox.configure(sql_engine)
-            await turn_steering_mailbox.cleanup_expired()
-
-            async def cleanup_expired_steering() -> None:
-                while True:
-                    await asyncio.sleep(60)
-                    try:
-                        await turn_steering_mailbox.cleanup_expired()
-                    except Exception:
-                        logger.exception("Failed to clean expired turn steering rows")
-
-            steering_cleanup_task = asyncio.create_task(cleanup_expired_steering())
+            turn_messages.configure(
+                cast(PostgresHistoryStore | None, container.get_history_store())
+            )
             await container.initialize_web_research()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
@@ -6622,10 +6968,7 @@ def create_agent_app(
                 )
             yield
         finally:
-            if steering_cleanup_task is not None:
-                steering_cleanup_task.cancel()
-                await asyncio.gather(steering_cleanup_task, return_exceptions=True)
-            turn_steering_mailbox.configure(None)
+            turn_messages.configure(None)
             # Shutdown must RUN and must COMPLETE.
             # - `finally`: a plain sequence after `yield` is skipped entirely
             #   when an exception propagates out of the app through the
