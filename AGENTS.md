@@ -153,6 +153,7 @@ that limitation. Do not present a focused patch review as a full PR review.
 For implementation work, identify or create the tracking GitHub issue and use
 a dedicated topic branch. Reuse the current branch when the user identifies it
 as the branch for this work. Keep unrelated local changes out of commits.
+When creating a branch, choose a descriptive name that does not contain `codex`.
 At completion, push and open a draft PR unless the user limits the task to local
 changes. Lightweight work does not require an OpenSpec change alongside its
 issue or PR. Explicit user instructions take precedence over this workflow.
