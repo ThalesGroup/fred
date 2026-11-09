@@ -432,7 +432,9 @@ def test_pending_message_only_opens_an_ordinary_text_turn(extra: dict) -> None:
             agent_instance_id="a",
             session_id="s",
             input="first update",
-            runtime_context=RuntimeContext(team_id="t"),
+            runtime_context=RuntimeContext(
+                space_id="f0137825-89b0-4d36-bdc3-b007a9777122"
+            ),
             pending_message_id="m1",
             **extra,
         )
@@ -442,7 +444,9 @@ def test_pending_message_only_opens_an_ordinary_text_turn(extra: dict) -> None:
         RuntimeExecuteRequest(
             agent_instance_id="a",
             input="first update",
-            runtime_context=RuntimeContext(team_id="t"),
+            runtime_context=RuntimeContext(
+                space_id="f0137825-89b0-4d36-bdc3-b007a9777122"
+            ),
             pending_message_id="m1",
         )
     with pytest.raises(
@@ -452,7 +456,9 @@ def test_pending_message_only_opens_an_ordinary_text_turn(extra: dict) -> None:
             agent_id="test.graph",
             session_id="s",
             input="first update",
-            runtime_context=RuntimeContext(team_id="t"),
+            runtime_context=RuntimeContext(
+                space_id="f0137825-89b0-4d36-bdc3-b007a9777122"
+            ),
             pending_message_id="m1",
         )
 

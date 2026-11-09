@@ -33,6 +33,9 @@ import {
 
 const labels = createInstance();
 const branding = vi.hoisted(() => ({ agentsNicknameSingular: "Agent" }));
+vi.mock("../../../../../../security/KeycloakService", () => ({
+  KeyCloakService: { GetSessionIdentity: () => "test-login" },
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: labels.t.bind(labels) }),
 }));

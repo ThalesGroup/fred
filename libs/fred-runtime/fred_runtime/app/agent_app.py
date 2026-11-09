@@ -2822,7 +2822,7 @@ class _HistoryRanker:
             if isinstance(load_id, str) and load_id not in self.skill_load_ids:
                 self.skill_load_ids.add(load_id)
                 return _HistoryPositions(row=self._take())
-        if kind in ("tool_call", "tool_result", "node_error"):
+        if kind in ("tool_call", "tool_result", "node_error", "execution_error"):
             return _HistoryPositions(row=self._take())
         if (
             kind == "thought_start"

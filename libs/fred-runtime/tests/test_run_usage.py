@@ -392,7 +392,10 @@ async def test_token_acquisition_shares_total_deadline(reporting, monkeypatch, c
 
 @pytest.mark.asyncio
 async def test_hitl_resume_has_new_key_on_same_exchange(reporting, monkeypatch):
-    history = SimpleNamespace(latest_exchange_id=AsyncMock(return_value=None))
+    history = SimpleNamespace(
+        latest_exchange_id=AsyncMock(return_value=None),
+        next_rank=AsyncMock(return_value=0),
+    )
     reporting.config.history_store = history
 
     async def save(**kwargs):
