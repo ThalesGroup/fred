@@ -9,10 +9,10 @@ from uuid import UUID
 
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
+from fred_knowledge.models import DocumentModels
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.semantic_splitter import SemanticSplitter
 from fred_knowledge.vector.base_vector_store import BaseVectorStore
-from fred_knowledge.models import DocumentModels
 from fred_knowledge.vector.factory import build_vector_store
 from fred_sdk.contracts.weaver import InferenceAdmission
 from langchain_core.embeddings import Embeddings
@@ -413,15 +413,17 @@ class ApplicationContext:
         raise ValueError("Vector writes require a manager processing attempt")
 
     def get_corpus_store(self, organization_id: UUID) -> BaseVectorStore:
-        """The organization's corpus index, cached per process.
+        """The organization's corpus index, cached per process and admitted client.
 
         Indexing writes with the admitted embedding model, creating the index with its
-        dimension. Without one, the store only deletes or flags existing vectors."""
+        dimension. Without one, the store only deletes or flags existing vectors. Copies
+        made by scoped_pipeline share this cache: the key carries the admission's client
+        identity, so a new source revision or connection never reuses an older client."""
         settings = self.configuration.manager_processing
         if settings is None:
             raise ValueError("Manager processing is not configured")
         admission = self._embedding[0] if self._embedding else None
-        key = (organization_id, admission.selection.key.identity if admission else None)
+        key = (organization_id, DocumentModels.identity(admission) if admission else None)
         with self._corpus_lock:
             if key not in self._corpus_stores:
                 instance = build_vector_store(

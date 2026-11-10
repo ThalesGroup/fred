@@ -556,6 +556,16 @@ def test_descriptor_requires_its_organization_and_the_admitted_corpus_model(desc
         Descriptor.model_validate({**descriptor.model_dump(), "models": StageModels(embedding=None, vision=None)})
 
 
+def test_a_committed_stage_replays_without_model_admission(descriptor):
+    from knowledge_flow_worker.features.manager_processing.contracts import Manifest, StageModels
+
+    manifest = Manifest(generation=descriptor.generation, artifacts=[], chunks=0, vectors=0)
+    replay = Descriptor.model_validate({**descriptor.model_dump(), "committed": manifest, "models": StageModels(embedding=None, vision=None)})
+    assert replay.committed is not None and replay.models.embedding is None
+    with pytest.raises(ValueError, match="carries no model admission"):
+        Descriptor.model_validate({**descriptor.model_dump(), "committed": manifest})
+
+
 def test_restore_reads_the_predecessor_stored_prefix(descriptor, tmp_path):
     from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
     from knowledge_flow_worker.features.manager_processing.contracts import Artifact, Manifest, Predecessor

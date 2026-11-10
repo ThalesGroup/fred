@@ -414,8 +414,9 @@ completeness: `complete_inventory_guaranteed: false` always yields `incomplete`.
 Silent provider truncation remains undetectable; platform approval must establish
 the full-list guarantee for that exact visibility scope.
 
-`chat_source` establishes chat from the platform guarantee;
-`mixed_capabilities_v1` reads boolean `capabilities.completion_chat` and
+`chat_source` establishes chat from the platform guarantee, so its source cannot
+attest `embedding_models`: a mixed list is declared or uses
+`mixed_capabilities_v1`, which reads boolean `capabilities.completion_chat` and
 `capabilities.reasoning` from the discovery response.
 Missing/invalid mixed-source metadata stays unknown, and `false` still retains
 the inventory member. Metadata records chat provenance, optional `name` or

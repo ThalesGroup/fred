@@ -15,13 +15,13 @@ from fred_core.model import http_clients
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
 from fred_core.sql import create_async_engine_from_config
 from fred_knowledge.artifacts.reader import ArtifactReader
+from fred_knowledge.models import DocumentModels
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.semantic_splitter import SemanticSplitter
 from fred_knowledge.vector.base_vector_store import BaseVectorStore
-from fred_knowledge.models import DocumentModels
 from fred_knowledge.vector.factory import build_vector_store
-from fred_sdk.contracts.weaver import InferenceAdmission
 from fred_pod.security.oidc_endpoints import resolve_endpoints
+from fred_sdk.contracts.weaver import InferenceAdmission
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -271,7 +271,7 @@ class ApplicationContext:
 
     def get_corpus_store(self, organization_id: UUID, embedding: InferenceAdmission) -> BaseVectorStore:
         """One organization's corpus, searched with its locked embedding model; read-only."""
-        key = (organization_id, embedding.selection.key.identity, embedding.selection.source_revision)
+        key = (organization_id, DocumentModels.identity(embedding))
         with self._corpus_lock:
             if key not in self._corpus_stores:
                 self._corpus_stores[key] = build_vector_store(

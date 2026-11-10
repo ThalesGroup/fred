@@ -54,7 +54,8 @@ pub enum SourceInventory {
     },
 }
 
-/// Chat is guaranteed by this declaration; an absent fact stays unknown.
+/// Chat is guaranteed by this declaration, except for an offer the source attests in
+/// `embedding_models`; an absent fact stays unknown.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DeclaredModel {
@@ -99,7 +100,7 @@ pub enum CredentialAuthority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Qualification {
-    /// Platform guarantees chat for every advertised model.
+    /// Platform guarantees chat for every advertised model: never with embedding models.
     ChatSource,
     /// Platform trusts the boolean capabilities.completion_chat and reasoning extensions.
     MixedCapabilitiesV1,
@@ -227,8 +228,15 @@ impl ModelSource {
             SourceInventory::Discovered {
                 url,
                 authentication,
+                qualification,
                 ..
             } => {
+                // A source listing embedding models is mixed: its other offers are not
+                // all chat. Declare them, or read the source's own capability metadata.
+                ensure!(
+                    *qualification != Qualification::ChatSource || self.embedding_models.is_empty(),
+                    "a chat_source qualification guarantees chat for every offer; a source with embedding models is mixed: declare its models or use mixed_capabilities_v1"
+                );
                 ensure!(
                     approved_url(url, self.allow_insecure_http),
                     "model source requires separately approved HTTP(S) destinations without credentials, query or fragment"
@@ -485,8 +493,22 @@ mod tests {
     }
 
     #[test]
+    fn a_chat_source_cannot_also_attest_embedding_models() {
+        let mut value = base();
+        assert!(parsed(value.clone()).is_ok());
+        value["embedding_models"] = json!(["embed"]);
+        assert!(
+            parsed(value.clone()).is_err(),
+            "unknown offers would become chat"
+        );
+        value["inventory"]["qualification"] = json!("mixed_capabilities_v1");
+        assert!(parsed(value).is_ok());
+    }
+
+    #[test]
     fn embedding_attestation_names_distinct_bounded_offers() {
         let mut value = base();
+        value["inventory"]["qualification"] = json!("mixed_capabilities_v1");
         value["embedding_models"] = json!(["mistral-embed", "text-embedding-3-small"]);
         let attested = parsed(value.clone()).unwrap();
         assert_eq!(attested.embedding_models.len(), 2);

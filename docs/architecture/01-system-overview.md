@@ -99,14 +99,18 @@ the person may do. [Security](03-security.md) explains these two controls;
 
 ## 1.4. Model decisions and credentials
 
-Control Plane decides every model Fred calls, from one organization policy that the
-Owner administers in **Models**. For agents, it selects the chat model at admission
-of each turn, using the working space's organization policy, the assistant's
-recommendation and the user's choice. For the organization's documents, the policy
-names the embedding model, an optional image-description model, and the default chat
-model that document tools such as summary and extraction use. Team and project
-execution do not introduce separate model policies, and no component holds a model
-choice in its own configuration.
+Control Plane decides every remote model call Fred makes for an organization, from
+one organization policy that the Owner administers in **Models**. For agents, it
+selects the chat model at admission of each turn, using the working space's
+organization policy, the assistant's recommendation and the user's choice. For the
+organization's documents, the policy names the embedding model, an optional
+image-description model, and the default chat model that document tools such as
+summary and extraction use. Team and project execution do not introduce separate
+model policies, and no component chooses a remote model in its own configuration.
+
+Models packaged with a workload are a different boundary: the search reranker, OCR
+and audio transcription run inside Knowledge Flow, send no document to a provider,
+and are configured with the deployment, not by the organization policy.
 
 ```mermaid
 flowchart TB
@@ -136,7 +140,8 @@ supplies credentials; it does not fix a model for the process's lifetime.
 An organization's documents form one corpus in its own vector index, embedded with
 one model. The first indexing locks that choice, since an index cannot mix embedding
 spaces; changing it would require reindexing every document, which Fred does not
-offer yet. Documents are not processed before an embedding model is chosen. The
+offer yet. Documents are not processed before an embedding model is chosen, and an
+unusable corpus model stops processing and search instead of being replaced. The
 [model reference](A13-models.md) connects these boundaries to the SQL schema,
 configuration types and runtime contracts, including the narrower transport that
 Ralph and Knowledge Flow support.

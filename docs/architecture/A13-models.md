@@ -18,24 +18,64 @@ facts and implementation entry points, not another policy definition.
 | Turn decision | [`resolve_runtime_binding`](../../apps/control-plane/src/agent_instances/runtime.rs), [`decide` / `admit`](../../apps/control-plane/src/model_catalog/instance.rs) | Space-derived organization, saved instance tuning and requested choice in a consistent snapshot |
 | Shared wire contract | [`InferenceAdmission`](../../libs/fred-rust-sdk/src/inference.rs), Python [`contracts.weaver`](../../libs/fred-sdk/fred_sdk/contracts/weaver.py) | [Generated API types](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts); connection only on the trusted execution path |
 | Python execution | [`TurnAuthority`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py), [`RoutedChatModelFactory`](../../libs/fred-runtime/fred_runtime/model_routing/provider.py) | [`checked_clients`](../../libs/fred-runtime/fred_runtime/model_routing/guard.py) checks destination/authentication before transport |
+| Client translation | `InferenceAdmission.chat_settings` in [`contracts.weaver`](../../libs/fred-sdk/fred_sdk/contracts/weaver.py) | Agent Pod and Knowledge Flow build chat clients from the admitted protocol, destination and options alone |
 | Embedded Rust execution | [`InferenceTurn`](../../libs/fred-rust-agent/src/turn.rs) | [`Ralph`](../../libs/fred-rust-agent/README.md), hosted by Control Plane; local binding checked before inference |
-| Document models | Policy `embedding`, `vision` and `default`; source `embedding_models` attestation; [migration 0020](../../apps/control-plane/migrations/0020_document_models.sql) lock trigger | Stage claim [`stage_models`](../../apps/control-plane/src/processing/store.rs) for the worker; [`cp_read.organization_model`](../../apps/control-plane/migrations/0020_document_models.sql) for search and document tools |
-| Knowledge Flow execution | [`DocumentModels`](../../libs/fred-knowledge/fred_knowledge/models.py) | Worker [`admit_models`](../../apps/knowledge-flow-worker/knowledge_flow_worker/application_context.py), backend [`organization_models`](../../apps/knowledge-flow-backend/knowledge_flow_backend/common/organization_models.py); local binding checked before inference |
+| Document models | Policy `embedding`, `vision` and `default`; source `embedding_models` attestation; [migration 0020](../../apps/control-plane/migrations/0020_document_models.sql) lock trigger | Stage claim [`stage_models`](../../apps/control-plane/src/processing/store.rs) / [`admit_document`](../../apps/control-plane/src/model_catalog/instance.rs) for the worker; [`cp_read.organization_model`](../../apps/control-plane/migrations/0020_document_models.sql), with the same availability criteria, for search and document tools |
+| Knowledge Flow execution | [`DocumentModels`](../../libs/fred-knowledge/fred_knowledge/models.py) | Worker [`admit_models`](../../apps/knowledge-flow-worker/knowledge_flow_worker/application_context.py), backend [`organization_models`](../../apps/knowledge-flow-backend/knowledge_flow_backend/common/organization_models.py); local binding checked before inference; corpus stores cached by `DocumentModels.identity` |
 
 Selection is shared; transport support is not identical. The
 [runtime connection contract](../../apps/control-plane/README.md#inference-connection)
 and [provisioning contract](../../apps/control-plane/README.md#workload-provisioning-and-rotation)
-define supported forms. Ralph and Knowledge Flow currently accept the `standard`
-route with `api_key` (Knowledge Flow also `none`), without an API version or gateway
-header. No consumer substitutes a local model policy for the admitted selection.
+define supported forms. The Python Agent Pod supports every form of the contract.
+Ralph and Knowledge Flow accept the `standard` route with `api_key` (Knowledge Flow
+also `none`), without an API version or gateway header; Knowledge Flow refuses any
+other form before a remote call. `wire` selects the generation protocol, chat
+completions or responses; an embedding offer is always called at
+`{api_root}/embeddings`. An option the admission leaves unset stays unset: no client
+default replaces it. No consumer substitutes a local model policy for the admitted
+selection.
 
 Provider model lists do not say which offers embed, so a source's `embedding_models`
-attests them; such an offer is never chat. A policy choice must fit its use: chat for
-default, fallback and title; an attested embedding offer for `embedding`; a chat offer
-not reported without image input for `vision`. A document model is never substituted:
-an unusable choice stops the stage. The first indexing claim sets the corpus lock in
-the claim's transaction, serialized with policy writes on the policy row; a trigger
-then refuses any change, release or deletion of it while the organization exists.
+attests them; such an offer is never chat. Chat is attested by a declared list, by a
+`chat_source` qualification, which then cannot also attest embedding models, or by
+the source's own metadata (`mixed_capabilities_v1`); otherwise it stays unknown and the
+offer cannot be chosen. A list without capability metadata, such as OpenAI's, is
+therefore declared. A policy choice must fit its use: chat for default, fallback and
+title; an attested embedding offer for `embedding`; a chat offer not reported without
+image input for `vision`.
+
+```mermaid
+flowchart TB
+    claim["Stage claim"] --> done{"Stage already<br/>committed?"}
+    done -->|"Yes"| replay["Replay its manifest<br/>No model, no inference"]
+    done -->|"No"| admit["Admit the stage's models<br/>in one policy snapshot"]
+    admit -->|"Unusable"| stop["Refuse: no generation,<br/>no corpus lock"]
+    admit -->|"Usable"| lock["First indexing: lock the<br/>corpus on the admitted model"]
+    lock --> gen["Record the generation<br/>Worker infers"]
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class claim,admit,lock,gen,replay fred
+    class done,stop neutral
+```
+
+A document model is never substituted: an unusable choice stops the stage. A new
+generation is admitted before the claim records anything. The first indexing claim
+then locks the corpus on exactly the admitted model, in the claim's transaction and
+serialized with policy writes on the policy row; a policy changed in between is
+retried, never locked on another model. A trigger then refuses any change, release
+or deletion of the lock while the organization exists. A committed stage replays its
+result with no admission, so a source disabled afterwards cannot block the replay.
+
+Search applies the same availability as the worker's admission: an enabled source
+observed at its current revision and a present offer with the aptitude of its use.
+A failed discovery keeps the last observed offers; a withdrawn offer or a removed
+attestation makes the corpus unavailable until the source changes, never another
+model. Each organization's corpus is its own index, `document-vectors-<organization
+id>` (pgvector: a collection with the same suffix), created by the first indexing.
+OpenSearch roles therefore grant the corpus prefix: write and index creation to the
+ingestion worker, read to the API. Cleanup and visibility changes use the corpus
+without an embedding model on both backends.
 
 [Automatic conversation titles](../../apps/control-plane/README.md#automatic-conversation-titles)
 receive their own Control Plane admission through `decide_title`, under the same
@@ -154,7 +194,7 @@ One of: `discovery_only`, `discovery_and_inference`.
 
 ### DeclaredModel
 
-Chat is guaranteed by this declaration; an absent fact stays unknown.
+Chat is guaranteed by this declaration, except for an offer the source attests in `embedding_models`; an absent fact stays unknown.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -257,6 +297,8 @@ Platform approval of one source. Contains references only, never secret values.
 
 ### ModelWire
 
+Generation protocol only. An attested embedding offer is always called at `{api_root}/embeddings`, the one embedding endpoint of these APIs.
+
 One of: `openai_chat`, `openai_responses`.
 
 ### OrganizationModels
@@ -326,28 +368,24 @@ A workload's local attestation of one admitted destination, read from its own co
 ## Deployment evidence
 
 The local profile is owned by the factory; the [deployment guide](../../deploy/k3d/README.md#models-for-local-testing)
-owns its operational procedure. For the source inspection behind this explanation,
-the paired revisions are:
-
-| Repository | Inspected revision / input |
-| --- | --- |
-| Fred | [`374530ebf8f8`](https://github.com/ThalesGroup/fred/tree/374530ebf8f8930f3ca6d4545598b3a6ef978ffd), application chart and runtime contracts |
-| Factory | [`3ebf2cb4a860`](https://github.com/fred-agent/fred-deployment-factory/blob/3ebf2cb4a86089eb44fba0136bc4b0dff0cf4fd1/k3d-apps/fred/values-weaver.yaml), instance values |
-
-These immutable links identify inspected configuration, not a deployed version
-or a provider acceptance result. A new deployment validation must record its own
-pair in its PR, alongside the outcome; matching branch names is insufficient.
-Fred-only CI cannot establish freshness of a separate factory checkout.
-
-The factory maps the `mistral` and `openai` bindings to the same approved API roots in
-Control Plane, Agent Pod and Knowledge Flow. Each receives `MISTRAL_API_KEY` and
-`OPENAI_API_KEY` from the optional keys of the Kubernetes Secret
-`fred-model-credentials`. Discovery authentication is separately declared even
-though this local profile deliberately shares each key.
-No Secret value is read or embedded here. The
+owns its operational procedure. It declares the `mistral` (discovered) and `openai`
+(declared) sources, maps their bindings to the same API roots in Control Plane,
+Agent Pod and Knowledge Flow, and gives each workload `MISTRAL_API_KEY` and
+`OPENAI_API_KEY` from optional keys of the Kubernetes Secret `fred-model-credentials`.
+The operator chooses the demo organizations' initial policy explicitly: Mistral by
+default, or an OpenAI-only or mixed overlay. A source without its key stays
+unavailable; it does not block a policy that does not use it. No Secret value is read
+or embedded here. The
 [rotation procedure](../../apps/control-plane/README.md#workload-provisioning-and-rotation)
 covers source revision, refresh and workload rollout; environment variables are
 process snapshots. Revoking a provider key can still interrupt an admitted turn.
+
+Three kinds of evidence stay distinct. Source inspection and the generated references
+here describe the code. Automated checks run on fakes and disposable databases and
+prove no provider call. Only a deployed reception, recorded in its PR with the Fred and
+factory revisions it used and its outcome, establishes that a configuration works; a
+branch name or an uncommitted factory change is not such a record. Fred-only CI cannot
+establish freshness of a separate factory checkout.
 
 ## Keeping this reference current
 

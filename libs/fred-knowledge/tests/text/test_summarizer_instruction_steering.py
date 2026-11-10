@@ -14,12 +14,13 @@
 
 from typing import List, Optional
 
+from langchain_core.documents import Document
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
 from fred_knowledge.text.base_summarizer import BaseDocSummarizer
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.llm_summarizer import LLMBasedDocSummarizer
 from fred_knowledge.text.smart_llm_summarizer import SmartDocSummarizer
-from langchain_core.documents import Document
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 
 class _FixedWidthSplitter(BaseTextSplitter):

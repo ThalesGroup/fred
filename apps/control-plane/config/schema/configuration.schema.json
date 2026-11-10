@@ -287,7 +287,7 @@
     },
     "DeclaredModel": {
       "additionalProperties": false,
-      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
       "properties": {
         "context_window_tokens": {
           "format": "int64",
@@ -691,6 +691,7 @@
       "type": "object"
     },
     "ModelWire": {
+      "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
       "enum": [
         "openai_chat",
         "openai_responses"

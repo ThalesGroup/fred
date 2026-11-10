@@ -58,8 +58,6 @@ def build_vector_store(
         )
         return instance
     elif isinstance(store, PgVectorStorageConfig):
-        if embedding_model is None:
-            raise ValueError("A pgvector corpus requires its embedding model")
         pg = postgres_config
         collection = corpus_index(store.collection_name, organization_id)
         instance = PgVectorStoreAdapter(

@@ -100,7 +100,7 @@ impl Row {
     }
 }
 
-/// Models admitted for one stage, read in one consistent snapshot of the policy.
+/// Models admitted for one stage that will infer, read in one consistent snapshot of the policy.
 async fn stage_models(
     pool: &sqlx::PgPool,
     organization: Uuid,
@@ -383,6 +383,9 @@ impl Processing {
         if c.stage == Stage::Preparation {
             self.authorize_actor(&r).await?;
         }
+        // Read before the claim transaction, which must not wait for a second pooled
+        // connection. Only a stage that will infer uses it: a committed replay ignores it.
+        let admission = stage_models(&self.pool, r.organization_id, c.stage).await;
         // Only this processing row is locked: claims of different documents never wait.
         let mut tx = self.pool.begin().await?;
         let r = locked(&mut tx, c.work.processing_id).await?;
@@ -400,7 +403,13 @@ impl Processing {
                 return Err(conflict("stale_generation"));
             }
             tx.commit().await?;
-            return self.descriptor(&r, &generations, g).await;
+            // A committed stage replays its result without inference, hence without
+            // a new model admission; a running one still needs its admitted models.
+            let models = match g.committed_at {
+                Some(_) => StageModels::default(),
+                None => admission?,
+            };
+            return self.descriptor(&r, &generations, g, models).await;
         }
         if r.summary.status != ProcessingStatus::Failed
             && let Some(g) = generations
@@ -408,7 +417,9 @@ impl Processing {
                 .find(|g| g.stage == c.stage && g.committed_at.is_some() && !r.objects_gone(g))
         {
             tx.commit().await?;
-            return self.descriptor(&r, &generations, g).await;
+            return self
+                .descriptor(&r, &generations, g, StageModels::default())
+                .await;
         }
         if r.summary.status.terminal() || r.deadline_at <= now {
             return Err(conflict("processing_terminal"));
@@ -437,17 +448,23 @@ impl Processing {
         if c.stage.ordinal() != expected {
             return Err(conflict("stage_order"));
         }
-        // The first indexing claim locks the corpus model: every vector of the
-        // organization's index then comes from the same embedding space.
-        if c.stage == Stage::Indexing
-            && sqlx::query("update organization_model_policy set embedding_locked_at=coalesce(embedding_locked_at,clock_timestamp()) where organization_id=$1 and embedding_source_id is not null")
+        // A new generation needs usable models: refuse before any claim mutation, so an
+        // unusable choice leaves neither a generation nor a corpus lock behind.
+        let models = admission?;
+        // The first indexing claim locks the corpus on the model it admitted: every vector
+        // of the organization's index then comes from the same embedding space. A policy
+        // changed since that admission is retried, never locked on another model.
+        if let Some(embedding) = &models.embedding
+            && sqlx::query("update organization_model_policy set embedding_locked_at=coalesce(embedding_locked_at,clock_timestamp()) where organization_id=$1 and embedding_source_id=$2 and embedding_upstream_model_id=$3")
                 .bind(r.organization_id)
+                .bind(&embedding.selection.key.source_id)
+                .bind(&embedding.selection.key.upstream_model_id)
                 .execute(&mut *tx)
                 .await?
                 .rows_affected()
                 == 0
         {
-            return Err(super::embedding_required());
+            return Err(super::unavailable());
         }
         let id = Uuid::new_v4();
         let expires = (now + chrono::Duration::seconds(r.lease(c.stage)?)).min(r.deadline_at);
@@ -460,13 +477,14 @@ impl Processing {
         sqlx::query("update document_processing set status='running',stage=$2,error_code=null,revision=revision+1 where id=$1")
             .bind(r.summary.id).bind(c.stage).execute(&mut *tx).await?;
         tx.commit().await?;
-        self.descriptor(&r, &generations, &g).await
+        self.descriptor(&r, &generations, &g, models).await
     }
     async fn descriptor(
         &self,
         r: &Row,
         generations: &[Generation],
         g: &Generation,
+        models: StageModels,
     ) -> AppResult<Descriptor> {
         let d = db::pipeline_document(&self.pool, r.summary.document_id).await?;
         let folder = match (d.folder_id, r.session_id) {
@@ -489,7 +507,6 @@ impl Processing {
             Some(_) => Some(manifest(&self.pool, g).await?),
             None => None,
         };
-        let models = stage_models(&self.pool, r.organization_id, g.stage).await?;
         Ok(Descriptor {
             work: r.work(self.installation),
             organization_id: r.organization_id,

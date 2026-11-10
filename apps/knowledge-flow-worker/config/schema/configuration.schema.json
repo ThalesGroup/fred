@@ -332,52 +332,6 @@
       "title": "ManagerProcessingConfig",
       "type": "object"
     },
-    "ModelConfiguration": {
-      "properties": {
-        "provider": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-          "title": "Provider"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Model name, e.g., gpt-4o, llama2.",
-          "title": "Name"
-        },
-        "settings": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-          "title": "Settings"
-        }
-      },
-      "title": "ModelConfiguration",
-      "type": "object",
-      "additionalProperties": false
-    },
     "ObservabilityConfig": {
       "properties": {
         "kpi": {
@@ -1210,18 +1164,6 @@
       },
       "title": "Inference Credentials",
       "type": "array"
-    },
-    "ocr_model": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ModelConfiguration"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
     },
     "attachment_processors": {
       "anyOf": [

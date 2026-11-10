@@ -106,23 +106,19 @@ platform:
       visibility_scope: local-test-mistral-account
       # The provider list does not say which models embed; the platform attests it.
       embedding_models: [mistral-embed]
-    # OpenAI's /v1/models carries no capability metadata and also lists
-    # embedding, audio and image models: besides the attested embedding models,
-    # authorize only chat models.
+    # OpenAI's /v1/models lists chat, embedding, audio and image models without
+    # capability metadata, so discovery cannot establish any aptitude. The platform
+    # declares the offers it approves: chat, except the attested embedding models.
     - source_id: openai
       revision: 1
       enabled: true
       inventory:
-        kind: discovered
-        url: https://api.openai.com/v1/models
-        authentication:
-          mode: bearer
-          secret_env_var: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
-          provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
-          authority: discovery_and_inference
-          accept_inference_authority: true
-        qualification: chat_source
-        complete_inventory_guaranteed: true
+        kind: declared
+        models:
+          - {id: gpt-4.1-mini}
+          - {id: gpt-4.1}
+          - {id: text-embedding-3-small}
+          - {id: text-embedding-3-large}
       inference:
         credential_binding: openai
         api_root: https://api.openai.com/v1

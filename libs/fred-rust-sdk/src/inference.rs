@@ -54,6 +54,8 @@ pub struct InferenceSelection {
     pub policy_revision: i64,
 }
 
+/// Generation protocol only. An attested embedding offer is always called at
+/// `{api_root}/embeddings`, the one embedding endpoint of these APIs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelWire {

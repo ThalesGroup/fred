@@ -8580,61 +8580,6 @@
                   "title": "Inference Credentials",
                   "type": "array"
                 },
-                "ocr_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
-                      },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
-                },
                 "attachment_processors": {
                   "anyOf": [
                     {
@@ -11109,61 +11054,6 @@
                   "title": "Inference Credentials",
                   "type": "array"
                 },
-                "ocr_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
-                      },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
-                },
                 "attachment_processors": {
                   "anyOf": [
                     {
@@ -13581,61 +13471,6 @@
                   "title": "Inference Credentials",
                   "type": "array"
                 },
-                "ocr_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
-                      },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
-                },
                 "attachment_processors": {
                   "anyOf": [
                     {
@@ -16052,61 +15887,6 @@
                   },
                   "title": "Inference Credentials",
                   "type": "array"
-                },
-                "ocr_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
-                      },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
                 },
                 "attachment_processors": {
                   "anyOf": [
@@ -18569,6 +18349,7 @@
                                 "type": "string"
                               },
                               "wire": {
+                                "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
                                 "enum": [
                                   "openai_chat",
                                   "openai_responses"
@@ -18687,7 +18468,7 @@
                                   "models": {
                                     "items": {
                                       "additionalProperties": false,
-                                      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+                                      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
                                       "properties": {
                                         "context_window_tokens": {
                                           "format": "int64",
@@ -20919,6 +20700,7 @@
                                 "type": "string"
                               },
                               "wire": {
+                                "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
                                 "enum": [
                                   "openai_chat",
                                   "openai_responses"
@@ -21037,7 +20819,7 @@
                                   "models": {
                                     "items": {
                                       "additionalProperties": false,
-                                      "description": "Chat is guaranteed by this declaration; an absent fact stays unknown.",
+                                      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
                                       "properties": {
                                         "context_window_tokens": {
                                           "format": "int64",

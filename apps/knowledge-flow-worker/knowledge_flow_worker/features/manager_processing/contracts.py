@@ -49,7 +49,7 @@ class Work(Contract):
 
 
 class StageModels(Contract):
-    """Models the Control Plane admitted for this stage under the organization's policy."""
+    """Models the Control Plane admitted for this stage; none for a committed replay."""
 
     embedding: InferenceAdmission | None
     vision: InferenceAdmission | None
@@ -92,7 +92,10 @@ class Descriptor(Contract):
             raise ValueError("A folder path is required only for a drive document")
         if self.organization_id != self.work.organization_id:
             raise ValueError("The descriptor and its work name different organizations")
-        if self.stage == "indexing" and self.models.embedding is None:
+        # A committed stage replays its result without inference, hence without admission.
+        if self.committed is not None and (self.models.embedding or self.models.vision):
+            raise ValueError("A committed stage replay carries no model admission")
+        if self.committed is None and self.stage == "indexing" and self.models.embedding is None:
             raise ValueError("Indexing requires the admitted corpus embedding model")
         return self
 

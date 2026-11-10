@@ -116,28 +116,8 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         # This identifier becomes a path segment on this route.
         if connection.route == "azure_deployment" and not _SEGMENT.fullmatch(model_id):
             raise ModelRoutingError("Invalid model identifier for a deployment route")
-        version = connection.api_version
-        # Explicit options only; do not inject core's default temperature.
-        options = selection.options.model_dump(exclude_none=True)
-        options.setdefault("temperature", None)
-        # Through the body: ChatOpenAI renames this option to max_completion_tokens,
-        # which these servers would ignore.
-        if (
-            connection.wire == "openai_chat"
-            and connection.dialect == "openai_compatible"
-            and "max_tokens" in options
-        ):
-            options["extra_body"] = {"max_tokens": options.pop("max_tokens")}
         config = ModelConfiguration(
-            provider="openai",
-            name=model_id,
-            settings={
-                "base_url": connection.base_url(model_id),
-                # Explicit: LangChain would otherwise choose from the model and payload.
-                "use_responses_api": connection.wire == "openai_responses",
-                "default_query": {"api-version": version} if version else None,
-                **options,
-            },
+            provider="openai", name=model_id, settings=admission.chat_settings()
         )
         identity = json.dumps(
             selection.key.identity, ensure_ascii=False, separators=(",", ":")

@@ -3,6 +3,7 @@
 """Control Plane admissions for tests, attested by the test workload's binding."""
 
 from fred_sdk.contracts.weaver import InferenceAdmission, InferenceCredentialBinding
+
 from knowledge_flow_worker.features.manager_processing.contracts import StageModels
 
 TEST_BINDING = InferenceCredentialBinding(credential_binding="test", api_root="https://models.invalid/v1")

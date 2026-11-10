@@ -126,7 +126,7 @@ The inherited factory settings are retained:
 | PostgreSQL / migrations | Database `fred_weaver`, host `postgres`; API and preparation worker use runtime login `fred_runtime`, schema `runtime`, password from `fred-secrets/POSTGRES_RUNTIME_PASSWORD`. The API's enabled migration job runs `python -m fred_runtime migrate`, including installed capabilities, after CP schema initialization. The worker runs no migration. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch KPI, Prometheus and node CA mount; their inherited credential references are retained. |
-| Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
+| Models | The control plane discovers the Mistral source and declares the OpenAI one; the pod retains only their inference credential bindings. Each reads the optional `MISTRAL_API_KEY` and `OPENAI_API_KEY` of `fred-model-credentials`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 
 After deploying, use organization administration -> Agents to find and activate
@@ -200,8 +200,9 @@ This profile does not migrate existing persisted resources. Application data res
 is unsupported for the Rust ingestion profile and is refused before mutation.
 Recreating a disposable local installation is a separate operator action.
 
-The vector index is configured in `manager_processing.vector_store.index`. Its name, and
-the KPI and log indexes, must match the permissions in the factory's `k3d/values.yaml`.
+The vector index base is configured in `manager_processing.vector_store.index`; each
+organization's corpus is `<base>-<organization id>`. The factory's `k3d/values.yaml`
+grants `<base>-*` (ingestion: write and create; API: read) and the KPI and log indexes.
 
 ## PowerPoint preparation worker: configuration and reception
 
@@ -238,31 +239,46 @@ and the existing porting status for the reception boundary.
 
 ## Models for local testing
 
-The profile declares two discovered sources in the control plane, `mistral` and
-`openai`, each read with its provider's `/v1/models` and called at its `/v1` root.
-Each uses its own key, `MISTRAL_API_KEY` or `OPENAI_API_KEY`, for both operations,
-from the optional keys of `fred-model-credentials`; a source without its key stays
-unavailable, and no secret value is stored in the configuration. Each source attests
-its embedding models (`mistral-embed`; `text-embedding-3-small`/`-large`), which
-provider lists do not identify. The control plane uses the same node CA bundle as
-the pod for outgoing TLS.
+The profile declares two sources in the control plane, both called at their
+provider's `/v1` root. `mistral` is discovered from `/v1/models`, whose capability
+metadata says which offers chat. OpenAI's list carries no such metadata, so `openai`
+is a declared list of the chat models the instance approves. Each source attests its
+embedding models (`mistral-embed`; `text-embedding-3-small`/`-large`), which
+provider lists do not identify. Each workload reads `MISTRAL_API_KEY` and
+`OPENAI_API_KEY` from optional keys of `fred-model-credentials`; no secret value is
+stored in the configuration. A source without its key stays unavailable: Mistral
+discovery fails and an OpenAI call is refused, without affecting the other source.
+The control plane uses the same node CA bundle as the pod for outgoing TLS.
 
-The overlay explicitly assigns `mistral` to the demo organizations `Acme` and
-`Globex`, resolved by their exact PostgreSQL names after the existing provisioning
-import. Each initially permits `mistral-small-latest`, `mistral-medium-latest` and
-`mistral-embed`, selects Small as default and `mistral-embed` for documents, and
-leaves fallback, vision and reasoning empty. The test account is
-shared deliberately; distinct accounts require distinct source IDs. Other
-organizations need their own explicit declaration, never an implicit global grant.
+The operator chooses the provider of the demo organizations `Acme` and `Globex`
+explicitly, with the factory's values; the presence of a key selects nothing:
+
+| Provider | Keys to export | Command from the factory |
+| --- | --- | --- |
+| Mistral | `MISTRAL_API_KEY` | `make k3d-app FRED=weaver APP=fred DIR=/path/to/fred` |
+| OpenAI | `OPENAI_API_KEY` | the same, with `VALUES=k3d-apps/fred/models-openai.yaml` |
+| Both | both | the same, with `VALUES=k3d-apps/fred/models-mistral-openai.yaml`: Acme on Mistral, Globex on OpenAI |
+
+Each declaration assigns its source, permits a small and a larger chat model and the
+embedding model, selects the small one as default and the embedding model for
+documents, and leaves fallback, vision and reasoning empty. Organizations resolve by
+their exact PostgreSQL names after the existing provisioning import. The test
+accounts are shared deliberately; distinct accounts require distinct source IDs.
+Other organizations need their own explicit declaration, never an implicit global
+grant. `make k3d-app-validate` with the same variables renders a profile without
+deploying it.
 
 Provision secrets, deploy the schema/configuration, then import the existing demo
-bundle. The post-provisioning pass discovers and initializes models automatically.
-Successful initialization is durable: restarts preserve subsequent UI decisions,
-even an empty or deleted policy. Missing models/discovery failures grant nothing
-for that organization. Correct the dependency and replay `control-plane
-initialize-models` in the manager's environment; already completed organizations
-are untouched. For historical policies, supply all source mappings explicitly;
-their administered choices are preserved. See the [initialization contract](../../apps/control-plane/README.md#initialize-organization-models-once)
+bundle. The post-provisioning pass refreshes the declared organizations' sources and
+initializes their policies once. Successful initialization is durable: restarts
+preserve subsequent UI decisions, even an empty or deleted policy, and the Owner
+changes the policy in **Models** until the first indexing locks the embedding model.
+A failed initialization grants nothing for that organization and is retried at the
+next control plane start, which stops on that failure: choose the profile matching
+the exported keys before importing the bundle. Correct the dependency and replay
+`control-plane initialize-models` in the manager's environment; already completed
+organizations are untouched. For historical policies, supply all source mappings
+explicitly; their administered choices are preserved. See the [initialization contract](../../apps/control-plane/README.md#initialize-organization-models-once)
 for diagnostics, bounds and recovery.
 
 Discovery lists the provider's complete visible inventory and grants no access.
@@ -271,10 +287,11 @@ Later discoveries do not extend the explicit permitted list. The old factory
 tests do not establish real k3d/provider validation; that remains a developer check.
 
 On the host (Docker Compose), `apps/control-plane/config/configuration_prod.yaml`
-declares the same sources, and `make setup-env` copies each exported key into the
-`.env` files. The Agent Pod and Knowledge Flow configurations retain only the
-matching inference credential bindings. OpenAI's model list carries no capability
-metadata: besides its attested embedding models, authorize only its chat models.
+declares the same sources and initializes Acme and Globex on Mistral, and
+`make setup-env` copies each exported key into the `.env` files. For OpenAI alone on
+the host, replace that file's `platform.organization_models` with the OpenAI
+declarations of `models-openai.yaml` before the first import. The Agent Pod and
+Knowledge Flow configurations retain only the matching inference credential bindings.
 
 `fred-test-mock` is a separate follow-up: retain the embedded pod model used by
 the graph Test agent, and wire it through Weaver's catalog and authorization.
@@ -298,8 +315,8 @@ document inventory or an authorization check.
 | Frontend | No object credential | Existing Resources pages and authenticated manager calls |
 
 Vector fields/mapping remain Swift's. Generation-scoped chunk IDs prevent stale
-overwrites. `document-vectors` stays separate because legacy retrieval does not
-enforce manager publication or ReBAC. File/Raw previews work through manager;
+overwrites. The `document-vectors-<organization id>` corpora stay separate from Swift's
+indexes because legacy retrieval does not enforce manager publication or ReBAC. File/Raw previews work through manager;
 this profile does not add manager search/chat support.
 
 The profile caps uploads at four times 100 MiB (400 MiB spool, 2 GiB pod ephemeral

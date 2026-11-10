@@ -133,7 +133,10 @@ class ModelConnection(ResolverFact):
         return self.api_root
 
     def request_url(self, model: str) -> str:
-        """The only URL this connection may reach for one model."""
+        """The only generation URL this connection may reach for one model.
+
+        `wire` selects the generation protocol only. An embedding offer is always
+        called at `{base_url}/embeddings`, the one embedding endpoint of these APIs."""
         leaf = "responses" if self.wire == "openai_responses" else "chat/completions"
         query = f"?api-version={self.api_version}" if self.api_version else ""
         return f"{self.base_url(model)}/{leaf}{query}"
@@ -191,6 +194,33 @@ class InferenceSelection(ResolverFact):
 class InferenceAdmission(ResolverFact):
     selection: InferenceSelection
     connection: ModelConnection
+
+    def chat_settings(self) -> dict[str, Any]:
+        """OpenAI-compatible chat client settings making exactly the admitted call.
+
+        Protocol, destination and options come from the admission alone: an unset option
+        stays unset rather than taking a client default. Authentication is the caller's,
+        from its local credential binding."""
+        connection = self.connection
+        model = self.selection.key.upstream_model_id
+        options: dict[str, Any] = self.selection.options.model_dump(exclude_none=True)
+        options.setdefault("temperature", None)
+        # Through the body: ChatOpenAI renames this option to max_completion_tokens,
+        # which these servers would ignore.
+        if (
+            connection.wire == "openai_chat"
+            and connection.dialect == "openai_compatible"
+            and "max_tokens" in options
+        ):
+            options["extra_body"] = {"max_tokens": options.pop("max_tokens")}
+        version = connection.api_version
+        return {
+            "base_url": connection.base_url(model),
+            # Explicit: LangChain would otherwise choose from the model and payload.
+            "use_responses_api": connection.wire == "openai_responses",
+            "default_query": {"api-version": version} if version else None,
+            **options,
+        }
 
 
 class ModelMetadata(ResolverFact):

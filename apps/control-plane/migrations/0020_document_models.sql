@@ -50,6 +50,11 @@ comment on trigger organization_embedding_locked on organization_model_policy is
 -- Knowledge Flow's per-request models, by working space: the locked corpus embedding
 -- (query embedding) and the organization's default chat model (document tools). The
 -- connection is the approved reference, never a secret; revisions identify the facts.
+-- `available` is the worker's stage admission (model_catalog::instance::admit_document):
+-- an enabled source observed at its current revision, a present offer with the aptitude
+-- of its use (`chat` or the attested `embedding` metadata); the policy's foreign keys
+-- already require the permission and its source assignment. A failed discovery keeps
+-- the last observed offers, as for every admission; a withdrawal removes them.
 create view cp_read.organization_model as
 select s.id as space_id, p.organization_id, u.use, u.source_id, u.upstream_model_id,
        m.configuration->'inference' as connection,
@@ -57,7 +62,8 @@ select s.id as space_id, p.organization_id, u.use, u.source_id, u.upstream_model
        m.snapshot_revision, p.revision as policy_revision,
        coalesce((m.configuration->>'enabled')::boolean, false)
            and m.snapshot_source_revision is not distinct from (m.configuration->>'revision')::bigint
-           and coalesce(o.advertised, false) as available
+           and coalesce(o.advertised, false)
+           and coalesce(o.metadata -> u.use = 'true'::jsonb, false) as available
 from space s
 join organization_model_policy p on p.organization_id = s.organization_id
 cross join lateral (values
@@ -67,5 +73,5 @@ cross join lateral (values
 join model_source m on m.source_id = u.source_id
 left join model_offer o on o.source_id = u.source_id and o.upstream_model_id = u.upstream_model_id
 where u.applies;
--- space_id/use select the row; available withdraws a disabled, unobserved or withdrawn offer.
+-- space_id/use select the row; `use` also names the aptitude in the offer metadata.
 grant select on cp_read.organization_model to fred_kf_reader;

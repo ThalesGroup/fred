@@ -158,7 +158,8 @@ pub struct Descriptor {
     pub profile_settings: serde_json::Value,
     pub predecessor: Option<Predecessor>,
     pub committed: Option<Manifest>,
-    /// Models admitted for this stage under the organization's policy.
+    /// Models admitted for this stage under the organization's policy; empty when the
+    /// descriptor replays a committed stage, which runs no inference.
     pub models: StageModels,
 }
 

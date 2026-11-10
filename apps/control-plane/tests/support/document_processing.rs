@@ -167,6 +167,90 @@ async fn commit_rows(
     .unwrap()
 }
 
+/// Whether Knowledge Flow may search the organization's corpus with its locked model.
+async fn corpus_available(pool: &sqlx::PgPool, organization: Uuid) -> Option<bool> {
+    sqlx::query_scalar("select bool_and(available) from cp_read.organization_model where organization_id=$1 and use='embedding'")
+        .bind(organization)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+async fn embedding_attested(pool: &sqlx::PgPool, value: bool) {
+    sqlx::query("update model_offer set metadata=jsonb_set(metadata,'{embedding}',to_jsonb($1)) where source_id='fixture'")
+        .bind(value)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+/// An unusable corpus model refuses the claim before any mutation: no generation, no
+/// corpus lock. The view Knowledge Flow searches with applies the same aptitude.
+async fn index_after_refusing_unusable_model(
+    pool: &sqlx::PgPool,
+    p: &Processing,
+    work: &Work,
+) -> Descriptor {
+    embedding_attested(pool, false).await;
+    assert!(matches!(
+        p.claim(claim(work, Stage::Indexing, Uuid::new_v4(), 1))
+            .await,
+        Err(control_plane::error::AppError::Problem {
+            code: "document_model_unavailable",
+            ..
+        })
+    ));
+    let (generations, locked): (i64, bool) = sqlx::query_as("select (select count(*) from generation where processing_id=$1 and stage='indexing'), (select embedding_locked_at is not null from organization_model_policy where organization_id=$2)")
+        .bind(work.processing_id)
+        .bind(work.organization_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!((generations, locked), (0, false));
+    embedding_attested(pool, true).await;
+    let indexed = p
+        .claim(claim(work, Stage::Indexing, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    let admitted = indexed.models.embedding.as_ref().unwrap();
+    assert_eq!(admitted.selection.key.upstream_model_id, "fixture-embed");
+    assert_eq!(
+        corpus_available(pool, work.organization_id).await,
+        Some(true)
+    );
+    embedding_attested(pool, false).await;
+    assert_eq!(
+        corpus_available(pool, work.organization_id).await,
+        Some(false)
+    );
+    embedding_attested(pool, true).await;
+    indexed
+}
+/// A committed stage replays from its result: a source disabled since then neither
+/// blocks the replay nor receives a new admission, since nothing is inferred again.
+async fn replay_without_admission(
+    pool: &sqlx::PgPool,
+    p: &Processing,
+    work: &Work,
+    indexed: &Descriptor,
+) {
+    let enabled = |value: bool| {
+        sqlx::query("update model_source set configuration=jsonb_set(configuration,'{enabled}',to_jsonb($1)) where source_id='fixture'")
+            .bind(value)
+            .execute(pool)
+    };
+    enabled(false).await.unwrap();
+    let replay = p
+        .claim(claim(work, Stage::Indexing, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    assert_eq!(replay.generation, indexed.generation);
+    assert!(replay.committed.is_some());
+    assert!(replay.models.embedding.is_none() && replay.models.vision.is_none());
+    assert_eq!(
+        corpus_available(pool, work.organization_id).await,
+        Some(false)
+    );
+    enabled(true).await.unwrap();
+}
 async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done: &Summary) {
     let (published_generation, saved) = published(&d.e.pool, work.document_id).await;
     let generation = saved.generation;
@@ -500,10 +584,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
         0,
     )
     .await;
-    let indexed = p
-        .claim(claim(&work, Stage::Indexing, Uuid::new_v4(), 1))
-        .await
-        .unwrap();
+    let indexed = Box::pin(index_after_refusing_unusable_model(&d.e.pool, &p, &work)).await;
     p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
         work: work.clone(),
         generation: indexed.generation,
@@ -543,6 +624,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
             .unwrap()
             .retrievable
     );
+    Box::pin(replay_without_admission(&d.e.pool, &p, &work, &indexed)).await;
     Box::pin(verify_terminal_replay(&d, &p, &work, &done)).await;
     // A fenced attempt writes only below its own prefix and cannot replace published bytes.
     assert_ne!(first.output_prefix, indexed.output_prefix);

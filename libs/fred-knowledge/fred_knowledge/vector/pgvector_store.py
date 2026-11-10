@@ -189,7 +189,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
 
     def __init__(
         self,
-        embedding_model: Embeddings,
+        embedding_model: Embeddings | None,
         embedding_model_name: str,
         postgres_config: PostgresStoreConfig,
         collection_name: str,
@@ -199,13 +199,32 @@ class PgVectorStoreAdapter(BaseVectorStore):
         self.collection_name = collection_name
         # lightweight engine for optional helper queries
         self._engine = create_engine_from_config(postgres_config)
-        self._vs = PGVector(
-            embeddings=self.embedding_model,
-            connection=self._engine,
-            collection_name=collection_name,
-            use_jsonb=True,
-            create_extension=False,  # Administrator-owned bootstrap, never application DDL.
+        # Without an embedding model the store only maintains existing vectors in SQL:
+        # it neither embeds nor creates the collection.
+        self._vs = (
+            PGVector(
+                embeddings=embedding_model,
+                connection=self._engine,
+                collection_name=collection_name,
+                use_jsonb=True,
+                create_extension=False,  # Administrator-owned bootstrap, never application DDL.
+            )
+            if embedding_model is not None
+            else None
         )
+
+    def _search(self) -> PGVector:
+        """The LangChain store, for operations that embed."""
+        if self._vs is None:
+            raise RuntimeError("This corpus store only maintains existing vectors")
+        return self._vs
+
+    def index_exists(self) -> bool:
+        """Whether this organization's collection exists; a maintenance store creates none."""
+        with self._engine.connect() as conn:
+            if not conn.scalar(text("SELECT to_regclass('langchain_pg_collection') IS NOT NULL")):
+                return False
+            return bool(conn.scalar(text("SELECT EXISTS (SELECT 1 FROM langchain_pg_collection WHERE name = :collection)"), {"collection": self.collection_name}))
 
     # ---------- BaseVectorStore: ingestion ----------
 
@@ -226,14 +245,15 @@ class PgVectorStoreAdapter(BaseVectorStore):
 
         from fred_knowledge.vector.base_vector_store import vector_write_observer
 
+        store = self._search()
         observer = vector_write_observer.get()
         if observer is None:
-            returned = self._vs.add_documents(documents, ids=assigned)
+            returned = store.add_documents(documents, ids=assigned)
         else:
             texts = [document.page_content for document in documents]
-            embeddings = self.embedding_model.embed_documents(texts)
+            embeddings = self.embedding_model.embed_documents(texts)  # type: ignore[union-attr]  # set with the store
             with observer.writing():
-                returned = self._vs.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=assigned)
+                returned = store.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=assigned)
 
         logger.info(
             "upserted %d chunk(s) into collection=%s",
@@ -303,6 +323,40 @@ class PgVectorStoreAdapter(BaseVectorStore):
         except Exception:
             logger.exception("failed to update retrievable flag for document_uid=%s", document_uid)
             raise RuntimeError("Failed to update retrievable flag in PGVector.")
+
+    def set_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        """Change inclusion of exactly these published chunks, in one transaction."""
+        with self._engine.begin() as conn:
+            updated = conn.execute(
+                text(
+                    """
+                    UPDATE langchain_pg_embedding e
+                    SET cmetadata = jsonb_set(e.cmetadata, '{retrievable}', to_jsonb(CAST(:value AS boolean)))
+                    FROM langchain_pg_collection c
+                    WHERE e.collection_id = c.uuid AND c.name = :collection
+                      AND e.cmetadata ->> 'document_uid' = :doc_uid AND e.cmetadata ->> 'chunk_uid' = ANY(:ids)
+                    """
+                ),
+                {"collection": self.collection_name, "doc_uid": document_uid, "ids": list(chunk_ids), "value": bool(value)},
+            ).rowcount
+            if updated != len(set(chunk_ids)):
+                raise RuntimeError("Published chunk inclusion was not fully applied.")
+
+    def verify_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        """Verify exact published IDs without loading text."""
+        with self._engine.connect() as conn:
+            matching = conn.scalar(
+                text(
+                    """
+                    SELECT count(*) FROM langchain_pg_embedding e JOIN langchain_pg_collection c ON c.uuid = e.collection_id
+                    WHERE c.name = :collection AND e.cmetadata ->> 'document_uid' = :doc_uid
+                      AND e.cmetadata ->> 'chunk_uid' = ANY(:ids) AND e.cmetadata -> 'retrievable' = to_jsonb(CAST(:value AS boolean))
+                    """
+                ),
+                {"collection": self.collection_name, "doc_uid": document_uid, "ids": list(chunk_ids), "value": bool(value)},
+            )
+        if matching != len(set(chunk_ids)):
+            raise RuntimeError("Published chunk inclusion does not match.")
 
     def set_document_name(self, *, document_uid: str, document_name: str) -> None:
         """
@@ -543,8 +597,10 @@ class PgVectorStoreAdapter(BaseVectorStore):
             self.collection_name,
             filter_arg,
         )
+        # Outside the search failure handling: a maintenance store must never answer empty.
+        store = self._search()
         try:
-            hits = self._vs.similarity_search_with_relevance_scores(query, k=candidate_k, filter=filter_arg)
+            hits = store.similarity_search_with_relevance_scores(query, k=candidate_k, filter=filter_arg)
         except Exception:
             logger.exception(
                 "similarity search failed (k=%s, filter=%s)",

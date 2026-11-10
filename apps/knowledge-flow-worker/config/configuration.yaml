@@ -263,13 +263,6 @@ inference_credentials:
   - credential_binding: openai
     api_root: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
-# ocr_model:
-#   provider: openai
-#   name: mistral-ocr-latest
-#   settings:
-#     base_url: https://api.mistral.ai/v1
-#     request_timeout: 300
-#     signed_url_expiry_hours: 1
 storage:
   postgres:
     host: localhost

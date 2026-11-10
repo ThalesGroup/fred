@@ -41,14 +41,18 @@ from fred_knowledge.vector.pgvector_store import PgVectorStoreAdapter
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
 
-@pytest.fixture
-def store() -> Iterator[PgVectorStoreAdapter]:
+def _config() -> PostgresStoreConfig:
     dsn = os.environ.get("FRED_PGVECTOR_DSN")
     if not dsn:
         pytest.skip("Set FRED_PGVECTOR_DSN to a bootstrapped disposable fred_kf database")
     url = make_url(dsn)
     assert url.username == "fred_kf", "The integration fixture must use the consumer login"
-    config = PostgresStoreConfig(host=url.host, port=url.port or 5432, username=url.username, password=url.password, database=url.database, schema="knowledge")
+    return PostgresStoreConfig(host=url.host, port=url.port or 5432, username=url.username, password=url.password, database=url.database, schema="knowledge")
+
+
+@pytest.fixture
+def store() -> Iterator[PgVectorStoreAdapter]:
+    config = _config()
     engine = create_engine_from_config(config)
     try:
         with engine.connect() as conn:
@@ -108,3 +112,29 @@ def test_legacy_chunk_without_the_field_stays_searchable_until_toggled(store: Pg
     store.set_document_retrievable(document_uid="doc-old", value=False)
 
     assert _searchable_uids(store) == set()
+
+
+def _maintenance(store: PgVectorStoreAdapter, collection: str | None = None) -> PgVectorStoreAdapter:
+    """The cleanup/visibility store: same collection, no embedding model."""
+    return PgVectorStoreAdapter(embedding_model=None, embedding_model_name="none", postgres_config=_config(), collection_name=collection or store.collection_name)
+
+
+def test_maintenance_without_an_embedder_flags_verifies_and_deletes(store: PgVectorStoreAdapter) -> None:
+    store.add_documents(_chunks("doc-a", 2) + _chunks("doc-b", 1))
+    maintenance = _maintenance(store)
+    assert maintenance.index_exists()
+    assert not _maintenance(store, f"missing-{uuid.uuid4().hex}").index_exists()
+    ids = ["doc-a::chunk::0", "doc-a::chunk::1"]
+    maintenance.set_chunks_retrievable(document_uid="doc-a", chunk_ids=ids, value=False)
+    maintenance.verify_chunks_retrievable(document_uid="doc-a", chunk_ids=ids, value=False)
+    with pytest.raises(RuntimeError, match="does not match"):
+        maintenance.verify_chunks_retrievable(document_uid="doc-a", chunk_ids=ids, value=True)
+    with pytest.raises(RuntimeError, match="not fully applied"):
+        maintenance.set_chunks_retrievable(document_uid="doc-b", chunk_ids=ids, value=False)
+    assert _searchable_uids(store) == {"doc-b"}
+    maintenance.delete_chunk("doc-b", "doc-b::chunk::0")
+    assert "text" not in maintenance.get_chunk("doc-b", "doc-b::chunk::0")
+    maintenance.delete_vectors_for_document(document_uid="doc-a")
+    assert maintenance.get_document_chunk_count(document_uid="doc-a") == 0
+    with pytest.raises(RuntimeError, match="only maintains"):
+        maintenance.ann_search("probe", k=1)

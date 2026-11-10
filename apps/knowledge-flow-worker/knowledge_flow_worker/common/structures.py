@@ -17,7 +17,7 @@ import re
 from enum import Enum
 from typing import List, Literal, Optional
 
-from fred_core.common import KpiObservabilityConfig, ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, TemporalSchedulerConfig
+from fred_core.common import KpiObservabilityConfig, OpenSearchStoreConfig, PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.documents.processing_profile import IngestionProcessingProfile as IngestionProcessingProfile
 from fred_knowledge.configuration import ArtifactStorageConfig, TabularStoreConfig, TextSplitterConfig, VectorStorageConfig
 from fred_knowledge.configuration import OpenSearchVectorIndexConfig as OpenSearchVectorIndexConfig
@@ -467,10 +467,6 @@ class Configuration(BaseModel):
     # The Control Plane admits each stage's embedding and vision models; this
     # workload only attests their destinations and holds their key variable names.
     inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
-    ocr_model: Optional[ModelConfiguration] = Field(
-        default=None,
-        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
-    )
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
         description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used.",

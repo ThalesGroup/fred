@@ -11,14 +11,14 @@ from fred_knowledge.models import DocumentModelError, DocumentModels
 ROOT = "https://models.invalid/v1"
 
 
-def admission(**connection) -> InferenceAdmission:
+def admission(options: dict | None = None, revision: int = 1, **connection) -> InferenceAdmission:
     return InferenceAdmission.model_validate(
         {
             "selection": {
                 "key": {"source_id": "s", "upstream_model_id": "embed"},
                 "source": "default",
-                "options": {},
-                "source_revision": 1,
+                "options": options or {},
+                "source_revision": revision,
                 "snapshot_revision": 1,
                 "policy_revision": 1,
             },
@@ -76,4 +76,34 @@ def test_unsupported_forms_and_missing_keys_are_explicit(monkeypatch, built):
         documents.embeddings(admission())
     with pytest.raises(DocumentModelError, match="standard route"):
         documents.embeddings(admission(route="azure_deployment", api_version="2024-10-21"))
+    assert built == []
+
+
+def test_a_new_revision_builds_a_new_client(monkeypatch, built):
+    monkeypatch.setenv("LOCAL_KEY", "secret")  # pragma: allowlist secret
+    documents = DocumentModels((InferenceCredentialBinding(credential_binding="b", api_root=ROOT, api_key_env="LOCAL_KEY"),))
+    first = documents.embeddings(admission())
+    assert documents.embeddings(admission(revision=2)) is not first
+    assert DocumentModels.identity(admission()) != DocumentModels.identity(admission(revision=2))
+
+
+@pytest.mark.parametrize("wire", ["openai_chat", "openai_responses"])
+def test_chat_follows_the_admitted_protocol_and_options_only(monkeypatch, wire):
+    monkeypatch.setenv("LOCAL_KEY", "secret")  # pragma: allowlist secret
+    documents = DocumentModels((InferenceCredentialBinding(credential_binding="b", api_root=ROOT, api_key_env="LOCAL_KEY"),))
+    unset = documents.chat(admission(wire=wire))
+    assert (unset.model_name, unset.openai_api_base, unset.use_responses_api) == ("embed", ROOT, wire == "openai_responses")
+    # No client default replaces an option the Control Plane left unset.
+    assert unset.temperature is None and "temperature" not in unset._get_request_payload([])
+    chosen = documents.chat(admission({"temperature": 0.3, "top_p": 0.5}, wire=wire))
+    assert (chosen.temperature, chosen.top_p) == (0.3, 0.5)
+
+
+def test_a_gateway_header_is_refused_before_any_client(monkeypatch, built):
+    monkeypatch.setenv("LOCAL_KEY", "secret")  # pragma: allowlist secret
+    monkeypatch.setenv("GATEWAY_KEY", "gateway")  # pragma: allowlist secret
+    binding = InferenceCredentialBinding(credential_binding="b", api_root=ROOT, api_key_env="LOCAL_KEY", gateway_key_env="GATEWAY_KEY")
+    documents = DocumentModels((binding,))
+    with pytest.raises(DocumentModelError, match="standard route"):
+        documents.embeddings(admission(auth={"kind": "api_key", "gateway_key_header": "X-Gateway-Key"}))
     assert built == []

@@ -26,16 +26,14 @@ the limits for turns already in progress.
 
 ## Ingestion preparation
 
-The prepare hook reads the rendered worker configuration and exports the processing
-contract from the built worker image. It provisions the required storage and service
-identities and the OpenSearch pipeline. OpenSearch index permissions use the
-configured `manager_processing.vector_store.index` and, when enabled, the configured
-KPI index. Permission targets must be concrete index names; wildcards are refused
-before any provisioning. The document index name is independent of the backend name.
-
-The hook does not infer resources from a component-name prefix. The worker uses the
-same rendered configuration as the permission setup. The local profile selects
-`document-vectors` and `weaver-kpi`: Swift can share the OpenSearch instance, never
+The Control Plane deployment exports the processing contract from the built worker
+image. Buckets, service identities, OpenSearch roles and the search pipeline belong
+to the infrastructure (locally, the factory's `k3d/values.yaml`), not to the
+application chart. Each organization's corpus is the index
+`<manager_processing.vector_store.index>-<organization id>`, created by the worker at
+that organization's first indexing. Roles therefore grant this prefix: writes and
+index creation to the worker, reads to the API. The local profile grants
+`document-vectors-*` and `weaver-kpi`: Swift can share the OpenSearch instance, never
 these indexes.
 
 ## PostgreSQL ownership

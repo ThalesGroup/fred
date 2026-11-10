@@ -18,6 +18,7 @@ import pytest_asyncio
 from fred_core.common import OpenSearchStoreConfig, PostgresStoreConfig
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_knowledge.models import DocumentModels
 from langchain_community.embeddings import FakeEmbeddings
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -34,7 +35,6 @@ from knowledge_flow_worker.common.structures import (
     StorageConfig,
     TemporalSchedulerConfig,
 )
-from fred_knowledge.models import DocumentModels
 from tests.model_admissions import TEST_BINDING
 from tests.services.artifact_store import TestArtifactStore
 
