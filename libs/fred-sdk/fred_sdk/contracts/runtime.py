@@ -1719,20 +1719,25 @@ class TeamWikiPort(ABC):
 
 
 class PreparationArtifactsPort(Protocol):
+    @abstractmethod
     def has_result(self, capability_id: str) -> bool:
         pass
 
+    @abstractmethod
     def settings(self, capability_id: str) -> Mapping[str, Any]:
         pass
 
+    @abstractmethod
     async def read_result(self, capability_id: str) -> bytes | None:
         pass
 
+    @abstractmethod
     async def read_sibling(self, capability_id: str, filename: str) -> bytes | None:
         pass
 
 
 class PreparationVisionAvailabilityPort(Protocol):
+    @abstractmethod
     async def available(self) -> bool:
         pass
 

@@ -3,6 +3,7 @@
 """Shared contract for work prepared outside the agent turn."""
 
 import json
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Literal, Protocol
 from uuid import UUID
@@ -101,25 +102,31 @@ class PreparationResult(BaseModel):
 
 
 class PreparationAssetReader(Protocol):
+    @abstractmethod
     async def read(self, asset_id: UUID) -> bytes:
         pass
 
 
 class PreparationArtifactStore(Protocol):
+    @abstractmethod
     async def write(self, path: str, content: bytes) -> None:
         pass
 
+    @abstractmethod
     async def read(self, path: str) -> bytes:
         pass
 
+    @abstractmethod
     async def delete(self, path: str) -> None:
         pass
 
 
 class PreparationVisionPort(Protocol):
+    @abstractmethod
     async def describe(self, image: bytes, prompt: str) -> str:
         pass
 
+    @abstractmethod
     async def available(self) -> bool:
         pass
 
