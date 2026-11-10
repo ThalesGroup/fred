@@ -101,21 +101,27 @@ class PreparationResult(BaseModel):
 
 
 class PreparationAssetReader(Protocol):
-    async def read(self, asset_id: UUID) -> bytes: ...
+    async def read(self, asset_id: UUID) -> bytes:
+        raise NotImplementedError
 
 
 class PreparationArtifactStore(Protocol):
-    async def write(self, path: str, content: bytes) -> None: ...
+    async def write(self, path: str, content: bytes) -> None:
+        raise NotImplementedError
 
-    async def read(self, path: str) -> bytes: ...
+    async def read(self, path: str) -> bytes:
+        raise NotImplementedError
 
-    async def delete(self, path: str) -> None: ...
+    async def delete(self, path: str) -> None:
+        raise NotImplementedError
 
 
 class PreparationVisionPort(Protocol):
-    async def describe(self, image: bytes, prompt: str) -> str: ...
+    async def describe(self, image: bytes, prompt: str) -> str:
+        raise NotImplementedError
 
-    async def available(self) -> bool: ...
+    async def available(self) -> bool:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)

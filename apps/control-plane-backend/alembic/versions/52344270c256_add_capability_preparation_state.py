@@ -12,11 +12,16 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+# Alembic reads these revision identifiers by introspection.
+# codeql[py/unused-global-variable]
 revision: str = "52344270c256"  # pragma: allowlist secret
+# codeql[py/unused-global-variable]
 down_revision: Union[str, Sequence[str], None] = (
     "b8e1f4a2c6d9"  # pragma: allowlist secret
 )
+# codeql[py/unused-global-variable]
 branch_labels: Union[str, Sequence[str], None] = None
+# codeql[py/unused-global-variable]
 depends_on: Union[str, Sequence[str], None] = None
 
 

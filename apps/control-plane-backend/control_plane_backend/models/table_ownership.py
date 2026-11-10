@@ -45,7 +45,6 @@ import control_plane_backend.models.agent_instance_models  # noqa: F401
 import control_plane_backend.models.agent_marketplace_models  # noqa: F401 — registers agent_marketplace_* with Base
 import control_plane_backend.models.announcement_models  # noqa: F401 — registers platform_announcement with Base
 import control_plane_backend.models.bootstrap_models  # noqa: F401 — registers platformbootstrap with Base
-import control_plane_backend.models.capability_preparation_models  # noqa: F401
 import control_plane_backend.models.capability_settings_models  # noqa: F401
 import control_plane_backend.models.knowledge_base_models  # noqa: F401
 
@@ -70,6 +69,7 @@ import control_plane_backend.models.team_admin_charter_models  # noqa: F401 - re
 import control_plane_backend.models.team_wiki_models  # noqa: F401 — registers team_wiki_pages / team_wiki_revisions with Base
 from control_plane_backend.models.base import Base
 
+import_module("control_plane_backend.models.capability_preparation_models")
 import_module("control_plane_backend.models.model_discovery_models")
 import_module("control_plane_backend.models.model_display_name_models")
 import_module("control_plane_backend.models.platform_skill_policy_models")

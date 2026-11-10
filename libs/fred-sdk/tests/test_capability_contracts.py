@@ -279,13 +279,17 @@ def test_preparation_declaration_rejects_duplicate_slot_and_unbounded_work() -> 
 
 def test_declared_preparation_requires_hook() -> None:
     with pytest.raises(ValueError, match="no prepare hook"):
-
-        class _BrokenCapability(AgentCapability[_Config, _Config, EmptyModel]):
-            manifest = _manifest(
-                id="broken_cap",
-                preparation=PreparationSpec(rules_version="1"),
-            )
-            ConfigModel = _Config
+        type(
+            "BrokenCapability",
+            (AgentCapability,),
+            {
+                "manifest": _manifest(
+                    id="broken_cap",
+                    preparation=PreparationSpec(rules_version="1"),
+                ),
+                "ConfigModel": _Config,
+            },
+        )
 
 
 def test_readiness_failure_carries_its_detail() -> None:
