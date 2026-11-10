@@ -108,14 +108,22 @@ LOCAL_POSTGRES_ADMIN := admin
 POSTGRES_BOOTSTRAP_IMAGE := pgvector/pgvector:pg15
 
 .PHONY: setup-env
-setup-env: ## Create each backend's .env from its .env.template (idempotent) and fill in the local Docker Compose secrets and the model keys exported in the shell (MISTRAL_API_KEY, OPENAI_API_KEY)
+setup-env: ## Create each backend's .env from its .env.template, add the variables a newer template introduced (existing values kept), and fill in the local Docker Compose secrets and the model keys exported in the shell (MISTRAL_API_KEY, OPENAI_API_KEY)
 	@set -e; \
 	for dir in $(ENV_APPS); do \
 		if [ ! -f "$$dir/config/.env" ]; then \
 			cp "$$dir/config/.env.template" "$$dir/config/.env"; \
 			echo "************ Created $$dir/config/.env from template ************"; \
 		else \
-			echo "************ $$dir/config/.env already exists, leaving it untouched ************"; \
+			missing=$$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$$dir/config/.env.template" | tr -d = \
+				| while read -r key; do grep -qE "^$$key=" "$$dir/config/.env" || echo "$$key"; done); \
+			if [ -n "$$missing" ]; then \
+				printf '\n# Added by make setup-env from .env.template\n' >> "$$dir/config/.env"; \
+				for key in $$missing; do grep -m1 -E "^$$key=" "$$dir/config/.env.template" >> "$$dir/config/.env"; done; \
+				echo "************ $$dir/config/.env: added from template: "$$missing" ************"; \
+			else \
+				echo "************ $$dir/config/.env is up to date with its template ************"; \
+			fi; \
 		fi; \
 	done
 	@# fred-deployment-factory's docker-compose fixes these to the same value everywhere
