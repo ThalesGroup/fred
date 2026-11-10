@@ -13,6 +13,8 @@ metadata:
 data:
   bootstrap.sql: |
 {{ .Files.Get "files/bootstrap.sql" | indent 4 }}
+  role-passwords.sql: |
+{{ .Files.Get "files/role-passwords.sql" | indent 4 }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -35,21 +37,8 @@ spec:
           args:
             - |
               # psql never echoes SQL or errors containing a password into pod logs.
-              if ! psql -X -q -v ON_ERROR_STOP=1 -v database="$PGDATABASE" -f /bootstrap/bootstrap.sql -f - >/dev/null 2>&1 <<'SQL'
-              SET log_statement = 'none';
-              SET log_min_duration_statement = -1;
-              SET log_min_duration_sample = -1;
-              SET log_transaction_sample_rate = 0;
-              SET log_min_error_statement = 'panic';
-              \getenv cp_password CP_PASSWORD
-              \getenv kf_password KF_PASSWORD
-              \getenv runtime_password RUNTIME_PASSWORD
-              \getenv monitor_password MONITOR_PASSWORD
-              ALTER ROLE fred_cp PASSWORD :'cp_password';
-              ALTER ROLE fred_kf PASSWORD :'kf_password';
-              ALTER ROLE fred_runtime PASSWORD :'runtime_password';
-              ALTER ROLE fred_monitor PASSWORD :'monitor_password';
-              SQL
+              if ! psql -X -q -v ON_ERROR_STOP=1 -v database="$PGDATABASE" \
+                -f /bootstrap/bootstrap.sql -f /bootstrap/role-passwords.sql >/dev/null 2>&1
               then
                 echo 'PostgreSQL bootstrap failed; review admin privileges and schema prerequisites.' >&2
                 exit 1

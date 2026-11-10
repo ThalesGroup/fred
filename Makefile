@@ -101,6 +101,11 @@ LOCAL_SECRET_KEYS := FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY
 	KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET \
 	MANAGER_WORKER_CLIENT_SECRET FRED_CONTENT_SECRET_KEY KF_ARTIFACT_SECRET_KEY MANAGER_DERIVED_SECRET_KEY
 WEAVER_DATABASE := fred_weaver
+# Fred reaches that PostgreSQL as its applications do, through the published port and never
+# by container name. The client runs in the chart hook's image: the host needs no psql.
+LOCAL_POSTGRES_HOST := host.docker.internal
+LOCAL_POSTGRES_ADMIN := admin
+POSTGRES_BOOTSTRAP_IMAGE := pgvector/pgvector:pg15
 
 .PHONY: setup-env
 setup-env: ## Create each backend's .env from its .env.template (idempotent) and fill in the local Docker Compose secrets and the model keys exported in the shell (MISTRAL_API_KEY, OPENAI_API_KEY)
@@ -151,11 +156,14 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent) and
 
 .PHONY: docker-prepare
 docker-prepare: ## What k3d's install hooks do, against Docker Compose: database roles and schemas, Control Plane schema, worker contract (replayable)
-	@# What the chart's postgresBootstrap hook and migration Jobs do on k3d, against app-postgres.
-	docker exec -i app-postgres psql -X -q -v ON_ERROR_STOP=1 -U admin -d $(WEAVER_DATABASE) \
-		-v database=$(WEAVER_DATABASE) < deploy/postgres/bootstrap.sql
-	@docker exec -i app-postgres psql -X -q -v ON_ERROR_STOP=1 -U admin -d $(WEAVER_DATABASE) -c \
-		"$(foreach role,fred_cp fred_kf fred_runtime fred_monitor,ALTER ROLE $(role) PASSWORD '$(LOCAL_PASSWORD)';)"
+	@# The chart's postgresBootstrap hook: the same image and SQL files, as the administrator.
+	cat deploy/postgres/bootstrap.sql deploy/postgres/role-passwords.sql | docker run --rm -i \
+		--add-host=host.docker.internal:host-gateway \
+		-e PGHOST=$(LOCAL_POSTGRES_HOST) -e PGPORT=5432 -e PGDATABASE=$(WEAVER_DATABASE) \
+		-e PGUSER=$(LOCAL_POSTGRES_ADMIN) -e PGPASSWORD=$(LOCAL_PASSWORD) \
+		$(foreach role,CP KF RUNTIME MONITOR,-e $(role)_PASSWORD=$(LOCAL_PASSWORD)) \
+		$(POSTGRES_BOOTSTRAP_IMAGE) psql -X -q -v ON_ERROR_STOP=1 -v database=$(WEAVER_DATABASE) -f -
+	@# Then the chart's migration Jobs.
 	DATABASE_URL=postgresql://fred_cp:$(LOCAL_PASSWORD)@localhost:5432/$(WEAVER_DATABASE) \
 		$(MAKE) -C apps/control-plane initialize-schema
 	$(MAKE) -C apps/knowledge-flow-worker dev

@@ -3,7 +3,11 @@
 import unittest
 from pathlib import Path
 
+import yaml
 from test_manager_chart import deployments, render
+
+ROOT = Path(__file__).resolve().parents[2]
+POSTGRES_DIR = ROOT / "deploy/postgres"
 
 
 class PostgresBoundaryTests(unittest.TestCase):
@@ -73,10 +77,9 @@ class PostgresBoundaryTests(unittest.TestCase):
             if d["kind"] == "ConfigMap"
             and d["metadata"]["name"] == "fred-app-postgres-bootstrap"
         )
-        source = Path(__file__).resolve().parents[1] / "postgres/bootstrap.sql"
-        self.assertEqual(
-            config["data"]["bootstrap.sql"].rstrip(), source.read_text().rstrip()
-        )
+        for sql in ("bootstrap.sql", "role-passwords.sql"):
+            source = POSTGRES_DIR / sql
+            self.assertEqual(config["data"][sql].rstrip(), source.read_text().rstrip())
         for name, role, schema in [
             ("control-plane-backend-schema-init-1", "fred_cp", "control_plane"),
             ("fred-agents-migration-1", "fred_runtime", "runtime"),
@@ -85,6 +88,22 @@ class PostgresBoundaryTests(unittest.TestCase):
             values = {item["name"]: item.get("value") for item in env}
             self.assertIn("://" + role + ":", values["DATABASE_URL"])
             self.assertEqual(values["DATABASE_SCHEMA"], schema)
+
+    def test_docker_prepare_runs_the_hook_sql_as_a_network_client(self):
+        """Docker Compose bootstraps as the hook does: same image, same files, no container name."""
+        makefile = (ROOT / "Makefile").read_text()
+        recipe = makefile.split("\ndocker-prepare:", 1)[1].split("\n\n", 1)[0]
+        values = yaml.safe_load((ROOT / "deploy/charts/fred/values.yaml").read_text())
+        self.assertIn(
+            f"POSTGRES_BOOTSTRAP_IMAGE := {values['postgresBootstrap']['image']}\n",
+            makefile,
+        )
+        self.assertIn(
+            "cat deploy/postgres/bootstrap.sql deploy/postgres/role-passwords.sql",
+            recipe,
+        )
+        self.assertNotIn("docker exec", recipe)
+        self.assertNotIn("ALTER ROLE", recipe)
 
 
 if __name__ == "__main__":

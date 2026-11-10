@@ -1,9 +1,11 @@
 # PostgreSQL component boundary
 
-`bootstrap.sql` is the canonical administrator-owned initialization source.
-The chart's `files/bootstrap.sql` is a generated copy, packaged by
-`make generate-chart-schema`. Never edit the packaged copy. The k3d factory reads
-the source directly from the Fred checkout.
+`bootstrap.sql` is the canonical administrator-owned initialization source;
+`role-passwords.sql`, run right after it in the same session, sets the component
+logins' passwords from the environment without logging them. The chart's `files/`
+holds generated copies, packaged by `make generate-chart-schema`; never edit them.
+The chart's `postgresBootstrap` hook runs both files; on Docker Compose,
+`make docker-prepare` runs the sources in the hook's image, over the published port.
 
 | Login | Owned schemas | Cross-component SELECT (through its NOLOGIN reader group) |
 | --- | --- | --- |

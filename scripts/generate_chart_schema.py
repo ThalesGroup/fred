@@ -803,9 +803,10 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path, metavar="OUTPUT")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    packaged = root / "deploy/charts/fred/files/bootstrap.sql"
-    packaged.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(root / "deploy/postgres/bootstrap.sql", packaged)
+    packaged = root / "deploy/charts/fred/files"
+    packaged.mkdir(parents=True, exist_ok=True)
+    for sql in ("bootstrap.sql", "role-passwords.sql"):
+        shutil.copyfile(root / "deploy/postgres" / sql, packaged / sql)
 
     for p in (
         args.fred_agents,
