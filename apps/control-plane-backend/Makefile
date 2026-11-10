@@ -16,6 +16,9 @@ include ../../scripts/makefiles/help.mk
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 
+WORKER_CONFIG_FILE ?= ./config/configuration_worker.yaml
+-include $(ROOT_DIR)/config/.make-local.env
+
 ##@ Dev Helpers
 
 CONTROL_PLANE_BASE_URL ?= http://localhost:8222/control-plane/v1
@@ -233,7 +236,7 @@ create-test-user: dev ## Create a user in control-plane without manual bearer to
 
 .PHONY: run-worker
 run-worker: dev ## run the Temporal control-plane worker
-	ENV_FILE=$(ROOT_DIR)/config/.env CONFIG_FILE=./config/configuration_worker.yaml $(UV) run python -m control_plane_backend.main_worker
+	ENV_FILE=$(ROOT_DIR)/config/.env CONFIG_FILE=$(WORKER_CONFIG_FILE) $(UV) run python -m control_plane_backend.main_worker
 
 .PHONY: run-worker-prod
 run-worker-prod: dev ## run the Temporal control-plane worker with production config

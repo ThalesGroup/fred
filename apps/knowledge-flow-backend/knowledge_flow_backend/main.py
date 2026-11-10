@@ -74,6 +74,7 @@ from knowledge_flow_backend.features.tasks.controller import TasksController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
+from knowledge_flow_backend.features.vision.controller import VisionController
 from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
 
@@ -273,6 +274,7 @@ def create_app() -> FastAPI:
     LibrarySyncController(router)
     TagController(app, router)
     VectorSearchController(router)
+    VisionController(router, application_context)
     CorpusTreeController(router)
     SummarizeController(app, router)
     ExtractController(app, router)

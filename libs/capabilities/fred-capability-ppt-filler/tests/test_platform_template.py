@@ -48,10 +48,9 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
-    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     RuntimeServices,
-    capability_platform_model,
+    capability_platform_model_optional,
     capability_team_authorizer,
 )
 from port_fakes import FakeWorkspace
@@ -66,10 +65,6 @@ _BASE = "/capabilities/ppt_builder/platform"
 class _Port(CapabilityModelPort):
     async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
         raise AssertionError("label_inventory is faked here")
-
-    async def require_vision_profile(self, profile_id: str) -> None:
-        if profile_id != "chat.vision":
-            raise CapabilityModelUnavailableError(f"{profile_id!r} is not offered.")
 
 
 PORT = _Port()
@@ -109,7 +104,7 @@ def _client(*, manager: bool) -> httpx.AsyncClient:
     assert router is not None
     app.include_router(router, prefix="/capabilities/ppt_builder")
     app.dependency_overrides[capability_team_authorizer] = lambda: _Authorizer(manager)
-    app.dependency_overrides[capability_platform_model] = lambda: PORT
+    app.dependency_overrides[capability_platform_model_optional] = lambda: PORT
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://pod"
     )
@@ -193,7 +188,7 @@ async def test_a_manager_upload_is_analysed_with_the_platform_model(
         assert body["analysis"]["template_sha256"] == SHA
         assert body["template_filename"] == "brand.pptx"
         assert body["replacement"] is None
-        assert body["use_vision"] is True and body["vision_profile_id"] is None
+        assert body["use_vision"] is True and "vision_profile_id" not in body
         assert (await client.get(f"{_BASE}/patterns.pdf")).content == b"%PDF-thumbs"
     # The platform's default model: the teamless port with no profile.
     assert offline_conversion == [(PORT, None, True)]
@@ -237,7 +232,7 @@ async def test_a_rerun_takes_the_vision_choice_and_leaves_agents_alone(
                 json={"use_vision": True, "vision_profile_id": "chat.vision"},
             )
         ).json()
-        assert body["vision_profile_id"] == "chat.vision"
+        assert "vision_profile_id" not in body
         # The current analysis stays in use while the re-run is the replacement.
         assert body["analysis"]["status"] == "succeeded"
         assert body["replacement_filename"] == "brand.pptx"  # a re-run keeps the name
@@ -246,7 +241,7 @@ async def test_a_rerun_takes_the_vision_choice_and_leaves_agents_alone(
         rules = await client.post(f"{_BASE}/analysis", json={"use_vision": False})
         assert rules.json()["use_vision"] is False
         await drain()
-    assert offline_conversion[1] == (PORT, "chat.vision", True)
+    assert offline_conversion[1] == (PORT, None, True)
     assert offline_conversion[2][2] is False
     assert await store.get("00000000-0000-4000-8000-000000000007") == agent_before
 
@@ -612,22 +607,21 @@ async def test_a_stored_pattern_edit_never_reaches_the_default_template(built_on
 
 
 @pytest.mark.asyncio
-async def test_a_vision_model_the_drawer_does_not_offer_is_422(analysis_db):
+async def test_legacy_vision_model_selection_is_ignored(analysis_db):
     await _uploaded()
-    before = await _rows()
     async with _client(manager=True) as client:
-        for response in (
-            await _upload(
-                client, OTHER, use_vision=True, vision_profile_id="chat.text"
-            ),
-            await client.post(
-                f"{_BASE}/analysis",
-                json={"use_vision": True, "vision_profile_id": "chat.text"},
-            ),
-        ):
-            assert response.status_code == 422
-        assert await _rows() == before  # no replacement started
-        # Rules labelling never reads the profile: nothing to refuse.
+        response = await _upload(
+            client, OTHER, use_vision=True, vision_profile_id="chat.text"
+        )
+        assert response.status_code == 200
+        await drain()
+        response = await client.post(
+            f"{_BASE}/analysis",
+            json={"use_vision": True, "vision_profile_id": "chat.text"},
+        )
+        assert response.status_code == 200
+        assert "vision_profile_id" not in response.json()
+        await drain()
         rules = await client.post(
             f"{_BASE}/analysis",
             json={"use_vision": False, "vision_profile_id": "chat.text"},

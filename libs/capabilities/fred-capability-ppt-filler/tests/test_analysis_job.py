@@ -122,9 +122,7 @@ async def test_save_returns_before_the_job_ends(analysis_db, monkeypatch):
 
     monkeypatch.setattr(analysis_job, "label_inventory", _slow_label)
     assets = FakeAssets()
-    stored = await _save(
-        PptBuilderConfig(labelling_model="chat.vision"), _uploads(), assets
-    )
+    stored = await _save(PptBuilderConfig(use_vision=True), _uploads(), assets)
 
     assert stored.template_sha256 == SHA
     assert assets.blobs == {stored.template_key: TEMPLATE}
@@ -143,7 +141,7 @@ async def test_save_returns_before_the_job_ends(analysis_db, monkeypatch):
     assert seen == {
         "pdf": b"%PDF-thumbs",
         "use_vision": True,
-        "profile_id": "chat.vision",
+        "profile_id": None,
     }
     assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
     assert status_response(record).summary is not None

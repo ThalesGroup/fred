@@ -1254,13 +1254,9 @@ built-in template.
   the plan before building" (default off) with its Body Small description.
   On saves `validate_plan: true`: the first deck of a conversation is shown as
   an outline the user approves before it is built.
-- **Vision settings.** A switch row "Use a vision model" (default on). With no
-  vision-capable model for the agent (`supports_vision` on neither the
-  effective chat model nor any available profile) it is shown off and
-  disabled, its description replaced by "No vision-capable model is available
-  for this agent; slides are labelled by rules". While on, an indented
-  (`outline-muted` left rule) `Select` lists "The agent's model" plus the
-  vision-capable profiles only.
+- **Vision settings.** A switch row "Use vision" (default on) uses Knowledge
+  Flow's configured vision model during template preparation. It is disabled
+  when Knowledge Flow vision is unavailable. There is no model picker.
 - **Variety row** (`PptBuilderVarietySettings`). Same setting card as the
   vision switch: the switch row "Enforce variety" with its Body Small
   description, then one line "[By slide name | By identified slide type] at

@@ -1330,6 +1330,77 @@ operations:
     review_status: pending_review
     required_permission: can_manage_platform # The 100 newest exposure lines (a banner on air, an announced package) with their start, their end and the acting administrator's uid; packages themselves are read one at a time by the route above. Same catch-all gate as the other announcement admin routes.
 
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/preparations
+    review_status: approved
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry
+    review_status: approved
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}
+    review_status: approved
+    required_permission: authenticated_user
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/retry
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/settings
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/cleanup/claim
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/work
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/attempts/{attempt}
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/assets/{asset_id}
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/result
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/cleanup/complete
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_cleanup_claim
+
   - service: knowledge-flow
     method: GET
     path: /healthz
@@ -1920,3 +1991,13 @@ operations:
     path: /knowledge-flow/v1/vector/visual-evidence-artifact
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/vision/availability
+    review_status: approved
+    required_permission: authenticated_user
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/internal/vision/describe
+    review_status: approved
+    required_permission: configured_vision_worker_service_agent

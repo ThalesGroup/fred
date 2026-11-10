@@ -66,7 +66,29 @@ run-docker: ## Run fred-agents in Docker (uses host network by default)
 .PHONY: docker-run
 docker-run: run-docker ## Backward-compatible alias for run-docker
 
+.PHONY: run-worker-docker
+run-worker-docker: ## Run the generic capability preparation worker in Docker
+	docker run --rm -it \
+		--name $(WORKER_CONTAINER_NAME) \
+		--network $(WORKER_DOCKER_NETWORK) \
+		--user $(WORKER_DOCKER_USER) \
+		-v $(realpath config):/app/config:ro \
+		-v $(realpath $(WORKER_ENV_FILE)):/app/worker.env:ro \
+		-e ENV_FILE=/app/worker.env \
+		-e CONFIG_FILE=$(WORKER_CONFIG_FILE) \
+		--entrypoint python \
+		$(IMAGE_FULL) \
+		-m fred_runtime preparation-worker
+
 PORT ?= 8000
+
+.PHONY: run-worker
+run-worker: dev ## Run the generic capability preparation worker (requires Temporal)
+	ENV_FILE=$(WORKER_ENV_FILE) $(UV) run python -m fred_runtime preparation-worker
+
+.PHONY: run-worker-prod
+run-worker-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
+run-worker-prod: run-worker ## Run the preparation worker with production configuration
 
 .PHONY: cli
 cli: dev ## Open the interactive CLI for a running agent pod
@@ -75,3 +97,8 @@ cli: dev ## Open the interactive CLI for a running agent pod
 # Docker runtime defaults
 API_CONTAINER_NAME ?= fred-agents-api
 API_DOCKER_NETWORK ?= host
+WORKER_CONTAINER_NAME ?= fred-agents-preparation-worker
+WORKER_DOCKER_NETWORK ?= host
+WORKER_DOCKER_USER ?= $(shell id -u):$(shell id -g)
+WORKER_CONFIG_FILE ?= ./config/configuration_prod.yaml
+WORKER_ENV_FILE ?= $(CURDIR)/config/.env

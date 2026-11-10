@@ -26,6 +26,7 @@ import {
 } from "./api/pptBuilderCapabilityOpenApi";
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 import { useAgentReadinessCheckMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useCapabilityRouted } from "../useCapabilityRouted";
 import type { PreviewSource } from "./usePatternsPreview";
 import {
@@ -96,6 +97,9 @@ export interface PptBuilderAnalysis {
   /** The analysis error, or the interruption notice, as the backend words it. */
   error: string | null;
   canRerun: boolean;
+  retry: (() => Promise<void>) | null;
+  retrying: boolean;
+  retryFailed: boolean;
   /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
   refreshing: boolean;
   /** No template of its own and the administrator's is in effect (else the built-in one). */
@@ -127,13 +131,16 @@ export function usePptBuilderAnalysis({
   const overrides = readOverrides(configValues);
 
   const [pollingInterval, setPollingInterval] = useState(0);
+  const [retryFailed, setRetryFailed] = useState(false);
   const statusQuery = useGetPptBuilderAnalysisQuery(
-    { instanceId: agentInstanceId ?? "" },
+    { instanceId: agentInstanceId ?? "", teamId },
     { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
   );
   // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
   // neither hide the analysis nor stop the polling of one in progress.
   const status = statusQuery.data;
+  const [retryPreparation, { isLoading: retrying }] =
+    usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation();
   const phase = analysisPhase({ stagedFile, templateSha, status });
   const refreshing = phase === "succeeded" && status?.refreshing === true;
   const usesBuiltin = phase === "builtin";
@@ -172,7 +179,7 @@ export function usePptBuilderAnalysis({
         ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
         : null;
   // The administrator's slide edits apply to the default template in effect (the platform
-  // one, else the Fred template), never to the agent's own.
+  // one, else the built-in template), never to the agent's own.
   const defaultOverrides = platform
     ? platform.overrides
     : platformQuery.data?.analysis
@@ -195,7 +202,7 @@ export function usePptBuilderAnalysis({
         : null
       : { kind: "builtin" }
     : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
-      ? { kind: "analysis", instanceId: agentInstanceId }
+      ? { kind: "analysis", instanceId: agentInstanceId, teamId }
       : null;
 
   return {
@@ -205,6 +212,20 @@ export function usePptBuilderAnalysis({
     hasPersistedTemplate: templateSha !== null,
     error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
+    retry:
+      phase === "failed" && status?.labelling_key === "shared" && teamId && agentInstanceId
+        ? async () => {
+            setRetryFailed(false);
+            try {
+              await retryPreparation({ teamId, agentInstanceId, capabilityId: CAPABILITY_ID }).unwrap();
+              await statusQuery.refetch();
+            } catch {
+              setRetryFailed(true);
+            }
+          }
+        : null,
+    retrying,
+    retryFailed,
     refreshing,
     platformTemplate: platform ? { filename: platform.template_filename ?? null } : null,
     effective,

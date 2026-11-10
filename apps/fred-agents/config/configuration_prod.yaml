@@ -123,6 +123,10 @@ storage:
 scheduler:
   enabled: false
 
+preparation:
+  enabled_capabilities:
+    - ppt_builder
+
 platform:
   control_plane_url: "http://localhost:8222/control-plane/v1"
 

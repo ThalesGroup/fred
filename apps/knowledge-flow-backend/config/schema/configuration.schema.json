@@ -2907,6 +2907,11 @@
       ],
       "default": null
     },
+    "vision_worker_client_id": {
+      "default": "agentic",
+      "title": "Vision Worker Client Id",
+      "type": "string"
+    },
     "ocr_model": {
       "anyOf": [
         {

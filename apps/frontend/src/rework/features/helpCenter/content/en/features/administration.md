@@ -102,8 +102,8 @@ Fred template until changed):
 
 - **Upload a .pptx template** — the file is read in the background. Until the
   reading succeeds, or if it fails, agents keep the previous template.
-- **Use a vision model** — the AI model that reads this template's slides; by
-  default, the platform's default model. The choice applies at the next
+- **Use a vision model** — Knowledge Flow's configured model reads this
+  template's slides when available. The switch applies at the next
   upload or **Run the analysis again**, and changes nothing for agents. It has
   no effect on the Fred template, which is already read.
 - **Review slides** — rename a slide, change its kind or set it aside. The
