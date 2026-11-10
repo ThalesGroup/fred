@@ -175,6 +175,12 @@ class CapabilityPreparationActivities:
         if spec is None or spec.rules_version != work.rules_version:
             await self._report_unavailable(preparation_id, work, attempt, headers)
             return
+        logger.info(
+            "Capability preparation started: capability=%s preparation=%s attempt=%s",
+            work.capability_id,
+            preparation_id,
+            attempt,
+        )
         artifacts = WorkerArtifactStore(self._filesystem, work.preparation_id, attempt)
         context = PreparationContext(
             work=work,
@@ -198,6 +204,13 @@ class CapabilityPreparationActivities:
         except Exception as exc:
             await artifacts.cleanup_failed_attempt()
             if attempt < work.max_attempts:
+                logger.warning(
+                    "Capability preparation attempt failed: capability=%s preparation=%s attempt=%s error_type=%s",
+                    work.capability_id,
+                    preparation_id,
+                    attempt,
+                    type(exc).__name__,
+                )
                 raise ApplicationError("Preparation attempt failed") from exc
             logger.warning(
                 "Preparation failed: capability=%s error_type=%s",
@@ -217,6 +230,13 @@ class CapabilityPreparationActivities:
             headers=headers,
         )
         result_response.raise_for_status()
+        logger.info(
+            "Capability preparation completed: capability=%s preparation=%s attempt=%s state=%s",
+            work.capability_id,
+            preparation_id,
+            attempt,
+            completion["state"],
+        )
 
     async def _report_unavailable(
         self,
