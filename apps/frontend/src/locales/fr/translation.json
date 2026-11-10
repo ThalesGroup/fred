@@ -439,16 +439,16 @@
         "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
       },
       "analysis": {
-        "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
-        "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "staged": "Le template sera lu une fois votre {{agentsNicknameSingular}} enregistré. Votre {{agentsNicknameSingular}} devient disponible quand c'est terminé.",
+        "inProgress": "Lecture du template en cours… Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
-        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
-        "failedRetry": "Le template n'a pas pu être lu. L'agent reste indisponible jusqu'à la réussite de la lecture.",
+        "failed": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible tant qu'il ne l'est pas ; enregistrez votre {{agentsNicknameSingular}} pour le relire.",
+        "failedRetry": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à la réussite de la lecture.",
         "retry": "Relancer la lecture",
         "retryError": "La lecture n'a pas pu être relancée.",
-        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
-        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
+        "interrupted": "La lecture du template a été interrompue. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Votre {{agentsNicknameSingular}} continue de l'utiliser ; enregistrez votre {{agentsNicknameSingular}} pour le relire et profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… Votre {{agentsNicknameSingular}} garde la lecture précédente jusqu'à la fin."
       },
       "review": {
         "title": "Slides du template",
@@ -565,7 +565,7 @@
         }
       },
       "platform": {
-        "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
+        "intro": "Les {{agentsNicknamePlural}} qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
         "loading": "Chargement du template de la plateforme…",
         "loadError": "Le template de la plateforme n'a pas pu être chargé.",
         "unavailable": "Les réglages des présentations ne sont pas disponibles pour le moment : le service qui construit les présentations est injoignable.",
@@ -578,15 +578,15 @@
         "uploadError": "Le template n'a pas été accepté.",
         "uploadFailed": "Un problème est survenu pendant l'envoi du fichier. Réessayez dans un instant.",
         "analysing": {
-          "keepCurrent": "Lecture de {{name}} en cours… Les agents gardent le template actuel jusqu'à la fin.",
-          "keepBuiltin": "Lecture de {{name}} en cours… Les agents gardent le template {{siteDisplayName}} jusqu'à la fin."
+          "keepCurrent": "Lecture de {{name}} en cours… Les {{agentsNicknamePlural}} gardent le template actuel jusqu'à la fin.",
+          "keepBuiltin": "Lecture de {{name}} en cours… Les {{agentsNicknamePlural}} gardent le template {{siteDisplayName}} jusqu'à la fin."
         },
         "failed": {
-          "keepCurrent": "{{name}} n'a pas pu être lu. Les agents gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
-          "keepBuiltin": "{{name}} n'a pas pu être lu. Les agents gardent le template {{siteDisplayName}} ; relancez la lecture ou téléversez un autre fichier."
+          "keepCurrent": "{{name}} n'a pas pu être lu. Les {{agentsNicknamePlural}} gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
+          "keepBuiltin": "{{name}} n'a pas pu être lu. Les {{agentsNicknamePlural}} gardent le template {{siteDisplayName}} ; relancez la lecture ou téléversez un autre fichier."
         },
-        "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… Les {{agentsNicknamePlural}} gardent la lecture précédente jusqu'à la fin.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Les {{agentsNicknamePlural}} continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
         "rerun": "Relancer la lecture",
         "rerunStarted": "Nouvelle lecture lancée.",
         "rerunError": "La lecture n'a pas pu être relancée.",
@@ -595,7 +595,7 @@
         "resetError": "Le template n'a pas pu être réinitialisé.",
         "resetConfirm": {
           "title": "Revenir au template {{siteDisplayName}} ?",
-          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template {{siteDisplayName}}, seront supprimés. Les agents sans template à eux reviendront au template {{siteDisplayName}}.",
+          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template {{siteDisplayName}}, seront supprimés. Les {{agentsNicknamePlural}} sans template à eux reviendront au template {{siteDisplayName}}.",
           "confirm": "Réinitialiser",
           "cancel": "Annuler"
         },

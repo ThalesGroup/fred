@@ -58,7 +58,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: h.translate, i18n: { language: "fr" } }),
 }));
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({ siteDisplayName: "Acme" }),
+  useFrontendProperties: () => ({ siteDisplayName: "Acme", agentsNicknamePlural: "Assistants" }),
 }));
 vi.mock("react-redux", () => ({ useSelector: () => "/pod/capabilities/ppt_builder" }));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
@@ -167,6 +167,7 @@ describe("PptBuilderPlatformPanel", () => {
     show({ analysis: null }, false);
     expect(text()).toContain(`${K}.builtinTemplate`);
     expect(h.translate).toHaveBeenCalledWith(`${K}.builtinTemplate`, { siteDisplayName: "Acme" });
+    expect(h.translate).toHaveBeenCalledWith(`${K}.intro`, { agentsNicknamePlural: "Assistants" });
     for (const action of [`${K}.upload`, `${K}.rerun`, `${K}.reset`, "use_vision.title"]) {
       expect(text()).not.toContain(action);
     }
@@ -181,6 +182,11 @@ describe("PptBuilderPlatformPanel", () => {
     });
     expect(text()).toContain(`${K}.current`);
     expect(text()).toContain(`${K}.analysing.keepCurrent`);
+    expect(h.translate).toHaveBeenCalledWith(`${K}.analysing.keepCurrent`, {
+      name: "next.pptx",
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     expect(text()).toContain(`${K}.replace`);
     expect(button(`${K}.rerun`).disabled).toBe(true);
   });
@@ -188,7 +194,11 @@ describe("PptBuilderPlatformPanel", () => {
   it("says a failed first replacement leaves the built-in template in use", () => {
     show({ analysis: null, replacement: analysis({ status: "failed", error: "Broken file.", inventory: null }) });
     expect(text()).toContain(`${K}.failed.keepBuiltin`);
-    expect(h.translate).toHaveBeenCalledWith(`${K}.failed.keepBuiltin`, { name: "", siteDisplayName: "Acme" });
+    expect(h.translate).toHaveBeenCalledWith(`${K}.failed.keepBuiltin`, {
+      name: "",
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     expect(text()).toContain("Broken file.");
     expect(button(`${K}.rerun`).disabled).toBe(false);
   });
@@ -199,7 +209,10 @@ describe("PptBuilderPlatformPanel", () => {
     expect(h.reset).not.toHaveBeenCalled();
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain(`${K}.resetConfirm.title`);
     expect(h.translate).toHaveBeenCalledWith(`${K}.resetConfirm.title`, { siteDisplayName: "Acme" });
-    expect(h.translate).toHaveBeenCalledWith(`${K}.resetConfirm.message`, { siteDisplayName: "Acme" });
+    expect(h.translate).toHaveBeenCalledWith(`${K}.resetConfirm.message`, {
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     await act(async () => button("confirm").click());
     expect(h.reset).toHaveBeenCalledTimes(1);
     expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.resetDone` });

@@ -58,7 +58,7 @@ const inProgress = (analysis: AnalysisStatusResponse | null | undefined) =>
 
 export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelProps) {
   const { t } = useTranslation();
-  const { siteDisplayName } = useFrontendProperties();
+  const { siteDisplayName, agentsNicknamePlural } = useFrontendProperties();
   const { showSuccess, showError } = useToast();
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
@@ -187,7 +187,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 
   return (
     <div className={styles.root}>
-      <p className={styles.hint}>{t(`${K}.intro`)}</p>
+      <p className={styles.hint}>{t(`${K}.intro`, { agentsNicknamePlural })}</p>
 
       <div className={`${styles.settingCard} ${styles.stacked}`}>
         <div className={styles.uploadRow}>
@@ -227,7 +227,12 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
           )}
         </div>
 
-        <PlatformStatus platform={platform} uploading={uploading} siteDisplayName={siteDisplayName} />
+        <PlatformStatus
+          platform={platform}
+          uploading={uploading}
+          siteDisplayName={siteDisplayName}
+          agentsNicknamePlural={agentsNicknamePlural}
+        />
 
         {summary && (
           <div className={styles.summaryRow}>
@@ -311,7 +316,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
       <ConfirmationDialog
         open={confirmReset}
         title={t(`${K}.resetConfirm.title`, { siteDisplayName })}
-        message={t(`${K}.resetConfirm.message`, { siteDisplayName })}
+        message={t(`${K}.resetConfirm.message`, { siteDisplayName, agentsNicknamePlural })}
         confirmLabel={t(`${K}.resetConfirm.confirm`)}
         cancelLabel={t(`${K}.resetConfirm.cancel`)}
         criticalAction
@@ -327,10 +332,12 @@ export function PlatformStatus({
   platform,
   uploading,
   siteDisplayName,
+  agentsNicknamePlural,
 }: {
   platform: PlatformTemplateResponse;
   uploading: boolean;
   siteDisplayName: string;
+  agentsNicknamePlural: string;
 }) {
   const { t } = useTranslation();
   const current = platform.analysis ?? null;
@@ -341,14 +348,14 @@ export function PlatformStatus({
   if (uploading || inProgress(replacement)) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name, siteDisplayName })}
+        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name, siteDisplayName, agentsNicknamePlural })}
       </p>
     );
   }
   if (replacement) {
     return (
       <div className={styles.failure} role="alert">
-        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name, siteDisplayName })}</p>
+        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name, siteDisplayName, agentsNicknamePlural })}</p>
         {replacement.error && <p className={styles.error}>{replacement.error}</p>}
       </div>
     );
@@ -356,10 +363,11 @@ export function PlatformStatus({
   if (current?.refreshing) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.refreshing`)}
+        <Spinner size={16} /> {t(`${K}.refreshing`, { agentsNicknamePlural })}
       </p>
     );
   }
-  if (current && !current.current) return <p className={styles.status}>{t(`${K}.outdated`)}</p>;
+  if (current && !current.current)
+    return <p className={styles.status}>{t(`${K}.outdated`, { agentsNicknamePlural })}</p>;
   return null;
 }

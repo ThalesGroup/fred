@@ -23,8 +23,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisStatusResponse, Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 
 const i18nState = vi.hoisted(() => ({ language: "fr" }));
+const translate = vi.hoisted(() => vi.fn((key: string) => key));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: i18nState }),
+  useTranslation: () => ({ t: translate, i18n: i18nState }),
+}));
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "Assistant" }),
 }));
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({ options, label }: { options: { value: string; label: string }[]; label: string }) => (
@@ -140,6 +144,9 @@ describe("AnalysisStatus", () => {
     for (const phase of ["pending", "running"] as const) {
       render(<AnalysisStatus analysis={analysis(phase)} />);
       expect(container.textContent).toContain("capability.ppt_builder.analysis.inProgress");
+      expect(translate).toHaveBeenCalledWith("capability.ppt_builder.analysis.inProgress", {
+        agentsNicknameSingular: "Assistant",
+      });
       expect(container.querySelector("button")).toBeNull();
     }
   });
