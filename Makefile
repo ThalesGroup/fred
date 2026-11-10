@@ -149,9 +149,10 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent) and
 		for dir in $(ENV_APPS); do sed -i -E "s|^$$key=.*|$$key=\"$$value\"|" "$$dir/config/.env"; done; \
 		echo "************ $$key copied from the shell ************"; \
 	done
-	@# At least one provider key: the organization's models come from its sources.
-	@grep -qE '^(MISTRAL|OPENAI)_API_KEY="?[^"]+' apps/fred-agents/config/.env \
-		|| { echo "Missing model key: export MISTRAL_API_KEY=... or OPENAI_API_KEY=..., then rerun." >&2; exit 1; }
+	@# The local organizations Acme and Globex use Mistral (apps/control-plane/config/
+	@# configuration_prod.yaml): without its key, their provisioning stops at model discovery.
+	@grep -qE '^MISTRAL_API_KEY="?[^"]+' apps/control-plane/config/.env \
+		|| { echo "Missing MISTRAL_API_KEY: the local organizations Acme and Globex use Mistral. export MISTRAL_API_KEY=..., then rerun." >&2; exit 1; }
 	@echo "✓ setup-env done. Review apps/*/config/.env yourself for anything beyond local docker-compose defaults (Azure, proxy, Prometheus, ...)."
 
 .PHONY: docker-prepare
