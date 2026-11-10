@@ -2,7 +2,7 @@
 schema: 1
 after: [ppt-builder-capability]
 title: "Move PPT Builder preparation to the capability worker"
-impact: major
+impact: minor
 configuration: production
 configuration_reason: "The cutover requires a Knowledge Flow vision model, a preparation worker with Temporal and object-store access, and explicit serving and control-plane preparation flags after backfill."
 ---
