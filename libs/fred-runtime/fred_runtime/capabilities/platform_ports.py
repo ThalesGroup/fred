@@ -24,6 +24,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security.utils import get_authorization_scheme_param
 from fred_core.common.team_id import is_personal_team_ref, personal_team_id
 from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_current_user
@@ -54,6 +55,7 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel, ConfigDict
 
+from ..common.outbound_credentials import static_person_provider
 from ..model_routing.authz import usable_model_capability_ids
 from ..model_routing.contracts import ModelNotUsableError, TeamRoutingProfileDriftError
 from ..model_routing.provider import RoutedChatModelFactory
@@ -283,12 +285,17 @@ def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
             and config.control_plane_http_client is not None
             and config.filesystem is not None
         ):
+            scheme, token = get_authorization_scheme_param(
+                request.headers.get("Authorization")
+            )
             preparation_port = RuntimePreparationRouteReader(
                 control_plane_url=config.control_plane_url,
                 runtime_id=config.service_name,
                 client=config.control_plane_http_client,
                 filesystem=config.filesystem,
-                authorization=request.headers.get("Authorization"),
+                credentials=static_person_provider(
+                    token.strip() if scheme.lower() == "bearer" else None
+                ),
                 enabled_capabilities=config.preparation_capabilities,
             )
             setattr(

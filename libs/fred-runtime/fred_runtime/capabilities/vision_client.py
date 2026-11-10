@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import httpx
 
+from fred_runtime.common.outbound_credentials import static_person_provider
+
 
 class VisionServiceUnavailable(Exception):
     """A bounded vision call could not return a usable answer."""
@@ -22,17 +24,14 @@ class SaveVisionAvailabilityClient:
     ) -> None:
         self._client = client
         self._url = knowledge_flow_url.rstrip("/") + "/vision/availability"
-        self._access_token = access_token
+        self._credentials = static_person_provider(access_token)
 
     async def available(self) -> bool:
         try:
+            authorization = (await self._credentials.credentials()).authorization
             response = await self._client.get(
                 self._url,
-                headers=(
-                    {"Authorization": f"Bearer {self._access_token}"}
-                    if self._access_token
-                    else None
-                ),
+                headers={"Authorization": authorization} if authorization else None,
                 timeout=3.0,
             )
             response.raise_for_status()

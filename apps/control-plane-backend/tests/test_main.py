@@ -289,7 +289,11 @@ class _FakeAgentInstanceStore:
         return record
 
     async def delete(
-        self, agent_instance_id: str, team_id: TeamId, actor_uid: str | None = None
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        actor_uid: str | None = None,
+        session: Any = None,
     ) -> bool:
         before = len(self._records)
         self._records = [

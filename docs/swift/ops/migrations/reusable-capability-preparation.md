@@ -1,10 +1,26 @@
-# PPT Builder preparation cutover
+---
+schema: 1
+after: [ppt-builder-capability]
+title: "Move PPT Builder preparation to the capability worker"
+impact: major
+configuration: production
+configuration_reason: "The cutover requires a Knowledge Flow vision model, a preparation worker with Temporal and object-store access, and explicit serving and control-plane preparation flags after backfill."
+---
+## Applicability
 
 This migration moves Swift PPT Builder originals from `cap_ppt_builder_analysis`
 into control-plane capability assets, and moves inventories and preview PDFs into
 the runtime object store. It also imports the active platform template, a failed
 or pending replacement, and the manager's pattern overrides. The old SQL rows
 remain intact for the migration window.
+
+## Prerequisites
+
+Make the control-plane and runtime databases and object stores available to the
+backfill command. For local storage, mount both storage roots at the same paths
+as their services. For MinIO or GCS, supply the same bucket configuration and
+credentials as the services. Keep the old PPT reader active until backfill and
+worker readiness checks complete.
 
 ## Configuration
 
@@ -34,20 +50,16 @@ generic `agent-pod` chart exposes it with `preparationWorker.enabled: true`.
 Temporal retries a worker activity after two minutes without a heartbeat.
 Agent multipart saves accept at most 64 MiB across all capability assets.
 
-## Deployment order
+## Upgrade
 
 1. Deploy the additive control-plane migration, Knowledge Flow vision endpoint,
    and the separate `fred-agents` preparation worker. Keep
    `preparation.enabled_capabilities` empty on serving pods while backfilling.
-2. Make the control-plane and runtime databases and their object stores available
-   to the backfill command. For local storage, run it with both storage roots
-   mounted at the same paths as the corresponding services. For MinIO or GCS,
-   supply the same bucket configuration and credentials as the services.
-3. Stop PPT template edits during the final pass. Let old analyses finish or
+2. Stop PPT template edits during the final pass. Let old analyses finish or
    repeat the pass until their status and hashes stop changing. Do not enable
    the new reader while a legacy `__platform_next__` row has succeeded but has
    not yet been promoted by the old job.
-4. Run a dry pass and then the import. The command scans one legacy row at a
+3. Run a dry pass and then the import. The command scans one legacy row at a
    time, verifies every template hash, writes immutable objects under stable
    keys, and commits one control-plane row at a time. Re-running it is safe.
 
@@ -72,6 +84,8 @@ the runtime database has a different password from `FRED_POSTGRES_PASSWORD`.
 The rules version must match PPT Builder's `PreparationSpec.rules_version` in
 the serving image.
 
+## Validation
+
 The JSON result reports `total` and counts for `imported`, `imported_builtin`,
 `existing`, and `skipped_*`. Check that their sum equals `total`. Deleted agents
 can be skipped.
@@ -93,7 +107,14 @@ historical fields in SQL, but the enabled reader uses the imported result. The
 next save removes the legacy model selection. A failed imported preparation can
 be retried without a new upload.
 
+## Rollback
+
 Before new template edits, rollback is a switch back to the old reader and
 writer because the legacy SQL rows were not deleted. After new edits begin, do
 not switch back without first reconciling those new assets into the legacy
 store; the old SQL rows no longer contain the latest uploaded templates.
+
+## Limitations
+
+During the migration window, stop template edits for the final backfill pass.
+After cutover, the legacy SQL rows no longer contain new template assets.

@@ -17,6 +17,8 @@ from fred_sdk.contracts.runtime import (
     CapabilityPreparationReader,
 )
 
+from fred_runtime.common.outbound_credentials import OutboundCredentialProvider
+
 
 class RuntimePreparationRouteReader(
     CapabilityPreparationReader, CapabilityPreparationManager
@@ -28,14 +30,14 @@ class RuntimePreparationRouteReader(
         runtime_id: str,
         client: httpx.AsyncClient,
         filesystem: BaseFilesystem,
-        authorization: str | None,
+        credentials: OutboundCredentialProvider,
         enabled_capabilities: tuple[str, ...] = (),
     ) -> None:
         self._url = control_plane_url.rstrip("/")
         self._runtime_id = runtime_id
         self._client = client
         self._filesystem = filesystem
-        self._authorization = authorization
+        self._credentials = credentials
         self._enabled_capabilities = frozenset(enabled_capabilities)
         self._allowed: set[str] = set()
 
@@ -49,7 +51,8 @@ class RuntimePreparationRouteReader(
             f"/teams/{quote(team_id, safe='')}/agent-instances/"
             f"{quote(agent_instance_id, safe='')}/preparations"
         )
-        headers = {"Authorization": self._authorization} if self._authorization else {}
+        authorization = (await self._credentials.credentials()).authorization
+        headers = {"Authorization": authorization} if authorization else {}
         response = await self._client.get(
             self._url + path, params={"limit": 100}, headers=headers
         )
@@ -80,7 +83,8 @@ class RuntimePreparationRouteReader(
     async def _platform_request(
         self, method: str, path: str, **kwargs: Any
     ) -> Mapping[str, Any]:
-        headers = {"Authorization": self._authorization} if self._authorization else {}
+        authorization = (await self._credentials.credentials()).authorization
+        headers = {"Authorization": authorization} if authorization else {}
         response = await self._client.request(
             method, self._url + path, headers=headers, **kwargs
         )

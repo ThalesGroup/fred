@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
-from fred_core import get_current_user_without_gcu, get_principal_context
+from fred_core import get_current_user, get_current_user_or_service, get_current_user_without_gcu
 from PIL import Image
 
+from knowledge_flow_backend.features.vision import controller as vision_controller
 from knowledge_flow_backend.features.vision.controller import VisionController
 
 
@@ -42,9 +43,38 @@ def _app(*, configured: bool = True, client_id: str = "agentic"):
     async def current_user():
         return object()
 
-    app.dependency_overrides[get_principal_context] = principal
+    app.dependency_overrides[vision_controller._worker_principal_context] = principal
     app.dependency_overrides[get_current_user_without_gcu] = current_user
     return app, model
+
+
+@pytest.mark.asyncio
+async def test_worker_identity_bypasses_human_gcu_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _ = _app()
+    del app.dependency_overrides[vision_controller._worker_principal_context]
+
+    async def service_subject():
+        return object()
+
+    async def human_gcu_gate():
+        raise AssertionError("Service requests must not enter the human GCU gate")
+
+    async def principal(_request, _subject):
+        return SimpleNamespace(caller=SimpleNamespace(client_id="agentic"))
+
+    app.dependency_overrides[get_current_user_or_service] = service_subject
+    app.dependency_overrides[get_current_user] = human_gcu_gate
+    monkeypatch.setattr(vision_controller, "get_principal_context", principal)
+    monkeypatch.setattr(vision_controller, "is_service_agent", lambda _caller: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.post(
+            "/internal/vision/describe",
+            data={"prompt": "Identify numbered slots"},
+            files={"image": ("slide.png", _png(), "image/png")},
+        )
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

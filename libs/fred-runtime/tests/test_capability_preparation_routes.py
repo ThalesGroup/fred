@@ -2,10 +2,47 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from fred_runtime.capabilities import platform_ports
 from fred_runtime.capabilities.preparation_routes import RuntimePreparationRouteReader
+from fred_runtime.common.outbound_credentials import static_person_provider
+from fred_sdk.contracts.runtime import CAPABILITY_PREPARATION_READER_STATE
+
+
+@pytest.mark.asyncio
+async def test_platform_reader_forwards_lowercase_bearer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer person"
+        return httpx.Response(200, json={"active": None, "candidate": None})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        config = SimpleNamespace(
+            rebac_engine=None,
+            chat_model_factory=None,
+            control_plane_url="https://control-plane/control-plane/v1",
+            service_name="fred-agents",
+            control_plane_http_client=client,
+            filesystem=object(),
+            preparation_capabilities=("ppt_builder",),
+        )
+        monkeypatch.setattr(
+            platform_ports,
+            "get_runtime_context_or_none",
+            lambda: SimpleNamespace(config=config),
+        )
+        monkeypatch.setattr(platform_ports, "platform_model_port", lambda *_: object())
+        request = Request(
+            {"type": "http", "headers": [(b"authorization", b"bearer person")]}
+        )
+        platform_ports._bind(request, None, False)
+        reader = getattr(request.state, CAPABILITY_PREPARATION_READER_STATE)
+        await reader.platform_status("ppt_builder", "template")
 
 
 @pytest.mark.asyncio
@@ -36,7 +73,7 @@ async def test_route_reader_scopes_artifacts_to_control_plane_status() -> None:
             runtime_id="fred-agents",
             client=client,
             filesystem=Filesystem(),  # type: ignore[arg-type]
-            authorization="Bearer person",
+            credentials=static_person_provider("person"),
         )
         with pytest.raises(PermissionError):
             await reader.read_result(reference)
@@ -64,7 +101,7 @@ async def test_route_reader_does_not_expose_artifacts_after_denial() -> None:
             runtime_id="fred-agents",
             client=client,
             filesystem=object(),  # type: ignore[arg-type]
-            authorization="Bearer denied",
+            credentials=static_person_provider("denied"),
         )
         with pytest.raises(HTTPException) as error:
             await reader.agent_status("t1", "a1", "example")
@@ -97,7 +134,7 @@ async def test_platform_port_uses_scoped_control_plane_routes() -> None:
             runtime_id="fred-agents",
             client=client,
             filesystem=Filesystem(),  # type: ignore[arg-type]
-            authorization="Bearer manager",
+            credentials=static_person_provider("manager"),
         )
         assert (await port.platform_status("ppt_builder", "template"))["active"]
         assert await port.read_result(reference) == reference.encode()

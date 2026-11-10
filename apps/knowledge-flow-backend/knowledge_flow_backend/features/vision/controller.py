@@ -9,17 +9,15 @@ import base64
 import io
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fred_core import get_current_user_without_gcu, get_principal_context, is_service_agent
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fred_core import AssertedUser, KeycloakUser, get_current_user_or_service, get_current_user_without_gcu, get_principal_context, is_service_agent
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
 from langchain_core.messages import HumanMessage
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.processors.input.common.image_describer import (
-    _stringify_content,
-)
+from knowledge_flow_backend.core.processors.input.common.image_describer import _stringify_content
 
 _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _MAX_PROMPT_CHARS = 16_000
@@ -34,6 +32,13 @@ class VisionAvailability(BaseModel):
 
 class VisionAnswer(BaseModel):
     text: str
+
+
+async def _worker_principal_context(
+    request: Request,
+    subject: KeycloakUser | AssertedUser = Depends(get_current_user_or_service),
+) -> PrincipalContext:
+    return await get_principal_context(request, subject)
 
 
 class VisionController:
@@ -53,7 +58,7 @@ class VisionController:
         async def describe(
             image: Annotated[UploadFile, File()],
             prompt: Annotated[str, Form()],
-            principals: PrincipalContext = Depends(get_principal_context),
+            principals: PrincipalContext = Depends(_worker_principal_context),
         ) -> VisionAnswer:
             self._require_worker(principals)
             if not context.configuration.vision_model:

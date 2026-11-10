@@ -823,6 +823,34 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    availabilityKnowledgeFlowV1VisionAvailabilityGet: build.query<
+      AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiResponse,
+      AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vision/availability`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    describeKnowledgeFlowV1InternalVisionDescribePost: build.mutation<
+      DescribeKnowledgeFlowV1InternalVisionDescribePostApiResponse,
+      DescribeKnowledgeFlowV1InternalVisionDescribePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/internal/vision/describe`,
+        method: "POST",
+        body: queryArg.bodyDescribeKnowledgeFlowV1InternalVisionDescribePost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
@@ -2029,6 +2057,21 @@ export type RerankDocumentsApiArg = {
   agent?: string | null;
   rerankRequest: RerankRequest;
 };
+export type AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiResponse =
+  /** status 200 Successful Response */ VisionAvailability;
+export type AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DescribeKnowledgeFlowV1InternalVisionDescribePostApiResponse =
+  /** status 200 Successful Response */ VisionAnswer;
+export type DescribeKnowledgeFlowV1InternalVisionDescribePostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyDescribeKnowledgeFlowV1InternalVisionDescribePost: BodyDescribeKnowledgeFlowV1InternalVisionDescribePost;
+};
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
   /** status 200 Successful Response */ DocumentTreeResponse;
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
@@ -3153,6 +3196,16 @@ export type RerankRequest = {
   /** Number of top-reranked chunks to consider */
   top_r?: number;
 };
+export type VisionAvailability = {
+  available: boolean;
+};
+export type VisionAnswer = {
+  text: string;
+};
+export type BodyDescribeKnowledgeFlowV1InternalVisionDescribePost = {
+  image: string;
+  prompt: string;
+};
 export type DocumentTreeResponse = {
   tree: string;
   /** True if any branch was pruned or items were omitted to fit max_chars. */
@@ -3529,6 +3582,9 @@ export const {
   useGetDocumentChunksOrderedQuery,
   useLazyGetDocumentChunksOrderedQuery,
   useRerankDocumentsMutation,
+  useAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
+  useLazyAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
+  useDescribeKnowledgeFlowV1InternalVisionDescribePostMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,
