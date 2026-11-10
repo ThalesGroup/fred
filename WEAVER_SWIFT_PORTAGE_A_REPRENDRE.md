@@ -1,6 +1,6 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `3ad093d3459768f0dec4d1deafdf8b83422f6e38`** (fusion décrite section 16 ; parents Weaver `e49f4cb79` et Swift `3ad093d34`).
+**Borne Swift intégrée : `49aaea6820556c63ff4e688dbfc7f8f702cad9e9`** (fusion décrite section 17 ; parents Weaver `58cc2ffe4` et Swift `49aaea682`).
 Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -1857,3 +1857,56 @@ Les contrôles utilisent les droits de la personne et de l'espace sélectionné.
 Vérifications locales : garde d'accès et navigation, exécution séquentielle, rapports et copie, outils de l'agent de diagnostic, refus de suppression d'un dossier non vide et reprise d'un projet par son opérateur (tests HTTP avec PostgreSQL). Aucun stockage de rapports côté serveur.
 
 La réception k3d requiert les images locales et un compte administrateur de plateforme également propriétaire d'au moins une organisation, équipe ou projet. Les contrôles de ressources nécessitent un espace de test accessible et, pour l'isolation, un second compte. La suite de validation en ligne de commande est indépendante.
+
+
+## 17. Intégration Swift du 10 novembre 2026
+
+Mise à jour locale demandée sur `weaver`. Base Weaver figée :
+`58cc2ffe4261a2fcad4d40a5276b99e1662dbdd7` ; ancienne borne Swift :
+`3ad093d3459768f0dec4d1deafdf8b83422f6e38` ; cible confirmée par fetch :
+`49aaea6820556c63ff4e688dbfc7f8f702cad9e9`. Cette section appartient au merge
+ayant la base Weaver et la cible Swift pour parents. Le checkout Swift distinct
+reste intact sur sa branche de correction Unicode ; sa branche locale `swift`
+pointait encore sur `d9e1b5d82` lors de l'inventaire.
+
+| Source nouvelle | Décision et apport |
+| --- | --- |
+| `1471f1ff5` (#3503) | Reprise directe du style ChatList : espace réservé à la barre de défilement et retrait du padding droit redondant. |
+| `d9e1b5d82` (#3517) | Déjà couvert : le test Weaver vérifie l'absence de l'ancienne table au head, son retour aux révisions antérieures SQLite et l'isolation des arbres. Conservation intégrale de ce test et des révisions propres à Weaver. |
+| `49aaea682` (#3514) | Reprise directe de l'encodage UTF-8 du nom dans Content-Disposition et des tests d'export Word/Markdown. Conservation des contrôles d'accès et des métadonnées d'auteur Weaver. |
+
+Les notes Unicode et barre de défilement sont reprises dans
+`deploy/release-notes/changes/`. Les notes Swift de cutover/rollback du steering
+ne sont pas réintroduites : la note `weaver-in-thread-steering.md` porte déjà
+le contrat Weaver d'installation neuve et de refus de downgrade PostgreSQL.
+Aucune migration n'est ajoutée ou modifiée. Les anciens portages et réceptions
+différés restent distincts ; cette fusion ne les valide pas.
+
+Les composants existants portent les deux corrections ; aucune abstraction ni
+voie de compatibilité supplémentaire. Production : +13 / -4 lignes ; tests :
++65 / -0 ; deux notes opérateur : +75 / -0, hors présent suivi.
+
+Vérifications locales :
+- Frontend : `make code-quality` avec Node 24.22.2 réussi (TypeScript, Prettier, ESLint).
+- `git diff --cached --check` réussi ; aucun conflit restant dans l'index.
+- Capability documentaire : `UV_NO_SYNC=1 make -o dev code-quality` réussi
+  (Ruff, formatage, Bandit, secrets et Basedpyright : zéro erreur/avertissement).
+- `.venv/bin/pytest -q --disable-socket --allow-unix-socket tests/test_router.py`
+  dans la capability : 49 réussites, avec contenu Word/Markdown, Unicode,
+  noms nettoyés, document absent et accès étranger.
+- Même commande sur `tests/test_migrations_downgrade.py` dans `apps/fred-agents` :
+  une réussite ; SQLite temporaire uniquement.
+- OpenAPI produit depuis `apps/fred-agents` par
+  `.venv/bin/python -m fred_runtime dump-openapi writable_document`, puis client
+  régénéré avec `npx --no-install @rtk-query/codegen-openapi
+  src/rework/features/capabilities/writable_document/api/writableDocumentCapabilityOpenApiConfig.json`
+  dans le frontend : aucun changement du client versionné.
+- Notes opérateur : `libs/fred-pod/.venv/bin/python scripts/migration_guides.py
+  check-pr --base 58cc2ffe4261a2fcad4d40a5276b99e1662dbdd7 --worktree` : deux
+  déclarations valides.
+
+La réception navigateur reste au développeur : barre de défilement sur une liste
+longue et export Word/Markdown avec titre Unicode. Le navigateur conserve sa
+règle existante de nettoyage du nom téléchargé ; le correctif porte sur l'en-tête
+HTTP qui empêchait certains exports. Aucun service démarré, base applicative
+modifiée, push ou déploiement.
