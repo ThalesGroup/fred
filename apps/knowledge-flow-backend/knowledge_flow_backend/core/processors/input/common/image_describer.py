@@ -52,6 +52,32 @@ Constraints:
 - If uncertain, say so briefly instead of inventing details
 """.strip()
 
+# Chat attachments: the agent answers follow-up questions from this text alone,
+# so it must be exhaustive and literal rather than a retrieval summary.
+VISION_ATTACHMENT_PROMPT_V1 = """
+Describe the image completely and literally, so that someone who cannot see it can answer any question about it.
+
+1. Text: transcribe every visible piece of text verbatim, in its original language (titles, axis titles, tick labels, legends, annotations, buttons, captions, footers, watermarks). Keep misspellings, cut words and overlapping text exactly as written: never correct, translate or expand them, and never add a vendor or meaning the image does not show.
+2. Structure checklist: for each item, say present (with details) or absent: title, axis titles, legend, gridlines (direction, color), borders or frame, logos, fonts (serif or sans-serif, weight, color).
+3. Charts:
+   - chart type and orientation;
+   - each axis: title or "no title", unit, scale, every tick label;
+   - first state how many bars, points or slices there are, counting carefully from left to right;
+   - then list each one in order. In a histogram, a bar spans the interval between two tick labels: name it by that interval (for example "2.00 to 3.00"), not by a single tick;
+   - read each value against the gridlines and the axis scale; mark it approximate when it falls between gridlines;
+   - colors of each series.
+4. Diagrams:
+   - every group or container with its label, and the components inside it; give counts for repeated components (for example "3 redis icons");
+   - then every arrow or line, one per line: from, to, direction (one-way or two-way), style (solid or dashed), label. Name the exact element an arrow touches, not just its area;
+   - then the components or groups with no connection at all.
+5. Tables: reproduce every row and column. Screenshots: layout, every visible text, controls and their state. Photos: scene, objects, people, positions.
+6. Main colors and spatial layout of the whole image.
+
+Never invent content: if something is unreadable, say so.
+Output plain text only, no markdown, no URLs, no base64.
+""".strip()
+
+
 PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1 = """
 You are generating a short visual enrichment for a slide that has already been processed by native extraction.
 
@@ -196,5 +222,6 @@ class VisionImageDescriber(BaseImageDescriber):
             text = _stringify_content(getattr(result, "content", "")).strip()
             return text or IMAGE_DESCRIPTION_UNAVAILABLE
         except Exception as e:
-            logger.warning("Vision description failed: %s", e)
+            # Provider errors can be long or echo the request: type and a clipped message only.
+            logger.warning("Vision description failed: %s: %s", type(e).__name__, str(e)[:200])
             return IMAGE_DESCRIPTION_UNAVAILABLE
