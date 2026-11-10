@@ -660,26 +660,32 @@ class CapabilityPreparationReader(ABC):
     """Authenticated current status and artifacts for a capability router."""
 
     @abstractmethod
-    def enabled(self, capability_id: str) -> bool: ...
+    def enabled(self, capability_id: str) -> bool:
+        pass
 
     @abstractmethod
     async def agent_status(
         self, team_id: str, agent_instance_id: str, capability_id: str
-    ) -> Mapping[str, Any] | None: ...
+    ) -> Mapping[str, Any] | None:
+        pass
 
     @abstractmethod
-    async def read_result(self, reference: str) -> bytes: ...
+    async def read_result(self, reference: str) -> bytes:
+        pass
 
     @abstractmethod
-    async def read_sibling(self, reference: str, filename: str) -> bytes: ...
+    async def read_sibling(self, reference: str, filename: str) -> bytes:
+        pass
 
     @abstractmethod
-    async def sibling_exists(self, reference: str, filename: str) -> bool: ...
+    async def sibling_exists(self, reference: str, filename: str) -> bool:
+        pass
 
     @abstractmethod
     async def platform_status(
         self, capability_id: str, slot_key: str
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
 
 class CapabilityPreparationManager(ABC):
@@ -693,27 +699,32 @@ class CapabilityPreparationManager(ABC):
         content: bytes,
         filename: str,
         config: Mapping[str, Any],
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
     @abstractmethod
     async def retry_platform_candidate(
         self, capability_id: str, slot_key: str
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
     @abstractmethod
     async def refresh_platform_candidate(
         self, capability_id: str, slot_key: str, config: Mapping[str, Any]
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
     @abstractmethod
     async def reset_platform_selection(
         self, capability_id: str, slot_key: str
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
     @abstractmethod
     async def set_platform_settings(
         self, capability_id: str, slot_key: str, settings: Mapping[str, Any]
-    ) -> Mapping[str, Any]: ...
+    ) -> Mapping[str, Any]:
+        pass
 
 
 CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
@@ -1708,17 +1719,22 @@ class TeamWikiPort(ABC):
 
 
 class PreparationArtifactsPort(Protocol):
-    def has_result(self, capability_id: str) -> bool: ...
+    def has_result(self, capability_id: str) -> bool:
+        pass
 
-    def settings(self, capability_id: str) -> Mapping[str, Any]: ...
+    def settings(self, capability_id: str) -> Mapping[str, Any]:
+        pass
 
-    async def read_result(self, capability_id: str) -> bytes | None: ...
+    async def read_result(self, capability_id: str) -> bytes | None:
+        pass
 
-    async def read_sibling(self, capability_id: str, filename: str) -> bytes | None: ...
+    async def read_sibling(self, capability_id: str, filename: str) -> bytes | None:
+        pass
 
 
 class PreparationVisionAvailabilityPort(Protocol):
-    async def available(self) -> bool: ...
+    async def available(self) -> bool:
+        pass
 
 
 @dataclass(frozen=True, slots=True)

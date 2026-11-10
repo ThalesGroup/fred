@@ -102,26 +102,26 @@ class PreparationResult(BaseModel):
 
 class PreparationAssetReader(Protocol):
     async def read(self, asset_id: UUID) -> bytes:
-        raise NotImplementedError
+        pass
 
 
 class PreparationArtifactStore(Protocol):
     async def write(self, path: str, content: bytes) -> None:
-        raise NotImplementedError
+        pass
 
     async def read(self, path: str) -> bytes:
-        raise NotImplementedError
+        pass
 
     async def delete(self, path: str) -> None:
-        raise NotImplementedError
+        pass
 
 
 class PreparationVisionPort(Protocol):
     async def describe(self, image: bytes, prompt: str) -> str:
-        raise NotImplementedError
+        pass
 
     async def available(self) -> bool:
-        raise NotImplementedError
+        pass
 
 
 @dataclass(frozen=True)
