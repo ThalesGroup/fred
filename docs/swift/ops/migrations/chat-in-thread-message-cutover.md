@@ -1,6 +1,7 @@
 ---
 schema: 1
 after: [chat-active-turn-steering]
+covers: [28d9ee7c7a232247dfa01838a2624ce21028c53c]
 title: "Replace active-turn steering with in-thread messages"
 impact: major
 configuration: none
