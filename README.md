@@ -18,6 +18,8 @@ Fred is an open-source platform for putting a **team** to work with AI agents on
 its own documents — with the identity, access control, audit and evaluation that
 regulated work actually requires, from a laptop to an air-gapped cluster.
 
+test 
+
 The tools most people already know — Claude Code, Codex and the like — make one
 person remarkably effective. Fred is built for the case where that isn't enough:
 **the data can't leave, and the result has to belong to a team, not to an
