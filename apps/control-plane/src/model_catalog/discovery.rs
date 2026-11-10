@@ -24,6 +24,8 @@ pub enum DiscoveryFailure {
     HttpUnavailable,
     #[error("credential_unavailable")]
     CredentialUnavailable,
+    #[error("credential_rejected")]
+    CredentialRejected,
     #[error("redirect_refused")]
     RedirectRefused,
     #[error("invalid_response")]
@@ -37,12 +39,57 @@ pub enum DiscoveryFailure {
 impl DiscoveryFailure {
     pub(super) fn state(self) -> &'static str {
         match self {
-            Self::TransportUnavailable | Self::HttpUnavailable | Self::CredentialUnavailable => {
-                "unavailable"
-            }
+            Self::TransportUnavailable
+            | Self::HttpUnavailable
+            | Self::CredentialUnavailable
+            | Self::CredentialRejected => "unavailable",
             Self::RedirectRefused | Self::InvalidResponse | Self::TooLarge => "invalid",
             Self::Incomplete => "incomplete",
         }
+    }
+
+    /// Platform-operator diagnosis: the source, its configured endpoint and credential
+    /// variable, never a secret or provider body. Not for organization administrators.
+    pub fn explain(self, source: &ModelSource) -> String {
+        let (url, variable) = match &source.inventory {
+            SourceInventory::Discovered {
+                url,
+                authentication,
+                ..
+            } => (
+                url.as_str(),
+                match authentication {
+                    DiscoveryAuthentication::Bearer { secret_env_var, .. } => {
+                        secret_env_var.as_str()
+                    }
+                    DiscoveryAuthentication::Public => "its credential variable",
+                },
+            ),
+            SourceInventory::Declared { .. } => {
+                ("the declared inventory", "its credential variable")
+            }
+        };
+        let why = match self {
+            Self::CredentialUnavailable => format!(
+                "{variable} is missing or unusable in the Control Plane environment; set it, then restart the Control Plane"
+            ),
+            Self::CredentialRejected => format!(
+                "the provider refused the key in {variable} (HTTP 401/403); check that it is a valid key for this provider"
+            ),
+            Self::TransportUnavailable => {
+                format!("{url} is unreachable (network, proxy, DNS or TLS)")
+            }
+            Self::HttpUnavailable => {
+                format!("{url} answered an error status; check the provider, then retry")
+            }
+            Self::RedirectRefused => format!("{url} redirected; configure the final URL"),
+            Self::InvalidResponse => format!("{url} returned a model list Fred cannot read"),
+            Self::TooLarge => format!("{url} returned a model list above the size bound"),
+            Self::Incomplete => {
+                format!("{url} does not guarantee a complete model list")
+            }
+        };
+        format!("source {}: {self}: {why}", source.source_id)
     }
 }
 
@@ -213,6 +260,12 @@ async fn fetch(
     }
     if response.status() == StatusCode::PARTIAL_CONTENT {
         return Err(DiscoveryFailure::Incomplete);
+    }
+    if matches!(
+        response.status(),
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+    ) {
+        return Err(DiscoveryFailure::CredentialRejected);
     }
     if response.status() != StatusCode::OK {
         return Err(DiscoveryFailure::HttpUnavailable);
@@ -395,5 +448,59 @@ mod tests {
             Some(true)
         );
         assert_eq!(metadata(&item, Qualification::ChatSource).vision, None);
+    }
+
+    #[tokio::test]
+    async fn a_provider_refusing_the_key_is_a_rejected_credential() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1/models", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 1024];
+            let _ = socket.read(&mut request).await;
+            let _ = socket
+                .write_all(b"HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n")
+                .await;
+        });
+        let outcome = fetch(
+            &url,
+            &DiscoveryAuthentication::Public,
+            Qualification::MixedCapabilitiesV1,
+            true,
+        )
+        .await;
+        assert!(matches!(outcome, Err(DiscoveryFailure::CredentialRejected)));
+    }
+
+    #[test]
+    fn the_operator_diagnosis_names_source_variable_and_endpoint() {
+        let source: ModelSource = serde_json::from_value(serde_json::json!({
+            "source_id":"mistral","revision":1,"enabled":true,
+            "inventory":{"kind":"discovered","url":"https://api.mistral.ai/v1/models",
+                "authentication":{"mode":"bearer","secret_env_var":"MISTRAL_API_KEY", // pragma: allowlist secret
+                    "provider_scopes":["GET /v1/models"],"authority":"discovery_and_inference",
+                    "accept_inference_authority":true},
+                "qualification":"mixed_capabilities_v1","complete_inventory_guaranteed":true},
+            "inference":{"credential_binding":"mistral","api_root":"https://api.mistral.ai/v1",
+                "wire":"openai_chat","route":"standard","dialect":"mistral",
+                "auth":{"kind":"api_key"}},
+            "visibility_scope":"account"}))
+        .unwrap();
+        assert_eq!(
+            DiscoveryFailure::CredentialUnavailable.explain(&source),
+            "source mistral: credential_unavailable: MISTRAL_API_KEY is missing or unusable \
+             in the Control Plane environment; set it, then restart the Control Plane"
+        );
+        assert!(
+            DiscoveryFailure::CredentialRejected
+                .explain(&source)
+                .contains("refused the key in MISTRAL_API_KEY")
+        );
+        assert!(
+            DiscoveryFailure::TransportUnavailable
+                .explain(&source)
+                .contains("https://api.mistral.ai/v1/models is unreachable")
+        );
     }
 }

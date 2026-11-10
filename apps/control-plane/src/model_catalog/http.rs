@@ -208,14 +208,20 @@ async fn refresh_model_source(
             "model_refresh_superseded",
             "A newer refresh or source configuration superseded this result.",
         )),
-        RefreshResult::Failed(error) => Err(AppError::problem(
-            if error.state() == "unavailable" {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::BAD_GATEWAY
-            },
-            "model_discovery_failed",
-            "Discovery failed; consult the retained source observation for diagnostics.",
-        )),
+        RefreshResult::Failed(error) => {
+            // The diagnosis names platform variables and endpoints: logs only, never
+            // the organization administrator's response.
+            tracing::warn!(source_id = %source.source_id, error_code = %error,
+                "Model discovery failed: {}", error.explain(source));
+            Err(AppError::problem(
+                if error.state() == "unavailable" {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::BAD_GATEWAY
+                },
+                "model_discovery_failed",
+                "Discovery failed; consult the retained source observation for diagnostics.",
+            ))
+        }
     }
 }

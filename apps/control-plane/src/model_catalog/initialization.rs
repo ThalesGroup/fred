@@ -105,7 +105,7 @@ pub async fn initialize(pool: &PgPool, platform: &PlatformConfig, require_all: b
         }
         for (index, organization, declaration) in resolved {
             initialize_one(pool, platform, organization, declaration).await
-                .map_err(|error| failure(index, reason(&error)))?;
+                .map_err(|error| failure(index, &reason(&error)))?;
         }
         // A migration never guesses historical mappings, including undeclared organizations.
         let missing: bool = sqlx::query_scalar(
@@ -124,12 +124,14 @@ fn failure(index: usize, reason: &str) -> anyhow::Error {
     )
 }
 
-fn reason(error: &AppError) -> &str {
+/// The code, with its operator diagnosis when the problem carries one.
+fn reason(error: &AppError) -> String {
     match error {
-        AppError::Problem { code, .. } => code,
-        AppError::Unprocessable(_) => "invalid_model_policy_or_reasoning",
-        AppError::NotFound => "organization_missing_or_retired",
-        _ => "model_initialization_database_unavailable",
+        AppError::Problem { code, detail, .. } if detail != code => format!("{code} ({detail})"),
+        AppError::Problem { code, .. } => (*code).to_string(),
+        AppError::Unprocessable(_) => "invalid_model_policy_or_reasoning".into(),
+        AppError::NotFound => "organization_missing_or_retired".into(),
+        _ => "model_initialization_database_unavailable".into(),
     }
 }
 
@@ -166,7 +168,16 @@ async fn initialize_one(
                 store::RefreshResult::Superseded => {
                     return Err(problem("model_refresh_superseded"));
                 }
-                store::RefreshResult::Failed(_) => return Err(problem("model_discovery_failed")),
+                store::RefreshResult::Failed(failure) => {
+                    let diagnosis = failure.explain(source);
+                    tracing::warn!(source_id = %source.source_id, error_code = %failure,
+                        "Model discovery failed: {diagnosis}");
+                    return Err(AppError::problem(
+                        axum::http::StatusCode::CONFLICT,
+                        "model_discovery_failed",
+                        diagnosis,
+                    ));
+                }
             }
         }
     }
