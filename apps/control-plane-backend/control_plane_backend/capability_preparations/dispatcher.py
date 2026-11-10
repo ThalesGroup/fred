@@ -232,4 +232,5 @@ async def run_dispatcher(
         try:
             await asyncio.wait_for(stop.wait(), timeout=2)
         except TimeoutError:
+            # The timeout starts the next dispatch cycle.
             pass
