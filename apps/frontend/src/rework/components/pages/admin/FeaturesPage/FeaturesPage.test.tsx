@@ -145,6 +145,9 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
     return null;
   },
 }));
+vi.mock("./SandboxSettingsPanel", () => ({
+  SandboxSettingsPanel: ({ visible }: { visible: boolean }) => (visible ? <div>Sandbox settings</div> : null),
+}));
 
 // Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
 vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({

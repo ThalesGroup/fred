@@ -67,6 +67,7 @@ import {
   requiresTeamSettings,
 } from "./capabilityEnablement";
 import { PlatformSkillsPanel } from "./PlatformSkillsPanel";
+import { SandboxSettingsPanel } from "./SandboxSettingsPanel.tsx";
 import { ModelIdentityCell } from "./ModelIdentityCell";
 import { ModelDiscoveryStatus, UnverifiedRuntimeWarning } from "./ModelDiscoveryStatus";
 import { partitionDiscoveredModels, splitModelSections } from "./modelSections";
@@ -827,6 +828,10 @@ export default function FeaturesPage() {
           {isError && <p className={styles.statusError}>{t("rework.admin.capabilities.loadError")}</p>}
           {activeKindFilter === "model" && !discoveryConfigurationReady && !isLoading && !isError && (
             <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
+          )}
+
+          {activeKindFilter === "tool" && allCapabilities.some((cap) => cap.id === "code_sandbox") && (
+            <SandboxSettingsPanel visible />
           )}
 
           {activeKindFilter === "model" && hasDiscovery && (

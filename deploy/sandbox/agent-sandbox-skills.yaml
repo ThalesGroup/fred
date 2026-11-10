@@ -1,0 +1,111 @@
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: fred-code-skills
+  namespace: fred-sandbox
+spec:
+  networkPolicyManagement: Unmanaged
+  podTemplate:
+    spec:
+      runtimeClassName: gvisor
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox
+          image: REPLACE_WITH_APPROVED_PYTHON_IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command: [sleep, infinity]
+          workingDir: /work
+          env:
+            - name: HOME
+              value: /work
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+              ephemeral-storage: 16Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+              ephemeral-storage: 16Mi
+          volumeMounts:
+            - name: scratch
+              mountPath: /tmp
+            - name: scratch
+              mountPath: /work
+            - name: skills
+              mountPath: /skills
+              readOnly: true
+      volumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: skills
+          persistentVolumeClaim:
+            claimName: REPLACE_WITH_APPROVED_SKILLS_PVC
+            readOnly: true
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: fred-code-skills
+  namespace: fred-sandbox
+spec:
+  replicas: 0
+  updateStrategy:
+    type: Recreate
+  sandboxTemplateRef:
+    name: fred-code-skills
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fred-sandbox-broker-agent-sandbox
+  namespace: fred-sandbox
+rules:
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxclaims]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxtemplates, sandboxwarmpools]
+    verbs: [get]
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxwarmpools]
+    resourceNames: [fred-code]
+    verbs: [patch]
+  - apiGroups: [agents.x-k8s.io]
+    resources: [sandboxes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fred-sandbox-broker-agent-sandbox
+  namespace: fred-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: fred-sandbox-broker
+    namespace: fred-sandbox-system
+roleRef:
+  kind: Role
+  name: fred-sandbox-broker-agent-sandbox
+  apiGroup: rbac.authorization.k8s.io

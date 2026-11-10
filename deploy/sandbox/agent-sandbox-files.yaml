@@ -1,0 +1,74 @@
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: fred-code-files
+  namespace: fred-sandbox
+spec:
+  networkPolicyManagement: Unmanaged
+  volumeClaimTemplatesPolicy: Allowed
+  podTemplate:
+    spec:
+      runtimeClassName: gvisor
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox
+          image: REPLACE_WITH_APPROVED_PYTHON_IMAGE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command: [sleep, infinity]
+          workingDir: /work
+          env:
+            - name: HOME
+              value: /work
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+              ephemeral-storage: 16Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+              ephemeral-storage: 16Mi
+          volumeMounts:
+            - name: scratch
+              mountPath: /tmp
+            - name: scratch
+              mountPath: /work
+            - name: inputs
+              mountPath: /inputs
+              readOnly: true
+      volumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: fred-code-files
+  namespace: fred-sandbox
+spec:
+  replicas: 0
+  updateStrategy:
+    type: Recreate
+  sandboxTemplateRef:
+    name: fred-code-files

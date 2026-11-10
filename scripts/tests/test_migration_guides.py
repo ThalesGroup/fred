@@ -102,6 +102,8 @@ class GitTests(unittest.TestCase):
         self.git("config", "user.name", "Migration Tests")
         self.git("config", "commit.gpgsign", "false")
         self.git("config", "tag.gpgsign", "false")
+        self.git("config", "gc.auto", "0")
+        self.git("config", "maintenance.auto", "false")
         self.write("deploy/charts/fred/values.yaml", "enabled: false\n")
         self.commit("initial")
         self.git("tag", "-a", "code/v1.2.3", "-m", "previous release")

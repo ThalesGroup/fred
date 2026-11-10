@@ -46,6 +46,7 @@ _FOREIGN_TABLES = frozenset(
         "users",
         "session",
         "session_metadata",
+        "session_attachments",
         "teammetadata",
         "session_history",
         "cp_task_run",
@@ -66,13 +67,13 @@ def test_owned_set_covers_kfb_tables_and_nothing_foreign() -> None:
 
 def test_required_set_adds_the_foreign_tables_kfb_reads() -> None:
     """The startup guard checks what the component NEEDS, not what it
-    migrates: `users` and `teammetadata` are control-plane-owned but queried
-    by ingestion/metadata code — missing them at boot must fail fast, not
+    migrates: user, team and conversation tables belong to control-plane but
+    are queried by ingestion and sandbox mounts — missing them must fail fast, not
     surface as UndefinedTableError mid-request."""
     assert OWNED_TABLES <= REQUIRED_TABLES
-    assert {"users", "teammetadata"} <= REQUIRED_TABLES
+    assert {"users", "teammetadata", "session_metadata", "session_attachments"} <= REQUIRED_TABLES
     # Needed-but-foreign is not owned: the Alembic filter must stay strict.
-    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "teammetadata"}
+    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "teammetadata", "session_metadata", "session_attachments"}
 
 
 def test_autogenerate_on_migrated_database_proposes_nothing() -> None:

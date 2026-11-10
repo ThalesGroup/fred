@@ -1,0 +1,141 @@
+import json
+
+import pytest
+from fred_capability_code_sandbox.capability import CodeSandboxCapability
+from fred_runtime.capabilities.registry import CapabilityRegistry
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+    TeamScopePolicy,
+)
+from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.sandbox import (
+    SandboxError,
+    SandboxExecutionPort,
+    SandboxInputPort,
+    SandboxResult,
+    SandboxSessionIdentity,
+)
+
+
+class FakeSandbox(SandboxExecutionPort):
+    def __init__(self) -> None:
+        self.requests = []
+        self.sessions = []
+        self.error: str | None = None
+        self.result = SandboxResult(exit_code=0, stdout="42\n", stderr="")
+
+    async def execute(self, request, session: SandboxSessionIdentity | None = None):
+        self.requests.append(request)
+        self.sessions.append(session)
+        if self.error:
+            raise SandboxError(self.error)
+        return self.result
+
+
+class FakeInputs(SandboxInputPort):
+    def __init__(self):
+        self.calls = []
+
+    async def prepare_view(self, session):
+        self.calls.append(("prepare", session))
+
+
+def context(port, session_id=None, team_id=None, inputs=None):
+    return CapabilityContext(
+        identity=CapabilityIdentity(
+            user_id="user", session_id=session_id, team_id=team_id
+        ),
+        config=EmptyModel(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(sandbox_execution=port, sandbox_inputs=inputs),
+    )
+
+
+def test_capability_boot_and_tool_schema() -> None:
+    registry = CapabilityRegistry()
+    registry.register(CodeSandboxCapability())
+    registry.validate()
+    capability = registry.capability("code_sandbox")
+    assert capability.manifest.team_scope is TeamScopePolicy.ADMIN_GATED
+    assert capability.manifest.execution_models == ("react", "graph")
+    assert [control.widget for control in capability.chat_controls(EmptyModel())] == [
+        "attach_files"
+    ]
+    tool = capability.tools(context(FakeSandbox()))[0]
+    assert set(tool.args_schema.model_json_schema()["properties"]) == {"code"}
+    assert "including a single Bash command" in tool.description
+    with pytest.raises(RuntimeError, match="configured execution broker"):
+        capability.tools(context(None))
+
+
+@pytest.mark.asyncio
+async def test_tool_executes_and_reports_bounded_error() -> None:
+    port = FakeSandbox()
+    tool = CodeSandboxCapability().tools(context(port))[0]
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "execute_code",
+            "id": "call-1",
+            "args": {"code": "python -c 'print(42)'"},
+        }
+    )
+    assert json.loads(result.content)["stdout"] == "42\n"
+    assert not result.artifact.is_error
+    assert port.requests[0].code == "python -c 'print(42)'"
+    assert port.sessions[0] is None
+    port.result = SandboxResult(exit_code=127, stdout="", stderr="command not found")
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "execute_code",
+            "id": "call-failed",
+            "args": {"code": "missing-command"},
+        }
+    )
+    assert not result.artifact.is_error
+    assert json.loads(result.content)["exit_code"] == 127
+    port.error = "runtime_unavailable"
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "execute_code",
+            "id": "call-2",
+            "args": {"code": "echo hi"},
+        }
+    )
+    assert result.artifact.is_error
+    assert json.loads(result.content) == {"error_code": "runtime_unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_tool_binds_conversation_without_exposing_it_to_model() -> None:
+    port = FakeSandbox()
+    tool = CodeSandboxCapability().tools(context(port, session_id="chat-1"))[0]
+    await tool.ainvoke({"code": "echo ok"})
+    assert port.sessions[0] == SandboxSessionIdentity(
+        user_id="user", session_id="chat-1"
+    )
+    assert set(tool.args_schema.model_fields) == {"code"}
+
+
+@pytest.mark.asyncio
+async def test_execution_prepares_the_trusted_conversation_view() -> None:
+    port = FakeSandbox()
+    inputs = FakeInputs()
+    tools = CodeSandboxCapability().tools(
+        context(port, session_id="chat-1", team_id="team-1", inputs=inputs)
+    )
+    assert [tool.name for tool in tools] == ["execute_code"]
+    await tools[0].ainvoke({"code": "ls /inputs"})
+    assert inputs.calls == [
+        (
+            "prepare",
+            SandboxSessionIdentity(
+                user_id="user", session_id="chat-1", team_id="team-1"
+            ),
+        )
+    ]
+    assert len(port.requests) == 1

@@ -88,8 +88,9 @@ ARG HF_OFFLINE_STRICT=1
 ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
 # System deps (minimal)
-RUN apt-get update && \
-    apt-get install -y \
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources && \
+    apt-get -o Acquire::Retries=5 update && \
+    apt-get -o Acquire::Retries=5 install -y \
     curl \
     pandoc \
     inkscape \
@@ -137,8 +138,8 @@ RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
 RUN python -c "\
 import duckdb; \
 con = duckdb.connect(database=':memory:'); \
-con.execute('INSTALL httpfs'); \
-con.execute('LOAD httpfs')"
+con.install_extension('httpfs', repository_url='https://extensions.duckdb.org'); \
+con.load_extension('httpfs')"
 # The downloads below run as fred-user, hence the readable secret mount.
 RUN --mount=type=secret,id=ca-bundle,mode=0444 \
     if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle REQUESTS_CA_BUNDLE=/run/secrets/ca-bundle; fi && \

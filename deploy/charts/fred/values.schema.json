@@ -40,6 +40,148 @@
       },
       "additionalProperties": false
     },
+    "sandboxBroker": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "sandboxNamespace": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "imagePullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "executionImage": {
+          "type": "string"
+        },
+        "backend": {
+          "enum": [
+            "kubernetes",
+            "agent_sandbox"
+          ]
+        },
+        "isolation": {
+          "enum": [
+            "kata",
+            "gvisor"
+          ]
+        },
+        "runtimeName": {
+          "type": "string"
+        },
+        "networkPolicyVerified": {
+          "type": "boolean"
+        },
+        "pidLimitVerified": {
+          "type": "boolean"
+        },
+        "agentPoolName": {
+          "type": "string"
+        },
+        "maxSandboxes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "quota": {
+          "type": "object",
+          "properties": {
+            "pods": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "jobs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "persistentVolumeClaims": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "secrets": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "pods",
+            "jobs",
+            "persistentVolumeClaims",
+            "secrets"
+          ]
+        },
+        "brokerTokenSecret": {
+          "type": "string"
+        },
+        "tlsSecret": {
+          "type": "string"
+        },
+        "mountProvider": {
+          "enum": [
+            "none",
+            "rclone_csi"
+          ]
+        },
+        "fileGatewayUrl": {
+          "type": "string"
+        },
+        "fileGatewayRevokeUrl": {
+          "type": "string"
+        },
+        "fileGatewaySecret": {
+          "type": "string"
+        },
+        "fileStorageClass": {
+          "type": "string"
+        },
+        "skillsVolume": {
+          "type": "string"
+        },
+        "settingsUrl": {
+          "type": "string"
+        },
+        "settingsTokenSecret": {
+          "type": "string"
+        },
+        "caSecret": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ]
+    },
     "registrations": {
       "type": "object",
       "properties": {

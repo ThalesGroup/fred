@@ -118,7 +118,17 @@ def _declared_route_operations() -> set[tuple[str, str]]:
                 if not isinstance(decorator.func, ast.Attribute):
                     continue
                 method = decorator.func.attr
-                if method not in _HTTP_METHODS:
+                if method == "api_route":
+                    methods = [
+                        value.value.upper()
+                        for keyword in decorator.keywords
+                        if keyword.arg == "methods" and isinstance(keyword.value, (ast.List, ast.Tuple))
+                        for value in keyword.value.elts
+                        if isinstance(value, ast.Constant) and isinstance(value.value, str)
+                    ]
+                elif method in _HTTP_METHODS:
+                    methods = [method.upper()]
+                else:
                     continue
                 receiver = decorator.func.value
                 if not isinstance(receiver, ast.Name):
@@ -139,7 +149,7 @@ def _declared_route_operations() -> set[tuple[str, str]]:
                     full_path = route_path
                 else:
                     full_path = f"{_BASE_URL}{prefixes.get(receiver.id, '')}{route_path}"
-                operations.add((method.upper(), full_path))
+                operations.update((declared_method, full_path) for declared_method in methods)
 
     assert operations, "No knowledge-flow route operations found"
     return operations
