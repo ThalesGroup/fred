@@ -2,7 +2,7 @@ name: Check pending request
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own
@@ -17,6 +17,8 @@ permissions:
 jobs:
   # Job to detect changes
   detect-changes:
+    # Every downstream check depends on this gate.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     # Those outputs are variables that will be shared to the check
     outputs:
