@@ -1,336 +1,130 @@
-"""Shared SQL mailbox for managed chat messages offered during a turn."""
+"""Deliver durable in-thread user updates at safe model boundaries."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import logging
+from collections.abc import Awaitable, Callable
 
-from fred_core.models.base import JsonColumn
+from fred_core.history.history_schema import TextPart
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_sdk.contracts.runtime import SteeredUserMessageRuntimeEvent
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import HumanMessage
 from langgraph.config import get_stream_writer
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Index,
-    MetaData,
-    String,
-    Table,
-    delete,
-    insert,
-    select,
-    update,
-)
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
-_ACTIVE_LEASE = timedelta(seconds=90)
-_PAUSED_RETENTION = timedelta(days=30)
-_MAX_PENDING = 32
-_CLEANUP_BATCH = 256
-_metadata = MetaData()
-_turns = Table(
-    "runtime_turn_steering",
-    _metadata,
-    Column("session_id", String, primary_key=True),
-    Column("turn_id", String(128), nullable=False),
-    Column("agent_instance_id", String, nullable=False),
-    Column("user_id", String, nullable=False),
-    Column("team_id", String, nullable=False),
-    Column("state", String(16), nullable=False),
-    Column("pending", JsonColumn, nullable=False),
-    Column("seen", JsonColumn, nullable=False),
-    Column("expires_at", DateTime(timezone=True), nullable=False),
-)
-Index("ix_runtime_turn_steering_expires_at", _turns.c.expires_at)
+from fred_runtime.runtime_support.run_scope import RunScope
+
+logger = logging.getLogger(__name__)
 
 
-def _expired(value: datetime, now: datetime) -> bool:
-    return value.replace(tzinfo=value.tzinfo or UTC) <= now
+class TurnMessages:
+    def __init__(self) -> None:
+        self._history: PostgresHistoryStore | None = None
+
+    def configure(self, history: PostgresHistoryStore | None) -> None:
+        self._history = history
+
+    def require_history(self) -> PostgresHistoryStore:
+        if self._history is None:
+            raise RuntimeError("Turn message history is not configured")
+        return self._history
 
 
-class TurnSteeringMailbox:
-    def __init__(self, engine: AsyncEngine | None = None) -> None:
-        self._engine = engine
-
-    def configure(self, engine: AsyncEngine | None) -> None:
-        self._engine = engine
-
-    def _require_engine(self) -> AsyncEngine:
-        if self._engine is None:
-            raise RuntimeError("Turn steering SQL engine is not configured")
-        return self._engine
-
-    async def start(
-        self,
-        session_id: str,
-        agent_instance_id: str,
-        user_id: str,
-        team_id: str,
-        turn_id: str,
-        *,
-        resume: bool = False,
-    ) -> str | None:
-        if self._engine is None:
-            return None
-        now = datetime.now(UTC)
-        try:
-            async with self._require_engine().begin() as conn:
-                row = (
-                    (
-                        await conn.execute(
-                            select(_turns)
-                            .where(_turns.c.session_id == session_id)
-                            .with_for_update()
-                        )
-                    )
-                    .mappings()
-                    .first()
-                )
-                if row is None:
-                    await conn.execute(
-                        insert(_turns).values(
-                            session_id=session_id,
-                            turn_id=turn_id,
-                            agent_instance_id=agent_instance_id,
-                            user_id=user_id,
-                            team_id=team_id,
-                            state="resumed" if resume else "active",
-                            pending=[],
-                            seen=[],
-                            expires_at=now + _ACTIVE_LEASE,
-                        )
-                    )
-                    return turn_id
-                if row["state"] in ("active", "resumed") and not _expired(
-                    row["expires_at"], now
-                ):
-                    return None
-                if (
-                    resume
-                    and row["state"] == "paused"
-                    and not _expired(row["expires_at"], now)
-                ):
-                    if (
-                        row["agent_instance_id"] != agent_instance_id
-                        or row["user_id"] != user_id
-                        or row["team_id"] != team_id
-                    ):
-                        return None
-                    pending, seen = row["pending"], row["seen"]
-                else:
-                    pending, seen = [], []
-                await conn.execute(
-                    update(_turns)
-                    .where(_turns.c.session_id == session_id)
-                    .values(
-                        turn_id=turn_id,
-                        agent_instance_id=agent_instance_id,
-                        user_id=user_id,
-                        team_id=team_id,
-                        state="resumed" if resume else "active",
-                        pending=pending,
-                        seen=seen,
-                        expires_at=now + _ACTIVE_LEASE,
-                    )
-                )
-                return turn_id
-        except IntegrityError:
-            # A concurrent first turn won the session's primary key.
-            return None
-
-    async def pause(self, session_id: str, turn_id: str) -> None:
-        async with self._require_engine().begin() as conn:
-            await conn.execute(
-                update(_turns)
-                .where(
-                    _turns.c.session_id == session_id,
-                    _turns.c.turn_id == turn_id,
-                    _turns.c.state.in_(("active", "resumed")),
-                )
-                .values(
-                    state="paused",
-                    expires_at=datetime.now(UTC) + _PAUSED_RETENTION,
-                )
-            )
-
-    async def renew(self, session_id: str, turn_id: str) -> None:
-        async with self._require_engine().begin() as conn:
-            await conn.execute(
-                update(_turns)
-                .where(
-                    _turns.c.session_id == session_id,
-                    _turns.c.turn_id == turn_id,
-                    _turns.c.state.in_(("active", "resumed")),
-                    _turns.c.expires_at > datetime.now(UTC),
-                )
-                .values(expires_at=datetime.now(UTC) + _ACTIVE_LEASE)
-            )
-
-    async def end(self, session_id: str, turn_id: str, *, paused: bool = False) -> None:
-        async with self._require_engine().begin() as conn:
-            row = (
-                (
-                    await conn.execute(
-                        select(_turns)
-                        .where(_turns.c.session_id == session_id)
-                        .with_for_update()
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if row is None or row["turn_id"] != turn_id:
-                return
-            if paused:
-                await conn.execute(
-                    update(_turns)
-                    .where(_turns.c.session_id == session_id)
-                    .values(
-                        state="paused", expires_at=datetime.now(UTC) + _PAUSED_RETENTION
-                    )
-                )
-            else:
-                await conn.execute(
-                    delete(_turns).where(_turns.c.session_id == session_id)
-                )
-
-    async def offer(
-        self,
-        session_id: str,
-        agent_instance_id: str,
-        user_id: str,
-        team_id: str,
-        turn_id: str,
-        message_id: str,
-        text: str,
-    ) -> bool:
-        if self._engine is None:
-            return False
-        async with self._require_engine().begin() as conn:
-            row = (
-                (
-                    await conn.execute(
-                        select(_turns)
-                        .where(_turns.c.session_id == session_id)
-                        .with_for_update()
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if (
-                row is None
-                or row["state"] not in ("active", "resumed")
-                or _expired(row["expires_at"], datetime.now(UTC))
-                or row["turn_id"] != turn_id
-                or row["agent_instance_id"] != agent_instance_id
-                or row["user_id"] != user_id
-                or row["team_id"] != team_id
-            ):
-                return False
-            if message_id in row["seen"]:
-                return True
-            if len(row["pending"]) >= _MAX_PENDING:
-                return False
-            await conn.execute(
-                update(_turns)
-                .where(_turns.c.session_id == session_id)
-                .values(
-                    pending=[*row["pending"], {"id": message_id, "text": text}],
-                    seen=[*row["seen"], message_id],
-                )
-            )
-            return True
-
-    async def take(self, session_id: str, turn_id: str) -> list[tuple[str, str]]:
-        async with self._require_engine().begin() as conn:
-            row = (
-                (
-                    await conn.execute(
-                        select(_turns)
-                        .where(_turns.c.session_id == session_id)
-                        .with_for_update()
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if (
-                row is None
-                or row["turn_id"] != turn_id
-                or row["state"] not in ("active", "resumed")
-                or _expired(row["expires_at"], datetime.now(UTC))
-            ):
-                return []
-            messages = [(item["id"], item["text"]) for item in row["pending"]]
-            if messages:
-                await conn.execute(
-                    update(_turns)
-                    .where(_turns.c.session_id == session_id)
-                    .values(pending=[])
-                )
-            return messages
-
-    async def purge(self, session_id: str, user_id: str | None = None) -> None:
-        if self._engine is None:
-            return
-        criteria = [_turns.c.session_id == session_id]
-        if user_id is not None:
-            criteria.append(_turns.c.user_id == user_id)
-        async with self._require_engine().begin() as conn:
-            await conn.execute(delete(_turns).where(*criteria))
-
-    async def cleanup_expired(self) -> None:
-        if self._engine is None:
-            return
-        async with self._require_engine().begin() as conn:
-            sessions = (
-                (
-                    await conn.execute(
-                        select(_turns.c.session_id)
-                        .where(_turns.c.expires_at <= datetime.now(UTC))
-                        .order_by(_turns.c.expires_at)
-                        .limit(_CLEANUP_BATCH)
-                        .with_for_update(skip_locked=True)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            if sessions:
-                await conn.execute(
-                    delete(_turns).where(_turns.c.session_id.in_(sessions))
-                )
+turn_messages = TurnMessages()
 
 
-turn_steering_mailbox = TurnSteeringMailbox()
+def steered_human_message(message_id: str, content: str) -> HumanMessage:
+    return HumanMessage(
+        id=f"steered:{message_id}",
+        content="The user has sent an update while this task is in progress. "
+        "Apply this latest instruction before deciding what to do next; "
+        "it may add information, revise or cancel the earlier request. "
+        "Answer any outstanding question in the final response. "
+        "If the user asks you to stop, do not call more tools; "
+        f"briefly acknowledge and end the turn.\n\n{content}",
+    )
 
 
 class TurnSteeringMiddleware(AgentMiddleware):
-    def __init__(self, session_id: str | None, turn_id: str | None = None) -> None:
+    def __init__(
+        self,
+        session_id: str | None,
+        pending_message_id: str | None = None,
+        exchange_id: str | None = None,
+        user_id: str | None = None,
+        agent_instance_id: str | None = None,
+    ) -> None:
         super().__init__()
         self._session_id = session_id
-        self._turn_id = turn_id
+        self._pending_message_id = pending_message_id
+        self._exchange_id = exchange_id
+        self._user_id = user_id
+        self._agent_instance_id = agent_instance_id
+        self._pending_delivery: tuple[tuple[str, str], ...] = ()
 
     async def abefore_model(self, state, runtime) -> dict | None:
-        if not self._session_id or not self._turn_id:
+        if not self._session_id or not self._agent_instance_id:
             return None
-        messages = await turn_steering_mailbox.take(self._session_id, self._turn_id)
-        if not messages:
+        history = turn_messages.require_history()
+        pending = await history.pending_steered_messages(
+            self._session_id, self._user_id, self._agent_instance_id
+        )
+        if not pending:
+            self._pending_delivery = ()
             return None
-        writer = get_stream_writer()
-        for message_id, text in messages:
-            writer(SteeredUserMessageRuntimeEvent(message_id=message_id, content=text))
-        return {
-            "messages": [
-                HumanMessage(
-                    content="The user has sent an update while this task is in progress. "
-                    "Apply this latest instruction before deciding what to do next; "
-                    "it may add information, revise or cancel the earlier request. "
-                    "If the user asks you to stop, do not call more tools; "
-                    f"briefly acknowledge and end the turn.\n\n{text}"
-                )
-                for _, text in messages
-            ]
+        seen_ids = {
+            str(message.id)
+            for message in state.get("messages", [])
+            if getattr(message, "id", None)
         }
+        injected: list[tuple[int, HumanMessage]] = []
+        pending_delivery: list[tuple[str, str]] = []
+        for message in pending:
+            extras = (message.metadata.model_extra or {}).get("extras")
+            message_id = (
+                extras.get("steered_message_id") if isinstance(extras, dict) else None
+            )
+            part = message.parts[0] if message.parts else None
+            if not isinstance(message_id, str) or not isinstance(part, TextPart):
+                continue
+            content = part.text
+            if message_id != self._pending_message_id:
+                stable_id = f"steered:{message_id}"
+                if stable_id not in seen_ids:
+                    injected.append(
+                        (
+                            message.rank,
+                            steered_human_message(message_id, content),
+                        )
+                    )
+            pending_delivery.append((message_id, content))
+        self._pending_delivery = tuple(pending_delivery)
+        injected.sort(key=lambda item: (0, item[0]) if item[0] >= 0 else (1, -item[0]))
+        return {"messages": [item for _, item in injected]} if injected else None
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        pending_delivery = self._pending_delivery
+        self._pending_delivery = ()
+        if pending_delivery:
+            scope = RunScope.current()
+            if scope is None:
+                raise RuntimeError("Steered delivery has no active run scope")
+            writer = get_stream_writer()
+            for message_id, content in pending_delivery:
+                receipt_key = f"steered-user:{message_id}"
+                receipt = scope.register_event_receipt(receipt_key)
+                try:
+                    writer(
+                        SteeredUserMessageRuntimeEvent(
+                            message_id=message_id, content=content
+                        )
+                    )
+                    await receipt
+                finally:
+                    scope.discard_event_receipt(receipt_key)
+        return await handler(request)

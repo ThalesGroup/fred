@@ -92,6 +92,20 @@ def test_fresh_turn_ignores_interrupt_id_and_builds_message_payload() -> None:
     assert len(messages) == 1
 
 
+def test_pending_opening_message_keeps_identity_in_checkpoint() -> None:
+    config = ExecutionConfig(session_id="s1", pending_message_id="m1")
+    input_model = ReActInput(
+        messages=(ReActMessage(role=ReActMessageRole.USER, content="new turn"),)
+    )
+    result = graph_input_from_react_input(
+        input_model, config, sanitize_tool_name=_sanitize
+    )
+    assert isinstance(result, dict)
+    messages = result["messages"]
+    assert isinstance(messages, list)
+    assert messages[0].id == "steered:m1"
+
+
 def test_batch_resume_targets_every_pending_interrupt() -> None:
     payload = {
         "answers": [

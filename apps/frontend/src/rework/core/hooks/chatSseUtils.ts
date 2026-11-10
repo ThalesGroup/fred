@@ -77,7 +77,9 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage): ChatMessage[] => 
   const k = keyOf(m);
   const stableConversationKey = stableConversationKeyOf(m);
   const incomingCallId = toolResultCallId(m);
+  const steeredId = m.metadata?.extras?.steered_message_id;
   const idx = base.findIndex((x) => {
+    if (typeof steeredId === "string" && x.metadata?.extras?.steered_message_id === steeredId) return true;
     if (keyOf(x) === k) return true;
     if (
       isOptimisticUserMessage(x) &&

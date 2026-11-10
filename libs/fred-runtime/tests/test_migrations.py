@@ -43,6 +43,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
+        "a7b8c9d0e1f2_in_thread_steering.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -51,6 +52,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
         ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
         ("d4e5c6b7a8f9", "c3d4b5a6f7e8"),  # pragma: allowlist secret
@@ -74,7 +76,9 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
-        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()
@@ -91,8 +95,56 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "exchange_id",
         "team_id",
         "agent_instance_id",
+        "message_id",
+        "delivery_state",
     }
-    assert revision == ("f6a7b8c9d0e1",)  # pragma: allowlist secret
+    assert revision == ("a7b8c9d0e1f2",)  # pragma: allowlist secret
+
+
+def test_upgrade_drops_old_pending_mailbox_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "runtime-with-pending.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
+    config = Config()
+    config.set_main_option("script_location", str(RUNTIME_ALEMBIC_DIR))
+    command.upgrade(config, "f6a7b8c9d0e1")  # pragma: allowlist secret
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO runtime_turn_steering "
+            "(session_id, turn_id, agent_instance_id, user_id, team_id, state, pending, seen, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "s",
+                "turn",
+                "agent",
+                "user",
+                "team",
+                "running",
+                '[{"id":"m","text":"old"}]',
+                "[]",
+                "2026-11-07",
+            ),
+        )
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as connection:
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
+        assert {
+            row[1] for row in connection.execute("PRAGMA table_info(session_history)")
+        } >= {"message_id", "delivery_state"}
+
+    previous_revision = "f6a7b8c9d0e1"  # pragma: allowlist secret
+    migrations.downgrade_migration_tree("runtime", previous_revision)
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
+        assert connection.execute(
+            "SELECT COUNT(*) FROM runtime_turn_steering"
+        ).fetchone() == (0,)
+        assert "delivery_state" not in {
+            row[1] for row in connection.execute("PRAGMA table_info(session_history)")
+        }
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
