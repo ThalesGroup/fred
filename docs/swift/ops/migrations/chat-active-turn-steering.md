@@ -1,15 +1,15 @@
 ---
 schema: 1
 after: [platform-skills-evolution]
-title: "Post in-thread messages during active agent turns"
+title: "Queue and send messages during active agent turns"
 impact: minor
 configuration: none
-configuration_reason: "In-thread messages use the existing shared runtime SQL engine and session_history table."
+configuration_reason: "Turn steering uses the existing shared runtime SQL engine and pool; no new service, connection setting or permission is required."
 ---
 
 ## Applicability
 
-Existing Fred deployments upgrading from the browser queue and runtime steering mailbox.
+Existing Fred deployments upgrading to this release.
 
 ## Prerequisites
 
@@ -21,18 +21,16 @@ No configuration changes are required.
 
 ## Upgrade
 
-Stop or drain old runtime replicas before applying the fred-runtime Alembic migration. The migration adds message identity and delivery state to `session_history` and drops `runtime_turn_steering`. Old replicas must not serve requests after the table is dropped. Start the new runtime replicas after migration, then deploy the matching frontend.
-
-Messages still pending in the old runtime mailbox or browser queue are discarded. Already delivered conversation history and checkpoints remain. Tell users to resend an old pending message if it did not appear in their conversation after upgrade.
+Run the fred-runtime Alembic migration before updating runtime replicas. The normal chart migration job performs this step. The runtime checks for `runtime_turn_steering` at startup and remains unready if the table is missing.
 
 ## Validation
 
-With two runtime replicas, start a ReAct or Deep turn on one pod and submit another text message through the other. The message should appear in the thread with a pending indicator, remain at the bottom while tool events continue, and gain its final rank without the indicator after the next model boundary. Reload the conversation and confirm its order. Repeat across a human-input pause and a restart. A message that misses the active turn should start as the next ordinary turn.
+With two `fred-agents` replicas, start an agent turn on one pod, submit Send through the other, and verify the message reaches the agent at the next model boundary. Repeat with a tool confirmation and resume on the other pod.
 
 ## Rollback
 
-Stop the new runtime replicas before downgrading the migration. The downgrade recreates an empty steering mailbox; messages submitted under the new version have no equivalent mailbox entry. Restore the old runtime and frontend together.
+Roll back the runtime and frontend together. The older runtime ignores the new table; downgrade the migration only after no updated replicas remain.
 
 ## Limitations
 
-Immediate in-thread submission accepts plain text in active ReAct and Deep turns. Graph execution, commands, attachments and human-input answers retain their existing send paths. An interrupted or unavailable model boundary leaves the new message pending until a later eligible turn.
+The ordinary pending list still lives in the browser and is lost on page reload. A pod failure between injection and the delivery event can leave the outcome uncertain; the UI does not retry automatically. Paused steering rows expire after 30 days.
