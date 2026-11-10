@@ -179,7 +179,7 @@ export function usePptBuilderAnalysis({
         ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
         : null;
   // The administrator's slide edits apply to the default template in effect (the platform
-  // one, else the Fred template), never to the agent's own.
+  // one, else the built-in template), never to the agent's own.
   const defaultOverrides = platform
     ? platform.overrides
     : platformQuery.data?.analysis

@@ -14,7 +14,7 @@
 
 // Admin drawer for the platform default template. A replacement is analysed while
 // the current one stays in use; only capability managers see the write actions.
-// Without a platform template, the manager reviews and corrects the Fred template.
+// Without a platform template, the manager reviews and corrects the built-in template.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 import { normalizeApiError } from "../../../core/errors/normalizeApiError";
@@ -57,6 +58,7 @@ const inProgress = (analysis: AnalysisStatusResponse | null | undefined) =>
 
 export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelProps) {
   const { t } = useTranslation();
+  const { siteDisplayName } = useFrontendProperties();
   const { showSuccess, showError } = useToast();
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
@@ -95,7 +97,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   };
 
   const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];
-  // The overrides edit the template in effect: the platform one, else the Fred template.
+  // The overrides edit the template in effect: the platform one, else the built-in template.
   const inventory = current ? (current.inventory ?? null) : (builtin?.inventory ?? null);
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, draft ?? savedOverrides) : null),
@@ -137,7 +139,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
     setConfirmReset(false);
     try {
       await resetTemplate().unwrap();
-      showSuccess({ summary: t(`${K}.resetDone`) });
+      showSuccess({ summary: t(`${K}.resetDone`, { siteDisplayName }) });
       setVisionDraft(null);
       void query.refetch();
     } catch (error) {
@@ -190,7 +192,11 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
       <div className={`${styles.settingCard} ${styles.stacked}`}>
         <div className={styles.uploadRow}>
           <Chip
-            label={current ? t(`${K}.current`, { name: platform.template_filename ?? "" }) : t(`${K}.fredTemplate`)}
+            label={
+              current
+                ? t(`${K}.current`, { name: platform.template_filename ?? "" })
+                : t(`${K}.builtinTemplate`, { siteDisplayName })
+            }
             leading={<Icon category="outlined" type={current ? "slideshow" : "palette"} />}
           />
           {canManage && (
@@ -221,7 +227,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
           )}
         </div>
 
-        <PlatformStatus platform={platform} uploading={uploading} />
+        <PlatformStatus platform={platform} uploading={uploading} siteDisplayName={siteDisplayName} />
 
         {summary && (
           <div className={styles.summaryRow}>
@@ -284,7 +290,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
                 disabled={busy}
                 onClick={() => setConfirmReset(true)}
               >
-                {t(`${K}.reset`)}
+                {t(`${K}.reset`, { siteDisplayName })}
               </Button>
             </div>
           )}
@@ -304,8 +310,8 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 
       <ConfirmationDialog
         open={confirmReset}
-        title={t(`${K}.resetConfirm.title`)}
-        message={t(`${K}.resetConfirm.message`)}
+        title={t(`${K}.resetConfirm.title`, { siteDisplayName })}
+        message={t(`${K}.resetConfirm.message`, { siteDisplayName })}
         confirmLabel={t(`${K}.resetConfirm.confirm`)}
         cancelLabel={t(`${K}.resetConfirm.cancel`)}
         criticalAction
@@ -317,24 +323,32 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 }
 
 /** What happens to the platform template next; a replacement never stops the current one. */
-export function PlatformStatus({ platform, uploading }: { platform: PlatformTemplateResponse; uploading: boolean }) {
+export function PlatformStatus({
+  platform,
+  uploading,
+  siteDisplayName,
+}: {
+  platform: PlatformTemplateResponse;
+  uploading: boolean;
+  siteDisplayName: string;
+}) {
   const { t } = useTranslation();
   const current = platform.analysis ?? null;
   const replacement = platform.replacement ?? null;
-  const keeps = current ? "keepCurrent" : "keepFred";
+  const keeps = current ? "keepCurrent" : "keepBuiltin";
   const name = platform.replacement_filename ?? "";
 
   if (uploading || inProgress(replacement)) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name })}
+        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name, siteDisplayName })}
       </p>
     );
   }
   if (replacement) {
     return (
       <div className={styles.failure} role="alert">
-        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name })}</p>
+        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name, siteDisplayName })}</p>
         {replacement.error && <p className={styles.error}>{replacement.error}</p>}
       </div>
     );
