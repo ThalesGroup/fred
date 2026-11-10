@@ -223,6 +223,39 @@ class PreparationWorker:
             except Exception as error:
                 retrying(identity, error)
 
+    async def register(self, stop: asyncio.Event) -> dict | None:
+        """Bind this logical pod to its queue, waiting for an unreachable Control Plane.
+
+        A worker may start before the Control Plane listens (make run, a CP restart):
+        a connection failure or a 502/503/504 is retried with a capped backoff until
+        stop. Any other refusal (401, 403, 404...) is a real error and fails startup.
+        """
+        delay = 1.0
+        while True:
+            try:
+                reply = await self.request(
+                    "GET", "/worker", params={"runtime_id": self.config.app.runtime_id}
+                )
+                return reply.json()
+            except (httpx.TransportError, httpx.HTTPStatusError) as error:
+                if isinstance(error, httpx.HTTPStatusError) and (
+                    error.response.status_code not in (502, 503, 504)
+                ):
+                    raise
+                logger.warning(
+                    "Control Plane unavailable; worker registration will retry",
+                    extra={
+                        "error_code": "capability_worker_registration_retry",
+                        "reason": failure_summary(error),
+                        "retry_in_s": delay,
+                    },
+                )
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), delay)
+            if stop.is_set():
+                return None
+            delay = min(delay * 2, 30.0)
+
     async def cleanup(self) -> None:
         while True:
             await self.cleanup_once()
@@ -266,11 +299,11 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
             engine,
         )
         # The CP binds queue and installation to the authenticated logical pod.
-        reply = await runner.request(
-            "GET", "/worker", params={"runtime_id": config.app.runtime_id}
-        )
-        queue = reply.json()["task_queue"]
-        runner.installation_id = UUID(reply.json()["installation_id"])
+        binding = await runner.register(stop)
+        if binding is None:
+            return
+        queue = binding["task_queue"]
+        runner.installation_id = UUID(binding["installation_id"])
         temporal = await TemporalClientProvider(config.scheduler.temporal).get_client()
         cleanup = asyncio.create_task(runner.cleanup())
         async with Worker(

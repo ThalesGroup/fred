@@ -23,5 +23,5 @@ How to use it:
 - import `REGISTRY` from `fred_agents.agents` to inspect registered agents
 
 Example:
-- `from fred_agents.main import app`
+- `from fred_agents.main import create_app`
 """

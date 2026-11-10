@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import functools
+
 from alembic import context
 from fred_capability_ppt_filler.builder.analysis_job import PptBuilderBase
 from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow  # noqa: F401
@@ -25,10 +27,13 @@ from fred_core.sql import make_alembic_env
 from fred_core.sql.alembic_env import _build_url
 from sqlalchemy import Column, Computed, ForeignKey, Index, MetaData, Table, Uuid
 
+# One configuration read per migration run, however often Alembic needs the URL.
+_postgres_config = functools.cache(load_postgres_config)
+
 _metadata = MetaData()
 for table in PptBuilderBase.metadata.tables.values():
     table.to_metadata(_metadata)
-if _build_url(load_postgres_config).startswith("postgresql"):
+if _build_url(_postgres_config).startswith("postgresql"):
     Table(
         "session_metadata",
         _metadata,
@@ -53,7 +58,7 @@ if _build_url(load_postgres_config).startswith("postgresql"):
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
     target_metadata=_metadata,
-    get_postgres_config=load_postgres_config,
+    get_postgres_config=_postgres_config,
     version_table="cap_ppt_builder_alembic_version",
     owned_tables=["cap_ppt_builder_analysis", "cap_ppt_builder_deck_plan"],
 )

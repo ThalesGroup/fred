@@ -167,7 +167,8 @@ class OpenSearchKPIStore(BaseKPIStore):
             ssl_show_warn=verify_certs,
             connection_class=RequestsHttpConnection,
         )
-        self.ensure_ready()
+        # KPIWriter readies the store once, best-effort: a slow or absent OpenSearch
+        # never stops the service from starting.
 
     # -- setup -----------------------------------------------------------------
     def ensure_ready(self) -> None:

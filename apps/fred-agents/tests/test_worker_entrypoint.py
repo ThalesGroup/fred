@@ -29,6 +29,10 @@ def test_api_is_the_default_and_worker_never_starts_http(monkeypatch, tmp_path, 
         }
     )
     monkeypatch.setattr(entrypoint, "load_agent_pod_config", lambda: config)
+    built = object()
+    monkeypatch.setattr(
+        "fred_agents.main.create_app", lambda cfg: built if cfg is config else None
+    )
     monkeypatch.setattr(
         "sys.argv", ["fred_agents"] + (["--mode", "worker"] if mode == "worker" else [])
     )
@@ -42,5 +46,5 @@ def test_api_is_the_default_and_worker_never_starts_http(monkeypatch, tmp_path, 
         http.assert_not_called()
     else:
         http.assert_called_once()
-        assert http.call_args.args == ("fred_agents.main:app",)
+        assert http.call_args.args == (built,)
         worker.assert_not_called()

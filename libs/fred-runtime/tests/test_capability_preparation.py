@@ -350,3 +350,63 @@ async def test_a_blocked_erasure_is_not_confirmed_and_does_not_hold_back_the_oth
         await worker.cleanup_once()
     await engine.dispose()
     assert cleaned == [erased]
+
+
+def _registering_worker(
+    minimal_config, tmp_path, cp
+) -> tuple[PreparationWorker, object]:
+    minimal_config.platform.control_plane_url = "http://cp.invalid/v1"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'register.db'}")
+    client = httpx.AsyncClient(transport=httpx.MockTransport(cp))
+    worker = PreparationWorker(
+        minimal_config,
+        CapabilityRegistry(),
+        client,
+        DelegationRuntime(token_provider=StaticWorkloadTokens()),
+        engine,
+    )
+    return worker, (client, engine)
+
+
+@pytest.mark.asyncio
+async def test_registration_waits_for_an_unreachable_control_plane(
+    minimal_config, tmp_path, monkeypatch, caplog
+):
+    replies = iter(["down", 503, "up"])
+
+    def cp(request: httpx.Request) -> httpx.Response:
+        reply = next(replies)
+        if reply == "down":
+            raise httpx.ConnectError("All connection attempts failed", request=request)
+        if reply == 503:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"task_queue": "q", "installation_id": "i"})
+
+    real_wait_for = asyncio.wait_for
+    monkeypatch.setattr(
+        preparation_worker.asyncio,
+        "wait_for",
+        lambda awaitable, timeout: real_wait_for(awaitable, 0.001),
+    )
+    worker, (client, engine) = _registering_worker(minimal_config, tmp_path, cp)
+    with caplog.at_level(logging.WARNING):
+        binding = await worker.register(asyncio.Event())
+    await client.aclose()
+    await engine.dispose()
+    assert binding == {"task_queue": "q", "installation_id": "i"}
+    retries = [r for r in caplog.records if "registration will retry" in r.getMessage()]
+    assert [r.retry_in_s for r in retries] == [1.0, 2.0]
+
+
+@pytest.mark.asyncio
+async def test_registration_refused_by_the_control_plane_fails_startup(
+    minimal_config, tmp_path
+):
+    def cp(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    worker, (client, engine) = _registering_worker(minimal_config, tmp_path, cp)
+    with pytest.raises(httpx.HTTPStatusError):
+        await worker.register(asyncio.Event())
+    await client.aclose()
+    await engine.dispose()

@@ -44,8 +44,11 @@ def main() -> None:
 
         asyncio.run(run_preparation_worker(config))
         return
+    from fred_agents.main import create_app
+
+    # One application, built from the configuration already read above.
     uvicorn.run(
-        "fred_agents.main:app",
+        create_app(config),
         host=config.app.host,
         port=config.app.port,
         log_level=config.app.log_level,

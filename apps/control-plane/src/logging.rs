@@ -87,6 +87,14 @@ pub async fn request_logging(request: Request, next: Next) -> Response {
     response
 }
 
+/// Routes the workers poll every few seconds. A successful poll is routine: DEBUG, so
+/// INFO keeps the requests that act. Failures keep WARN/ERROR; the work found is
+/// logged by its own handler and report.
+const POLLED_ROUTES: [&str; 2] = [
+    "/capability-preparations/cleanup",
+    "/document-processing/cleanup",
+];
+
 struct Completion {
     method: String,
     path: String,
@@ -132,7 +140,9 @@ impl Completion {
                 )
             };
         }
-        if successful {
+        if successful && self.method == "GET" && POLLED_ROUTES.iter().any(|r| route.ends_with(r)) {
+            completion!(Level::DEBUG);
+        } else if successful {
             completion!(Level::INFO);
         } else if status.is_some_and(|s| s >= 500) || outcome == "failed" {
             completion!(Level::ERROR);
@@ -274,5 +284,44 @@ mod tests {
         for line in &lines {
             assert_eq!(line["request_id"], request_id.as_str());
         }
+    }
+
+    #[tokio::test]
+    async fn a_successful_worker_poll_is_debug_and_its_report_stays_info() {
+        use axum::{Router, body::Body, http::Method, routing::get};
+        use tower::ServiceExt;
+
+        let buffer = Buffer::default();
+        let sink = buffer.clone();
+        let subscriber = tracing_subscriber::registry().with(StdoutLayer::new(
+            identity("api"),
+            LogFormat::Json,
+            false,
+            move || sink,
+        ));
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let app = Router::new()
+            .route(
+                "/document-processing/cleanup",
+                get(|| async { "[]" }).post(|| async { "ok" }),
+            )
+            .route_layer(axum::middleware::from_fn(expose_route))
+            .layer(axum::middleware::from_fn(request_logging));
+        let request = |method: Method| {
+            Request::builder()
+                .method(method)
+                .uri("/document-processing/cleanup")
+                .body(Body::empty())
+                .unwrap()
+        };
+        app.clone().oneshot(request(Method::GET)).await.unwrap();
+        app.oneshot(request(Method::POST)).await.unwrap();
+
+        let text = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        let severities: Vec<String> = text
+            .lines()
+            .map(|l| serde_json::from_str::<Value>(l).unwrap()["severity"].to_string())
+            .collect();
+        assert_eq!(severities, ["\"DEBUG\"", "\"INFO\""], "{text}");
     }
 }

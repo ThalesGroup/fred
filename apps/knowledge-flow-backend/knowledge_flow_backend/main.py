@@ -71,7 +71,6 @@ def create_app() -> FastAPI:
         logger.info("GPU support is disabled; running on CPU")
 
     application_context = ApplicationContext(configuration)
-    application_context._log_config_summary()
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
 
     @asynccontextmanager

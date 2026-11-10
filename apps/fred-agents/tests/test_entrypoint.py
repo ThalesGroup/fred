@@ -46,10 +46,14 @@ def test_main_passes_http_binding_settings_to_uvicorn(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(entrypoint, "load_agent_pod_config", lambda: config)
+    built = object()
+    monkeypatch.setattr(
+        "fred_agents.main.create_app", lambda cfg: built if cfg is config else None
+    )
     monkeypatch.setattr("sys.argv", ["fred_agents"])
 
-    def _fake_uvicorn_run(app_path: str, **kwargs: object) -> None:
-        captured["app_path"] = app_path
+    def _fake_uvicorn_run(app: object, **kwargs: object) -> None:
+        captured["app"] = app
         captured.update(kwargs)
 
     monkeypatch.setattr(entrypoint.uvicorn, "run", _fake_uvicorn_run)
@@ -57,7 +61,7 @@ def test_main_passes_http_binding_settings_to_uvicorn(monkeypatch) -> None:
     entrypoint.main()
 
     assert captured == {
-        "app_path": "fred_agents.main:app",
+        "app": built,
         "log_config": None,
         "host": "0.0.0.0",
         "port": 8123,

@@ -161,8 +161,9 @@ docker-prepare: ## What k3d's install hooks do, against Docker Compose: database
 		--add-host=host.docker.internal:host-gateway \
 		-e PGHOST=$(LOCAL_POSTGRES_HOST) -e PGPORT=5432 -e PGDATABASE=$(WEAVER_DATABASE) \
 		-e PGUSER=$(LOCAL_POSTGRES_ADMIN) -e PGPASSWORD=$(LOCAL_PASSWORD) \
+		-e PGOPTIONS='-c client_min_messages=warning' \
 		$(foreach role,CP KF RUNTIME MONITOR,-e $(role)_PASSWORD=$(LOCAL_PASSWORD)) \
-		$(POSTGRES_BOOTSTRAP_IMAGE) psql -X -q -v ON_ERROR_STOP=1 -v database=$(WEAVER_DATABASE) -f -
+		$(POSTGRES_BOOTSTRAP_IMAGE) psql -X -q -o /dev/null -v ON_ERROR_STOP=1 -v database=$(WEAVER_DATABASE) -f -
 	@# Then the chart's migration Jobs.
 	DATABASE_URL=postgresql://fred_cp:$(LOCAL_PASSWORD)@localhost:5432/$(WEAVER_DATABASE) \
 		$(MAKE) -C apps/control-plane initialize-schema

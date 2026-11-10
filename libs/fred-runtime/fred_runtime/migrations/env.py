@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import functools
+
 from typing import cast
 
 from alembic import context
@@ -45,6 +47,8 @@ cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
 
 
+# One configuration read per migration run, however often Alembic needs the URL.
+@functools.cache
 def _postgres_config():
     return load_agent_pod_config().storage.postgres
 

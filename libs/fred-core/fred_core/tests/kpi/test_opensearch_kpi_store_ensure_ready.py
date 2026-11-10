@@ -213,3 +213,18 @@ def test_ensure_ready_repairs_existing_skill_dimensions(field: str) -> None:
     assert indices.put_calls[0]["properties"]["dims"]["properties"][field] == {
         "type": "keyword"
     }
+
+
+def test_the_writer_readies_the_store_once_and_construction_does_not() -> None:
+    from unittest.mock import patch
+
+    from fred_core.kpi.kpi_writer import KPIWriter
+
+    with patch("fred_core.kpi.opensearch_kpi_store.OpenSearch") as client_class:
+        store = OpenSearchKPIStore(host="https://opensearch:9200", index="kpi-index")
+        indices = client_class.return_value.indices
+        indices.exists.assert_not_called()
+        indices.exists.return_value = False
+        KPIWriter(store=store)
+    indices.exists.assert_called_once_with(index="kpi-index")
+    indices.create.assert_called_once()

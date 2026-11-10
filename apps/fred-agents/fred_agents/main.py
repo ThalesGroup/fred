@@ -15,11 +15,12 @@
 ASGI entrypoint for the standalone Fred agents pod.
 
 Why this module exists:
-- downstream pod apps need a tiny `main.py` that loads config, builds the
-  registry, and exposes an `app` object for Uvicorn
+- downstream pod apps need a tiny `main.py` that loads config and builds the
+  registry; nothing is built at import, so each server builds exactly one app
 
 How to use it:
-- run `uvicorn fred_agents.main:app`
+- run `python -m fred_agents` (production), or
+  `uvicorn --factory fred_agents.main:create_app` (make run)
 - or import `create_app()` in tests
 
 Example:
@@ -53,6 +54,3 @@ def create_app(config: AgentPodConfig | None = None) -> FastAPI:
         registry=REGISTRY,
         config=resolved_config,
     )
-
-
-app = create_app()
