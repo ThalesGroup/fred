@@ -107,7 +107,7 @@ async fn embedded_log_retains_retired_content_until_metadata_purge() {
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     lifecycle
-        .accept_session(&pool, "alice", space, id)
+        .accept_session(&pool, "alice", space, id, false)
         .await
         .unwrap();
     assert_eq!(store.read_log_async(&name).await.unwrap(), b"opaque");

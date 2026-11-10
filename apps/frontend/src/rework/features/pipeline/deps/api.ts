@@ -38,9 +38,8 @@ interface ReadEndpoint<Arg, Result> {
 }
 
 /** One-shot reads keep their subscription through any concurrent invalidation refresh. */
-export function useApiRead() {
+export function useApiRead(dispatch: ApiDispatch) {
   const store = useStore<AppState>();
-  const dispatch = useApiDispatch();
   return useCallback(
     async <Arg, Result>(endpoint: ReadEndpoint<Arg, Result>, arg: Arg): Promise<Result> => {
       const request = dispatch(endpoint.initiate(arg, { forceRefetch: true }));
@@ -71,3 +70,5 @@ export function useApiRead() {
     [dispatch, store],
   );
 }
+
+export type ApiRead = ReturnType<typeof useApiRead>;

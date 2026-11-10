@@ -3121,15 +3121,42 @@
       }
     },
     "selftest": {
+      "path": {
+        "root": "Organization, directly accessible space or personal space",
+        "sharedOnly": "Shared checks only",
+        "shared": "Shared checks",
+        "organization": "Organization",
+        "team": "Team",
+        "project": "Project",
+        "personal": "Personal space",
+        "chooseTeam": "Team (optional)",
+        "chooseProject": "Project (optional)",
+        "stop": "Stop at {{name}}"
+      },
       "page": {
         "title": "Self-test",
         "subtitle": "Each family checks one area of this deployment, as you, on the real services. Everything a run creates carries the run's token and is deleted at the end.",
         "durationTitle": "Temporary test data",
         "durationDescription": "Keep this tab open until it ends. Closing it stops the run and leaves its test data behind, named with the run's token.",
         "runAll": "Run all",
-        "copyAll": "Copy full report"
+        "copyAll": "Copy full report",
+        "runPath": "Run selected path",
+        "manualTests": "Manual tests",
+        "runStandard": "Run standard tests",
+        "weaverNotice": "Before running the checks",
+        "weaverHelp": "Choose an organization, then optionally a team and project. Shared checks run once, followed by checks at each selected level. Keep this page open through cleanup. Copy the report before changing the path or leaving.",
+        "scope": "Space for test resources",
+        "noScope": "No space selected",
+        "scopeError": "Your spaces could not be loaded. Space checks require an accessible space."
       },
       "report": {
+        "sectionStatus": {
+          "passed": "Passed",
+          "failed": "Failed",
+          "running": "Running",
+          "skipped": "Skipped",
+          "notRun": "Not run"
+        },
         "verified": "Verified",
         "partial": "Partial — no failures",
         "running": "Running…",
@@ -3143,7 +3170,8 @@
       "authz": {
         "notice": {
           "title": "Why check authorization?",
-          "description": "This family detects unintended access to protected routes, administration and teams. Run all checks access for your role and rejection of missing or invalid tokens; the foreign-team check skips if no such team exists. Test isolation between two users separately below with a second account; that check creates and removes temporary prompts in both personal spaces. The session-expiry check also runs separately and may take several minutes."
+          "description": "This family detects unintended access to protected routes, administration and teams. Run all checks access for your role and rejection of missing or invalid tokens; the foreign-team check skips if no such team exists. Test isolation between two users separately below with a second account; that check creates and removes temporary prompts in both personal spaces. The session-expiry check also runs separately and may take several minutes.",
+          "weaver": "Standard tests check access using your own grants. Supply a second account to check isolation. The role campaign and session-expiry check each require a separate start."
         },
         "expiry": {
           "title": "Agent access after your session expires",
@@ -3182,19 +3210,23 @@
       "families": {
         "identity": {
           "title": "Identity and session",
-          "subtitle": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason."
+          "subtitle": "Checks authenticated access to the three APIs, rejection of missing or invalid tokens, public routes and personal-space identity. Checks that do not apply to this provider are skipped with a reason.",
+          "weaver": "Check sign-in, onboarding, direct space membership and rejection of invalid credentials."
         },
         "authorization": {
           "title": "Authorization",
-          "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, protected routes of every backend refuse a missing, malformed or forged token, administration routes follow your platform role, and team content stays closed to a team you do not belong to, even for a platform admin."
+          "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, protected routes of every backend refuse a missing, malformed or forged token, administration routes follow your platform role, and team content stays closed to a team you do not belong to, even for a platform admin.",
+          "weaver": "Verify protected routes and access in the selected space. Run the manual role campaign to check isolation between accounts."
         },
         "knowledge": {
           "title": "Documents and knowledge",
-          "subtitle": "Works in your personal space. Checks retrieval scoped to one folder and isolation from another through the self-test agent, direct search under each search policy, one small document per supported format (text, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), a SQL query on a CSV, linking and unlinking a document between folders, retrievability, the document tree, that deleted documents leave no retrievable chunk and, as an optional step, the corpus audit."
+          "subtitle": "Works in your personal space. Checks retrieval scoped to one folder and isolation from another through the self-test agent, direct search under each search policy, one small document per supported format (text, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), a SQL query on a CSV, linking and unlinking a document between folders, retrievability, the document tree, that deleted documents leave no retrievable chunk and, as an optional step, the corpus audit.",
+          "weaver": "Upload and retrieve a disposable document in the selected space, then verify cleanup."
         },
         "agents": {
           "title": "Agents",
-          "subtitle": "Enrolls a temporary self-test agent in your personal space. Checks that its system prompt is delivered, that its chat model is usable, that an updated configuration reaches several following turns, that a disabled agent cannot run, the copy targets, a duplicate under a chosen name and the refusal of a second one, a copy under a free name, and concurrent conversations that each receive only their own context."
+          "subtitle": "Enrolls a temporary self-test agent in your personal space. Checks that its system prompt is delivered, that its chat model is usable, that an updated configuration reaches several following turns, that a disabled agent cannot run, the copy targets, a duplicate under a chosen name and the refusal of a second one, a copy under a free name, and concurrent conversations that each receive only their own context.",
+          "weaver": "Check agent configuration, availability and execution in the selected space."
         },
         "prompts": {
           "title": "Prompts",
@@ -3202,31 +3234,60 @@
           "spaceLabel": "Scenario space",
           "spacePlaceholder": "Select a space explicitly",
           "spaceUnavailable": "Spaces could not be loaded.",
-          "spaceEmpty": "No accessible space."
+          "spaceEmpty": "No accessible space.",
+          "weaver": "Check categories, prompt editing, slash commands, favorites and cleanup. At the organization level, also read the prompt marketplace."
         },
         "web": {
           "title": "Web research",
-          "subtitle": "Runs the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds: refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken. Then it checks that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end."
+          "subtitle": "Runs the deterministic web research agent through the real execution pipeline. It fails first when web research is not enabled on this deployment; otherwise it proves each protection holds: refused schemes, ports and credentials, loopback, private, metadata and encoded addresses, platform service names, redirects to internal destinations, binary content, and a SafeSearch the model cannot weaken. Then it checks that search and page reading work. Probes that need an unreachable third-party endpoint are skipped, never passed. The temporary agent is deleted at the end.",
+          "weaver": "Test guarded web access through the diagnostic agent when web research is enabled."
         },
         "platform": {
           "title": "Platform",
-          "subtitle": "Reads the deployment without changing it: service health and readiness, account status, the identity provider and its token issuer, clocks, agent runtimes and the self-test agent, model profiles, the capability catalog and the main admin settings."
+          "subtitle": "Reads the deployment without changing it: service health and readiness, account status, the identity provider and its token issuer, clocks, agent runtimes and the self-test agent, model profiles, the capability catalog and the main admin settings.",
+          "weaver": "Check service health, sign-in configuration and the selected organization's catalogs."
         },
         "conversations": {
           "title": "Conversations",
-          "subtitle": "Creates two conversations in your personal space and runs a turn in one. Checks that both are listed, that a rename is kept, that an attached file is retrievable in its conversation and never from the other one, that a deleted attachment disappears, the inactive-conversation list, and bulk deletion."
+          "subtitle": "Creates two conversations in your personal space and runs a turn in one. Checks that both are listed, that a rename is kept, that an attached file is retrievable in its conversation and never from the other one, that a deleted attachment disappears, the inactive-conversation list, and bulk deletion.",
+          "weaver": "Create disposable conversations and verify that an attachment stays within its conversation."
         },
         "teams": {
           "title": "Teams",
-          "subtitle": "Creates a disposable team you administer, then deletes it. Skipped until you accept the team-admin charter; the run never accepts it for you. Checks that team owner alone cannot edit content, that the editor role opens and its revocation closes editing, a team prompt, folder and agent, wiki revisions and restore, the join link, model routing, copying the team agent to your personal space, and that nothing of the deleted team stays reachable."
+          "subtitle": "Creates a disposable team you administer, then deletes it. Skipped until you accept the team-admin charter; the run never accepts it for you. Checks that team owner alone cannot edit content, that the editor role opens and its revocation closes editing, a team prompt, folder and agent, wiki revisions and restore, the join link, model routing, copying the team agent to your personal space, and that nothing of the deleted team stays reachable.",
+          "weaver": "Create and remove a disposable child space using your existing rights."
         },
         "security": {
           "title": "Security",
-          "subtitle": "Checks that the platform is served over HTTPS, reports which response-hardening headers the page sets, checks that error responses expose no stack trace, then uploads a harmless SVG to your personal space and checks that its raw download is an attachment and that its inline preview cannot run as a document on this origin."
+          "subtitle": "Checks that the platform is served over HTTPS, reports which response-hardening headers the page sets, checks that error responses expose no stack trace, then uploads a harmless SVG to your personal space and checks that its raw download is an attachment and that its inline preview cannot run as a document on this origin.",
+          "weaver": "Check transport, response headers, safe errors, document downloads and previews."
         },
         "observability": {
           "title": "Observability",
-          "subtitle": "Reads the conversation, message and token usage KPIs over the last day, then checks the health of the search cluster and of every metrics target. A backend this deployment does not run is skipped, never failed."
+          "subtitle": "Reads the conversation, message and token usage KPIs over the last day, then checks the health of the search cluster and of every metrics target. A backend this deployment does not run is skipped, never failed.",
+          "weaver": "Read your usage, authorized space usage and Technical status."
+        }
+      },
+      "weaver": {
+        "started": "Started {{time}}",
+        "manual": {
+          "caption": "Use a separate account with a content role on the selected parent team. The campaign changes roles only on a disposable child project. Keep this page open during cleanup.",
+          "usernameLabel": "Test account username",
+          "keycloakCaption": "Choose a test account and enter its password. This requires direct-grant login on the test Keycloak client. Your current session stays signed in.",
+          "authRequired": "The role campaign requires Keycloak password sign-in.",
+          "accountsUnavailable": "Could not load test accounts for this team.",
+          "accountsEmpty": "No eligible test account with a username on this page.",
+          "recovery": "A campaign project may still need cleanup. Sign in as the operator who started it.",
+          "recover": "Clean up campaign project",
+          "confirmation": "Create a disposable project under team {{name}} and test the second account's roles there? Keep the page open until cleanup finishes.",
+          "expiryCaption": "The test starts one agent turn with your current browser access token and searches a temporary document before and after that token expires. With delegation enabled, searches use the agent's service token and delegated context, not the browser token. The original browser token must be rejected before the second search. Service-token expiry or renewal is not checked. Browser refresh stays enabled. The wait is bounded to 15 minutes; keep this page open through cleanup.",
+          "expiryConfirmation": "Start the session-expiry check in {{name}} and keep the page open until its temporary resources are removed?",
+          "campaignTarget": "Parent team: {{name}}",
+          "expiryTarget": "Test space: {{name}}",
+          "savedTarget": "Saved campaign project cleanup",
+          "campaignMissingScope": "Select an accessible team, or a project with an accessible parent team, to run the isolation campaign.",
+          "campaignMissingRole": "The operator needs both the owner role and a content role on the parent team.",
+          "expiryMissingScope": "Select a team, project or personal space to run the session-expiry check."
         }
       }
     },
@@ -4896,10 +4957,6 @@
         "tasks": {
           "title": "Tasks and activity",
           "next": "List scoped Weaver operations and their states; then add acknowledgement and cancellation."
-        },
-        "diagnostics": {
-          "title": "Diagnostics",
-          "next": "Port one scenario at a time and verify its Weaver contracts before enabling execution."
         },
         "migration": {
           "title": "Platform import and export",

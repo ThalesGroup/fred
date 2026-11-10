@@ -5,7 +5,11 @@
 use control_plane::{
     api, bootstrap,
     domain::SpaceKind,
-    lifecycle::{self, Status, policy::Catalog, worker::SpaceDeletionSweep},
+    lifecycle::{
+        self, Status,
+        policy::Catalog,
+        worker::{ImmediateDeletion, SpaceDeletionSweep},
+    },
     spaces,
 };
 use serde_json::json;
@@ -230,6 +234,84 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .replay_workflow(handle.fetch_history(Default::default()))
         .await
         .unwrap();
+
+    // The explicit request starts targeted work even with the periodic sweep paused.
+    let mut paused = lifecycle.config.clone();
+    paused.enabled = false;
+    lifecycle::worker::reconcile(&client, &paused)
+        .await
+        .unwrap();
+    for action in schedule
+        .describe(Default::default())
+        .await
+        .unwrap()
+        .running_actions()
+    {
+        let sweep = client.get_workflow_handle::<SpaceDeletionSweep>(action.workflow_id);
+        tokio::time::timeout(
+            Duration::from_secs(15),
+            sweep.get_result(Default::default()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    }
+    let disposable = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "Disposable".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let app = api::routes(api::AppState {
+        agent_catalog: Default::default(),
+        auth: Arc::new(identity.auth().await),
+        pool: e.pool.clone(),
+        directory: None,
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: lifecycle.clone(),
+    });
+    let path = format!("/spaces/{}?immediate=true", disposable.id);
+    let (status, _) =
+        support::request(&app, &identity, Some("root"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 403);
+    let mut tx = e.pool.begin().await.unwrap();
+    control_plane::authorization::write_platform(
+        &mut tx,
+        "alice",
+        control_plane::roles::PlatformRole::PlatformAdmin,
+        true,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let (status, receipt) =
+        support::request(&app, &identity, Some("alice"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 202);
+    assert_eq!(receipt["requested_at"], receipt["due_at"]);
+    let immediate_operation: Uuid = serde_json::from_value(receipt["id"].clone()).unwrap();
+    wait_for(&e.pool, immediate_operation, true, &mut second).await;
+    assert!(spaces::load(&e.pool, disposable.id).await.is_err());
+    let targeted = client.get_workflow_handle::<ImmediateDeletion>(format!(
+        "{}-{immediate_operation}",
+        t.workflow_id_prefix
+    ));
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        targeted.get_result(Default::default()),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    lifecycle::worker::reconcile(&client, &lifecycle.config)
+        .await
+        .unwrap();
+
     // Hold the platform lock while an activity is pending. SIGTERM must release
     // its local future and server-side wait within the shutdown budget.
     let waiting = spaces::create_space(
@@ -242,7 +324,10 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     )
     .await
     .unwrap();
-    let waiting_receipt = lifecycle.accept(&e.pool, "root", waiting.id).await.unwrap();
+    let waiting_receipt = lifecycle
+        .accept(&e.pool, "root", waiting.id, false)
+        .await
+        .unwrap();
     let mut held = e.pool.begin().await.unwrap();
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(bootstrap::LOCK_KEY)
@@ -301,7 +386,10 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     .unwrap();
     sqlx::raw_sql("create function fail_lifecycle_test() returns trigger language plpgsql as $$ begin raise exception 'private dependency detail'; end $$; create trigger fail_lifecycle_test before delete on space for each row execute function fail_lifecycle_test()")
         .execute(&e.pool).await.unwrap();
-    let failing_receipt = lifecycle.accept(&e.pool, "root", failing.id).await.unwrap();
+    let failing_receipt = lifecycle
+        .accept(&e.pool, "root", failing.id, false)
+        .await
+        .unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let receipt = lifecycle::store::status(&e.pool, "root", failing_receipt.id)

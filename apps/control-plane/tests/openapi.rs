@@ -16,6 +16,26 @@ fn schema() -> Value {
 }
 
 #[test]
+fn immediate_deletion_is_an_optional_query_on_the_cleanup_routes() {
+    let api = schema();
+    for path in [
+        "/control-plane/v1/documents/{id}",
+        "/control-plane/v1/spaces/{id}",
+        "/control-plane/v1/spaces/{space_id}/sessions/{session_id}",
+    ] {
+        let parameter = api["paths"][path]["delete"]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["name"] == "immediate")
+            .unwrap();
+        assert_eq!(parameter["in"], "query");
+        assert_ne!(parameter["required"], true);
+        assert_eq!(parameter["schema"]["type"], "boolean");
+    }
+}
+
+#[test]
 fn attachment_readiness_is_required_and_independent_of_processing() {
     let api = schema();
     let attachment = &api["components"]["schemas"]["Attachment"];
@@ -141,6 +161,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /capability-preparations/{id}/confirm",
         "get /capability-preparations/cleanup",
         "post /capability-preparations/{id}/cleaned",
+        "get /spaces/{id}/deletion",
         "get /spaces/{id}/members",
         "get /spaces/{id}/member-candidates",
         "put /spaces/{id}/roles/{role}/{user}",
@@ -1022,4 +1043,19 @@ fn usage_report_identifies_a_bounded_set_of_catalogue_offers() {
     for status in ["204", "409", "422"] {
         assert!(operation["responses"].get(status).is_some(), "{status}");
     }
+}
+
+#[test]
+fn folder_deletion_exposes_an_optional_empty_only_precondition() {
+    let api = schema();
+    let parameters = api["paths"]["/control-plane/v1/folders/{id}"]["delete"]["parameters"]
+        .as_array()
+        .unwrap();
+    let empty = parameters
+        .iter()
+        .find(|parameter| parameter["name"] == "empty_only")
+        .unwrap();
+    assert_eq!(empty["in"], "query");
+    assert_eq!(empty["required"], false);
+    assert_eq!(empty["schema"]["type"], "boolean");
 }

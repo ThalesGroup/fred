@@ -7,7 +7,8 @@ use anyhow::{Context, Result};
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
 use temporalio_client::{
-    Client, ClientOptions, ConnectionOptions, Url,
+    Client, ClientOptions, ConnectionOptions, Url, WorkflowIdConflictPolicy, WorkflowIdReusePolicy,
+    WorkflowStartOptions,
     schedules::{
         CreateScheduleOptions, ScheduleAction, ScheduleDescriptionAction, ScheduleError,
         ScheduleOverlapPolicy, ScheduleSpec,
@@ -27,6 +28,23 @@ pub struct CleanupActivities {
     pub config: LifecycleConfig,
     pub runtime: super::runtime_storage::RuntimeStorage,
     pub storage: Option<Arc<crate::documents::Storage>>,
+}
+
+impl CleanupActivities {
+    async fn batch(&self, operation: Uuid) -> crate::error::AppResult<()> {
+        cleanup::batch(
+            &self.pool,
+            operation,
+            &self.runtime,
+            self.storage.as_deref(),
+        )
+        .instrument(tracing::info_span!(
+            "deletion",
+            operation_id = %operation,
+            target_kind = tracing::field::Empty,
+        ))
+        .await
+    }
 }
 // A Temporal timeout signals cancellation; it does not drop Rust activity futures.
 // Keep local work shorter than start-to-close and release resources on shutdown.
@@ -76,23 +94,43 @@ impl CleanupActivities {
         if !self.config.enabled {
             return Ok(());
         }
-        bounded(
-            &ctx,
-            cleanup::batch(
-                &self.pool,
-                operation,
-                &self.runtime,
-                self.storage.as_deref(),
+        bounded(&ctx, self.batch(operation)).await
+    }
+
+    #[activity]
+    pub async fn clean_immediate(
+        self: Arc<Self>,
+        ctx: ActivityContext,
+        operation: Uuid,
+    ) -> Result<bool, ActivityError> {
+        if !self.config.enabled {
+            return Ok(true);
+        }
+        bounded(&ctx, async {
+            self.batch(operation).await?;
+            Ok(
+                sqlx::query_scalar("select status = 'completed' from deletion where id = $1")
+                    .bind(operation)
+                    .fetch_one(&self.pool)
+                    .await?,
             )
-            .instrument(tracing::info_span!(
-                "deletion",
-                operation_id = %operation,
-                target_kind = tracing::field::Empty,
-            )),
-        )
+        })
         .await
     }
 }
+
+fn cleanup_options() -> ActivityOptions {
+    let mut options = ActivityOptions::with_close_timeouts(
+        temporalio_common::ActivityCloseTimeouts::ScheduleAndStartToClose {
+            schedule_to_close: Duration::from_secs(240),
+            start_to_close: Duration::from_secs(60),
+        },
+    )
+    .build();
+    options.retry_policy = Some(RetryPolicy::builder().maximum_attempts(3).build());
+    options
+}
+
 #[workflow]
 #[derive(Default)]
 pub struct SpaceDeletionSweep;
@@ -100,35 +138,83 @@ pub struct SpaceDeletionSweep;
 impl SpaceDeletionSweep {
     #[run]
     pub async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<()> {
-        let options = || {
-            let mut options = ActivityOptions::with_close_timeouts(
-                temporalio_common::ActivityCloseTimeouts::ScheduleAndStartToClose {
-                    schedule_to_close: Duration::from_secs(240),
-                    start_to_close: Duration::from_secs(60),
-                },
-            )
-            .build();
-            options.retry_policy = Some(RetryPolicy::builder().maximum_attempts(3).build());
-            options
-        };
         let ids = ctx
-            .execute_activity(CleanupActivities::candidates, (), options())
+            .execute_activity(CleanupActivities::candidates, (), cleanup_options())
             .await?;
         for id in ids {
             // Failed candidates retain their receipt; the remaining candidates still run.
             if ctx
-                .execute_activity(CleanupActivities::clean, id, options())
+                .execute_activity(CleanupActivities::clean, id, cleanup_options())
                 .await
                 .is_err()
             {
                 let _ = ctx
-                    .execute_activity(CleanupActivities::exhausted, id, options())
+                    .execute_activity(CleanupActivities::exhausted, id, cleanup_options())
                     .await;
             }
         }
         Ok(())
     }
 }
+
+#[workflow]
+#[derive(Default)]
+pub struct ImmediateDeletion;
+
+#[workflow_methods]
+impl ImmediateDeletion {
+    #[run]
+    pub async fn run(ctx: &mut WorkflowContext<Self>, operation: Uuid) -> WorkflowResult<()> {
+        for attempt in 0..20 {
+            if attempt != 0 {
+                ctx.timer(Duration::from_secs(3)).await;
+            }
+            match ctx
+                .execute_activity(
+                    CleanupActivities::clean_immediate,
+                    operation,
+                    cleanup_options(),
+                )
+                .await
+            {
+                Ok(true) => break,
+                Ok(false) => {}
+                Err(_) => {
+                    ctx.execute_activity(
+                        CleanupActivities::exhausted,
+                        operation,
+                        cleanup_options(),
+                    )
+                    .await?;
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(super) async fn start_immediate(config: &LifecycleConfig, operation: Uuid) -> Result<()> {
+    let client = connect(config).await?;
+    tokio::time::timeout(
+        Duration::from_secs(config.temporal.rpc_timeout_seconds),
+        client.start_workflow(
+            ImmediateDeletion::run,
+            operation,
+            WorkflowStartOptions::new(
+                config.temporal.task_queue.clone(),
+                format!("{}-{operation}", config.temporal.workflow_id_prefix),
+            )
+            .id_reuse_policy(WorkflowIdReusePolicy::AllowDuplicate)
+            .id_conflict_policy(WorkflowIdConflictPolicy::UseExisting)
+            .execution_timeout(Duration::from_secs(90))
+            .build(),
+        ),
+    )
+    .await??;
+    Ok(())
+}
+
 const OWNER: &str = "control-plane space lifecycle v1";
 fn action(config: &LifecycleConfig) -> ScheduleAction {
     ScheduleAction::start_workflow(
@@ -247,6 +333,8 @@ pub async fn run(
     let options = WorkerOptions::new(&config.temporal.task_queue)
         .graceful_shutdown_period(Duration::from_secs(2))
         .register_workflow::<SpaceDeletionSweep>()
+        .map_err(setup)?
+        .register_workflow::<ImmediateDeletion>()
         .map_err(setup)?
         .register_activities(CleanupActivities {
             pool,

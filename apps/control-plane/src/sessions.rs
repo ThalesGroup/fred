@@ -29,7 +29,7 @@ use crate::{
     authorization,
     domain::{Permission, Space},
     error::{AppError, AppResult},
-    extract::{ApiJson, ApiPath},
+    extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::{self, AdmittedUser},
     spaces,
 };
@@ -423,7 +423,7 @@ async fn update_session(
 }
 
 #[utoipa::path(delete, path = "/spaces/{space_id}/sessions/{session_id}",
-    params(("space_id" = Uuid, Path), ("session_id" = Uuid, Path)),
+    params(("space_id" = Uuid, Path), ("session_id" = Uuid, Path), crate::lifecycle::DeleteQuery),
     responses((status = 202, body = crate::lifecycle::Receipt), (status = 200, body = crate::lifecycle::Receipt),
         (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
@@ -433,17 +433,11 @@ async fn delete_session(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
+    ApiQuery(query): ApiQuery<crate::lifecycle::DeleteQuery>,
 ) -> AppResult<impl IntoResponse> {
     let receipt = s
         .lifecycle
-        .accept_session(&s.pool, &user.uid, space_id, session_id)
+        .accept_session(&s.pool, &user.uid, space_id, session_id, query.immediate)
         .await?;
-    Ok((
-        if receipt.status == crate::lifecycle::Status::Completed {
-            StatusCode::OK
-        } else {
-            StatusCode::ACCEPTED
-        },
-        Json(receipt),
-    ))
+    Ok(crate::lifecycle::deletion_response(&s.lifecycle.config, receipt, query.immediate).await)
 }

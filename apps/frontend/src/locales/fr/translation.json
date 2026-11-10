@@ -3121,15 +3121,42 @@
       }
     },
     "selftest": {
+      "path": {
+        "root": "Organisation, espace directement accessible ou espace personnel",
+        "sharedOnly": "Vérifications communes uniquement",
+        "shared": "Vérifications communes",
+        "organization": "Organisation",
+        "team": "Équipe",
+        "project": "Projet",
+        "personal": "Espace personnel",
+        "chooseTeam": "Équipe (facultatif)",
+        "chooseProject": "Projet (facultatif)",
+        "stop": "Arrêter à {{name}}"
+      },
       "page": {
         "title": "Auto-test",
         "subtitle": "Chaque famille vérifie un domaine de ce déploiement, avec votre compte, sur les vrais services. Tout ce qu'une exécution crée porte son jeton et est supprimé à la fin.",
         "durationTitle": "Données de test temporaires",
         "durationDescription": "Gardez cet onglet ouvert jusqu'à la fin. Le fermer arrête le run et laisse ses données de test, nommées avec le jeton du run.",
         "runAll": "Tout lancer",
-        "copyAll": "Copier le rapport complet"
+        "copyAll": "Copier le rapport complet",
+        "runPath": "Exécuter le parcours sélectionné",
+        "manualTests": "Tests manuels",
+        "runStandard": "Lancer les tests standard",
+        "weaverNotice": "Avant de lancer les tests",
+        "weaverHelp": "Choisissez une organisation, puis éventuellement une équipe et un projet. Les vérifications communes s'exécutent une fois, puis chaque niveau sélectionné est testé. Gardez la page ouverte pendant le nettoyage. Copiez le rapport avant de changer de parcours ou de quitter la page.",
+        "scope": "Espace pour les ressources de test",
+        "noScope": "Aucun espace sélectionné",
+        "scopeError": "Vos espaces ne sont pas disponibles. Les tests de ressources nécessitent un espace accessible."
       },
       "report": {
+        "sectionStatus": {
+          "passed": "Réussi",
+          "failed": "Échec",
+          "running": "En cours",
+          "skipped": "Ignoré",
+          "notRun": "Non exécuté"
+        },
         "verified": "Vérifié",
         "partial": "Partiel — aucun échec",
         "running": "En cours…",
@@ -3143,7 +3170,8 @@
       "authz": {
         "notice": {
           "title": "Pourquoi vérifier les autorisations ?",
-          "description": "Cette famille détecte les accès indus aux routes protégées, à l'administration et aux équipes. Tout lancer vérifie les droits liés à votre rôle et le refus des jetons absents ou invalides ; le contrôle d'une équipe extérieure est ignoré si aucune n'existe. L'isolation entre deux utilisateurs se teste séparément ci-dessous avec un second compte ; ce contrôle crée et supprime des prompts temporaires dans les deux espaces personnels. Le test d'expiration de session se lance aussi séparément et peut durer plusieurs minutes."
+          "description": "Cette famille détecte les accès indus aux routes protégées, à l'administration et aux équipes. Tout lancer vérifie les droits liés à votre rôle et le refus des jetons absents ou invalides ; le contrôle d'une équipe extérieure est ignoré si aucune n'existe. L'isolation entre deux utilisateurs se teste séparément ci-dessous avec un second compte ; ce contrôle crée et supprime des prompts temporaires dans les deux espaces personnels. Le test d'expiration de session se lance aussi séparément et peut durer plusieurs minutes.",
+          "weaver": "Les tests standard vérifient vos droits actuels. Indiquez un second compte pour vérifier l'isolation. La campagne de rôles et le test d'expiration se lancent séparément."
         },
         "expiry": {
           "title": "Accès de l'agent après l'expiration de votre session",
@@ -3182,19 +3210,23 @@
       "families": {
         "identity": {
           "title": "Identité et session",
-          "subtitle": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication."
+          "subtitle": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
+          "weaver": "Vérifie la connexion, l'admission, les appartenances directes et le refus des identifiants invalides."
         },
         "authorization": {
           "title": "Autorisation",
-          "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux d'administration correspondent aux accès réels, les routes protégées de chaque backend refusent un jeton absent, malformé ou falsifié, les routes d'administration suivent votre rôle sur la plateforme, et le contenu d'une équipe dont vous n'êtes pas membre reste fermé, même à un administrateur de la plateforme."
+          "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux d'administration correspondent aux accès réels, les routes protégées de chaque backend refusent un jeton absent, malformé ou falsifié, les routes d'administration suivent votre rôle sur la plateforme, et le contenu d'une équipe dont vous n'êtes pas membre reste fermé, même à un administrateur de la plateforme.",
+          "weaver": "Vérifie les routes protégées et les accès dans l'espace sélectionné. Lancez la campagne manuelle pour vérifier l'isolation entre les comptes."
         },
         "knowledge": {
           "title": "Documents et connaissances",
-          "subtitle": "Travaille dans votre espace personnel. Vérifie la recherche limitée à un dossier et l'isolation d'un autre via l'agent d'auto-test, la recherche directe selon chaque politique, un petit document par format pris en charge (texte, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), une requête SQL sur un CSV, l'ajout et le retrait d'un document entre dossiers, la récupérabilité, l'arborescence des documents, l'absence de fragment récupérable après suppression et, en option, l'audit du corpus."
+          "subtitle": "Travaille dans votre espace personnel. Vérifie la recherche limitée à un dossier et l'isolation d'un autre via l'agent d'auto-test, la recherche directe selon chaque politique, un petit document par format pris en charge (texte, Markdown, JSON Lines, PDF, Word, Excel, PowerPoint), une requête SQL sur un CSV, l'ajout et le retrait d'un document entre dossiers, la récupérabilité, l'arborescence des documents, l'absence de fragment récupérable après suppression et, en option, l'audit du corpus.",
+          "weaver": "Importe et recherche un document temporaire dans l'espace sélectionné, puis vérifie sa suppression."
         },
         "agents": {
           "title": "Agents",
-          "subtitle": "Inscrit un agent d'auto-test temporaire dans votre espace personnel. Vérifie que son prompt système est transmis, que son modèle est utilisable, qu'une configuration modifiée atteint plusieurs tours suivants, qu'un agent désactivé ne peut pas répondre, les destinations de copie, un duplicata sous un nom choisi et le refus d'un second, une copie sous un nom libre, et des conversations simultanées qui reçoivent chacune seulement leur propre contexte."
+          "subtitle": "Inscrit un agent d'auto-test temporaire dans votre espace personnel. Vérifie que son prompt système est transmis, que son modèle est utilisable, qu'une configuration modifiée atteint plusieurs tours suivants, qu'un agent désactivé ne peut pas répondre, les destinations de copie, un duplicata sous un nom choisi et le refus d'un second, une copie sous un nom libre, et des conversations simultanées qui reçoivent chacune seulement leur propre contexte.",
+          "weaver": "Vérifie la configuration, la disponibilité et l'exécution d'un agent dans l'espace sélectionné."
         },
         "prompts": {
           "title": "Prompts",
@@ -3202,31 +3234,60 @@
           "spaceLabel": "Espace du scénario",
           "spacePlaceholder": "Sélectionnez explicitement un espace",
           "spaceUnavailable": "Impossible de charger les espaces.",
-          "spaceEmpty": "Aucun espace accessible."
+          "spaceEmpty": "Aucun espace accessible.",
+          "weaver": "Vérifie les catégories, la modification des prompts, les commandes, les favoris et le nettoyage. Au niveau de l'organisation, consulte aussi le marketplace des prompts."
         },
         "web": {
           "title": "Recherche web",
-          "subtitle": "Exécute l'agent déterministe de recherche web à travers le vrai pipeline d'exécution. Il échoue d'emblée si la recherche web n'est pas activée sur ce déploiement ; sinon il prouve que chaque protection tient : schémas, ports et identifiants refusés, adresses loopback, privées, de métadonnées et encodées, noms des services de la plateforme, redirections vers des destinations internes, contenu binaire et un SafeSearch que le modèle ne peut pas affaiblir. Il vérifie ensuite que la recherche et la lecture de page fonctionnent. Les sondes qui dépendent d'un service tiers injoignable sont ignorées, jamais validées. L'agent temporaire est supprimé à la fin."
+          "subtitle": "Exécute l'agent déterministe de recherche web à travers le vrai pipeline d'exécution. Il échoue d'emblée si la recherche web n'est pas activée sur ce déploiement ; sinon il prouve que chaque protection tient : schémas, ports et identifiants refusés, adresses loopback, privées, de métadonnées et encodées, noms des services de la plateforme, redirections vers des destinations internes, contenu binaire et un SafeSearch que le modèle ne peut pas affaiblir. Il vérifie ensuite que la recherche et la lecture de page fonctionnent. Les sondes qui dépendent d'un service tiers injoignable sont ignorées, jamais validées. L'agent temporaire est supprimé à la fin.",
+          "weaver": "Vérifie les protections de l'accès web via l'agent de diagnostic si la recherche web est activée."
         },
         "platform": {
           "title": "Plateforme",
-          "subtitle": "Lit le déploiement sans rien modifier : santé et disponibilité des services, statut du compte, fournisseur d'identité et émetteur du jeton, horloges, runtimes d'agents et agent d'auto-test, profils de modèles, catalogue des capacités et principaux réglages d'administration."
+          "subtitle": "Lit le déploiement sans rien modifier : santé et disponibilité des services, statut du compte, fournisseur d'identité et émetteur du jeton, horloges, runtimes d'agents et agent d'auto-test, profils de modèles, catalogue des capacités et principaux réglages d'administration.",
+          "weaver": "Vérifie les services, la configuration de connexion et les catalogues de l'organisation sélectionnée."
         },
         "conversations": {
           "title": "Conversations",
-          "subtitle": "Crée deux conversations dans votre espace personnel et exécute un tour dans l'une. Vérifie qu'elles sont listées, qu'un renommage est conservé, qu'un fichier joint est retrouvé dans sa conversation et jamais depuis l'autre, qu'une pièce jointe supprimée disparaît, la liste des conversations inactives et la suppression groupée."
+          "subtitle": "Crée deux conversations dans votre espace personnel et exécute un tour dans l'une. Vérifie qu'elles sont listées, qu'un renommage est conservé, qu'un fichier joint est retrouvé dans sa conversation et jamais depuis l'autre, qu'une pièce jointe supprimée disparaît, la liste des conversations inactives et la suppression groupée.",
+          "weaver": "Crée des conversations temporaires et vérifie qu'une pièce jointe reste limitée à sa conversation."
         },
         "teams": {
           "title": "Équipes",
-          "subtitle": "Crée une équipe jetable que vous administrez, puis la supprime. Ignorée tant que vous n'avez pas accepté la charte de responsable d'équipe ; l'exécution ne l'accepte jamais à votre place. Vérifie que le seul rôle de responsable ne permet pas de modifier le contenu, que le rôle d'éditeur ouvre la modification et que son retrait la referme, un prompt, un dossier et un agent d'équipe, les révisions et la restauration du wiki, le lien d'invitation, le routage des modèles, la copie de l'agent d'équipe vers votre espace personnel, et que rien de l'équipe supprimée ne reste accessible."
+          "subtitle": "Crée une équipe jetable que vous administrez, puis la supprime. Ignorée tant que vous n'avez pas accepté la charte de responsable d'équipe ; l'exécution ne l'accepte jamais à votre place. Vérifie que le seul rôle de responsable ne permet pas de modifier le contenu, que le rôle d'éditeur ouvre la modification et que son retrait la referme, un prompt, un dossier et un agent d'équipe, les révisions et la restauration du wiki, le lien d'invitation, le routage des modèles, la copie de l'agent d'équipe vers votre espace personnel, et que rien de l'équipe supprimée ne reste accessible.",
+          "weaver": "Crée et supprime un espace enfant temporaire avec vos droits actuels."
         },
         "security": {
           "title": "Sécurité",
-          "subtitle": "Vérifie que la plateforme est servie en HTTPS, indique quels en-têtes de durcissement la page envoie, vérifie que les réponses d'erreur n'exposent aucune trace d'exécution, puis dépose un SVG inoffensif dans votre espace personnel et vérifie que son téléchargement brut est une pièce jointe et que son aperçu ne peut pas s'exécuter comme document sur cette origine."
+          "subtitle": "Vérifie que la plateforme est servie en HTTPS, indique quels en-têtes de durcissement la page envoie, vérifie que les réponses d'erreur n'exposent aucune trace d'exécution, puis dépose un SVG inoffensif dans votre espace personnel et vérifie que son téléchargement brut est une pièce jointe et que son aperçu ne peut pas s'exécuter comme document sur cette origine.",
+          "weaver": "Vérifie le transport, les en-têtes, les erreurs, les téléchargements et les aperçus de documents."
         },
         "observability": {
           "title": "Observabilité",
-          "subtitle": "Lit les KPI de conversations, de messages et de consommation de jetons sur la dernière journée, puis vérifie la santé du cluster de recherche et de chaque cible de métriques. Un backend que ce déploiement n'utilise pas est ignoré, jamais compté en échec."
+          "subtitle": "Lit les KPI de conversations, de messages et de consommation de jetons sur la dernière journée, puis vérifie la santé du cluster de recherche et de chaque cible de métriques. Un backend que ce déploiement n'utilise pas est ignoré, jamais compté en échec.",
+          "weaver": "Consulte votre consommation, celle de l'espace autorisé et l'état technique."
+        }
+      },
+      "weaver": {
+        "started": "Début : {{time}}",
+        "manual": {
+          "caption": "Utilisez un autre compte ayant accès au contenu de l'équipe sélectionnée. La campagne change les rôles uniquement dans un projet enfant temporaire. Gardez la page ouverte pendant le nettoyage.",
+          "usernameLabel": "Nom d'utilisateur du compte de test",
+          "keycloakCaption": "Sélectionnez un compte de test et saisissez son mot de passe. Le client Keycloak de test doit autoriser l'accès direct (direct-grant). Votre session actuelle reste ouverte.",
+          "authRequired": "La campagne de rôles nécessite une connexion Keycloak par mot de passe.",
+          "accountsUnavailable": "Impossible de charger les comptes de test de cette équipe.",
+          "accountsEmpty": "Cette page ne contient aucun compte de test éligible avec un nom d'utilisateur.",
+          "recovery": "Un projet de campagne peut encore nécessiter un nettoyage. Connectez-vous avec le compte qui a lancé la campagne.",
+          "recover": "Nettoyer le projet de campagne",
+          "confirmation": "Créer un projet temporaire dans l'équipe {{name}} et y tester les rôles du second compte ? Gardez cette page ouverte jusqu'à la fin du nettoyage.",
+          "expiryCaption": "Le test démarre un tour d'agent avec le jeton d'accès actuel du navigateur et recherche un document temporaire avant et après l'expiration de ce jeton. Si la délégation est activée, les recherches utilisent le jeton de service de l'agent et le contexte délégué, pas le jeton du navigateur. Le jeton initial du navigateur doit être refusé avant la seconde recherche. L'expiration ou le renouvellement du jeton de service ne sont pas vérifiés. Le renouvellement du navigateur reste actif. L'attente est limitée à 15 minutes ; gardez cette page ouverte jusqu'au nettoyage.",
+          "expiryConfirmation": "Lancer la vérification d'expiration de session dans {{name}} et garder cette page ouverte jusqu'à la suppression des ressources temporaires ?",
+          "campaignTarget": "Équipe parente : {{name}}",
+          "expiryTarget": "Espace testé : {{name}}",
+          "savedTarget": "Nettoyage du projet de campagne enregistré",
+          "campaignMissingScope": "Sélectionnez une équipe accessible, ou un projet dont l'équipe parente est accessible, pour lancer la campagne d'isolation.",
+          "campaignMissingRole": "Le compte opérateur doit avoir le rôle de propriétaire et un rôle d'accès au contenu dans l'équipe parente.",
+          "expiryMissingScope": "Sélectionnez une équipe, un projet ou un espace personnel pour vérifier l'expiration de session."
         }
       }
     },
@@ -4896,10 +4957,6 @@
         "tasks": {
           "title": "Tâches et activité",
           "next": "Lister les opérations Weaver avec leur portée et leurs états ; ajouter ensuite acquittement et annulation."
-        },
-        "diagnostics": {
-          "title": "Diagnostics",
-          "next": "Reprendre un scénario à la fois et vérifier ses contrats Weaver avant de permettre son exécution."
         },
         "migration": {
           "title": "Import et export de plateforme",

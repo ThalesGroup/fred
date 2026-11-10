@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import type { IconType } from "../../components/shared/utils/Type";
+import { selfTestFamilies, type SelfTestFamily } from "./familyCatalog";
+export type { FamilyId, SelfTestFamily } from "./familyCatalog";
 import { useAgentsDeps } from "./deps/agents";
 import { useAuthorizationDeps } from "./deps/authorization";
 import { useConversationsDeps } from "./deps/conversations";
@@ -33,26 +34,7 @@ import { teamsScenario } from "./scenarios/teamsScenario";
 import { webResearchScenario } from "./scenarios/webResearchScenario";
 import { useAuthzProbeRun } from "./useAuthzProbeRun";
 import { usePipelineDeps } from "./usePipelineRun";
-import { useScenarioRun, type PipelineRun } from "./useScenarioRun";
-
-export type FamilyId =
-  | "platform"
-  | "identity"
-  | "knowledge"
-  | "agents"
-  | "prompts"
-  | "conversations"
-  | "teams"
-  | "web"
-  | "security"
-  | "observability"
-  | "authorization";
-
-export interface SelfTestFamily {
-  id: FamilyId;
-  icon: IconType;
-  run: PipelineRun;
-}
+import { useScenarioRun } from "./useScenarioRun";
 
 /** Every family, in page order. The hooks run unconditionally, so the order never changes. */
 export function useSelfTestFamilies(promptSpaceId: string | undefined): SelfTestFamily[] {
@@ -70,17 +52,17 @@ export function useSelfTestFamilies(promptSpaceId: string | undefined): SelfTest
   const security = useScenarioRun(securityScenario, useSecurityDeps(knowledgeDeps));
   const observability = useScenarioRun(observabilityScenario, useObservabilityDeps());
 
-  return [
-    { id: "platform", icon: "cloud", run: platform },
-    { id: "identity", icon: "person", run: { ...identity, start: identity.runIdentity } },
-    { id: "knowledge", icon: "database", run: knowledge },
-    { id: "agents", icon: "smart_toy", run: agents },
-    { id: "prompts", icon: "notes", run: prompts },
-    { id: "conversations", icon: "forum", run: conversations },
-    { id: "teams", icon: "groups", run: teams },
-    { id: "web", icon: "travel_explore", run: web },
-    { id: "security", icon: "shield", run: security },
-    { id: "observability", icon: "analytics", run: observability },
-    { id: "authorization", icon: "admin_panel_settings", run: authorization },
-  ];
+  return selfTestFamilies({
+    platform,
+    identity: { ...identity, start: identity.runIdentity },
+    knowledge,
+    agents,
+    prompts,
+    conversations,
+    teams,
+    web,
+    security,
+    observability,
+    authorization,
+  });
 }

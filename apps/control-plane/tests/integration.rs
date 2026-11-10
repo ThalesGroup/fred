@@ -2785,7 +2785,10 @@ async fn admission_follows_active_grants_not_personal_space_or_old_consent() {
     assert!(is_admitted(&e.pool, "bob").await.unwrap());
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
-    lifecycle.accept(&e.pool, "root", org.id).await.unwrap();
+    lifecycle
+        .accept(&e.pool, "root", org.id, false)
+        .await
+        .unwrap();
     assert!(!is_admitted(&e.pool, "bob").await.unwrap());
     assert!(is_admitted(&e.pool, "root").await.unwrap());
 }
@@ -3504,7 +3507,7 @@ async fn business_routes_share_one_authorization_answer() {
         .await
         .unwrap();
     for id in [retired.id, retired_org.id] {
-        lifecycle.accept(&e.pool, "root", id).await.unwrap();
+        lifecycle.accept(&e.pool, "root", id, false).await.unwrap();
     }
 
     let identity = support::IdentityServer::start().await;
@@ -3779,7 +3782,7 @@ async fn folder_and_space_deletion_reject_pending_upload_before_triggers() {
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     assert!(matches!(
-        lifecycle.accept(&e.pool, "root", team.id).await,
+        lifecycle.accept(&e.pool, "root", team.id, false).await,
         Err(AppError::Conflict(_))
     ));
     assert!(
@@ -3857,7 +3860,9 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
         } else {
             wait_for_advisory_waiter(&e.pool).await;
         }
-        db::delete_folder(&mut *deleting, folder.id).await.unwrap();
+        db::delete_folder(&mut *deleting, folder.id, false)
+            .await
+            .unwrap();
         deleting.commit().await.unwrap();
         assert_eq!(pending.await.unwrap(), 404);
     }

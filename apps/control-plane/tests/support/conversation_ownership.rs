@@ -64,7 +64,7 @@ async fn runtime_payload_cascade_requires_no_cross_component_content_access() {
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     let receipt = lifecycle
-        .accept_session(&e.pool, "alice", team.id, id)
+        .accept_session(&e.pool, "alice", team.id, id, false)
         .await
         .unwrap();
     let mut deletion = e.pool.begin().await.unwrap();

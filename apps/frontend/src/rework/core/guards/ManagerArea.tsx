@@ -8,18 +8,10 @@ import Button from "@shared/atoms/Button/Button";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { usePlatformArea } from "@core/hooks/usePlatformArea";
+import { isPlatformAdminRoute, usePlatformArea } from "@core/hooks/usePlatformArea";
+import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 
-const platformRoutes = new Set([
-  "/admin/organizations",
-  "/admin/provisioning",
-  "/admin/monitor",
-  "/admin/self-test",
-  "/settings",
-  "/gcu",
-  "/gdpr",
-  "/release-notes",
-]);
+const platformRoutes = new Set(["/settings", "/gcu", "/gdpr", "/release-notes"]);
 
 // These business routes have their own organization guard, including for mixed roles.
 const ORGANIZATION_ROUTES = new Set(["/admin", "/admin/features", "/admin/supervision", "/unauthorized"]);
@@ -32,9 +24,11 @@ export default function ManagerArea({ children }: { children: (business: boolean
   const access = useManagerPlatformAdmin();
   const area = usePlatformArea();
   const { pathname } = useLocation();
+  const path = pathname.replace(/\/$/, "");
+  const selfTest = useSelfTestAccess(path !== "/admin/self-test");
   const { t } = useTranslation();
   useRefetchOnWindowFocus(access.refetch, false);
-  if (access.isLoading || (access.isFetching && !access.currentData) || area.loading) {
+  if (access.isLoading || (access.isFetching && !access.currentData) || area.loading || selfTest.loading) {
     return (
       <MainLayout navigation={false}>
         <p role="status">{t("common.loading")}</p>
@@ -53,8 +47,8 @@ export default function ManagerArea({ children }: { children: (business: boolean
       </MainLayout>
     );
   }
-  const path = pathname.replace(/\/$/, "");
-  if (area.platformArea && !platformRoutes.has(path) && !ORGANIZATION_ROUTES.has(path))
+  if (path === "/admin/self-test" && !selfTest.allowed) return <Navigate to="/unauthorized" replace />;
+  if (area.platformArea && !isPlatformAdminRoute(path) && !platformRoutes.has(path) && !ORGANIZATION_ROUTES.has(path))
     return <Navigate to="/admin/organizations" replace />;
   // One output shape for every route, so the layout stays mounted across a space change;
   // only the business consumers (announcements, patch notes) depend on the route.

@@ -18,6 +18,8 @@ import type { Reporter, Scenario, StepReport } from "./types";
 export interface PipelineRun {
   steps: StepReport[];
   isRunning: boolean;
+  durationMs?: number;
+  reset?: () => void;
   /** Resolves when the run ends, so Run all can chain families. */
   start: () => Promise<void>;
 }
@@ -25,6 +27,8 @@ export interface PipelineRun {
 export interface Runner {
   steps: StepReport[];
   isRunning: boolean;
+  durationMs?: number;
+  reset: () => void;
   run: (body: (report: Reporter, signal: AbortSignal) => Promise<void>) => Promise<void>;
 }
 
@@ -32,6 +36,7 @@ export interface Runner {
 export function useRunner(): Runner {
   const [steps, setSteps] = useState<StepReport[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [durationMs, setDurationMs] = useState<number>();
   const controllerRef = useRef<AbortController | null>(null);
 
   const report = useCallback((step: StepReport) => {
@@ -49,12 +54,27 @@ export function useRunner(): Runner {
       controllerRef.current?.abort();
       const controller = new AbortController();
       controllerRef.current = controller;
+      const start = performance.now();
+      setDurationMs(undefined);
       setSteps([]);
       setIsRunning(true);
       try {
-        await body(report, controller.signal);
+        await body((step) => {
+          if (!controller.signal.aborted) report(step);
+        }, controller.signal);
+      } catch {
+        if (!controller.signal.aborted)
+          report({
+            id: "run-error",
+            title: "Complete the scenario",
+            status: "failed",
+            error: "The scenario ended unexpectedly.",
+          });
       } finally {
-        if (!controller.signal.aborted) setIsRunning(false);
+        if (!controller.signal.aborted) {
+          setIsRunning(false);
+          setDurationMs(performance.now() - start);
+        }
       }
     },
     [report],
@@ -62,11 +82,15 @@ export function useRunner(): Runner {
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  return { steps, isRunning, run };
+  const reset = useCallback(() => {
+    setSteps([]);
+    setDurationMs(undefined);
+  }, []);
+  return { steps, isRunning, durationMs, run, reset };
 }
 
 export function useScenarioRun<D>(scenario: Scenario<D>, deps: D): PipelineRun {
-  const { steps, isRunning, run } = useRunner();
+  const { steps, isRunning, durationMs, run, reset } = useRunner();
   const start = useCallback(() => run((report, signal) => scenario(deps, report, signal)), [run, scenario, deps]);
-  return { steps, isRunning, start };
+  return { steps, isRunning, durationMs, start, reset };
 }

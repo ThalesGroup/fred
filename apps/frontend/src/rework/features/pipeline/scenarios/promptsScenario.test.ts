@@ -379,6 +379,35 @@ describe("promptsScenario through Weaver requests", () => {
     expectOnlyExistingData();
   });
 
+  it.each(["wrong command", "wrong prompt", "separate matches", "absent"])(
+    "requires the command and prompt to match in the same catalog entry: %s",
+    async (mode) => {
+      intercept = async (request) => {
+        const url = new URL(request.url);
+        const created = prompts.get(CREATED_PROMPT);
+        if (request.method !== "GET" || url.pathname !== `${basePath}/prompts` || !created) return;
+        const match = promptSummaryFixture(created);
+        const wrongCommand = { ...match, logical_name: "unrelated-command" };
+        const wrongPrompt = { ...match, prompt_id: OTHER_PROMPT };
+        return page(
+          mode === "wrong command"
+            ? [wrongCommand]
+            : mode === "wrong prompt"
+              ? [wrongPrompt]
+              : mode === "separate matches"
+                ? [wrongCommand, wrongPrompt]
+                : [],
+          url,
+        );
+      };
+      const reports = await run();
+      expect(reports.status("prompt-command")).toBe("failed");
+      expect(reports.status("delete-prompt")).toBe("passed");
+      expect(reports.status("delete-category")).toBe("passed");
+      expectOnlyExistingData();
+    },
+  );
+
   it("does not accept a partial prompt catalog when its second page is denied", async () => {
     intercept = async (request) =>
       new URL(request.url).pathname.endsWith("/prompts") && new URL(request.url).searchParams.has("after")
@@ -451,18 +480,13 @@ async function launch(all = false) {
   await act(async () => button.click());
 }
 async function waitForPromptEnd() {
+  const reportToggle = '[data-family="prompts"] button[aria-expanded]';
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(
-      container.querySelector('[data-family="prompts"] [aria-label="rework.selftest.report.expand"]'),
-    ).not.toBeNull();
+    expect(container.querySelector(reportToggle)).not.toBeNull();
     expect(spaceSelect().disabled).toBe(false);
   });
-  await act(async () =>
-    container
-      .querySelector<HTMLButtonElement>('[data-family="prompts"] [aria-label="rework.selftest.report.expand"]')!
-      .click(),
-  );
+  await act(async () => container.querySelector<HTMLButtonElement>(`${reportToggle}[aria-expanded="false"]`)?.click());
 }
 
 describe("prompt selection from the real self-test launcher", () => {

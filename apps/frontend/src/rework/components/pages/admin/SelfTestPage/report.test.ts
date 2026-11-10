@@ -46,3 +46,44 @@ describe("report", () => {
     expect(text).not.toContain("Teams");
   });
 });
+
+it("keeps a previous manual run and a never-started manual test separate from the standard total", () => {
+  const at = new Date("2026-10-20T10:00:00Z");
+  const report = buildCombinedReport(
+    [
+      { title: "Identity", steps: [passed] },
+      { title: "Knowledge", steps: [] },
+    ],
+    "https://example.test",
+    at,
+    [
+      { title: "Role campaign", steps: [] },
+      { title: "Session expiry", startedAt: new Date("2026-10-20T09:15:00Z"), steps: [failed] },
+    ],
+  );
+  expect(report).toContain("Standard tests: 1 passed, 0 failed");
+  expect(report).toContain("Manual tests: 0 passed, 1 failed");
+  expect(report).toContain("Role campaign: Not run");
+  expect(report).toContain("Knowledge: Not run");
+  expect(report).toContain("2026-10-20T09:15:00.000Z");
+  expect(report).toContain("ERROR: boom");
+});
+
+it("preserves ordered path levels and skipped reasons alongside separate manual runs", () => {
+  const skipped = { id: "skip", title: "Access", status: "skipped" as const, detail: "No project selected" };
+  const report = buildCombinedReport(
+    [{ title: "Identity", steps: [passed, skipped] }],
+    "https://example.test",
+    new Date("2026-10-20T10:00:00Z"),
+    [{ title: "Manual", steps: [failed] }],
+    [
+      { title: "Shared", sections: [{ title: "Platform", steps: [passed] }] },
+      { title: "Organization: selected", sections: [{ title: "Identity", steps: [skipped] }] },
+      { title: "Project: unavailable", sections: [] },
+    ],
+  );
+  expect(report.indexOf("# Shared")).toBeLessThan(report.indexOf("# Organization: selected"));
+  expect(report).toContain("# Project: unavailable: 0 passed, 0 failed, 0 skipped, 0 steps");
+  expect(report).toContain("[SKIPPED] Access — No project selected");
+  expect(report).toContain("Manual tests: 0 passed, 1 failed");
+});

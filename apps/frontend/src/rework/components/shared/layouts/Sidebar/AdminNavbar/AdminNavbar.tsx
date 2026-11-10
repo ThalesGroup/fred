@@ -22,6 +22,7 @@ import { useLocation } from "react-router-dom";
 import { useOrganizationSupervisionAccess } from "@core/hooks/useOrganizationSupervisionAccess";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { organizationOwnerPages } from "@core/guards/organizationOwnerPages";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
@@ -91,6 +92,7 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
 /** Platform pages only: organization pages are reached through the switcher. */
 function PlatformAdminNavbar() {
   const { t } = useTranslation();
+  const selfTest = useSelfTestAccess();
   return (
     <NavigationMenu
       items={[
@@ -112,12 +114,16 @@ function PlatformAdminNavbar() {
           icon: { category: "outlined", type: "monitoring", filled: false },
           linkProps: { to: "/admin/monitor" },
         },
-        {
-          type: "link",
-          label: t("rework.selftest.page.title"),
-          icon: { category: "outlined", type: "rocket_launch", filled: false },
-          linkProps: { to: "/admin/self-test" },
-        },
+        ...(selfTest.allowed
+          ? [
+              {
+                type: "link",
+                label: t("rework.sidebar.admin.menu.selftest"),
+                icon: { category: "outlined", type: "check_circle", filled: false },
+                linkProps: { to: "/admin/self-test" },
+              } satisfies NavigationMenuItemProps,
+            ]
+          : []),
       ]}
     />
   );

@@ -76,9 +76,11 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   database password through `migration.extraEnvVars`. The applications read these
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
   own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
-- **Gateway DNS.** The frontend's manager/control-plane upstream defaults use
-  `control-plane-backend.<release namespace>.svc.cluster.local:8222`, even when
-  instance values replace `frontend.env`. Override `FRONTEND_CONTROL_PLANE_UPSTREAM` in `env` or `extraEnvVars` for another
+- **Gateway DNS.** The frontend's control-plane and knowledge upstream defaults use
+  `control-plane-backend.<release namespace>.svc.cluster.local:8222` and
+  `knowledge-flow-backend.<release namespace>.svc.cluster.local:8000`, even when
+  instance values replace `frontend.env`. Override `FRONTEND_CONTROL_PLANE_UPSTREAM`
+  or `FRONTEND_KNOWLEDGE_FLOW_UPSTREAM` in `env` or `extraEnvVars` for another
   address or DNS domain. Nginx's request-time resolver needs fully qualified names.
 
 The local k3d example in fred-deployment-factory applies

@@ -2470,7 +2470,6 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
             .await
             .unwrap();
     d.folder = target.clone();
-    expire_generations(&d.e.pool, processing).await;
     sqlx::query("update generation set cleanup_cursor=200 where id=$1")
         .bind(indexing.generation)
         .execute(&d.e.pool)
@@ -2552,11 +2551,42 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await
         .unwrap();
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
-    sqlx::query("update deletion set due_at=now() where id=$1")
+    sqlx::query("update deletion set due_at=requested_at where id=$1")
         .bind(operation)
         .execute(&d.e.pool)
         .await
         .unwrap();
+
+    // An immediate receipt still respects an uncommitted generation's lease.
+    sqlx::query("update generation set committed_at=null,vector_ordinals=null,cleanup_after=clock_timestamp()+interval '1 hour' where id=$1")
+        .bind(preparation.generation).execute(&d.e.pool).await.unwrap();
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    sqlx::query(
+        "update generation set committed_at=clock_timestamp(),vector_ordinals='{}' where id=$1",
+    )
+    .bind(preparation.generation)
+    .execute(&d.e.pool)
+    .await
+    .unwrap();
+
+    // Committed generations still require every admitted object and workspace write to acknowledge.
+    for workspace in [false, true] {
+        let write = Uuid::new_v4();
+        sqlx::query("update generation set write_ids=array_append(write_ids,$2),
+            pending_writes=case when $3 then pending_writes else array_append(pending_writes,$2) end,
+            pending_workspaces=case when $3 then array_append(pending_workspaces,$2) else pending_workspaces end where id=$1")
+            .bind(indexing.generation).bind(write).bind(workspace).execute(&d.e.pool).await.unwrap();
+        assert!(p.cleanup_candidates().await.unwrap().is_empty());
+        p.record_write(control_plane::processing::cleanup::WriteReceipt {
+            work: work.clone(),
+            generation: indexing.generation,
+            write_id: write,
+            completed: true,
+            workspace,
+        })
+        .await
+        .unwrap();
+    }
 
     let candidates = p.cleanup_candidates().await.unwrap();
     assert_eq!(candidates.len(), 1);
@@ -2702,6 +2732,42 @@ async fn lifecycle_waits_for_running_retired_document() {
 
 #[tokio::test]
 #[ignore = "needs Postgres and S3: make test-integration"]
+async fn immediate_document_deletion_requires_platform_administrator_and_creator() {
+    use control_plane::{authorization, lifecycle::Lifecycle, roles::PlatformRole};
+    let mut lifecycle = Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.config.temporal.host = "127.0.0.1:1".into();
+    lifecycle.config.temporal.connect_timeout_seconds = 1;
+    let (d, _) = Box::pin(setup_with_lifecycle(lifecycle)).await;
+    let (status, uploaded) = d
+        .upload("writer", "fixture.txt", b"fixture", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201);
+    let id = uploaded["document_id"].as_str().unwrap();
+    let path = format!("/documents/{id}?immediate=true");
+    assert_eq!(d.json("writer", "DELETE", &path, Value::Null).await.0, 403);
+
+    crate::grant(&d.e, d.folder.space_id, Role::Editor, "reader").await;
+    for actor in ["reader", "writer"] {
+        authorization::write_platform(
+            &mut d.e.pool.acquire().await.unwrap(),
+            actor,
+            PlatformRole::PlatformAdmin,
+            true,
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(d.json("reader", "DELETE", &path, Value::Null).await.0, 403);
+
+    let (status, receipt) = d.json("writer", "DELETE", &path, Value::Null).await;
+    assert_eq!(status, 202);
+    assert_eq!(receipt["target_id"], id);
+    assert_eq!(receipt["due_at"], receipt["requested_at"]);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn editor_deletes_document_without_retiring_its_folder() {
     use control_plane::lifecycle::{Lifecycle, Receipt, Status, TargetKind, cleanup};
     let mut lifecycle = Lifecycle::default();
@@ -2792,6 +2858,19 @@ async fn editor_deletes_document_without_retiring_its_folder() {
             .await
             .unwrap();
     let path = format!("/documents/{}", work.document_id);
+    assert_eq!(
+        d.request(
+            "writer",
+            "DELETE",
+            &format!("{path}?immediate=true"),
+            Body::empty(),
+            "",
+            None
+        )
+        .await
+        .status(),
+        403
+    );
     assert_eq!(
         d.request("reader", "DELETE", &path, Body::empty(), "", None)
             .await
@@ -2927,7 +3006,6 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         waiting.error_code.as_deref(),
         Some("document_writes_pending")
     );
-    expire_generations(&d.e.pool, processing).await;
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     assert!(
         p.retrieval_work(work.document_id, retrieval).await.is_ok(),

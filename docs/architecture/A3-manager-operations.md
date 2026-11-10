@@ -520,6 +520,15 @@ when a catalog is reloaded.
 A document deletion inherits its space's retention and its receipt completes once
 the document has been purged.
 
+The self-test requests `immediate=true` when deleting a disposable drive document,
+conversation, team or project. This requires platform administration as well as
+the usual deletion authority. The document creator, conversation owner or direct
+space owner must make the request. Immediate space deletion accepts a team or
+project without child spaces or conversations. A new immediate receipt is due at
+acceptance and starts a bounded workflow for that receipt. The periodic sweep
+resumes work if the targeted workflow stops before cleanup completes. Replaying
+an accepted deletion preserves its deadline.
+
 `control-plane serve` supervises lifecycle tasks in the same process as HTTP and
 the processing dispatcher. Acceptance and completion emit `deletion.accepted`
 and `deletion.completed` on `fred.security.audit` after SQL commit.

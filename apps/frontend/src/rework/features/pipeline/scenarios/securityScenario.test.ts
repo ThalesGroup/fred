@@ -14,7 +14,13 @@
 
 import { describe, expect, it } from "vitest";
 import { collect, signal } from "./fakePlatform";
-import { runsActiveContent, securityScenario, type HeaderMap, type SecurityDeps } from "./securityScenario";
+import {
+  runSecurityBaseline,
+  runsActiveContent,
+  securityScenario,
+  type HeaderMap,
+  type SecurityDeps,
+} from "./securityScenario";
 
 const HARDENED: HeaderMap = {
   "content-security-policy": "default-src 'self'; frame-ancestors 'self'",
@@ -61,6 +67,21 @@ async function run(d: SecurityDeps) {
 }
 
 describe("securityScenario", () => {
+  it("requires the protected route's application error rather than a missing ingress route", async () => {
+    for (const [type, body, status] of [
+      ["text/html", "<p>Page not found</p>", "failed"],
+      ["application/json", '{"detail":"Not found","code":"not_found"}', "passed"],
+    ]) {
+      const run = collect();
+      await runSecurityBaseline(
+        deps({ headersOf: async () => ({ status: 404, headers: { "content-type": type }, body }) }),
+        run.report,
+        ["/protected"],
+        [403, 404],
+      );
+      expect(run.status("error-bodies")).toBe(status);
+    }
+  });
   it("passes on a hardened deployment and deletes its folder", async () => {
     const d = deps();
     const r = await run(d);
@@ -98,13 +119,16 @@ describe("securityScenario", () => {
     expect((await run(deps({ origin: { https: false, local: true } }))).status("transport")).toBe("skipped");
   });
 
-  it("fails when an error body carries a stack trace", async () => {
+  it.each([
+    'Traceback (most recent call last):\n  File "/app/x.py", line 3',
+    'thread "worker" panicked at source.rs:3',
+    "stack backtrace:\n0: private_frame",
+    "Error: private message\n    at handler (source.js:3:2)",
+  ])("fails when an error body carries a recognized stack trace", async (body) => {
     const leaky = deps();
     const base = leaky.headersOf;
     leaky.headersOf = async (path, token) =>
-      path.startsWith("/control-plane/v1/teams/")
-        ? { status: 500, headers: {}, body: 'Traceback (most recent call last):\n  File "/app/x.py", line 3' }
-        : base(path, token);
+      path.startsWith("/control-plane/v1/teams/") ? { status: 500, headers: {}, body } : base(path, token);
     expect((await run(leaky)).status("error-bodies")).toBe("failed");
   });
 

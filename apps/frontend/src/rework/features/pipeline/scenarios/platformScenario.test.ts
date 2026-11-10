@@ -94,6 +94,25 @@ describe("platformScenario", () => {
     expect((await run(fakeDeps({ tokenClaims: () => ({ exp: NOW / 1000 - 1 }) }))).status("clocks")).toBe("failed");
   });
 
+  it("keeps issuer values and token claims out of reports", async () => {
+    for (const tokenClaims of [
+      () => ({ iss: "https://id.example/realms/app", iat: NOW / 1000, exp: NOW / 1000 + 60 }),
+      () => ({ iss: "https://other.example/realms/app", iat: NOW / 1000 + 600, exp: NOW / 1000 + 900 }),
+    ]) {
+      const result = await run(fakeDeps({ tokenClaims }));
+      const sessionSteps = result.steps.filter((step) =>
+        ["provider-config", "token-issuer", "clocks"].includes(step.id),
+      );
+      const output = JSON.stringify(sessionSteps);
+      expect(output).not.toContain("https://");
+      expect(output).not.toContain(String(NOW / 1000));
+    }
+  });
+
+  it("does not pass an invalid server clock response", async () => {
+    expect((await run(fakeDeps({ serverDate: async () => new Date("invalid") }))).status("clocks")).toBe("skipped");
+  });
+
   it("fails when the self-test agent is missing, and when no model is offered", async () => {
     const r = await run(
       fakeDeps({ templates: async () => [template("agents", "other")], modelProfiles: async () => ({ profiles: [] }) }),

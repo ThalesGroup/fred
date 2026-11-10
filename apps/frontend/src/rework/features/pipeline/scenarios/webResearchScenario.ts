@@ -39,8 +39,8 @@ export interface WebReport {
 
 const GROUP_LABEL: Record<WebProbe["group"], string> = {
   schema: "Refused by the tool contract",
-  guard: "Refused before any connection",
-  remote: "Refused on the Internet",
+  guard: "Destination guard response",
+  remote: "Remote response",
   search: "Search",
   fetch: "Page read",
 };
@@ -62,10 +62,20 @@ export function reportProbes(report: Reporter, probes: WebProbe[]): void {
   for (const probe of probes) {
     const status: StepStatus = probe.verdict;
     const observed = `observed ${probe.observed}, expected ${probe.expected}`;
-    const text = probe.detail ? `${observed} — ${probe.detail}` : observed;
+    const detail =
+      probe.verdict === "skipped" && probe.observed === "http_error"
+        ? "An HTTP error prevented verification; the expected protection was not demonstrated."
+        : probe.detail;
+    const text = detail ? `${observed} — ${detail}` : observed;
+    const title =
+      probe.id === "fetch_focus"
+        ? "Focused read returns non-empty content"
+        : probe.id.startsWith("safesearch_")
+          ? `Reported SafeSearch policy: ${probe.title}`
+          : probe.title;
     report({
       id: `web-${probe.id}`,
-      title: `${GROUP_LABEL[probe.group] ?? probe.group}: ${probe.title}`,
+      title: `${GROUP_LABEL[probe.group] ?? probe.group}: ${title}`,
       status,
       ...(status === "failed" ? { error: text } : { detail: text }),
     });

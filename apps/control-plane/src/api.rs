@@ -540,9 +540,17 @@ async fn rename_folder(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeleteFolderQuery {
+    /// Check all child rows under the mutation lock; the default keeps recursive deletion.
+    #[serde(default)]
+    empty_only: bool,
+}
+
 #[utoipa::path(
     delete, path = "/folders/{id}",
-    params(("id" = Uuid, Path)),
+    params(("id" = Uuid, Path), ("empty_only" = Option<bool>, Query, description = "Refuse deletion if any child folder or document remains")),
     responses(
         (status = 204, description = "Success"),
         (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
@@ -557,6 +565,7 @@ async fn delete_folder(
     State(s): State<AppState>,
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<DeleteFolderQuery>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
     let (mut tx, _) =
@@ -580,7 +589,9 @@ async fn delete_folder(
             "folder has pending document uploads".into(),
         ));
     }
-    db::delete_folder(&mut *tx, id).await?;
+    if !db::delete_folder(&mut *tx, id, query.empty_only).await? {
+        return Err(AppError::Conflict("folder is not empty".into()));
+    }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1207,6 +1218,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(my_spaces))
         .routes(routes!(delete_space))
         .routes(routes!(deletion_status))
+        .routes(routes!(project_deletion_status))
         .routes(routes!(create_personal_space))
         .routes(routes!(create_folder))
         .routes(
@@ -1409,27 +1421,41 @@ fn upload_error(status: StatusCode) -> axum::response::Response {
     (status, Json(serde_json::json!({"detail": if status == StatusCode::PAYLOAD_TOO_LARGE { "provisioning bundle exceeds size limit" } else { "expected one multipart file" }}))).into_response()
 }
 
-#[utoipa::path(delete, path = "/spaces/{id}", params(("id" = Uuid, Path)), responses(
+#[utoipa::path(delete, path = "/spaces/{id}", params(("id" = Uuid, Path), crate::lifecycle::DeleteQuery), responses(
     (status = 202, description = "Durably accepted", body = crate::lifecycle::Receipt),
     (status = 200, description = "Already completed", body = crate::lifecycle::Receipt),
     (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
     (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
+    (status = 422, body = crate::error::ErrorBody),
     (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
 ))]
 async fn delete_space(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<crate::lifecycle::DeleteQuery>,
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
     require_real_authentication(&s)?;
-    let receipt = s.lifecycle.accept(&s.pool, &user.uid, id).await?;
-    Ok((
-        if receipt.status == crate::lifecycle::Status::Completed {
-            StatusCode::OK
-        } else {
-            StatusCode::ACCEPTED
-        },
-        Json(receipt),
+    let receipt = s
+        .lifecycle
+        .accept(&s.pool, &user.uid, id, query.immediate)
+        .await?;
+    Ok(crate::lifecycle::deletion_response(&s.lifecycle.config, receipt, query.immediate).await)
+}
+/// Read the original actor's project deletion receipt without initiating cleanup.
+#[utoipa::path(get, path = "/spaces/{id}/deletion", params(("id" = Uuid, Path)), responses(
+    (status = 200, body = crate::lifecycle::Receipt),
+    (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
+    (status = 404, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody), (status = 500, body = crate::error::ErrorBody)
+))]
+async fn project_deletion_status(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<Json<crate::lifecycle::Receipt>> {
+    require_real_authentication(&s)?;
+    Ok(Json(
+        crate::lifecycle::store::project_status(&s.pool, &user.uid, id).await?,
     ))
 }
 #[utoipa::path(get, path = "/deletions/{operation_id}", params(("operation_id" = Uuid, Path)), responses(

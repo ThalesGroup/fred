@@ -453,7 +453,10 @@ async fn prompts_authorization_admission_and_placement() {
     );
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
-    lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
+    lifecycle
+        .accept(&e.pool, "root", team.id, false)
+        .await
+        .unwrap();
     for (method, path, body) in [
         ("GET", collection(team.id), Value::Null),
         ("GET", format!("{}/{id}", collection(team.id)), Value::Null),

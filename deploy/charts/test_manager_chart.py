@@ -250,6 +250,43 @@ class ManagerChartTests(unittest.TestCase):
                     namespace,
                 )
 
+    def test_knowledge_upstream_uses_release_namespace_and_preserves_overrides(self):
+        name = "FRONTEND_KNOWLEDGE_FLOW_UPSTREAM"
+        for namespace in ("fred", "another-namespace"):
+            for settings in (
+                (),
+                ("applications.frontend.env[0].name=INSTANCE_SETTING",),
+            ):
+                with self.subTest(namespace=namespace, settings=settings):
+                    apps = deployments(render(*settings, namespace=namespace))
+                    env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0][
+                        "env"
+                    ]
+                    self.assertEqual(
+                        [entry for entry in env if entry["name"] == name],
+                        [
+                            {
+                                "name": name,
+                                "value": f"http://knowledge-flow-backend.{namespace}.svc.cluster.local:8000",
+                            }
+                        ],
+                    )
+        for field in ("env", "extraEnvVars"):
+            with self.subTest(field=field):
+                apps = deployments(
+                    render(
+                        f"applications.frontend.{field}[0].name={name}",
+                        f"applications.frontend.{field}[0].value=http://custom.example:8000",
+                    )
+                )
+                env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0][
+                    "env"
+                ]
+                self.assertEqual(
+                    [entry for entry in env if entry["name"] == name],
+                    [{"name": name, "value": "http://custom.example:8000"}],
+                )
+
     def test_explicit_manager_upstream_overrides_are_preserved_without_duplicates(self):
         for field, value, expected in (
             (

@@ -117,6 +117,7 @@ from .graph_steps import (
     think_step,
     trace_step,
 )
+from .runtime_probe import runtime_probe_step
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
@@ -342,6 +343,7 @@ class TestAssistantGraphAgent(GraphAgent):
         entry="dispatch",
         nodes={
             "dispatch": dispatch_step,
+            "runtime_probe": runtime_probe_step,
             "echo": echo_step,
             "model_probe": model_probe_step,
             "hitl_confirm": hitl_confirm_step,
@@ -371,6 +373,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "assist_draft": "assist_review",
             "delegate": "finalize",
             "graph_check": "finalize",
+            "runtime_probe": "finalize",
             "echo": "finalize",
             "model_probe": "finalize",
             "hitl_confirm": "finalize",
@@ -394,6 +397,7 @@ class TestAssistantGraphAgent(GraphAgent):
         },
         routes={
             "dispatch": {
+                "runtime_probe": "runtime_probe",
                 "echo": "echo",
                 "model_probe": "model_probe",
                 "hitl_confirm": "hitl_confirm",

@@ -167,6 +167,7 @@ async fn delete_attachment(
             &user.uid,
             document_id,
             Some((space_id, session_id)),
+            false,
         )
         .await?;
     Ok((

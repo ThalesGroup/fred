@@ -27,9 +27,22 @@ macro_rules! generation_due {
     };
 }
 /// Retired documents past retention, with no active request or protected generation.
+/// An already committed generation admits no new writes. Zero-retention deletion
+/// may reclaim it without waiting out its lease once all admitted writes have acknowledged.
 macro_rules! purge_due {
     () => {
-        "d.retrieval_phase is distinct from 'writing' and d.deletion_id is not null and d.purged_at is null and exists (select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()) and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and (lg.cleanup_after > clock_timestamp() or cardinality(lg.pending_writes) > 0 or cardinality(lg.pending_workspaces) > 0))"
+        "d.retrieval_phase is distinct from 'writing' and d.deletion_id is not null and d.purged_at is null
+         and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running'))
+         and exists (
+           select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()
+           and not exists (
+             select 1 from document_processing lp join generation lg on lg.processing_id = lp.id
+             where lp.document_id = d.id and (
+               cardinality(lg.pending_writes) > 0 or cardinality(lg.pending_workspaces) > 0
+               or (lg.cleanup_after > clock_timestamp() and (lg.committed_at is null or retired.due_at > retired.requested_at))
+             )
+           )
+         )"
     };
 }
 
