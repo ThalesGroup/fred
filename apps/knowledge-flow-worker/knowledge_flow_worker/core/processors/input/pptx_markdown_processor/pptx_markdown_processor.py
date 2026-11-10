@@ -52,11 +52,6 @@ class PptxProcessingMode(str, Enum):
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."
 
-    def __init__(self):
-        super().__init__()
-        self.image_describer = None
-        self._warned_missing_vision_model = False
-
     def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, PptxProcessingMode]:
         processing = get_configuration().processing
         current_profile = get_current_processing_profile()
@@ -76,18 +71,10 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
     def _resolve_image_describer(self, mode: PptxProcessingMode):
         if mode == PptxProcessingMode.NATIVE_ONLY:
             return None
-        if self.image_describer is not None:
-            return self.image_describer
-        if not get_configuration().vision_model:
-            if not self._warned_missing_vision_model:
-                logger.warning("Vision model configuration is missing while vision enrichment is enabled.")
-                self._warned_missing_vision_model = True
-            return None
-        self.image_describer = build_image_describer(
-            get_configuration().vision_model,
-            system_prompt=PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
-        )
-        return self.image_describer
+        describer = build_image_describer(system_prompt=PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1)
+        if describer is None:
+            logger.info("No vision model admitted while vision enrichment is enabled; slides keep native content.")
+        return describer
 
     def _build_native_markdown(
         self,

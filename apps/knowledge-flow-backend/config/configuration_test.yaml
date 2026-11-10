@@ -42,27 +42,6 @@ security:
   authorized_origins:
     - "http://localhost:5173"
 # Keep ingestion synchronous for easier test scripting and deterministic logs.
-chat_model:
-  provider: ollama
-  name: qwen2.5:3b-instruct
-  settings:
-    base_url: http://localhost:11434
-    temperature: 0
-    max_retries: 0
-embedding_model:
-  provider: ollama
-  name: nomic-embed-text
-  settings:
-    base_url: http://localhost:11434
-    max_retries: 0
-# ocr_model:
-#   provider: openai
-#   name: mistral-ocr-latest
-#   settings:
-#     base_url: https://api.mistral.ai/v1
-#     request_timeout: 300
-#     signed_url_expiry_hours: 1
-
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

@@ -99,6 +99,10 @@ class BaseVectorStore(ABC):
 
     strict_operations: bool = False
 
+    def index_exists(self) -> bool:
+        """Whether this corpus holds an index yet; a store creating it implicitly always does."""
+        return True
+
     @abstractmethod
     def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
         """Upsert chunks; return assigned ids (prefer stable chunk_uids)."""

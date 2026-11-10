@@ -32,6 +32,12 @@ pub struct OrganizationModels {
     pub reasoning_enabled: Vec<ModelOfferKey>,
     pub default: Option<ModelOfferKey>,
     pub fallback: Option<ModelOfferKey>,
+    /// Embedding model of the organization's documents, within its permitted offers.
+    #[serde(default)]
+    pub embedding: Option<ModelOfferKey>,
+    /// Optional model describing document images, within its permitted chat offers.
+    #[serde(default)]
+    pub vision: Option<ModelOfferKey>,
 }
 
 impl OrganizationModels {
@@ -43,6 +49,8 @@ impl OrganizationModels {
             reasoning_enabled: self.reasoning_enabled.clone(),
             default: self.default.clone(),
             fallback: self.fallback.clone(),
+            embedding: self.embedding.clone(),
+            vision: self.vision.clone(),
         }
     }
 }

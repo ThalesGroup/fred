@@ -61,7 +61,6 @@ def create_app() -> FastAPI:
         log_format=configuration.app.log_format,
         service_role="api",
     )
-    logger.info("Embedding model selected", extra={"provider": configuration.embedding_model.provider, "model": configuration.embedding_model.name})
 
     if not configuration.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""

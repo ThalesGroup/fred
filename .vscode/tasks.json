@@ -3,7 +3,7 @@
   "tasks": [
     {
       "label": "Fred (make run)",
-      "detail": "Every Fred application, as make run; after make docker-up and make docker-app (or make docker-prepare)",
+      "detail": "Every Fred application, as make run; after make docker-up and make docker-prepare in the factory",
       "dependsOn": [
         "control-plane-backend",
         "fred-agents",

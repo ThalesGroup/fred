@@ -16,13 +16,15 @@ from knowledge_flow_worker.features.manager_processing.contracts import Descript
 from knowledge_flow_worker.features.manager_processing.persistence import ScopedVectors, _placement
 from knowledge_flow_worker.features.scheduler.export_contract import export
 from knowledge_flow_worker.features.scheduler.scheduler_structures import PipelineDefinition
+from tests.model_admissions import indexing_models
 
 
 @pytest.fixture
 def descriptor():
+    organization = uuid4()
     return Descriptor(
-        work=Work(contract_version=1, installation_id=uuid4(), processing_id=uuid4(), document_id=uuid4(), original_sha256="a" * 64, profile="fast"),
-        organization_id=uuid4(),
+        work=Work(contract_version=1, installation_id=uuid4(), processing_id=uuid4(), document_id=uuid4(), organization_id=organization, original_sha256="a" * 64, profile="fast"),
+        organization_id=organization,
         space_id=uuid4(),
         folder_id=uuid4(),
         folder_path="/folder",
@@ -42,6 +44,7 @@ def descriptor():
         profile_settings={},
         predecessor=None,
         committed=None,
+        models=indexing_models(),
     )
 
 
@@ -336,10 +339,10 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
             raise RuntimeError("store unavailable")
         return {}
 
-    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=read)
+    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=read, index_exists=lambda: True)
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
     if failure:
         if failure == "authority":
             with pytest.raises(RuntimeError):
@@ -388,10 +391,10 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
         if identifier == str(uuid5(UUID(failing["generation"]), "0")):
             raise RuntimeError("store unavailable")
 
-    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {})
+    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {}, index_exists=lambda: True)
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
     cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
 
@@ -466,11 +469,11 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         events.append(key)
         removed.add(key)
 
-    vectors = SimpleNamespace(delete_vectors_for_document=delete, get_document_chunk_count=count)
+    vectors = SimpleNamespace(delete_vectors_for_document=delete, get_document_chunk_count=count, index_exists=lambda: True)
     artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
     if remaining:
         cleanup.sweep(context)
         assert all(ack.work.document_id != descriptor.work.document_id for ack in acknowledgments)
@@ -492,6 +495,65 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         assert ack.generation == descriptor.generation
         assert ack.cursor == ack.next_cursor == 0
         assert ack.objects_empty == (object_count <= 200)
+
+
+def test_cleanup_without_a_corpus_index_touches_no_vector(descriptor, monkeypatch):
+    """An organization that never indexed a document has no index: cleanup only clears objects."""
+    from knowledge_flow_worker.features.manager_processing import cleanup
+
+    acknowledgments = []
+
+    class Client:
+        def __init__(self, _):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def get(self, _):
+            return [
+                {
+                    "work": descriptor.work.model_dump(mode="json"),
+                    "generation": str(descriptor.generation),
+                    "cursor": 0,
+                    "chunks": 2,
+                    "batch": 200,
+                    "preserve_objects": False,
+                    "protected_ordinals": [],
+                    "output_prefix": "p/",
+                    "purge_document": purge,
+                }
+                for purge in (False, True)
+            ]
+
+        def post(self, _, body):
+            acknowledgments.append(body)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("no vector operation without a corpus index")
+
+    vectors = SimpleNamespace(index_exists=lambda: False, delete_chunk=forbidden, get_chunk=forbidden, delete_vectors_for_document=forbidden, get_document_chunk_count=forbidden)
+    artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=lambda *_a, **_k: iter(()), remove_object=forbidden))
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
+    seen = []
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: seen.append(organization_id) or vectors)
+    cleanup.sweep(context)
+    assert [ack.purge_document for ack in acknowledgments] == [False, True]
+    assert [ack.next_cursor for ack in acknowledgments] == [2, 0]
+    assert set(seen) == {descriptor.work.organization_id}
+
+
+def test_descriptor_requires_its_organization_and_the_admitted_corpus_model(descriptor):
+    from knowledge_flow_worker.features.manager_processing.contracts import StageModels
+
+    with pytest.raises(ValueError, match="different organizations"):
+        Descriptor.model_validate({**descriptor.model_dump(), "organization_id": uuid4()})
+    with pytest.raises(ValueError, match="corpus embedding model"):
+        Descriptor.model_validate({**descriptor.model_dump(), "models": StageModels(embedding=None, vision=None)})
 
 
 def test_restore_reads_the_predecessor_stored_prefix(descriptor, tmp_path):
@@ -525,7 +587,7 @@ def test_extraction_child_freezes_profile_before_context_and_requires_office_pre
     profile = json.loads(fixture.read_text())["processor_profiles"]["fast"]
     descriptor = descriptor.model_copy(update={"profile_settings": profile, "file": {"input_activity_timeout_seconds": 60}})
     configuration = SimpleNamespace(processing=SimpleNamespace(profiles=SimpleNamespace(fast=None)), manager_processing=SimpleNamespace())
-    context = SimpleNamespace(configuration=configuration)
+    context = SimpleNamespace(configuration=configuration, admit_models=lambda models: None)
 
     def build(received):
         assert received.processing.profiles.fast == type(received.processing.profiles.fast).model_validate(profile)
@@ -873,7 +935,7 @@ def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dep
     def forbidden(*args, **kwargs):
         raise AssertionError("Tabular attachments must not initialize vectors or shared content storage")
 
-    monkeypatch.setattr(app_context, "get_manager_vector_store", forbidden)
+    monkeypatch.setattr(app_context, "get_corpus_store", forbidden)
     monkeypatch.setattr(app_context, "get_embedder", forbidden)
     get_content_store = type(app_context).get_content_store
 

@@ -104,9 +104,12 @@ platform:
   inference_credentials:
     - credential_binding: mistral
       api_root: https://api.mistral.ai/v1
+      api_key_env: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
+    - credential_binding: openai
+      api_root: https://api.openai.com/v1
       api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
-  # Discovery lists all offers; organization_models authorizes two of them for
-  # the demo bundle's organizations.
+  # Discovery lists all offers; organization_models authorizes two chat models
+  # and the embedding model for the demo bundle's organizations.
   model_sources:
     - source_id: mistral
       revision: 1
@@ -116,7 +119,7 @@ platform:
         url: https://api.mistral.ai/v1/models
         authentication:
           mode: bearer
-          secret_env_var: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+          secret_env_var: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
           # API operations of the existing local test key, not OAuth scope names.
           provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
           authority: discovery_and_inference
@@ -133,6 +136,35 @@ platform:
         auth:
           kind: api_key
       visibility_scope: local-test-mistral-account
+      # The provider list does not say which models embed; the platform attests it.
+      embedding_models: [mistral-embed]
+    # OpenAI's /v1/models carries no capability metadata and also lists
+    # embedding, audio and image models: besides the attested embedding models,
+    # authorize only chat models.
+    - source_id: openai
+      revision: 1
+      enabled: true
+      inventory:
+        kind: discovered
+        url: https://api.openai.com/v1/models
+        authentication:
+          mode: bearer
+          secret_env_var: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+          provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
+          authority: discovery_and_inference
+          accept_inference_authority: true
+        qualification: chat_source
+        complete_inventory_guaranteed: true
+      inference:
+        credential_binding: openai
+        api_root: https://api.openai.com/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai
+        auth:
+          kind: api_key
+      visibility_scope: local-test-openai-account
+      embedding_models: [text-embedding-3-small, text-embedding-3-large]
   organization_models:
     - organization: Acme
       sources: [mistral]
@@ -141,7 +173,9 @@ platform:
       permitted:
         - {source_id: mistral, upstream_model_id: mistral-small-latest}
         - {source_id: mistral, upstream_model_id: mistral-medium-latest}
+        - {source_id: mistral, upstream_model_id: mistral-embed}
       reasoning_enabled: []
+      embedding: {source_id: mistral, upstream_model_id: mistral-embed}
     - organization: Globex
       sources: [mistral]
       default: {source_id: mistral, upstream_model_id: mistral-small-latest}
@@ -149,7 +183,9 @@ platform:
       permitted:
         - {source_id: mistral, upstream_model_id: mistral-small-latest}
         - {source_id: mistral, upstream_model_id: mistral-medium-latest}
+        - {source_id: mistral, upstream_model_id: mistral-embed}
       reasoning_enabled: []
+      embedding: {source_id: mistral, upstream_model_id: mistral-embed}
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2

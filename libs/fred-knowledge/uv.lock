@@ -600,6 +600,7 @@ source = { editable = "." }
 dependencies = [
     { name = "attrs" },
     { name = "fred-core" },
+    { name = "fred-sdk" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-postgres" },
@@ -633,6 +634,7 @@ requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fred-core", editable = "../fred-core" },
+    { name = "fred-sdk", editable = "../fred-sdk" },
     { name = "langchain-community", specifier = ">=0.4.1" },
     { name = "langchain-core", specifier = ">=1.6.5" },
     { name = "langchain-postgres", specifier = ">=0.0.17" },
@@ -691,6 +693,53 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "pytest-socket", specifier = ">=0.7.0" },
     { name = "ruff", specifier = ">=0.12.5,<0.16" },
+]
+
+[[package]]
+name = "fred-sdk"
+version = "5.0.0"
+source = { editable = "../fred-sdk" }
+dependencies = [
+    { name = "fred-pod" },
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fred-core", marker = "extra == 'agents'", editable = "../fred-core" },
+    { name = "fred-pod", editable = "../fred-pod" },
+    { name = "fred-sdk", extras = ["agents"], marker = "extra == 'dev'" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "langchain", marker = "extra == 'agents'", specifier = ">=1.4.2" },
+    { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1.6.5" },
+    { name = "langgraph", marker = "extra == 'agents'", specifier = ">=1.2.12" },
+    { name = "prometheus-client", marker = "extra == 'knowledge-base'", specifier = ">=0.20.0" },
+    { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "pyyaml", marker = "extra == 'agents'", specifier = ">=6.0.1" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "temporalio", marker = "extra == 'dev'", specifier = ">=1.35.0,<2.0.0" },
+    { name = "temporalio", marker = "extra == 'knowledge-base'", specifier = ">=1.35.0,<2.0.0" },
+]
+provides-extras = ["agents", "knowledge-base", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.8.6" },
+    { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "fred-sdk", extras = ["agents"] },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+    { name = "temporalio", specifier = ">=1.35.0,<2.0.0" },
 ]
 
 [[package]]

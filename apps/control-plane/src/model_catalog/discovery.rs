@@ -61,6 +61,12 @@ pub struct ModelMetadata {
     pub chat_provenance: Option<ChatProvenance>,
     /// Source-reported aptitude; absent means unknown, not unsupported.
     pub reasoning: Option<bool>,
+    /// Platform-attested embedding offer; such an offer is never chat.
+    #[serde(default)]
+    pub embedding: Option<bool>,
+    /// Source-reported image input; absent means unknown, not unsupported.
+    #[serde(default)]
+    pub vision: Option<bool>,
     pub display_name: Option<String>,
     pub context_window_tokens: Option<i64>,
     pub max_input_tokens: Option<i64>,
@@ -85,16 +91,19 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
         }
     };
     let positive = |key| item.get(key).and_then(Value::as_i64).filter(|v| *v > 0);
+    let capability = |name: &str| match qualification {
+        Qualification::MixedCapabilitiesV1 => item
+            .get("capabilities")
+            .and_then(|v| v.get(name))
+            .and_then(Value::as_bool),
+        Qualification::ChatSource => None,
+    };
     ModelMetadata {
         chat,
         chat_provenance,
-        reasoning: match qualification {
-            Qualification::MixedCapabilitiesV1 => item
-                .get("capabilities")
-                .and_then(|v| v.get("reasoning"))
-                .and_then(Value::as_bool),
-            Qualification::ChatSource => None,
-        },
+        reasoning: capability("reasoning"),
+        embedding: None,
+        vision: capability("vision"),
         display_name: ["name", "display_name"].iter().find_map(|key| {
             item.get(key)
                 .and_then(Value::as_str)
@@ -249,6 +258,8 @@ fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
             chat: Some(true),
             chat_provenance: Some(ChatProvenance::SourceGuarantee),
             reasoning: model.reasoning,
+            embedding: None,
+            vision: None,
             display_name: model.display_name.clone(),
             context_window_tokens: model.context_window_tokens,
             max_input_tokens: model.max_input_tokens,
@@ -260,6 +271,25 @@ fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
 pub(super) async fn discover(
     source: &ModelSource,
 ) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
+    let mut offers = inventory(source).await?;
+    for offer in &mut offers {
+        if source.embedding_models.contains(&offer.upstream_model_id) {
+            attest_embedding(&mut offer.metadata);
+        }
+    }
+    Ok(offers)
+}
+
+/// The platform attestation overrides any chat qualification of the same offer.
+fn attest_embedding(metadata: &mut ModelMetadata) {
+    metadata.chat = Some(false);
+    metadata.chat_provenance = Some(ChatProvenance::SourceGuarantee);
+    metadata.reasoning = None;
+    metadata.embedding = Some(true);
+    metadata.vision = Some(false);
+}
+
+async fn inventory(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
     match &source.inventory {
         SourceInventory::Declared { models } => Ok(models.iter().map(declared_offer).collect()),
         SourceInventory::Discovered {
@@ -305,11 +335,11 @@ mod tests {
             serde_json::json!([
                 {"upstream_model_id":"gpt-4o","metadata":{"chat":true,
                     "chat_provenance":"source_guarantee","reasoning":false,
-                    "display_name":"GPT-4o","context_window_tokens":128000,
+                    "embedding":null,"vision":null,"display_name":"GPT-4o","context_window_tokens":128000,
                     "max_input_tokens":100,"max_output_tokens":200}},
                 {"upstream_model_id":"bare","metadata":{"chat":true,
                     "chat_provenance":"source_guarantee","reasoning":null,
-                    "display_name":null,"context_window_tokens":null,
+                    "embedding":null,"vision":null,"display_name":null,"context_window_tokens":null,
                     "max_input_tokens":null,"max_output_tokens":null}},
             ])
         );
@@ -335,5 +365,35 @@ mod tests {
             metadata(&item, Qualification::MixedCapabilitiesV1).reasoning,
             None
         );
+    }
+
+    #[tokio::test]
+    async fn an_attested_embedding_offer_is_never_chat() {
+        let source: ModelSource = serde_json::from_value(serde_json::json!({
+            "source_id":"s","revision":1,"enabled":true,
+            "inventory":{"kind":"declared","models":[{"id":"chat"},{"id":"embed"}]},
+            "inference":{"credential_binding":"b","api_root":"https://gateway.invalid/v1",
+                "wire":"openai_chat","route":"standard","dialect":"openai",
+                "auth":{"kind":"api_key"}},
+            "visibility_scope":"account","embedding_models":["embed"]}))
+        .unwrap();
+        let offers = discover(&source).await.unwrap();
+        let (chat, embed) = (&offers[0].metadata, &offers[1].metadata);
+        assert_eq!((chat.chat, chat.embedding), (Some(true), None));
+        assert_eq!(
+            (embed.chat, embed.embedding, embed.vision),
+            (Some(false), Some(true), Some(false))
+        );
+    }
+
+    #[test]
+    fn vision_is_a_discovered_boolean() {
+        let item =
+            serde_json::json!({"id":"m","capabilities":{"completion_chat":true,"vision":true}});
+        assert_eq!(
+            metadata(&item, Qualification::MixedCapabilitiesV1).vision,
+            Some(true)
+        );
+        assert_eq!(metadata(&item, Qualification::ChatSource).vision, None);
     }
 }

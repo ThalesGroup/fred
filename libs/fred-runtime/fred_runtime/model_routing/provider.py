@@ -34,7 +34,7 @@ from .guard import NO_AUTH_BEARER, checked_clients, guarded_model
 from .turn import TurnAuthority, current_turn
 
 if TYPE_CHECKING:
-    from fred_runtime.app.config import InferenceCredentialBinding
+    from fred_sdk.contracts.weaver import InferenceCredentialBinding
 
 logger = logging.getLogger(__name__)
 
@@ -109,14 +109,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         model_id = selection.key.upstream_model_id
         auth = connection.auth
         local = self._credentials.get(connection.credential_binding)
-        if (
-            local is None
-            or local.api_root != connection.api_root
-            or (local.api_key_env is not None) != (auth.kind == "api_key")
-            or (local.client_secret_env is not None) != (auth.kind == "entra")
-            or (local.gateway_key_env is not None)
-            != (auth.gateway_key_header is not None)
-        ):
+        if local is None or not local.attests(connection):
             raise ModelRoutingError(
                 "Inference source provisioning does not match the approved connection"
             )

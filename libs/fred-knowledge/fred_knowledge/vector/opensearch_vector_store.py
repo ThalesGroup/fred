@@ -307,7 +307,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
     def __init__(
         self,
-        embedding_model: Embeddings,
+        embedding_model: Embeddings | None,
         embedding_model_name: str,
         kpi: BaseKPIWriter | None,
         host: str,
@@ -352,7 +352,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             ssl_show_warn=False,
         )
 
-        if not read_only:
+        # Without an embedding model the store only maintains existing vectors.
+        if not read_only and embedding_model is not None:
             self.ensure_ready()
         logger.info("initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
@@ -365,6 +366,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             actor=KPIActor(type="system"),
         )
 
+    @property
+    def _embeddings(self) -> Embeddings:
+        """The corpus model; a maintenance store, built without one, never embeds."""
+        if self._embedding_model is None:
+            raise RuntimeError("This corpus store only maintains existing vectors")
+        return self._embedding_model
+
     # ---------- lazy LangChain wrapper + raw client ----------
 
     @property
@@ -373,7 +381,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             self._vs = OpenSearchVectorSearch(
                 opensearch_url=self._host,
                 index_name=self._index,
-                embedding_function=self._embedding_model,
+                embedding_function=self._embeddings,
                 use_ssl=self._secure,
                 verify_certs=self._verify_certs,
                 http_auth=(self._username, self._password),
@@ -388,9 +396,15 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         # low-level OpenSearch client for BM25/phrase
         return self.client
 
+    def index_exists(self) -> bool:
+        """A corpus index exists once its organization's first document is indexed."""
+        return bool(self._client.indices.exists(index=self._index))
+
     def ensure_ready(self) -> None:
         if self._ready:
             return
+        if self._embedding_model is None:
+            raise RuntimeError("Corpus validation requires the corpus embedding model")
         # A slow embedding probe must not accumulate waiting readiness threads.
         if not self._ready_lock.acquire(blocking=False):
             raise RuntimeError("Corpus validation is in progress")
@@ -1454,7 +1468,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         try:
             with self._phase_timer("vector_ann_embed_query"):
-                vector = self._embedding_model.embed_query(query)
+                vector = self._embeddings.embed_query(query)
             logger.debug("embedding_dim=%d", len(vector))
         except Exception as e:
             logger.exception("failed to compute embedding.")
@@ -1528,7 +1542,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
             return knn_query
 
-        embedding_vector = self._embedding_model.embed_query(query)
+        embedding_vector = self._embeddings.embed_query(query)
         search_body = {
             "size": top_k,
             "query": {
@@ -1613,7 +1627,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             return False
 
     def _get_embedding_dimension(self) -> int:
-        dummy_vector = self._embedding_model.embed_query("dummy")
+        dummy_vector = self._embeddings.embed_query("dummy")
         return len(dummy_vector)
 
     def _expected_index_spec(self, expected_dim: int) -> ExpectedIndexSpec:

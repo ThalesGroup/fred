@@ -6,7 +6,6 @@ processing:
   profiles:
     fast:
       use_gpu: false
-      generate_summary: false
       input_activity_timeout: 90m
       push_metadata_activity_timeout: 5m
       output_activity_timeout: 1h
@@ -72,7 +71,6 @@ processing:
         class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
     medium:
       use_gpu: false
-      generate_summary: false
       input_activity_timeout: 2h
       push_metadata_activity_timeout: 5m
       output_activity_timeout: 1h
@@ -140,7 +138,6 @@ processing:
         class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
     rich:
       use_gpu: false
-      generate_summary: false
       input_activity_timeout: 2h
       push_metadata_activity_timeout: 5m
       output_activity_timeout: 1h

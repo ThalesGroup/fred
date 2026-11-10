@@ -28,6 +28,11 @@ pub struct ModelSource {
     /// Explicit platform approval for internal HTTP routes; HTTPS is the default.
     #[serde(default)]
     pub allow_insecure_http: bool,
+    /// Platform attestation: these exact offers compute embeddings and are never chat.
+    /// Provider model lists do not establish this aptitude.
+    #[schema(max_items = 256)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embedding_models: Vec<String>,
 }
 
 /// Where this source's offers come from. A declared list replaces discovery for its
@@ -208,6 +213,15 @@ impl ModelSource {
         ensure!(
             bounded_text(&self.visibility_scope, 256),
             "invalid model source visibility"
+        );
+        let mut attested = HashSet::new();
+        ensure!(
+            self.embedding_models.len() <= MAX_DECLARED_MODELS
+                && self
+                    .embedding_models
+                    .iter()
+                    .all(|id| bounded_text(id, 256) && attested.insert(id)),
+            "invalid or duplicate embedding model attestation"
         );
         match &self.inventory {
             SourceInventory::Discovered {
@@ -468,5 +482,18 @@ mod tests {
         assert!(discovered.same_identity(&parsed(reviewed).unwrap()));
         // A changed list is the same source; only its revision has to change.
         assert!(list.same_identity(&declared(json!([{"id":"b"}])).unwrap()));
+    }
+
+    #[test]
+    fn embedding_attestation_names_distinct_bounded_offers() {
+        let mut value = base();
+        value["embedding_models"] = json!(["mistral-embed", "text-embedding-3-small"]);
+        let attested = parsed(value.clone()).unwrap();
+        assert_eq!(attested.embedding_models.len(), 2);
+        assert!(source(json!({})).unwrap().embedding_models.is_empty());
+        for invalid in [json!(["a", "a"]), json!([""]), json!(["x".repeat(257)])] {
+            value["embedding_models"] = invalid;
+            assert!(parsed(value.clone()).is_err());
+        }
     }
 }

@@ -60,9 +60,10 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
         self.settings: Dict[str, Any] = dict(ocr_cfg.settings or {})
         self.base_url = str(self.settings.get("base_url") or "https://api.mistral.ai/v1").rstrip("/")
         self.timeout = _resolve_timeout(self.settings)
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        key_env = self.settings.get("api_key_env") or "MISTRAL_API_KEY"
+        self.api_key = os.getenv(key_env)
         if not self.api_key:
-            raise ValueError(f"Missing OPENAI_API_KEY for remote OCR model '{ocr_cfg.name}'.")
+            raise ValueError(f"Missing {key_env} for remote OCR model '{ocr_cfg.name}'.")
         self.signed_url_expiry_hours = int(self.settings.get("signed_url_expiry_hours") or 1)
         self.include_image_base64 = bool(self.settings.get("include_image_base64") or False)
 

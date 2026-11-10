@@ -44,6 +44,13 @@ pub fn unavailable() -> AppError {
         "Document processing is unavailable",
     )
 }
+pub fn embedding_required() -> AppError {
+    AppError::problem(
+        axum::http::StatusCode::CONFLICT,
+        "embedding_model_required",
+        "Documents cannot be processed before an organization owner chooses an embedding model in Models.",
+    )
+}
 pub fn capacity() -> AppError {
     AppError::problem(
         axum::http::StatusCode::TOO_MANY_REQUESTS,

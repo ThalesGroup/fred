@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
+from uuid import UUID
 
 import httpx
-from fred_core import ModelProvider, get_embeddings, get_model, split_realm_url
+from fred_core import split_realm_url
 from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
@@ -16,9 +18,10 @@ from fred_knowledge.artifacts.reader import ArtifactReader
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.semantic_splitter import SemanticSplitter
 from fred_knowledge.vector.base_vector_store import BaseVectorStore
+from fred_knowledge.models import DocumentModels
 from fred_knowledge.vector.factory import build_vector_store
+from fred_sdk.contracts.weaver import InferenceAdmission
 from fred_pod.security.oidc_endpoints import resolve_endpoints
-from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -72,8 +75,9 @@ class ApplicationContext:
             return
         self.configuration = configuration
         self._published_artifact_reader: ArtifactReader | None = None
-        self._vector_store_instance: BaseVectorStore | None = None
-        self._embedder_instance: Embeddings | None = None
+        self._document_models = DocumentModels(configuration.inference_credentials)
+        self._corpus_lock = threading.Lock()
+        self._corpus_stores: dict[tuple, BaseVectorStore] = {}
         self._kpi_writer: BaseKPIWriter | None = None
         self._control_plane_client: httpx.AsyncClient | None = None
         self._pg_async_engine: AsyncEngine | None = None
@@ -103,34 +107,7 @@ class ApplicationContext:
                 except Exception as e:
                     logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                     raise ValueError("Invalid Keycloak URL") from e
-        embedding = self.configuration.embedding_model
-        # Non-secret settings from YAML
-        for k, v in (embedding.settings or {}).items():
-            # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
-            if any(t in k.lower() for t in ("secret", "token", "key")):
-                logger.info("     ↳ %s: (masked)", k)
-            else:
-                logger.info("     ↳ %s: %s", k, v)
-
-        # Required env vars by provider
-        provider = (embedding.provider or "").lower()
-        if provider == ModelProvider.OPENAI.value:
-            _require_env("OPENAI_API_KEY")
-        elif provider == ModelProvider.AZURE_OPENAI.value:
-            _require_env("AZURE_OPENAI_API_KEY")
-        elif provider == ModelProvider.AZURE_APIM.value:
-            _require_env("AZURE_AD_CLIENT_SECRET")
-            _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
-        elif provider == ModelProvider.OLLAMA.value:
-            # Usually no secrets; base_url is in settings
-            pass
-        elif provider == ModelProvider.VERTEX_AI.value:
-            pass
-        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
-            pass
-        else:
-            logger.error("     ❌ Unsupported embedding provider: %s", provider)
-            raise ValueError(f"Unsupported embedding provider: {provider}")
+        logger.info("  🧠 models: admitted per organization by the Control Plane; %d credential binding(s)", len(self.configuration.inference_credentials))
 
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
@@ -227,25 +204,9 @@ class ApplicationContext:
         logger.info("Shared Postgres async initialized.")
         return pg_async_engine
 
-    def get_embedder(self) -> Embeddings:
-        """
-        Fred rationale:
-        - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
-        - Only secrets live in env; all other wiring lives in YAML.
-        - Typed return (Embeddings) keeps the contract clear at call sites.
-
-        Cache the provider client across indexing activities.
-        """
-        if self._embedder_instance is not None:
-            return self._embedder_instance
-        cfg: ModelConfiguration = self.configuration.embedding_model
-        self._embedder_instance = get_embeddings(cfg)
-        return self._embedder_instance
-
-    def get_utility_model(self):
-        if not self.configuration.chat_model:
-            raise ValueError("Utility model configuration is missing.")
-        return get_model(self.configuration.chat_model)
+    def get_document_models(self) -> DocumentModels:
+        """Builds the Control Plane's admitted models against this workload's bindings."""
+        return self._document_models
 
     def get_crossencoder_model(self) -> "CrossEncoder":
         """
@@ -308,14 +269,23 @@ class ApplicationContext:
 
         return CrossEncoder(model_name_or_path=model_config.name, cache_folder=None)
 
-    def get_create_vector_store(self, embedding_model: Embeddings, *, read_only: bool = False) -> BaseVectorStore:
-        """
-        Vector Store Factory
-        """
-        if self._vector_store_instance is not None:
-            return self._vector_store_instance
-        self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store, read_only=read_only)
-        return self._vector_store_instance
+    def get_corpus_store(self, organization_id: UUID, embedding: InferenceAdmission) -> BaseVectorStore:
+        """One organization's corpus, searched with its locked embedding model; read-only."""
+        key = (organization_id, embedding.selection.key.identity, embedding.selection.source_revision)
+        with self._corpus_lock:
+            if key not in self._corpus_stores:
+                self._corpus_stores[key] = build_vector_store(
+                    self._document_models.embeddings(embedding),
+                    self.configuration.storage.vector_store,
+                    organization_id=organization_id,
+                    embedding_model_name=embedding.selection.key.upstream_model_id,
+                    opensearch_config=self.configuration.storage.opensearch,
+                    postgres_config=self.configuration.storage.postgres,
+                    kpi=self.get_kpi_writer(),
+                    splitter=self.get_text_splitter(),
+                    read_only=True,
+                )
+            return self._corpus_stores[key]
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
@@ -390,18 +360,6 @@ class ApplicationContext:
                 logger.debug("Error closing OpenSearch client", exc_info=True)
             finally:
                 self._opensearch_client = None
-
-    def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
-        return build_vector_store(
-            embedding_model,
-            store,
-            embedding_model_name=self.configuration.embedding_model.name or "unknown",
-            opensearch_config=self.configuration.storage.opensearch,
-            postgres_config=self.configuration.storage.postgres,
-            kpi=self.get_kpi_writer(),
-            splitter=self.get_text_splitter(),
-            read_only=read_only,
-        )
 
 
 def _mask(value: Optional[str]) -> str:

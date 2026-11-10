@@ -9,6 +9,7 @@ dependencies = [
   "attrs>=25",
   "sqlalchemy>=2.0.42",
   "fred-core>=5.0.0,<6",
+  "fred-sdk>=5.0.0,<6",
   "langchain-core>=1.6.5",
   "langchain-community>=0.4.1",
   "langchain-text-splitters>=1.1.2",
@@ -35,6 +36,7 @@ fred_knowledge = ["py.typed"]
 [tool.uv.sources]
 fred-core = { path = "../fred-core", editable = true }
 fred-pod = { path = "../fred-pod", editable = true }
+fred-sdk = { path = "../fred-sdk", editable = true }
 
 [project.optional-dependencies]
 dev = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "pytest-cov>=6.1.1", "pytest-socket>=0.8.0", "ruff>=0.12.0", "basedpyright==1.31.0", "bandit>=1.8.5", "detect-secrets>=1.5.0"]

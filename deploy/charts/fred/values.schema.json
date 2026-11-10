@@ -1174,7 +1174,7 @@
                   "default": [],
                   "items": {
                     "additionalProperties": false,
-                    "description": "Attests one admitted destination, even without a secret; holds variable names only.",
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
                     "properties": {
                       "credential_binding": {
                         "maxLength": 128,
@@ -6474,97 +6474,71 @@
                   "type": "object",
                   "additionalProperties": false
                 },
-                "chat_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
+                "inference_credentials": {
+                  "default": [],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+                    "properties": {
+                      "credential_binding": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "title": "Credential Binding",
+                        "type": "string"
+                      },
+                      "api_root": {
+                        "title": "Api Root",
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
+                      }
                     },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
+                    "required": [
+                      "credential_binding",
+                      "api_root"
+                    ],
+                    "title": "InferenceCredentialBinding",
+                    "type": "object"
                   },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "embedding_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
+                  "title": "Inference Credentials",
+                  "type": "array"
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -7454,8 +7428,6 @@
               },
               "required": [
                 "app",
-                "chat_model",
-                "embedding_model",
                 "security",
                 "storage"
               ],
@@ -8542,151 +8514,71 @@
                   "type": "object",
                   "additionalProperties": false
                 },
-                "chat_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "embedding_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "vision_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
+                "inference_credentials": {
+                  "default": [],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+                    "properties": {
+                      "credential_binding": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "title": "Credential Binding",
+                        "type": "string"
                       },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
+                      "api_root": {
+                        "title": "Api Root",
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
+                      }
                     },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null
+                    "required": [
+                      "credential_binding",
+                      "api_root"
+                    ],
+                    "title": "InferenceCredentialBinding",
+                    "type": "object"
+                  },
+                  "title": "Inference Credentials",
+                  "type": "array"
                 },
                 "ocr_model": {
                   "anyOf": [
@@ -8986,12 +8878,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -9166,12 +9052,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -9344,12 +9224,6 @@
                               "default": false,
                               "description": "Enable/disable semantic image description in markdown for this profile.",
                               "title": "Process Images",
-                              "type": "boolean"
-                            },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
                               "type": "boolean"
                             },
                             "input_activity_timeout": {
@@ -10087,8 +9961,6 @@
               },
               "required": [
                 "app",
-                "chat_model",
-                "embedding_model",
                 "scheduler",
                 "storage"
               ],
@@ -11175,151 +11047,67 @@
                   "type": "object",
                   "additionalProperties": false
                 },
-                "chat_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "embedding_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "vision_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
+                "inference_credentials": {
+                  "default": [],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+                    "properties": {
+                      "credential_binding": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "title": "Credential Binding",
+                        "type": "string"
                       },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
+                      "api_root": {
+                        "title": "Api Root",
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
+                      }
                     },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null
+                    "title": "InferenceCredentialBinding",
+                    "type": "object"
+                  },
+                  "title": "Inference Credentials",
+                  "type": "array"
                 },
                 "ocr_model": {
                   "anyOf": [
@@ -11608,12 +11396,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -11784,12 +11566,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -11958,12 +11734,6 @@
                               "default": false,
                               "description": "Enable/disable semantic image description in markdown for this profile.",
                               "title": "Process Images",
-                              "type": "boolean"
-                            },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
                               "type": "boolean"
                             },
                             "input_activity_timeout": {
@@ -13749,151 +13519,67 @@
                   "type": "object",
                   "additionalProperties": false
                 },
-                "chat_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "embedding_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "vision_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
+                "inference_credentials": {
+                  "default": [],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+                    "properties": {
+                      "credential_binding": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "title": "Credential Binding",
+                        "type": "string"
                       },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
+                      "api_root": {
+                        "title": "Api Root",
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
+                      }
                     },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null
+                    "title": "InferenceCredentialBinding",
+                    "type": "object"
+                  },
+                  "title": "Inference Credentials",
+                  "type": "array"
                 },
                 "ocr_model": {
                   "anyOf": [
@@ -14182,12 +13868,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -14358,12 +14038,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -14532,12 +14206,6 @@
                               "default": false,
                               "description": "Enable/disable semantic image description in markdown for this profile.",
                               "title": "Process Images",
-                              "type": "boolean"
-                            },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
                               "type": "boolean"
                             },
                             "input_activity_timeout": {
@@ -16323,151 +15991,67 @@
                   "type": "object",
                   "additionalProperties": false
                 },
-                "chat_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "embedding_model": {
-                  "properties": {
-                    "provider": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                      "title": "Provider"
-                    },
-                    "name": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "description": "Model name, e.g., gpt-4o, llama2.",
-                      "title": "Name"
-                    },
-                    "settings": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": true,
-                          "type": "object"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                      "title": "Settings"
-                    }
-                  },
-                  "title": "ModelConfiguration",
-                  "type": "object",
-                  "additionalProperties": false
-                },
-                "vision_model": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "provider": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Provider of the AI model, e.g., openai, ollama, azure.",
-                          "title": "Provider"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "default": null,
-                          "description": "Model name, e.g., gpt-4o, llama2.",
-                          "title": "Name"
-                        },
-                        "settings": {
-                          "anyOf": [
-                            {
-                              "additionalProperties": true,
-                              "type": "object"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Additional provider-specific settings, e.g. Azure endpoint/API version or Vertex AI project/location.",
-                          "title": "Settings"
-                        }
+                "inference_credentials": {
+                  "default": [],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+                    "properties": {
+                      "credential_binding": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "title": "Credential Binding",
+                        "type": "string"
                       },
-                      "title": "ModelConfiguration",
-                      "type": "object",
-                      "additionalProperties": false
+                      "api_root": {
+                        "title": "Api Root",
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
+                      }
                     },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null
+                    "title": "InferenceCredentialBinding",
+                    "type": "object"
+                  },
+                  "title": "Inference Credentials",
+                  "type": "array"
                 },
                 "ocr_model": {
                   "anyOf": [
@@ -16756,12 +16340,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -16932,12 +16510,6 @@
                               "title": "Process Images",
                               "type": "boolean"
                             },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
-                              "type": "boolean"
-                            },
                             "input_activity_timeout": {
                               "default": "1h",
                               "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -17106,12 +16678,6 @@
                               "default": false,
                               "description": "Enable/disable semantic image description in markdown for this profile.",
                               "title": "Process Images",
-                              "type": "boolean"
-                            },
-                            "generate_summary": {
-                              "default": false,
-                              "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-                              "title": "Generate Summary",
                               "type": "boolean"
                             },
                             "input_activity_timeout": {
@@ -18914,6 +18480,14 @@
                             "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
                             "type": "boolean"
                           },
+                          "embedding_models": {
+                            "description": "Platform attestation: these exact offers compute embeddings and are never chat.\nProvider model lists do not establish this aptitude.",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 256,
+                            "type": "array"
+                          },
                           "enabled": {
                             "type": "boolean"
                           },
@@ -19225,6 +18799,29 @@
                               }
                             ]
                           },
+                          "embedding": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "fallback": {
                             "oneOf": [
                               {
@@ -19298,6 +18895,29 @@
                             },
                             "maxItems": 64,
                             "type": "array"
+                          },
+                          "vision": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -21210,6 +20830,14 @@
                             "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
                             "type": "boolean"
                           },
+                          "embedding_models": {
+                            "description": "Platform attestation: these exact offers compute embeddings and are never chat.\nProvider model lists do not establish this aptitude.",
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 256,
+                            "type": "array"
+                          },
                           "enabled": {
                             "type": "boolean"
                           },
@@ -21521,6 +21149,29 @@
                               }
                             ]
                           },
+                          "embedding": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "fallback": {
                             "oneOf": [
                               {
@@ -21594,6 +21245,29 @@
                             },
                             "maxItems": 64,
                             "type": "array"
+                          },
+                          "vision": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [

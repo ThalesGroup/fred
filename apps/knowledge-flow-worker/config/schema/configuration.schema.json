@@ -70,6 +70,67 @@
       "type": "object",
       "additionalProperties": false
     },
+    "InferenceCredentialBinding": {
+      "additionalProperties": false,
+      "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+      "properties": {
+        "credential_binding": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Credential Binding",
+          "type": "string"
+        },
+        "api_root": {
+          "title": "Api Root",
+          "type": "string"
+        },
+        "api_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Env"
+        },
+        "client_secret_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Env"
+        },
+        "gateway_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gateway Key Env"
+        }
+      },
+      "required": [
+        "credential_binding",
+        "api_root"
+      ],
+      "title": "InferenceCredentialBinding",
+      "type": "object"
+    },
     "IngestionProcessingProfile": {
       "enum": [
         "fast",
@@ -702,12 +763,6 @@
           "title": "Process Images",
           "type": "boolean"
         },
-        "generate_summary": {
-          "default": false,
-          "description": "Enable/disable human-centric abstract and keyword generation for this profile.",
-          "title": "Generate Summary",
-          "type": "boolean"
-        },
         "input_activity_timeout": {
           "default": "1h",
           "description": "Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -738,7 +793,7 @@
         },
         "text_splitter": {
           "$ref": "#/$defs/TextSplitterConfig",
-          "description": "Text splitter configuration for vectorization and summarization."
+          "description": "Text splitter configuration for vectorization."
         },
         "input_processors": {
           "description": "Input processors selected for this profile (suffix-specific).",
@@ -1148,22 +1203,13 @@
     "observability": {
       "$ref": "#/$defs/ObservabilityConfig"
     },
-    "chat_model": {
-      "$ref": "#/$defs/ModelConfiguration"
-    },
-    "embedding_model": {
-      "$ref": "#/$defs/ModelConfiguration"
-    },
-    "vision_model": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ModelConfiguration"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
+    "inference_credentials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InferenceCredentialBinding"
+      },
+      "title": "Inference Credentials",
+      "type": "array"
     },
     "ocr_model": {
       "anyOf": [
@@ -1232,8 +1278,6 @@
   },
   "required": [
     "app",
-    "chat_model",
-    "embedding_model",
     "scheduler",
     "storage"
   ],

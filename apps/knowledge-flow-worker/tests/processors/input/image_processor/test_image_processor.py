@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from pathlib import Path
-from types import SimpleNamespace
 
 from knowledge_flow_worker.core.processors.input.common.image_describer import IMAGE_DESCRIPTION_UNAVAILABLE
 from knowledge_flow_worker.core.processors.input.image_processor.image_processor import ImageProcessor
@@ -36,8 +35,6 @@ def _convert(tmp_path: Path, image_name: str = "Nvidia_logo.png") -> str:
 
 
 def test_image_processor_keeps_filename_markdown_without_vision(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(f"{_MODULE}.get_configuration", lambda: SimpleNamespace(vision_model=None))
-
     markdown = _convert(tmp_path)
 
     assert "# Nvidia_logo" in markdown
@@ -51,8 +48,7 @@ def test_image_processor_appends_vision_summary_when_available(tmp_path: Path, m
             assert data_url.startswith("data:image/png;base64,")
             return "There is an image showing a green logo on a black background."
 
-    monkeypatch.setattr(f"{_MODULE}.get_configuration", lambda: SimpleNamespace(vision_model=object()))
-    monkeypatch.setattr(f"{_MODULE}.build_image_describer", lambda _: FakeDescriber())
+    monkeypatch.setattr(f"{_MODULE}.build_image_describer", lambda *_args, **_kwargs: FakeDescriber())
 
     markdown = _convert(tmp_path)
 
@@ -66,33 +62,9 @@ def test_image_processor_skips_vision_section_when_description_unavailable(tmp_p
         def describe(self, _: str) -> str:
             return IMAGE_DESCRIPTION_UNAVAILABLE
 
-    monkeypatch.setattr(f"{_MODULE}.get_configuration", lambda: SimpleNamespace(vision_model=object()))
-    monkeypatch.setattr(f"{_MODULE}.build_image_describer", lambda _: FailingDescriber())
+    monkeypatch.setattr(f"{_MODULE}.build_image_describer", lambda *_args, **_kwargs: FailingDescriber())
 
     markdown = _convert(tmp_path)
 
     assert "Vision summary" not in markdown
     assert 'Search for "Nvidia_logo"' in markdown
-
-
-def test_image_processor_builds_describer_once_across_documents(tmp_path: Path, monkeypatch) -> None:
-    build_calls = []
-
-    class FakeDescriber:
-        def describe(self, _: str) -> str:
-            return "There is an image showing a single pixel."
-
-    def _build(_) -> FakeDescriber:
-        build_calls.append(1)
-        return FakeDescriber()
-
-    monkeypatch.setattr(f"{_MODULE}.get_configuration", lambda: SimpleNamespace(vision_model=object()))
-    monkeypatch.setattr(f"{_MODULE}.build_image_describer", _build)
-
-    processor = ImageProcessor()
-    for name in ("first.png", "second.png"):
-        image_path = tmp_path / name
-        image_path.write_bytes(_ONE_PIXEL_PNG)
-        processor.convert_file_to_markdown(image_path, tmp_path / "out" / name, document_uid=None)
-
-    assert len(build_calls) == 1

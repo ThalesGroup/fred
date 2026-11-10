@@ -16,10 +16,10 @@ from typing import List, Optional
 
 from fred_knowledge.text.base_summarizer import BaseDocSummarizer
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
-from fred_knowledge.text.cheap_extractive_summarizer import CheapExtractiveSummarizer
 from fred_knowledge.text.llm_summarizer import LLMBasedDocSummarizer
 from fred_knowledge.text.smart_llm_summarizer import SmartDocSummarizer
 from langchain_core.documents import Document
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 
 class _FixedWidthSplitter(BaseTextSplitter):
@@ -50,13 +50,8 @@ class _RecordingSummarizer(BaseDocSummarizer):
 
 
 def _smart_summarizer_with_fake(*, opts: Optional[dict] = None) -> tuple[SmartDocSummarizer, _RecordingSummarizer]:
-    """Build a SmartDocSummarizer with its real LLM swapped for a recording fake.
-
-    Constructing SmartDocSummarizer with model_config=None makes LLMBasedDocSummarizer's
-    init fail (no utility model), so __init__ already falls back to CheapExtractiveSummarizer
-    -- we then overwrite that fallback with our recording fake, so no real LLM is ever touched.
-    """
-    smart = SmartDocSummarizer(model_config=None, splitter=_FixedWidthSplitter(), opts=opts)
+    """Build a SmartDocSummarizer with its admitted model swapped for a recording fake."""
+    smart = SmartDocSummarizer(model=FakeListChatModel(responses=["unused"]), model_name="fake", splitter=_FixedWidthSplitter(), opts=opts)
     fake = _RecordingSummarizer()
     smart._summarizer = fake
     return smart, fake
@@ -151,15 +146,3 @@ def test_llm_based_summarizer_blends_instruction_into_prompt(monkeypatch):
     summarizer.summarize_abstract("some text", max_words=50)
     assert "concise abstract" in captured["user"]
     assert "focus on financial risks" not in captured["user"]
-
-
-def test_cheap_extractive_summarizer_ignores_instruction():
-    """The non-LLM fallback has no way to honor an instruction; it should accept
-    the parameter without erroring and produce its normal extractive output."""
-    summarizer = CheapExtractiveSummarizer()
-    text = "Short sentence one. Another sentence here. A third one for good measure."
-
-    with_instruction = summarizer.summarize_abstract(text, instruction="focus on risks")
-    without_instruction = summarizer.summarize_abstract(text)
-
-    assert with_instruction == without_instruction

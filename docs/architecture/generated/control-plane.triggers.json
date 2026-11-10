@@ -168,6 +168,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - the indexed corpus embedding model",
+    "function": "keep_locked_embedding",
+    "table": "organization_model_policy",
+    "trigger": "organization_embedding_locked",
+    "when": "BEFORE UPDATE OR DELETE / ROW"
+  },
+  {
     "comment": "effect: record organization model-policy initialization",
     "function": "remember_model_policy_initialization",
     "table": "organization_model_policy",

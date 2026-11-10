@@ -81,6 +81,7 @@ struct DueGeneration {
     #[sqlx(flatten)]
     generation: Generation,
     document_id: Uuid,
+    organization_id: Uuid,
     profile: Profile,
     original_sha256: String,
     published: bool,
@@ -88,6 +89,7 @@ struct DueGeneration {
 #[derive(sqlx::FromRow)]
 struct DuePurge {
     document_id: Uuid,
+    organization_id: Uuid,
     processing_id: Uuid,
     profile: Profile,
     original_sha256: String,
@@ -158,18 +160,19 @@ impl Processing {
     }
     pub async fn cleanup_candidates(&self) -> AppResult<Vec<Cleanup>> {
         let limit = i64::from(self.config.limits.batch);
-        let work = |processing_id, document_id, original_sha256, profile| Work {
+        let work = |processing_id, document_id, organization_id, original_sha256, profile| Work {
             contract_version: 1,
             installation_id: self.installation,
             processing_id,
             document_id,
+            organization_id,
             original_sha256,
             profile,
         };
         let due: Vec<DueGeneration> = sqlx::query_as(concat!(
-            "with due as materialized (select g.id, p.document_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document_current d on d.id = p.document_id where g.cleanup_after <= now() and ",
+            "with due as materialized (select g.id, p.document_id, s.organization_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document_current d on d.id = p.document_id join space s on s.id = d.space_id where g.cleanup_after <= now() and ",
             generation_due!(),
-            " order by g.cleanup_after, g.id limit $1 for update of g skip locked) update generation g set cleanup_after = clock_timestamp() + make_interval(secs => $2) from due where g.id = due.id returning g.*, due.document_id, due.profile, due.original_sha256, due.published"
+            " order by g.cleanup_after, g.id limit $1 for update of g skip locked) update generation g set cleanup_after = clock_timestamp() + make_interval(secs => $2) from due where g.id = due.id returning g.*, due.document_id, due.organization_id, due.profile, due.original_sha256, due.published"
         ))
         .bind(limit)
         .bind(CLAIM_SECONDS)
@@ -189,7 +192,13 @@ impl Processing {
                     _ => Vec::new(),
                 };
                 Cleanup {
-                    work: work(g.processing_id, c.document_id, c.original_sha256, c.profile),
+                    work: work(
+                        g.processing_id,
+                        c.document_id,
+                        c.organization_id,
+                        c.original_sha256,
+                        c.profile,
+                    ),
                     generation: g.id,
                     output_prefix: g.prefix,
                     chunks: g.chunks as u32,
@@ -203,7 +212,7 @@ impl Processing {
             .collect();
         // The database runs local and organization used-byte accounting.
         let purges: Vec<DuePurge> = sqlx::query_as(concat!(
-            "with due as materialized (select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document_current d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
+            "with due as materialized (select d.id as document_id, s.organization_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document_current d join space s on s.id = d.space_id cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
             purge_due!(),
             " order by d.purge_after, d.id limit $1 for update of d skip locked) update document d set purge_after = clock_timestamp() + make_interval(secs => $2) from due where d.id = due.document_id returning due.*"
         ))
@@ -212,7 +221,13 @@ impl Processing {
         .fetch_all(&self.pool)
         .await?;
         result.extend(purges.into_iter().map(|c| Cleanup {
-            work: work(c.processing_id, c.document_id, c.original_sha256, c.profile),
+            work: work(
+                c.processing_id,
+                c.document_id,
+                c.organization_id,
+                c.original_sha256,
+                c.profile,
+            ),
             generation: c.generation,
             output_prefix: store::document_output(&self.config.derived.prefix, c.document_id),
             chunks: 0,

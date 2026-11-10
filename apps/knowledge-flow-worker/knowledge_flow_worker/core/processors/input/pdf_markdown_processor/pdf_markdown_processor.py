@@ -29,10 +29,9 @@ from fred_core.kpi import Dims
 from markitdown import MarkItDown
 from pypdf.errors import PdfReadError
 
-from knowledge_flow_worker.application_context import get_configuration
+from knowledge_flow_worker.application_context import get_app_context, get_configuration
 from knowledge_flow_worker.common.processing_metrics import processing_timer
 from knowledge_flow_worker.common.processing_profile_context import get_current_processing_profile
-from knowledge_flow_worker.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_worker.core.processors.input.common.image_describer import build_image_describer
 from knowledge_flow_worker.core.processors.input.common.ocr.paddle_ocr import PaddleOCRmodel
@@ -74,13 +73,6 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         # sessions from disk, so it must not be rebuilt per document either.
         self._ocr_model: PaddleOCRmodel | None = None
         self._ocr_model_lock = threading.Lock()
-        # Same reasoning again, for the vision-model image describer (see
-        # _get_image_describer): build_image_describer -> get_model() constructs a
-        # real provider client per call — for Vertex-backed providers specifically,
-        # fred-core's factory does not share the process-wide httpx pool the way it
-        # does for OpenAI/Azure, so each call builds its own auth + connection pool.
-        self._image_describer: BaseImageDescriber | None = None
-        self._image_describer_lock = threading.Lock()
 
     def _remove_all_files(self, folder):
         shutil.rmtree(folder, ignore_errors=True)
@@ -145,7 +137,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return extracted_text
 
         except Exception as e:
-            raise RuntimeError(f"[PDF][PROCESSOR] Failed to use image describer : {get_configuration().vision_model}") from e
+            raise RuntimeError("[PDF][PROCESSOR] Failed to use the image describer") from e
 
     def _build_extractor(self, extractor_name: str, docling_num_threads: int = 4) -> BasePdfExtractor:
         if extractor_name == "docling":
@@ -195,22 +187,6 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     self._ocr_model = PaddleOCRmodel()
         return self._ocr_model
 
-    def _get_image_describer(self, vision_cfg) -> BaseImageDescriber | None:
-        """Build the vision-model image describer once and reuse it across documents.
-
-        Mirrors _get_extractor/_get_ocr_model above: build_image_describer() ->
-        get_model() constructs a real provider client (auth + connection pool) on
-        every call — rebuilding it per document reloads that on every file, on every
-        one of the worker's concurrent activity threads. Dormant under the shipped
-        default (`process_images: false`), but one config flag away from firing on
-        every document, same as the two already-fixed bugs in this file.
-        """
-        if self._image_describer is None:
-            with self._image_describer_lock:
-                if self._image_describer is None:
-                    self._image_describer = build_image_describer(vision_cfg)
-        return self._image_describer
-
     def _pdf_kpi_timer(self, name: str, dims: Dims) -> AbstractContextManager:
         return processing_timer(name, dims)
 
@@ -231,11 +207,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         profile_cfg = processing.get_profile_config(active_profile)
 
         vision_model_name = "unknown"
-        vision_model = get_configuration().vision_model
-        if profile_cfg.process_images and vision_model:
-            image_describer = self._get_image_describer(vision_model)
+        vision = get_app_context().get_vision()
+        if profile_cfg.process_images and vision is not None:
+            image_describer = build_image_describer()
             use_image_describer = True
-            vision_model_name = vision_model.name or "unknown"
+            vision_model_name = vision[1]
         if profile_cfg.pdf.do_ocr:
             use_ocr = True
 

@@ -9,6 +9,7 @@ import { OrganizationModels } from "./OrganizationModels";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   title: null as null | { source_id: string; upstream_model_id: string },
+  locked: false,
   save: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   error: vi.fn(),
   refetch: vi.fn(),
@@ -50,20 +51,25 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     currentData: {
       policy: {
         revision: 4,
-        permitted: ["chat", "withdrawn"].map((upstream_model_id) => ({ source_id: "a", upstream_model_id })),
+        permitted: ["chat", "withdrawn", "embed"].map((upstream_model_id) => ({ source_id: "a", upstream_model_id })),
         reasoning_enabled: [],
         default: null,
         fallback: null,
         title: h.title,
+        embedding: h.locked ? { source_id: "a", upstream_model_id: "embed" } : null,
+        embedding_locked: h.locked,
+        vision: null,
       },
       sources: [
         {
           observation: { enabled: false },
-          offers: ["chat", "withdrawn", "not-permitted"].map((id) => ({
+          offers: ["chat", "withdrawn", "not-permitted", "embed"].map((id) => ({
             source_id: "a",
             upstream_model_id: id,
             selectable: id !== "withdrawn",
-            metadata: {},
+            advertised: true,
+            metadata:
+              id === "embed" ? { chat: false, embedding: true } : { chat: true, vision: id === "chat" ? null : false },
           })),
         },
       ],
@@ -82,6 +88,7 @@ afterEach(() => {
   container.remove();
   vi.clearAllMocks();
   h.title = null;
+  h.locked = false;
 });
 it("uses the server choices, restores the saved title choice and reports conflicts", async () => {
   container = document.createElement("div");
@@ -118,4 +125,33 @@ it("uses the server choices, restores the saved title choice and reports conflic
   expect(h.error).toHaveBeenCalledWith(
     expect.objectContaining({ summary: "rework.admin.capabilities.organizationModels.saveError" }),
   );
+});
+it("offers each document choice only its aptitude and keeps the corpus model locked", async () => {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const render = () => root.render(<OrganizationModels organizationId="org" defaultsOpen onCloseDefaults={() => {}} />);
+  await act(async () => render());
+  const select = (field: string) => container.querySelector<HTMLSelectElement>(`select[aria-label$=".${field}"]`)!;
+  const labels = (field: string) => [...select(field).options].map((o) => o.text);
+  const none = "rework.admin.capabilities.organizationModels.none";
+  expect(labels("default")).toEqual([none, "a / chat", "a / withdrawn"]);
+  expect(labels("embedding")).toEqual([none, "a / embed"]);
+  // Unknown image input is offered; a source-reported refusal is not.
+  expect(labels("vision")).toEqual([none, "a / chat"]);
+  await act(async () => {
+    select("embedding").selectedIndex = 1;
+    select("embedding").dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(h.save).toHaveBeenCalledWith({
+    organizationId: "org",
+    replaceModelPolicy: expect.objectContaining({
+      embedding: { source_id: "a", upstream_model_id: "embed" },
+      vision: null,
+    }),
+  });
+  h.locked = true;
+  await act(async () => render());
+  expect(select("embedding").disabled).toBe(true);
+  expect(container.textContent).toContain("rework.admin.capabilities.organizationModels.embeddingLockedHint");
 });

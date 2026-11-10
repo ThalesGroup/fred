@@ -80,23 +80,13 @@ def default_or_unknown(value: str, default="None") -> str:
 class DocxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts DOCX files to Markdown while preserving headings, tables, and basic formatting."
 
-    def __init__(self):
-        super().__init__()
-        self.image_describer = None
-        self._warned_missing_vision_model = False
-
     def _resolve_image_describer(self, process_images: bool):
         if not process_images:
             return None
-        if self.image_describer is not None:
-            return self.image_describer
-        if not get_configuration().vision_model:
-            if not self._warned_missing_vision_model:
-                logger.warning("Vision model configuration is missing while process_images is enabled.")
-                self._warned_missing_vision_model = True
-            return None
-        self.image_describer = build_image_describer(get_configuration().vision_model)
-        return self.image_describer
+        describer = build_image_describer()
+        if describer is None:
+            logger.info("No vision model admitted while process_images is enabled; images are not described.")
+        return describer
 
     def _annotate_markdown_tables(self, md_content: str) -> str:
         """Wrap Markdown tables with TABLE_START/END markers for downstream chunking."""

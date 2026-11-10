@@ -24,7 +24,51 @@ and source emitters to locate the signals needed for this scenario:
 - application metrics, exporter endpoints and any configured Prometheus targets;
 - configured log/search sinks and dashboard queries, when relevant.
 
+## Quality review during every session
+
+Challenge the signals as well as application behavior, using observed events and
+targeted source inspection. Report concrete defects without launching a separate
+audit or changing code outside the agreed scope. Use the current
+[logging contract](../../../docs/architecture/A3-manager-operations.md#logging)
+as evidence, not as proof that emitted logs meet these requirements:
+
+- INFO must be concise and useful for operating Fred: meaningful lifecycle,
+  outcomes and bounded diagnostic context. Flag repetitive polling/health success,
+  duplicate access logs, configuration dumps and per-item/token chatter. Check
+  disabled-log formatting, payload serialization and synchronous I/O on hot paths
+  when implicated; do not claim a measured performance cost without measurements.
+  Keep required security audit events; do not globally raise severity to hide noise.
+- No secrets or personal data in emitted application/dependency logs, audit
+  payloads or metric labels. Check free text and exception chains, not only field
+  names: credentials, headers/cookies, signed URLs, prompts, responses, document
+  contents, filenames and paths can disclose sensitive information. Sanitizing a
+  chat excerpt does not fix disclosure at the emitter or in the collected index.
+  Flag a leak immediately without reproducing its value. Opaque person IDs are
+  pseudonymous, not anonymous; flag conflicts between existing audit identity
+  fields and the confidentiality requirement instead of silently removing audits.
+- Events must identify the service/role, time, severity, operation, outcome and
+  necessary non-sensitive correlation IDs consistently across Rust and Python.
+  Flag missing terminal outcomes, misleading severity and unstructured/multiline
+  output that breaks collection. Never add payloads merely to improve correlation.
+- Review available KPI semantics, units, labels, cardinality, duplication and
+  collection cost. Distinguish an unwired Weaver metric from a measured zero or a
+  broken collector. Swift KPI parity is not assumed; report the scenario's missing
+  evidence without restoring retired metrics or starting a benchmark campaign.
+
+## Verify the collection path
+
+For a Fluent Bit -> OpenSearch deployment, verify the actual input (container
+stdout or mounted host files), parser, metadata, output/index and recent arrival
+of this session's events. Observe collected logs through bounded queries when
+available, and compare local output to distinguish an emitter defect from lost,
+duplicated, delayed or misparsed events. Do not assume that a Compose collector
+exists because k3d has one, that `make run` logs are mounted into it, or that a KPI
+index contains application logs. Report an absent or unverified collection path
+and explicitly identify local-file observation as the fallback. This verification
+does not authorize infrastructure changes or artificial business events.
+
 Retain unfiltered local logs for owned processes and read new lines with cursors.
+Keep raw captures private; never attach a raw log containing sensitive values.
 Use a streaming monitor only if the current tool supports one; otherwise poll
 bounded batches during active turns and on developer signals. Do not claim
 continuous observation when inactive. Query only the required time window and

@@ -15,10 +15,8 @@
 import base64
 import logging
 import mimetypes
-import threading
 from pathlib import Path
 
-from knowledge_flow_worker.application_context import get_configuration
 from knowledge_flow_worker.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_worker.core.processors.input.common.image_describer import IMAGE_DESCRIPTION_UNAVAILABLE, build_image_describer
@@ -41,29 +39,11 @@ class ImageProcessor(BaseMarkdownProcessor):
 
     description = "Processes image files into searchable markdown, with a vision description when a vision model is configured."
 
-    def __init__(self) -> None:
-        super().__init__()
-        # Same reasoning as PdfMarkdownProcessor: this instance is a shared
-        # singleton (application_context.get_input_processor_instance) called from
-        # concurrent Temporal activity threads, and build_image_describer builds a
-        # real provider client — so build it once and reuse it.
-        self._image_describer: BaseImageDescriber | None = None
-        self._image_describer_lock = threading.Lock()
-        self._warned_missing_vision_model = False
-
     def _resolve_image_describer(self) -> BaseImageDescriber | None:
-        if self._image_describer is not None:
-            return self._image_describer
-        vision_model = get_configuration().vision_model
-        if not vision_model:
-            if not self._warned_missing_vision_model:
-                logger.info("Vision model missing; markdown keeps filename-based content only.")
-                self._warned_missing_vision_model = True
-            return None
-        with self._image_describer_lock:
-            if self._image_describer is None:
-                self._image_describer = build_image_describer(vision_model)
-        return self._image_describer
+        describer = build_image_describer()
+        if describer is None:
+            logger.info("No vision model admitted; markdown keeps filename-based content only.")
+        return describer
 
     @staticmethod
     def _to_data_url(file_path: Path) -> str:

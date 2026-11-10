@@ -48,9 +48,7 @@ before startup; the latter indexes sessions awaiting retirement receipts.
 
 ## From scratch (fred-deployment-factory)
 
-**Host run**, from fred-deployment-factory: `make docker-up`, then
-`make docker-app FRED=weaver APP=fred DIR=<this checkout> KEY_FILE=<Mistral key file>`
-([first start](../../deploy/k3d/README.md#first-start)).
+**Host run**: see the [first start](../../deploy/k3d/README.md#first-start).
 `config/configuration_prod.yaml` points to the Docker Compose services. Against
 another fresh database, run `make initialize-schema` here with `DATABASE_URL`
 pointing to its `fred_cp` login.
@@ -225,8 +223,8 @@ k3d/platform functional reception.
 ## Platform model inventory and organization administration
 
 `platform.model_sources` defaults to `[]` in the schema. The host development
-configuration and checkout-owned k3d overlay opt into the Mistral test source;
-see [the local model setup](../../deploy/k3d/README.md#models-for-local-testing).
+configuration and checkout-owned k3d overlay opt into the Mistral and OpenAI test
+sources; see [the local model setup](../../deploy/k3d/README.md#models-for-local-testing).
 `serve` applies these non-secret approvals to SQL after checking the schema, then
 runs the bounded organization initialization below. Organization APIs expose only
 assigned sources and persist explicit choices. There is no background model polling. The internal `configure_sources`,
@@ -262,6 +260,9 @@ platform:
         auth:
           kind: api_key
       visibility_scope: example-account-namespace-all-models
+      # Platform attestation: model lists do not say which offers embed.
+      # Such an offer is never chat; it can be an organization's corpus model.
+      embedding_models: [example-embedding]
     # A source without a usable model list: the platform declares its models.
     - source_id: example-declared-gateway
       revision: 1
@@ -305,6 +306,8 @@ platform:
       fallback: {source_id: shared-gateway, upstream_model_id: backup-v2}
       reasoning_enabled:
         - {source_id: research-account, upstream_model_id: chat-v1}
+      embedding: null   # optional: an attested embedding offer, also permitted
+      vision: null      # optional: a permitted chat offer describing document images
     - organization: Example Support
       sources: [support-account]
       permitted: []
@@ -318,6 +321,11 @@ URL. Sharing a source with two organizations requires two explicit assignments.
 At most 64 organizations, 64 sources per organization and 4096 permitted offers
 are accepted. Reasoning requires a permitted, source-reported reasoning-capable
 offer. A missing or unavailable model fails initialization; no substitute is picked.
+Each choice must fit its use: chat offers for default, fallback and title, an attested
+embedding offer for `embedding`, and a chat offer not reported without image input
+for `vision`. Documents are not processed before an organization has an embedding
+model, and its first indexing locks it: later writes keep that choice
+(`embedding_model_locked`), and a trigger refuses to change, release or delete it.
 
 Deployment order:
 

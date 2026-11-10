@@ -78,7 +78,6 @@ def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=None,
             processing=SimpleNamespace(
                 normalize_profile=lambda p: p,
                 get_profile_config=lambda p: SimpleNamespace(
@@ -124,7 +123,6 @@ def test_pdf_processor_transcribes_images_with_ocr(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=None,
             processing=SimpleNamespace(
                 normalize_profile=lambda p: p,
                 get_profile_config=lambda p: SimpleNamespace(
@@ -171,7 +169,6 @@ def test_pdf_processor_describes_images_with_vision_model(
     monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=SimpleNamespace(name="fake-vision"),
             processing=SimpleNamespace(
                 normalize_profile=lambda p: p,
                 get_profile_config=lambda p: SimpleNamespace(
@@ -196,8 +193,12 @@ def test_pdf_processor_describes_images_with_vision_model(
         lambda model, images: [{"rec_texts": []}],
     )
     monkeypatch.setattr(
+        "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_app_context",
+        lambda: SimpleNamespace(get_vision=lambda: (object(), "fake-vision")),
+    )
+    monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_image_describer",
-        lambda cfg: MockImageDescriber(),
+        lambda *_args, **_kwargs: MockImageDescriber(),
     )
     monkeypatch.setattr(
         processor,
@@ -230,7 +231,6 @@ def test_pdf_processor_builds_extractor_only_once_per_config(monkeypatch: pytest
     monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=None,
             processing=SimpleNamespace(
                 normalize_profile=lambda p: p,
                 get_profile_config=lambda p: SimpleNamespace(
@@ -272,7 +272,6 @@ def test_pdf_processor_builds_ocr_model_only_once_across_documents(monkeypatch: 
     monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
         lambda: SimpleNamespace(
-            vision_model=None,
             processing=SimpleNamespace(
                 normalize_profile=lambda p: p,
                 get_profile_config=lambda p: SimpleNamespace(
@@ -295,57 +294,6 @@ def test_pdf_processor_builds_ocr_model_only_once_across_documents(monkeypatch: 
         processor,
         "_use_ocr",
         lambda model, images: [{"rec_texts": ["OCR extracted text"]}],
-    )
-
-    for i in range(3):
-        result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path / f"out{i}", f"doc-{i}")
-        assert Path(result["md_file"]).exists()
-
-    assert len(build_calls) == 1
-
-
-def test_pdf_processor_builds_image_describer_only_once_across_documents(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
-    """`_get_image_describer` must reuse the same describer instance across documents
-    instead of rebuilding it (and reloading its vision-model client) on every single
-    file — the image-describer equivalent of `_get_extractor`'s caching above."""
-    img_path = tmp_path / "img0.png"
-
-    class FakeExtractor:
-        def extract(self, file_path: Path, work_dir: str):
-            return (f"Before\n\n![]({img_path})\n\nAfter", [ImageTranscription(image_path=img_path)])
-
-    build_calls: list[None] = []
-
-    def fake_build_image_describer(cfg):
-        build_calls.append(None)
-        return MockImageDescriber()
-
-    monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
-        lambda: SimpleNamespace(
-            vision_model=SimpleNamespace(name="fake-vision"),
-            processing=SimpleNamespace(
-                normalize_profile=lambda p: p,
-                get_profile_config=lambda p: SimpleNamespace(
-                    process_images=True,
-                    pdf=ProcessingConfig.PdfPipelineConfig(extractor="docling", do_ocr=False),
-                ),
-            ),
-        ),
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_current_processing_profile",
-        lambda: "rich",
-    )
-    monkeypatch.setattr(processor, "_build_extractor", lambda *_: FakeExtractor())
-    monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_image_describer",
-        fake_build_image_describer,
-    )
-    monkeypatch.setattr(
-        processor,
-        "_use_image_describer",
-        lambda describer, img_t, ocr_r: "described",
     )
 
     for i in range(3):

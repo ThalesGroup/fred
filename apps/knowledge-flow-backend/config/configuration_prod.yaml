@@ -52,17 +52,16 @@ security:
     # identity to the Control Plane using Knowledge Flow's own service token.
     act_for_people: true
     accept_delegated_calls: true
-chat_model:
-  provider: openai
-  name: mistral-small-latest # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
-  settings:
-    base_url: https://api.mistral.ai/v1
-embedding_model:
-  provider: openai
-  name: mistral-embed # or text-embedding-3-small
-  settings:
-    base_url: https://api.mistral.ai/v1
-    check_embedding_ctx_length: false
+# The Control Plane decides the organization's models: search embeds questions with its
+# locked corpus model, document tools use its default chat model. This workload only
+# attests the approved destinations and names the variables holding their keys.
+inference_credentials:
+  - credential_binding: mistral
+    api_root: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
+  - credential_binding: openai
+    api_root: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
@@ -207,8 +206,8 @@ storage:
       max_selected_datasets: 50
   vector_store:
     type: opensearch
-    # Must match the index the worker writes to (its configuration_prod.yaml),
-    # otherwise the API searches an empty index and every RAG query returns 0.
+    # Base name shared with the worker: each organization's corpus is the index
+    # document-vectors-<organization id>.
     index: document-vectors
     bulk_size: 1000
 control_plane_url: "http://localhost:8222/control-plane/v1"

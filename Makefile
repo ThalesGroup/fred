@@ -103,7 +103,7 @@ LOCAL_SECRET_KEYS := FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY
 WEAVER_DATABASE := fred_weaver
 
 .PHONY: setup-env
-setup-env: ## Create each backend's .env from its .env.template (idempotent) and fill in the local Docker Compose secrets; KEY_FILE=<file> sets the Mistral key
+setup-env: ## Create each backend's .env from its .env.template (idempotent) and fill in the local Docker Compose secrets and the model keys exported in the shell (MISTRAL_API_KEY, OPENAI_API_KEY)
 	@set -e; \
 	for dir in $(ENV_APPS); do \
 		if [ ! -f "$$dir/config/.env" ]; then \
@@ -136,15 +136,17 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent) and
 		sed -i 's|^CONFIG_FILE=.*|CONFIG_FILE="./config/configuration_prod.yaml"|' apps/knowledge-flow-backend/config/.env; \
 		echo "************ Fixed knowledge-flow-backend CONFIG_FILE to configuration_prod.yaml ************"; \
 	fi
-	@# The model provider key (Mistral in the local configurations), the same for every application:
-	@# KEY_FILE, a file holding only the key, as for k3d's fred-model-credentials; else fred-agents' key.
-	@if [ -n "$(KEY_FILE)" ]; then api_key="$$(tr -d '[:space:]' < "$(KEY_FILE)")"; pattern='.*'; \
-	else api_key="$$(sed -n -E 's/^OPENAI_API_KEY="?([^"]+)"?$$/\1/p' apps/fred-agents/config/.env)"; pattern='(\"\")?'; fi; \
-	if [ -n "$$api_key" ]; then \
-		for dir in $(ENV_APPS); do \
-			sed -i -E "s/^OPENAI_API_KEY=$$pattern$$/OPENAI_API_KEY=\"$$api_key\"/" "$$dir/config/.env"; \
-		done; \
-	fi
+	@# Model keys, the same in every application: each one exported in the shell
+	@# replaces the one in every .env.
+	@for key in MISTRAL_API_KEY OPENAI_API_KEY; do \
+		value="$$(printenv $$key || true)"; \
+		[ -n "$$value" ] || continue; \
+		for dir in $(ENV_APPS); do sed -i -E "s|^$$key=.*|$$key=\"$$value\"|" "$$dir/config/.env"; done; \
+		echo "************ $$key copied from the shell ************"; \
+	done
+	@# At least one provider key: the organization's models come from its sources.
+	@grep -qE '^(MISTRAL|OPENAI)_API_KEY="?[^"]+' apps/fred-agents/config/.env \
+		|| { echo "Missing model key: export MISTRAL_API_KEY=... or OPENAI_API_KEY=..., then rerun." >&2; exit 1; }
 	@echo "✓ setup-env done. Review apps/*/config/.env yourself for anything beyond local docker-compose defaults (Azure, proxy, Prometheus, ...)."
 
 .PHONY: docker-prepare

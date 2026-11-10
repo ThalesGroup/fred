@@ -17,7 +17,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
-from fred_core.common import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig
+from fred_core.common import OpenSearchStoreConfig, PostgresStoreConfig
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from pydantic import AnyHttpUrl, AnyUrl
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -64,16 +64,6 @@ def app_context(monkeypatch, tmp_path):
                 username="admin",
             ),
             vector_store=PgVectorStorageConfig(type="pgvector"),
-        ),
-        chat_model=ModelConfiguration(
-            provider="openai",
-            name="gpt-4o",
-            settings={"temperature": 0, "max_retries": 1},
-        ),
-        embedding_model=ModelConfiguration(
-            provider="openai",
-            name="text-embedding-3-large",
-            settings={},
         ),
         observability=ObservabilityConfig(
             kpi=KpiObservabilityConfig(

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from pathlib import Path
-from types import SimpleNamespace
 
 from knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_image_processor import FastLiteImageProcessor
 
@@ -27,11 +26,6 @@ _ONE_PIXEL_PNG = (
 def test_fast_lite_image_processor_uses_filename_fallback_without_vision(tmp_path: Path, monkeypatch) -> None:
     image_path = tmp_path / "Screenshot_login_page.png"
     image_path.write_bytes(_ONE_PIXEL_PNG)
-
-    monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_image_processor.get_configuration",
-        lambda: SimpleNamespace(vision_model=None),
-    )
 
     result = FastLiteImageProcessor().extract(image_path)
 
@@ -50,12 +44,8 @@ def test_fast_lite_image_processor_appends_vision_summary_when_available(tmp_pat
             return "There is an image showing a login form and a submit button."
 
     monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_image_processor.get_configuration",
-        lambda: SimpleNamespace(vision_model=object()),
-    )
-    monkeypatch.setattr(
         "knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_image_processor.build_image_describer",
-        lambda _: FakeDescriber(),
+        lambda *_args, **_kwargs: FakeDescriber(),
     )
 
     result = FastLiteImageProcessor().extract(image_path)

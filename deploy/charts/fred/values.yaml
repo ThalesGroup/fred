@@ -154,7 +154,6 @@ x-rich-input-processors: &rich-input-processors
 
 x-profile-fast: &profile-fast
   use_gpu: true
-  generate_summary: false
   input_activity_timeout: 90m
   activity_heartbeat_timeout: 5m
   retry_initial_interval: 5s
@@ -173,7 +172,6 @@ x-profile-fast: &profile-fast
 
 x-profile-medium: &profile-medium
   use_gpu: true
-  generate_summary: false
   input_activity_timeout: 2h
   activity_heartbeat_timeout: 5m
   retry_initial_interval: 20s
@@ -196,7 +194,6 @@ x-profile-medium: &profile-medium
 
 x-profile-rich-worker: &profile-rich-worker
   use_gpu: true
-  generate_summary: true
   input_activity_timeout: 2h
   activity_heartbeat_timeout: 5m
   retry_initial_interval: 30s
@@ -318,25 +315,13 @@ x-kf-scheduler: &kf-scheduler
     ingestion_max_concurrent_activities: 3
 
 
-x-kf-embedding-model: &kf-embedding-model
-  provider: openai           # CUSTOMIZE: openai | azure | ollama
-  name: text-embedding-3-large
-  settings: {}
-
-x-kf-chat-model: &kf-chat-model
-  provider: openai           # CUSTOMIZE: openai | azure | ollama
-  name: gpt-4o-mini          # CUSTOMIZE: azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-  settings: {}
-  # openai: nothing else required (keys in .env)
-  # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
-  # ollama: { base_url: "http://localhost:11434" }
-
-x-kf-vision-model: &kf-vision-model
-  provider: openai           # CUSTOMIZE
-  name: gpt-4o-mini          # CUSTOMIZE: or gpt-4o if you want higher fidelity
-  settings:
-    temperature: 0           # optional
-    max_retries: 2           # optional
+# Knowledge Flow chooses no model: the Control Plane admits each organization's
+# embedding, vision and default chat models from platform.model_sources. List here
+# the credential bindings of those sources, with the variables holding their keys.
+x-kf-inference-credentials: &kf-inference-credentials []   # CUSTOMIZE
+  # - credential_binding: openai
+  #   api_root: https://api.openai.com/v1
+  #   api_key_env: OPENAI_API_KEY
 
 x-kf-crossencoder-model: &kf-crossencoder-model
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
@@ -1226,8 +1211,7 @@ applications:
             port: 9111
 
       security:        *kf-security
-      embedding_model: *kf-embedding-model
-      chat_model:      *kf-chat-model
+      inference_credentials: *kf-inference-credentials
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
     dotenv:
@@ -1421,7 +1405,7 @@ applications:
         memory: 4Gi
     # ── Application configuration (rendered as ConfigMap) ───────────────
     # Most sections are shared with knowledge-flow-backend via YAML anchors.
-    # Only app (port 8112) and processing.rich.generate_summary differ.
+    # Only app (port 8112) and the worker's processing profiles differ.
     # The three extraction deployments below inherit this whole block through
     # `inheritFrom` and replace `scheduler` alone. They inherit it at render time,
     # not through a YAML anchor: an anchor is resolved when this file is parsed, so
@@ -1443,7 +1427,6 @@ applications:
             address: 0.0.0.0
             port: 9112
 
-      # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
       processing:
         default_profile: fast
         profiles:
@@ -1455,9 +1438,7 @@ applications:
       scheduler:
         <<: *kf-scheduler
         worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
-      embedding_model: *kf-embedding-model
-      chat_model:      *kf-chat-model
-      vision_model:    *kf-vision-model
+      inference_credentials: *kf-inference-credentials
       storage:         *kf-storage
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""

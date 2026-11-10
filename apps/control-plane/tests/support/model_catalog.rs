@@ -259,7 +259,7 @@ async fn a_declared_list_follows_the_published_path_without_discovery_or_permiss
     let offer = |id: &str| json!({"source_id":"d","upstream_model_id":id});
     let policy = |revision, permitted: Value, reasoning: Value| {
         json!({"expected_revision":revision,"permitted":permitted,"reasoning_enabled":reasoning,
-            "default":null,"fallback":null,"title":null})
+            "default":null,"fallback":null,"title":null,"embedding":null,"vision":null})
     };
 
     // Declared is not yet observed: nothing is published or selectable before a refresh.
@@ -532,7 +532,7 @@ async fn sources_isolate_inventory_refresh_policy_recommendation_and_admission()
     assert_eq!(body["code"], "model_source_not_assigned");
     assert_eq!(calls, provider.response.lock().await.2);
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null,"title":null});
+    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null,"title":null,"embedding":null,"vision":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, policy)
             .await
@@ -644,7 +644,7 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
     let identity = support::IdentityServer::start().await;
     let app = model_app(&e, &identity, platform.clone()).await;
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null,"title":null});
+    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null,"title":null,"embedding":null,"vision":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, empty)
             .await
@@ -1498,7 +1498,7 @@ async fn title_model_policy_uses_organization_offers_and_survives_reload() {
         .unwrap();
     assert_eq!(offer["selectable"], true);
     let path = format!("/organizations/{}/model-policy", org.id);
-    let mut body = json!({"expected_revision":1,"permitted":[key("a")],"reasoning_enabled":[],"default":key("a"),"fallback":null,"title":key("a")});
+    let mut body = json!({"expected_revision":1,"permitted":[key("a")],"reasoning_enabled":[],"default":key("a"),"fallback":null,"title":key("a"),"embedding":null,"vision":null});
     let (status, saved) = request(&app, &identity, Some("alice"), "PUT", &path, body.clone()).await;
     assert_eq!(status, 200, "{saved}");
     assert_eq!(saved["title"], key("a"));
@@ -1557,4 +1557,134 @@ async fn title_model_policy_uses_organization_offers_and_survives_reload() {
             .0,
         409
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn document_models_need_their_aptitude_and_the_indexed_corpus_keeps_its_embedding() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    *provider.response.lock().await = (
+        200,
+        json!({"data": [
+            {"id":"chat", "capabilities":{"completion_chat":true,"vision":false,"reasoning":true}},
+            {"id":"see", "capabilities":{"completion_chat":true,"vision":true}},
+            {"id":"embed", "capabilities":{"completion_chat":false}}
+        ]}),
+        0,
+    );
+    let mut source = provider.source("a");
+    source.embedding_models = vec!["embed".into()];
+    let platform = PlatformConfig {
+        model_sources: vec![source],
+        organization_models: vec![declaration("TSN", &["a"])],
+        ..Default::default()
+    };
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform).await;
+    let offer = |id: &str| json!({"source_id":"a","upstream_model_id":id});
+    let offers = inventory(&app, &identity, org.id).await["sources"][0]["offers"].clone();
+    let embed = offers
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["upstream_model_id"] == "embed")
+        .unwrap();
+    assert_eq!(
+        (&embed["metadata"]["chat"], &embed["metadata"]["embedding"]),
+        (&json!(false), &json!(true))
+    );
+    assert_eq!(
+        embed["selectable"], true,
+        "an attested embedding offer can be permitted"
+    );
+    let path = format!("/organizations/{}/model-policy", org.id);
+    let body = |revision: i64, embedding: Value, vision: Value| {
+        json!({"expected_revision":revision,"permitted":[offer("chat"),offer("see"),offer("embed")],
+            "reasoning_enabled":[],"default":offer("chat"),"fallback":null,"title":null,
+            "embedding":embedding,"vision":vision})
+    };
+    let put = |payload: Value| {
+        let (app, identity, path) = (&app, &identity, &path);
+        async move { request(app, identity, Some("alice"), "PUT", path, payload).await }
+    };
+    // Each choice needs its aptitude: no chat model embeds, no embedding model chats or sees.
+    for (embedding, vision) in [
+        (offer("chat"), Value::Null),
+        (offer("embed"), offer("embed")),
+        (offer("embed"), offer("chat")),
+    ] {
+        let (status, error) = put(body(1, embedding, vision)).await;
+        assert_eq!(status, 422, "{error}");
+    }
+    let (status, saved) = put(body(1, offer("embed"), offer("see"))).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(
+        (
+            &saved["embedding"],
+            &saved["vision"],
+            &saved["embedding_locked"]
+        ),
+        (&offer("embed"), &offer("see"), &json!(false))
+    );
+    let projected = |use_: &'static str| {
+        let pool = e.pool.clone();
+        async move {
+            sqlx::query_as::<_, (String, bool)>("select upstream_model_id, available from cp_read.organization_model where space_id=$1 and use=$2")
+                .bind(org.id).bind(use_).fetch_optional(&pool).await.unwrap()
+        }
+    };
+    assert_eq!(projected("chat").await, Some(("chat".into(), true)));
+    assert_eq!(
+        projected("embedding").await,
+        None,
+        "no corpus is indexed yet"
+    );
+    // Before any indexing the choice is free; the first indexing claim locks it.
+    let (status, saved) = put(body(2, Value::Null, offer("see"))).await;
+    assert_eq!(status, 200, "{saved}");
+    let (status, saved) = put(body(3, offer("embed"), Value::Null)).await;
+    assert_eq!(status, 200, "{saved}");
+    sqlx::query(
+        "update organization_model_policy set embedding_locked_at=now() where organization_id=$1",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(projected("embedding").await, Some(("embed".into(), true)));
+    let (status, error) = put(body(4, Value::Null, Value::Null)).await;
+    assert_eq!(
+        (status, error["code"].as_str()),
+        (409, Some("embedding_model_locked")),
+        "{error}"
+    );
+    let (status, saved) = put(body(4, offer("embed"), offer("see"))).await;
+    assert_eq!(status, 200, "other choices stay administrable: {saved}");
+    assert_eq!(saved["embedding_locked"], true);
+    // The database keeps the corpus fact even against a direct write or deletion.
+    for statement in [
+        "update organization_model_policy set embedding_source_id=null, embedding_upstream_model_id=null where organization_id=$1",
+        "update organization_model_policy set embedding_locked_at=null where organization_id=$1",
+        "delete from organization_model_policy where organization_id=$1",
+    ] {
+        let error = sqlx::query(statement)
+            .bind(org.id)
+            .execute(&e.pool)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("keeps its embedding model"),
+            "{error}"
+        );
+    }
+    // A withdrawn corpus model is published as unavailable, never replaced.
+    sqlx::query("update model_offer set advertised=false, withdrawn_at=now() where upstream_model_id='embed'")
+        .execute(&e.pool).await.unwrap();
+    assert_eq!(projected("embedding").await, Some(("embed".into(), false)));
 }

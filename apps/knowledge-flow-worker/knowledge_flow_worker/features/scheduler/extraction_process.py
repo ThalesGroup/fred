@@ -180,6 +180,8 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
         descriptor = Descriptor.model_validate_json(request.manager_job_json)
         setattr(configuration.processing.profiles, descriptor.work.profile, ProcessingConfig.ProfileConfig.model_validate(descriptor.profile_settings))
         context = ApplicationContext(configuration)
+        # Input processors read the process context: one activity per child process.
+        context.admit_models(descriptor.models)
         from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
         from knowledge_flow_worker.features.manager_processing.persistence import scoped_pipeline
 

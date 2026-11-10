@@ -107,11 +107,10 @@ def test_index_filters_preserve_union_intersection_and_direct_folder_semantics()
 @pytest.mark.parametrize("policy", ["strict", "hybrid", "semantic"])
 async def test_search_prefilters_before_top_k_and_retains_sql_verification(monkeypatch, policy):
     service = search_module.VectorSearchService.__new__(search_module.VectorSearchService)
-    service._require_corpus_ready = AsyncMock()
     service._semantic = AsyncMock(return_value=[])
     service._strict = AsyncMock(return_value=[])
     service._hybrid = AsyncMock(return_value=[])
-    service.vector_store = SimpleNamespace()
+    service._corpus = AsyncMock(return_value=SimpleNamespace())
     service._visible_hits = AsyncMock(return_value=[])
     service._record_search_stats = MagicMock()
     service._kpi_search_dims = MagicMock(return_value={})
@@ -272,8 +271,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     monkeypatch.setattr(search_module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine))
     monkeypatch.setattr(search_module, "resolve_scope", AsyncMock(return_value=scope))
     service = search_module.VectorSearchService.__new__(search_module.VectorSearchService)
-    service._require_corpus_ready = AsyncMock()
-    service.vector_store = SimpleNamespace()
+    service._corpus = AsyncMock(return_value=SimpleNamespace())
     service._record_search_stats = MagicMock()
     service._kpi_search_dims = MagicMock(return_value={})
     service._to_hit = AsyncMock(side_effect=lambda doc, score, rank, user: SimpleNamespace(content=doc.page_content, score=score, rank=rank))
@@ -283,7 +281,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     def hit(uid, ordinal, score, label):
         return BaseVectorHit(document=Document(page_content=label, metadata={"document_uid": str(uid), "chunk_uid": str(uuid5(generation, str(ordinal)))}), score=score)
 
-    async def strategy(**kwargs):
+    async def strategy(store, **kwargs):
         started.append(kwargs)
         if len(started) == (1 if corpus.is_empty else 2):
             both_started.set()
@@ -348,10 +346,9 @@ async def test_direct_attachment_chunks_require_sql_publication_and_requested_do
     monkeypatch.setattr(search_module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine))
     monkeypatch.setattr(search_module, "resolve_scope", AsyncMock(return_value=scope))
     service = search_module.VectorSearchService.__new__(search_module.VectorSearchService)
-    service._require_corpus_ready = AsyncMock()
     service._to_hit = AsyncMock(side_effect=lambda doc, score, rank, user: doc.page_content)
     rows = [dict(text=str(i), metadata={"document_uid": str(DOC), "chunk_uid": str(uuid5(generation, str(i))), "chunk_index": i}) for i in (0, 2)]
     rows.append(dict(text="injected", metadata={"document_uid": str(FOLDER), "chunk_uid": str(uuid5(generation, "0")), "chunk_index": 0}))
-    service.vector_store = SimpleNamespace(get_chunks_for_document=lambda _: rows)
+    service._corpus = AsyncMock(return_value=SimpleNamespace(get_chunks_for_document=lambda _: rows))
     context = DocumentAccessContext(space_id=SPACE, document_scope=scope.document_scope, conversation_id=CONVERSATION, attachment_ids=(DOC,))
     assert await service.get_document_chunks_ordered(user=PERSON, document_uid=str(DOC), context=context, limit=10, authorized_space_ids=(SPACE,)) == ["0"]

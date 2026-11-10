@@ -51,7 +51,7 @@ def set_document_retrievable(command: dict) -> bool:
         callback(client, path, work, "claim")
         if not ids:
             raise ManagerError("indexing_failed", permanent=True)
-        context.get_manager_vector_store().set_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
+        context.get_corpus_store(work.organization_id).set_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
         return True
 
 
@@ -71,5 +71,5 @@ def confirm_document_retrievable(command: dict) -> None:
         if work.phase != "applied":
             raise ManagerError("retrieval_projection_uncertain", permanent=True)
         if ids:
-            context.get_manager_vector_store().verify_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
+            context.get_corpus_store(work.organization_id).verify_chunks_retrievable(document_uid=str(work.document_id), chunk_ids=ids, value=work.retrievable)
         callback(client, path, work, "confirm")

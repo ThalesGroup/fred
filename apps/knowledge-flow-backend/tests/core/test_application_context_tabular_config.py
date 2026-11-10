@@ -14,7 +14,7 @@
 
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
-from fred_core.common import ModelConfiguration, PostgresStoreConfig
+from fred_core.common import PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, StorageConfig
@@ -51,8 +51,6 @@ def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
             rebac=None,
         ),
         storage=storage,
-        chat_model=ModelConfiguration(provider="openai", name="gpt-4o", settings={}),
-        embedding_model=ModelConfiguration(provider="openai", name="text-embedding-3-large", settings={}),
     )
 
 

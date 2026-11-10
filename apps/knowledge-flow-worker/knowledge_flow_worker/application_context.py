@@ -5,16 +5,18 @@ import logging
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Type
+from uuid import UUID
 
-from fred_core import get_embeddings, get_model
-from fred_core.common import ModelConfiguration
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.semantic_splitter import SemanticSplitter
 from fred_knowledge.vector.base_vector_store import BaseVectorStore
+from fred_knowledge.models import DocumentModels
 from fred_knowledge.vector.factory import build_vector_store
+from fred_sdk.contracts.weaver import InferenceAdmission
 from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from knowledge_flow_worker.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_worker.common.structures import Configuration
@@ -186,10 +188,13 @@ class ApplicationContext:
         self._output_processor_instances: Dict[str, BaseOutputProcessor] = {}
         self._vector_store_instance: BaseVectorStore | None = None
         self._content_store_instance: "LocalTabularArtifacts | None" = None
-        self._embedder_instance: Embeddings | None = None
+        # The stage's admitted models: indexing installs its embedding, extraction its vision.
+        self._embedding: tuple[InferenceAdmission, Embeddings] | None = None
+        self._vision: tuple[InferenceAdmission, BaseChatModel] | None = None
+        self._document_models = DocumentModels(configuration.inference_credentials)
         self._kpi_writer: BaseKPIWriter | None = None
-        self._manager_vector_lock = threading.Lock()
-        self._manager_vector_store = None
+        self._corpus_lock = threading.Lock()
+        self._corpus_stores: dict[tuple, BaseVectorStore] = {}
         validate_profile_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_attachment_processor_config(configuration)
@@ -377,53 +382,61 @@ class ApplicationContext:
             raise RuntimeError("Tabular artifacts require a manager processing attempt")
         return self._content_store_instance
 
+    def admit_models(self, models) -> None:
+        """Install one stage's admitted models (a manager-processing `StageModels`)."""
+        self._embedding = (models.embedding, self._document_models.embeddings(models.embedding)) if models.embedding else None
+        self._vision = (models.vision, self._document_models.chat(models.vision)) if models.vision else None
+
     def get_embedder(self) -> Embeddings:
-        """
-        Fred rationale:
-        - Knowledge Flow uses the shared fred_core factory to avoid provider drift.
-        - Only secrets live in env; all other wiring lives in YAML.
-        - Typed return (Embeddings) keeps the contract clear at call sites.
+        """The corpus embedding model the Control Plane admitted for this indexing stage."""
+        if self._embedding is None:
+            raise RuntimeError("No embedding model was admitted for this stage")
+        return self._embedding[1]
 
-        Cache the provider client across indexing activities.
-        """
-        if self._embedder_instance is not None:
-            return self._embedder_instance
-        cfg: ModelConfiguration = self.configuration.embedding_model
-        self._embedder_instance = get_embeddings(cfg)
-        return self._embedder_instance
-
-    def get_utility_model(self):
-        if not self.configuration.chat_model:
-            raise ValueError("Utility model configuration is missing.")
-        return get_model(self.configuration.chat_model)
+    def get_vision(self) -> tuple[BaseChatModel, str] | None:
+        """The organization's admitted image-description model and its name, if chosen."""
+        if self._vision is None:
+            return None
+        admission, model = self._vision
+        return model, admission.selection.key.upstream_model_id
 
     def get_vector_store(self) -> BaseVectorStore:
-        """
-        Vector Store Factory
-        """
+        """The attempt-scoped vector writer installed by scoped_pipeline."""
         if self._vector_store_instance is not None:
             return self._vector_store_instance
         raise ValueError("Vector store is not initialized. Use get_create_vector_store() instead.")
 
     def get_create_vector_store(self, embedding_model: Embeddings, *, read_only: bool = False) -> BaseVectorStore:
-        """
-        Vector Store Factory
-        """
+        """The attempt-scoped vector writer; only a processing attempt installs one."""
         if self._vector_store_instance is not None:
             return self._vector_store_instance
-        self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store, read_only=read_only)
-        return self._vector_store_instance
+        raise ValueError("Vector writes require a manager processing attempt")
 
-    def get_manager_vector_store(self):
-        with self._manager_vector_lock:
-            if self._manager_vector_store is None:
-                settings = self.configuration.manager_processing
-                if settings is None:
-                    raise ValueError("Manager processing is not configured")
-                instance = self.build_vector_store(self.get_embedder(), settings.vector_store)
+    def get_corpus_store(self, organization_id: UUID) -> BaseVectorStore:
+        """The organization's corpus index, cached per process.
+
+        Indexing writes with the admitted embedding model, creating the index with its
+        dimension. Without one, the store only deletes or flags existing vectors."""
+        settings = self.configuration.manager_processing
+        if settings is None:
+            raise ValueError("Manager processing is not configured")
+        admission = self._embedding[0] if self._embedding else None
+        key = (organization_id, admission.selection.key.identity if admission else None)
+        with self._corpus_lock:
+            if key not in self._corpus_stores:
+                instance = build_vector_store(
+                    self._embedding[1] if self._embedding else None,
+                    settings.vector_store,
+                    organization_id=organization_id,
+                    embedding_model_name=admission.selection.key.upstream_model_id if admission else "none",
+                    opensearch_config=self.configuration.storage.opensearch,
+                    postgres_config=self.configuration.storage.postgres,
+                    kpi=self.get_kpi_writer(),
+                    splitter=self.get_text_splitter(),
+                )
                 instance.strict_operations = True
-                self._manager_vector_store = instance
-            return self._manager_vector_store
+                self._corpus_stores[key] = instance
+            return self._corpus_stores[key]
 
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:
@@ -449,26 +462,4 @@ class ApplicationContext:
             chunk_size=splitter_cfg.chunk_size,
             chunk_overlap=splitter_cfg.chunk_overlap,
             preserve_tables=splitter_cfg.preserve_tables,
-        )
-
-    def is_summary_generation_enabled(self) -> bool:
-        """
-        Checks if the summary generation feature is enabled in the configuration.
-        Returns:
-            bool: True if enabled, False otherwise.
-        """
-        profile = get_current_processing_profile()
-        profile_cfg = self.configuration.processing.get_profile_config(profile)
-        return profile_cfg.generate_summary
-
-    def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
-        return build_vector_store(
-            embedding_model,
-            store,
-            embedding_model_name=self.configuration.embedding_model.name or "unknown",
-            opensearch_config=self.configuration.storage.opensearch,
-            postgres_config=self.configuration.storage.postgres,
-            kpi=self.get_kpi_writer(),
-            splitter=self.get_text_splitter(),
-            read_only=read_only,
         )

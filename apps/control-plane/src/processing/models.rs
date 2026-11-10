@@ -99,6 +99,8 @@ pub struct Work {
     pub installation_id: Uuid,
     pub processing_id: Uuid,
     pub document_id: Uuid,
+    /// The document's organization, whose corpus holds its vectors.
+    pub organization_id: Uuid,
     #[schema(pattern = "^[0-9a-f]{64}$")]
     pub original_sha256: String,
     pub profile: Profile,
@@ -156,6 +158,18 @@ pub struct Descriptor {
     pub profile_settings: serde_json::Value,
     pub predecessor: Option<Predecessor>,
     pub committed: Option<Manifest>,
+    /// Models admitted for this stage under the organization's policy.
+    pub models: StageModels,
+}
+
+/// Indexing embeds with the organization's locked corpus model; extraction may
+/// describe images with its vision model. Connections carry references, never secrets.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct StageModels {
+    #[schema(required = true)]
+    pub embedding: Option<fred_rust_sdk::inference::InferenceAdmission>,
+    #[schema(required = true)]
+    pub vision: Option<fred_rust_sdk::inference::InferenceAdmission>,
 }
 
 /// The previous stage's result and the stored prefix that holds its artifacts.
@@ -312,6 +326,7 @@ mod tests {
             installation_id: Uuid::new_v4(),
             processing_id: Uuid::new_v4(),
             document_id: Uuid::new_v4(),
+            organization_id: Uuid::new_v4(),
             original_sha256: "a".repeat(64),
             profile: Profile::Fast,
         };

@@ -63,3 +63,23 @@ def test_get_embeddings_vertex_model_garden_uses_full_vertex_model_name(
             "max_retries": 2,
         }
     ]
+
+
+def test_openai_embeddings_use_the_admitted_key_without_the_global_variable(
+    monkeypatch: Any,
+) -> None:
+    from fred_core.model import factory
+
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(factory, "OpenAIEmbeddings", lambda **kw: calls.append(kw))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    cfg = ModelConfiguration(
+        provider="openai",
+        name="mistral-embed",
+        settings={"base_url": "https://api.mistral.ai/v1"},
+    )
+    factory.get_embeddings(
+        cfg, inference_api_key="admitted-key"
+    )  # pragma: allowlist secret
+    assert calls[0]["api_key"] == "admitted-key"  # pragma: allowlist secret
+    assert calls[0]["openai_api_base"] == "https://api.mistral.ai/v1"

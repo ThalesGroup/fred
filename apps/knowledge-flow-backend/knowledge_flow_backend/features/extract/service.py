@@ -21,6 +21,7 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 from pydantic import BaseModel, ConfigDict, Field
 
+from knowledge_flow_backend.common.organization_models import organization_chat_model
 from knowledge_flow_backend.features.content.published_markdown import published_markdown
 from knowledge_flow_backend.features.extract.extractor import DocumentExtractor
 
@@ -45,13 +46,14 @@ class ExtractDocumentResponse(BaseModel):
 
 
 class ExtractService:
-    def _build_extractor(self) -> DocumentExtractor:
-        return DocumentExtractor()
+    async def _build_extractor(self, context: DocumentAccessContext) -> DocumentExtractor:
+        model, _ = await organization_chat_model(context)
+        return DocumentExtractor(model)
 
     async def extract_document(self, user: AssertedUser, document_uid: str, request: ExtractDocumentRequest, context: DocumentAccessContext) -> ExtractDocumentResponse:
         started = time.monotonic()
         text = await published_markdown(user, document_uid, context)
-        extractor = self._build_extractor()
+        extractor = await self._build_extractor(context)
         result = await extractor.extract(text=text, instruction=request.instruction)
         logger.info(
             "%s items=%d chunks=%d truncated=%s total_ms=%.0f",

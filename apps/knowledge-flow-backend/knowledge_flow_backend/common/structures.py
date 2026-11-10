@@ -9,6 +9,7 @@ from fred_knowledge.configuration import OpenSearchVectorIndexConfig as OpenSear
 from fred_knowledge.configuration import PgVectorStorageConfig as PgVectorStorageConfig
 from fred_knowledge.configuration import TabularQueryConfig as TabularQueryConfig
 from fred_pod.common.structures import LogOutputFormat
+from fred_sdk.contracts.weaver import InferenceCredentialBinding
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -42,8 +43,9 @@ class Configuration(BaseModel):
     model_config = ConfigDict(extra="forbid")
     app: AppConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
-    chat_model: ModelConfiguration
-    embedding_model: ModelConfiguration
+    # The Control Plane decides the organization's models; this workload only attests
+    # the approved destinations and holds the names of their key variables.
+    inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     control_plane_url: str | None = None

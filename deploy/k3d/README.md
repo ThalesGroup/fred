@@ -53,38 +53,13 @@ Never reset a database containing data to keep. See the
 ## First start
 
 The path a new contributor follows, from empty infrastructure to an assistant that
-answers from a team's documents. Only step 1 differs between k3d, deployed as in
-production, and Docker Compose, the fast loop that runs this checkout on the host.
+answers from a team's documents.
 
-**Prerequisites.** Sibling checkouts of `fred` (branch `weaver`) and
-`fred-deployment-factory`, the tools listed in the factory README, the line
-`127.0.0.1 keycloak weaver.localhost` in `/etc/hosts`, and a Mistral
-API key in a file holding only the key.
-
-**1. Infrastructure and Fred.** From the factory checkout, one of:
-
-```sh
-# k3d: http://weaver.localhost:8088
-make k3d-up
-kubectl --context k3d-fred -n fred-weaver create secret generic fred-model-credentials \
-  --from-file=OPENAI_API_KEY=/absolute/path/to/mistral-key
-make k3d-app FRED=weaver APP=fred DIR=/absolute/path/to/this/checkout
-
-# Docker Compose: http://localhost:5173
-make docker-up
-make docker-app FRED=weaver APP=fred DIR=/absolute/path/to/this/checkout \
-  KEY_FILE=/absolute/path/to/mistral-key
-```
-
-Both run the same six processes: `control-plane-backend`, `fred-agents`,
-`fred-agents-worker`, `knowledge-flow-backend`, `knowledge-flow-worker` and `frontend`
-(the k3d monitor needs Kubernetes). Both print how to read the bootstrap token.
-On Docker Compose, the VS Code task **Fred (make run)** runs the same processes once
-`make docker-app` has prepared the checkout.
-
-**2. Platform admin.** Open the address above, sign in with the intended
-admin identity (register only if needed), activate platform administration with the
-bootstrap token, then accept the terms of use ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
+**1–2. Fred running, you platform admin.** Follow the
+[factory README](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/README.md):
+k3d, deployed as in production, or Docker Compose, the fast loop that runs this
+checkout on the host. It ends with your first login as platform admin
+([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
 
 **3. Example people and spaces.** Build the demo bundle, then import it as the
 owner in **Provisioning**:
@@ -97,9 +72,9 @@ It creates Acme (team Research) and Globex (team Support) with the thirteen
 accounts of the [example table](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 each account's password is `Azerty123_`.
 
-**4. Models and assistant template.** As `alice`, authorize
-`mistral-small-latest` and `mistral-medium-latest` in **Models** and choose a
-default, then activate `fred.github.assistant` in the organization's **Agents**
+**4. Models and assistant template.** As `alice`, authorize chat models in
+**Models**: those your key's provider lists, for example `mistral-small-latest` or
+`gpt-4o-mini`. Choose a default, then activate `fred.github.assistant` in the organization's **Agents**
 ([journey](../../docs/architecture/02.3-agent-administration.md)).
 
 **5. First answer from documents.** As `bob`, in Research: upload a text PDF in
@@ -263,17 +238,20 @@ and the existing porting status for the reception boundary.
 
 ## Models for local testing
 
-The profile declares the `mistral` source in the control plane, using
-`https://api.mistral.ai/v1/models` for discovery and
-`https://api.mistral.ai/v1` for inference. This local profile explicitly reuses
-the existing `fred-model-credentials/OPENAI_API_KEY` for both operations; no
-secret value is stored in the configuration. The control plane uses the same
-node CA bundle as the pod for outgoing TLS.
+The profile declares two discovered sources in the control plane, `mistral` and
+`openai`, each read with its provider's `/v1/models` and called at its `/v1` root.
+Each uses its own key, `MISTRAL_API_KEY` or `OPENAI_API_KEY`, for both operations,
+from the optional keys of `fred-model-credentials`; a source without its key stays
+unavailable, and no secret value is stored in the configuration. Each source attests
+its embedding models (`mistral-embed`; `text-embedding-3-small`/`-large`), which
+provider lists do not identify. The control plane uses the same node CA bundle as
+the pod for outgoing TLS.
 
 The overlay explicitly assigns `mistral` to the demo organizations `Acme` and
 `Globex`, resolved by their exact PostgreSQL names after the existing provisioning
-import. Each initially permits `mistral-small-latest` and `mistral-medium-latest`,
-selects Small as default, and leaves fallback/reasoning empty. The test account is
+import. Each initially permits `mistral-small-latest`, `mistral-medium-latest` and
+`mistral-embed`, selects Small as default and `mistral-embed` for documents, and
+leaves fallback, vision and reasoning empty. The test account is
 shared deliberately; distinct accounts require distinct source IDs. Other
 organizations need their own explicit declaration, never an implicit global grant.
 
@@ -292,10 +270,11 @@ Later discoveries do not extend the explicit permitted list. The old factory
 `models_catalog` remains excluded from this Weaver overlay. The isolated automated
 tests do not establish real k3d/provider validation; that remains a developer check.
 
-The host equivalent is `apps/control-plane/config/configuration_prod.yaml`, with the
-existing Mistral key supplied through the control plane's environment or local
-`.env`. The pod's `configuration.yaml` and `configuration_prod.yaml` retain only
-the matching inference credential binding.
+On the host (Docker Compose), `apps/control-plane/config/configuration_prod.yaml`
+declares the same sources, and `make setup-env` copies each exported key into the
+`.env` files. The Agent Pod and Knowledge Flow configurations retain only the
+matching inference credential bindings. OpenAI's model list carries no capability
+metadata: besides its attested embedding models, authorize only its chat models.
 
 `fred-test-mock` is a separate follow-up: retain the embedded pod model used by
 the graph Test agent, and wire it through Weaver's catalog and authorization.

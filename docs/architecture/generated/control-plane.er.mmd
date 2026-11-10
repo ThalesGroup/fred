@@ -30,8 +30,10 @@ erDiagram
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
@@ -350,6 +352,11 @@ erDiagram
   timestamp_with_time_zone updated_at
   text title_source_id FK
   text title_upstream_model_id FK
+  text embedding_source_id FK
+  text embedding_upstream_model_id FK
+  timestamp_with_time_zone embedding_locked_at
+  text vision_source_id FK
+  text vision_upstream_model_id FK
 }
 "control_plane.organization_model_permission" {
   uuid organization_id FK
@@ -714,4 +721,16 @@ erDiagram
   uuid prompt_id FK
   uuid skill_id FK
   uuid agent_instance_id FK
+}
+"cp_read.organization_model" {
+  uuid space_id
+  uuid organization_id
+  text use
+  text source_id
+  text upstream_model_id
+  jsonb connection
+  bigint source_revision
+  bigint snapshot_revision
+  bigint policy_revision
+  boolean available
 }

@@ -31,9 +31,9 @@ trusted document-context header and exclude conversation attachments.
 
 - `published_artifacts`: S3 reader endpoint, bucket and environment-variable credential references.
 - `storage`: PostgreSQL, optional OpenSearch, vector projection, logs and bounded tabular query settings.
-- `embedding_model`: query embeddings, matching the worker's indexing model.
+- `inference_credentials`: the model destinations this workload attests and the variables holding their keys. The Control Plane decides the models: search embeds the question with the organization's locked corpus model, in its index `document-vectors-<organization id>`; summary and exhaustive extraction use its default chat model. Without them, search returns nothing and document tools answer `409`.
 - `crossencoder_model`: the retained local reranker. Its default model is baked into the production image.
-- `chat_model` and `text_splitter`: utility LLM and independent splitting parameters for summary/exhaustive extraction.
+- `text_splitter`: independent splitting parameters for summary and exhaustive extraction.
 - `use_gpu`: explicit API device policy, derived from the former effective profile settings in each shipped configuration.
 
 There is no scheduler, processing profile or processor registry in the API configuration. PyMuPDF, OCR, Office and audio extraction options belong to the worker.

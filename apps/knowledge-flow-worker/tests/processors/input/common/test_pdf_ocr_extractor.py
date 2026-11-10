@@ -41,7 +41,7 @@ def test_build_pdf_ocr_extractor_recognizes_mistral_ocr():
 def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_path: Path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
 
     requests: list[tuple[str, str, object, object]] = []
 

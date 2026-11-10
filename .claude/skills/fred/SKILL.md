@@ -1,6 +1,6 @@
 ---
 name: fred
-description: Démarrer les composants Fred locaux et, sur demande, un pod fred-samples et son serveur de test ; observer leurs logs pendant que le développeur teste dans l’UI. Utiliser pour une session locale de démarrage, arrêt ou diagnostic par les logs, sans campagne de tests ni collecte KPI.
+description: Démarrer les composants Fred locaux et, sur demande, un pod fred-samples et son serveur de test ; observer et challenger la qualité de leurs logs et des KPI disponibles pendant les essais UI, sans campagne de tests ou de mesure automatique.
 ---
 
 # Fred — démarrage et observation locale
@@ -19,8 +19,11 @@ lance les applications demandées, lit leurs logs et aide au diagnostic.
 - Demander avant tout élargissement : tests, requêtes métier, publication de KB,
   modification de configuration/code, installation supplémentaire ou dépannage long.
   Ne lancer ni `make test`, ni `make code-quality`, ni campagne automatique.
-- Pas de KPI pour cette première version. Le signal est stdout/stderr de chaque
-  composant, avec les messages d’audit déjà présents dans ces logs.
+- À chaque session, appliquer les critères de qualité de
+  [live-observability-session](../live-observability-session/SKILL.md) aux logs,
+  audits et KPI disponibles : confidentialité à la source, INFO sobre, coût et
+  utilité diagnostique. Le recâblage incomplet des KPI Swift dans Weaver ne
+  dispense pas de signaler les lacunes ; il ne déclenche pas une campagne.
 
 ## Répertoires et composants
 
@@ -33,8 +36,9 @@ que ces chemins désignent le checkout choisi.
 |---|---|---|
 | Control Plane API et tâches de fond | `apps/control-plane` | `make run` |
 | Knowledge Flow API | `apps/knowledge-flow-backend` | `make run` |
-| Knowledge Flow worker | `apps/knowledge-flow-backend` | `make run-worker` |
+| Knowledge Flow worker | `apps/knowledge-flow-worker` | `make run` |
 | Fred Agents API | `apps/fred-agents` | `make run` |
+| Fred Agents worker de préparation des capacités | `apps/fred-agents` | `make run-worker` |
 | Frontend | `apps/frontend` | `make run` |
 
 Ce sont des commandes disponibles, pas une liste de processus obligatoires.
@@ -56,9 +60,9 @@ composants Python, vérifier leurs mécanismes actuels de délégation et d'iden
 Ne jamais assouplir audience, issuer, isolation ou contrôle d'accès pour démarrer.
 Un refus d'authentification est à diagnostiquer, pas à contourner.
 
-La collecte de KPI et les tests de renouvellement ne font pas partie du démarrage.
-Sur demande, utiliser `live-observability-session` avec les émetteurs/exporteurs
-actuels et les références d'exploitation arc42. Ne pas réactiver d'anciens réglages
+Les campagnes de mesure et les tests de renouvellement ne font pas partie du
+démarrage. L'observation utilise les émetteurs/exporteurs actuels et les références
+d'exploitation arc42. Ne pas réactiver d'anciens réglages
 ou scripts Swift sans vérifier leur compatibilité. Les modifications de durée de
 jeton, publications, migrations et campagnes doivent appartenir au périmètre demandé.
 
@@ -67,8 +71,17 @@ jeton, publications, migrations et campagnes doivent appartenir au périmètre d
 1. Lire les cibles Makefile et leurs prérequis. `make run` peut installer des
    dépendances, et le worker Knowledge Flow peut télécharger des modèles.
    Signaler un coût de préparation important avant de le déclencher.
+   Pour le frontend, comparer le Node actif à `.nvmrc` et au contrôle de
+   `scripts/makefiles/node.mk` ; sélectionner une version compatible déjà
+   installée avant d'envisager une installation.
 2. Vérifier `config/.env` et le fichier désigné par `CONFIG_FILE`, puis les
    éventuels overrides du Makefile.
+   Dans le profil local Compose actuel, les API Control Plane, Knowledge Flow et
+   Fred Agents utilisent `configuration_prod.yaml` ; le worker Knowledge Flow
+   utilise son propre `configuration_worker.yaml`. Les deux processus Fred Agents
+   partagent le même `.env` et YAML, avec `scheduler.enabled` pour le worker.
+   Vérifier les ports publiés par Compose et le namespace Temporal commun, sans
+   confondre les noms DNS internes des conteneurs et les adresses vues de l'hôte.
    Lire uniquement les valeurs nécessaires ; ne jamais afficher les secrets ou
    recopier le `.env` entier dans une réponse. Vérifier les destinations locales,
    l’authentification et la cohérence API/worker ; ne rien réécrire silencieusement.
@@ -87,6 +100,9 @@ jeton, publications, migrations et campagnes doivent appartenir au périmètre d
 - Conserver stdout ET stderr complets dans un fichier par composant, sous un
   répertoire de session unique tel que `/tmp/fred-live-<session>/`. Éviter de
   filtrer à la capture : les lignes d’activités Temporal sont utiles à l’ingestion.
+  Garder ces fichiers privés. Vérifier si le collecteur de la plateforme lit
+  effectivement ces processus : une capture locale de `make run` n'est pas
+  automatiquement collectée par Fluent Bit ni consultable dans OpenSearch.
 - Tenir un petit journal de session dans ce répertoire : composant, checkout,
   commande, identifiant de session/processus, log, état constaté. Cela permet
   de reprendre l’observation sans démarrer de doublons après une interruption.

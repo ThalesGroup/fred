@@ -20,7 +20,8 @@ def sweep(context):
         for candidate in candidates:
             # The manager leases each candidate; a failing one returns later, behind the others.
             try:
-                clean(context.get_manager_vector_store, client, artifacts, candidate)
+                work = Work.model_validate(candidate["work"])
+                clean(lambda: context.get_corpus_store(work.organization_id), client, artifacts, candidate)
             except Exception:
                 logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s", candidate.get("generation"), exc_info=True)
 
@@ -28,9 +29,12 @@ def sweep(context):
 def clean(store, client, artifacts, candidate):
     work = Work.model_validate(candidate["work"])
     generation = UUID(candidate["generation"])
+    # An organization that never indexed a document has no corpus index, hence no vectors.
+    indexed = store().index_exists()
     if candidate.get("purge_document"):
-        store().delete_vectors_for_document(document_uid=str(work.document_id))
-        if store().get_document_chunk_count(document_uid=str(work.document_id)) > 0:
+        if indexed:
+            store().delete_vectors_for_document(document_uid=str(work.document_id))
+        if indexed and store().get_document_chunk_count(document_uid=str(work.document_id)) > 0:
             logging.getLogger(__name__).info("Document vector cleanup will retry: %s", work.document_id)
             return
         objects = list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 201))
@@ -52,7 +56,7 @@ def clean(store, client, artifacts, candidate):
         return
     start = candidate["cursor"]
     end = min(candidate["chunks"], start + candidate["batch"])
-    for ordinal in range(start, end):
+    for ordinal in range(start if indexed else end, end):
         if ordinal in candidate["protected_ordinals"]:
             continue
         identifier = str(uuid5(generation, str(ordinal)))

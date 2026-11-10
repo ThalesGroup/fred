@@ -19,13 +19,23 @@ facts and implementation entry points, not another policy definition.
 | Shared wire contract | [`InferenceAdmission`](../../libs/fred-rust-sdk/src/inference.rs), Python [`contracts.weaver`](../../libs/fred-sdk/fred_sdk/contracts/weaver.py) | [Generated API types](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts); connection only on the trusted execution path |
 | Python execution | [`TurnAuthority`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py), [`RoutedChatModelFactory`](../../libs/fred-runtime/fred_runtime/model_routing/provider.py) | [`checked_clients`](../../libs/fred-runtime/fred_runtime/model_routing/guard.py) checks destination/authentication before transport |
 | Embedded Rust execution | [`InferenceTurn`](../../libs/fred-rust-agent/src/turn.rs) | [`Ralph`](../../libs/fred-rust-agent/README.md), hosted by Control Plane; local binding checked before inference |
+| Document models | Policy `embedding`, `vision` and `default`; source `embedding_models` attestation; [migration 0020](../../apps/control-plane/migrations/0020_document_models.sql) lock trigger | Stage claim [`stage_models`](../../apps/control-plane/src/processing/store.rs) for the worker; [`cp_read.organization_model`](../../apps/control-plane/migrations/0020_document_models.sql) for search and document tools |
+| Knowledge Flow execution | [`DocumentModels`](../../libs/fred-knowledge/fred_knowledge/models.py) | Worker [`admit_models`](../../apps/knowledge-flow-worker/knowledge_flow_worker/application_context.py), backend [`organization_models`](../../apps/knowledge-flow-backend/knowledge_flow_backend/common/organization_models.py); local binding checked before inference |
 
 Selection is shared; transport support is not identical. The
 [runtime connection contract](../../apps/control-plane/README.md#inference-connection)
 and [provisioning contract](../../apps/control-plane/README.md#workload-provisioning-and-rotation)
-define supported forms. Ralph currently accepts `openai_chat`, `standard`,
-`api_key`, without an API version or gateway header. No runtime substitutes a
-pod-local model policy for the admitted selection.
+define supported forms. Ralph and Knowledge Flow currently accept the `standard`
+route with `api_key` (Knowledge Flow also `none`), without an API version or gateway
+header. No consumer substitutes a local model policy for the admitted selection.
+
+Provider model lists do not say which offers embed, so a source's `embedding_models`
+attests them; such an offer is never chat. A policy choice must fit its use: chat for
+default, fallback and title; an attested embedding offer for `embedding`; a chat offer
+not reported without image input for `vision`. A document model is never substituted:
+an unusable choice stops the stage. The first indexing claim sets the corpus lock in
+the claim's transaction, serialized with policy writes on the policy row; a trigger
+then refuses any change, release or deletion of it while the organization exists.
 
 [Automatic conversation titles](../../apps/control-plane/README.md#automatic-conversation-titles)
 receive their own Control Plane admission through `decide_title`, under the same
@@ -50,8 +60,10 @@ erDiagram
 
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
@@ -97,6 +109,11 @@ erDiagram
   timestamp_with_time_zone updated_at
   text title_source_id FK
   text title_upstream_model_id FK
+  text embedding_source_id FK
+  text embedding_upstream_model_id FK
+  timestamp_with_time_zone embedding_locked_at
+  text vision_source_id FK
+  text vision_upstream_model_id FK
 }
 
 "control_plane.organization_model_permission" {
@@ -230,6 +247,7 @@ Platform approval of one source. Contains references only, never secret values.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `allow_insecure_http` | boolean |  | Explicit platform approval for internal HTTP routes; HTTPS is the default. |
+| `embedding_models` | array of string, max items 256 |  | Platform attestation: these exact offers compute embeddings and are never chat. Provider model lists do not establish this aptitude. |
 | `enabled` | boolean |  |  |
 | `inference` | [`ModelConnection`](#modelconnection) | yes |  |
 | `inventory` | [`SourceInventory`](#sourceinventory) | yes |  |
@@ -246,11 +264,13 @@ One of: `openai_chat`, `openai_responses`.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `default` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
+| `embedding` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `fallback` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `organization` | string | yes | Exact existing organization name, resolved using the provisioning SQL lookup. |
 | `permitted` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes |  |
 | `reasoning_enabled` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 |  |  |
 | `sources` | array of string, max items 64 | yes |  |
+| `vision` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 
 ### Qualification
 
@@ -280,18 +300,19 @@ One of:
 | `models` | array of [`DeclaredModel`](#declaredmodel), min items 1, max items 256 | yes |  |
 <!-- end generated -->
 
-## Agent Pod configuration
+## Agent Pod and Knowledge Flow configuration
 
 Python's top-level `inference_credentials` is generated from the
 [Agent Pod configuration schema](../../apps/fred-agents/config/schema/configuration.schema.json),
 whose owner is [`AgentPodConfig`](../../libs/fred-runtime/fred_runtime/app/config.py).
-It maps an admitted binding/destination to local variables; it contains no model
-catalogue or organization selection policy.
+Knowledge Flow's backend and worker configurations carry the same type. It maps an
+admitted binding/destination to local variables; it contains no model catalogue or
+organization selection policy.
 
 <!-- generated: schemas apps/fred-agents/config/schema/configuration.schema.json InferenceCredentialBinding -->
 ### InferenceCredentialBinding
 
-Attests one admitted destination, even without a secret; holds variable names only.
+A workload's local attestation of one admitted destination, read from its own configuration: variable names only, never secrets. Every model client (Agent Pod, Knowledge Flow) checks the Control Plane's admitted connection against it.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -318,10 +339,11 @@ or a provider acceptance result. A new deployment validation must record its own
 pair in its PR, alongside the outcome; matching branch names is insufficient.
 Fred-only CI cannot establish freshness of a separate factory checkout.
 
-This factory revision maps the `mistral` binding to the same approved API root in
-Control Plane and Agent Pod. Each receives `OPENAI_API_KEY` from the Kubernetes
-Secret reference `fred-model-credentials/OPENAI_API_KEY`. Discovery authentication
-is separately declared even though this local profile deliberately shares the key.
+The factory maps the `mistral` and `openai` bindings to the same approved API roots in
+Control Plane, Agent Pod and Knowledge Flow. Each receives `MISTRAL_API_KEY` and
+`OPENAI_API_KEY` from the optional keys of the Kubernetes Secret
+`fred-model-credentials`. Discovery authentication is separately declared even
+though this local profile deliberately shares each key.
 No Secret value is read or embedded here. The
 [rotation procedure](../../apps/control-plane/README.md#workload-provisioning-and-rotation)
 covers source revision, refresh and workload rollout; environment variables are

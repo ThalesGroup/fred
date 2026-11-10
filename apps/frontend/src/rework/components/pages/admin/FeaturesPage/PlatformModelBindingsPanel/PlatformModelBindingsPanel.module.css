@@ -25,6 +25,12 @@
   font: var(--font-body-small);
 }
 
+.sectionTitle {
+  margin: var(--spacing-m) 0 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
 .currentProfileId {
   display: inline-block;
   vertical-align: bottom;

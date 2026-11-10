@@ -74,6 +74,7 @@ impl Row {
             installation_id: installation,
             processing_id: self.summary.id,
             document_id: self.summary.document_id,
+            organization_id: self.organization_id,
             original_sha256: self.original_sha256.clone(),
             profile: self.summary.profile,
         }
@@ -97,6 +98,36 @@ impl Row {
     pub fn objects_gone(&self, g: &Generation) -> bool {
         g.cleaned_at.is_some() && self.published_generation != Some(g.id)
     }
+}
+
+/// Models admitted for one stage, read in one consistent snapshot of the policy.
+async fn stage_models(
+    pool: &sqlx::PgPool,
+    organization: Uuid,
+    stage: Stage,
+) -> AppResult<StageModels> {
+    use crate::model_catalog::instance::{DocumentModel, admit_document};
+    let mut tx = pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    let models = match stage {
+        Stage::Indexing => StageModels {
+            embedding: Some(
+                admit_document(&mut tx, organization, DocumentModel::Embedding)
+                    .await?
+                    .ok_or_else(super::embedding_required)?,
+            ),
+            vision: None,
+        },
+        Stage::Extraction => StageModels {
+            embedding: None,
+            vision: admit_document(&mut tx, organization, DocumentModel::Vision).await?,
+        },
+        _ => StageModels::default(),
+    };
+    tx.commit().await?;
+    Ok(models)
 }
 
 /// `{root}/{document_id}/output/`: every derived object of a document, never its input.
@@ -204,6 +235,14 @@ impl Processing {
             .execute(&mut **tx)
             .await?;
         db::pipeline_document(&mut **tx, document_id).await?;
+        // Indexing needs the organization's embedding model; refuse before queuing work.
+        if !sqlx::query_scalar::<_, bool>("select exists(select 1 from document d join space s on s.id=d.space_id join organization_model_policy p on p.organization_id=s.organization_id where d.id=$1 and p.embedding_source_id is not null)")
+            .bind(document_id)
+            .fetch_one(&mut **tx)
+            .await?
+        {
+            return Err(super::embedding_required());
+        }
         // Serializes admissions so the pending-attempt cap stays exact.
         sqlx::query("select singleton from document_storage where singleton for update")
             .execute(&mut **tx)
@@ -398,6 +437,18 @@ impl Processing {
         if c.stage.ordinal() != expected {
             return Err(conflict("stage_order"));
         }
+        // The first indexing claim locks the corpus model: every vector of the
+        // organization's index then comes from the same embedding space.
+        if c.stage == Stage::Indexing
+            && sqlx::query("update organization_model_policy set embedding_locked_at=coalesce(embedding_locked_at,clock_timestamp()) where organization_id=$1 and embedding_source_id is not null")
+                .bind(r.organization_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected()
+                == 0
+        {
+            return Err(super::embedding_required());
+        }
         let id = Uuid::new_v4();
         let expires = (now + chrono::Duration::seconds(r.lease(c.stage)?)).min(r.deadline_at);
         let prefix = format!(
@@ -438,6 +489,7 @@ impl Processing {
             Some(_) => Some(manifest(&self.pool, g).await?),
             None => None,
         };
+        let models = stage_models(&self.pool, r.organization_id, g.stage).await?;
         Ok(Descriptor {
             work: r.work(self.installation),
             organization_id: r.organization_id,
@@ -460,6 +512,7 @@ impl Processing {
             profile_settings: r.profile_settings.0.clone(),
             predecessor,
             committed,
+            models,
         })
     }
     /// Release only this failed activity generation; Temporal retains its retry budget.

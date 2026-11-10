@@ -105,8 +105,11 @@ Read [submission](../../apps/control-plane/src/processing/worker_contract.rs),
 The worker authenticates to manager using its workload identity. Manager binds
 each stage claim to this work and a generation. Preparation persists `policy.json`.
 Extraction obtains the original through manager, checks its size/hash and runs the
-existing configured PDF processor. Output processing reuses the configured
-splitter, embedding model and vector store implementation.
+existing configured PDF processor; it describes images only with the organization's
+admitted vision model, if one is chosen. Indexing embeds with the organization's
+corpus model, which the stage claim admits and its first claim locks, and writes to
+the organization's own index, `document-vectors-<organization id>`, created with that
+model's dimension. Processing is refused while the organization has no embedding model.
 
 Each stage writes under its own derived generation prefix. For a nonempty text
 PDF, the published artifact set contains `metadata.json`, `output.md` and
@@ -130,8 +133,9 @@ metadata. Join `D` back to SQL to establish Papers placement. Filter the index b
 `metadata.document_uid`, then match chunk IDs to the published `chunks.jsonl`.
 A document filter alone can also return staged generations.
 
-The separate `document-vectors` index prevents legacy retrieval from exposing
-staged manager chunks or applying legacy ACLs to manager documents. Generation
+Per-organization `document-vectors-<organization id>` indexes prevent legacy retrieval
+from exposing staged manager chunks or applying legacy ACLs to manager documents, and
+keep each corpus in one embedding space. Generation
 UUID-based IDs fence stale writes without changing the Swift chunk schema.
 
 Read [scoped pipeline and vectors](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/persistence.py),
@@ -232,10 +236,10 @@ manifest identifies the visible result.
 
 ### OpenSearch and Temporal: inspect the processing result
 
-In OpenSearch Dev Tools, substitute the configured manager index and `D`:
+In OpenSearch Dev Tools, substitute the organization's index and `D`:
 
 ```text
-GET <manager-index>/_search
+GET document-vectors-<organization id>/_search
 {
   "size": 10,
   "track_total_hits": true,
@@ -248,7 +252,7 @@ This is a sample, and its total can include obsolete generations awaiting cleanu
 For a complete comparison, use `_mget` in bounded batches with all IDs from the
 published `chunks.jsonl`. Verify each `_id`, text and metadata against that file,
 and inspect a vector's `vector_field` dimension
-against the configured embedding model. The published record/ID count agrees with
+against the organization's corpus embedding model. The published record/ID count agrees with
 the SQL manifest's `chunks`, `vectors` and `vector_ordinals` for this text PDF.
 Check the legacy index separately: this ingestion adds no legacy document there.
 

@@ -73,8 +73,7 @@ def _processor(store: _CancelledVectorStore, kpi: _RecordingKpi) -> Vectorizatio
     processor.embedder = object()
 
     class _Context:
-        def is_summary_generation_enabled(self) -> bool:
-            return False
+        pass
 
     class _Splitter:
         def split(self, document: Document) -> list[Document]:

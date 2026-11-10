@@ -359,7 +359,6 @@
     "fast": {
       "use_gpu": false,
       "process_images": false,
-      "generate_summary": false,
       "input_activity_timeout": "90m",
       "push_metadata_activity_timeout": "300s",
       "output_activity_timeout": "3600s",
@@ -500,7 +499,6 @@
     "medium": {
       "use_gpu": false,
       "process_images": false,
-      "generate_summary": false,
       "input_activity_timeout": "2h",
       "push_metadata_activity_timeout": "300s",
       "output_activity_timeout": "3600s",
@@ -641,7 +639,6 @@
     "rich": {
       "use_gpu": false,
       "process_images": true,
-      "generate_summary": false,
       "input_activity_timeout": "2h",
       "push_metadata_activity_timeout": "300s",
       "output_activity_timeout": "3600s",

@@ -8,8 +8,10 @@ Choose a configuration with `CONFIG_FILE`, and environment references with
 `ENV_FILE`. Copy `.env.template` locally and supply the required values.
 
 Configure Temporal, outgoing workload identity, the immutable artifact bucket,
-and OpenSearch/pgvector under `manager_processing`. The API reader must use the
-same corpus and query embedding model. Use the [processing overlay](../../../deploy/charts/fred/examples/document-processing.yaml)
+and OpenSearch/pgvector under `manager_processing`. `inference_credentials` lists the
+model destinations the worker attests: each stage claim admits the organization's
+embedding and vision models, and indexing writes to that organization's index. The
+API reader uses the same index base name. Use the [processing overlay](../../../deploy/charts/fred/examples/document-processing.yaml)
 and [k3d contract export](../../../deploy/k3d/README.md) for the deployment setup.
 The API’s HTTP security, published reads and reranker settings are independent.
 E0 PostgreSQL roles and grants are unchanged by this split.

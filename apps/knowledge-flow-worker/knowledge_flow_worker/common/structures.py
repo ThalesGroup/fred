@@ -24,6 +24,7 @@ from fred_knowledge.configuration import OpenSearchVectorIndexConfig as OpenSear
 from fred_knowledge.configuration import PgVectorStorageConfig as PgVectorStorageConfig
 from fred_knowledge.configuration import TabularQueryConfig as TabularQueryConfig
 from fred_pod.common.structures import LogOutputFormat
+from fred_sdk.contracts.weaver import InferenceCredentialBinding
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """
@@ -200,10 +201,6 @@ class ProcessingConfig(BaseModel):
             default=False,
             description="Enable/disable semantic image description in markdown for this profile.",
         )
-        generate_summary: bool = Field(
-            default=False,
-            description="Enable/disable human-centric abstract and keyword generation for this profile.",
-        )
         input_activity_timeout: str = Field(
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
@@ -221,7 +218,7 @@ class ProcessingConfig(BaseModel):
         )
         text_splitter: "TextSplitterConfig" = Field(
             default_factory=lambda: TextSplitterConfig(),
-            description="Text splitter configuration for vectorization and summarization.",
+            description="Text splitter configuration for vectorization.",
         )
         input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
             default_factory=list,
@@ -467,9 +464,9 @@ class Configuration(BaseModel):
     model_config = ConfigDict(extra="forbid")
     app: AppConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
-    chat_model: ModelConfiguration
-    embedding_model: ModelConfiguration
-    vision_model: Optional[ModelConfiguration] = None
+    # The Control Plane admits each stage's embedding and vision models; this
+    # workload only attests their destinations and holds their key variable names.
+    inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
     ocr_model: Optional[ModelConfiguration] = Field(
         default=None,
         description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",

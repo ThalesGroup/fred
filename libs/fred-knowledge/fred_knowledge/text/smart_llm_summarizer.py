@@ -29,13 +29,12 @@ import logging
 import re
 from typing import List, Optional, Protocol, Tuple
 
-from fred_core.common import ModelConfiguration
 from langchain_core.documents import Document
+from langchain_core.language_models.chat_models import BaseChatModel
 
 # Contracts + concrete summarizers
 from fred_knowledge.text.base_summarizer import BaseDocSummarizer
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
-from fred_knowledge.text.cheap_extractive_summarizer import CheapExtractiveSummarizer
 from fred_knowledge.text.llm_summarizer import LLMBasedDocSummarizer
 
 logger = logging.getLogger(__name__)
@@ -68,7 +67,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
     def __init__(
         self,
         *,
-        model_config: ModelConfiguration,  # your Configuration.model (can be None)
+        model: BaseChatModel,
+        model_name: str,
         splitter: BaseTextSplitter,  # reuse the pipeline splitter to align shard boundaries
         opts: Optional[dict] = None,  # temporary hardcoded opts; move to config later
     ):
@@ -88,15 +88,8 @@ class SmartDocSummarizer(BaseDocSummarizer):
         }
 
         self.splitter = splitter
-        # Always provide a working summarizer (LLM or cheap extractive fallback).
-        try:
-            self._summarizer: BaseDocSummarizer = LLMBasedDocSummarizer(model_config)
-            self.model_name = model_config.name if model_config else "default"
-            logger.info("SmartDocSummarizer: using LLM-based summarizer (%s)", self._summarizer.__class__.__name__)
-        except Exception as e:
-            self._summarizer = CheapExtractiveSummarizer()
-            self.model_name = "extractive-fallback"
-            logger.info("SmartDocSummarizer: using built-in extractive fallback due to %r", e)
+        self._summarizer: BaseDocSummarizer = LLMBasedDocSummarizer(model)
+        self.model_name = model_name
 
     # ------------------------ Public API (orchestration) ------------------------
     def get_model_name(self) -> str:

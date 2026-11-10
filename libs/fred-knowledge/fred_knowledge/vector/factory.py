@@ -1,6 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import logging
+from uuid import UUID
 
 from langchain_core.embeddings import Embeddings
 
@@ -13,10 +14,26 @@ from fred_knowledge.vector.pgvector_store import PgVectorStoreAdapter
 logger = logging.getLogger(__name__)
 
 
+def corpus_index(base: str, organization_id: UUID) -> str:
+    """One index per organization: its vectors share the organization's embedding model."""
+    return f"{base}-{organization_id}"
+
+
 def build_vector_store(
-    embedding_model: Embeddings, store, *, embedding_model_name: str, opensearch_config, postgres_config, kpi, splitter: BaseTextSplitter, read_only: bool = False
+    embedding_model: Embeddings | None,
+    store,
+    *,
+    organization_id: UUID,
+    embedding_model_name: str,
+    opensearch_config,
+    postgres_config,
+    kpi,
+    splitter: BaseTextSplitter,
+    read_only: bool = False,
 ) -> BaseVectorStore:
-    """Construct an explicitly selected namespace for the API or a processing attempt."""
+    """Construct one organization's corpus store for the API or a processing attempt.
+
+    Without an embedding model, the store only deletes or flags existing vectors."""
 
     if isinstance(store, OpenSearchVectorIndexConfig):
         if not opensearch_config:
@@ -30,7 +47,7 @@ def build_vector_store(
             embedding_model_name=embedding_model_name,
             kpi=kpi,
             host=opensearch_config.host,
-            index=store.index,
+            index=corpus_index(store.index, organization_id),
             username=opensearch_config.username,
             password=password,
             secure=opensearch_config.secure,
@@ -41,17 +58,17 @@ def build_vector_store(
         )
         return instance
     elif isinstance(store, PgVectorStorageConfig):
+        if embedding_model is None:
+            raise ValueError("A pgvector corpus requires its embedding model")
         pg = postgres_config
+        collection = corpus_index(store.collection_name, organization_id)
         instance = PgVectorStoreAdapter(
             embedding_model=embedding_model,
             embedding_model_name=embedding_model_name,
             postgres_config=pg,
-            collection_name=store.collection_name,
+            collection_name=collection,
         )
-        logger.info(
-            "Using postgres collection=%s (default table)",
-            store.collection_name,
-        )
+        logger.info("Using postgres collection=%s (default table)", collection)
     else:
         raise ValueError("Unsupported vector store backend")
     return instance

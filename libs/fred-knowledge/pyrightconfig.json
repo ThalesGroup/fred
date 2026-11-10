@@ -5,6 +5,6 @@
   "typeCheckingMode": "basic",
   "venvPath": ".",
   "venv": ".venv",
-  "extraPaths": ["../fred-core", "../fred-pod"],
+  "extraPaths": ["../fred-core", "../fred-pod", "../fred-sdk"],
   "reportMissingTypeStubs": false
 }

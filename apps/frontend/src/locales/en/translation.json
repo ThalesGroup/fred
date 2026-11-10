@@ -1741,9 +1741,9 @@
           "default": "Default model",
           "fallback": "Fallback model",
           "none": "None",
-          "policyHint": "These choices apply to your organization. Choose from permitted models. Per-pod settings are unavailable in this catalog.",
+          "policyHint": "These choices apply to your organization. Choose from permitted models. The default model also serves the document tools (summary, extraction). Per-pod settings are unavailable in this catalog.",
           "revokeTitle": "Remove permission?",
-          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback or conversation title model, that choice will also be cleared.",
+          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback, conversation title, embedding or vision model, that choice will also be cleared.",
           "withdrawn": "Withdrawn from source",
           "chat": "Chat confirmed",
           "notChat": "Not chat capable",
@@ -1753,7 +1753,14 @@
           "max_input_tokens": "Input: {{count}} tokens",
           "max_output_tokens": "Output: {{count}} tokens",
           "noSources": "No model source is configured in the control plane.",
-          "noModels": "No models in the catalog."
+          "noModels": "No models in the catalog.",
+          "embedding": "Embedding model",
+          "vision": "Image description model",
+          "documents": "Documents",
+          "embeddingHint": "Required to process documents. Every document of the organization is indexed with this model: the first indexing locks the choice.",
+          "embeddingLockedHint": "Locked: the organization's documents are indexed with this model. Changing it requires reindexing every document.",
+          "visionHint": "Optional. Describes the images of documents during processing, according to the processing profile. Without a choice, images are not described.",
+          "embeddingAptitude": "Embeddings"
         },
         "organizationCapabilities": {
           "col": {

@@ -81,8 +81,8 @@ async def main() -> None:
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
-    # Initialize the corpus before ingestion; API replicas only validate it.
-    await asyncio.to_thread(app_context.get_manager_vector_store)
+    # Each organization's corpus index is created by its first indexing, with the
+    # dimension of the embedding model the Control Plane admitted for it.
 
     # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
     # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics

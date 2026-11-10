@@ -147,7 +147,7 @@
           "default": [],
           "items": {
             "additionalProperties": false,
-            "description": "Attests one admitted destination, even without a secret; holds variable names only.",
+            "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
             "properties": {
               "credential_binding": {
                 "maxLength": 128,

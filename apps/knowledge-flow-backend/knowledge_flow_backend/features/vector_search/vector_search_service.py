@@ -18,7 +18,6 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from functools import cached_property
 from threading import Lock
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 from uuid import UUID
@@ -35,6 +34,7 @@ from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreA
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.organization_models import OrganizationModelUnavailable, organization_model
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
@@ -102,25 +102,32 @@ class VectorSearchService:
 
     def __init__(self):
         ctx = ApplicationContext.get_instance()
-        self.embedder = ctx.get_embedder()
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
         self._crossencoder_model: Optional[Any] = None
         self._crossencoder_lock = Lock()
 
-    @cached_property
-    def vector_store(self) -> BaseVectorStore:
-        # Opened on first search: building this service for route registration or
-        # OpenAPI generation must not reach a database.
-        return ApplicationContext.get_instance().get_create_vector_store(self.embedder, read_only=True)
+    async def _corpus(self, context: DocumentAccessContext) -> BaseVectorStore | None:
+        """The space's organization corpus, or None before its first indexed document.
 
-    async def _require_corpus_ready(self) -> None:
+        The question is embedded with the corpus's locked model, admitted by the
+        Control Plane; this workload never chooses or substitutes a model."""
         try:
-            store = await asyncio.to_thread(lambda: self.vector_store)
+            async with ApplicationContext.get_instance().get_pg_async_engine().connect() as conn:
+                model = await organization_model(conn, context.space_id, "embedding")
+        except OrganizationModelUnavailable:
+            raise HTTPException(status_code=503, detail="corpus_model_unavailable") from None
+        if model is None:
+            return None
+        try:
+            store = await asyncio.to_thread(ApplicationContext.get_instance().get_corpus_store, model.organization_id, model.admission)
+            if not await asyncio.to_thread(store.index_exists):
+                return None
             if isinstance(store, OpenSearchVectorStoreAdapter):
                 await asyncio.to_thread(store.ensure_ready)
         except Exception:
             logger.warning("corpus is not ready", exc_info=True)
             raise HTTPException(status_code=503, detail="corpus_not_ready") from None
+        return store
 
     @property
     def crossencoder_model(self) -> Any:
@@ -133,11 +140,11 @@ class VectorSearchService:
                     self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
         return self._crossencoder_model
 
-    def _kpi_search_dims(self, *, policy: str) -> dict[str, Optional[str]]:
-        index_name = getattr(self.vector_store, "index_name", None) or getattr(self.vector_store, "index", None)
+    def _kpi_search_dims(self, store: BaseVectorStore | None, *, policy: str) -> dict[str, Optional[str]]:
+        index_name = getattr(store, "index_name", None) or getattr(store, "index", None)
         return {
             "policy": policy,
-            "backend": type(self.vector_store).__name__,
+            "backend": type(store).__name__ if store is not None else None,
             "index": str(index_name) if index_name else None,
         }
 
@@ -283,6 +290,7 @@ class VectorSearchService:
 
     async def _semantic(
         self,
+        store: BaseVectorStore,
         question: str,
         user: KeycloakUser | AssertedUser,
         k: int,
@@ -310,11 +318,11 @@ class VectorSearchService:
 
         sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
-        base_dims = self._kpi_search_dims(policy="semantic")
+        base_dims = self._kpi_search_dims(store, policy="semantic")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 ann_hits: List[AnnHit] = await asyncio.to_thread(
-                    self.vector_store.ann_search,
+                    store.ann_search,
                     question,
                     k=k,
                     search_filter=sf,
@@ -341,6 +349,7 @@ class VectorSearchService:
 
     async def _strict(
         self,
+        store: BaseVectorStore,
         question: str,
         user: KeycloakUser | AssertedUser,
         k: int,
@@ -366,12 +375,13 @@ class VectorSearchService:
             method falls back to semantic ANN search. This keeps local dev backends
             (pgvector) usable even when the request policy defaults to `strict`.
         """
-        if not isinstance(self.vector_store, SupportsFullTextSearch):
+        if not isinstance(store, SupportsFullTextSearch):
             logger.warning(
                 "backend=%s lacks full_text_search; falling back to semantic search",
-                type(self.vector_store).__name__,
+                type(store).__name__,
             )
             return await self._semantic(
+                store,
                 question=question,
                 user=user,
                 k=k,
@@ -379,14 +389,14 @@ class VectorSearchService:
                 metadata_terms_extra=metadata_terms_extra,
                 metadata_any=metadata_any,
             )
-        full_text_store = cast(SupportsFullTextSearch, self.vector_store)
+        full_text_store = cast(SupportsFullTextSearch, store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
-        base_dims = self._kpi_search_dims(policy="strict")
+        base_dims = self._kpi_search_dims(store, policy="strict")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[FullTextHit] = await asyncio.to_thread(
@@ -418,6 +428,7 @@ class VectorSearchService:
 
     async def _hybrid(
         self,
+        store: BaseVectorStore,
         question: str,
         user: KeycloakUser | AssertedUser,
         k: int,
@@ -443,12 +454,13 @@ class VectorSearchService:
             method falls back to semantic ANN search. This keeps local dev backends
             (pgvector) usable even when the request policy defaults to `hybrid`.
         """
-        if not isinstance(self.vector_store, SupportsHybridSearch):
+        if not isinstance(store, SupportsHybridSearch):
             logger.warning(
                 "backend=%s lacks hybrid_search; falling back to semantic search",
-                type(self.vector_store).__name__,
+                type(store).__name__,
             )
             return await self._semantic(
+                store,
                 question=question,
                 user=user,
                 k=k,
@@ -456,14 +468,14 @@ class VectorSearchService:
                 metadata_terms_extra=metadata_terms_extra,
                 metadata_any=metadata_any,
             )
-        hybrid_store = cast(SupportsHybridSearch, self.vector_store)
+        hybrid_store = cast(SupportsHybridSearch, store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
         search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms, metadata_any=metadata_any)
 
-        base_dims = self._kpi_search_dims(policy="hybrid")
+        base_dims = self._kpi_search_dims(store, policy="hybrid")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[HybridHit] = await asyncio.to_thread(
@@ -512,11 +524,13 @@ class VectorSearchService:
         The index only proposes candidates. A chunk is returned only if the Control
         Plane facts keep it: live document in scope, retrievable, published generation.
         """
-        await self._require_corpus_ready()
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
             scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
         if (not scope.space_ids or scope.document_scope.is_empty) and not scope.attachment_ids:
+            return []
+        store = await self._corpus(context)
+        if store is None:
             return []
         pool = min(top_k * 5, 100) if rerank else top_k
         policy_key = policy_name or SearchPolicyName.hybrid
@@ -544,6 +558,7 @@ class VectorSearchService:
         rankings = await asyncio.gather(
             *(
                 strategy(
+                    store,
                     question=question,
                     user=user,
                     k=pool,
@@ -563,11 +578,9 @@ class VectorSearchService:
             hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
         hits = hits[:top_k]
         stats_policy = policy_key
-        if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
-            policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)
-        ):
+        if (policy_key == SearchPolicyName.strict and not isinstance(store, SupportsFullTextSearch)) or (policy_key == SearchPolicyName.hybrid and not isinstance(store, SupportsHybridSearch)):
             stats_policy = SearchPolicyName.semantic
-        self._record_search_stats(base_dims=self._kpi_search_dims(policy=stats_policy.value), hits_count=len(hits), top_k=top_k, user=user)
+        self._record_search_stats(base_dims=self._kpi_search_dims(store, policy=stats_policy.value), hits_count=len(hits), top_k=top_k, user=user)
         return hits
 
     async def _visible_hits(
@@ -596,7 +609,7 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
         """
-        base_dims = self._kpi_search_dims(policy="rerank")
+        base_dims = self._kpi_search_dims(None, policy="rerank")
         model_name = getattr(self.crossencoder_model, "model_name", None) or getattr(self.crossencoder_model, "name", None)
         if model_name:
             base_dims["model"] = str(model_name)
@@ -645,11 +658,13 @@ class VectorSearchService:
         every row of a large table comes back. The caller checked the space read;
         staged or retired chunks are dropped before the limit applies.
         """
-        await self._require_corpus_ready()
+        store = await self._corpus(context)
+        if store is None:
+            return []
         try:
-            raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
+            raw_chunks = await asyncio.to_thread(store.get_chunks_for_document, document_uid)
         except NotImplementedError:
-            logger.warning("store %s cannot fetch chunks by document", type(self.vector_store).__name__)
+            logger.warning("store %s cannot fetch chunks by document", type(store).__name__)
             return []
         if not raw_chunks:
             return []

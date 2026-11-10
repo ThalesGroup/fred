@@ -179,6 +179,67 @@
       "title": "DelegationConfig",
       "type": "object"
     },
+    "InferenceCredentialBinding": {
+      "additionalProperties": false,
+      "description": "A workload's local attestation of one admitted destination, read from its own\nconfiguration: variable names only, never secrets. Every model client (Agent Pod,\nKnowledge Flow) checks the Control Plane's admitted connection against it.",
+      "properties": {
+        "credential_binding": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Credential Binding",
+          "type": "string"
+        },
+        "api_root": {
+          "title": "Api Root",
+          "type": "string"
+        },
+        "api_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Env"
+        },
+        "client_secret_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Env"
+        },
+        "gateway_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gateway Key Env"
+        }
+      },
+      "required": [
+        "credential_binding",
+        "api_root"
+      ],
+      "title": "InferenceCredentialBinding",
+      "type": "object"
+    },
     "KpiLogSinkConfig": {
       "properties": {
         "enabled": {
@@ -1062,11 +1123,13 @@
     "observability": {
       "$ref": "#/$defs/ObservabilityConfig"
     },
-    "chat_model": {
-      "$ref": "#/$defs/ModelConfiguration"
-    },
-    "embedding_model": {
-      "$ref": "#/$defs/ModelConfiguration"
+    "inference_credentials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InferenceCredentialBinding"
+      },
+      "title": "Inference Credentials",
+      "type": "array"
     },
     "crossencoder_model": {
       "anyOf": [
@@ -1119,8 +1182,6 @@
   },
   "required": [
     "app",
-    "chat_model",
-    "embedding_model",
     "security",
     "storage"
   ],

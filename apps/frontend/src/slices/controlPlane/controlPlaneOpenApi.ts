@@ -2433,6 +2433,8 @@ export type RetrievalWork = {
   document_id: string;
   manifest: Manifest;
   operation_id: string;
+  /** The document's organization, whose corpus holds its vectors. */
+  organization_id: string;
   phase: ProjectionPhase;
   retrievable: boolean;
 };
@@ -2485,6 +2487,58 @@ export type Failure = {
   stage: Stage;
   work: Work;
 };
+export type ModelAuthKind = "none" | "api_key" | "entra";
+export type ModelAuth = {
+  client_id?: string | null;
+  /** Name of the header carrying a gateway key, with any kind. */
+  gateway_key_header?: string | null;
+  kind: ModelAuthKind;
+  scope?: string | null;
+  /** Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. */
+  tenant_id?: string | null;
+};
+export type ModelDialect = "openai" | "openai_compatible" | "mistral";
+export type ModelRoute = "standard" | "azure_deployment";
+export type ModelWire = "openai_chat" | "openai_responses";
+export type ModelConnection = {
+  /** Separately approved canonical root; never derived from a discovery URL. */
+  api_root: string;
+  api_version?: string | null;
+  auth: ModelAuth;
+  /** Source-bound workload provisioning reference; never a credential value. */
+  credential_binding: string;
+  dialect: ModelDialect;
+  route: ModelRoute;
+  wire: ModelWire;
+};
+export type ModelOfferKey = {
+  source_id: string;
+  upstream_model_id: string;
+};
+export type ReasoningEffort = "high";
+export type EffectiveModelOptions = {
+  max_tokens?: number | null;
+  reasoning_effort?: ReasoningEffort | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
+export type ModelSelectionSource = "user_choice" | "instance_recommendation" | "default" | "withdrawal_fallback";
+export type InferenceSelection = {
+  key: ModelOfferKey;
+  options: EffectiveModelOptions;
+  policy_revision: number;
+  snapshot_revision: number;
+  source: ModelSelectionSource;
+  source_revision: number;
+};
+export type InferenceAdmission = {
+  connection: ModelConnection;
+  selection: InferenceSelection;
+};
+export type StageModels = {
+  embedding: InferenceAdmission | null;
+  vision: InferenceAdmission | null;
+};
 export type Predecessor = {
   manifest: Manifest;
   prefix: string;
@@ -2501,6 +2555,8 @@ export type Descriptor = {
   max_chunks: number;
   max_output_bytes: number;
   mime: string;
+  /** Models admitted for this stage under the organization's policy. */
+  models: StageModels;
   name: string;
   organization_id: string;
   output_prefix: string;
@@ -2882,14 +2938,13 @@ export type PodCapabilityInventory = {
   /** Links from the last successful snapshot, all scoped to this runtime. */
   template_capabilities: PodTemplateCapability[];
 };
-export type ModelOfferKey = {
-  source_id: string;
-  upstream_model_id: string;
-};
 export type OrganizationModelPolicy = {
   created_at?: string | null;
   created_by?: string | null;
   default?: ModelOfferKey | null;
+  embedding?: ModelOfferKey | null;
+  /** Set by the first indexing: the corpus keeps this embedding model. */
+  embedding_locked: boolean;
   fallback?: ModelOfferKey | null;
   organization_id: string;
   permitted: ModelOfferKey[];
@@ -2900,15 +2955,18 @@ export type OrganizationModelPolicy = {
   title?: ModelOfferKey | null;
   updated_at?: string | null;
   updated_by?: string | null;
+  vision?: ModelOfferKey | null;
 };
 export type ReplaceModelPolicy = {
   default: ModelOfferKey | null;
+  embedding: ModelOfferKey | null;
   expected_revision: number;
   fallback: ModelOfferKey | null;
   permitted: ModelOfferKey[];
   /** Organization ceiling, independent of the user's per-question choice. */
   reasoning_enabled: ModelOfferKey[];
   title: ModelOfferKey | null;
+  vision: ModelOfferKey | null;
 };
 export type ModelObservation = {
   checked_at?: string | null;
@@ -2927,10 +2985,14 @@ export type ModelMetadata = {
   chat_provenance?: ChatProvenance | null;
   context_window_tokens?: number | null;
   display_name?: string | null;
+  /** Platform-attested embedding offer; such an offer is never chat. */
+  embedding?: boolean | null;
   max_input_tokens?: number | null;
   max_output_tokens?: number | null;
   /** Source-reported aptitude; absent means unknown, not unsupported. */
   reasoning?: boolean | null;
+  /** Source-reported image input; absent means unknown, not unsupported. */
+  vision?: boolean | null;
 };
 export type StoredModelOffer = {
   advertised: boolean;
@@ -3392,22 +3454,6 @@ export type ChatControlDescriptor = {
   widget: string;
 };
 export type ExecutionTransport = "sse";
-export type ReasoningEffort = "high";
-export type EffectiveModelOptions = {
-  max_tokens?: number | null;
-  reasoning_effort?: ReasoningEffort | null;
-  temperature?: number | null;
-  top_p?: number | null;
-};
-export type ModelSelectionSource = "user_choice" | "instance_recommendation" | "default" | "withdrawal_fallback";
-export type InferenceSelection = {
-  key: ModelOfferKey;
-  options: EffectiveModelOptions;
-  policy_revision: number;
-  snapshot_revision: number;
-  source: ModelSelectionSource;
-  source_revision: number;
-};
 export type ModelPreparationErrorCode =
   | "selection_missing"
   | "reselection_required"
@@ -3503,34 +3549,6 @@ export type RuntimeAttachment = {
   document_id: string;
   mime: string;
   name: string;
-};
-export type ModelAuthKind = "none" | "api_key" | "entra";
-export type ModelAuth = {
-  client_id?: string | null;
-  /** Name of the header carrying a gateway key, with any kind. */
-  gateway_key_header?: string | null;
-  kind: ModelAuthKind;
-  scope?: string | null;
-  /** Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. */
-  tenant_id?: string | null;
-};
-export type ModelDialect = "openai" | "openai_compatible" | "mistral";
-export type ModelRoute = "standard" | "azure_deployment";
-export type ModelWire = "openai_chat" | "openai_responses";
-export type ModelConnection = {
-  /** Separately approved canonical root; never derived from a discovery URL. */
-  api_root: string;
-  api_version?: string | null;
-  auth: ModelAuth;
-  /** Source-bound workload provisioning reference; never a credential value. */
-  credential_binding: string;
-  dialect: ModelDialect;
-  route: ModelRoute;
-  wire: ModelWire;
-};
-export type InferenceAdmission = {
-  connection: ModelConnection;
-  selection: InferenceSelection;
 };
 export type RuntimeModelOffer = {
   /** Necessary known facts only; local support, credentials and connectivity remain unproven. */

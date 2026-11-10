@@ -685,7 +685,11 @@ def _create_model(
 # ---------------------------------------------------------------------------
 
 
-def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
+def get_embeddings(
+    cfg: ModelConfiguration,
+    *,
+    inference_api_key: SecretStr | Callable[[], str] | None = None,
+) -> LCEmbeddings:
     if not cfg.provider:
         raise ValueError("Embedding configuration provider is required")
 
@@ -716,7 +720,11 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     name = cfg.name
 
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if inference_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            # An admitted connection's key, resolved from the workload's local binding.
+            settings["api_key"] = inference_api_key
         if not name:
             raise ValueError(
                 "OpenAI embeddings require 'name' (e.g., text-embedding-3-large)."

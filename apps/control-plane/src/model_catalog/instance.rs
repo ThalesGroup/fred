@@ -86,7 +86,13 @@ pub(crate) async fn validate_write(
                 "The recommended model must be permitted by the owning organization.".into(),
             ));
         }
-        policy::require_selectable(conn, organization, &BTreeSet::from([key.clone()])).await?;
+        policy::require_selectable(
+            conn,
+            organization,
+            &BTreeSet::from([key.clone()]),
+            &[(policy::Use::Chat, key)],
+        )
+        .await?;
     }
     // Check the known effective recommendation/default, never an arbitrary first offer.
     // A legacy profile has no offer identity and cannot be resolved by name.
@@ -174,6 +180,8 @@ pub(crate) async fn resolve(
         .chain(settings.recommended_model.iter())
         .chain(policy.default.iter())
         .chain(policy.fallback.iter())
+        .chain(policy.embedding.iter())
+        .chain(policy.vision.iter())
         .cloned()
         .collect();
     let offers = keys
@@ -461,6 +469,71 @@ pub(crate) fn decide_title(
     })
 }
 
+/// Models Knowledge Flow uses on the organization's documents.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DocumentModel {
+    Embedding,
+    Vision,
+}
+
+/// The organization's chosen document model and its approved connection, if chosen.
+/// Callers supply a consistent snapshot; an unusable choice is an explicit error.
+pub(crate) async fn admit_document(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    model: DocumentModel,
+) -> AppResult<Option<InferenceAdmission>> {
+    let models = resolve(conn, organization, &serde_json::json!({})).await?;
+    let (key, use_) = match model {
+        DocumentModel::Embedding => (models.policy.embedding.as_ref(), policy::Use::Embedding),
+        DocumentModel::Vision => (models.policy.vision.as_ref(), policy::Use::Vision),
+    };
+    let Some(key) = key else {
+        return Ok(None);
+    };
+    let selection = decide_document(&models, key, use_).ok_or_else(|| {
+        AppError::problem(
+            axum::http::StatusCode::CONFLICT,
+            "document_model_unavailable",
+            "The organization's embedding or vision model is unavailable. Ask an organization owner to check the model policy and its source.",
+        )
+    })?;
+    admit(conn, organization, selection).await.map(Some)
+}
+
+/// A document model is the organization's explicit choice, never a substitute: an
+/// unavailable choice stops the processing stage instead of silently changing model.
+fn decide_document(
+    models: &RuntimeModels,
+    key: &ModelOfferKey,
+    use_: policy::Use,
+) -> Option<InferenceSelection> {
+    let offer = models.offers.iter().find(|o| &o.key == key)?;
+    let metadata = offer.metadata.as_ref()?;
+    if !offer.permitted
+        || !use_.fits(metadata.chat, metadata.embedding, metadata.vision)
+        || offer.diagnostics.iter().any(|d| {
+            !matches!(
+                d,
+                ModelDiagnostic::DiscoveryUnavailable
+                    | ModelDiagnostic::OptionsExceedKnownLimit
+                    | ModelDiagnostic::ChatNotEstablished
+            )
+        })
+    {
+        return None;
+    }
+    let observation = offer.observation.as_ref()?;
+    Some(InferenceSelection {
+        key: key.clone(),
+        source: ModelSelectionSource::Default,
+        options: EffectiveModelOptions::default(),
+        source_revision: observation.source_revision,
+        snapshot_revision: observation.snapshot_revision,
+        policy_revision: models.policy.revision,
+    })
+}
+
 /// Connection projection is explicit, separate from the browser-safe decision.
 pub(crate) async fn admit(
     conn: &mut PgConnection,
@@ -523,6 +596,30 @@ mod preparation_tests {
         assert!(decide_title(&models, &main).is_none());
     }
 
+    #[test]
+    fn a_document_model_needs_its_aptitude_and_is_never_substituted() {
+        use policy::Use;
+        let mut models = models();
+        let embed = models.offers.len();
+        let mut offer = candidate("embed");
+        let metadata = offer.metadata.as_mut().unwrap();
+        (metadata.chat, metadata.embedding) = (Some(false), Some(true));
+        offer.diagnostics = vec![ModelDiagnostic::ChatNotEstablished];
+        models.offers.push(offer);
+        assert!(decide_document(&models, &key("embed"), Use::Embedding).is_some());
+        assert!(decide_document(&models, &key("embed"), Use::Vision).is_none());
+        assert!(decide_document(&models, &key("model"), Use::Embedding).is_none());
+        // Unknown image input is accepted; a source-reported refusal is not.
+        assert!(decide_document(&models, &key("model"), Use::Vision).is_some());
+        models.offers[0].metadata.as_mut().unwrap().vision = Some(false);
+        assert!(decide_document(&models, &key("model"), Use::Vision).is_none());
+        // A withdrawn choice stops the stage; it never falls back to another offer.
+        models.offers[embed]
+            .diagnostics
+            .push(ModelDiagnostic::Withdrawn);
+        assert!(decide_document(&models, &key("embed"), Use::Embedding).is_none());
+    }
+
     fn key(name: &str) -> ModelOfferKey {
         ModelOfferKey {
             source_id: "source".into(),
@@ -541,6 +638,8 @@ mod preparation_tests {
                 chat: Some(true),
                 chat_provenance: None,
                 reasoning: Some(true),
+                embedding: None,
+                vision: None,
                 display_name: None,
                 context_window_tokens: Some(1000),
                 max_input_tokens: None,
@@ -570,6 +669,9 @@ mod preparation_tests {
                 reasoning_enabled: vec![],
                 default: None,
                 fallback: Some(key("fallback")),
+                embedding: None,
+                embedding_locked: false,
+                vision: None,
                 created_by: None,
                 created_at: None,
                 updated_by: None,

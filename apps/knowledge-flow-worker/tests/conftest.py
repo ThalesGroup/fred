@@ -15,7 +15,7 @@
 
 import pytest
 import pytest_asyncio
-from fred_core.common import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig
+from fred_core.common import OpenSearchStoreConfig, PostgresStoreConfig
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from fred_core.documents.document_structures import DocumentMetadata
 from langchain_community.embeddings import FakeEmbeddings
@@ -34,7 +34,8 @@ from knowledge_flow_worker.common.structures import (
     StorageConfig,
     TemporalSchedulerConfig,
 )
-from knowledge_flow_worker.core.processors.output.vectorization_processor.embedder import Embedder
+from fred_knowledge.models import DocumentModels
+from tests.model_admissions import TEST_BINDING
 from tests.services.artifact_store import TestArtifactStore
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
@@ -63,19 +64,15 @@ class _InMemoryTestMetadataStore:
 
 @pytest.fixture(scope="function", autouse=True)
 def fake_embedder(monkeypatch):
-    """Monkeypatch the Embedder to avoid real API calls."""
-
-    def fake_init(self, config=None):
-        self.model = FakeEmbeddings(size=1352)
-
-    monkeypatch.setattr(Embedder, "__init__", fake_init)
+    """Admitted embedding models are offline fakes: no provider call in unit tests."""
+    monkeypatch.setattr(DocumentModels, "embeddings", lambda self, admission: FakeEmbeddings(size=1352))
 
 
 @pytest.fixture(scope="function", autouse=True)
 def app_context(monkeypatch, fake_embedder, tmp_path):
     """Initialize configuration and test-only artifact/metadata doubles."""
     ApplicationContext._instance = None
-    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("MISTRAL_API_KEY", "test")
     # OpenSearchStoreConfig sources its password from this env var; set it so the
     # config below builds without reaching OpenSearch (unit-level, no integration).
     monkeypatch.setenv("OPENSEARCH_PASSWORD", "test")  # pragma: allowlist secret
@@ -89,6 +86,7 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
             reload=False,
             reload_dir=".",
         ),
+        inference_credentials=(TEST_BINDING,),
         scheduler=SchedulerConfig(
             enabled=False,
             backend="temporal",
@@ -114,22 +112,11 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
             ),
             vector_store=PgVectorStorageConfig(type="pgvector"),
         ),
-        chat_model=ModelConfiguration(
-            provider="openai",
-            name="gpt-4o",
-            settings={"temperature": 0, "max_retries": 1},
-        ),
-        embedding_model=ModelConfiguration(
-            provider="openai",
-            name="text-embedding-3-large",
-            settings={},
-        ),
         processing=ProcessingConfig(
             default_profile=IngestionProcessingProfile.medium,
             profiles=ProcessingConfig.ProfilesConfig(
                 fast=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(
@@ -146,7 +133,6 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
                 ),
                 medium=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(
@@ -163,7 +149,6 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
                 ),
                 rich=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(

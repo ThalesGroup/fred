@@ -30,6 +30,12 @@ pub struct OrganizationModelPolicy {
     /// Optional conversation-title model, within this organization's permitted offers.
     #[serde(default)]
     pub title: Option<ModelOfferKey>,
+    /// Embedding model of the organization's documents, within its permitted offers.
+    pub embedding: Option<ModelOfferKey>,
+    /// Set by the first indexing: the corpus keeps this embedding model.
+    pub embedding_locked: bool,
+    /// Optional model describing document images, within its permitted chat offers.
+    pub vision: Option<ModelOfferKey>,
     pub created_by: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_by: Option<String>,
@@ -57,6 +63,14 @@ pub struct ReplaceModelPolicy {
     #[serde(deserialize_with = "Option::deserialize")]
     #[schema(required = true)]
     pub title: Option<ModelOfferKey>,
+    /// Embedding model of the documents; unchangeable once the corpus is indexed.
+    #[serde(deserialize_with = "Option::deserialize")]
+    #[schema(required = true)]
+    pub embedding: Option<ModelOfferKey>,
+    /// Optional model describing document images during processing.
+    #[serde(deserialize_with = "Option::deserialize")]
+    #[schema(required = true)]
+    pub vision: Option<ModelOfferKey>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -68,6 +82,11 @@ struct PolicyRow {
     fallback_upstream_model_id: Option<String>,
     title_source_id: Option<String>,
     title_upstream_model_id: Option<String>,
+    embedding_source_id: Option<String>,
+    embedding_upstream_model_id: Option<String>,
+    embedding_locked: bool,
+    vision_source_id: Option<String>,
+    vision_upstream_model_id: Option<String>,
     created_by: String,
     created_at: DateTime<Utc>,
     updated_by: String,
@@ -90,7 +109,9 @@ pub(super) async fn read(
 ) -> AppResult<OrganizationModelPolicy> {
     let row: Option<PolicyRow> = sqlx::query_as(
         "select revision, default_source_id, default_upstream_model_id,
-             fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id, created_by, created_at, updated_by, updated_at
+             fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id,
+             embedding_source_id, embedding_upstream_model_id, embedding_locked_at is not null as embedding_locked,
+             vision_source_id, vision_upstream_model_id, created_by, created_at, updated_by, updated_at
          from organization_model_policy where organization_id = $1",
     ).bind(organization_id).fetch_optional(&mut *conn).await?;
     let permissions: Vec<(String, String, bool)> = sqlx::query_as(
@@ -122,6 +143,9 @@ pub(super) async fn read(
             default: key(row.default_source_id, row.default_upstream_model_id),
             fallback: key(row.fallback_source_id, row.fallback_upstream_model_id),
             title: key(row.title_source_id, row.title_upstream_model_id),
+            embedding: key(row.embedding_source_id, row.embedding_upstream_model_id),
+            embedding_locked: row.embedding_locked,
+            vision: key(row.vision_source_id, row.vision_upstream_model_id),
             created_by: Some(row.created_by),
             created_at: Some(row.created_at),
             updated_by: Some(row.updated_by),
@@ -135,6 +159,9 @@ pub(super) async fn read(
             default: None,
             fallback: None,
             title: None,
+            embedding: None,
+            embedding_locked: false,
+            vision: None,
             created_by: None,
             created_at: None,
             updated_by: None,
@@ -175,14 +202,50 @@ impl ReplaceModelPolicy {
                 return Err(AppError::Unprocessable("invalid offer identity".into()));
             }
         }
-        if [&self.default, &self.fallback, &self.title]
+        if self
+            .choices()
             .into_iter()
-            .flatten()
+            .flat_map(|(_, choice)| choice)
             .any(|choice| !permitted.contains(choice))
         {
-            return Err(AppError::Unprocessable("default, fallback and title must be permitted; clear or replace revoked choices explicitly".into()));
+            return Err(AppError::Unprocessable("default, fallback, title, embedding and vision must be permitted; clear or replace revoked choices explicitly".into()));
         }
         Ok(permitted)
+    }
+
+    /// Every single-model choice with the aptitude its use requires.
+    fn choices(&self) -> [(Use, Option<&ModelOfferKey>); 5] {
+        [
+            (Use::Chat, self.default.as_ref()),
+            (Use::Chat, self.fallback.as_ref()),
+            (Use::Chat, self.title.as_ref()),
+            (Use::Embedding, self.embedding.as_ref()),
+            (Use::Vision, self.vision.as_ref()),
+        ]
+    }
+}
+
+/// What a selected offer is used for, and therefore which aptitude it needs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Use {
+    Chat,
+    Embedding,
+    Vision,
+}
+
+impl Use {
+    /// Vision accepts an unknown image aptitude; only a source-reported refusal excludes it.
+    pub(super) fn fits(
+        self,
+        chat: Option<bool>,
+        embedding: Option<bool>,
+        vision: Option<bool>,
+    ) -> bool {
+        match self {
+            Self::Chat => chat == Some(true),
+            Self::Embedding => embedding == Some(true),
+            Self::Vision => chat == Some(true) && vision != Some(false),
+        }
     }
 }
 
@@ -194,18 +257,23 @@ struct Candidate {
     observed_ok: bool,
     current: bool,
     advertised: bool,
-    chat: bool,
+    metadata: Json<super::discovery::ModelMetadata>,
 }
 
-/// One calculation for administrative picker choices and write validation.
+/// One calculation for administrative picker choices and write validation: a present
+/// offer, observed at the current enabled revision, usable for chat or embeddings.
 pub(super) fn selectable(
     enabled: bool,
     observed_ok: bool,
     current: bool,
     advertised: bool,
-    chat: bool,
+    usable: bool,
 ) -> bool {
-    enabled && observed_ok && current && advertised && chat
+    enabled && observed_ok && current && advertised && usable
+}
+
+pub(super) fn usable(metadata: &super::discovery::ModelMetadata) -> bool {
+    metadata.chat == Some(true) || metadata.embedding == Some(true)
 }
 
 /// Shared source boundary for policy writes, recommendations and refresh admission.
@@ -239,6 +307,7 @@ pub(super) async fn require_selectable(
     conn: &mut PgConnection,
     organization_id: Uuid,
     candidates: &BTreeSet<ModelOfferKey>,
+    uses: &[(Use, &ModelOfferKey)],
 ) -> AppResult<()> {
     require_assigned(
         conn,
@@ -254,7 +323,7 @@ pub(super) async fn require_selectable(
              coalesce((s.configuration->>'enabled')::boolean, false) as enabled,
              s.state = 'ok' as observed_ok,
              coalesce(s.snapshot_source_revision = (s.configuration->>'revision')::bigint, false) as current,
-             o.advertised, coalesce(o.metadata->'chat' = 'true'::jsonb, false) as chat
+             o.advertised, o.metadata
          from model_source s join model_offer o on o.source_id = s.source_id
          join jsonb_to_recordset($1) as x(source_id text, upstream_model_id text)
              on (o.source_id, o.upstream_model_id) = (x.source_id, x.upstream_model_id)
@@ -283,14 +352,32 @@ pub(super) async fn require_selectable(
             row.observed_ok,
             row.current,
             row.advertised,
-            row.chat,
+            usable(&row.metadata),
         )
     }) {
         return Err(AppError::problem(
             StatusCode::CONFLICT,
             "model_offer_not_selectable",
-            "New permissions and selections require a present chat offer successfully observed at the current enabled source revision.",
+            "New permissions and selections require a present chat or embedding offer successfully observed at the current enabled source revision.",
         ));
+    }
+    for (use_, key) in uses {
+        let row = rows.iter().find(|row| {
+            row.source_id == key.source_id && row.upstream_model_id == key.upstream_model_id
+        });
+        if row.is_some_and(|row| {
+            !use_.fits(
+                row.metadata.chat,
+                row.metadata.embedding,
+                row.metadata.vision,
+            )
+        }) {
+            return Err(AppError::problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "model_offer_unsuited",
+                "Chat choices require a chat offer, the embedding choice an attested embedding offer and the vision choice a chat offer not reported without image input.",
+            ));
+        }
     }
     Ok(())
 }
@@ -317,24 +404,36 @@ pub(super) async fn replace(
             "Model policy changed; reload it before replacing it.",
         ));
     }
-    let previous: BTreeSet<_> = current.permitted.into_iter().collect();
+    if current.embedding_locked && request.embedding != current.embedding {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "embedding_model_locked",
+            "The organization's documents are indexed with this embedding model; it cannot change.",
+        ));
+    }
+    let previous: BTreeSet<_> = current.permitted.iter().cloned().collect();
     let mut candidates: BTreeSet<_> = permitted.difference(&previous).cloned().collect();
-    for (choice, old) in [
-        (&request.default, &current.default),
-        (&request.fallback, &current.fallback),
-        (&request.title, &current.title),
-    ] {
+    let current_choices = [
+        current.default.as_ref(),
+        current.fallback.as_ref(),
+        current.title.as_ref(),
+        current.embedding.as_ref(),
+        current.vision.as_ref(),
+    ];
+    let mut uses = Vec::new();
+    for ((use_, choice), old) in request.choices().into_iter().zip(current_choices) {
         if choice != old
             && let Some(choice) = choice
         {
             candidates.insert(choice.clone());
+            uses.push((use_, choice));
         }
     }
-    let previous_reasoning: BTreeSet<_> = current.reasoning_enabled.into_iter().collect();
-    let reasoning: BTreeSet<_> = request.reasoning_enabled.into_iter().collect();
+    let previous_reasoning: BTreeSet<_> = current.reasoning_enabled.iter().cloned().collect();
+    let reasoning: BTreeSet<_> = request.reasoning_enabled.iter().cloned().collect();
     let newly_enabled: BTreeSet<_> = reasoning.difference(&previous_reasoning).cloned().collect();
     candidates.extend(newly_enabled.iter().cloned());
-    require_selectable(conn, organization_id, &candidates).await?;
+    require_selectable(conn, organization_id, &candidates, &uses).await?;
     if !newly_enabled.is_empty() {
         let supported: i64 = sqlx::query_scalar(
             "select count(*) from model_offer o
@@ -359,8 +458,10 @@ pub(super) async fn replace(
     sqlx::query(
         "insert into organization_model_policy
              (organization_id, revision, default_source_id, default_upstream_model_id,
-              fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id, created_by, updated_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+              fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id,
+              embedding_source_id, embedding_upstream_model_id, vision_source_id, vision_upstream_model_id,
+              created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
          on conflict (organization_id) do update set revision = excluded.revision,
              default_source_id = excluded.default_source_id,
              default_upstream_model_id = excluded.default_upstream_model_id,
@@ -368,6 +469,10 @@ pub(super) async fn replace(
              fallback_upstream_model_id = excluded.fallback_upstream_model_id,
              title_source_id = excluded.title_source_id,
              title_upstream_model_id = excluded.title_upstream_model_id,
+             embedding_source_id = excluded.embedding_source_id,
+             embedding_upstream_model_id = excluded.embedding_upstream_model_id,
+             vision_source_id = excluded.vision_source_id,
+             vision_upstream_model_id = excluded.vision_upstream_model_id,
              updated_by = excluded.updated_by, updated_at = now()",
     )
     .bind(organization_id)
@@ -378,6 +483,10 @@ pub(super) async fn replace(
     .bind(request.fallback.as_ref().map(|k| &k.upstream_model_id))
     .bind(request.title.as_ref().map(|k| &k.source_id))
     .bind(request.title.as_ref().map(|k| &k.upstream_model_id))
+    .bind(request.embedding.as_ref().map(|k| &k.source_id))
+    .bind(request.embedding.as_ref().map(|k| &k.upstream_model_id))
+    .bind(request.vision.as_ref().map(|k| &k.source_id))
+    .bind(request.vision.as_ref().map(|k| &k.upstream_model_id))
     .bind(uid)
     .execute(&mut *conn)
     .await?;

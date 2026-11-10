@@ -26,7 +26,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
 
@@ -57,8 +56,7 @@ def _healthy_context() -> SimpleNamespace:
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
-        get_embedder=lambda: "embedder",
-        get_create_vector_store=MagicMock(return_value=object()),
+        get_corpus_store=MagicMock(side_effect=AssertionError("API readiness must not open a corpus")),
         get_published_artifact_reader=MagicMock(side_effect=AssertionError("API readiness must not access S3")),
         get_authorization_client=lambda: authorization,
         configuration=SimpleNamespace(storage=SimpleNamespace(opensearch=object()), control_plane_url="https://cp/control-plane/v1"),
@@ -91,13 +89,14 @@ def test_ready_all_dependencies_ok() -> None:
         assert body["checks"][name]["ok"] is True
 
 
-def test_ready_opens_the_read_only_vector_store() -> None:
+def test_ready_does_not_depend_on_any_organization_corpus() -> None:
+    """Corpus indexes are per organization and validated with their model on search."""
     ctx = _healthy_context()
 
     with _client(ctx) as client:
         assert client.get("/knowledge-flow/v2/ready").status_code == 200
 
-    ctx.get_create_vector_store.assert_called_once_with("embedder", read_only=True)
+    ctx.get_corpus_store.assert_not_called()
 
 
 def test_ready_reports_degraded_when_postgres_down() -> None:
@@ -134,17 +133,3 @@ def test_ready_skips_unconfigured_opensearch() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
-
-
-def test_api_stays_live_and_becomes_ready_after_corpus_initialization():
-    ctx = _healthy_context()
-    store = MagicMock(spec=OpenSearchVectorStoreAdapter)
-    store.ensure_ready.side_effect = [RuntimeError("Corpus index is not initialized"), None]
-    ctx.get_create_vector_store.return_value = store
-    with _client(ctx) as client:
-        assert client.get("/knowledge-flow/v2/healthz").status_code == 200
-        response = client.get("/knowledge-flow/v2/ready")
-        assert response.status_code == 503
-        assert response.json()["checks"]["opensearch"]["ok"] is False
-        assert client.get("/knowledge-flow/v2/healthz").status_code == 200
-        assert client.get("/knowledge-flow/v2/ready").status_code == 200

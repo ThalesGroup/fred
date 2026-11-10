@@ -82,6 +82,7 @@ markers = [
 [tool.uv.sources]
 fred-knowledge = { path = "../../libs/fred-knowledge", editable = true }
 fred-pod = { path = "../../libs/fred-pod", editable = true }
+fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-core = { path = "../../libs/fred-core", editable = true }
 
 # Keep CPU-only index for x86_64

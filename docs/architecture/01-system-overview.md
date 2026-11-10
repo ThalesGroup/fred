@@ -89,8 +89,8 @@ The pod obtains an authorized context for each turn. Selecting an assistant or
 model in the browser does not grant execution. Document search uses the person's
 authority within the conversation's space and permitted ancestor resources;
 it does not give the model unrestricted access. The answer streams from the pod
-to the frontend. Knowledge Flow's embedding models are configured separately
-from the conversation's generation model.
+to the frontend. Knowledge Flow embeds the question with the corpus model of the
+space's organization, not with the conversation's generation model.
 
 Organization-level policy limits which models and pod offers may be used; local
 capability restrictions can narrow it. Roles in the working space determine what
@@ -99,32 +99,44 @@ the person may do. [Security](03-security.md) explains these two controls;
 
 ## 1.4. Model decisions and credentials
 
-Control Plane selects the model at admission of each turn, using the working
-space's organization policy, the assistant's recommendation and the user's choice.
-Team and project execution do not introduce separate model policies.
+Control Plane decides every model Fred calls, from one organization policy that the
+Owner administers in **Models**. For agents, it selects the chat model at admission
+of each turn, using the working space's organization policy, the assistant's
+recommendation and the user's choice. For the organization's documents, the policy
+names the embedding model, an optional image-description model, and the default chat
+model that document tools such as summary and extraction use. Team and project
+execution do not introduce separate model policies, and no component holds a model
+choice in its own configuration.
 
 ```mermaid
 flowchart TB
-    owner["Organization Owner"] -->|"Permitted models and defaults"| cp
+    owner["Organization Owner"] -->|"Permitted models and choices"| cp
     platform["Platform configuration"] -->|"Approved sources"| cp
     cp["Control Plane<br/>Select model and connection"]
-    cp --> python["Python agent<br/>Separate Agent Pod"]
-    cp --> rust["Ralph - Rust agent<br/>Inside Control Plane"]
+    cp -->|"Each turn"| python["Python agent<br/>Separate Agent Pod"]
+    cp -->|"Each turn"| rust["Ralph - Rust agent<br/>Inside Control Plane"]
+    cp -->|"Each processing stage<br/>and search"| kf["Knowledge Flow<br/>Index and search documents"]
     secrets["Kubernetes Secrets<br/>Local credentials"] -.-> python
     secrets -.-> rust
+    secrets -.-> kf
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class cp,python,rust fred
+    class cp,python,rust,kf fred
     class secrets cots
     class owner,platform neutral
 ```
 
-Both runtimes consume the admitted decision and verify it against their local
-credential binding before calling the provider. The decision carries a credential
-reference, never its value. Browser preparation exposes neither that connection
-nor a secret. Startup supplies credentials; it does not fix one model for the
-pod's lifetime. The [model reference](A13-models.md) connects this boundary to the
-SQL schema, configuration types and runtime contracts, including Ralph's narrower
-transport support.
+Each consumer verifies the admitted decision against its local credential binding
+before calling the provider. The decision carries a credential reference, never its
+value. Browser preparation exposes neither that connection nor a secret. Startup
+supplies credentials; it does not fix a model for the process's lifetime.
+
+An organization's documents form one corpus in its own vector index, embedded with
+one model. The first indexing locks that choice, since an index cannot mix embedding
+spaces; changing it would require reindexing every document, which Fred does not
+offer yet. Documents are not processed before an embedding model is chosen. The
+[model reference](A13-models.md) connects these boundaries to the SQL schema,
+configuration types and runtime contracts, including the narrower transport that
+Ralph and Knowledge Flow support.

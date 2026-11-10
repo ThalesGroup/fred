@@ -15,11 +15,10 @@
 import logging
 import os
 import time
-from typing import List, Optional, override
+from typing import override
 
-from fred_core.documents.document_structures import DocSummary, DocumentMetadata, ProcessingStage
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage
 from fred_core.kpi import BaseKPIWriter, KPIActor
-from fred_knowledge.text.smart_llm_summarizer import SmartDocSummarizer
 from fred_knowledge.vector.cancellation import WorkCancelled
 from langchain_core.documents import Document
 
@@ -44,7 +43,7 @@ class VectorizationProcessor(BaseOutputProcessor):
     Emits KPIs for duration, sizes, counts, and failures.
     """
 
-    description = "Splits documents, embeds chunks, and stores vectors plus summaries for retrieval."
+    description = "Splits documents, embeds chunks, and stores vectors for retrieval."
 
     def __init__(self, *, context=None, vector_store=None):
         self.context = context if context is not None else ApplicationContext.get_instance()
@@ -54,21 +53,6 @@ class VectorizationProcessor(BaseOutputProcessor):
 
         self.embedder = self.context.get_embedder()
         logger.info(f"🧠 Embedder initialized: {self.embedder.__class__.__name__}")
-
-        self.smart_summarizer = SmartDocSummarizer(
-            model_config=self.context.configuration.chat_model,
-            splitter=self.splitter,
-            opts={  # hardcoded; move to config later
-                "sum_enabled": True,
-                "sum_input_cap": 120_000,
-                "sum_abs_words": 180,
-                "sum_kw_top_k": 24,
-                "mr_top_shards": 24,
-                "mr_shard_words": 80,
-                "small_threshold": 50_000,
-                "large_threshold": 1_200_000,
-            },
-        )
 
         self.vector_store = vector_store if vector_store is not None else self.context.get_create_vector_store(self.embedder)
         logger.info(f"🗃️ Vector store initialized: {self.vector_store.__class__.__name__}")
@@ -106,28 +90,6 @@ class VectorizationProcessor(BaseOutputProcessor):
 
             slide_assets = load_pptx_slide_assets(file_path)
 
-            # Ensure keywords is always defined
-            keywords: List[str] | None = None
-
-            # 1.b) Summarize ONCE per doc (size-aware; non-blocking)
-            if self.context.is_summary_generation_enabled():
-                abstract: Optional[str]
-                abstract, keywords = self.smart_summarizer.summarize_document(document)
-
-                if abstract or keywords:
-                    logger.info("Summaries computed: abstract_len=%d, keywords=%d", len(abstract or ""), len(keywords or []))
-
-                    # Fred rationale:
-                    # - Keep human-facing abstract at *document* level (no chunk bloat).
-                    # - Add provenance for audits and future refresh decisions.
-                    metadata.summary = DocSummary(
-                        abstract=abstract,
-                        keywords=keywords or [],
-                        model_name=self.smart_summarizer.get_model_name(),
-                        method="SmartDocSummarizer@v1",
-                        # created_at is set by the metadata store on save if you prefer; setting here is optional.
-                    )
-
             # 2) Split
             chunks = self.splitter.split(document)
             chunks_count = len(chunks)
@@ -142,14 +104,6 @@ class VectorizationProcessor(BaseOutputProcessor):
             base_flat = flat_metadata_from(metadata)
             base_flat = {k: v for k, v in base_flat.items() if v is not None}
 
-            # just before: for i, doc in enumerate(chunks):
-            kw_for_search = None
-            if keywords:
-                # Fred rationale:
-                # - Give BM25 a few strong tokens without duplicating the abstract.
-                # - Keep it short to avoid index bloat.
-                kw_for_search = " ".join((keywords or [])[:12])
-
             for i, doc in enumerate(chunks):
                 raw_meta = (doc.metadata or {}).copy()
 
@@ -159,11 +113,6 @@ class VectorizationProcessor(BaseOutputProcessor):
 
                 # Stable id
                 raw_meta["chunk_uid"] = make_chunk_uid(doc_uid, {**raw_meta, "chunk_index": i})
-
-                # - Per-chunk 'doc_kw' boosts lexical recall for hybrid search.
-                # - Name is short; ensure sanitize_chunk_metadata() whitelists 'doc_kw'.
-                if kw_for_search:
-                    raw_meta["doc_kw"] = kw_for_search
 
                 slide_number = slide_number_from_chunk_metadata(raw_meta)
                 if slide_number is not None:

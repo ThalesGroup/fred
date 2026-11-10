@@ -16,8 +16,7 @@
 import logging
 from typing import List, Optional
 
-from fred_core import get_model
-from fred_core.common import ModelConfiguration
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable
 
@@ -37,13 +36,9 @@ class LLMBasedDocSummarizer(BaseDocSummarizer):
     - No provider branching here; utility_llm factory already handled that.
     """
 
-    def __init__(self, model_config: Optional[ModelConfiguration]):
-        # If no model configured, raise: the caller must select the fallback summarizer instead.
-        if model_config is None:
-            raise ValueError("Utility model configuration is missing.")
-        self.model = get_model(model_config)
-        if self.model is None:
-            raise RuntimeError("No utility LLM configured; use FallbackDocSummarizer instead.")
+    def __init__(self, model: BaseChatModel):
+        # The caller supplies an admitted chat model; this class never selects one.
+        self.model = model
 
         # Reusable 2-message prompt (system + user). We keep a MessagesPlaceholder
         # so we can reuse the chain for both abstract and keywords with different system prompts.

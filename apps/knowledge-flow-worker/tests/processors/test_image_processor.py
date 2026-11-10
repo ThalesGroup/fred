@@ -16,7 +16,6 @@
 
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -118,10 +117,6 @@ def test_extract_file_metadata(image_processor):
 
 def test_convert_file_to_markdown(image_processor, monkeypatch):
     """Test markdown conversion for image files (no vision model: filename fallback)"""
-    monkeypatch.setattr(
-        "knowledge_flow_worker.core.processors.input.image_processor.image_processor.get_configuration",
-        lambda: SimpleNamespace(vision_model=None),
-    )
     # Create a test image file named "Nvidia.png"
     png_data = (
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"

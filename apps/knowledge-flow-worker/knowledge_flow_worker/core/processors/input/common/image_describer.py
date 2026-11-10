@@ -20,8 +20,6 @@
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from fred_core import get_model
-from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -89,20 +87,20 @@ Output constraints:
 """.strip()
 
 
-def build_image_describer(
-    vision_cfg: Optional[ModelConfiguration],
-    system_prompt: str | None = None,
-) -> Optional[BaseImageDescriber]:
+def build_image_describer(system_prompt: str | None = None) -> Optional[BaseImageDescriber]:
     """
-    Fred rationale:
-    - Centralizes the decision: if 'vision' is configured, we return a describer.
-    - Keeps PdfMarkdownProcessor free of provider logic.
+    The current stage's describer, or None when the organization chose no vision model.
+
+    The model is the Control Plane's admission for this extraction stage, already built
+    and cached by the application context. Never cache the describer itself: a shared
+    processor instance may serve the documents of several organizations.
     """
-    if not vision_cfg:
-        logger.info("No vision configuration found; images won't be described.")
+    from knowledge_flow_worker.application_context import get_app_context
+
+    vision = get_app_context().get_vision()
+    if vision is None:
         return None
-    model = get_model(vision_cfg)  # one constructor for all providers
-    return VisionImageDescriber(model, system_prompt or VISION_DESCRIBE_PROMPT_V1, provider=vision_cfg.provider)
+    return VisionImageDescriber(vision[0], system_prompt or VISION_DESCRIBE_PROMPT_V1)
 
 
 def _stringify_content(content: Union[str, List[Any], Dict[str, Any]]) -> str:
@@ -158,9 +156,8 @@ class VisionImageDescriber(BaseImageDescriber):
     - Prompt lives here; transport/auth stays in fred_core.model_hub.
     """
 
-    def __init__(self, model: BaseChatModel, system_prompt: str, provider: str | None = None, max_tokens: int = 512):
+    def __init__(self, model: BaseChatModel, system_prompt: str, max_tokens: int = 512):
         # Bind per-call kwargs like max_tokens via LC's .bind()
-        self.provider = (provider or "").lower()
         self.model = model
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens

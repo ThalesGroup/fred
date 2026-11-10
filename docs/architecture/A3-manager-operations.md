@@ -173,10 +173,13 @@ platform:
   inference_credentials:
     - credential_binding: mistral
       api_root: https://api.mistral.ai/v1
-      api_key_env: OPENAI_API_KEY
+      api_key_env: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
+    - credential_binding: openai
+      api_root: https://api.openai.com/v1
+      api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
   # Local test source, replacing Swift's Small/Medium static profiles.
-  # Discovery lists all offers; authorize mistral-small-latest and
-  # mistral-medium-latest for the organization in the Models tab.
+  # Discovery lists all offers; in the Models tab, authorize chat models and
+  # choose the documents' embedding model, e.g. mistral-embed.
   model_sources:
     - source_id: mistral
       revision: 1
@@ -186,7 +189,7 @@ platform:
         url: https://api.mistral.ai/v1/models
         authentication:
           mode: bearer
-          secret_env_var: OPENAI_API_KEY
+          secret_env_var: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
           # API operations of the existing local test key, not OAuth scope names.
           provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
           authority: discovery_and_inference
@@ -203,6 +206,35 @@ platform:
         auth:
           kind: api_key
       visibility_scope: local-test-mistral-account
+      # The provider list does not say which models embed; the platform attests it.
+      embedding_models: [mistral-embed]
+    # OpenAI's /v1/models carries no capability metadata and also lists
+    # embedding, audio and image models: besides the attested embedding models,
+    # authorize only chat models.
+    - source_id: openai
+      revision: 1
+      enabled: true
+      inventory:
+        kind: discovered
+        url: https://api.openai.com/v1/models
+        authentication:
+          mode: bearer
+          secret_env_var: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+          provider_scopes: ["GET /v1/models", "POST /v1/chat/completions"]
+          authority: discovery_and_inference
+          accept_inference_authority: true
+        qualification: chat_source
+        complete_inventory_guaranteed: true
+      inference:
+        credential_binding: openai
+        api_root: https://api.openai.com/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai
+        auth:
+          kind: api_key
+      visibility_scope: local-test-openai-account
+      embedding_models: [text-embedding-3-small, text-embedding-3-large]
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2
@@ -280,7 +312,7 @@ flowchart LR
 
 | | Host run | k3d release |
 | --- | --- | --- |
-| Start | `make docker-app FRED=weaver APP=fred DIR=../fred` in the factory | `make k3d-app FRED=weaver APP=fred DIR=../fred` in the factory |
+| Start | `make docker-prepare DIR=../fred` in the factory, then `make run` | `make k3d-app FRED=weaver APP=fred DIR=../fred` in the factory |
 | Configuration | `config/configuration_prod.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `temporal:7233`, `keycloak:8080` |

@@ -28,8 +28,7 @@ SPACE, DOC, OUTSIDE, HIDDEN, ATTACHMENT, GENERATION = [UUID(int=i) for i in rang
 @pytest.fixture
 def search(monkeypatch):
     service = module.VectorSearchService.__new__(module.VectorSearchService)
-    service._require_corpus_ready = AsyncMock()
-    service.vector_store = SimpleNamespace()
+    service._corpus = AsyncMock(return_value=SimpleNamespace())
     service.kpi = MagicMock()
     # Exercise rerank_documents itself: reverse relevance, without changing retrieval scores.
     service._crossencoder_model = SimpleNamespace(predict=MagicMock(side_effect=lambda pairs: list(range(len(pairs)))))
@@ -53,7 +52,7 @@ def search(monkeypatch):
         return BaseVectorHit(document=Document(page_content=f"{uid}:{ordinal}", metadata={"document_uid": str(uid), "chunk_uid": str(uuid5(GENERATION, str(ordinal)))}), score=score)
 
     candidates = [hit(i, score) for i, score in enumerate([0.9, 0.8, 0.7, 0.6, 0.4, 0.1])]
-    strategy = AsyncMock(side_effect=lambda **kwargs: candidates[: kwargs["k"]])
+    strategy = AsyncMock(side_effect=lambda store, **kwargs: candidates[: kwargs["k"]])
     service._hybrid = strategy
     args = dict(
         question="anchor",
@@ -165,7 +164,7 @@ def test_simultaneous_first_reranks_load_crossencoder_once(monkeypatch):
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
     service = module.VectorSearchService()
     context.get_crossencoder_model.assert_not_called()
-    context.get_create_vector_store.assert_not_called()
+    context.get_corpus_store.assert_not_called()
     lock = service._crossencoder_lock
 
     def enter():
@@ -196,8 +195,30 @@ def test_simultaneous_first_reranks_load_crossencoder_once(monkeypatch):
 @pytest.mark.asyncio
 async def test_unreachable_vector_store_is_reported_as_not_ready(monkeypatch):
     context = MagicMock()
-    context.get_create_vector_store.side_effect = OSError("unreachable")
+    context.get_corpus_store.side_effect = OSError("unreachable")
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
+    monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=SimpleNamespace(organization_id=UUID(int=7), admission=object())))
     with pytest.raises(HTTPException) as failure:
-        await module.VectorSearchService()._require_corpus_ready()
-    assert failure.value.status_code == 503
+        await module.VectorSearchService()._corpus(DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()))
+    assert failure.value.detail == "corpus_not_ready"
+
+
+@pytest.mark.asyncio
+async def test_the_question_is_embedded_only_with_the_locked_corpus_model(monkeypatch):
+    """No locked model or no index yet: an empty result, never another model or index."""
+    context = MagicMock()
+    monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
+    scope = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope())
+    service = module.VectorSearchService()
+    monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=None))
+    assert await service._corpus(scope) is None
+    context.get_corpus_store.assert_not_called()
+    model = SimpleNamespace(organization_id=UUID(int=7), admission=object())
+    monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=model))
+    context.get_corpus_store.return_value = SimpleNamespace(index_exists=lambda: False)
+    assert await service._corpus(scope) is None
+    context.get_corpus_store.assert_called_once_with(model.organization_id, model.admission)
+    monkeypatch.setattr(module, "organization_model", AsyncMock(side_effect=module.OrganizationModelUnavailable("withdrawn")))
+    with pytest.raises(HTTPException) as failure:
+        await service._corpus(scope)
+    assert failure.value.detail == "corpus_model_unavailable"

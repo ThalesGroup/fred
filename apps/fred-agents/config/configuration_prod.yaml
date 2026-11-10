@@ -125,6 +125,9 @@ scheduler:
 inference_credentials:
   - credential_binding: mistral
     api_root: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY # pragma: allowlist secret (env var name only)
+  - credential_binding: openai
+    api_root: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
 
 platform:

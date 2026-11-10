@@ -19,7 +19,6 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from knowledge_flow_worker.application_context import get_configuration
 from knowledge_flow_worker.core.processors.input.common.image_describer import IMAGE_DESCRIPTION_UNAVAILABLE, build_image_describer
 from knowledge_flow_worker.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor, FastTextOptions, FastTextResult
 from knowledge_flow_worker.core.processors.input.image_processor.image_processor import SUPPORTED_IMAGE_EXTENSIONS
@@ -36,21 +35,11 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
     basic metadata so the image remains retrievable in session-scoped RAG.
     """
 
-    def __init__(self) -> None:
-        self.image_describer = None
-        self._warned_missing_vision_model = False
-
     def _resolve_image_describer(self):
-        if self.image_describer is not None:
-            return self.image_describer
-        vision_model = get_configuration().vision_model
-        if not vision_model:
-            if not self._warned_missing_vision_model:
-                logger.info("Vision model missing; using filename fallback only.")
-                self._warned_missing_vision_model = True
-            return None
-        self.image_describer = build_image_describer(vision_model)
-        return self.image_describer
+        describer = build_image_describer()
+        if describer is None:
+            logger.info("No vision model admitted; using filename fallback only.")
+        return describer
 
     @staticmethod
     def _fallback_text(file_path: Path) -> str:

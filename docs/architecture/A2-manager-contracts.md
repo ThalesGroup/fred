@@ -77,6 +77,7 @@ application path writes it yet.
 | 1. Immutability | `marketplace_entry` | `marketplace_entry_identity` / `protect_marketplace_entry` | BEFORE INSERT OR UPDATE / ROW | marketplace identity and successive publication versions |
 | 1. Immutability | `marketplace_installation` | `marketplace_installation_immutable` / `protect_marketplace_installation` | BEFORE INSERT OR UPDATE / ROW | installation receipt and snapshot provenance |
 | 1. Immutability | `marketplace_proposal` | `marketplace_proposal_immutable` / `protect_marketplace_proposal` | BEFORE INSERT OR UPDATE / ROW | submitted package, attribution and final decision |
+| 1. Immutability | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | the indexed corpus embedding model |
 | 1. Immutability | `powerpoint_file` | `powerpoint_file_identity` / `protect_powerpoint_file` | BEFORE INSERT OR UPDATE / ROW | PowerPoint identity and terminal retirement; live upload owner |
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
 | 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |

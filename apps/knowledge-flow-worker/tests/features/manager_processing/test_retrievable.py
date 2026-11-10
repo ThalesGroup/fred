@@ -22,11 +22,12 @@ from knowledge_flow_worker.features.manager_processing.retrievable_workflow impo
 def projection(monkeypatch):
     from knowledge_flow_worker.application_context import ApplicationContext
 
-    document, operation, generation = uuid4(), uuid4(), uuid4()
+    document, operation, generation, organization = uuid4(), uuid4(), uuid4(), uuid4()
     ids = [str(uuid5(generation, str(i))) for i in (0, 2)]
     vectors = Mock()
     state = {
         "document_id": str(document),
+        "organization_id": str(organization),
         "operation_id": str(operation),
         "retrievable": False,
         "confirmed": False,
@@ -61,7 +62,7 @@ def projection(monkeypatch):
     manager.__enter__ = Mock(return_value=client)
     manager.__exit__ = Mock(return_value=None)
     monkeypatch.setattr(retrievable, "ManagerClient", lambda _: manager)
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors if organization_id == organization else None)
     monkeypatch.setattr(ApplicationContext, "get_instance", lambda: context)
     return SimpleNamespace(command={"document_id": str(document), "operation_id": str(operation)}, state=state, ids=ids, vectors=vectors, client=client, failures=failures)
 

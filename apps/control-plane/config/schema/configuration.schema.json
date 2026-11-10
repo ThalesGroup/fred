@@ -651,6 +651,14 @@
           "description": "Explicit platform approval for internal HTTP routes; HTTPS is the default.",
           "type": "boolean"
         },
+        "embedding_models": {
+          "description": "Platform attestation: these exact offers compute embeddings and are never chat.\nProvider model lists do not establish this aptitude.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
         "enabled": {
           "type": "boolean"
         },
@@ -702,6 +710,17 @@
             }
           ]
         },
+        "embedding": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey",
+              "description": "Embedding model of the organization's documents, within its permitted offers."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fallback": {
           "oneOf": [
             {
@@ -736,6 +755,17 @@
           },
           "maxItems": 64,
           "type": "array"
+        },
+        "vision": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey",
+              "description": "Optional model describing document images, within its permitted chat offers."
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [

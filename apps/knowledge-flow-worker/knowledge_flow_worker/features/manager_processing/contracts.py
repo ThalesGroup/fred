@@ -7,6 +7,7 @@ from typing import Literal, Self
 from uuid import UUID
 
 from fred_knowledge.artifacts.contracts import Artifact, Contract
+from fred_sdk.contracts.weaver import InferenceAdmission
 from pydantic import Field, model_validator
 
 Profile = Literal["fast", "medium", "rich"]
@@ -41,8 +42,17 @@ class Work(Contract):
     installation_id: UUID
     processing_id: UUID
     document_id: UUID
+    # The document's organization, whose corpus holds its vectors.
+    organization_id: UUID
     original_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     profile: Profile
+
+
+class StageModels(Contract):
+    """Models the Control Plane admitted for this stage under the organization's policy."""
+
+    embedding: InferenceAdmission | None
+    vision: InferenceAdmission | None
 
 
 class Predecessor(Contract):
@@ -72,6 +82,7 @@ class Descriptor(Contract):
     profile_settings: dict
     predecessor: Predecessor | None
     committed: Manifest | None
+    models: StageModels
 
     @model_validator(mode="after")
     def validate_placement(self) -> Self:
@@ -79,6 +90,10 @@ class Descriptor(Contract):
             raise ValueError("Exactly one folder or conversation is required")
         if (self.folder_path is None) != (self.folder_id is None):
             raise ValueError("A folder path is required only for a drive document")
+        if self.organization_id != self.work.organization_id:
+            raise ValueError("The descriptor and its work name different organizations")
+        if self.stage == "indexing" and self.models.embedding is None:
+            raise ValueError("Indexing requires the admitted corpus embedding model")
         return self
 
 
@@ -128,6 +143,7 @@ class Cleaned(Contract):
 
 class RetrievalWork(Contract):
     document_id: UUID
+    organization_id: UUID
     operation_id: UUID
     manifest: Manifest
     retrievable: bool

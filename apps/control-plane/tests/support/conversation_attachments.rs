@@ -978,13 +978,11 @@ async fn email_metadata_publication_and_conversation_reader() {
             .await
             .unwrap()
             .work(p.installation);
-        let preparation = p
-            .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+        let preparation = Box::pin(p.claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1)))
             .await
             .unwrap();
-        commit(&p, &preparation, &[("policy.json", b"{}")], 0).await;
-        let extraction = p
-            .claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1))
+        Box::pin(commit(&p, &preparation, &[("policy.json", b"{}")], 0)).await;
+        let extraction = Box::pin(p.claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1)))
             .await
             .unwrap();
         let temp = tempfile::tempdir().unwrap();
@@ -1016,10 +1014,9 @@ async fn email_metadata_publication_and_conversation_reader() {
             ("metadata.json", metadata.as_slice()),
             ("output.md", markdown.as_slice()),
         ];
-        commit(&p, &extraction, &files, 0).await;
+        Box::pin(commit(&p, &extraction, &files, 0)).await;
         let index_activity = Uuid::new_v4();
-        let mut indexed = p
-            .claim(claim(&work, Stage::Indexing, index_activity, 1))
+        let mut indexed = Box::pin(p.claim(claim(&work, Stage::Indexing, index_activity, 1)))
             .await
             .unwrap();
         if fixture == "plain_with_attachments.eml" {
@@ -1063,8 +1060,7 @@ async fn email_metadata_publication_and_conversation_reader() {
             assert!(Box::pin(p.commit(bad.clone())).await.is_err());
             // Invalid immutable bytes cannot be edited in place. A new fenced
             // attempt restores the extraction; the old generation stays unreadable.
-            indexed = p
-                .claim(claim(&work, Stage::Indexing, index_activity, 2))
+            indexed = Box::pin(p.claim(claim(&work, Stage::Indexing, index_activity, 2)))
                 .await
                 .unwrap();
             assert!(Box::pin(p.commit(bad)).await.is_err());

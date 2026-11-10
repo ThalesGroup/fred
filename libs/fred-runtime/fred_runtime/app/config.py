@@ -81,9 +81,9 @@ from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
 from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
 from fred_pod.common.structures import LogOutputFormat
-from fred_sdk.contracts.weaver import canonical_api_root
+from fred_sdk.contracts.weaver import InferenceCredentialBinding
 from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -424,26 +424,6 @@ class PodPlatformConfig(BaseModel):
     """
 
     control_plane_url: str | None = None
-
-
-_ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
-
-
-class InferenceCredentialBinding(BaseModel):
-    """Attests one admitted destination, even without a secret; holds variable names only."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    credential_binding: str = Field(min_length=1, max_length=128)
-    api_root: str
-    api_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
-    client_secret_env: str | None = Field(default=None, pattern=_ENV_NAME)
-    gateway_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
-
-    @model_validator(mode="after")
-    def approved_root(self) -> InferenceCredentialBinding:
-        if not canonical_api_root(self.api_root):
-            raise ValueError("Inference API root must be a canonical HTTP(S) URL")
-        return self
 
 
 class AgentPodConfig(BaseModel):

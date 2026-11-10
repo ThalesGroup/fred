@@ -281,7 +281,7 @@ pub(super) async fn read_inventory(
                     observation.state == "ok",
                     observation.snapshot_source_revision == Some(observation.source_revision),
                     offer.advertised,
-                    offer.metadata.chat == Some(true),
+                    super::policy::usable(&offer.metadata),
                 );
             }
             ModelInventory {

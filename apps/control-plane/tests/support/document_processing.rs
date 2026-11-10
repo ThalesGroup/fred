@@ -49,6 +49,7 @@ async fn setup_with_content_limits(
         contract: WorkerContract::load(&config.worker_contract_file, "ingestion").unwrap(),
         config,
     });
+    attest_embedding_model(&d.e.pool).await;
     d.app = api::router(
         api::AppState {
             agent_catalog: Default::default(),
@@ -64,6 +65,31 @@ async fn setup_with_content_limits(
         &[],
     );
     (d, processing)
+}
+/// Indexing needs each organization's embedding model: a declared fixture offer,
+/// published without network, chosen by every organization existing at setup.
+pub(super) async fn attest_embedding_model(pool: &sqlx::PgPool) {
+    use control_plane::model_catalog::{self, config::ModelSource};
+    let source: ModelSource =
+        serde_json::from_value(json!({"source_id":"fixture","revision":1,"enabled":true,
+        "inventory":{"kind":"declared","models":[{"id":"fixture-embed"}]},
+        "inference":{"credential_binding":"fixture","api_root":"https://models.invalid/v1",
+            "wire":"openai_chat","route":"standard","dialect":"openai","auth":{"kind":"none"}},
+        "visibility_scope":"fixture","embedding_models":["fixture-embed"]}))
+        .unwrap();
+    model_catalog::configure_sources(pool, std::slice::from_ref(&source))
+        .await
+        .unwrap();
+    model_catalog::refresh(pool, &source).await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    for statement in [
+        "insert into organization_model_source (organization_id, source_id) select id, 'fixture' from space where kind = 'organization' on conflict do nothing",
+        "insert into organization_model_policy (organization_id, revision, embedding_source_id, embedding_upstream_model_id, created_by, updated_by) select id, 1, 'fixture', 'fixture-embed', 'fixture', 'fixture' from space where kind = 'organization' on conflict do nothing",
+        "insert into organization_model_permission (organization_id, source_id, upstream_model_id) select id, 'fixture', 'fixture-embed' from space where kind = 'organization' on conflict do nothing",
+    ] {
+        sqlx::query(statement).execute(&mut *tx).await.unwrap();
+    }
+    tx.commit().await.unwrap();
 }
 fn claim(work: &Work, stage: Stage, activity: Uuid, attempt: u32) -> Claim {
     Claim {

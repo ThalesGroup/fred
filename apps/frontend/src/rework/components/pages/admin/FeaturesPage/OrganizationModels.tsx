@@ -33,6 +33,25 @@ import panelStyles from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel
 const sameOffer = (left: ModelOfferKey | null | undefined, right: ModelOfferKey) =>
   left?.source_id === right.source_id && left.upstream_model_id === right.upstream_model_id;
 
+type Choice = "default" | "fallback" | "title" | "embedding" | "vision";
+
+/** The aptitude each choice needs; the Control Plane applies the same rule on save. */
+const fits = (choice: Choice, { metadata }: StoredModelOffer) =>
+  choice === "embedding"
+    ? metadata.embedding === true
+    : metadata.chat === true && (choice !== "vision" || metadata.vision !== false);
+
+const aptitude = ({ advertised, metadata }: StoredModelOffer) =>
+  !advertised
+    ? "withdrawn"
+    : metadata.embedding === true
+      ? "embeddingAptitude"
+      : metadata.chat === true
+        ? "chat"
+        : metadata.chat === false
+          ? "notChat"
+          : "unknownChat";
+
 export function OrganizationModels({
   organizationId,
   defaultsOpen,
@@ -73,6 +92,8 @@ export function OrganizationModels({
           default: policy.default ?? null,
           fallback: policy.fallback ?? null,
           title: policy.title ?? null,
+          embedding: policy.embedding ?? null,
+          vision: policy.vision ?? null,
           ...change,
         },
       }).unwrap();
@@ -92,8 +113,13 @@ export function OrganizationModels({
       default: sameOffer(policy.default, offer) ? null : (policy.default ?? null),
       fallback: sameOffer(policy.fallback, offer) ? null : (policy.fallback ?? null),
       title: sameOffer(policy.title, offer) ? null : (policy.title ?? null),
+      embedding: sameOffer(policy.embedding, offer) ? null : (policy.embedding ?? null),
+      vision: sameOffer(policy.vision, offer) ? null : (policy.vision ?? null),
     });
   };
+  // The indexed corpus keeps its embedding model, so it stays permitted.
+  const corpusModel = (offer: ModelOfferKey) =>
+    (policy?.embedding_locked ?? false) && sameOffer(policy?.embedding, offer);
   const refreshModels = useCallback(
     async (knownSources?: ModelInventory[]) => {
       setIsRefreshingModels(true);
@@ -137,8 +163,8 @@ export function OrganizationModels({
           <Switch
             size="small"
             checked={permitted(offer)}
-            disabled={!permitted(offer) && !offer.selectable}
-            aria-disabled={busy || (!permitted(offer) && !offer.selectable)}
+            disabled={corpusModel(offer) || (!permitted(offer) && !offer.selectable)}
+            aria-disabled={busy || corpusModel(offer) || (!permitted(offer) && !offer.selectable)}
             aria-label={t("rework.admin.capabilities.organizationModels.permitAria", {
               name: `${offer.source_id} / ${offer.upstream_model_id}`,
             })}
@@ -182,6 +208,14 @@ export function OrganizationModels({
             {sameOffer(policy?.fallback, offer) && (
               <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.organizationModels.fallback")}</span>
             )}
+            {sameOffer(policy?.embedding, offer) && (
+              <span className={styles.modelSpecChip}>
+                {t("rework.admin.capabilities.organizationModels.embedding")}
+              </span>
+            )}
+            {sameOffer(policy?.vision, offer) && (
+              <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.organizationModels.vision")}</span>
+            )}
           </span>
         </div>
       ),
@@ -189,10 +223,7 @@ export function OrganizationModels({
     {
       label: t("rework.admin.capabilities.col.health"),
       size: "1fr",
-      cellRenderer: (offer) =>
-        t(
-          `rework.admin.capabilities.organizationModels.${!offer.advertised ? "withdrawn" : offer.metadata.chat === true ? "chat" : offer.metadata.chat === false ? "notChat" : "unknownChat"}`,
-        ),
+      cellRenderer: (offer) => t(`rework.admin.capabilities.organizationModels.${aptitude(offer)}`),
     },
     {
       label: t("rework.admin.capabilities.col.reasoning"),
@@ -251,18 +282,35 @@ export function OrganizationModels({
       value?.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()),
     ),
   );
-  const choiceOptions = (choice: ModelOfferKey | null | undefined) => [
-    { key: "none", value: "", label: t("rework.admin.capabilities.organizationModels.none") },
-    ...(policy?.permitted ?? []).map((key) => {
-      const offer = offers.find((item) => sameOffer(key, item));
-      return {
-        key: offerId(key),
-        value: offerId(key),
-        label: `${key.source_id} / ${key.upstream_model_id}`,
-        disabled: !sameOffer(choice, key) && (!offer || !offer.selectable),
-      };
-    }),
-  ];
+  const choiceOptions = (field: Choice) => {
+    const choice = policy?.[field];
+    return [
+      { key: "none", value: "", label: t("rework.admin.capabilities.organizationModels.none") },
+      ...(policy?.permitted ?? []).flatMap((key) => {
+        const offer = offers.find((item) => sameOffer(key, item));
+        if (!sameOffer(choice, key) && offer && !fits(field, offer)) return [];
+        return [
+          {
+            key: offerId(key),
+            value: offerId(key),
+            label: `${key.source_id} / ${key.upstream_model_id}`,
+            disabled: !sameOffer(choice, key) && (!offer || !offer.selectable),
+          },
+        ];
+      }),
+    ];
+  };
+  const choiceSelect = (field: Choice, locked = false) => (
+    <Select
+      key={field}
+      size="small"
+      label={t(`rework.admin.capabilities.organizationModels.${field}`)}
+      value={policy?.[field] ? offerId(policy[field]) : ""}
+      options={choiceOptions(field)}
+      disabled={busy || !policy || locked}
+      onChange={(value) => void save({ [field]: policy?.permitted.find((key) => offerId(key) === value) ?? null })}
+    />
+  );
   return (
     <>
       <div className={styles.modelListToolbar}>
@@ -331,20 +379,17 @@ export function OrganizationModels({
       >
         <div className={panelStyles.body}>
           <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.policyHint")}</p>
-          {(["default", "fallback", "title"] as const).map((field) => (
-            <Select
-              key={field}
-              size="small"
-              label={t(`rework.admin.capabilities.organizationModels.${field}`)}
-              value={policy?.[field] ? offerId(policy[field]) : ""}
-              options={choiceOptions(policy?.[field])}
-              disabled={busy || !policy}
-              onChange={(value) =>
-                void save({ [field]: policy?.permitted.find((key) => offerId(key) === value) ?? null })
-              }
-            />
-          ))}
+          {(["default", "fallback", "title"] as const).map((field) => choiceSelect(field))}
           <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.titleHint")}</p>
+          <h3 className={panelStyles.sectionTitle}>{t("rework.admin.capabilities.organizationModels.documents")}</h3>
+          {choiceSelect("embedding", policy?.embedding_locked)}
+          <p className={panelStyles.hint}>
+            {t(
+              `rework.admin.capabilities.organizationModels.${policy?.embedding_locked ? "embeddingLockedHint" : "embeddingHint"}`,
+            )}
+          </p>
+          {choiceSelect("vision")}
+          <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.visionHint")}</p>
         </div>
       </InlineDrawer>
       <ConfirmationDialog

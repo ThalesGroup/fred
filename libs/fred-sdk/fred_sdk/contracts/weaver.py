@@ -139,6 +139,40 @@ class ModelConnection(ResolverFact):
         return f"{self.base_url(model)}/{leaf}{query}"
 
 
+_ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
+
+
+class InferenceCredentialBinding(BaseModel):
+    """A workload's local attestation of one admitted destination, read from its own
+    configuration: variable names only, never secrets. Every model client (Agent Pod,
+    Knowledge Flow) checks the Control Plane's admitted connection against it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    credential_binding: str = Field(min_length=1, max_length=128)
+    api_root: str
+    api_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
+    client_secret_env: str | None = Field(default=None, pattern=_ENV_NAME)
+    gateway_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
+
+    @model_validator(mode="after")
+    def approved_root(self) -> Self:
+        if not canonical_api_root(self.api_root):
+            raise ValueError("Inference API root must be a canonical HTTP(S) URL")
+        return self
+
+    def attests(self, connection: ModelConnection) -> bool:
+        """Same binding and destination, and local secrets for exactly its authentication."""
+        auth = connection.auth
+        return (
+            self.credential_binding == connection.credential_binding
+            and self.api_root == connection.api_root
+            and (self.api_key_env is not None) == (auth.kind == "api_key")
+            and (self.client_secret_env is not None) == (auth.kind == "entra")
+            and (self.gateway_key_env is not None)
+            == (auth.gateway_key_header is not None)
+        )
+
+
 class EffectiveModelOptions(ModelOptions):
     reasoning_effort: Literal["high"] | None = None
 
@@ -163,6 +197,8 @@ class ModelMetadata(ResolverFact):
     chat: bool | None
     chat_provenance: Literal["source_guarantee", "api_metadata"] | None
     reasoning: bool | None = None
+    embedding: bool | None = None
+    vision: bool | None = None
     display_name: str | None
     context_window_tokens: int | None
     max_input_tokens: int | None
@@ -189,6 +225,9 @@ class OrganizationModelPolicy(ResolverFact):
     default: ModelOfferKey | None
     fallback: ModelOfferKey | None
     title: ModelOfferKey | None = None
+    embedding: ModelOfferKey | None = None
+    embedding_locked: bool = False
+    vision: ModelOfferKey | None = None
     created_by: str | None
     created_at: datetime | None
     updated_by: str | None
@@ -231,7 +270,13 @@ class RuntimeModels(ResolverFact):
         expected = set(self.policy.permitted)
         expected.update(
             k
-            for k in (self.recommendation, self.policy.default, self.policy.fallback)
+            for k in (
+                self.recommendation,
+                self.policy.default,
+                self.policy.fallback,
+                self.policy.embedding,
+                self.policy.vision,
+            )
             if k
         )
         if len(set(keys)) != len(keys) or set(keys) != expected:

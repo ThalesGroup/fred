@@ -64,6 +64,8 @@ pub enum RetrievalStep {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct RetrievalWork {
     pub document_id: Uuid,
+    /// The document's organization, whose corpus holds its vectors.
+    pub organization_id: Uuid,
     pub operation_id: Uuid,
     pub manifest: Manifest,
     pub retrievable: bool,
@@ -253,8 +255,15 @@ impl Processing {
         .fetch_optional(&self.pool)
         .await?
         .ok_or(AppError::NotFound)?;
+        let organization_id: Uuid = sqlx::query_scalar(
+            "select s.organization_id from document d join space s on s.id=d.space_id where d.id=$1",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(RetrievalWork {
             document_id: id,
+            organization_id,
             operation_id: operation,
             manifest: store::manifest(&self.pool, &published).await?,
             retrievable: c.target,

@@ -205,6 +205,8 @@ def scoped_pipeline(context, descriptor: Descriptor, output: Path, artifacts: Ar
     scoped._input_processor_instances = {}
     scoped._output_processor_instances = {}
     scoped._inject_processor_context = True
+    # Only the Control Plane's admission for this stage decides its models.
+    scoped.admit_models(descriptor.models)
     if descriptor.session_id is not None:
         scoped.configuration.storage.tabular_store.pointer_chunks_enabled = False
     settings = scoped.configuration.manager_processing
@@ -215,7 +217,7 @@ def scoped_pipeline(context, descriptor: Descriptor, output: Path, artifacts: Ar
     suffix = Path(descriptor.name).suffix.lower()
     category = EXTENSION_CATEGORY.get(suffix)
     if include_output and category != "spreadsheet" and (category != "tabular" or scoped.configuration.storage.tabular_store.pointer_chunks_enabled):
-        underlying = context.get_manager_vector_store()
+        underlying = scoped.get_corpus_store(descriptor.organization_id)
         vectors = ScopedVectors(underlying, descriptor, artifacts, output, scoped.get_text_splitter())
         scoped._vector_store_instance = vectors
     # Construct only this document's output processor; tabular work needs no embedder.

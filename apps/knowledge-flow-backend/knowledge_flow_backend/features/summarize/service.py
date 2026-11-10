@@ -24,6 +24,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.organization_models import organization_chat_model
 from knowledge_flow_backend.features.content.published_markdown import published_markdown
 
 logger = logging.getLogger(__name__)
@@ -66,11 +67,9 @@ class SummarizeService:
     def __init__(self):
         self.context = ApplicationContext.get_instance()
 
-    def _build_summarizer(self) -> SmartDocSummarizer:
-        return SmartDocSummarizer(
-            model_config=self.context.configuration.chat_model,
-            splitter=self.context.get_text_splitter(),
-        )
+    async def _build_summarizer(self, context: DocumentAccessContext) -> SmartDocSummarizer:
+        model, name = await organization_chat_model(context)
+        return SmartDocSummarizer(model=model, model_name=name, splitter=self.context.get_text_splitter())
 
     async def summarize_document(self, user: AssertedUser, document_uid: str, request: SummarizeDocumentRequest, context: DocumentAccessContext) -> SummarizeDocumentResponse:
         started = time.monotonic()
@@ -78,7 +77,7 @@ class SummarizeService:
         fetch_ms = (time.monotonic() - started) * 1000
         document = Document(page_content=markdown, metadata={})
 
-        summarizer = self._build_summarizer()
+        summarizer = await self._build_summarizer(context)
         # SmartDocSummarizer is synchronous (LLM calls via .invoke()); offload so it
         # doesn't block the event loop, matching vector_search_service.py's pattern.
         #

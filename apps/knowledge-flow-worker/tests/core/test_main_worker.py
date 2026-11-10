@@ -68,7 +68,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         max_concurrent_activities: int = 1,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
-        assert observed["corpus_initialized"] is True
         observed["temporal_config"] = temporal_config
         observed["roles"] = roles
         observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
@@ -92,7 +91,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     )
     monkeypatch.setattr(main_worker_module, "run_worker", fake_run_worker)
     monkeypatch.setattr(main_worker_module, "emit_process_kpis", fake_emit_process_kpis)
-    monkeypatch.setattr(ApplicationContext, "get_manager_vector_store", lambda self: observed.setdefault("corpus_initialized", True))
     monkeypatch.setattr(ApplicationContext, "get_kpi_writer", lambda self: writer_sentinel)
     monkeypatch.setattr(ApplicationContext, "shutdown", fake_shutdown)
 

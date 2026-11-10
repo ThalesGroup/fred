@@ -44,6 +44,7 @@ from dataclasses import dataclass
 
 from fred_core import is_rate_limit
 from langchain_core.documents import Document
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
 
@@ -127,11 +128,9 @@ def _pack_windows(chunks: list[str], window_chars: int) -> list[str]:
 class DocumentExtractor:
     """Exhaustive map-reduce extraction over a document's full text."""
 
-    def __init__(self) -> None:
+    def __init__(self, model: BaseChatModel) -> None:
         self.context = ApplicationContext.get_instance()
-        self.model = self.context.get_utility_model()
-        if self.model is None:
-            raise RuntimeError("No utility LLM configured; exhaustive extraction requires a model.")
+        self.model = model
         self.splitter = self.context.get_text_splitter()
 
     def _prompt_for(self, instruction: str, chunk: str) -> list[tuple[str, str]]:
