@@ -42,6 +42,15 @@ class BrokerSettings:
     file_storage_class: str | None = None
     docker_volume_plugin: str | None = None
     skills_volume: str | None = None
+    coordinator_dsn: str | None = None
+    workspace_storage_class: str | None = None
+    workspace_size: str = "1Gi"
+    active_idle_seconds: int = 120
+    max_retained_sessions: int = 1000
+    max_preparations: int = 8
+    max_queue_length: int = 256
+    max_queue_per_tenant: int = 8
+    queue_wait_seconds: int = 30
 
     def __post_init__(self) -> None:
         if self.backend not in {"docker", "kubernetes", "agent_sandbox"}:
@@ -164,6 +173,31 @@ class BrokerSettings:
             r"[a-z0-9][a-z0-9.-]{0,62}", self.skills_volume
         ):
             raise ValueError("Sandbox skills volume name is invalid")
+        if self.coordinator_dsn:
+            if not self.coordinator_dsn.startswith(("postgresql://", "postgres://")):
+                raise ValueError("Shared coordinator requires a PostgreSQL DSN")
+            if self.backend != "agent_sandbox" or not self.workspace_storage_class:
+                raise ValueError(
+                    "Shared coordination requires Agent Sandbox and persistent workspace storage"
+                )
+            if self.active_idle_seconds >= self.idle_timeout_seconds:
+                raise ValueError("Active idle period must be shorter than final expiry")
+        elif self.workspace_storage_class:
+            raise ValueError("Persistent workspace storage requires shared coordination")
+        if not 60 <= self.active_idle_seconds <= 3600:
+            raise ValueError("Active idle period must be 60-3600 seconds")
+        if not 1 <= self.max_retained_sessions <= 100_000:
+            raise ValueError("Retained session ceiling must be 1-100000")
+        if not 1 <= self.max_preparations <= 1000 or (
+            self.coordinator_dsn and self.max_preparations > self.max_sandboxes
+        ):
+            raise ValueError("Preparation ceiling must fit active capacity")
+        if not 1 <= self.max_queue_per_tenant <= self.max_queue_length <= 100_000:
+            raise ValueError("Queue limits are invalid")
+        if not 1 <= self.queue_wait_seconds <= 120:
+            raise ValueError("Queue wait must be 1-120 seconds")
+        if not re.fullmatch(r"[1-9][0-9]*(Mi|Gi)", self.workspace_size):
+            raise ValueError("Workspace size is invalid")
 
     @classmethod
     def from_environment(cls) -> BrokerSettings:
@@ -205,4 +239,14 @@ class BrokerSettings:
             file_storage_class=os.getenv("SANDBOX_FILE_STORAGE_CLASS") or None,
             docker_volume_plugin=os.getenv("SANDBOX_DOCKER_VOLUME_PLUGIN") or None,
             skills_volume=os.getenv("SANDBOX_SKILLS_VOLUME") or None,
+            coordinator_dsn=os.getenv("SANDBOX_COORDINATOR_DSN") or None,
+            workspace_storage_class=os.getenv("SANDBOX_WORKSPACE_STORAGE_CLASS")
+            or None,
+            workspace_size=os.getenv("SANDBOX_WORKSPACE_SIZE", "1Gi"),
+            active_idle_seconds=int(os.getenv("SANDBOX_ACTIVE_IDLE_SECONDS", "120")),
+            max_retained_sessions=int(os.getenv("SANDBOX_MAX_RETAINED", "1000")),
+            max_preparations=int(os.getenv("SANDBOX_MAX_PREPARATIONS", "8")),
+            max_queue_length=int(os.getenv("SANDBOX_MAX_QUEUE", "256")),
+            max_queue_per_tenant=int(os.getenv("SANDBOX_MAX_QUEUE_PER_TENANT", "8")),
+            queue_wait_seconds=int(os.getenv("SANDBOX_QUEUE_WAIT_SECONDS", "30")),
         )

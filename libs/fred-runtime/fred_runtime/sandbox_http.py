@@ -71,6 +71,7 @@ class SandboxHttpAdapter(SandboxExecutionPort):
         headers = {"Authorization": f"Bearer {self._token}"}
         if session is not None:
             headers["X-Fred-Sandbox-Session"] = self.session_key(session)
+            headers["X-Fred-Sandbox-Tenant"] = self.tenant_key(session)
         try:
             response = await self._client.post(
                 f"{self._base_url}/v1/execute",
@@ -100,6 +101,16 @@ class SandboxHttpAdapter(SandboxExecutionPort):
             hashlib.sha256,
         ).hexdigest()
 
+    def tenant_key(self, session: SandboxSessionIdentity) -> str:
+        scope = (
+            f"team:{session.team_id}" if session.team_id else f"user:{session.user_id}"
+        )
+        return hmac.new(
+            self._token.encode(),
+            b"fred-sandbox-tenant-v1\0" + scope.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
     async def view_key(self, session: SandboxSessionIdentity) -> str:
         try:
             response = await self._client.post(
@@ -107,6 +118,7 @@ class SandboxHttpAdapter(SandboxExecutionPort):
                 headers={
                     "Authorization": f"Bearer {self._token}",
                     "X-Fred-Sandbox-Session": self.session_key(session),
+                    "X-Fred-Sandbox-Tenant": self.tenant_key(session),
                 },
             )
             response.raise_for_status()

@@ -60,6 +60,7 @@ import control_plane_backend.models.platform_ui_settings_models  # noqa: F401 â€
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.routing_policy_models  # noqa: F401
+import control_plane_backend.models.sandbox_coordination_models  # noqa: F401
 import control_plane_backend.models.sandbox_settings_models  # noqa: F401
 import control_plane_backend.models.session_attachment_models  # noqa: F401
 import control_plane_backend.models.session_metadata_models  # noqa: F401
