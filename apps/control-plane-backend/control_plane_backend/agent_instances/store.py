@@ -24,7 +24,7 @@ from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -42,6 +42,9 @@ from control_plane_backend.models.agent_marketplace_models import (
     AgentMarketplaceEntryRow,
 )
 from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.capability_preparation_models import (
+    CapabilityPreparationRow,
+)
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
@@ -385,6 +388,76 @@ class AgentInstanceStore:
                 .scalars()
                 .all()
             )
+        return [_row_to_record(row) for row in rows]
+
+    async def list_home_agents(
+        self,
+        user_id: str,
+        team_ids: list[str],
+        suggestion_team_ids: list[str],
+        *,
+        include_history: bool = True,
+        limit: int = 5,
+    ) -> list[AgentInstanceRecord]:
+        """Return bounded launchable instances, recent activity before suggestions.
+
+        Pass only teams authorized for agent use; filtering precedes LIMIT.
+        """
+        q = select(AgentInstanceRow).where(
+            AgentInstanceRow.team_id.in_(team_ids),
+            AgentInstanceRow.enabled.is_(True),
+            AgentInstanceRow.suspension_reason.is_(None),
+            ~select(CapabilityPreparationRow.id)
+            .where(
+                CapabilityPreparationRow.owner_kind == "agent",
+                CapabilityPreparationRow.owner_id == AgentInstanceRow.agent_instance_id,
+                CapabilityPreparationRow.team_id == AgentInstanceRow.team_id,
+                CapabilityPreparationRow.is_current.is_(True),
+                CapabilityPreparationRow.gates_readiness.is_(True),
+                CapabilityPreparationRow.state != "succeeded",
+            )
+            .exists(),
+        )
+        if include_history:
+            recent = (
+                select(
+                    SessionMetadataRow.agent_instance_id,
+                    SessionMetadataRow.team_id,
+                    func.max(SessionMetadataRow.last_activity_at).label("last_used"),
+                )
+                .where(
+                    SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.team_id.in_(team_ids),
+                    SessionMetadataRow.deleted_at.is_(None),
+                    SessionMetadataRow.last_activity_at.is_not(None),
+                )
+                .group_by(
+                    SessionMetadataRow.agent_instance_id, SessionMetadataRow.team_id
+                )
+                .subquery()
+            )
+            q = (
+                q.outerjoin(
+                    recent,
+                    (AgentInstanceRow.agent_instance_id == recent.c.agent_instance_id)
+                    & (AgentInstanceRow.team_id == recent.c.team_id),
+                )
+                .where(
+                    or_(
+                        recent.c.last_used.is_not(None),
+                        AgentInstanceRow.team_id.in_(suggestion_team_ids),
+                    )
+                )
+                .order_by(recent.c.last_used.desc().nulls_last())
+            )
+        else:
+            q = q.where(AgentInstanceRow.team_id.in_(suggestion_team_ids))
+        q = q.order_by(
+            func.lower(AgentInstanceRow.display_name),
+            AgentInstanceRow.agent_instance_id,
+        ).limit(limit)
+        async with use_session(self._sessions) as s:
+            rows = (await s.scalars(q)).all()
         return [_row_to_record(row) for row in rows]
 
     async def list_all(

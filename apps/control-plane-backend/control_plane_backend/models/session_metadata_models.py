@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -52,6 +52,9 @@ class SessionMetadataRow(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Soft-hide marker for the deferred delete window (CTRLP-12 A5). When set,
     # the conversation is hidden from the sidebar/team list but its row and
     # history survive until the lifecycle erases it at window expiry. NULL for
@@ -83,3 +86,11 @@ class SessionContextPromptRow(Base):
     )
     prompt_id: Mapped[str] = mapped_column(String, primary_key=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+Index(
+    "ix_session_metadata_user_agent_activity",
+    SessionMetadataRow.user_id,
+    SessionMetadataRow.agent_instance_id,
+    SessionMetadataRow.last_activity_at,
+)

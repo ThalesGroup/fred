@@ -5277,6 +5277,27 @@ and are gated by the pod's capability-manager check
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
 `openspec/specs/ppt-builder/spec.md`.
 
+## Home agent launchers (2026-11-09)
+
+`GET /control-plane/v1/me/home-agents` accepts optional `limit` (default 5,
+integer 1-20; invalid values return 422) and returns `HomeAgentsResponse`: at
+most that many existing `ManagedAgentInstanceSummary` items in `agents`, plus
+`history_unavailable` (normally false). Current `CAN_USE_TEAM_AGENTS` access,
+enabled state, suspension and current readiness-gating preparations are checked
+before the limit. Known activity in
+the caller's non-deleted conversations ranks first, descending; case-insensitive
+name and instance id break ties. Remaining places use accessible platform-default
+teams and the caller's personal space, alphabetically. The endpoint needs SQL
+and authorization, not OpenSearch or live runtime catalogs.
+
+An explicit `updated_at` session PATCH also stamps a separate, monotonic
+server-side `session_metadata.last_activity_at`. The existing browser calls
+this at send time and after persistence; it indicates reported conversation
+activity, not a server-verified successful turn. Title/context edits alone do
+not establish activity. Legacy dates remain unknown until new activity.
+History-query SQL failure retries suggestions only and marks history unavailable;
+failed suggestions or authorization remain request errors.
+
 ## 72. Contract Notes - reusable capability preparation (2026-11-06)
 
 A capability may advertise `preparation` with asset slots, rules version, input

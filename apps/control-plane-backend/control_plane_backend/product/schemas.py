@@ -395,6 +395,13 @@ class ManagedAgentInstanceSummary(BaseModel):
     )
 
 
+class HomeAgentsResponse(BaseModel):
+    """Bounded home launchers and explicit history degradation status."""
+
+    agents: list[ManagedAgentInstanceSummary]
+    history_unavailable: bool = False
+
+
 class RuntimeAgentExecutionPreparation(BaseModel):
     """
     Execution preparation for a direct runtime agent target (not a managed instance).

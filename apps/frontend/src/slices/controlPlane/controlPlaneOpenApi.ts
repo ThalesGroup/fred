@@ -893,6 +893,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: build.query<
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse,
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/home-agents`,
+        params: {
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
@@ -3068,6 +3079,11 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionListItem[];
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
+};
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse =
+  /** status 200 Successful Response */ HomeAgentsResponse;
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg = {
+  limit?: number;
 };
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
@@ -5521,6 +5537,10 @@ export type CreateSessionRequest = {
   agent_instance_id?: string | null;
   title?: string | null;
 };
+export type HomeAgentsResponse = {
+  agents: ManagedAgentInstanceSummary[];
+  history_unavailable?: boolean;
+};
 export type InactiveSessionItem = {
   session_id: string;
   team_id: string;
@@ -7182,6 +7202,8 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useLazyGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,

@@ -65,6 +65,7 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.product.home_agents import list_home_agents
 from control_plane_backend.product.schemas import (
     AgentCopyRequest,
     AgentCopyResponse,
@@ -81,6 +82,7 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    HomeAgentsResponse,
     InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
@@ -1880,6 +1882,20 @@ async def get_team_sessions(
         required_permissions=[TeamPermission.CAN_READ_CONVERSATIONS],
     )
     return await list_sessions(team_id, user_id=user.uid, deps=deps)
+
+
+@router.get(
+    "/me/home-agents",
+    response_model=HomeAgentsResponse,
+    summary="Accessible home agents, recent conversation activity first.",
+)
+async def get_my_home_agents(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+    limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> HomeAgentsResponse:
+    """List launchers using current permissions, without querying runtime pods."""
+    return await list_home_agents(user, deps, limit=limit)
 
 
 @router.get(

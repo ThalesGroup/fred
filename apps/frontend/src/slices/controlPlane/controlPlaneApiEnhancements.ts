@@ -384,6 +384,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
     },
     // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: {
+      providesTags: (result) => [
+        { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+        ...(result?.agents.flatMap((agent) => [
+          { type: "ControlPlaneAgentInstance" as const, id: agent.agent_instance_id },
+          { type: "ControlPlaneSession" as const, id: `LIST-${agent.team_id}` },
+        ]) ?? []),
+      ],
+    },
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
       providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
     },
@@ -1028,6 +1037,7 @@ export const {
   useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
   // Batch uid → display-name resolution for audit fields (#1952).
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
+  useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery: useHomeAgentsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,

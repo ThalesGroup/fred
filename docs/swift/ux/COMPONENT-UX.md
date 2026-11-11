@@ -61,6 +61,16 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Home agent launchers
+
+Home displays up to five distinct usable agents: recent conversation activity
+first, then accessible default-team/personal suggestions. One SQL-backed product
+query replaces KPI and per-team catalog requests. Loading, retryable failure,
+successful empty state and partial history failure have separate messages. A
+partial failure preserves suggestions. Reopening home refreshes permissions
+and ranking. Legacy conversations have no inferred activity date.
+
+
 ### Platform skills presentation and administration
 
 **Locations:** `src/rework/utils/skillPresentation.ts` and
