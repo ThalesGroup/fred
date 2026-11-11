@@ -117,7 +117,7 @@ export default function KpiStatCard({
                 size="medium"
                 color="on-surface-retreat"
                 iconSize="2xs"
-                icon={{ category: "outlined", type: "show_chart" }}
+                icon={{ type: "show_chart" }}
                 aria-label={`${trendAction.label} - ${label}`}
                 onClick={trendAction.onClick}
               />

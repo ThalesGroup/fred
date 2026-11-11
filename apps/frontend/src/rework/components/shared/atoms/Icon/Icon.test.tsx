@@ -54,4 +54,11 @@ describe("Icon accessibility", () => {
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
     expect(icon?.hasAttribute("aria-label")).toBe(false);
   });
+
+  it("uses the outlined material icon when no category is given", () => {
+    render(<Icon type="show_chart" />);
+    const icon = container.querySelector("span");
+    expect(icon?.classList.contains("material-symbols-outlined")).toBe(true);
+    expect(icon?.textContent).toBe("show_chart");
+  });
 });

@@ -27,7 +27,7 @@ const h = vi.hoisted(() => ({
     { team_id: "t-f", name: "Zeta", member_count: 5 },
   ],
   catalog: vi.fn(),
-  adoption: vi.fn(() => ({ data: { people_with_access: 20 } })),
+  adoption: vi.fn(() => ({ currentData: { people_with_access: 20 } })),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -179,7 +179,7 @@ describe("AnalyticsScopeSummary", () => {
   });
 
   it("omits the member total while it is unknown", () => {
-    h.adoption.mockReturnValueOnce({ data: { people_with_access: null } });
+    h.adoption.mockReturnValueOnce({ currentData: { people_with_access: null } });
     render(<AnalyticsScopeSummary value={["t-a"]} timeRange={RANGE} />);
     expect(container.textContent).not.toContain("membersTotal");
   });
