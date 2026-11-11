@@ -62,7 +62,7 @@
   gap: var(--spacing-m);
 }
 
-/* A question-led card: heading, then tiles and charts on the second surface. */
+/* Section heading, then tiles and charts on the second surface. */
 .section {
   display: flex;
   flex-direction: column;

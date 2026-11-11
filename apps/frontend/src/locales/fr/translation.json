@@ -2028,85 +2028,85 @@
       "sections": {
         "reach": {
           "eyebrow": "Portée",
-          "title": "Combien de personnes utilisent la plateforme ?"
+          "title": "Visiteurs et utilisateurs actifs"
         },
         "volumes": {
           "eyebrow": "Volumes",
-          "title": "Combien d'échanges sur la période ?",
+          "title": "Messages et conversations",
           "def": "Messages envoyés par les utilisateurs aux agents. Les réponses des agents ne sont pas comptées.",
           "how": "à rapprocher du nombre d'utilisateurs actifs : si les messages montent plus vite que les utilisateurs, l'usage s'intensifie."
         },
         "frequency": {
           "eyebrow": "Fréquence",
-          "title": "Est-ce devenu une habitude ?"
+          "title": "Fréquence d'utilisation"
         },
         "distribution": {
           "eyebrow": "Répartition",
-          "title": "L'usage est-il réparti ou porté par quelques personnes ?",
+          "title": "Conversations par utilisateur actif",
           "def": "Utilisateurs actifs regroupés selon le nombre de conversations qu'ils ont ouvertes sur la période. Chaque barre compte des personnes, pas des conversations.",
           "how": "si quelques personnes concentrent l'essentiel des conversations, l'usage repose sur une poignée de champions et reste fragile. Une répartition étalée montre une habitude installée chez beaucoup de monde."
         },
         "collective": {
           "eyebrow": "Usage collectif",
-          "title": "Travaille-t-on seul ou en équipe ?",
+          "title": "Conversations par espace",
           "def": "Répartition des conversations selon l'espace où elles ont lieu : l'espace personnel de l'utilisateur, ou l'espace d'une équipe (avec ses agents et ses corpus partagés).",
           "how": "une part d'équipe qui grandit montre que la plateforme devient un outil collectif, au-delà d'un assistant individuel."
         },
         "diffusion": {
           "eyebrow": "Diffusion",
-          "title": "Quelles équipes utilisent la plateforme ?"
+          "title": "Activité par équipe"
         },
         "agents": {
           "eyebrow": "Agents",
-          "title": "Combien d'agents servent vraiment, et lesquels ?"
+          "title": "Utilisation des agents"
         },
         "skills": {
           "eyebrow": "Skills",
-          "title": "Quels skills sont mobilisés ?",
+          "title": "Chargements de skills",
           "def": "Un skill est un ensemble d'instructions qu'un agent charge pour une tâche précise. Il peut être demandé par l'utilisateur (commande) ou chargé de lui-même par le modèle.",
           "how": "un skill surtout chargé par le modèle est bien décrit et trouvé seul. Un skill jamais chargé est à revoir ou à retirer."
         },
         "knowledge": {
           "eyebrow": "Connaissances",
-          "title": "Les équipes alimentent-elles leurs corpus, et s'en servent-elles ?"
+          "title": "Documents et recherches dans les corpus"
         },
         "cost": {
           "eyebrow": "Coût et empreinte",
-          "title": "À quel prix, et où part-il ?",
+          "title": "Coût, tokens et empreinte",
           "def": "Tokens envoyés aux modèles (messages, historique et documents transmis) et tokens générés dans les réponses, pour chaque intervalle de la période.",
           "how": "les tokens envoyés pèsent le plus dans le coût. S'ils montent plus vite que les messages, les conversations s'allongent ou les documents transmis grossissent."
         },
         "webResearch": {
           "eyebrow": "Recherche web",
-          "title": "Combien coûte la recherche web, et tient-elle la charge ?"
+          "title": "Appels, coût et latence de la recherche web"
         },
         "storage": {
           "eyebrow": "Stockage par équipe",
-          "title": "Quelles équipes approchent de leur quota ?",
+          "title": "Stockage et quotas par équipe",
           "def": "Espace occupé aujourd'hui par les documents et ressources de chaque équipe, rapporté au quota qui lui est attribué.",
           "how": "à partir de 80 %, prévenir l'équipe ou relever son quota avant que les imports ne soient bloqués."
         },
         "agentBuild": {
           "eyebrow": "Agents",
-          "title": "Comment les agents sont-ils construits ?",
+          "title": "Création des agents et longueur des prompts",
           "def": "Taille des instructions (prompt système) de chaque agent, en tokens. Elle est renvoyée au modèle à chaque message.",
           "how": "des prompts très longs augmentent le coût de chaque échange et peuvent noyer les consignes importantes."
         },
         "capabilities": {
           "eyebrow": "Capabilities",
-          "title": "Activées sur les agents, ou réellement utilisées ?"
+          "title": "Utilisation des capacités"
         },
         "quality": {
           "eyebrow": "Qualité perçue",
-          "title": "Les réponses sont-elles utiles ?"
+          "title": "Échecs de réponse et échanges uniques"
         },
         "activation": {
           "eyebrow": "Activation et rétention",
-          "title": "Les nouveaux démarrent-ils, et reviennent-ils ?"
+          "title": "Activation et fidélisation des nouveaux utilisateurs"
         },
         "members": {
           "eyebrow": "Diffusion",
-          "title": "Qui, dans l'équipe, se sert de la plateforme ?",
+          "title": "Activité des membres de l'équipe",
           "def": "\"Membres actifs\" : membres de l'équipe qui ont envoyé au moins un message dans un espace de cette équipe sur la période. Les membres sont comptés à aujourd'hui (pas d'historique des arrivées)."
         }
       },

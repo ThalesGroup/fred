@@ -60,7 +60,7 @@ export function ChartHint({ id, title }: { id: string; title: string }) {
   return <InfoHint label={title} def={t(`rework.analytics.charts.${id}.def`)} />;
 }
 
-/** A question-led card of tiles and charts; `id` names its keys under `rework.analytics.sections`. */
+/** A section of tiles and charts; `id` names its keys under `rework.analytics.sections`. */
 export function AnalyticsSection({
   id,
   aside,
