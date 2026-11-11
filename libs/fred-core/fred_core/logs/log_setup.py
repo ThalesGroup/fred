@@ -259,4 +259,17 @@ def log_setup(
     audit_logger.addHandler(audit_handler)
     audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
+    _structured_temporal_logs()
     flush_startup_logs()
+
+
+def _structured_temporal_logs() -> None:
+    """Temporal's logger adapters append their context dict to every message, while
+    the same values are already the structured `temporal_workflow` /
+    `temporal_activity` field: keep the field, not the copy."""
+    try:
+        from temporalio import activity, workflow
+    except ImportError:  # Temporal is an optional dependency of fred-core.
+        return
+    workflow.logger.workflow_info_on_message = False
+    activity.logger.activity_info_on_message = False

@@ -101,3 +101,23 @@ def test_every_python_process_writes_the_same_fields(
     assert {key for key in CONTRACT["event"]} - {"service", "service_role"} <= set(
         event
     )
+
+
+def test_temporal_messages_do_not_repeat_their_structured_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from temporalio import activity, workflow
+
+    monkeypatch.setattr(workflow.logger, "workflow_info_on_message", True)
+    monkeypatch.setattr(activity.logger, "activity_info_on_message", True)
+    log_setup(
+        service_name="contract-service",
+        service_role="worker",
+        log_format="json",
+        include_uvicorn=False,
+    )
+    # The `temporal_workflow` / `temporal_activity` fields keep the context.
+    assert workflow.logger.workflow_info_on_message is False
+    assert workflow.logger.workflow_info_on_extra is True
+    assert activity.logger.activity_info_on_message is False
+    assert activity.logger.activity_info_on_extra is True
