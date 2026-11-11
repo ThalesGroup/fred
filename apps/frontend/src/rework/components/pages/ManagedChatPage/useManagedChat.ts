@@ -32,7 +32,12 @@ import type { EffectiveChatModel } from "../../../../slices/controlPlane/control
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
-import { useChatAttachments } from "./useChatAttachments";
+import {
+  buildAttachmentsMarkdown,
+  splitSessionAttachments,
+  toDraftChip,
+  useChatAttachments,
+} from "./useChatAttachments";
 import { buildComposerRuntimeContext, toTurnAttachments } from "./runtimeContextBuilder";
 import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
@@ -116,6 +121,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     command?: TurnCommand;
     skills?: SkillInvocation[];
     attachments?: TurnAttachment[];
+    preserveComposer?: boolean;
   } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
@@ -251,6 +257,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // The attempt owns preflight before SSE starts. Navigation revokes it even
   // if the user later returns to the same session while creation is pending.
   const sendAttemptRef = useRef<{ sessionId: string; originSessionId: string | null; cancelled: boolean } | null>(null);
+  // A late drop during preflight would be cleared without reaching the captured turn.
+  const preparingComposerRef = useRef<NonNullable<typeof sendAttemptRef.current> | null>(null);
   useEffect(
     () => () => {
       if (sendAttemptRef.current) sendAttemptRef.current.cancelled = true;
@@ -425,6 +433,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // really starting — clearing the composer any earlier would lose the
   // user's text/attachments on a prepare-execution failure (404/503/network).
   const handleTurnStarted = useCallback(() => {
+    preparingComposerRef.current = null;
+    if (submittedDraftRef.current?.preserveComposer) return;
     setInput("");
     attachments.clearReadyAttachments();
   }, [attachments.clearReadyAttachments]);
@@ -639,6 +649,34 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isTurnActive,
   });
   isLoadingHistoryRef.current = isLoadingHistory;
+
+  // Unsent rows are drafts of this conversation's composer; the drawer only lists sent ones.
+  // Without its history the split cannot be made: offering sent files for removal would delete them.
+  const { sent: sentAttachments, drafts: draftAttachments } = useMemo(() => {
+    if (historyUnavailable) return { sent: attachments.persistedAttachments, drafts: [] };
+    return isHistorySettled && sessionId
+      ? splitSessionAttachments(attachments.persistedAttachments, messages)
+      : { sent: [], drafts: [] };
+  }, [attachments.persistedAttachments, historyUnavailable, isHistorySettled, messages, sessionId]);
+  const composerAttachments = useMemo(() => {
+    const localIds = new Set(attachments.attachments.map((attachment) => attachment.id));
+    const restored = sessionId
+      ? draftAttachments
+          .filter((draft) => !localIds.has(draft.attachmentId))
+          .map((draft) => toDraftChip(draft, sessionId))
+      : [];
+    return [...attachments.attachments, ...restored];
+  }, [attachments.attachments, draftAttachments, sessionId]);
+  // A composer send also carries its drafts; any other turn only knows the sent files.
+  const sentAttachmentsMarkdown = useMemo(() => buildAttachmentsMarkdown(sentAttachments, []), [sentAttachments]);
+  const composerTurnAttachmentsMarkdown = useMemo(
+    () =>
+      buildAttachmentsMarkdown(
+        [...sentAttachments, ...draftAttachments],
+        attachments.attachments.filter((attachment) => attachment.status === "ready"),
+      ),
+    [attachments.attachments, draftAttachments, sentAttachments],
+  );
   reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
@@ -700,10 +738,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const handleAddAttachments = useCallback(
     (files: File[], source: AttachmentSource) => {
       if (executionDisabledRef.current) return;
+      if (preparingComposerRef.current && !preparingComposerRef.current.cancelled) {
+        showWarn({ summary: t("chatbot.steering.waiting") });
+        return;
+      }
       const sid = ensureSessionForAttachments();
       void attachments.addFiles(files, source, sid);
     },
-    [attachments.addFiles, ensureSessionForAttachments],
+    [attachments.addFiles, ensureSessionForAttachments, showWarn, t],
   );
 
   // The composer's context for one turn, shared by send and HITL resume so a
@@ -757,7 +799,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
             searchPolicy: composer.searchPolicy,
             ragScope: composer.ragScope,
             boundLibraryIds,
-            attachmentsMarkdown: attachments.attachmentsMarkdown,
+            attachmentsMarkdown: sentAttachmentsMarkdown,
             ...(reasoningShown ? { reasoning: composer.reasoning } : {}),
             askUser: composer.askUser,
             chatProfileId: composer.chatProfileId,
@@ -768,7 +810,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       };
     },
     [
-      attachments.attachmentsMarkdown,
+      sentAttachmentsMarkdown,
       chatControls,
       composer.selectedLibraryIds,
       composer.selectedDocumentUids,
@@ -809,6 +851,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         !text ||
         waitResponse ||
         awaitingAgentQuestion ||
+        (sessionId !== null && !resumingPending && (!isHistorySettled || attachments.isHydratingAttachments)) ||
         (!resumingPending && attachments.hasUploadingAttachments) ||
         (!resumingPending && inputTooLong)
       ) {
@@ -825,7 +868,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         showWarn({ summary: t("chatbot.steering.waiting") });
         return false;
       }
-      if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
+      if (
+        (sendAttemptRef.current && !sendAttemptRef.current.cancelled) ||
+        (preparingComposerRef.current && !preparingComposerRef.current.cancelled)
+      ) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return false;
       }
@@ -846,6 +892,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
       const attempt = { sessionId: sessionId ?? uuidv4(), originSessionId: sessionId, cancelled: false };
       sendAttemptRef.current = attempt;
+      if (!resumingPending && interrupted?.action !== "continue") preparingComposerRef.current = attempt;
+      let enteredSend = false;
       try {
         // Composer input is left untouched until the session write barrier below
         // confirms success — clearing it eagerly would lose the user's message if
@@ -905,13 +953,16 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
         if (resumingPending) delete runtimeContext.attachments_markdown;
+        else if (interrupted?.action !== "restart" && composerTurnAttachmentsMarkdown != null) {
+          runtimeContext.attachments_markdown = composerTurnAttachmentsMarkdown;
+        }
         // Only this turn's files: earlier ones already sit on their own turns. A
         // restart re-sends the interrupted turn's files, already cleared from the composer.
         const turnAttachments = resumingPending
           ? []
           : interrupted?.action === "restart"
             ? (submittedDraftRef.current?.attachments ?? [])
-            : toTurnAttachments(attachments.attachments);
+            : toTurnAttachments(composerAttachments);
         // Titled once, on the first exchange; renaming afterwards is the user's call.
         const autoTitle =
           !titleRenamedRef.current && !latestMessagesRef.current.some((message) => message.role === "user");
@@ -926,32 +977,48 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           command: turnCommand,
           skills,
           attachments: turnAttachments,
+          preserveComposer: interrupted?.action === "restart",
         };
-        return send(
+        const result = send(
           text,
           sid,
           {
             ...runtimeContext,
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
-            ...(turnAttachments.length ? { attachments: turnAttachments } : {}),
+            attachments: turnAttachments,
             ...(autoTitle ? { auto_title: true } : {}),
           },
           turnOptions,
           interrupted,
           pendingMessageId,
         );
+        enteredSend = true;
+        void result.then(
+          () => {
+            if (preparingComposerRef.current === attempt) preparingComposerRef.current = null;
+          },
+          () => {
+            if (preparingComposerRef.current === attempt) preparingComposerRef.current = null;
+          },
+        );
+        return result;
       } finally {
         if (sendAttemptRef.current === attempt) sendAttemptRef.current = null;
+        if (preparingComposerRef.current === attempt && (!enteredSend || attempt.cancelled))
+          preparingComposerRef.current = null;
       }
     },
     [
-      attachments.attachments,
+      composerAttachments,
+      composerTurnAttachmentsMarkdown,
       attachments.hasUploadingAttachments,
+      attachments.isHydratingAttachments,
       input,
       inputCharacterCount,
       inputTooLong,
       waitResponse,
+      isHistorySettled,
       pendingHitl,
       replacePendingHitls,
       replaceStagedHitlAnswers,
@@ -971,10 +1038,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
 
   const handleSend = useCallback(async () => {
     if (executionDisabledRef.current) return;
+    if (sessionId !== null && (!isHistorySettled || attachments.isHydratingAttachments)) return;
     const text = input.trim();
     if (!text || inputTooLong) return;
     if (waitResponse) {
-      if (attachments.attachments.length > 0) {
+      if (composerAttachments.length > 0) {
         showWarn({ summary: t("chatbot.steering.textOnly") });
         return;
       }
@@ -995,8 +1063,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     input,
     waitResponse,
     sessionId,
+    isHistorySettled,
+    attachments.isHydratingAttachments,
     steerActiveTurn,
-    attachments.attachments.length,
+    composerAttachments.length,
     inputTooLong,
     showWarn,
     t,
@@ -1439,9 +1509,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     ],
   );
   const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
-  const removeAttachment = useMemo(
-    () => guardChange(attachments.removeAttachment),
-    [guardChange, attachments.removeAttachment],
+  const removeAttachment = useCallback(
+    (id: string) => {
+      if (executionDisabledRef.current || (preparingComposerRef.current && !preparingComposerRef.current.cancelled))
+        return;
+      attachments.removeAttachment(id);
+    },
+    [attachments.removeAttachment],
   );
   const deletePersistedAttachment = useCallback(
     async (id: string) => {
@@ -1479,9 +1553,9 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     hitlFreeText,
     setHitlFreeText: setSelectedHitlFreeText,
     selectedLibraryIds: composer.selectedLibraryIds,
-    attachments: attachments.attachments,
-    persistedAttachments: attachments.persistedAttachments,
-    isHydratingAttachments: attachments.isHydratingAttachments,
+    attachments: composerAttachments,
+    persistedAttachments: sentAttachments,
+    isHydratingAttachments: attachments.isHydratingAttachments || (!isHistorySettled && !historyUnavailable),
     attachmentsUploading: attachments.hasUploadingAttachments,
     handleAddAttachments,
     removeAttachment,

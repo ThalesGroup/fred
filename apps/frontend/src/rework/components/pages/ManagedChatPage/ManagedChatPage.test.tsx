@@ -1628,3 +1628,43 @@ describe("ManagedChatPage with several prompt commands", () => {
     });
   });
 });
+
+describe("ManagedChatPage file drop", () => {
+  const drop = (target: Element) => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: { types: ["Files"], files: [new File(["x"], "late.pdf")] },
+    });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+  };
+
+  it("accepts a dropped file, except while a question holds the composer", () => {
+    const handleAddAttachments = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = (pendingHitl: unknown) => {
+      chatValue = {
+        ...baseChatValue([]),
+        chatControls: [{ capability_id: "document_access", widget: "attach_files", params: {} }],
+        handleAddAttachments,
+        pendingHitl,
+      };
+      act(() => root.render(<ManagedChatPage />));
+    };
+    try {
+      render(null);
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+
+      render({ session_id: "session-1", exchange_id: "exchange-1", payload: { stage: "agent_question" } });
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});

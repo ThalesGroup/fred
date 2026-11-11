@@ -3815,7 +3815,7 @@ async def _write_turn_history(
                 extras["skill_invocation"] = SkillInvocation.model_validate(
                     skill_invocation
                 ).model_dump(mode="json")
-            if attachments:
+            if attachments is not None:
                 extras["attachments"] = [
                     TurnAttachment.model_validate(item).model_dump(mode="json")
                     for item in attachments

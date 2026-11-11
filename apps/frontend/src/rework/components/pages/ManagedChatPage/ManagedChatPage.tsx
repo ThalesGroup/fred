@@ -449,6 +449,11 @@ export default function ManagedChatPage() {
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments =
     !chat.executionDisabled && chat.chatControls.some((control) => control.widget === "attach_files");
+  const awaitingHumanAnswer =
+    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
+    (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
+  // Drop and paste reach the whole page: they follow the composer, held while a question waits.
+  const acceptsDroppedFiles = allowChatAttachments && !awaitingHumanAnswer;
 
   // The rail's attachments launcher. Offered when the agent still exposes
   // attaching OR the conversation already holds files: an older session whose
@@ -583,17 +588,17 @@ export default function ManagedChatPage() {
 
   // Page-wide like drop: a paste event only reaches the focused element, so
   // the composer alone would miss every Ctrl+V made with the focus elsewhere.
-  usePastedFiles({ enabled: allowChatAttachments, onFiles: (files) => addAttachments(files, "paste") });
+  usePastedFiles({ enabled: acceptsDroppedFiles, onFiles: (files) => addAttachments(files, "paste") });
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!allowChatAttachments) return;
+    if (!acceptsDroppedFiles) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(true);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (!allowChatAttachments) return;
+    if (!acceptsDroppedFiles) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(false);
@@ -648,12 +653,17 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const awaitingHumanAnswer =
-    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
-    (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
   const composerControlsDisabled =
-    chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
-  const composerInputDisabled = chat.executionDisabled || chat.isLoadingHistory || awaitingHumanAnswer;
+    chat.executionDisabled ||
+    chat.waitResponse ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
+  const composerInputDisabled =
+    chat.executionDisabled ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
