@@ -54,7 +54,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
@@ -182,6 +182,7 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import (
     BaseModel,
     Field,
@@ -4854,6 +4855,10 @@ async def _iterate_runtime_event_payloads_inner(
             capability_registry, tuning, definition
         ),
     )
+    if not ctx.get("session_id"):
+        # A one-shot call, such as an evaluation, has no conversation, and only
+        # conversations created by the Control Plane own stored checkpoints.
+        services = replace(services, checkpointer=InMemorySaver())
     if owns_run_record and current_turn().binding.title is not None:
         request._title_task = asyncio.create_task(
             generate_session_title(request.message, binding=binding, services=services)
