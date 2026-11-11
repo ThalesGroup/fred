@@ -34,9 +34,8 @@ Generates:
 Conversation model
 ------------------
 There is a single conversation population, so the same turns feed
-`top_agents_by_conversations`, `messages_over_time`, `conversation_depth`,
-`conversations_per_user` and `agents_per_user` instead of two disjoint turn
-sets:
+`analytics_activity_over_time`,
+`analytics_usage` and `analytics_agents` instead of two disjoint turn sets:
 
     per-agent turn budget (CONVERSATION_DISTRIBUTION, scaled by --since-days)
       → carved into conversations, each one's length drawn from
@@ -47,7 +46,7 @@ sets:
         + N agent.turn_completed (runtime dims, same session_id)
 
 Trade-off: per-agent turn totals stay exact — the budget is carved, never
-exceeded — so `top_agents_by_conversations` keeps showing the table below.
+exceeded — so `analytics_agents` keeps showing the table below.
 The price is that the *last* conversation carved out of each agent's budget is
 truncated to whatever the budget has left, i.e. at most 20 conversations out of
 ~450 are shorter than drawn. That is invisible in the length histogram.
@@ -75,7 +74,7 @@ Turn budget per agent (turns / 30 days, scaled by --since-days):
         Zephyr              12
         Eclipse             12
 
-Conversation length — turns per conversation (`conversation_depth`):
+Conversation length — turns per conversation (`analytics_usage`):
 
         1 turn      : 40 %   (one-shots)
         2–5 turns   : 30 %
@@ -86,7 +85,7 @@ Conversation length — turns per conversation (`conversation_depth`):
     → median ≈ 2–3 turns, with mass across the whole dashboard bucket axis.
 
 User activity — share of the user population, by conversations created
-(`conversations_per_user`):
+(`analytics_usage`):
 
         1 conversation    : 35 % of users
         2–5               : 29 %
@@ -162,7 +161,7 @@ TEAM_IDS = [
 
 # Teams a shared (non-personal) conversation can belong to. A conversation that
 # is *not* team-scoped runs in its user's own personal space instead, which is
-# what `sessions_by_scope` splits on — see PERSONAL_SESSION_SHARE.
+# what `analytics_teams` splits on — see PERSONAL_SESSION_SHARE.
 SHARED_TEAM_IDS = ["team-alpha", "team-beta", "team-gamma"]
 PERSONAL_SESSION_SHARE = 0.35
 
@@ -186,7 +185,7 @@ RUNTIME_ID = "fred-agents"
 # emits agent.turn_error_total alongside the turn in that case.
 TURN_ERROR_SHARE = 0.02
 
-# Target distribution for top_agents_by_conversations (turns per 30 days).
+# Target distribution for analytics_agents (turns per 30 days).
 # Scaled proportionally when --since-days differs from 30.
 CONVERSATION_DISTRIBUTION = [
     # (agent_name, turns_per_month)
@@ -452,7 +451,7 @@ def _plan_conversation_lengths(since_days: int) -> list[_PlannedConversation]:
     """Carve every agent's turn budget into conversations.
 
     The budget comes from CONVERSATION_DISTRIBUTION (scaled to the window) and
-    is consumed exactly, so `top_agents_by_conversations` keeps its intended
+    is consumed exactly, so `analytics_agents` keeps its intended
     per-agent totals — only the last conversation of each agent may be cut
     short by whatever the budget has left.
     """
@@ -796,13 +795,13 @@ def main() -> None:
     personal = sum(1 for c in conversations if c.scope_type == "personal")
     print(f"    • scope split: {personal} personal / {len(conversations) - personal} team")
     _print_distribution(
-        "conversation_depth", [c.turns for c in conversations], "turns"
+        "turns per conversation", [c.turns for c in conversations], "turns"
     )
     _print_distribution(
-        "conversations_per_user", list(per_user.values()), "conversations"
+        "conversations per user", list(per_user.values()), "conversations"
     )
     _print_distribution(
-        "agents_per_user", [len(a) for a in agents_per_user.values()], "agents"
+        "agents per user", [len(a) for a in agents_per_user.values()], "agents"
     )
 
     if args.dry_run:

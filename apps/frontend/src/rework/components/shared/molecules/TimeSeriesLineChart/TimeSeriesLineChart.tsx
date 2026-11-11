@@ -76,7 +76,7 @@ export default function TimeSeriesLineChart({
       {isError && <div className={styles.stateError}>{t("common.loadingError")}</div>}
       {/* Without this branch an empty series rendered as a bare titled box with
           nothing under it, which reads as a broken chart rather than as "there
-          is nothing to plot" - the same empty state BarChart and PieChart have
+          is nothing to plot" - the same empty state BarChart has
           always shown. Trend series hit it routinely: they are sparse by
           design and drop the current partial bucket, so a range whose only
           activity is today legitimately has no point to draw. */}
@@ -125,6 +125,7 @@ export default function TimeSeriesLineChart({
               // avoid. Sparse trend series reach that case routinely.
               dot={rows.length < 2}
               activeDot={{ r: 4, fill: css["--primary"] }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>

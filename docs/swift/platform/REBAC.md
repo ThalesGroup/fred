@@ -115,6 +115,10 @@ Can:
 - define and update `TeamPlatformPolicy` (quotas, allowed model profiles,
   allowed MCP servers, storage and ingestion limits)
 - read any team configuration surface for audit purposes
+- read the team's usage analytics: KPI presets and the Excel export scoped
+  to the team (`can_read_analytics`, `team_admin` only — members, editors and
+  analysts keep their personal usage only); platform observers read every
+  non-personal team through `can_observe_platform`
 
 A nominated admin who has not accepted the configured team administrator
 charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:

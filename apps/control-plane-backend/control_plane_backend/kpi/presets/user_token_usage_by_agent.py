@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import Request
 from fred_core import KeycloakUser
-from fred_core.kpi import estimate_green_cost
+from fred_core.kpi import estimate_green_cost, usd_to_eur
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
@@ -123,7 +123,11 @@ async def query_user_token_usage_by_agent(
 
     rows = [
         LabelValuePoint(
-            label=label, value=value, co2e_grams=co2e_grams, kwh=kwh, cost_usd=cost_usd
+            label=label,
+            value=value,
+            co2e_grams=co2e_grams,
+            kwh=kwh,
+            cost_eur=usd_to_eur(cost_usd),
         )
         for label, value, co2e_grams, kwh, cost_usd in totals[:TOP_N]
     ]

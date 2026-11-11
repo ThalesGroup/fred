@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { ReactNode } from "react";
 import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import BarChart from "../BarChart/BarChart";
 
@@ -22,6 +23,10 @@ interface HistogramChartProps {
   emptyMessage?: string;
   isLoading: boolean;
   isError: boolean;
+  flat?: boolean;
+  /** Separated bars with their count and share written above, no value axis. */
+  labelled?: boolean;
+  titleAction?: ReactNode;
 }
 
 /**
@@ -49,6 +54,9 @@ export default function HistogramChart({
   emptyMessage,
   isLoading,
   isError,
+  flat,
+  labelled = false,
+  titleAction,
 }: HistogramChartProps) {
   // A distribution preset returns every bucket even when the range is empty, so
   // "no data" arrives as a row of zeros rather than as no rows. A flat all-zero
@@ -66,7 +74,12 @@ export default function HistogramChart({
       isError={isError}
       sortOrder="none"
       orientation="vertical"
-      barCategoryGap="2%"
+      barCategoryGap={labelled ? undefined : "2%"}
+      flat={flat}
+      labelled={labelled}
+      shareLabels={labelled}
+      maxBarSize={labelled ? 96 : undefined}
+      titleAction={titleAction}
     />
   );
 }

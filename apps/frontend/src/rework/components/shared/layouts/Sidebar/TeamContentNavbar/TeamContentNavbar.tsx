@@ -294,9 +294,10 @@ export default function TeamContentNavbar() {
     // Same elevated-role gate as Activity: the team usage dashboard
     // (OBSERV-02 v3) has been reachable by direct URL only — this is its
     // first in-app entry point for a real (non-personal) team.
+    // Only analytics readers get the team analytics; the others land on their own usage.
     settingsItems.push({
       type: "link",
-      label: t("rework.teamSettings.navigation.usage"),
+      label: t(capabilities.canReadAnalytics ? "rework.analytics.title" : "rework.teamUsage.title"),
       icon: { category: "outlined", type: "analytics", filled: false },
       linkProps: { to: usageBase },
     });

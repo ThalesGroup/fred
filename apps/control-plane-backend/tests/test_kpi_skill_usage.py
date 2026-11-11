@@ -17,8 +17,8 @@ from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("team_id", [None, TeamId("team-1")])
-async def test_skill_usage_scope_counts_limit_and_thread_offload(team_id):
+@pytest.mark.parametrize("team_ids", [(), (TeamId("team-1"), TeamId("team-2"))])
+async def test_skill_usage_scope_counts_limit_and_thread_offload(team_ids):
     body_seen = []
     loop_thread = get_ident()
 
@@ -62,7 +62,7 @@ async def test_skill_usage_scope_counts_limit_and_thread_offload(team_id):
         since=since,
         until=until,
         request=Request({"type": "http"}),
-        team_id=team_id,
+        team_ids=team_ids,
     )
     assert [row.model_dump() for row in result.rows] == [
         {"skill_name": "a", "user_count": 4, "model_count": 2, "total": 6},
@@ -74,7 +74,9 @@ async def test_skill_usage_scope_counts_limit_and_thread_offload(team_id):
     assert {
         "range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}
     } in filters
-    assert ({"term": {"dims.team_id": "team-1"}} in filters) == (team_id is not None)
+    assert ({"terms": {"dims.team_id": ["team-1", "team-2"]}} in filters) == bool(
+        team_ids
+    )
     assert body_seen[0]["aggs"]["skills"]["terms"] == {
         "field": "dims.skill_name",
         "size": 100,
@@ -90,7 +92,7 @@ async def test_skill_usage_empty_and_router_authorization(monkeypatch):
     from control_plane_backend.kpi.scope import KpiScope
     from fred_core.security.models import AuthorizationError, Resource
 
-    scope = AsyncMock(return_value=KpiScope(team_id=TeamId("team-1")))
+    scope = AsyncMock(return_value=KpiScope(team_ids=(TeamId("team-1"),)))
     monkeypatch.setattr(api, "resolve_kpi_scope", scope)
     route = next(
         r
@@ -109,13 +111,13 @@ async def test_skill_usage_empty_and_router_authorization(monkeypatch):
         request=request,
         since=None,
         until=None,
-        team_id=TeamId("team-1"),
+        team_ids=[TeamId("team-1")],
         user=user,
         store=store,
     )
     assert response.rows == [] and response.truncated is False
     scope.assert_awaited_once_with(
-        request, user, TeamId("team-1"), platform_admin_only=False, self_scoped=False
+        request, user, [TeamId("team-1")], self_scoped=False, user_filter=None
     )
     scope.side_effect = AuthorizationError(
         "u", "can_observe_platform", Resource.ORGANIZATION
@@ -125,7 +127,7 @@ async def test_skill_usage_empty_and_router_authorization(monkeypatch):
             request=request,
             since=None,
             until=None,
-            team_id=None,
+            team_ids=[],
             user=user,
             store=store,
         )
@@ -169,7 +171,7 @@ async def test_personal_skill_route_is_self_scoped_and_rejects_team(monkeypatch)
     from control_plane_backend.kpi import api
     from control_plane_backend.kpi.scope import KpiScope
 
-    scope = AsyncMock(return_value=KpiScope(team_id=None))
+    scope = AsyncMock(return_value=KpiScope())
     monkeypatch.setattr(api, "resolve_kpi_scope", scope)
     route = next(
         r
@@ -186,10 +188,10 @@ async def test_personal_skill_route_is_self_scoped_and_rejects_team(monkeypatch)
     user = KeycloakUser(uid="authenticated-user", username="u", roles=[])
     request = Request({"type": "http"})
     await route.endpoint(
-        request=request, since=None, until=None, team_id=None, user=user, store=store
+        request=request, since=None, until=None, team_ids=[], user=user, store=store
     )
     scope.assert_awaited_once_with(
-        request, user, None, platform_admin_only=False, self_scoped=True
+        request, user, [], self_scoped=True, user_filter=None
     )
     assert {"term": {"dims.user_id": user.uid}} in seen[0]["query"]["bool"]["filter"]
     with pytest.raises(HTTPException) as exc:
@@ -197,7 +199,7 @@ async def test_personal_skill_route_is_self_scoped_and_rejects_team(monkeypatch)
             request=request,
             since=None,
             until=None,
-            team_id=TeamId("other-team"),
+            team_ids=[TeamId("other-team")],
             user=user,
             store=store,
         )

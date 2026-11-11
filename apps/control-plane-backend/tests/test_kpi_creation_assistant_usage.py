@@ -31,18 +31,6 @@ from control_plane_backend.kpi.presets.common import (
 from control_plane_backend.kpi.presets.creation_assistant_usage import (
     query_creation_assistant_usage,
 )
-from control_plane_backend.kpi.presets.messages_over_time import (
-    query_messages_over_time,
-)
-from control_plane_backend.kpi.presets.token_usage_by_agent import (
-    query_token_usage_by_agent,
-)
-from control_plane_backend.kpi.presets.token_usage_by_model import (
-    query_token_usage_by_model,
-)
-from control_plane_backend.kpi.presets.token_usage_over_time import (
-    query_token_usage_over_time,
-)
 from control_plane_backend.kpi.presets.user_token_usage_by_agent import (
     query_user_token_usage_by_agent,
 )
@@ -84,11 +72,8 @@ async def _filters(handler: Any, store: _Store | None = None) -> list[Any]:
 
 
 _TOKEN_PRESETS = [
-    query_token_usage_over_time,
     query_user_token_usage_over_time,
-    query_token_usage_by_model,
     query_user_token_usage_by_model,
-    query_token_usage_by_agent,
     query_user_token_usage_by_agent,
 ]
 
@@ -104,9 +89,7 @@ async def test_token_presets_read_turns_and_creation_assistant_drafts(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "handler", [query_token_usage_by_agent, query_user_token_usage_by_agent]
-)
+@pytest.mark.parametrize("handler", [query_user_token_usage_by_agent])
 async def test_by_agent_buckets_creation_assistant_drafts_under_their_label(
     handler: Any,
 ) -> None:
@@ -128,22 +111,6 @@ async def test_by_agent_buckets_creation_assistant_drafts_under_their_label(
     assert [(r.label, r.value) for r in result.rows] == [
         (CREATION_ASSISTANT_LABEL, 200)
     ]
-
-
-@pytest.mark.asyncio
-async def test_team_view_counts_the_team_where_the_agent_is_created() -> None:
-    store = _Store()
-    await query_token_usage_over_time(store, user=_USER, team_id="team-1", **_WINDOW)  # type: ignore[arg-type]
-    filters = store.bodies[0]["query"]["bool"]["filter"]
-    assert {"term": {"dims.team_id": "team-1"}} in filters
-    assert TOKEN_USAGE_FILTER in filters
-
-
-@pytest.mark.asyncio
-async def test_turn_count_presets_ignore_creation_assistant_drafts() -> None:
-    filters = await _filters(query_messages_over_time)
-    assert {"term": {"metric.name": TURN_COMPLETED_METRIC}} in filters
-    assert CREATION_ASSISTANT_METRIC not in repr(filters)
 
 
 @pytest.mark.asyncio

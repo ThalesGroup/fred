@@ -15,48 +15,72 @@
 import { useTranslation } from "react-i18next";
 import { useWebResearchSummaryQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
-import BarChart from "@shared/molecules/BarChart/BarChart";
-import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
-import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
+import { AnalyticsSection } from "./AnalyticsSection";
+import { RankedList } from "./RankedBars";
+import { formatValue } from "./analyticsFormat";
+import { type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "./analyticsQuery";
 import styles from "./AnalyticsPage.module.css";
 
-/** Admin-only web research volume, estimated provider cost and refusals. */
-export default function WebResearchSection({ timeRange }: { timeRange: TimeRange }) {
-  const { t } = useTranslation();
-  const { data, isLoading, isError } = useWebResearchSummaryQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-  const card = (key: string, value: number | null | undefined, fractionDigits?: number) => (
+/** Web research volume, estimated provider cost and refusals. Absent while the capability is
+ *  enabled nowhere on the platform. */
+export default function WebResearchSection({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
+  const { t, i18n } = useTranslation();
+  const lng = i18n.language;
+  const { data, isLoading, isError } = useWebResearchSummaryQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const card = (key: string, value: number | null | undefined, displayValue?: string, caption?: string) => (
     <KpiStatCard
       label={t(`rework.analytics.webResearch.${key}`)}
       hint={t(`rework.analytics.webResearch.hints.${key}`)}
       value={value}
-      fractionDigits={fractionDigits}
+      displayValue={displayValue}
+      caption={caption}
       isLoading={isLoading}
       isError={isError}
+      nested
     />
   );
+  if (data?.available === false) return null;
+  const count = (v: number) => formatValue(v, "count", lng);
+  const cost = data?.estimated_cost_eur;
+  const refused = data ? data.blocked + data.saturated + data.failed : undefined;
+  const p95 = data?.p95_ms;
   const reasons = (data?.by_reason ?? []).map((r) => ({
-    ...r,
+    key: r.label,
     label: t(`rework.analytics.webResearch.reasons.${r.label}`, { defaultValue: r.label }),
+    value: r.value,
+    valueText: count(r.value),
   }));
 
   return (
-    <Disclosure title={t("rework.analytics.sections.webResearch")} defaultOpen>
-      <div className={styles.kpiRow}>
-        {card("toolCalls", data?.tool_calls)}
-        {card("searches", data?.searches)}
-        {card("fetches", data?.fetches)}
-        {card("estimatedCost", data?.estimated_cost_usd, 4)}
-        {card("blocked", data?.blocked)}
-        {card("saturated", data?.saturated)}
-        {card("failed", data?.failed)}
-        {card("p95", data?.p95_ms)}
-        {card("users", data?.unique_users)}
-      </div>
-      <div className={styles.sectionStack}>
-        <BarChart
+    <AnalyticsSection id="webResearch">
+      <div className={styles.mainAside}>
+        <div className={styles.kpiRowDense}>
+          {card("toolCalls", data?.tool_calls)}
+          {card("searches", data?.searches)}
+          {card(
+            "fetches",
+            data?.fetches,
+            undefined,
+            data?.searches
+              ? t("rework.analytics.webResearch.pagesPerSearch", {
+                  value: formatValue(data.fetches / data.searches, "decimal", lng),
+                })
+              : undefined,
+          )}
+          {card("estimatedCost", cost, cost == null ? undefined : formatValue(cost, "eur", lng))}
+          {card(
+            "refused",
+            refused,
+            data ? `${count(data.blocked)} / ${count(data.saturated)} / ${count(data.failed)}` : undefined,
+            data?.tool_calls
+              ? t("rework.analytics.webResearch.shareOfCalls", {
+                  value: formatValue(refused! / data.tool_calls, "percent", lng),
+                })
+              : undefined,
+          )}
+          {card("p95", p95, p95 == null ? undefined : formatSeconds(p95 / 1000, lng))}
+        </div>
+        <RankedList
           title={t("rework.analytics.webResearch.reasonsTitle")}
           rows={reasons}
           emptyMessage={t("rework.analytics.webResearch.noRefusal")}
@@ -64,6 +88,10 @@ export default function WebResearchSection({ timeRange }: { timeRange: TimeRange
           isError={isError}
         />
       </div>
-    </Disclosure>
+    </AnalyticsSection>
   );
+}
+
+function formatSeconds(seconds: number, lng: string): string {
+  return new Intl.NumberFormat(lng, { style: "unit", unit: "second", maximumFractionDigits: 1 }).format(seconds);
 }

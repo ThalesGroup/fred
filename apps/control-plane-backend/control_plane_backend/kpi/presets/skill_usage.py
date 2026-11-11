@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -13,7 +14,11 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import SkillUsageResponse, SkillUsageRow
+from control_plane_backend.kpi.presets.common import (
+    SkillUsageResponse,
+    SkillUsageRow,
+    scope_filter,
+)
 
 TOP_SKILLS = 100
 
@@ -25,15 +30,13 @@ async def query_skill_usage(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
+    user_ids: Sequence[str] | None = None,
 ) -> SkillUsageResponse:
     # The preset router owns authorization for both team and platform scope.
     del user, request
-    filters: list[dict[str, Any]] = []
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
     return await _query_skill_usage(
-        store, since=since, until=until, scope_filters=filters
+        store, since=since, until=until, scope_filters=scope_filter(team_ids, user_ids)
     )
 
 
@@ -121,6 +124,7 @@ SKILL_USAGE_PRESET = PresetDef(
     handler=query_skill_usage,
     summary="Successful skill loads by user or model over the selected time range",
     team_scopable=True,
+    user_filterable=True,
 )
 
 

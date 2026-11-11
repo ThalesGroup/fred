@@ -19,6 +19,7 @@ provider errors carry no tokens and are left to the latency/status analytics."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -30,6 +31,7 @@ from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import (
     CREATION_ASSISTANT_ANSWERED_FILTER,
     CreationAssistantUsageResponse,
+    user_filter,
 )
 
 
@@ -40,6 +42,7 @@ async def query_creation_assistant_usage(
     since: datetime,
     until: datetime,
     request: Request,
+    user_ids: Sequence[str] | None = None,
 ) -> CreationAssistantUsageResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
@@ -59,6 +62,7 @@ async def query_creation_assistant_usage(
                         }
                     },
                     CREATION_ASSISTANT_ANSWERED_FILTER,
+                    *user_filter(user_ids),
                 ]
             }
         },
@@ -89,4 +93,5 @@ CREATION_ASSISTANT_USAGE_PRESET = PresetDef(
     response_model=CreationAssistantUsageResponse,
     handler=query_creation_assistant_usage,
     summary="Creation assistant token consumption and number of drafts, platform-wide",
+    user_filterable=True,
 )
