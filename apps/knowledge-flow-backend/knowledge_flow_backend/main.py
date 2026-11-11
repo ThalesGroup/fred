@@ -38,6 +38,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import load_configuration
+from knowledge_flow_backend.common.platform_failure_handler import register_platform_failure_handler
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
 from knowledge_flow_backend.features.content.published_markdown import MarkdownController
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         start_http_server(prom_cfg.port, addr=prom_cfg.address)
 
     register_exception_handlers(app)
+    register_platform_failure_handler(app)
     register_tabular_exception_handlers(app)
     initialize_user_security(configuration.security.user)
     # JWT and trusted delegation only; admission is Control Plane's, at turn start.

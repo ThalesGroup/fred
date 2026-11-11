@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """2026-11-11 scenario: a wrong KF_ARTIFACT_ACCESS_KEY says so, without the store's text."""
 
+import logging
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,13 +11,16 @@ from uuid import UUID
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core.common import register_exception_handlers
+from fred_core.common.platform_failure import PlatformFailure
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
+from fred_core.history.history_schema import FailureOrigin, ToolFailureCode
 from fred_knowledge.artifacts.reader import ArtifactReader
 from fred_knowledge.configuration import ArtifactStorageConfig
 from minio.error import S3Error
 from urllib3 import HTTPResponse
 
+from knowledge_flow_backend.common.platform_failure_handler import register_platform_failure_handler
 from knowledge_flow_backend.features.content import published_markdown as markdown_module
 from knowledge_flow_backend.security.weaver_admission import delegated_person
 
@@ -30,7 +34,7 @@ class _RefusingStore:
         raise S3Error(HTTPResponse(status=403), "InvalidAccessKeyId", STORE_TEXT, "/app-content-documents/attempt/output.md", "req", "seaweedfs-host")
 
 
-def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch):
+def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch, caplog):
     monkeypatch.setenv("KF_ARTIFACT_ACCESS_KEY", ACCESS_KEY)
     monkeypatch.setenv("KF_ARTIFACT_SECRET_KEY", "wrong-secret-value")
     reader = ArtifactReader(
@@ -56,10 +60,11 @@ def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch):
 
     app, router = FastAPI(), APIRouter()
     register_exception_handlers(app)
+    register_platform_failure_handler(app)
     markdown_module.MarkdownController(router)
     app.include_router(router)
     app.dependency_overrides[delegated_person] = lambda: SimpleNamespace(uid="alice")
-    with TestClient(app, raise_server_exceptions=False) as client:
+    with caplog.at_level(logging.ERROR), TestClient(app, raise_server_exceptions=False) as client:
         response = client.get(f"/documents/{DOC}/markdown", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()).model_dump_json()})
 
     assert response.status_code == 502
@@ -69,3 +74,29 @@ def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch):
     }
     for private in (ACCESS_KEY, STORE_TEXT, "app-content-documents", "seaweedfs-host", "8333", "InvalidAccessKeyId"):
         assert private not in response.text
+    # The log keeps the store's own cause.
+    [record] = [r for r in caplog.records if r.getMessage() == "Platform dependency failure"]
+    assert record.exc_info is not None
+    assert isinstance(record.exc_info[1].__cause__, S3Error)
+
+
+def test_an_unreachable_dependency_answers_503_without_a_setting():
+    app = FastAPI()
+    register_exception_handlers(app)
+    register_platform_failure_handler(app)
+
+    @app.get("/read")
+    async def read() -> None:
+        try:
+            raise OSError("connection refused by postgres-host:5432")
+        except OSError as error:
+            raise PlatformFailure(FailureOrigin.database, ToolFailureCode.service_busy) from error
+
+    response = TestClient(app, raise_server_exceptions=False).get("/read")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "A dependency of this service is unavailable.",
+        "failure": {"code": "service_busy", "origin": "database", "setting": None},
+    }
+    assert "postgres-host" not in response.text

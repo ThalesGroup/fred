@@ -22,6 +22,7 @@ from fred_core.security.delegation import AssertedUser, DelegationGrant
 from fred_core.security.mcp_delegation import declare_delegation_parameters
 
 from knowledge_flow_backend import mcp_mount
+from knowledge_flow_backend.common.platform_failure_handler import register_platform_failure_handler
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.mcp_mount import _DelegatedMCPTransport, _mcp_http_client, mount_fastapi_tools
 
@@ -80,6 +81,7 @@ def _mount(app):
 def test_mounted_failure_retains_registered_metadata_and_receiver_references(caplog, status):
     app = RequestLoggingFastAPI()
     register_exception_handlers(app)
+    register_platform_failure_handler(app)
     seen = {}
 
     @app.get("/documents/{uid}", operation_id="describe_document", dependencies=[Depends(declare_delegation_parameters)])
@@ -293,6 +295,7 @@ def test_curated_sql_400_result_and_full_delegated_json_log(logging_sinks, capsy
 
     app = RequestLoggingFastAPI()
     register_exception_handlers(app)
+    register_platform_failure_handler(app)
     router = APIRouter(dependencies=[Depends(declare_delegation_parameters)])
     TabularController(router)
     app.include_router(router)

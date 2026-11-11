@@ -4,13 +4,9 @@
 
 from __future__ import annotations
 
-import logging
 import socket
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.common.platform_failure import (
     PlatformFailure,
     database_failure,
@@ -170,58 +166,3 @@ def test_the_model_reads_the_component_and_the_setting_never_the_dependency_text
     assert "KF_ARTIFACT_ACCESS_KEY" in text
     assert "never leaves the log" not in text
     assert ToolFailure.from_http_status(500).platform_explanation() is None
-
-
-@pytest.mark.parametrize(
-    ("raised", "status", "detail"),
-    [
-        (
-            PlatformFailure(
-                FailureOrigin.object_storage,
-                MISCONFIGURED,
-                setting="KF_ARTIFACT_ACCESS_KEY",
-            ),
-            502,
-            "A dependency refused this service's configuration.",
-        ),
-        (
-            PlatformFailure(FailureOrigin.database, UNAVAILABLE),
-            503,
-            "A dependency of this service is unavailable.",
-        ),
-    ],
-)
-def test_one_handler_answers_the_failure_without_the_dependency_text(
-    raised: PlatformFailure, status: int, detail: str, caplog: pytest.LogCaptureFixture
-) -> None:
-    app = FastAPI()
-    register_exception_handlers(app)
-
-    @app.get("/read")
-    async def read() -> None:
-        try:
-            raise _s3("InvalidAccessKeyId")
-        except S3Error as error:
-            raise raised from error
-
-    with caplog.at_level(logging.ERROR):
-        response = TestClient(app, raise_server_exceptions=False).get("/read")
-
-    assert response.status_code == status
-    failure = raised.failure
-    assert response.json() == {
-        "detail": detail,
-        "failure": {
-            "code": failure.code.value,
-            "origin": failure.origin.value if failure.origin else None,
-            "setting": failure.setting,
-        },
-    }
-    for private in ("never leaves the log", "app-content-documents", "host"):
-        assert private not in response.text
-    # The log keeps the dependency's own cause.
-    (record,) = [
-        r for r in caplog.records if r.getMessage() == "Platform dependency failure"
-    ]
-    assert record.exc_info is not None
-    assert isinstance(record.exc_info[1].__cause__, S3Error)  # type: ignore[union-attr]

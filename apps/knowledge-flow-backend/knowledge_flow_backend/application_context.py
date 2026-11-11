@@ -10,10 +10,11 @@ from uuid import UUID
 import httpx
 from fred_core import split_realm_url
 from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
+from fred_core.common.platform_failure import database_failure
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
-from fred_core.sql import classify_connection_failures, create_async_engine_from_config
+from fred_core.sql import create_async_engine_from_config
 from fred_knowledge.artifacts.reader import ArtifactReader
 from fred_knowledge.models import DocumentModels
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
@@ -24,6 +25,7 @@ from fred_pod.common.structures import OPENSEARCH_PASSWORD_ENV, POSTGRES_PASSWOR
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_sdk.contracts.weaver import InferenceAdmission
 from opensearchpy import OpenSearch, RequestsHttpConnection
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.common.structures import Configuration, PgVectorStorageConfig, TabularStoreConfig
@@ -201,7 +203,7 @@ class ApplicationContext:
     def _init_pg_async_engine(self):
         pg_cfg = self.configuration.storage.postgres
         pg_async_engine = create_async_engine_from_config(pg_cfg)
-        classify_connection_failures(pg_async_engine)
+        _classify_connection_failures(pg_async_engine)
 
         logger.info("Shared Postgres async initialized.")
         return pg_async_engine
@@ -362,6 +364,25 @@ class ApplicationContext:
                 logger.debug("Error closing OpenSearch client", exc_info=True)
             finally:
                 self._opensearch_client = None
+
+
+def _classify_connection_failures(engine: AsyncEngine) -> None:
+    """Report a refused or unreachable PostgreSQL connection as a `PlatformFailure`.
+
+    Why: opening a connection is the one place every query of the engine shares;
+    asyncpg raises a bare OSError there, which no SQLAlchemy error hook sees.
+    Other errors, and every error once connected, keep their own type.
+    """
+
+    @event.listens_for(engine.sync_engine, "do_connect")
+    def _connect(dialect: Any, _record: Any, cargs: Any, cparams: Any) -> Any:
+        try:
+            return dialect.connect(*cargs, **cparams)
+        except Exception as error:
+            failure = database_failure(error)
+            if failure is None:
+                raise
+            raise failure from error
 
 
 def _mask(value: Optional[str]) -> str:

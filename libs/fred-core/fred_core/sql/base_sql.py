@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from fred_pod.common.structures import POSTGRES_PASSWORD_ENV
-from sqlalchemy import JSON, Table, create_engine, event, text
+from sqlalchemy import JSON, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -219,28 +219,6 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
     except Exception:
         logger.error("Failed to create engine")
         raise
-
-
-def classify_connection_failures(engine: AsyncEngine) -> None:
-    """Report a refused or unreachable PostgreSQL connection as a `PlatformFailure`.
-
-    Why: opening a connection is the one place every query of the engine shares;
-    asyncpg raises a bare OSError there, which no SQLAlchemy error hook sees.
-    Other errors, and every error once connected, keep their own type.
-    """
-    # Imported here: the failure vocabulary lives in history, whose store
-    # imports this module.
-    from fred_core.common.platform_failure import database_failure
-
-    @event.listens_for(engine.sync_engine, "do_connect")
-    def _connect(dialect: Any, _record: Any, cargs: Any, cparams: Any) -> Any:
-        try:
-            return dialect.connect(*cargs, **cparams)
-        except Exception as error:
-            failure = database_failure(error)
-            if failure is None:
-                raise
-            raise failure from error
 
 
 class BaseSqlStore:
