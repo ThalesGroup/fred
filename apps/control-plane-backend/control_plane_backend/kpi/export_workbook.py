@@ -21,6 +21,7 @@ written: no user name, email or id ever reaches a sheet.
 from __future__ import annotations
 
 import io
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -36,7 +37,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
 from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
-from control_plane_backend.kpi.export_texts import SHARED, Lang, text
+from control_plane_backend.kpi.export_texts import SHARED, AgentLabels, Lang, text
 from control_plane_backend.kpi.presets.analytics_activity_over_time import (
     AnalyticsActivityResponse,
 )
@@ -51,7 +52,16 @@ from control_plane_backend.kpi.presets.analytics_quality_cost import (
 from control_plane_backend.kpi.presets.analytics_teams import AnalyticsTeamsResponse
 from control_plane_backend.kpi.presets.analytics_teams_catalog import AnalyticsTeamRow
 from control_plane_backend.kpi.presets.analytics_usage import AnalyticsUsageResponse
-from control_plane_backend.kpi.presets.common import CREATION_ASSISTANT_LABEL
+from control_plane_backend.kpi.presets.common import (
+    CREATION_ASSISTANT_LABEL,
+    CreationAssistantUsageResponse,
+    LabelValueResponse,
+    SkillUsageResponse,
+    TeamStorageResponse,
+)
+from control_plane_backend.kpi.presets.web_research_summary import (
+    WebResearchSummaryResponse,
+)
 from control_plane_backend.kpi.user_filter import ResolvedUserFilter
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -84,6 +94,13 @@ class ExportData:
     catalog: list[AnalyticsTeamRow]
     user_filter: ResolvedUserFilter | None = None
     days: CountedDays = ALL_DAYS
+    agent_labels: AgentLabels = AgentLabels()
+    include_technical: bool = False
+    skills: SkillUsageResponse | None = None
+    storage: TeamStorageResponse | None = None
+    prompt_lengths: LabelValueResponse | None = None
+    creation_assistant: CreationAssistantUsageResponse | None = None
+    web_research: WebResearchSummaryResponse | None = None
 
     def local_day(self, moment: datetime, *, end: bool = False) -> date:
         # The period end is an instant: its last covered day is the one just before it.
@@ -111,10 +128,14 @@ def build_workbook(data: ExportData, lang: Lang) -> bytes:
     book.summary()
     book.over_time()
     book.adoption()
+    book.usage()
     book.teams()
     book.agents()
     book.capabilities()
     book.models()
+    book.skills()
+    book.technical()
+    book.web_research()
     for sheet in book.wb.worksheets:
         sheet.sheet_view.showGridLines = sheet.title != text(lang, "sheet.about")
     buffer = io.BytesIO()
@@ -154,25 +175,40 @@ class _Book:
         self._first = True
 
     def t(self, key: str) -> str:
-        return text(self.lang, key)
+        return text(self.lang, key, self.data.agent_labels)
 
     def explain(self, prefix: str) -> str | None:
         """`<prefix>.def`, then "How to read it:" and `<prefix>.how` when there is one."""
         shared = SHARED[self.lang]
-        definition = shared.get(f"rework.analytics.{prefix}.def")
-        if definition is None:
+        if f"rework.analytics.{prefix}.def" not in shared:
             return None
-        how = shared.get(f"rework.analytics.{prefix}.how")
+        definition = self.t(f"{prefix}.def")
+        how = (
+            self.t(f"{prefix}.how")
+            if f"rework.analytics.{prefix}.how" in shared
+            else None
+        )
         return f"{definition} {self.t('howToRead')} {how}" if how else definition
 
     def sheet(self, key: str) -> Worksheet:
+        title = self.t(key)
+        if key == "sheet.agents":
+            title = (
+                re.sub(r"[\\/*?:\[\]]", "", title)
+                .strip(" '")
+                .lstrip("=+-@")[:31]
+                .strip(" '")
+                or "Agents"
+            )
+            if title.casefold() == "history":
+                title = "History data"
         if self._first:
             self._first = False
             ws = self.wb.active
             assert ws is not None
-            ws.title = self.t(key)
+            ws.title = title
             return ws
-        return self.wb.create_sheet(self.t(key))
+        return self.wb.create_sheet(title)
 
     def day(self, moment: datetime, *, end: bool = False) -> str:
         return self.data.local_day(moment, end=end).strftime(STRFTIME[self.lang])
@@ -270,7 +306,7 @@ class _Book:
             ]
         for i, (label, value) in enumerate(info, 3):
             ws.cell(i, 1, label).font = Font(bold=True)
-            # Team names and filter values come from users.
+            # Team names come from users.
             cell = _write(ws, i, 2, value)
             if isinstance(value, datetime):
                 cell.number_format = f"{DATE_FORMAT[self.lang]} hh:mm"
@@ -291,34 +327,22 @@ class _Book:
         return f"{value:,}".replace(",", "\u202f" if self.lang == "fr" else ",")
 
     def filter_text(self, resolved: ResolvedUserFilter) -> str:
-        """The conditions as the page shows them, e.g. `organisation Equals "A"`."""
-        rule = "rework.platformAccess.rule"
-        conditions = [
-            " ".join(
-                [
-                    " > ".join(c.claim),
-                    self.t(f"{rule}.operatorLabel.{c.operator}"),
-                    f'"{c.value}"',
-                    *(
-                        [f"({self.t(f'{rule}.caseSensitive')})"]
-                        if c.case_sensitive
-                        else []
-                    ),
-                ]
-            )
-            for c in resolved.filter.conditions
-        ]
-        if len(conditions) == 1:
-            return conditions[0]
-        combination = self.t(f"{rule}.{resolved.filter.combination}")
-        separator = " : " if self.lang == "fr" else ": "
-        return f"{combination}{separator}" + "; ".join(conditions)
+        # Filter operands can be names or email addresses, so keep them out of the file.
+        return self.t("about.userFilterApplied").format(
+            count=len(resolved.filter.conditions)
+        )
 
     def summary(self) -> None:
         data = self.data
-        adoption, usage, quality = data.adoption, data.usage, data.quality
+        adoption, usage, quality, agents = (
+            data.adoption,
+            data.usage,
+            data.quality,
+            data.agents,
+        )
         adoption_theme, usage_theme = self.t("tabs.adoption"), self.t("tabs.usage")
         quality_theme, cost_theme = self.t("theme.quality"), self.t("theme.cost")
+        agents_theme, teams_theme = self.t("theme.agents"), self.t("theme.teams")
         access = PeriodValue(
             current=adoption.people_with_access, previous=adoption.people_with_access
         )
@@ -331,19 +355,80 @@ class _Book:
             (adoption_theme, "funnel.rates.visitRate.name", "funnel.rates.visitRate", adoption.visit_rate, "%", PCT),
             (adoption_theme, "funnel.rates.visitorToActive.name", "funnel.rates.visitorToActive", adoption.visitor_to_active_rate, "%", PCT),
             (adoption_theme, "tiles.newUsers.label", "tiles.newUsers", adoption.new_users, "unit.people", INT),
+            (adoption_theme, "tiles.firstMessageWithin7Days.label", "tiles.firstMessageWithin7Days", adoption.first_message_within_7_days_rate, "%", PCT),
+            (adoption_theme, "tiles.daysToFirstMessage.label", "tiles.daysToFirstMessage", adoption.median_days_to_first_message, "unit.days", DEC),
             (adoption_theme, "tiles.nextMonthReturn.label", "tiles.nextMonthReturn", adoption.next_month_return, "%", PCT),
-            (adoption_theme, "tiles.activeTeams.label", "tiles.activeTeams", data.teams.active_teams, "unit.teams", INT),
             (usage_theme, "tiles.conversations.label", "tiles.conversations", usage.conversations, "unit.conversations", INT),
             (usage_theme, "tiles.messages.label", "tiles.messages", usage.messages, "unit.messages", INT),
             (usage_theme, "tiles.activeUsersPerWorkday.label", "tiles.activeUsersPerWorkday", usage.active_users_per_workday, "unit.people", DEC),
             (usage_theme, "tiles.daysPerWeek.label", "tiles.daysPerWeek", usage.days_per_week_median, "unit.days", DEC),
+            (usage_theme, "tiles.conversationsPerUser.label", "tiles.conversationsPerUser", usage.conversations_per_user_median, "unit.conversations", DEC),
             (usage_theme, "tiles.messagesPerConversation.label", "tiles.messagesPerConversation", usage.messages_per_conversation_median, "unit.messages", DEC),
+            (usage_theme, "tiles.dailyUsage.label", "tiles.dailyUsage", usage.daily_usage_share, "%", PCT),
+            (usage_theme, "topDecile", "topDecile", usage.top_decile_conversation_share, "%", PCT),
+            (agents_theme, "tiles.agentsUsed.label", "tiles.agentsUsed", agents.agents_used, "unit.agents", INT),
+            (agents_theme, "tiles.agentsCreated.label", "tiles.agentsCreated", agents.agents_created, "unit.agents", INT),
+            (agents_theme, "agentsPublished", "tiles.agentsCreated", agents.agents_created_published, "unit.agents", INT),
+            (agents_theme, "tiles.documentsAdded.label", "tiles.documentsAdded", agents.documents_added, "unit.documents", INT),
             (quality_theme, "tiles.failedAnswers.label", "tiles.failedAnswers", quality.failed_turn_rate, "%", PCT),
+            (quality_theme, "tiles.singleExchange.label", "tiles.singleExchange", usage.single_exchange_share, "%", PCT),
             (cost_theme, "tiles.cost.label", "tiles.cost", quality.cost_eur, "€", EUR),
+            (cost_theme, "costPerActiveUser", "tiles.cost", quality.cost_eur_per_active_user, "€", EUR_CENTS),
             (cost_theme, "tokensSent", "tiles.tokens", quality.input_tokens, "unit.tokens", INT),
             (cost_theme, "tokensGenerated", "tiles.tokens", quality.output_tokens, "unit.tokens", INT),
+            (cost_theme, "tokensCached", "tiles.tokens", quality.cached_input_tokens, "unit.tokens", INT),
             (cost_theme, "tiles.footprint.label", "tiles.footprint", _scaled(quality.co2e_grams, 0.001), "unit.kgCo2e", DEC),
+            (cost_theme, "energy", "tiles.footprint", quality.kwh, "unit.kwh", DEC),
         ]  # fmt: skip
+        if data.include_technical:
+            indicators.extend(
+                [
+                    (
+                        adoption_theme,
+                        "tiles.activeTeams.label",
+                        "tiles.activeTeams",
+                        data.teams.active_teams,
+                        "unit.teams",
+                        INT,
+                    ),
+                    (
+                        agents_theme,
+                        "tiles.teamsFeedingCorpus.label",
+                        "tiles.teamsFeedingCorpus",
+                        agents.teams_feeding_corpus,
+                        "unit.teams",
+                        INT,
+                    ),
+                ]
+            )
+        if agents.corpus_searches is not None:
+            indicators.append(
+                (
+                    agents_theme,
+                    "tiles.corpusSearches.label",
+                    "tiles.corpusSearches",
+                    agents.corpus_searches,
+                    "unit.searches",
+                    INT,
+                )
+            )
+        for key, value, unit, fmt in (
+            (
+                "teamConversations",
+                data.teams.team_conversations,
+                "unit.conversations",
+                INT,
+            ),
+            (
+                "personalConversations",
+                data.teams.personal_conversations,
+                "unit.conversations",
+                INT,
+            ),
+            ("teamShare", data.teams.team_share, "%", PCT),
+        ):
+            if value is not None:
+                indicators.append((teams_theme, key, key, value, unit, fmt))
         ws = self.sheet("sheet.summary")
         rows = []
         for theme, label, prefix, value, unit, _ in indicators:
@@ -475,6 +560,147 @@ class _Book:
             widths={1: 18},
         )
         ws.freeze_panes = None
+
+    def skills(self) -> None:
+        if self.data.skills is None:
+            return
+        ws = self.sheet("sheet.skills")
+        self.table(
+            ws,
+            "Skills",
+            [
+                (self.t("skills.name"), None),
+                (self.t("skills.loads"), None),
+                (self.t("skills.byUser"), None),
+                (self.t("skills.byModel"), None),
+            ],
+            [
+                (r.skill_name, r.total, r.user_count, r.model_count)
+                for r in self.data.skills.rows
+            ],
+            [None, INT, INT, INT],
+            widths={1: 40},
+        )
+
+    def technical(self) -> None:
+        if (
+            self.data.storage is None
+            and self.data.prompt_lengths is None
+            and self.data.creation_assistant is None
+        ):
+            return
+        ws = self.sheet("sheet.technical")
+        row = 1
+        if self.data.storage is not None:
+            self.heading(ws, "A1", self.t("technical.storage"))
+            self.table(
+                ws,
+                "Storage",
+                [
+                    (self.t("tables.storage.team"), None),
+                    (self.t("tables.storage.used"), None),
+                    (self.t("tables.storage.quota"), None),
+                    (self.t("tables.storage.share"), None),
+                ],
+                [
+                    (
+                        r.label,
+                        r.used_bytes,
+                        r.quota_bytes,
+                        r.used_bytes / r.quota_bytes if r.quota_bytes else None,
+                    )
+                    for r in self.data.storage.rows
+                ],
+                [None, INT, INT, PCT],
+                start_row=2,
+                widths={1: 32},
+            )
+            row = max(len(self.data.storage.rows), 1) + 5
+        if self.data.prompt_lengths is not None:
+            self.heading(ws, f"A{row}", self.t("technical.promptLengths"))
+            self.table(
+                ws,
+                "PromptLengths",
+                [
+                    (self.t("technical.characters"), None),
+                    (self.t("technical.agents"), None),
+                ],
+                [(r.label, r.value) for r in self.data.prompt_lengths.rows],
+                [None, INT],
+                start_row=row + 1,
+            )
+            row += max(len(self.data.prompt_lengths.rows), 1) + 4
+        if self.data.creation_assistant is not None:
+            assistant = self.data.creation_assistant
+            self.heading(ws, f"A{row}", self.t("tiles.creationAssistant.label"))
+            self.table(
+                ws,
+                "CreationAssistant",
+                [
+                    (
+                        self.t("technical.drafts"),
+                        self.explain("tiles.creationAssistant"),
+                    ),
+                    (self.t("tokensSent"), None),
+                    (self.t("tokensGenerated"), None),
+                ],
+                [(assistant.drafts, assistant.input_tokens, assistant.output_tokens)],
+                [INT, INT, INT],
+                start_row=row + 1,
+            )
+        ws.freeze_panes = None
+
+    def web_research(self) -> None:
+        research = self.data.web_research
+        if research is None or not research.available:
+            return
+        ws = self.sheet("sheet.webResearch")
+        rows = [
+            (self.t("webResearch.toolCalls"), research.tool_calls, INT),
+            (self.t("webResearch.searches"), research.searches, INT),
+            (self.t("webResearch.fetches"), research.fetches, INT),
+            (self.t("webResearch.billableSearches"), research.billable_searches, INT),
+            (
+                self.t("webResearch.estimatedCost"),
+                research.estimated_cost_eur,
+                EUR_CENTS,
+            ),
+            (self.t("webResearch.blocked"), research.blocked, INT),
+            (self.t("webResearch.saturated"), research.saturated, INT),
+            (self.t("webResearch.failed"), research.failed, INT),
+            (self.t("webResearch.uniqueUsers"), research.unique_users, INT),
+            (self.t("webResearch.p95Ms"), research.p95_ms, DEC),
+        ]
+        self.table(
+            ws,
+            "WebResearch",
+            [(self.t("summary.indicator"), None), (self.t("webResearch.value"), None)],
+            [(label, value) for label, value, _ in rows],
+            [None, None],
+            widths={1: 36},
+        )
+        self.heading(ws, "A15", self.t("webResearch.reasons"))
+        self.table(
+            ws,
+            "WebResearchReasons",
+            [(self.t("webResearch.reason"), None), (self.t("webResearch.count"), None)],
+            [(r.label, r.value) for r in research.by_reason],
+            [None, INT],
+            start_row=16,
+        )
+        for i, (_, _, fmt) in enumerate(rows, 2):
+            ws.cell(i, 2).number_format = fmt
+        ws.freeze_panes = None
+
+    def usage(self) -> None:
+        ws = self.sheet("sheet.usage")
+        self.table(
+            ws,
+            "ConversationDistribution",
+            [(self.t("usage.conversationCount"), None), (self.t("usage.users"), None)],
+            [(r.label, r.value) for r in self.data.usage.conversation_distribution],
+            [None, INT],
+        )
 
     def teams(self) -> None:
         data = self.data

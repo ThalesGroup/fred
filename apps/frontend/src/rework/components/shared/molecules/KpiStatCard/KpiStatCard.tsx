@@ -110,7 +110,7 @@ export default function KpiStatCard({
       {(hint || trendAction) && (
         <span className={styles.hintCorner}>
           {trendAction && (
-            <Tooltip text={trendAction.label}>
+            <Tooltip text={trendAction.label} dismissOnClick>
               <IconButton
                 className={styles.action}
                 variant="icon"

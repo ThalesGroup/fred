@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAgentsTotalQuery,
   useAnalyticsAgentsQuery,
@@ -25,19 +25,19 @@ import { BarCell, RankedList, SplitCell } from "../RankedBars";
 import AnalyticsTable, { TableHint } from "../AnalyticsTable";
 import InfoTile from "../InfoTile";
 import { formatValue, NO_VALUE } from "../analyticsFormat";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "../analyticsQuery";
+import { currentQueryLoading, allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 export default function AgentsTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const args = kpiArgs(timeRange, teamIds, userFilter, days);
   const agents = useAnalyticsAgentsQuery(args, KPI_CACHE);
   // Agents existing today: configuration, not narrowed by a user filter.
   const agentsTotal = useAgentsTotalQuery(kpiArgs(timeRange, teamIds), KPI_CACHE);
   const skills = useSkillUsageQuery(args, KPI_CACHE);
-  const data = agents.data;
-  const tile = { isLoading: agents.isLoading, isError: agents.isError };
-  const existing = agentsTotal.data?.value;
+  const data = agents.currentData;
+  const tile = { isLoading: currentQueryLoading(agents), isError: agents.isError };
+  const existing = agentsTotal.currentData?.value;
   const published = data?.agents_created_published.current;
 
   // Rate cells are empty when there is nothing to divide by.
@@ -152,7 +152,7 @@ export default function AgentsTab({ timeRange, teamIds, mode = "platform", userF
               })}`,
             }))}
             emptyMessage={t("rework.analytics.charts.topAgents.empty")}
-            isLoading={agents.isLoading}
+            isLoading={currentQueryLoading(agents)}
             isError={agents.isError}
           />
         </div>
@@ -165,12 +165,11 @@ export default function AgentsTab({ timeRange, teamIds, mode = "platform", userF
           columns={capabilityColumns}
           rows={data?.capabilities}
           rowKey={(r) => r.capability_id}
-          isLoading={agents.isLoading}
+          isLoading={currentQueryLoading(agents)}
           isError={agents.isError}
         />
       </AnalyticsSection>
 
-      {/* currentData, not data: a previous range's rows must not show while the new one loads. */}
       <AnalyticsSection id="skills">
         <AnalyticsTable
           id="skills"
@@ -178,7 +177,7 @@ export default function AgentsTab({ timeRange, teamIds, mode = "platform", userF
           columns={skillColumns}
           rows={skills.currentData?.rows}
           rowKey={(r) => r.skill_name}
-          isLoading={skills.isLoading || (skills.isFetching && !skills.currentData)}
+          isLoading={currentQueryLoading(skills)}
           isError={skills.isError}
         />
         {!!skills.currentData?.rows.length && (

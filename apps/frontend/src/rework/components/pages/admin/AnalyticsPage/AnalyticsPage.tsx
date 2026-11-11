@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import AnalyticsView from "./AnalyticsView";
 
 /** Platform analytics for administrators and observers, any team scope. */
 export default function AnalyticsPage() {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   return <AnalyticsView title={t("rework.analytics.title")} mode="platform" />;
 }

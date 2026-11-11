@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAnalyticsActivityOverTimeQuery,
   useAnalyticsQualityCostQuery,
@@ -29,18 +29,25 @@ import { AnalyticsSection, AnalyticsServiceDown, ChartHint } from "../AnalyticsS
 import AnalyticsTable from "../AnalyticsTable";
 import InfoTile from "../InfoTile";
 import { bucketSeries, formatValue, NO_VALUE, type ValueFormat } from "../analyticsFormat";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, zonedKpiArgs } from "../analyticsQuery";
+import {
+  currentQueryLoading,
+  allFailed,
+  type AnalyticsTabProps,
+  KPI_CACHE,
+  kpiArgs,
+  zonedKpiArgs,
+} from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 export default function QualityCostTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
   const quality = useAnalyticsQualityCostQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   const zoned = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const usage = useAnalyticsUsageQuery(zoned, KPI_CACHE);
   const activity = useAnalyticsActivityOverTimeQuery(zoned, KPI_CACHE);
-  const data = quality.data;
-  const tile = { isLoading: quality.isLoading, isError: quality.isError };
+  const data = quality.currentData;
+  const tile = { isLoading: currentQueryLoading(quality), isError: quality.isError };
   const fmt = (v: number | null | undefined, f: ValueFormat) => (v == null ? NO_VALUE : formatValue(v, f, lng));
   const num = (text: string) => <span className={styles.numeric}>{text}</span>;
 
@@ -122,7 +129,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
     },
   ];
 
-  const tokensTitle = t(`rework.analytics.charts.tokensOverTime.title.${activity.data?.bucket ?? "day"}`);
+  const tokensTitle = t(`rework.analytics.charts.tokensOverTime.title.${activity.currentData?.bucket ?? "day"}`);
 
   if (allFailed([quality, usage, activity])) return <AnalyticsServiceDown />;
 
@@ -140,11 +147,11 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
           />
           <InfoTile
             id="singleExchange"
-            period={usage.data?.single_exchange_share}
+            period={usage.currentData?.single_exchange_share}
             format="percent"
             deltaKind="points"
             neutralDelta
-            isLoading={usage.isLoading}
+            isLoading={currentQueryLoading(usage)}
             isError={usage.isError}
           />
         </div>
@@ -200,7 +207,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
         <MultiSeriesLineChart
           title={tokensTitle}
           titleAction={<ChartHint id="tokensOverTime" title={tokensTitle} />}
-          rows={bucketSeries(activity.data?.points, activity.data?.bucket, series, lng, t)}
+          rows={bucketSeries(activity.currentData?.points, activity.currentData?.bucket, series, lng, t)}
           series={Object.values(series)}
           barSeries={Object.values(series)}
           seriesColors={["--primary", "--primary"]}
@@ -210,7 +217,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
           stacked
           valueLabel={t("rework.analytics.charts.tokensOverTime.valueLabel")}
           isFetching={activity.isFetching}
-          isLoading={activity.isLoading}
+          isLoading={currentQueryLoading(activity)}
           isError={activity.isError}
           flat
         />
@@ -228,7 +235,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
             columns={modelColumns}
             rows={data?.models}
             rowKey={(r) => r.model}
-            isLoading={quality.isLoading}
+            isLoading={currentQueryLoading(quality)}
             isError={quality.isError}
           />
           <AnalyticsTable
@@ -236,7 +243,7 @@ export default function QualityCostTab({ timeRange, teamIds, userFilter, days }:
             columns={agentColumns}
             rows={agentRows}
             rowKey={(r) => r.key}
-            isLoading={quality.isLoading}
+            isLoading={currentQueryLoading(quality)}
             isError={quality.isError}
           />
         </div>

@@ -20,14 +20,14 @@ import AdoptionFunnel from "../AdoptionFunnel";
 import CohortTable from "../CohortTable";
 import { AnalyticsSection, AnalyticsServiceDown } from "../AnalyticsSection";
 import InfoTile from "../InfoTile";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
+import { currentQueryLoading, allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 export default function AdoptionTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
   const zoned = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const adoption = useAnalyticsAdoptionQuery(zoned, KPI_CACHE);
-  const data = adoption.data;
-  const tile = { isLoading: adoption.isLoading, isError: adoption.isError };
+  const data = adoption.currentData;
+  const tile = { isLoading: currentQueryLoading(adoption), isError: adoption.isError };
   const usage = useAnalyticsUsageQuery(zoned, KPI_CACHE);
 
   if (allFailed([adoption, usage])) return <AnalyticsServiceDown />;
@@ -40,9 +40,9 @@ export default function AdoptionTab({ timeRange, teamIds, userFilter, days }: An
           <div className={styles.stack}>
             <InfoTile
               id="activeUsersPerWorkday"
-              period={usage.data?.active_users_per_workday}
+              period={usage.currentData?.active_users_per_workday}
               format="decimal"
-              isLoading={usage.isLoading}
+              isLoading={currentQueryLoading(usage)}
               isError={usage.isError}
             />
           </div>

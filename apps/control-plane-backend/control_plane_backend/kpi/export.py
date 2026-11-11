@@ -26,21 +26,31 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fred_core import KeycloakUser, get_current_user
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    get_current_user,
+)
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.counted_days import (
     EXCLUDE_HOLIDAYS_QUERY,
     EXCLUDE_WEEKENDS_QUERY,
     check_time_zone,
     counted_days,
 )
+from control_plane_backend.kpi.export_texts import AgentLabels
 from control_plane_backend.kpi.export_workbook import (
     XLSX_MEDIA_TYPE,
     ExportData,
     build_workbook,
     export_filename,
+)
+from control_plane_backend.kpi.presets.agent_prompt_length_distribution import (
+    query_agent_prompt_length_distribution,
 )
 from control_plane_backend.kpi.presets.analytics_activity_over_time import (
     query_analytics_activity_over_time,
@@ -55,6 +65,14 @@ from control_plane_backend.kpi.presets.analytics_quality_cost import (
 from control_plane_backend.kpi.presets.analytics_teams import query_analytics_teams
 from control_plane_backend.kpi.presets.analytics_teams_catalog import team_catalog
 from control_plane_backend.kpi.presets.analytics_usage import query_analytics_usage
+from control_plane_backend.kpi.presets.creation_assistant_usage import (
+    query_creation_assistant_usage,
+)
+from control_plane_backend.kpi.presets.skill_usage import query_skill_usage
+from control_plane_backend.kpi.presets.storage_by_team import query_storage_by_team
+from control_plane_backend.kpi.presets.web_research_summary import (
+    query_web_research_summary,
+)
 from control_plane_backend.kpi.scope import resolve_kpi_scope
 from control_plane_backend.kpi.user_filter import UserFilterParam, parse_user_filter
 from control_plane_backend.kpi.utils import Bucket
@@ -90,6 +108,22 @@ def add_export_route(
         user_filter: UserFilterParam = None,
         exclude_weekends: bool = EXCLUDE_WEEKENDS_QUERY,
         exclude_holidays: bool = EXCLUDE_HOLIDAYS_QUERY,
+        include_technical: bool = Query(
+            default=False,
+            description="Include the platform Technical tab in the workbook.",
+        ),
+        agents_nickname_singular: str = Query(
+            default="Agent",
+            min_length=1,
+            max_length=200,
+            description="Configured singular name for an agent in the workbook.",
+        ),
+        agents_nickname_plural: str = Query(
+            default="Agents",
+            min_length=1,
+            max_length=200,
+            description="Configured plural name for agents in the workbook.",
+        ),
         user: KeycloakUser = Depends(get_current_user),
         store: OpenSearchKPIStore = Depends(get_store),
     ) -> Response:
@@ -97,6 +131,15 @@ def add_export_route(
         scope = await resolve_kpi_scope(
             request, user, team_ids, user_filter=parse_user_filter(user_filter)
         )
+        if include_technical and scope.team_ids:
+            await (
+                get_application_container(request)
+                .get_rebac_engine()
+                .check_user_permission_or_raise(
+                    user, OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID
+                )
+            )
+        platform_view = include_technical or not scope.team_ids
 
         now = datetime.now(tz=timezone.utc)
         resolved_since = since or (now - timedelta(days=30))
@@ -113,7 +156,12 @@ def add_export_route(
             user_ids=scope.user_ids,
             days=days,
         )
-        sections, catalog = await asyncio.gather(
+        (
+            sections,
+            catalog,
+            skills,
+            technical,
+        ) = await asyncio.gather(
             asyncio.gather(
                 query_analytics_adoption(store, **common, tz=tz),
                 query_analytics_usage(store, **common, tz=tz),
@@ -125,8 +173,43 @@ def add_export_route(
                 ),
             ),
             team_catalog(request, scope.team_ids),
+            query_skill_usage(store, **common),
+            asyncio.gather(
+                query_storage_by_team(
+                    store,
+                    user=user,
+                    since=resolved_since,
+                    until=resolved_until,
+                    request=request,
+                    team_ids=scope.team_ids,
+                ),
+                query_web_research_summary(store, **common),
+                query_agent_prompt_length_distribution(
+                    store,
+                    user=user,
+                    since=resolved_since,
+                    until=resolved_until,
+                    request=request,
+                )
+                if not scope.team_ids
+                else asyncio.sleep(0, result=None),
+                query_creation_assistant_usage(
+                    store,
+                    user=user,
+                    since=resolved_since,
+                    until=resolved_until,
+                    request=request,
+                    user_ids=scope.user_ids,
+                    days=days,
+                )
+                if not scope.team_ids
+                else asyncio.sleep(0, result=None),
+            )
+            if platform_view
+            else asyncio.sleep(0, result=(None, None, None, None)),
         )
         adoption, usage, teams, agents, quality, activity = sections
+        storage, web_research, prompt_lengths, creation_assistant = technical
         data = ExportData(
             since=resolved_since,
             until=resolved_until,
@@ -143,6 +226,13 @@ def add_export_route(
             catalog=catalog,
             user_filter=scope.user_filter,
             days=days,
+            agent_labels=AgentLabels(agents_nickname_singular, agents_nickname_plural),
+            include_technical=platform_view,
+            skills=skills,
+            storage=storage,
+            prompt_lengths=prompt_lengths,
+            creation_assistant=creation_assistant,
+            web_research=web_research,
         )
         # openpyxl is CPU-bound and synchronous: keep it off the event loop.
         content = await asyncio.to_thread(build_workbook, data, lang)

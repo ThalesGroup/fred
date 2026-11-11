@@ -1878,11 +1878,11 @@
       },
       "agents": {
         "promptLengthDistribution": {
-          "empty": "No agent data in this period.",
+          "empty": "No {{agentsNicknameSingularLowercase}} data in this period.",
           "title": "System prompt length distribution",
-          "valueLabel": "Agents",
-          "agentCount_one": "on {{value}} agent",
-          "agentCount_other": "on {{value}} agents"
+          "valueLabel": "{{agentsNicknamePlural}}",
+          "agentCount_one": "on {{value}} {{agentsNicknameSingularLowercase}}",
+          "agentCount_other": "on {{value}} {{agentsNicknamePluralLowercase}}"
         }
       },
       "conversationsByScope": {
@@ -1976,7 +1976,7 @@
         "adoption": "Adoption",
         "usage": "Usage",
         "teams": "Teams",
-        "agents": "Agents and tools",
+        "agents": "{{agentsNicknamePlural}} and tools",
         "cost": "Quality and cost",
         "tech": "Technical"
       },
@@ -2023,7 +2023,7 @@
         "condition": "{{field}} {{operator}} \"{{value}}\"",
         "and": "and",
         "or": "or",
-        "notFiltered": "Activity figures only count the matching users. Not filtered: agents existing, agents equipped per capability, team member counts, storage and prompt length. \"Without data\": users for whom a filtered attribute is not recorded, for example because they have not signed in since the access rule started using it."
+        "notFiltered": "Activity figures only count the matching users. Not filtered: {{agentsNicknamePluralLowercase}} existing, {{agentsNicknamePluralLowercase}} equipped per capability, team member counts, storage and prompt length. \"Without data\": users for whom a filtered attribute is not recorded, for example because they have not signed in since the access rule started using it."
       },
       "sections": {
         "reach": {
@@ -2033,7 +2033,7 @@
         "volumes": {
           "eyebrow": "Volumes",
           "title": "Messages and conversations",
-          "def": "Messages sent by users to agents. Agent replies are not counted.",
+          "def": "Messages sent by users to {{agentsNicknamePluralLowercase}}. {{agentsNicknameSingular}} replies are not counted.",
           "how": "compare it with the number of active users: if messages grow faster than users, usage is intensifying."
         },
         "frequency": {
@@ -2049,7 +2049,7 @@
         "collective": {
           "eyebrow": "Collective use",
           "title": "Conversations by space",
-          "def": "Conversations split by the space they take place in: the user's personal space, or a team space (with its shared agents and corpora).",
+          "def": "Conversations split by the space they take place in: the user's personal space, or a team space (with its shared {{agentsNicknamePluralLowercase}} and corpora).",
           "how": "a growing team share shows the platform is becoming a collective tool, beyond an individual assistant."
         },
         "diffusion": {
@@ -2057,13 +2057,13 @@
           "title": "Activity by team"
         },
         "agents": {
-          "eyebrow": "Agents",
-          "title": "Agent usage"
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "{{agentsNicknameSingular}} usage"
         },
         "skills": {
           "eyebrow": "Skills",
           "title": "Skill loads",
-          "def": "A skill is a set of instructions an agent loads for a specific task. The user can request it (command) or the model can load it on its own.",
+          "def": "A skill is a set of instructions an {{agentsNicknameSingularLowercase}} loads for a specific task. The user can request it (command) or the model can load it on its own.",
           "how": "a skill mostly loaded by the model is well described and found on its own. A skill never loaded should be reviewed or removed."
         },
         "knowledge": {
@@ -2087,9 +2087,9 @@
           "how": "from 80%, warn the team or raise its quota before imports get blocked."
         },
         "agentBuild": {
-          "eyebrow": "Agents",
-          "title": "Agent creation and prompt length",
-          "def": "Size of each agent's instructions (system prompt), in tokens. It is sent to the model with every message.",
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "{{agentsNicknameSingular}} creation and prompt length",
+          "def": "Size of each {{agentsNicknameSingularLowercase}}'s instructions (system prompt), in tokens. It is sent to the model with every message.",
           "how": "very long prompts raise the cost of every exchange and can drown the important instructions."
         },
         "capabilities": {
@@ -2114,12 +2114,12 @@
         "conversations": {
           "label": "Conversations",
           "caption": "opened over the period",
-          "def": "Number of conversations started over the period, across all agents and spaces."
+          "def": "Number of conversations started over the period, across all {{agentsNicknamePluralLowercase}} and spaces."
         },
         "messages": {
           "label": "Messages sent",
-          "caption": "by users to agents",
-          "def": "Messages written by users. Agent replies are not counted.",
+          "caption": "by users to {{agentsNicknamePluralLowercase}}",
+          "def": "Messages written by users. {{agentsNicknameSingular}} replies are not counted.",
           "how": "the detail over time is in the Usage tab."
         },
         "conversationsPerUser": {
@@ -2131,18 +2131,18 @@
           "label": "Messages per conversation",
           "caption": "median over the period",
           "def": "Number of messages the user sent in a conversation (median).",
-          "how": "1 to 2 messages: one-off questions. Beyond 4: iterative work with the agent (writing, analysis)."
+          "how": "1 to 2 messages: one-off questions. Beyond 4: iterative work with the {{agentsNicknameSingularLowercase}} (writing, analysis)."
         },
         "creationAssistant": {
           "label": "Creation assistant",
           "caption": "drafts generated over the period · {{tokens, number}} tokens",
-          "def": "Agent drafts proposed by the creation assistant, and the tokens used to produce them.",
-          "how": "compared with the agents created, shows whether the assistant really helps to start an agent."
+          "def": "{{agentsNicknameSingular}} drafts proposed by the creation assistant, and the tokens used to produce them.",
+          "how": "compared with the {{agentsNicknamePluralLowercase}} created, shows whether the assistant really helps to start an {{agentsNicknameSingularLowercase}}."
         },
         "activeUsers": {
           "label": "Active users",
           "caption": "sent at least one message",
-          "def": "Distinct people who sent at least one message to an agent over the period. Signing in without writing does not count.",
+          "def": "Distinct people who sent at least one message to an {{agentsNicknameSingularLowercase}} over the period. Signing in without writing does not count.",
           "how": "this is the main adoption measure. Compared with the number of registered users, it gives the adoption rate."
         },
         "activeTeams": {
@@ -2176,17 +2176,17 @@
           "how": "above 20%, use is settled. Below 10%, the platform stays an occasional tool."
         },
         "agentsUsed": {
-          "label": "Agents used",
-          "caption_one": "out of {{count}} existing agent",
-          "caption_other": "out of {{count}} existing agents",
-          "def": "Agents that received at least one message over the period.",
-          "how": "agents never used clutter the catalog: archive them or make them better known."
+          "label": "{{agentsNicknamePlural}} used",
+          "caption_one": "out of {{count}} existing {{agentsNicknameSingularLowercase}}",
+          "caption_other": "out of {{count}} existing {{agentsNicknamePluralLowercase}}",
+          "def": "{{agentsNicknamePlural}} that received at least one message over the period.",
+          "how": "{{agentsNicknamePluralLowercase}} never used clutter the catalog: archive them or make them better known."
         },
         "agentsCreated": {
-          "label": "Agents created",
+          "label": "{{agentsNicknamePlural}} created",
           "caption": "over the period",
-          "def": "Agents created over the period, and among them those shared on the marketplace.",
-          "how": "regular creations show teams are making the platform their own beyond the agents provided.",
+          "def": "{{agentsNicknamePlural}} created over the period, and among them those shared on the marketplace.",
+          "how": "regular creations show teams are making the platform their own beyond the {{agentsNicknamePluralLowercase}} provided.",
           "published_one": "of which {{count}} published on the marketplace",
           "published_other": "of which {{count}} published on the marketplace"
         },
@@ -2203,8 +2203,8 @@
         },
         "corpusSearches": {
           "label": "Corpus searches",
-          "caption": "made by agents to answer",
-          "def": "Number of times an agent searched a corpus to build its answer.",
+          "caption": "made by {{agentsNicknamePluralLowercase}} to answer",
+          "def": "Number of times an {{agentsNicknameSingularLowercase}} searched a corpus to build its answer.",
           "how": "compared with the documents added, shows whether corpora are really used or lie dormant."
         },
         "failedAnswers": {
@@ -2217,7 +2217,7 @@
           "label": "Single-exchange conversations",
           "caption": "one message, one answer, then nothing",
           "def": "Share of conversations where the user sent only one message.",
-          "how": "read with care: it can be a question solved quickly as well as a drop-out. A sudden rise is worth a look at the agents involved."
+          "how": "read with care: it can be a question solved quickly as well as a drop-out. A sudden rise is worth a look at the {{agentsNicknamePluralLowercase}} involved."
         },
         "tokens": {
           "label": "Tokens processed",
@@ -2240,7 +2240,7 @@
           "label": "Next-month return",
           "caption": "of last month's newcomers came back",
           "def": "Among the people who arrived the previous month, share of those who sent at least one message this month (the month the period ends in).",
-          "how": "above 50%, the first experience convinces. Below, look at onboarding and the agents offered by default."
+          "how": "above 50%, the first experience convinces. Below, look at onboarding and the {{agentsNicknamePluralLowercase}} offered by default."
         },
         "firstMessageWithin7Days": {
           "label": "First message within 7 days",
@@ -2263,7 +2263,7 @@
             "week": "Messages sent per week",
             "month": "Messages sent per month"
           },
-          "def": "Messages sent by users to agents in each bucket. The last bucket may still be in progress."
+          "def": "Messages sent by users to {{agentsNicknamePluralLowercase}} in each bucket. The last bucket may still be in progress."
         },
         "conversationDistribution": {
           "users_one": "{{value}} user · {{share}}",
@@ -2292,7 +2292,7 @@
           "activeUsers": "Active users",
           "visitors": "Visitors",
           "valueLabel": "People",
-          "def": "Bars: people who sent at least one message to an agent in the bucket. Line: people who signed in, even without writing. The last bucket is the current one, still in progress."
+          "def": "Bars: people who sent at least one message to an {{agentsNicknameSingularLowercase}} in the bucket. Line: people who signed in, even without writing. The last bucket is the current one, still in progress."
         },
         "tokensOverTime": {
           "title": {
@@ -2308,9 +2308,9 @@
           "periodTotals": "Over the period: {{sent}} input · {{generated}} output"
         },
         "topAgents": {
-          "title": "Most used agents",
-          "empty": "No agent used in this period.",
-          "def": "Agents ranked by the number of conversations held with them over the period; on a tie, by the number of distinct people who sent them at least one message.",
+          "title": "Most used {{agentsNicknamePluralLowercase}}",
+          "empty": "No {{agentsNicknameSingularLowercase}} used in this period.",
+          "def": "{{agentsNicknamePlural}} ranked by the number of conversations held with them over the period; on a tie, by the number of distinct people who sent them at least one message.",
           "conversations_one": "{{value}} conversation",
           "conversations_other": "{{value}} conversations",
           "users_one": "{{value}} user",
@@ -2334,12 +2334,12 @@
         },
         "capabilities": {
           "title": "Use per capability",
-          "def": "\"Agents equipped\": agents that have the capability turned on today. \"Agents that used it\": agents whose model called at least one of its tools over the period. Calls recorded before per-capability tracking are not counted.",
-          "how": "a usage rate under 30% points to a capability mostly turned on \"just in case\". It weighs the agent down without serving: remove it, or describe it better in the agent's instructions.",
-          "empty": "No agent has a capability turned on.",
+          "def": "\"{{agentsNicknamePlural}} equipped\": {{agentsNicknamePluralLowercase}} that have the capability turned on today. \"{{agentsNicknamePlural}} that used it\": {{agentsNicknamePluralLowercase}} whose model called at least one of its tools over the period. Calls recorded before per-capability tracking are not counted.",
+          "how": "a usage rate under 30% points to a capability mostly turned on \"just in case\". It weighs the {{agentsNicknameSingularLowercase}} down without serving: remove it, or describe it better in the {{agentsNicknameSingularLowercase}}'s instructions.",
+          "empty": "No {{agentsNicknameSingularLowercase}} has a capability turned on.",
           "capability": "Capability",
-          "equipped": "Agents equipped",
-          "used": "Agents that used it",
+          "equipped": "{{agentsNicknamePlural}} equipped",
+          "used": "{{agentsNicknamePlural}} that used it",
           "usageRate": "Usage rate",
           "calls": "Calls",
           "users": "Users reached",
@@ -2355,11 +2355,11 @@
           "footprint": "Footprint"
         },
         "agentCost": {
-          "title": "By agent",
-          "def": "Agents that used the most tokens over the period, with the matching estimated cost.",
-          "how": "an expensive agent with few users deserves a look: a model too powerful for the task, or documents too large passed with every message.",
+          "title": "By {{agentsNicknameSingularLowercase}}",
+          "def": "{{agentsNicknamePlural}} that used the most tokens over the period, with the matching estimated cost.",
+          "how": "an expensive {{agentsNicknameSingularLowercase}} with few users deserves a look: a model too powerful for the task, or documents too large passed with every message.",
           "empty": "No usage in this period.",
-          "agent": "Agent",
+          "agent": "{{agentsNicknameSingular}}",
           "tokens": "Tokens processed",
           "cost": "Estimated cost",
           "perUser": "Cost per user"
@@ -2406,7 +2406,7 @@
       "funnel": {
         "title": "From access to use",
         "def": "Each step counts the people of the previous one who went further over the period: allowed to use the platform, came at least once, then sent at least one message.",
-        "how": "the biggest drop tells you what to do. People who do not come: a communication topic. Visitors who do not write: they lack use cases or ready-to-use agents.",
+        "how": "the biggest drop tells you what to do. People who do not come: a communication topic. Visitors who do not write: they lack use cases or ready-to-use {{agentsNicknamePluralLowercase}}.",
         "unknown": "Not available",
         "steps": {
           "peopleWithAccess": {
@@ -2420,7 +2420,7 @@
           },
           "activeUsers": {
             "label": "Active users",
-            "def": "Distinct people who sent at least one message to an agent over the period. Signing in without writing does not count."
+            "def": "Distinct people who sent at least one message to an {{agentsNicknameSingularLowercase}} over the period. Signing in without writing does not count."
           }
         },
         "rates": {
@@ -2434,7 +2434,7 @@
             "name": "Visitors who moved to use",
             "text": "of visitors sent at least one message",
             "def": "Share of the people who signed in over the period who also sent at least one message.",
-            "how": "a drop points to visitors who do not know what to do: highlight use cases or ready-to-use agents."
+            "how": "a drop points to visitors who do not know what to do: highlight use cases or ready-to-use {{agentsNicknamePluralLowercase}}."
           }
         },
         "adoption": {
@@ -2553,8 +2553,8 @@
         "valueLabel": "Tokens"
       },
       "byAgent": {
-        "empty": "No agent usage in this period.",
-        "title": "Usage by agent",
+        "empty": "No {{agentsNicknameSingularLowercase}} usage in this period.",
+        "title": "Usage by {{agentsNicknameSingularLowercase}}",
         "valueLabel": "Tokens"
       },
       "byModel": {

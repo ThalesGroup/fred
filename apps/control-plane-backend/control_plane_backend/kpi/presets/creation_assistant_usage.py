@@ -19,6 +19,7 @@ provider errors carry no tokens and are left to the latency/status analytics."""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -59,7 +60,7 @@ async def query_creation_assistant_usage(
                         "range": {
                             "@timestamp": {
                                 "gte": since.isoformat(),
-                                "lte": until.isoformat(),
+                                "lt": until.isoformat(),
                             }
                         }
                     },
@@ -75,7 +76,7 @@ async def query_creation_assistant_usage(
         },
     }
 
-    resp = store.client.search(index=store.index, body=body)
+    resp = await asyncio.to_thread(store.client.search, index=store.index, body=body)
     aggs = resp.get("aggregations", {})
     input_tokens = int(aggs.get("sum_input", {}).get("value") or 0)
     output_tokens = int(aggs.get("sum_output", {}).get("value") or 0)

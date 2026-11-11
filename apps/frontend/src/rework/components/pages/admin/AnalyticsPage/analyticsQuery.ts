@@ -126,3 +126,12 @@ export function platformOnly(teamIds: string[]) {
 export function allFailed(queries: { isError: boolean }[]): boolean {
   return queries.length > 0 && queries.every((q) => q.isError);
 }
+
+/** A new scope must not display the previous scope's cached result while it fetches. */
+export function currentQueryLoading(query: {
+  isLoading: boolean;
+  isFetching: boolean;
+  currentData?: unknown;
+}): boolean {
+  return query.isLoading || (query.isFetching && query.currentData === undefined);
+}

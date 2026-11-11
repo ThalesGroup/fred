@@ -72,7 +72,7 @@ async def test_skill_usage_scope_counts_limit_and_thread_offload(team_ids):
     filters = body_seen[0]["query"]["bool"]["filter"]
     assert {"term": {"metric.name": "agent.skill_loaded_total"}} in filters
     assert {
-        "range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}
+        "range": {"@timestamp": {"gte": since.isoformat(), "lt": until.isoformat()}}
     } in filters
     assert ({"terms": {"dims.team_id": ["team-1", "team-2"]}} in filters) == bool(
         team_ids
@@ -163,7 +163,7 @@ async def test_personal_skill_query_filters_authenticated_user_and_both_origins(
     assert {"terms": {"dims.skill_origin": ["user", "agent"]}} in filters
     assert not any("dims.team_id" in f.get("term", {}) for f in filters)
     assert {
-        "range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}
+        "range": {"@timestamp": {"gte": since.isoformat(), "lt": until.isoformat()}}
     } in filters
 
 

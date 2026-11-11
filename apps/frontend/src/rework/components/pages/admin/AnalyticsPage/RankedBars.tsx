@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import type { ColorTheme } from "@shared/utils/Type";
 import { formatValue, NO_VALUE } from "./analyticsFormat";
@@ -48,7 +48,7 @@ export function RankedList({
   isError,
   keepOrder = false,
 }: RankedListProps) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const sorted = keepOrder ? rows : [...rows].sort((a, b) => b.value - a.value);
   const max = Math.max(0, ...rows.map((row) => row.value));
   return (
@@ -99,7 +99,7 @@ export function BarCell({
   /** Writes the percent in the bar's colour, bold: a value to act on. */
   emphasize?: boolean;
 }) {
-  const { i18n } = useTranslation();
+  const { i18n } = useAnalyticsTranslation();
   if (share == null) return <span className={styles.numeric}>{NO_VALUE}</span>;
   const text = formatValue(share, "percent", i18n.language);
   return (
@@ -116,7 +116,7 @@ export function BarCell({
 
 /** Two parts of a whole side by side in one bar, with "72 % / 28 %" after it. */
 export function SplitCell({ first, second, label }: { first: number; second: number; label: string }) {
-  const { i18n } = useTranslation();
+  const { i18n } = useAnalyticsTranslation();
   const total = first + second;
   const pct = (v: number) => formatValue(total ? v / total : 0, "percent", i18n.language);
   return (

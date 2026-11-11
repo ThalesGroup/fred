@@ -81,7 +81,13 @@ model prices with a rate set next to them (default 1 EUR = 1.12 USD).
 
 The export SHALL produce `analytics_<scope>_<start>_<end>.xlsx` for the current
 scope, period and filter, with typed values, the indicator explanations, and
-no chart.
+no chart. Agent labels SHALL use the deployment's configured singular and
+plural nicknames when exported from the page. The workbook SHALL include the
+visible adoption, usage, team, agent, capability, cost, skill, storage and web
+research aggregates for that scope. Filter values containing user names or
+email addresses SHALL NOT appear in the workbook. A team-page export SHALL
+omit platform-only figures and the Technical sheet. A platform-page export
+SHALL include them, including when the platform observer selects teams.
 
 #### Scenario: Two-team export
 

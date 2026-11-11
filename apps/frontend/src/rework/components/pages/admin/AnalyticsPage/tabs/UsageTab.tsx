@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { TFunction } from "i18next";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAnalyticsActivityOverTimeQuery,
   useAnalyticsUsageQuery,
@@ -23,20 +23,20 @@ import { AnalyticsSection, AnalyticsServiceDown, ChartHint } from "../AnalyticsS
 import { RankedList } from "../RankedBars";
 import InfoTile from "../InfoTile";
 import { bucketSpan, formatBucketLabel, formatValue } from "../analyticsFormat";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
+import { currentQueryLoading, allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 export default function UsageTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const args = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const usage = useAnalyticsUsageQuery(args, KPI_CACHE);
   const activity = useAnalyticsActivityOverTimeQuery(args, KPI_CACHE);
-  const data = usage.data;
-  const tile = { isLoading: usage.isLoading, isError: usage.isError };
+  const data = usage.currentData;
+  const tile = { isLoading: currentQueryLoading(usage), isError: usage.isError };
   const topShare = data?.top_decile_conversation_share.current;
-  const bucket = activity.data?.bucket ?? "day";
-  const span = bucketSpan(activity.data?.points);
-  const messageRows = (activity.data?.points ?? []).map((p) => ({
+  const bucket = activity.currentData?.bucket ?? "day";
+  const span = bucketSpan(activity.currentData?.points);
+  const messageRows = (activity.currentData?.points ?? []).map((p) => ({
     label: formatBucketLabel(p.start, bucket, i18n.language, t, span),
     value: p.values.messages ?? 0,
   }));
@@ -72,7 +72,7 @@ export default function UsageTab({ timeRange, teamIds, userFilter, days }: Analy
             orientation="vertical"
             sortOrder="none"
             valueLabel={t("rework.analytics.charts.messagesOverTime.valueLabel")}
-            isLoading={activity.isLoading}
+            isLoading={currentQueryLoading(activity)}
             isError={activity.isError}
             flat
             labelled
@@ -105,7 +105,7 @@ export default function UsageTab({ timeRange, teamIds, userFilter, days }: Analy
           titleAction={<ChartHint id="conversationDistribution" title={distributionTitle} />}
           rows={distributionRows}
           emptyMessage={t("rework.analytics.charts.conversationDistribution.empty")}
-          isLoading={usage.isLoading}
+          isLoading={currentQueryLoading(usage)}
           isError={usage.isError}
           keepOrder
         />

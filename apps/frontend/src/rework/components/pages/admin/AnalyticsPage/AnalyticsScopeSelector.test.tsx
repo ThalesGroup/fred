@@ -36,6 +36,14 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({
+    agentsNicknameSingular: "Agent",
+    agentsNicknamePlural: "Agents",
+    siteDisplayName: "Fred",
+  }),
+}));
+
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAnalyticsTeamsCatalogQuery: () => h.catalog(),
   useAnalyticsAdoptionQuery: h.adoption,

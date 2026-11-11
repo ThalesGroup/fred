@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createContext, type ReactNode, useContext } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import { MaterialIcon } from "@shared/atoms/Icon/Icon";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -21,7 +21,7 @@ import styles from "./AnalyticsPage.module.css";
 
 /** Definition plus an optional "How to read it" line, as one tooltip panel. */
 export function HintContent({ def, how }: { def: string; how?: string }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   return (
     <span className={styles.hintPanel}>
       <span>{def}</span>
@@ -46,7 +46,7 @@ export function InfoIcon({ label, content }: { label: string; content: ReactNode
 }
 
 export function InfoHint({ label, def, how }: { label: string; def: string; how?: string }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   return <InfoIcon label={t("rework.analytics.moreInfo", { label })} content={<HintContent def={def} how={how} />} />;
 }
 
@@ -56,7 +56,7 @@ export const useInSection = () => useContext(SectionContext);
 
 /** The info icon of a chart title, from `rework.analytics.charts.<id>.def`. */
 export function ChartHint({ id, title }: { id: string; title: string }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   return <InfoHint label={title} def={t(`rework.analytics.charts.${id}.def`)} />;
 }
 
@@ -71,7 +71,7 @@ export function AnalyticsSection({
   aside?: ReactNode;
   children: ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const key = `rework.analytics.sections.${id}`;
   const def = t(`${key}.def`, { defaultValue: "" });
   const title = t(`${key}.title`);
@@ -93,7 +93,7 @@ export function AnalyticsSection({
 }
 
 export function AnalyticsServiceDown() {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   return (
     <ServiceNotice
       icon="cloud_off"

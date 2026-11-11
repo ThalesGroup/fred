@@ -20,6 +20,7 @@ returned while the capability is enabled for no team and no personal space.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -118,7 +119,7 @@ async def query_web_research_summary(
         )
 
     filters: list[dict[str, Any]] = [
-        {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
+        {"range": {"@timestamp": {"gte": since.isoformat(), "lt": until.isoformat()}}},
         {"term": {"metric.name": "web_research.request"}},
     ]
     filters.extend(scope_filter(team_ids, user_ids))
@@ -140,7 +141,7 @@ async def query_web_research_summary(
             "by_tool": {"terms": {"field": "dims.tool_name", "size": 5}},
         },
     }
-    resp = store.client.search(index=store.index, body=body)
+    resp = await asyncio.to_thread(store.client.search, index=store.index, body=body)
     aggs = resp.get("aggregations", {})
     reasons = [
         LabelValuePoint(label=b["key"], value=b["doc_count"])

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAgentPromptLengthDistributionQuery,
   useCreationAssistantUsageQuery,
@@ -29,12 +29,19 @@ import InfoTile from "../InfoTile";
 import { BarCell } from "../RankedBars";
 import { formatValue, NO_VALUE } from "../analyticsFormat";
 import WebResearchSection from "../WebResearchSection";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, platformOnly } from "../analyticsQuery";
+import {
+  currentQueryLoading,
+  allFailed,
+  type AnalyticsTabProps,
+  KPI_CACHE,
+  kpiArgs,
+  platformOnly,
+} from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 /** Platform operations: web research, storage quotas, how agents are built, model governance. */
 export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const args = kpiArgs(timeRange, teamIds);
   const storage = useStorageByTeamQuery(args, KPI_CACHE);
   const promptLength = useAgentPromptLengthDistributionQuery(args, platformOnly(teamIds));
@@ -48,8 +55,8 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: A
   const NEAR_QUOTA = 0.8;
   const usedShare = (r: TeamStorageRow) => (r.quota_bytes ? r.used_bytes / r.quota_bytes : null);
   const storageRows = useMemo(
-    () => [...(storage.data?.rows ?? [])].sort((a, b) => (usedShare(b) ?? -1) - (usedShare(a) ?? -1)),
-    [storage.data],
+    () => [...(storage.currentData?.rows ?? [])].sort((a, b) => (usedShare(b) ?? -1) - (usedShare(a) ?? -1)),
+    [storage.currentData],
   );
   const storageKey = "rework.analytics.tables.storage";
   const bytes = (value: number) => <span className={styles.numeric}>{formatBytes(value, i18n.language)}</span>;
@@ -88,7 +95,7 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: A
     },
   ];
 
-  const promptAgents = (promptLength.data?.rows ?? []).reduce((sum, r) => sum + r.value, 0);
+  const promptAgents = (promptLength.currentData?.rows ?? []).reduce((sum, r) => sum + r.value, 0);
 
   if (allFailed([storage, promptLength, creationAssistant])) return <AnalyticsServiceDown />;
 
@@ -103,7 +110,7 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: A
           columns={storageColumns}
           rows={storageRows}
           rowKey={(r) => r.team_id}
-          isLoading={storage.isLoading}
+          isLoading={currentQueryLoading(storage)}
           isError={storage.isError}
         />
       </AnalyticsSection>
@@ -113,14 +120,14 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: A
           <div className={styles.block}>
             <HistogramChart
               title={t("rework.analytics.agents.promptLengthDistribution.title")}
-              rows={promptLength.data?.rows ?? []}
+              rows={promptLength.currentData?.rows ?? []}
               valueLabel={t("rework.analytics.agents.promptLengthDistribution.valueLabel")}
               emptyMessage={t(
                 teamScoped
                   ? "rework.analytics.scope.notForTeams"
                   : "rework.analytics.agents.promptLengthDistribution.empty",
               )}
-              isLoading={promptLength.isLoading}
+              isLoading={currentQueryLoading(promptLength)}
               isError={promptLength.isError}
               flat
               labelled
@@ -136,12 +143,12 @@ export default function TechnicalTab({ timeRange, teamIds, userFilter, days }: A
           </div>
           <InfoTile
             id="creationAssistant"
-            value={creationAssistant.data?.drafts}
+            value={creationAssistant.currentData?.drafts}
             caption={t("rework.analytics.tiles.creationAssistant.caption", {
-              tokens: creationAssistant.data?.total_tokens ?? 0,
+              tokens: creationAssistant.currentData?.total_tokens ?? 0,
             })}
             {...(teamScoped && { unavailable: true, noDataLabel: t("rework.analytics.scope.notForTeamsShort") })}
-            isLoading={creationAssistant.isLoading}
+            isLoading={currentQueryLoading(creationAssistant)}
             isError={creationAssistant.isError}
           />
         </div>

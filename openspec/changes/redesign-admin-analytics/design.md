@@ -19,7 +19,10 @@
 7. **Euros**: `usd_per_eur` (default 1.12) next to the model prices in
    `model_impact_factors.yaml`; prices stay in USD.
 8. **Export** rendered server-side with openpyxl; fr/en texts in one Python
-   module, a test keeps them aligned with the i18n keys.
+   module, a test keeps them aligned with the i18n keys. The page passes its
+   configured agent nicknames and view mode to keep workbook labels and sheets
+   consistent with the UI. A team-scoped platform export checks platform
+   observer permission before reading Technical data.
 9. **Rolling periods**: "3 months" and "12 months" start the same day and
    time 3 or 12 months earlier.
 10. **Capability usage** aggregates `dims.capability_id` on tool KPIs; calls

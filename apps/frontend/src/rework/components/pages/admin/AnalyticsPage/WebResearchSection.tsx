@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import { useWebResearchSummaryQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import { AnalyticsSection } from "./AnalyticsSection";
 import { RankedList } from "./RankedBars";
 import { formatValue } from "./analyticsFormat";
-import { type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "./analyticsQuery";
+import { currentQueryLoading, type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "./analyticsQuery";
 import styles from "./AnalyticsPage.module.css";
 
 /** Web research volume, estimated provider cost and refusals. Absent while the capability is
  *  enabled nowhere on the platform. */
 export default function WebResearchSection({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
-  const { data, isLoading, isError } = useWebResearchSummaryQuery(
-    kpiArgs(timeRange, teamIds, userFilter, days),
-    KPI_CACHE,
-  );
+  const query = useWebResearchSummaryQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
+  const data = query.currentData;
+  const isLoading = currentQueryLoading(query);
+  const isError = query.isError;
   const card = (key: string, value: number | null | undefined, displayValue?: string, caption?: string) => (
     <KpiStatCard
       label={t(`rework.analytics.webResearch.${key}`)}

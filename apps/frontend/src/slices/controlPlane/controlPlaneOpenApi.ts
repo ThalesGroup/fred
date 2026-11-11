@@ -2455,6 +2455,9 @@ const injectedRtkApi = api.injectEndpoints({
           user_filter: queryArg.userFilter,
           exclude_weekends: queryArg.excludeWeekends,
           exclude_holidays: queryArg.excludeHolidays,
+          include_technical: queryArg.includeTechnical,
+          agents_nickname_singular: queryArg.agentsNicknameSingular,
+          agents_nickname_plural: queryArg.agentsNicknamePlural,
         },
       }),
     }),
@@ -4290,6 +4293,12 @@ export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg = {
   excludeWeekends?: boolean;
   /** Leave French public holidays (local days in `tz`) out of every indicator. */
   excludeHolidays?: boolean;
+  /** Include the platform Technical tab in the workbook. */
+  includeTechnical?: boolean;
+  /** Configured singular name for an agent in the workbook. */
+  agentsNicknameSingular?: string;
+  /** Configured plural name for agents in the workbook. */
+  agentsNicknamePlural?: string;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;

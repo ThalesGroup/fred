@@ -1878,11 +1878,11 @@
       },
       "agents": {
         "promptLengthDistribution": {
-          "empty": "Aucune donnée d'agent sur cette période.",
+          "empty": "Aucune donnée d'{{agentsNicknameSingularLowercase}} sur cette période.",
           "title": "Distribution de la longueur des prompts systèmes",
-          "valueLabel": "Agents",
-          "agentCount_one": "sur {{value}} agent",
-          "agentCount_other": "sur {{value}} agents"
+          "valueLabel": "{{agentsNicknamePlural}}",
+          "agentCount_one": "sur {{value}} {{agentsNicknameSingularLowercase}}",
+          "agentCount_other": "sur {{value}} {{agentsNicknamePluralLowercase}}"
         }
       },
       "conversationsByScope": {
@@ -1976,7 +1976,7 @@
         "adoption": "Adoption",
         "usage": "Usage",
         "teams": "Équipes",
-        "agents": "Agents et outils",
+        "agents": "{{agentsNicknamePlural}} et outils",
         "cost": "Qualité et coût",
         "tech": "Technique"
       },
@@ -2023,7 +2023,7 @@
         "condition": "{{field}} {{operator}} « {{value}} »",
         "and": "et",
         "or": "ou",
-        "notFiltered": "Les chiffres d'activité ne comptent que les utilisateurs correspondants. Restent non filtrés : les agents existants, les agents équipés par capacité, le nombre de membres des équipes, le stockage et la longueur des prompts. « Sans donnée » : utilisateurs pour qui un attribut filtré n'est pas enregistré, par exemple parce qu'ils ne se sont pas connectés depuis que la règle d'accès l'utilise."
+        "notFiltered": "Les chiffres d'activité ne comptent que les utilisateurs correspondants. Restent non filtrés : les {{agentsNicknamePluralLowercase}} existants, les {{agentsNicknamePluralLowercase}} équipés par capacité, le nombre de membres des équipes, le stockage et la longueur des prompts. « Sans donnée » : utilisateurs pour qui un attribut filtré n'est pas enregistré, par exemple parce qu'ils ne se sont pas connectés depuis que la règle d'accès l'utilise."
       },
       "sections": {
         "reach": {
@@ -2033,7 +2033,7 @@
         "volumes": {
           "eyebrow": "Volumes",
           "title": "Messages et conversations",
-          "def": "Messages envoyés par les utilisateurs aux agents. Les réponses des agents ne sont pas comptées.",
+          "def": "Messages envoyés par les utilisateurs aux {{agentsNicknamePluralLowercase}}. Les réponses des {{agentsNicknamePluralLowercase}} ne sont pas comptées.",
           "how": "à rapprocher du nombre d'utilisateurs actifs : si les messages montent plus vite que les utilisateurs, l'usage s'intensifie."
         },
         "frequency": {
@@ -2049,7 +2049,7 @@
         "collective": {
           "eyebrow": "Usage collectif",
           "title": "Conversations par espace",
-          "def": "Répartition des conversations selon l'espace où elles ont lieu : l'espace personnel de l'utilisateur, ou l'espace d'une équipe (avec ses agents et ses corpus partagés).",
+          "def": "Répartition des conversations selon l'espace où elles ont lieu : l'espace personnel de l'utilisateur, ou l'espace d'une équipe (avec ses {{agentsNicknamePluralLowercase}} et ses corpus partagés).",
           "how": "une part d'équipe qui grandit montre que la plateforme devient un outil collectif, au-delà d'un assistant individuel."
         },
         "diffusion": {
@@ -2057,13 +2057,13 @@
           "title": "Activité par équipe"
         },
         "agents": {
-          "eyebrow": "Agents",
-          "title": "Utilisation des agents"
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "Utilisation des {{agentsNicknamePluralLowercase}}"
         },
         "skills": {
           "eyebrow": "Skills",
           "title": "Chargements de skills",
-          "def": "Un skill est un ensemble d'instructions qu'un agent charge pour une tâche précise. Il peut être demandé par l'utilisateur (commande) ou chargé de lui-même par le modèle.",
+          "def": "Un skill est un ensemble d'instructions qu'un {{agentsNicknameSingularLowercase}} charge pour une tâche précise. Il peut être demandé par l'utilisateur (commande) ou chargé de lui-même par le modèle.",
           "how": "un skill surtout chargé par le modèle est bien décrit et trouvé seul. Un skill jamais chargé est à revoir ou à retirer."
         },
         "knowledge": {
@@ -2087,9 +2087,9 @@
           "how": "à partir de 80 %, prévenir l'équipe ou relever son quota avant que les imports ne soient bloqués."
         },
         "agentBuild": {
-          "eyebrow": "Agents",
-          "title": "Création des agents et longueur des prompts",
-          "def": "Taille des instructions (prompt système) de chaque agent, en tokens. Elle est renvoyée au modèle à chaque message.",
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "Création des {{agentsNicknamePluralLowercase}} et longueur des prompts",
+          "def": "Taille des instructions (prompt système) de chaque {{agentsNicknameSingularLowercase}}, en tokens. Elle est renvoyée au modèle à chaque message.",
           "how": "des prompts très longs augmentent le coût de chaque échange et peuvent noyer les consignes importantes."
         },
         "capabilities": {
@@ -2114,12 +2114,12 @@
         "conversations": {
           "label": "Conversations",
           "caption": "ouvertes sur la période",
-          "def": "Nombre de conversations démarrées sur la période, tous agents et espaces confondus."
+          "def": "Nombre de conversations démarrées sur la période, tous {{agentsNicknamePluralLowercase}} et espaces confondus."
         },
         "messages": {
           "label": "Messages envoyés",
-          "caption": "par les utilisateurs aux agents",
-          "def": "Messages écrits par les utilisateurs. Les réponses des agents ne sont pas comptées.",
+          "caption": "par les utilisateurs aux {{agentsNicknamePluralLowercase}}",
+          "def": "Messages écrits par les utilisateurs. Les réponses des {{agentsNicknamePluralLowercase}} ne sont pas comptées.",
           "how": "le détail dans le temps est dans l'onglet Usage."
         },
         "conversationsPerUser": {
@@ -2131,18 +2131,18 @@
           "label": "Messages par conversation",
           "caption": "médiane sur la période",
           "def": "Nombre de messages envoyés par l'utilisateur dans une conversation (médiane).",
-          "how": "1 à 2 messages : des questions ponctuelles. Au-delà de 4 : un travail itératif avec l'agent (rédaction, analyse)."
+          "how": "1 à 2 messages : des questions ponctuelles. Au-delà de 4 : un travail itératif avec l'{{agentsNicknameSingularLowercase}} (rédaction, analyse)."
         },
         "creationAssistant": {
           "label": "Assistant de création",
           "caption": "brouillons générés sur la période · {{tokens, number}} tokens",
-          "def": "Brouillons d'agent proposés par l'assistant de création, et tokens consommés pour les produire.",
-          "how": "rapporté aux agents créés, montre si l'assistant aide vraiment à démarrer un agent."
+          "def": "Brouillons d'{{agentsNicknameSingularLowercase}} proposés par l'assistant de création, et tokens consommés pour les produire.",
+          "how": "rapporté aux {{agentsNicknamePluralLowercase}} créés, montre si l'assistant aide vraiment à démarrer un {{agentsNicknameSingularLowercase}}."
         },
         "activeUsers": {
           "label": "Utilisateurs actifs",
           "caption": "ont envoyé au moins un message",
-          "def": "Personnes distinctes qui ont envoyé au moins un message à un agent sur la période. Se connecter sans écrire ne compte pas.",
+          "def": "Personnes distinctes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} sur la période. Se connecter sans écrire ne compte pas.",
           "how": "c'est la mesure principale de l'adoption. Rapportée au nombre d'utilisateurs enregistrés, elle donne le taux d'adoption."
         },
         "activeTeams": {
@@ -2176,17 +2176,17 @@
           "how": "au-delà de 20 %, l'usage est installé. Sous 10 %, la plateforme reste un outil d'appoint."
         },
         "agentsUsed": {
-          "label": "Agents utilisés",
-          "caption_one": "sur {{count}} agent existant",
-          "caption_other": "sur {{count}} agents existants",
-          "def": "Agents qui ont reçu au moins un message sur la période.",
-          "how": "les agents jamais utilisés encombrent le catalogue : à archiver ou à mieux faire connaître."
+          "label": "{{agentsNicknamePlural}} utilisés",
+          "caption_one": "sur {{count}} {{agentsNicknameSingularLowercase}} existant",
+          "caption_other": "sur {{count}} {{agentsNicknamePluralLowercase}} existants",
+          "def": "{{agentsNicknamePlural}} qui ont reçu au moins un message sur la période.",
+          "how": "les {{agentsNicknamePluralLowercase}} jamais utilisés encombrent le catalogue : à archiver ou à mieux faire connaître."
         },
         "agentsCreated": {
-          "label": "Agents créés",
+          "label": "{{agentsNicknamePlural}} créés",
           "caption": "sur la période",
-          "def": "Agents créés sur la période, et parmi eux ceux partagés sur la marketplace.",
-          "how": "des créations régulières montrent que les équipes s'approprient la plateforme au-delà des agents fournis.",
+          "def": "{{agentsNicknamePlural}} créés sur la période, et parmi eux ceux partagés sur la marketplace.",
+          "how": "des créations régulières montrent que les équipes s'approprient la plateforme au-delà des {{agentsNicknamePluralLowercase}} fournis.",
           "published_one": "dont {{count}} publié sur la marketplace",
           "published_other": "dont {{count}} publiés sur la marketplace"
         },
@@ -2203,8 +2203,8 @@
         },
         "corpusSearches": {
           "label": "Recherches dans les corpus",
-          "caption": "faites par les agents pour répondre",
-          "def": "Nombre de fois où un agent a cherché dans un corpus pour construire sa réponse.",
+          "caption": "faites par les {{agentsNicknamePluralLowercase}} pour répondre",
+          "def": "Nombre de fois où un {{agentsNicknameSingularLowercase}} a cherché dans un corpus pour construire sa réponse.",
           "how": "rapporté aux documents ajoutés, montre si les corpus servent réellement ou dorment."
         },
         "failedAnswers": {
@@ -2217,7 +2217,7 @@
           "label": "Conversations d'un seul échange",
           "caption": "un message, une réponse, puis plus rien",
           "def": "Part des conversations où l'utilisateur n'a envoyé qu'un seul message.",
-          "how": "à lire avec prudence : ce peut être une question vite résolue comme un abandon. Une hausse brutale mérite d'aller voir les agents concernés."
+          "how": "à lire avec prudence : ce peut être une question vite résolue comme un abandon. Une hausse brutale mérite d'aller voir les {{agentsNicknamePluralLowercase}} concernés."
         },
         "tokens": {
           "label": "Tokens traités",
@@ -2240,7 +2240,7 @@
           "label": "Retour le mois suivant",
           "caption": "des nouveaux du mois dernier sont revenus",
           "def": "Parmi les personnes arrivées le mois précédent, part de celles qui ont envoyé au moins un message ce mois-ci (le mois où se termine la période).",
-          "how": "au-dessus de 50 %, la première expérience convainc. En dessous, regarder l'onboarding et les agents proposés par défaut."
+          "how": "au-dessus de 50 %, la première expérience convainc. En dessous, regarder l'onboarding et les {{agentsNicknamePluralLowercase}} proposés par défaut."
         },
         "firstMessageWithin7Days": {
           "label": "Premier message sous 7 jours",
@@ -2263,7 +2263,7 @@
             "week": "Messages envoyés par semaine",
             "month": "Messages envoyés par mois"
           },
-          "def": "Messages envoyés par les utilisateurs aux agents dans chaque intervalle. Le dernier intervalle peut être encore en cours."
+          "def": "Messages envoyés par les utilisateurs aux {{agentsNicknamePluralLowercase}} dans chaque intervalle. Le dernier intervalle peut être encore en cours."
         },
         "conversationDistribution": {
           "users_one": "{{value}} utilisateur · {{share}}",
@@ -2292,7 +2292,7 @@
           "activeUsers": "Utilisateurs actifs",
           "visitors": "Visiteurs",
           "valueLabel": "Personnes",
-          "def": "Barres : personnes qui ont envoyé au moins un message à un agent dans l'intervalle. Ligne : personnes qui se sont connectées, même sans écrire. Le dernier intervalle est celui en cours."
+          "def": "Barres : personnes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} dans l'intervalle. Ligne : personnes qui se sont connectées, même sans écrire. Le dernier intervalle est celui en cours."
         },
         "tokensOverTime": {
           "title": {
@@ -2308,9 +2308,9 @@
           "periodTotals": "Sur la période : {{sent}} en entrée · {{generated}} en sortie"
         },
         "topAgents": {
-          "title": "Agents les plus utilisés",
-          "empty": "Aucun agent utilisé sur la période.",
-          "def": "Agents classés par nombre de conversations menées avec eux sur la période ; à égalité, par nombre de personnes distinctes qui leur ont envoyé au moins un message.",
+          "title": "{{agentsNicknamePlural}} les plus utilisés",
+          "empty": "Aucun {{agentsNicknameSingularLowercase}} utilisé sur la période.",
+          "def": "{{agentsNicknamePlural}} classés par nombre de conversations menées avec eux sur la période ; à égalité, par nombre de personnes distinctes qui leur ont envoyé au moins un message.",
           "conversations_one": "{{value}} conversation",
           "conversations_other": "{{value}} conversations",
           "users_one": "{{value}} utilisateur",
@@ -2334,12 +2334,12 @@
         },
         "capabilities": {
           "title": "Usage par capability",
-          "def": "\"Agents équipés\" : agents qui ont la capability activée aujourd'hui. \"Agents qui l'ont utilisée\" : agents dont le modèle a appelé au moins un outil de cette capability sur la période. Les appels enregistrés avant le suivi par capability ne sont pas comptés.",
-          "how": "un taux d'utilisation sous 30 % signale une capability surtout activée \"au cas où\". Elle alourdit l'agent sans servir : à retirer, ou à mieux décrire dans les instructions de l'agent.",
-          "empty": "Aucun agent n'a de capability activée.",
+          "def": "\"{{agentsNicknamePlural}} équipés\" : {{agentsNicknamePluralLowercase}} qui ont la capability activée aujourd'hui. \"{{agentsNicknamePlural}} qui l'ont utilisée\" : {{agentsNicknamePluralLowercase}} dont le modèle a appelé au moins un outil de cette capability sur la période. Les appels enregistrés avant le suivi par capability ne sont pas comptés.",
+          "how": "un taux d'utilisation sous 30 % signale une capability surtout activée \"au cas où\". Elle alourdit l'{{agentsNicknameSingularLowercase}} sans servir : à retirer, ou à mieux décrire dans les instructions de l'{{agentsNicknameSingularLowercase}}.",
+          "empty": "Aucun {{agentsNicknameSingularLowercase}} n'a de capability activée.",
           "capability": "Capability",
-          "equipped": "Agents équipés",
-          "used": "Agents qui l'ont utilisée",
+          "equipped": "{{agentsNicknamePlural}} équipés",
+          "used": "{{agentsNicknamePlural}} qui l'ont utilisée",
           "usageRate": "Taux d'utilisation",
           "calls": "Appels",
           "users": "Utilisateurs touchés",
@@ -2355,11 +2355,11 @@
           "footprint": "Empreinte"
         },
         "agentCost": {
-          "title": "Par agent",
-          "def": "Agents qui ont consommé le plus de tokens sur la période, avec le coût estimé correspondant.",
-          "how": "un agent cher avec peu d'utilisateurs mérite un regard : modèle trop puissant pour la tâche, ou documents trop volumineux transmis à chaque message.",
+          "title": "Par {{agentsNicknameSingularLowercase}}",
+          "def": "{{agentsNicknamePlural}} qui ont consommé le plus de tokens sur la période, avec le coût estimé correspondant.",
+          "how": "un {{agentsNicknameSingularLowercase}} cher avec peu d'utilisateurs mérite un regard : modèle trop puissant pour la tâche, ou documents trop volumineux transmis à chaque message.",
           "empty": "Aucune consommation sur la période.",
-          "agent": "Agent",
+          "agent": "{{agentsNicknameSingular}}",
           "tokens": "Tokens traités",
           "cost": "Coût estimé",
           "perUser": "Coût par utilisateur"
@@ -2406,7 +2406,7 @@
       "funnel": {
         "title": "De l'accès à l'usage",
         "def": "Chaque étape compte les personnes de la précédente qui sont allées plus loin sur la période : autorisées à utiliser la plateforme, venues au moins une fois, puis ayant envoyé au moins un message.",
-        "how": "la plus grosse perte indique quoi faire. Des gens qui ne viennent pas : un sujet de communication. Des visiteurs qui n'écrivent pas : il leur manque des cas d'usage ou des agents prêts à l'emploi.",
+        "how": "la plus grosse perte indique quoi faire. Des gens qui ne viennent pas : un sujet de communication. Des visiteurs qui n'écrivent pas : il leur manque des cas d'usage ou des {{agentsNicknamePluralLowercase}} prêts à l'emploi.",
         "unknown": "Non disponible",
         "steps": {
           "peopleWithAccess": {
@@ -2420,7 +2420,7 @@
           },
           "activeUsers": {
             "label": "Utilisateurs actifs",
-            "def": "Personnes distinctes qui ont envoyé au moins un message à un agent sur la période. Se connecter sans écrire ne compte pas."
+            "def": "Personnes distinctes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} sur la période. Se connecter sans écrire ne compte pas."
           }
         },
         "rates": {
@@ -2434,7 +2434,7 @@
             "name": "Visiteurs passés à l'usage",
             "text": "des visiteurs ont envoyé au moins un message",
             "def": "Part des personnes connectées sur la période qui ont aussi envoyé au moins un message.",
-            "how": "une baisse signale des visiteurs qui ne trouvent pas quoi faire : mettre en avant des cas d'usage ou des agents prêts à l'emploi."
+            "how": "une baisse signale des visiteurs qui ne trouvent pas quoi faire : mettre en avant des cas d'usage ou des {{agentsNicknamePluralLowercase}} prêts à l'emploi."
           }
         },
         "adoption": {
@@ -2553,8 +2553,8 @@
         "valueLabel": "Tokens"
       },
       "byAgent": {
-        "empty": "Aucune consommation d'agent sur cette période.",
-        "title": "Consommation par agent",
+        "empty": "Aucune consommation d'{{agentsNicknameSingularLowercase}} sur cette période.",
+        "title": "Consommation par {{agentsNicknameSingularLowercase}}",
         "valueLabel": "Tokens"
       },
       "byModel": {

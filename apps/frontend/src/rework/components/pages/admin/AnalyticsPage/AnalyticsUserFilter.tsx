@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -44,7 +44,7 @@ const isComplete = (condition: PlatformAccessCondition) =>
 
 /** "N users match · M without data", or nothing while the counts are unknown. */
 function Coverage({ param }: { param?: string }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const summary = useAnalyticsUserFilterQuery({ userFilter: param }, { ...KPI_CACHE, skip: !param });
   if (!param) return null;
   if (summary.isError) return <span className={styles.error}>{t("rework.analytics.userFilter.invalid")}</span>;
@@ -69,7 +69,7 @@ export default function AnalyticsUserFilter({
   value: AnalyticsUserFilterValue | null;
   onChange: (filter: AnalyticsUserFilterValue | null) => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState<AnalyticsUserFilterValue>({ combination: "all", conditions: [] });
   const [picking, setPicking] = useState<number | "add">();
@@ -262,7 +262,7 @@ export function AnalyticsUserFilterSummary({
   value: AnalyticsUserFilterValue | null;
   onClear: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   if (!value) return null;
   const text = value.conditions
     .map((c) =>

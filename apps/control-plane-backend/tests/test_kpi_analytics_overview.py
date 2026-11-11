@@ -88,7 +88,10 @@ async def test_overview_splits_the_two_periods_in_one_search(priced: None) -> No
 
     assert len(store.bodies) == 1
     filters = store.body()["aggs"]["periods"]["filters"]["filters"]
-    assert filters["current"]["range"]["@timestamp"]["gte"] == SINCE.isoformat()
+    assert filters["current"]["range"]["@timestamp"] == {
+        "gte": SINCE.isoformat(),
+        "lt": UNTIL.isoformat(),
+    }
     assert filters["previous"]["range"]["@timestamp"] == {
         "gte": PREVIOUS_SINCE.isoformat(),
         "lt": SINCE.isoformat(),

@@ -135,7 +135,7 @@ async def test_creation_assistant_usage_sums_tokens_of_assistant_calls_only() ->
         "range": {
             "@timestamp": {
                 "gte": _WINDOW["since"].isoformat(),
-                "lte": _WINDOW["until"].isoformat(),
+                "lt": _WINDOW["until"].isoformat(),
             }
         }
     } in filters

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import { MaterialIcon } from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
@@ -37,7 +37,7 @@ interface AdoptionFunnelProps {
 
 /** Access, then visitors, then active users, each with the rate of the step that leads to it. */
 export default function AdoptionFunnel({ data, isLoading, isError, trendArgs }: AdoptionFunnelProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const [trend, setTrend] = useState<{ id: TrendId; label: string; value: number | null } | null>(null);
   const lng = i18n.language;
   const title = t(`${KEY}.title`);
@@ -135,7 +135,7 @@ export default function AdoptionFunnel({ data, isLoading, isError, trendArgs }: 
 }
 
 function Delta({ period }: { period: PeriodValue | undefined }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const delta = periodDelta(period, "points", t, i18n.language);
   if (!delta) return null;
   const tone = delta.tone === "positive" ? styles.positive : delta.tone === "negative" ? styles.negative : "";
@@ -143,7 +143,7 @@ function Delta({ period }: { period: PeriodValue | undefined }) {
 }
 
 function StepRate({ id, period }: { id: string; period: PeriodValue | undefined }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const key = `${KEY}.rates.${id}`;
   const name = t(`${key}.name`);
   if (period?.current == null) return null;
@@ -162,7 +162,7 @@ function StepRate({ id, period }: { id: string; period: PeriodValue | undefined 
 }
 
 function AdoptionRate({ period }: { period: PeriodValue | undefined }) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const label = t(`${KEY}.adoption.label`);
   return (
     <div className={styles.funnelAdoption}>

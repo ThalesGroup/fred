@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import type { KpiStatCardProps } from "@shared/molecules/KpiStatCard/KpiStatCard";
 import type { PeriodValue } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -52,7 +52,7 @@ export default function InfoTile({
   trendArgs,
   ...card
 }: InfoTileProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const [trendOpen, setTrendOpen] = useState(false);
   const nested = useInSection();
   const key = `rework.analytics.tiles.${id}`;

@@ -67,6 +67,13 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "fr" },
   }),
 }));
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({
+    agentsNicknameSingular: "Agent",
+    agentsNicknamePlural: "Agents",
+    siteDisplayName: "Fred",
+  }),
+}));
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({ useSelectedTeam: () => h.selected }));
 vi.mock("../admin/AnalyticsPage/exportAnalytics", () => ({ exportAnalytics: h.exportAnalytics }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -186,7 +193,7 @@ describe("TeamUsagePage for a team admin", () => {
     asAdmin();
     await act(async () => button("rework.analytics.export").click());
     expect(h.exportAnalytics).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ teamIds: ["team-1"], lang: "fr" }),
+      expect.objectContaining({ teamIds: ["team-1"], lang: "fr", includeTechnical: false }),
     );
   });
 
@@ -200,6 +207,25 @@ describe("TeamUsagePage for a team admin", () => {
       { since: expect.any(String), until: expect.any(String) },
       { refetchOnMountOrArgChange: 300 },
     );
+  });
+
+  it("hides a previous period's personal totals while the next period loads", () => {
+    asAdmin();
+    const overTime = hook("useUserTokenUsageOverTimeQuery");
+    const original = overTime.getMockImplementation()!;
+    overTime.mockReturnValue({
+      data: { rows: [{ cost_eur: 0.0123 }] },
+      currentData: undefined,
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+    });
+    try {
+      openTab("rework.teamUsage.personalSectionTitle");
+      expect(panel()).not.toContain("rework.tokenUsageImpact.costTitle");
+    } finally {
+      overTime.mockImplementation(original);
+    }
   });
 });
 

@@ -113,7 +113,7 @@ def distinct(field: str) -> dict[str, Any]:
 
 
 def time_range(
-    gte: datetime, lte: datetime, *, inclusive_end: bool = True
+    gte: datetime, lte: datetime, *, inclusive_end: bool = False
 ) -> dict[str, Any]:
     end = "lte" if inclusive_end else "lt"
     return {"range": {"@timestamp": {"gte": gte.isoformat(), end: lte.isoformat()}}}

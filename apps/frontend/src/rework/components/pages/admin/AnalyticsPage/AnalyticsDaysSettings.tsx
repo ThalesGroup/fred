@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useId, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Switch from "@shared/atoms/Switch/Switch";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
@@ -28,7 +28,7 @@ interface AnalyticsDaysSettingsProps {
 
 /** Header button and dialog choosing the counted days. Switches apply at once, so the dialog only closes. */
 export default function AnalyticsDaysSettings({ value, onChange }: AnalyticsDaysSettingsProps) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const [open, setOpen] = useState(false);
   const weekendsId = useId();
   const holidaysId = useId();

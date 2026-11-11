@@ -33,8 +33,8 @@ const h = vi.hoisted(() => ({
     isFetching: false,
     isError: false,
   })),
-  webResearchQuery: vi.fn((): { data: unknown; isLoading: boolean; isError: boolean } => ({
-    data: { available: true, estimated_cost_eur: 1.5, searches: 10, by_reason: [] },
+  webResearchQuery: vi.fn((): { currentData: unknown; isLoading: boolean; isError: boolean } => ({
+    currentData: { available: true, estimated_cost_eur: 1.5, searches: 10, by_reason: [] },
     isLoading: false,
     isError: false,
   })),
@@ -46,7 +46,7 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   overviewQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       visitors: { current: 80, previous: 40 },
       active_users: { current: 42, previous: 21 },
       active_teams: { current: 3, previous: 2 },
@@ -60,7 +60,7 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   adoptionQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       people_with_access: 200,
       visitors: { current: 80, previous: 40 },
       active_users: { current: 42, previous: 21 },
@@ -82,7 +82,7 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   usageQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       active_users: { current: 42 },
       active_users_per_workday: { current: 12, previous: 10 },
       daily_usage_share: { current: 0.28, previous: 0.3 },
@@ -100,13 +100,13 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   activityQuery: vi.fn(() => ({
-    data: { bucket: "week", series: [], points: [{ start: "2026-09-28", values: { messages: 5 } }] },
+    currentData: { bucket: "week", series: [], points: [{ start: "2026-09-28", values: { messages: 5 } }] },
     isLoading: false,
     isFetching: false,
     isError: false,
   })),
   teamsQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       active_teams: { current: 1, previous: 1 },
       team_share: { current: 0.6, previous: 0.5 },
       team_conversations: { current: 6 },
@@ -118,7 +118,7 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   agentsQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       agents_used: { current: 4, previous: 2 },
       agents_created: { current: 1 },
       agents_created_published: { current: 1, previous: 0 },
@@ -136,7 +136,7 @@ const h = vi.hoisted(() => ({
     isError: false,
   })),
   qualityQuery: vi.fn(() => ({
-    data: {
+    currentData: {
       failed_turn_rate: { current: 0.018, previous: 0.024 },
       cost_eur: { current: 21 },
       cost_eur_per_active_user: { current: 0.5 },
@@ -167,6 +167,12 @@ const h = vi.hoisted(() => ({
         { team_id: "t-b", name: "Beta", member_count: 1 },
       ],
     },
+    currentData: {
+      rows: [
+        { team_id: "t-a", name: "Alpha", member_count: 2 },
+        { team_id: "t-b", name: "Beta", member_count: 1 },
+      ],
+    },
   })),
 }));
 
@@ -176,6 +182,14 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: { defaultValue?: string }) =>
       options?.defaultValue !== undefined && lookup(en, key) === undefined ? options.defaultValue : key,
     i18n: { language: "en" },
+  }),
+}));
+
+vi.mock("../../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({
+    agentsNicknameSingular: "Assistant",
+    agentsNicknamePlural: "Assistants",
+    siteDisplayName: "Fred",
   }),
 }));
 
@@ -393,6 +407,7 @@ describe("AnalyticsPage", () => {
         until: expect.any(String),
         tz: expect.any(String),
         lang: "en",
+        includeTechnical: true,
       }),
     );
     expect(exportButton().disabled).toBe(true);
@@ -499,7 +514,7 @@ describe("AnalyticsPage", () => {
     container.remove();
 
     const previous = h.webResearchQuery.getMockImplementation()!;
-    h.webResearchQuery.mockReturnValue({ data: { available: false }, isLoading: false, isError: false });
+    h.webResearchQuery.mockReturnValue({ currentData: { available: false }, isLoading: false, isError: false });
     try {
       render();
       openTab("tech");
@@ -557,7 +572,7 @@ describe("AnalyticsPage", () => {
 
   it("says when people with access are unknown", () => {
     h.adoptionQuery.mockReturnValue({
-      data: {
+      currentData: {
         people_with_access: null,
         visitors: { current: 8 },
         active_users: { current: 4 },
@@ -613,7 +628,7 @@ describe("AnalyticsPage", () => {
 
   it("sums up web research in six tiles, refusals together and p95 in seconds", () => {
     h.webResearchQuery.mockReturnValueOnce({
-      data: {
+      currentData: {
         available: true,
         tool_calls: 200,
         searches: 40,
@@ -644,14 +659,14 @@ describe("AnalyticsPage", () => {
 
   it("lists storage per team with used space, quota and a warning from 80%", () => {
     h.neutralQuery.mockImplementation(() => ({
-      data: {
+      data: undefined,
+      currentData: {
         rows: [
           { team_id: "a", label: "Small", used_bytes: 1024, quota_bytes: 10240 },
           { team_id: "b", label: "Full", used_bytes: 9216, quota_bytes: 10240 },
           { team_id: "c", label: "Unbounded", used_bytes: 2048, quota_bytes: null },
         ],
       },
-      currentData: undefined,
       isLoading: false,
       isFetching: false,
       isError: false,
@@ -685,7 +700,7 @@ describe("AnalyticsPage", () => {
   });
 
   it("falls back to the service notice when every read of a tab fails", () => {
-    const failed = { data: undefined, isLoading: false, isFetching: false, isError: true } as never;
+    const failed = { currentData: undefined, isLoading: false, isFetching: false, isError: true } as never;
     h.adoptionQuery.mockReturnValue(failed);
     h.usageQuery.mockReturnValue(failed);
     render();

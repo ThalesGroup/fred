@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../admin/AnalyticsPage/useAnalyticsTranslation";
 import {
   useUserSkillUsageQuery,
   useUserTokenUsageByAgentQuery,
@@ -39,7 +39,7 @@ interface PersonalUsageProps {
 
 /** The viewer's own token usage: self-scoped reads, never another person's data. */
 export default function PersonalUsage({ timeRange, withSkills }: PersonalUsageProps) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const args = { since: timeRange.since, until: timeRange.until };
   const overTime = useUserTokenUsageOverTimeQuery(args, CACHE);
   const byAgent = useUserTokenUsageByAgentQuery(args, CACHE);
@@ -74,29 +74,32 @@ export default function PersonalUsage({ timeRange, withSkills }: PersonalUsagePr
           <div className={styles.cellFull}>
             <TimeSeriesLineChart
               title={t("rework.teamUsage.tokensOverTime.title")}
-              rows={overTime.data?.rows ?? []}
-              interval={overTime.data?.interval}
+              rows={overTime.currentData?.rows ?? []}
+              interval={overTime.currentData?.interval}
               valueLabel={t("rework.teamUsage.tokensOverTime.valueLabel")}
               isFetching={overTime.isFetching}
-              isLoading={overTime.isLoading}
+              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
               isError={overTime.isError}
             />
-            <TokenUsageImpact rows={overTime.data?.rows} isLoading={overTime.isLoading} />
+            <TokenUsageImpact
+              rows={overTime.currentData?.rows}
+              isLoading={overTime.isLoading || (overTime.isFetching && !overTime.currentData)}
+            />
           </div>
           <BarChart
             title={t("rework.teamUsage.byAgent.title")}
-            rows={agentUsageRows(byAgent.data?.rows, t)}
+            rows={agentUsageRows(byAgent.currentData?.rows, t)}
             valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
             emptyMessage={t("rework.teamUsage.byAgent.empty")}
-            isLoading={byAgent.isLoading}
+            isLoading={byAgent.isLoading || (byAgent.isFetching && !byAgent.currentData)}
             isError={byAgent.isError}
           />
           <BarChart
             title={t("rework.teamUsage.byModel.title")}
-            rows={byModel.data?.rows ?? []}
+            rows={byModel.currentData?.rows ?? []}
             valueLabel={t("rework.teamUsage.byModel.valueLabel")}
             emptyMessage={t("rework.teamUsage.byModel.empty")}
-            isLoading={byModel.isLoading}
+            isLoading={byModel.isLoading || (byModel.isFetching && !byModel.currentData)}
             isError={byModel.isError}
           />
         </div>

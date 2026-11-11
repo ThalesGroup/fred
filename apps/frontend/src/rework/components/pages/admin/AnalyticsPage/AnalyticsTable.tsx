@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable";
 import { InfoHint } from "./AnalyticsSection";
 import styles from "./AnalyticsPage.module.css";
@@ -33,7 +33,7 @@ interface AnalyticsTableProps<T> {
 
 /** The info icon of an untitled table, for its section heading (`aside`). */
 export function TableHint({ id }: { id: string }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const key = `rework.analytics.tables.${id}`;
   return <InfoHint label={t(`${key}.title`)} def={t(`${key}.def`)} how={t(`${key}.how`)} />;
 }
@@ -49,7 +49,7 @@ export default function AnalyticsTable<T>({
   emptyMessage,
   hideTitle = false,
 }: AnalyticsTableProps<T>) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const key = `rework.analytics.tables.${id}`;
   const title = t(`${key}.title`);
   const def = t(`${key}.def`, { defaultValue: "" });

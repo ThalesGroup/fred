@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import { useAnalyticsActivityOverTimeQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg as ActivityArgs } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { bucketSeries, formatValue } from "./analyticsFormat";
-import { KPI_CACHE } from "./analyticsQuery";
+import { currentQueryLoading, KPI_CACHE } from "./analyticsQuery";
 import { KPI_TRENDS, trendPoints, type TrendId } from "./kpiTrend";
 import styles from "./AnalyticsPage.module.css";
 
@@ -38,12 +38,12 @@ interface KpiTrendDialogProps {
 
 /** A KPI over the selected period: a running total, or a count per bucket for distinct people. */
 export default function KpiTrendDialog({ id, label, value, args, open, onClose }: KpiTrendDialogProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
   const activity = useAnalyticsActivityOverTimeQuery(args, { ...KPI_CACHE, skip: !open });
   const { kind, format } = KPI_TRENDS[id];
-  const bucket = activity.data?.bucket ?? "day";
-  const points = trendPoints(activity.data?.points, id);
+  const bucket = activity.currentData?.bucket ?? "day";
+  const points = trendPoints(activity.currentData?.points, id);
 
   return (
     <Dialog
@@ -64,7 +64,7 @@ export default function KpiTrendDialog({ id, label, value, args, open, onClose }
         labelled
         flat
         isFetching={activity.isFetching}
-        isLoading={activity.isLoading}
+        isLoading={currentQueryLoading(activity)}
         isError={activity.isError}
       />
       {kind === "distinct" && value != null && (

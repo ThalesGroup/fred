@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAnalyticsTeamsCatalogQuery,
   useAnalyticsTeamsQuery,
@@ -25,7 +25,7 @@ import { AnalyticsSection, AnalyticsServiceDown } from "../AnalyticsSection";
 import AnalyticsTable, { TableHint } from "../AnalyticsTable";
 import { BarCell } from "../RankedBars";
 import { formatValue, NO_VALUE, periodDelta, type TeamRow, teamRows } from "../analyticsFormat";
-import { type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "../analyticsQuery";
+import { currentQueryLoading, type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 /** Colors a change as shown (one decimal): a displayed 0 % stays uncolored. */
@@ -52,7 +52,7 @@ interface ConversationScopeBarProps {
 
 /** Team and personal conversations as one horizontal bar of two labelled shares. */
 function ConversationScopeBar({ team, personal, share, emptyMessage, isLoading, isError }: ConversationScopeBarProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
   const total = team + personal;
   const change = periodDelta(share, "points", t, lng);
@@ -119,17 +119,17 @@ function ConversationScopeBar({ team, personal, share, emptyMessage, isLoading, 
 }
 
 export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
   const teams = useAnalyticsTeamsQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   // A team admin may only list their own team.
   const catalog = useAnalyticsTeamsCatalogQuery(mode === "team" ? { teamIds } : {}, KPI_CACHE);
-  const data = teams.data;
+  const data = teams.currentData;
   const teamScoped = teamIds.length > 0;
 
   const rows = useMemo(
-    () => teamRows(data?.rows ?? [], catalog.data?.rows ?? [], teamIds),
-    [data, catalog.data, teamIds],
+    () => teamRows(data?.rows ?? [], catalog.currentData?.rows ?? [], teamIds),
+    [data, catalog.currentData, teamIds],
   );
 
   const column = (
@@ -200,7 +200,7 @@ export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFi
   // One team: its own members, without the cross-team split or table.
   if (mode === "team") {
     const row = rows[0];
-    const card = { isLoading: teams.isLoading, isError: teams.isError, nested: true };
+    const card = { isLoading: currentQueryLoading(teams), isError: teams.isError, nested: true };
     return (
       <div className={styles.tabContent}>
         <AnalyticsSection id="members">
@@ -229,7 +229,7 @@ export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFi
           emptyMessage={t(
             teamScoped ? "rework.analytics.scope.notForTeams" : "rework.analytics.conversationsByScope.empty",
           )}
-          isLoading={teams.isLoading}
+          isLoading={currentQueryLoading(teams)}
           isError={teams.isError}
         />
       </AnalyticsSection>
@@ -240,7 +240,7 @@ export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFi
             {data &&
               t("rework.analytics.tables.teams.activeTeams", {
                 active: formatValue(data.active_teams.current ?? 0, "count", lng),
-                count: teamScoped ? teamIds.length : (catalog.data?.rows.length ?? 0),
+                count: teamScoped ? teamIds.length : (catalog.currentData?.rows.length ?? 0),
               })}
             <TableHint id="teams" />
           </>
@@ -252,7 +252,7 @@ export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFi
           columns={columns}
           rows={rows}
           rowKey={(r) => r.teamId}
-          isLoading={teams.isLoading}
+          isLoading={currentQueryLoading(teams)}
           isError={teams.isError}
         />
       </AnalyticsSection>

@@ -14,7 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import Button from "@shared/atoms/Button/Button";
 import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -57,7 +57,7 @@ export default function AnalyticsScopeSelector({
   value,
   onChange,
 }: ScopeProps & { onChange: (ids: string[]) => void }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const { teams, loaded } = useTeamCatalog();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -170,7 +170,7 @@ export default function AnalyticsScopeSelector({
 
 /** Under a team scope: the first teams as chips, how many more, and their distinct members. */
 export function AnalyticsScopeSummary({ value, timeRange }: ScopeProps & { timeRange: TimeRange }) {
-  const { t } = useTranslation();
+  const { t } = useAnalyticsTranslation();
   const { teams } = useTeamCatalog();
   // People in several teams count once: the adoption read's people with access (same cached read).
   const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, value), {
@@ -181,7 +181,7 @@ export function AnalyticsScopeSummary({ value, timeRange }: ScopeProps & { timeR
   const picked = new Set(value);
   const selected = teams.filter((team) => picked.has(team.team_id));
   if (selected.length === 0) return null;
-  const members = adoption.data?.people_with_access;
+  const members = adoption.currentData?.people_with_access;
   const more = selected.length - SUMMARY_CHIPS;
   return (
     <div className={styles.summary}>

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "../useAnalyticsTranslation";
 import {
   useAnalyticsActivityOverTimeQuery,
   useAnalyticsAdoptionQuery,
@@ -23,11 +23,18 @@ import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSe
 import { AnalyticsServiceDown, ChartHint } from "../AnalyticsSection";
 import InfoTile from "../InfoTile";
 import { bucketSeries, formatValue } from "../analyticsFormat";
-import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs, zonedKpiArgs } from "../analyticsQuery";
+import {
+  currentQueryLoading,
+  allFailed,
+  type AnalyticsTabProps,
+  KPI_CACHE,
+  kpiArgs,
+  zonedKpiArgs,
+} from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
 export default function OverviewTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const overview = useAnalyticsOverviewQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   const zoned = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const activity = useAnalyticsActivityOverTimeQuery(zoned, KPI_CACHE);
@@ -36,16 +43,16 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
   // Active teams out of all teams is a platform figure: a team's page neither shows nor reads it.
   const crossTeam = mode === "platform";
   const catalog = useAnalyticsTeamsCatalogQuery({}, { ...KPI_CACHE, skip: !crossTeam });
-  const data = overview.data;
-  const totalTeams = teamIds.length > 0 ? teamIds.length : catalog.data?.rows.length;
+  const data = overview.currentData;
+  const totalTeams = teamIds.length > 0 ? teamIds.length : catalog.currentData?.rows.length;
   // Headline figures: the large value size.
-  const tile = { isLoading: overview.isLoading, isError: overview.isError, size: "large" as const };
-  const lifecycleTile = { isLoading: adoption.isLoading, isError: adoption.isError, size: "large" as const };
+  const tile = { isLoading: currentQueryLoading(overview), isError: overview.isError, size: "large" as const };
+  const lifecycleTile = { isLoading: currentQueryLoading(adoption), isError: adoption.isError, size: "large" as const };
   const perUser = data?.cost_eur_per_active_user.current;
   const activeUsers = t("rework.analytics.charts.activityOverTime.activeUsers");
   const visitors = t("rework.analytics.charts.activityOverTime.visitors");
 
-  const activityTitle = t(`rework.analytics.charts.activityOverTime.title.${activity.data?.bucket ?? "day"}`);
+  const activityTitle = t(`rework.analytics.charts.activityOverTime.title.${activity.currentData?.bucket ?? "day"}`);
 
   if (allFailed([overview, activity])) return <AnalyticsServiceDown />;
 
@@ -53,7 +60,7 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
     <div className={styles.tabContent}>
       <div className={styles.kpiRow}>
         <InfoTile id="activeUsers" period={data?.active_users} trendArgs={zoned} {...tile} />
-        <InfoTile id="newUsers" period={adoption.data?.new_users} {...lifecycleTile} />
+        <InfoTile id="newUsers" period={adoption.currentData?.new_users} {...lifecycleTile} />
         {crossTeam && (
           <InfoTile
             id="activeTeams"
@@ -65,7 +72,7 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
         )}
         <InfoTile
           id="nextMonthReturn"
-          period={adoption.data?.next_month_return}
+          period={adoption.currentData?.next_month_return}
           format="percent"
           deltaKind="points"
           {...lifecycleTile}
@@ -75,8 +82,8 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
         title={activityTitle}
         titleAction={<ChartHint id="activityOverTime" title={activityTitle} />}
         rows={bucketSeries(
-          activity.data?.points,
-          activity.data?.bucket,
+          activity.currentData?.points,
+          activity.currentData?.bucket,
           { active_users: activeUsers, visitors },
           i18n.language,
           t,
@@ -87,7 +94,7 @@ export default function OverviewTab({ timeRange, teamIds, mode = "platform", use
         labelled
         valueLabel={t("rework.analytics.charts.activityOverTime.valueLabel")}
         isFetching={activity.isFetching}
-        isLoading={activity.isLoading}
+        isLoading={currentQueryLoading(activity)}
         isError={activity.isError}
       />
       <div className={styles.kpiRow}>

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
 import type { AnalyticsCohortRow } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { InfoHint } from "./AnalyticsSection";
 import { formatValue, NO_VALUE } from "./analyticsFormat";
@@ -41,7 +41,7 @@ interface CohortTableProps {
 
 /** One row per arrival month: its newcomers and their return 1, 2 and 3 months later. */
 export default function CohortTable({ rows, isLoading, isError }: CohortTableProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
   const lng = i18n.language;
   const title = t(`${KEY}.title`);
   const offsets = [1, 2, 3];

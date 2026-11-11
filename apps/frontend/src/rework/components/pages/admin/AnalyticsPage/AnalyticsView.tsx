@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import { useState, type ComponentType, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import { useAnalyticsTranslation } from "./useAnalyticsTranslation";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Button from "@shared/atoms/Button/Button";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -72,7 +73,8 @@ interface AnalyticsViewProps {
 
 /** Analytics, one tab per question family. Only the selected tab mounts, so only its reads run. */
 export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extraTab }: AnalyticsViewProps) {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useAnalyticsTranslation();
+  const { agentsNicknameSingular, agentsNicknamePlural } = useFrontendProperties();
   const { showError } = useToast();
   const [exporting, setExporting] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
@@ -95,7 +97,13 @@ export default function AnalyticsView({ title, mode, teamIds: fixedTeamIds, extr
     setExporting(true);
     try {
       const lang = i18n.language.startsWith("fr") ? "fr" : "en";
-      await exportAnalytics({ ...zonedKpiArgs(timeRange, teamIds, userFilter, days), lang });
+      await exportAnalytics({
+        ...zonedKpiArgs(timeRange, teamIds, userFilter, days),
+        lang,
+        agentsNicknameSingular,
+        agentsNicknamePlural,
+        includeTechnical: mode === "platform",
+      });
     } catch {
       showError({ summary: t("rework.analytics.exportError") });
     } finally {

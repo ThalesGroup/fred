@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -48,14 +49,14 @@ async def query_agent_prompt_length_distribution(
     # as a follow-up (KPI-ANALYTICS-RFC.md v3 §2.3).
     del user, request
 
-    # Pass 1 — agents created on or before `until`.
+    # Pass 1 - agents created before `until`.
     # We use a large `size` on the terms agg to capture all known agents.
     created_body: dict[str, Any] = {
         "size": 0,
         "query": {
             "bool": {
                 "filter": [
-                    {"range": {"@timestamp": {"lte": until.isoformat()}}},
+                    {"range": {"@timestamp": {"lt": until.isoformat()}}},
                     {"term": {"metric.name": "agent.created_total"}},
                     {"exists": {"field": "dims.agent_instance_id"}},
                 ]
@@ -67,7 +68,9 @@ async def query_agent_prompt_length_distribution(
             }
         },
     }
-    created_resp = store.client.search(index=store.index, body=created_body)
+    created_resp = await asyncio.to_thread(
+        store.client.search, index=store.index, body=created_body
+    )
     created_ids: set[str] = {
         str(b["key"])
         for b in created_resp.get("aggregations", {})
@@ -96,7 +99,9 @@ async def query_agent_prompt_length_distribution(
             }
         },
     }
-    deleted_resp = store.client.search(index=store.index, body=deleted_body)
+    deleted_resp = await asyncio.to_thread(
+        store.client.search, index=store.index, body=deleted_body
+    )
     deleted_before_window: set[str] = {
         str(b["key"])
         for b in deleted_resp.get("aggregations", {})
@@ -109,13 +114,13 @@ async def query_agent_prompt_length_distribution(
         return LabelValueResponse(rows=[], since=since, until=until)
 
     # Pass 2 — for each alive agent, find the latest lifecycle event (created or
-    # updated) with @timestamp ≤ until and read system_prompt_chars from its dims.
+    # updated) before `until` and read system_prompt_chars from its dims.
     latest_body: dict[str, Any] = {
         "size": 0,
         "query": {
             "bool": {
                 "filter": [
-                    {"range": {"@timestamp": {"lte": until.isoformat()}}},
+                    {"range": {"@timestamp": {"lt": until.isoformat()}}},
                     {
                         "terms": {
                             "metric.name": ["agent.created_total", "agent.updated"]
@@ -141,7 +146,9 @@ async def query_agent_prompt_length_distribution(
             }
         },
     }
-    latest_resp = store.client.search(index=store.index, body=latest_body)
+    latest_resp = await asyncio.to_thread(
+        store.client.search, index=store.index, body=latest_body
+    )
 
     # Collect prompt lengths and bucket them.
     bucket_counts: dict[

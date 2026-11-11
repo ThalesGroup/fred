@@ -75,7 +75,7 @@ async def _query_skill_usage(
     filters: list[dict[str, Any]] = [
         {"term": {"metric.name": "agent.skill_loaded_total"}},
         {"terms": {"dims.skill_origin": ["user", "agent"]}},
-        {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
+        {"range": {"@timestamp": {"gte": since.isoformat(), "lt": until.isoformat()}}},
         *scope_filters,
     ]
     body = {

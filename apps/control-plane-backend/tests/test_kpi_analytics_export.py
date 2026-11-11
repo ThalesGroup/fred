@@ -29,7 +29,13 @@ import pytest
 from control_plane_backend.kpi import api, export
 from control_plane_backend.kpi import scope as kpi_scope
 from control_plane_backend.kpi.counted_days import CountedDays
-from control_plane_backend.kpi.export_texts import EXPORT_ONLY, SHARED, Lang
+from control_plane_backend.kpi.export_texts import (
+    EXPORT_ONLY,
+    SHARED,
+    AgentLabels,
+    Lang,
+    text,
+)
 from control_plane_backend.kpi.export_workbook import (
     XLSX_MEDIA_TYPE,
     ExportData,
@@ -60,13 +66,25 @@ from control_plane_backend.kpi.presets.analytics_teams import (
 )
 from control_plane_backend.kpi.presets.analytics_teams_catalog import AnalyticsTeamRow
 from control_plane_backend.kpi.presets.analytics_usage import AnalyticsUsageResponse
-from control_plane_backend.kpi.presets.common import CREATION_ASSISTANT_LABEL
+from control_plane_backend.kpi.presets.common import (
+    CREATION_ASSISTANT_LABEL,
+    CreationAssistantUsageResponse,
+    LabelValuePoint,
+    LabelValueResponse,
+    SkillUsageResponse,
+    SkillUsageRow,
+    TeamStorageResponse,
+    TeamStorageRow,
+)
+from control_plane_backend.kpi.presets.web_research_summary import (
+    WebResearchSummaryResponse,
+)
 from control_plane_backend.kpi.user_filter import (
     AnalyticsUserFilter,
     ResolvedUserFilter,
     UserFilterMatch,
 )
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.routing import APIRoute
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
@@ -192,6 +210,26 @@ def _responses() -> dict[str, Any]:
             since=SINCE,
             until=UNTIL,
         ),
+        skills=SkillUsageResponse(
+            rows=[SkillUsageRow(skill_name="Search", user_count=3, model_count=4, total=7)],
+            since=SINCE, until=UNTIL,
+        ),
+        storage=TeamStorageResponse(
+            rows=[TeamStorageRow(team_id="t-audit", label="Audit interne", used_bytes=1024, quota_bytes=4096)],
+            since=SINCE, until=UNTIL,
+        ),
+        prompt_lengths=LabelValueResponse(
+            rows=[LabelValuePoint(label="0-500", value=3)], since=SINCE, until=UNTIL,
+        ),
+        creation_assistant=CreationAssistantUsageResponse(
+            drafts=2, input_tokens=100, output_tokens=50, total_tokens=150, since=SINCE, until=UNTIL,
+        ),
+        web_research=WebResearchSummaryResponse(
+            available=True, tool_calls=12, searches=5, fetches=7, billable_searches=4,
+            estimated_cost_eur=0.2, blocked=1, saturated=0, failed=1, unique_users=3,
+            p95_ms=900, by_reason=[LabelValuePoint(label="unsafe_destination", value=1)],
+            since=SINCE, until=UNTIL,
+        ),
     )  # fmt: skip
 
 
@@ -211,6 +249,7 @@ def _data(team_ids: tuple[str, ...] = ()) -> ExportData:
         tz="Europe/Paris",
         team_ids=team_ids,
         exported_at=datetime(2026, 10, 26, 9, 42, tzinfo=timezone.utc),
+        include_technical=True,
         catalog=[r for r in _catalog() if not team_ids or r.team_id in team_ids],
         **_responses(),
     )
@@ -225,11 +264,15 @@ def _filtered(lang: Lang) -> ExportData:
         {
             "combination": "any",
             "conditions": [
-                {"claim": ["organisation"], "operator": "equals", "value": "=A"},
+                {
+                    "claim": ["email"],
+                    "operator": "equals",
+                    "value": "alice@example.com",
+                },
                 {
                     "claim": ["profile", "unit"],
                     "operator": "contains",
-                    "value": "R&D",
+                    "value": "Alice Smith",
                     "case_sensitive": True,
                 },
             ],
@@ -244,27 +287,32 @@ def _filtered(lang: Lang) -> ExportData:
 @pytest.mark.parametrize("lang", ["fr", "en"])
 def test_about_sheet_states_the_user_filter_and_its_coverage(lang: Lang) -> None:
     data = _filtered(lang)
-    ws = load_workbook(io.BytesIO(build_workbook(data, lang)))[
-        "À propos" if lang == "fr" else "About"
-    ]
+    workbook = load_workbook(io.BytesIO(build_workbook(data, lang)))
+    ws = workbook["À propos" if lang == "fr" else "About"]
     values = {ws.cell(r, 1).value: ws.cell(r, 2) for r in range(3, 10)}
     if lang == "fr":
         text = values["Filtre utilisateurs"]
-        assert text.value == (
-            'Au moins une (OU) : organisation Est égal à "=A"; '
-            'profile > unit Contient "R&D" (Sensible à la casse)'
-        )
+        assert text.value == "Filtre appliqué (2 conditions, valeurs non exportées)"
         assert values["Utilisateurs filtrés"].value == (
             "2 correspondent, 1\u202f100 sans donnée, sur 1\u202f200 utilisateurs connus"
         )
     else:
         text = values["User filter"]
-        assert str(text.value).startswith('At least one (OR): organisation Equals "=A"')
+        assert text.value == "Filter applied (2 conditions, values omitted)"
         assert values["Filtered users"].value == (
             "2 matching, 1,100 without data, out of 1,200 known users"
         )
-    # A value from a user is text, never a formula.
     assert text.data_type == "s"
+    cells = [
+        str(cell.value)
+        for sheet in workbook
+        for row in sheet
+        for cell in row
+        if cell.value is not None
+    ]
+    assert not any(
+        "alice@example.com" in cell or "Alice Smith" in cell for cell in cells
+    )
     assert export_filename(data, lang) == (
         "analytics_plateforme-filtre_2026-09-26_2026-10-25.xlsx"
         if lang == "fr"
@@ -277,19 +325,20 @@ def _header(ws: Any, row: int = 1) -> list[Any]:
 
 
 def _fr(key: str) -> str:
-    return SHARED["fr"][f"rework.analytics.{key}"]
+    return text("fr", key)
 
 
 def test_sheets_tables_and_frozen_headers() -> None:
     wb = _book()
     assert wb.sheetnames == [
-        "À propos", "Synthèse", "Évolution", "Adoption",
-        "Équipes", "Agents", "Capacités", "Modèles et coût",
+        "À propos", "Synthèse", "Évolution", "Adoption", "Usage",
+        "Équipes", "Agents", "Capacités", "Modèles et coût", "Skills", "Technique", "Recherche Web",
     ]  # fmt: skip
     tables = {name for ws in wb.worksheets for name in ws.tables}
     assert tables == {
-        "Synthese", "Evolution", "Entonnoir", "Retour", "Equipes",
-        "Agents", "Capacites", "Modeles", "CoutAgents",
+        "Synthese", "Evolution", "Entonnoir", "Retour", "ConversationDistribution", "Equipes",
+        "Agents", "Capacites", "Modeles", "CoutAgents", "Skills", "Storage",
+        "PromptLengths", "CreationAssistant", "WebResearch", "WebResearchReasons",
     }  # fmt: skip
     assert wb["Synthèse"].freeze_panes == "A2"
     assert wb["À propos"].sheet_view.showGridLines is False
@@ -339,6 +388,32 @@ def test_summary_rows_formats_and_comments_reuse_page_texts() -> None:
     # A definition without a "how to read" stays alone.
     assert rows[_fr("tiles.conversations.label")][6].value == _fr(
         "tiles.conversations.def"
+    )
+    assert rows[_fr("tiles.agentsUsed.label")][2].value == 8
+    assert rows[_fr("tiles.dailyUsage.label")][2].value == 0.2
+    assert rows[_fr("tiles.singleExchange.label")][2].value == 0.3
+    assert rows[_fr("tokensCached")][2].value == 0
+
+
+def test_export_includes_skills_and_technical_figures() -> None:
+    wb = _book()
+    assert [wb["Skills"].cell(2, c).value for c in range(1, 5)] == ["Search", 7, 3, 4]
+    assert [wb["Technique"].cell(3, c).value for c in range(1, 5)] == [
+        "Audit interne",
+        1024,
+        4096,
+        0.25,
+    ]
+    assert wb["Recherche Web"]["B2"].value == 12
+    assert wb["Recherche Web"]["B6"].value == 0.2
+    data = _data()
+    assert data.web_research is not None
+    hidden = dataclasses.replace(
+        data, web_research=data.web_research.model_copy(update={"available": False})
+    )
+    assert (
+        "Recherche Web"
+        not in load_workbook(io.BytesIO(build_workbook(hidden, "fr"))).sheetnames
     )
 
 
@@ -442,6 +517,15 @@ def _route() -> APIRoute:
     )
 
 
+def test_export_nickname_limit_matches_frontend_configuration() -> None:
+    app = FastAPI()
+    app.include_router(api.build_kpi_router())
+    params = app.openapi()["paths"]["/kpi/analytics/export"]["get"]["parameters"]
+    for name in ("agents_nickname_singular", "agents_nickname_plural"):
+        schema = next(param["schema"] for param in params if param["name"] == name)
+        assert schema["maxLength"] == 200
+
+
 def _call(**overrides: Any) -> dict[str, Any]:
     return {
         **dict(
@@ -454,6 +538,9 @@ def _call(**overrides: Any) -> dict[str, Any]:
             lang="fr",
             exclude_weekends=False,
             exclude_holidays=False,
+            include_technical=False,
+            agents_nickname_singular="Agent",
+            agents_nickname_plural="Agents",
             user=USER,
             store=SimpleNamespace(),
         ),
@@ -463,6 +550,11 @@ def _call(**overrides: Any) -> dict[str, Any]:
 
 @pytest.fixture
 def presets(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
+    async def build_now(function: Any, *args: Any) -> Any:
+        return function(*args)
+
+    # Route tests exercise the response; workbook tests cover generation separately.
+    monkeypatch.setattr(export.asyncio, "to_thread", build_now)
     responses = _responses()
     mocks = {
         "query_analytics_adoption": AsyncMock(return_value=responses["adoption"]),
@@ -473,6 +565,15 @@ def presets(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
         "query_analytics_activity_over_time": AsyncMock(
             return_value=responses["activity"]
         ),
+        "query_skill_usage": AsyncMock(return_value=responses["skills"]),
+        "query_storage_by_team": AsyncMock(return_value=responses["storage"]),
+        "query_agent_prompt_length_distribution": AsyncMock(
+            return_value=responses["prompt_lengths"]
+        ),
+        "query_creation_assistant_usage": AsyncMock(
+            return_value=responses["creation_assistant"]
+        ),
+        "query_web_research_summary": AsyncMock(return_value=responses["web_research"]),
         "team_catalog": AsyncMock(return_value=_catalog()),
     }
     for name, mock in mocks.items():
@@ -494,12 +595,54 @@ async def test_route_returns_the_workbook_with_its_filename(
         'attachment; filename="analytics_1-teams_2026-09-26_2026-10-25.xlsx"'
     )
     assert load_workbook(io.BytesIO(response.body)).sheetnames[0] == "About"
+    team_book = load_workbook(io.BytesIO(response.body))
+    assert "Technical" not in team_book.sheetnames
+    assert "Web research" not in team_book.sheetnames
+    summary_labels = [row[1] for row in team_book["Summary"].values]
+    assert text("en", "tiles.activeTeams.label") not in summary_labels
+    assert text("en", "tiles.teamsFeedingCorpus.label") not in summary_labels
+    presets["query_storage_by_team"].assert_not_awaited()
+    presets["query_web_research_summary"].assert_not_awaited()
     awaited = presets["query_analytics_activity_over_time"].await_args
     assert awaited is not None
     kwargs = awaited.kwargs
     assert kwargs["team_ids"] == (TeamId("t-big"),)
     assert (kwargs["bucket"], kwargs["tz"]) == ("auto", "Europe/Paris")
     presets["team_catalog"].assert_awaited_once()
+
+
+def test_workbook_uses_the_configured_agent_nicknames() -> None:
+    data = dataclasses.replace(
+        _data(), agent_labels=AgentLabels("Assistant", "Assistants")
+    )
+    workbook = load_workbook(io.BytesIO(build_workbook(data, "fr")))
+    assert "Assistants" in workbook.sheetnames
+    values = [
+        cell.value
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows()
+        for cell in row
+    ]
+    assert "Assistants équipés" in values
+    assert "Assistant" in values
+    assert not any(
+        isinstance(value, str) and "{{agentsNickname" in value for value in values
+    )
+
+
+@pytest.mark.parametrize(
+    ("nickname", "sheet_name"),
+    [
+        ("'Bots'", "Bots"),
+        ("=Bots", "Bots"),
+        ("History", "History data"),
+        ("A" * 200, "A" * 31),
+    ],
+)
+def test_configured_agent_sheet_name_is_valid(nickname: str, sheet_name: str) -> None:
+    data = dataclasses.replace(_data(), agent_labels=AgentLabels("Assistant", nickname))
+    workbook = load_workbook(io.BytesIO(build_workbook(data, "en")))
+    assert sheet_name in workbook.sheetnames
 
 
 @pytest.mark.asyncio
@@ -517,7 +660,11 @@ async def test_route_passes_the_user_filter_to_scope_and_sections(
     assert passed is not None
     assert passed.kwargs["user_filter"].conditions[0].value == "A"
     for name, mock in presets.items():
-        if name != "team_catalog":
+        if name not in (
+            "team_catalog",
+            "query_storage_by_team",
+            "query_agent_prompt_length_distribution",
+        ):
             assert mock.await_args is not None
             assert mock.await_args.kwargs["user_ids"] == ("u1", "u2")
     assert "platform-filtered" in response.headers["content-disposition"]
@@ -536,7 +683,11 @@ async def test_route_passes_the_counted_days_to_every_section(
 
     expected = CountedDays(exclude_weekends=True, exclude_holidays=True)
     for name, mock in presets.items():
-        if name != "team_catalog":
+        if name not in (
+            "team_catalog",
+            "query_storage_by_team",
+            "query_agent_prompt_length_distribution",
+        ):
             assert mock.await_args is not None
             assert mock.await_args.kwargs["days"] == expected, name
     about = load_workbook(io.BytesIO(response.body))["About"]
@@ -560,6 +711,46 @@ class _DenyAll:
 
 
 @pytest.mark.asyncio
+async def test_platform_export_keeps_technical_data_when_teams_are_selected(
+    presets: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope = AsyncMock(return_value=kpi_scope.KpiScope(team_ids=(TeamId("t-big"),)))
+    monkeypatch.setattr(export, "resolve_kpi_scope", scope)
+    permission = AsyncMock()
+    container = SimpleNamespace(
+        get_rebac_engine=lambda: SimpleNamespace(
+            check_user_permission_or_raise=permission
+        )
+    )
+    monkeypatch.setattr(export, "get_application_container", lambda r: container)
+
+    response = await _route().endpoint(
+        **_call(team_ids=[TeamId("t-big")], include_technical=True, lang="en")
+    )
+
+    assert "Technical" in load_workbook(io.BytesIO(response.body)).sheetnames
+    presets["query_storage_by_team"].assert_awaited_once()
+    permission.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_team_export_cannot_request_platform_technical_data(
+    presets: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope = AsyncMock(return_value=kpi_scope.KpiScope(team_ids=(TeamId("t-big"),)))
+    monkeypatch.setattr(export, "resolve_kpi_scope", scope)
+    container = SimpleNamespace(get_rebac_engine=lambda: _DenyAll())
+    monkeypatch.setattr(export, "get_application_container", lambda r: container)
+
+    with pytest.raises(AuthorizationError):
+        await _route().endpoint(
+            **_call(team_ids=[TeamId("t-big")], include_technical=True)
+        )
+    for mock in presets.values():
+        mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_non_observer_is_forbidden_before_any_read(
     presets: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -579,7 +770,9 @@ def test_cohort_months_are_real_dates() -> None:
 
 
 def test_user_named_cells_stay_text_and_never_break_the_file() -> None:
-    data = _data()
+    data = dataclasses.replace(
+        _data(), agent_labels=AgentLabels("=SUM(1,1)", "=Assistants")
+    )
     data.agents.top_agents[0].label = '=HYPERLINK("http://evil","x")'
     data.catalog[0].name = "Audit\x01 interne"
     wb = load_workbook(io.BytesIO(build_workbook(data, "fr")))  # type: ignore[arg-type]
