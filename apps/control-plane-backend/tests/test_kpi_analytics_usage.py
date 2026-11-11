@@ -26,10 +26,10 @@ from _kpi_test_doubles import (
     periods,
     value,
 )
+from control_plane_backend.kpi.counted_days import CountedDays
 from control_plane_backend.kpi.presets.analytics_usage import (
     ANALYTICS_USAGE_PRESET,
     query_analytics_usage,
-    workdays,
 )
 from fred_core.common import TeamId
 
@@ -58,9 +58,12 @@ def _period(days: list[tuple[str, float]], *, scale: int = 1) -> dict[str, Any]:
     }
 
 
-def test_workdays_skip_weekends_in_the_zone() -> None:
+WEEKDAYS = CountedDays(exclude_weekends=True)
+
+
+def test_counted_days_skip_weekends_in_the_zone() -> None:
     # Thu 1 Oct 00:00 UTC -> Thu 8 Oct 00:00 UTC (exclusive): Thu, Fri, Mon-Wed.
-    days = workdays(SINCE, UNTIL, "UTC")
+    days = CountedDays(exclude_weekends=True, tz="UTC").days(SINCE, UNTIL)
     assert [d.isoformat() for d in days] == [
         "2026-10-01",
         "2026-10-02",
@@ -82,6 +85,7 @@ async def test_usage_reads_both_periods() -> None:
         request=cast(Any, None),
         team_ids=(TeamId("a"), TeamId("b")),
         tz="UTC",
+        days=WEEKDAYS,
     )
     assert TEAM_TERMS in store.filters()
     assert sorted(
@@ -108,6 +112,33 @@ async def test_usage_reads_both_periods() -> None:
         ("31+", 0),
     ]
     assert ANALYTICS_USAGE_PRESET.zoned and ANALYTICS_USAGE_PRESET.team_scopable
+    assert ANALYTICS_USAGE_PRESET.day_filterable
+
+
+@pytest.mark.asyncio
+async def test_per_day_denominators_follow_the_counted_days() -> None:
+    current = _period([("2026-10-01", 3), ("2026-10-03", 9), ("2026-10-05", 2)])
+    store = FakeKpiStore(periods=periods(current, _period([])))
+
+    async def read(days: CountedDays) -> Any:
+        return await query_analytics_usage(
+            cast(Any, store),
+            user=USER,
+            since=SINCE,
+            until=UNTIL,
+            request=cast(Any, None),
+            tz="UTC",
+            days=days,
+        )
+
+    every_day = await read(CountedDays())
+    # Saturday counts: (3 + 9 + 2) users over 7 days, one 7-day week.
+    assert every_day.active_users_per_workday.current == pytest.approx(2)
+    assert every_day.days_per_week_median.current == 3
+    weekdays = await read(WEEKDAYS)
+    assert weekdays.active_users_per_workday.current == pytest.approx(1)
+    # Five counted weekdays make one week, so a daily user scores 5, not 3.6.
+    assert weekdays.days_per_week_median.current == 3
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,8 @@ export async function exportAnalytics(args: ExportAnalyticsControlPlaneV1KpiAnal
   if (args.tz) params.set("tz", args.tz);
   if (args.lang) params.set("lang", args.lang);
   if (args.userFilter) params.set("user_filter", args.userFilter);
+  if (args.excludeWeekends !== undefined) params.set("exclude_weekends", String(args.excludeWeekends));
+  if (args.excludeHolidays !== undefined) params.set("exclude_holidays", String(args.excludeHolidays));
 
   // Like the generated client's base query: a token expired during sleep is renewed first.
   await KeyCloakService.ensureFreshToken(30);

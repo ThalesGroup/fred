@@ -17,7 +17,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from dataclasses import replace
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import Request
@@ -26,6 +27,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     SESSIONS,
     TURNS,
@@ -72,6 +74,7 @@ def activity_body(
     bucket: CalendarBucket,
     tz: str,
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> dict[str, Any]:
     histogram = calendar_histogram(since, until, bucket, tz)
     histogram["aggs"] = {
@@ -93,6 +96,7 @@ def activity_body(
                         }
                     },
                     *scope_filter(team_ids, user_ids),
+                    *days.query_filter(since, until),
                 ]
             }
         },
@@ -131,14 +135,23 @@ async def query_analytics_activity_over_time(
     user_ids: Sequence[str] | None = None,
     bucket: Bucket = "auto",
     tz: str = "Europe/Paris",
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsActivityResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
     resolved = resolve_bucket(bucket, since, until)
+    days = replace(days, tz=tz)
     response = await search(
-        store, activity_body(since, until, team_ids, resolved, tz, user_ids)
+        store, activity_body(since, until, team_ids, resolved, tz, user_ids, days)
     )
     buckets = response.get("aggregations", {}).get("by_time", {}).get("buckets", [])
+    if days.active and resolved in ("hour", "day"):
+        # An excluded day is not a zero: its buckets leave the series.
+        buckets = [
+            b
+            for b in buckets
+            if days.counts(date.fromisoformat(str(b["key_as_string"])[:10]))
+        ]
     return AnalyticsActivityResponse(
         bucket=resolved,
         series=list(SERIES),
@@ -156,4 +169,5 @@ ANALYTICS_ACTIVITY_OVER_TIME_PRESET = PresetDef(
     team_scopable=True,
     user_filterable=True,
     bucketable=True,
+    day_filterable=True,
 )

@@ -41,6 +41,40 @@ export interface AnalyticsTabProps {
   mode?: AnalyticsMode;
   /** Serialized user filter (platform page only): passed to the reads that can be narrowed to users. */
   userFilter?: string;
+  /** Which days the indicators count; every activity read leaves the others out. */
+  days: AnalyticsDays;
+}
+
+/** The viewer's choice of counted days. Weekends and French public holidays are left out by default. */
+export interface AnalyticsDays {
+  excludeWeekends: boolean;
+  excludeHolidays: boolean;
+}
+
+export const DEFAULT_ANALYTICS_DAYS: AnalyticsDays = { excludeWeekends: true, excludeHolidays: true };
+const DAYS_STORAGE_KEY = "analytics.days";
+
+/** The stored choice, or the defaults when storage is empty, blocked or holds something else. */
+export function loadAnalyticsDays(): AnalyticsDays {
+  try {
+    const stored = JSON.parse(localStorage.getItem(DAYS_STORAGE_KEY) ?? "null") as Partial<AnalyticsDays> | null;
+    return {
+      excludeWeekends:
+        typeof stored?.excludeWeekends === "boolean" ? stored.excludeWeekends : DEFAULT_ANALYTICS_DAYS.excludeWeekends,
+      excludeHolidays:
+        typeof stored?.excludeHolidays === "boolean" ? stored.excludeHolidays : DEFAULT_ANALYTICS_DAYS.excludeHolidays,
+    };
+  } catch {
+    return DEFAULT_ANALYTICS_DAYS;
+  }
+}
+
+export function saveAnalyticsDays(days: AnalyticsDays): void {
+  try {
+    localStorage.setItem(DAYS_STORAGE_KEY, JSON.stringify(days));
+  } catch {
+    // Private window or blocked storage: the choice lasts for this page only.
+  }
 }
 
 /** Same limits as the control plane's `user_filter` parameter. */
@@ -67,18 +101,20 @@ export function userFilterParam(filter: AnalyticsUserFilterValue | null | undefi
   });
 }
 
-export function kpiArgs(range: TimeRange, teamIds: string[] = [], userFilter?: string) {
+/** Without `days`, a read counts every day: for state counts such as storage or agents existing. */
+export function kpiArgs(range: TimeRange, teamIds: string[] = [], userFilter?: string, days?: AnalyticsDays) {
   return {
     since: range.since,
     until: range.until,
     ...(teamIds.length > 0 && { teamIds }),
     ...(userFilter && { userFilter }),
+    ...(days && { excludeWeekends: days.excludeWeekends, excludeHolidays: days.excludeHolidays }),
   };
 }
 
 /** For reads with calendar buckets or days: they follow the viewer's time zone. */
-export function zonedKpiArgs(range: TimeRange, teamIds: string[] = [], userFilter?: string) {
-  return { ...kpiArgs(range, teamIds, userFilter), tz: viewerTimeZone() };
+export function zonedKpiArgs(range: TimeRange, teamIds: string[] = [], userFilter?: string, days?: AnalyticsDays) {
+  return { ...kpiArgs(range, teamIds, userFilter, days), tz: viewerTimeZone() };
 }
 
 /** Options for reads whose data carries no team: skipped under a team scope, which the tile says. */

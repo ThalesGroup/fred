@@ -33,6 +33,7 @@ from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     AGENT_CREATED_METRIC,
     DOCUMENT_CREATED_METRIC,
@@ -142,6 +143,7 @@ def top_agents_body(
     until: datetime,
     team_ids: Sequence[str],
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> dict[str, Any]:
     return {
         "size": 0,
@@ -151,6 +153,7 @@ def top_agents_body(
                     time_range(since, until),
                     AGENT_TURNS,
                     *scope_filter(team_ids, user_ids),
+                    *days.query_filter(since, until),
                 ]
             }
         },
@@ -224,6 +227,7 @@ def capability_usage_body(
     until: datetime,
     team_ids: Sequence[str],
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> dict[str, Any]:
     """Tool calls per providing capability; a call paused for a human approval is
     timed again when it resumes, so only its final outcome counts."""
@@ -236,6 +240,7 @@ def capability_usage_body(
                     metric(TOOL_LATENCY_METRIC),
                     {"exists": {"field": "dims.capability_id"}},
                     *scope_filter(team_ids, user_ids),
+                    *days.query_filter(since, until),
                 ],
                 "must_not": [{"term": {"dims.status": "awaiting_human"}}],
             }
@@ -322,14 +327,15 @@ async def query_analytics_agents(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsAgentsResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
-    windows = Windows.of(since, until)
+    windows = Windows.of(since, until, days)
     periods, top, usage, equipped, published, web = await asyncio.gather(
         search(store, agents_body(windows, team_ids, user_ids)),
-        search(store, top_agents_body(since, until, team_ids, user_ids)),
-        search(store, capability_usage_body(since, until, team_ids, user_ids)),
+        search(store, top_agents_body(since, until, team_ids, user_ids, days)),
+        search(store, capability_usage_body(since, until, team_ids, user_ids, days)),
         # Configuration, not activity: not narrowed by a user filter.
         equipped_capabilities(request, team_ids),
         agents_created_published(request, windows, team_ids, user_ids),
@@ -373,4 +379,5 @@ ANALYTICS_AGENTS_PRESET = PresetDef(
     summary="Agents used, created and published, top agents by conversations, capability equipment and usage, and corpus activity",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )

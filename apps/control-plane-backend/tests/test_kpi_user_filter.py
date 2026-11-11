@@ -23,19 +23,13 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from _kpi_test_doubles import SINCE, UNTIL, USER, FakeKpiStore
+from _kpi_test_doubles import SINCE, UNTIL, USER, FakeKpiStore, stub_side_reads
 from control_plane_backend.kpi import api
 from control_plane_backend.kpi import scope as kpi_scope
 from control_plane_backend.kpi import user_filter as uf
 from control_plane_backend.kpi.presets import (
     PRESETS,
-    analytics_adoption,
-    analytics_agents,
-    analytics_quality_cost,
-    analytics_teams,
-    web_research_summary,
 )
-from control_plane_backend.kpi.presets.analytics_common import PeriodValue
 from control_plane_backend.kpi.scope import KpiScope, resolve_kpi_scope
 from fastapi import HTTPException, Request
 from fastapi.routing import APIRoute
@@ -343,32 +337,7 @@ CLAUSE = {"terms": {"dims.user_id": ["u1", "u2"]}}
 
 @pytest.fixture
 def no_side_reads(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _people(*args: Any) -> int:
-        return 0
-
-    async def _names(_request: Any, team_ids: list[str]) -> dict[str, str]:
-        return {}
-
-    async def _labels(*args: Any) -> dict[str, str]:
-        return {}
-
-    async def _equipped(*args: Any) -> list[Any]:
-        return []
-
-    async def _published(*args: Any) -> PeriodValue:
-        return PeriodValue(current=0, previous=0)
-
-    async def _enabled(_request: Any) -> bool:
-        return True
-
-    monkeypatch.setattr(analytics_adoption, "people_with_access", _people)
-    monkeypatch.setattr(analytics_teams, "resolve_team_names", _names)
-    monkeypatch.setattr(analytics_quality_cost, "agent_labels", _labels)
-    monkeypatch.setattr(analytics_agents, "agent_labels", _labels)
-    monkeypatch.setattr(analytics_agents, "equipped_capabilities", _equipped)
-    monkeypatch.setattr(analytics_agents, "agents_created_published", _published)
-    monkeypatch.setattr(analytics_agents, "web_research_enabled", _enabled)
-    monkeypatch.setattr(web_research_summary, "web_research_enabled", _enabled)
+    stub_side_reads(monkeypatch)
 
 
 @pytest.mark.asyncio

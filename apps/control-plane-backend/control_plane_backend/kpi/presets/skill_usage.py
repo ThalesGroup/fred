@@ -13,6 +13,7 @@ from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import (
     SkillUsageResponse,
@@ -32,11 +33,18 @@ async def query_skill_usage(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> SkillUsageResponse:
     # The preset router owns authorization for both team and platform scope.
     del user, request
     return await _query_skill_usage(
-        store, since=since, until=until, scope_filters=scope_filter(team_ids, user_ids)
+        store,
+        since=since,
+        until=until,
+        scope_filters=[
+            *scope_filter(team_ids, user_ids),
+            *days.query_filter(since, until),
+        ],
     )
 
 
@@ -125,6 +133,7 @@ SKILL_USAGE_PRESET = PresetDef(
     summary="Successful skill loads by user or model over the selected time range",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )
 
 

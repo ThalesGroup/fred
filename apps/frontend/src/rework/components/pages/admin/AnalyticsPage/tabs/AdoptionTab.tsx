@@ -23,11 +23,11 @@ import InfoTile from "../InfoTile";
 import { allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
-export default function AdoptionTab({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
-  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+export default function AdoptionTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
+  const adoption = useAnalyticsAdoptionQuery(zonedKpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   const data = adoption.data;
   const tile = { isLoading: adoption.isLoading, isError: adoption.isError };
-  const usage = useAnalyticsUsageQuery(zonedKpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const usage = useAnalyticsUsageQuery(zonedKpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
 
   if (allFailed([adoption, usage])) return <AnalyticsServiceDown />;
 

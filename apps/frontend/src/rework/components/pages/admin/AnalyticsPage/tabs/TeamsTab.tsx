@@ -118,10 +118,10 @@ function ConversationScopeBar({ team, personal, share, emptyMessage, isLoading, 
   );
 }
 
-export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFilter }: AnalyticsTabProps) {
+export default function TeamsTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
   const lng = i18n.language;
-  const teams = useAnalyticsTeamsQuery(kpiArgs(timeRange, teamIds, userFilter), KPI_CACHE);
+  const teams = useAnalyticsTeamsQuery(kpiArgs(timeRange, teamIds, userFilter, days), KPI_CACHE);
   // A team admin may only list their own team.
   const catalog = useAnalyticsTeamsCatalogQuery(mode === "team" ? { teamIds } : {}, KPI_CACHE);
   const data = teams.data;

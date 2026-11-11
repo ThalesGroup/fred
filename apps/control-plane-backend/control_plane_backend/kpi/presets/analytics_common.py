@@ -30,6 +30,7 @@ from fred_core.kpi import estimate_green_cost, usd_to_eur
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.common import (
     TOKEN_USAGE_FILTER,
     TURN_COMPLETED_METRIC,
@@ -90,10 +91,19 @@ class Windows:
     since: datetime
     until: datetime
     previous_since: datetime
+    # Local days left out of every search and per-day denominator.
+    days: CountedDays = ALL_DAYS
 
     @classmethod
-    def of(cls, since: datetime, until: datetime) -> "Windows":
-        return cls(since=since, until=until, previous_since=since - (until - since))
+    def of(
+        cls, since: datetime, until: datetime, days: CountedDays = ALL_DAYS
+    ) -> "Windows":
+        return cls(
+            since=since,
+            until=until,
+            previous_since=since - (until - since),
+            days=days,
+        )
 
 
 def distinct(field: str) -> dict[str, Any]:
@@ -130,9 +140,15 @@ def two_period_body(
         ),
     }
     scope = time_range(windows.previous_since, windows.until)
+    bounds = (windows.previous_since, windows.until)
     if only is not None:
         periods = {only: periods[only]}
         scope = periods[only]
+        bounds = (
+            (windows.since, windows.until)
+            if only == "current"
+            else (windows.previous_since, windows.since)
+        )
     return {
         "size": 0,
         "query": {
@@ -141,6 +157,7 @@ def two_period_body(
                     scope,
                     {"bool": {"should": list(metrics), "minimum_should_match": 1}},
                     *scope_filter(team_ids, user_ids),
+                    *windows.days.query_filter(*bounds),
                 ]
             }
         },

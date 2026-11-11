@@ -241,6 +241,10 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 
 import AnalyticsPage from "./AnalyticsPage";
 import AnalyticsView from "./AnalyticsView";
+import { loadAnalyticsDays } from "./analyticsQuery";
+
+// Weekends and French public holidays are left out until the viewer says otherwise.
+const DEFAULT_DAYS_ARGS = { excludeWeekends: true, excludeHolidays: true };
 
 declare global {
   // eslint-disable-next-line no-var
@@ -466,7 +470,7 @@ describe("AnalyticsPage", () => {
     expect(h.skillQuery).not.toHaveBeenCalled();
     openTab("agents");
     expect(h.skillQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String), ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
   });
@@ -546,7 +550,7 @@ describe("AnalyticsPage", () => {
     expect(panel()).toContain("rework.analytics.tiles.newUsers.caption");
     expect(panel()).toContain("64%");
     expect(h.adoptionQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String), tz: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String), tz: expect.any(String), ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
   });
@@ -733,12 +737,12 @@ describe("AnalyticsPage team scope", () => {
     openTab("agents");
     selectTeams("Beta", "Alpha");
     expect(h.skillQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String), teamIds: ["t-a", "t-b"] },
+      { since: expect.any(String), until: expect.any(String), teamIds: ["t-a", "t-b"], ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
     expect(container.textContent).toContain("rework.analytics.scope.membersTotal");
     expect(h.agentsQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String), teamIds: ["t-a", "t-b"] },
+      { since: expect.any(String), until: expect.any(String), teamIds: ["t-a", "t-b"], ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
     expect(panel()).toContain("rework.analytics.scope.notForTeamsShort");
@@ -755,10 +759,69 @@ describe("AnalyticsPage team scope", () => {
     expect(h.exportAnalytics).toHaveBeenCalledWith(expect.objectContaining({ teamIds: ["t-a"] }));
   });
 
+  describe("counted days", () => {
+    const exportButton = () =>
+      [...container.querySelectorAll("button")].find((el) => el.textContent?.includes("rework.analytics.export"))!;
+    const settingsButton = () =>
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.analytics.days.open"]')!;
+    const switchFor = (key: string) => {
+      const label = [...document.querySelectorAll("span")].find((el) => el.textContent === key)!;
+      return document.querySelector<HTMLInputElement>(`input[aria-labelledby="${label.id}"]`)!;
+    };
+
+    afterEach(() => localStorage.clear());
+
+    it("leaves weekends and holidays out of every activity read and the export by default", async () => {
+      render();
+      for (const query of [h.overviewQuery, h.activityQuery, h.adoptionQuery]) {
+        expect(query).toHaveBeenCalledWith(expect.objectContaining(DEFAULT_DAYS_ARGS), expect.anything());
+      }
+      await act(async () => exportButton().click());
+      expect(h.exportAnalytics).toHaveBeenCalledWith(expect.objectContaining(DEFAULT_DAYS_ARGS));
+    });
+
+    it("applies a switch at once and remembers it for the viewer", () => {
+      render();
+      act(() => settingsButton().click());
+      const weekends = switchFor("rework.analytics.days.excludeWeekends");
+      expect(weekends.checked).toBe(true);
+      expect(switchFor("rework.analytics.days.excludeHolidays").checked).toBe(true);
+      vi.clearAllMocks();
+      act(() => weekends.click());
+      expect(h.overviewQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeWeekends: false, excludeHolidays: true }),
+        expect.anything(),
+      );
+      expect(JSON.parse(localStorage.getItem("analytics.days")!)).toEqual({
+        excludeWeekends: false,
+        excludeHolidays: true,
+      });
+
+      act(() => root?.unmount());
+      container.remove();
+      vi.clearAllMocks();
+      render();
+      expect(h.overviewQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeWeekends: false }),
+        expect.anything(),
+      );
+    });
+
+    it("falls back to the defaults when storage is unreadable", () => {
+      localStorage.setItem("analytics.days", "{not json");
+      expect(loadAnalyticsDays()).toEqual({ excludeWeekends: true, excludeHolidays: true });
+      const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      expect(loadAnalyticsDays()).toEqual({ excludeWeekends: true, excludeHolidays: true });
+      getItem.mockRestore();
+    });
+  });
+
   it("sends the viewer's time zone with calendar reads", () => {
     render();
     expect(h.activityQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String), tz: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String), tz: expect.any(String), ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
   });
@@ -812,7 +875,7 @@ describe("AnalyticsPage user filter", () => {
     openTab("agents");
     applyFilter();
     expect(h.agentsQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String), userFilter: FILTER },
+      { since: expect.any(String), until: expect.any(String), userFilter: FILTER, ...DEFAULT_DAYS_ARGS },
       { refetchOnMountOrArgChange: 300 },
     );
     expect(h.skillQuery).toHaveBeenLastCalledWith(expect.objectContaining({ userFilter: FILTER }), expect.anything());
@@ -839,7 +902,7 @@ describe("AnalyticsPage user filter", () => {
     )!;
     act(() => remove.click());
     expect(h.overviewQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String) },
+      { since: expect.any(String), until: expect.any(String), ...DEFAULT_DAYS_ARGS },
       expect.anything(),
     );
     expect(container.textContent).not.toContain("rework.analytics.userFilter.condition");

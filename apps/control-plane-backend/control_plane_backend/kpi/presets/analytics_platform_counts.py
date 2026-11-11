@@ -135,5 +135,6 @@ async def agents_created_published(
         ],
         [str(team_id) for team_id in team_ids],
         created_by=user_ids,
+        excluded=windows.days.excluded_ranges(windows.previous_since, windows.until),
     )
     return PeriodValue(current=float(current), previous=float(previous))

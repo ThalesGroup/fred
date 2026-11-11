@@ -27,6 +27,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     TURNS,
     VISITS,
@@ -100,10 +101,11 @@ async def query_analytics_adoption(
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
     tz: str = "Europe/Paris",
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsAdoptionResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
-    windows = Windows.of(since, until)
+    windows = Windows.of(since, until, days)
     response, people, lifecycle = await asyncio.gather(
         search(store, funnel_body(windows, team_ids, user_ids)),
         people_with_access(request, team_ids, user_ids),
@@ -144,4 +146,5 @@ ANALYTICS_ADOPTION_PRESET = PresetDef(
     team_scopable=True,
     user_filterable=True,
     zoned=True,
+    day_filterable=True,
 )

@@ -26,9 +26,9 @@ import { bucketSpan, formatBucketLabel, formatValue } from "../analyticsFormat";
 import { allFailed, type AnalyticsTabProps, KPI_CACHE, zonedKpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
-export default function UsageTab({ timeRange, teamIds, userFilter }: AnalyticsTabProps) {
+export default function UsageTab({ timeRange, teamIds, userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
-  const args = zonedKpiArgs(timeRange, teamIds, userFilter);
+  const args = zonedKpiArgs(timeRange, teamIds, userFilter, days);
   const usage = useAnalyticsUsageQuery(args, KPI_CACHE);
   const activity = useAnalyticsActivityOverTimeQuery(args, KPI_CACHE);
   const data = usage.data;

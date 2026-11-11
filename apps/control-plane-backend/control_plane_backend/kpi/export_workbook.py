@@ -35,6 +35,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.export_texts import SHARED, Lang, text
 from control_plane_backend.kpi.presets.analytics_activity_over_time import (
     AnalyticsActivityResponse,
@@ -82,6 +83,7 @@ class ExportData:
     # Selected teams (every team for the platform).
     catalog: list[AnalyticsTeamRow]
     user_filter: ResolvedUserFilter | None = None
+    days: CountedDays = ALL_DAYS
 
     def local_day(self, moment: datetime, *, end: bool = False) -> date:
         # The period end is an instant: its last covered day is the one just before it.
@@ -249,6 +251,7 @@ class _Book:
                 self.t("about.comparison"),
                 self.period(data.previous_since, data.since),
             ),
+            (self.t("about.days"), self.days_text(data.days)),
             (self.t("about.exportedAt"), exported),
             (self.t("about.privacy"), self.t("about.privacyText")),
         ]
@@ -274,6 +277,15 @@ class _Book:
                 cell.alignment = Alignment(horizontal="left")
         ws.column_dimensions["A"].width = 26
         ws.column_dimensions["B"].width = 60
+
+    def days_text(self, days: CountedDays) -> str:
+        key = {
+            (False, False): "all",
+            (True, False): "noWeekends",
+            (False, True): "noHolidays",
+            (True, True): "workdays",
+        }[(days.exclude_weekends, days.exclude_holidays)]
+        return self.t(f"about.days.{key}")
 
     def count(self, value: int) -> str:
         return f"{value:,}".replace(",", "\u202f" if self.lang == "fr" else ",")

@@ -135,14 +135,23 @@ describe("TeamUsagePage for a team admin", () => {
       ...["overview", "adoption", "usage", "teams", "agents", "cost"].map((id) => `rework.analytics.tabs.${id}`),
       "rework.teamUsage.personalSectionTitle",
     ]);
-    expect(container.querySelector('button[aria-haspopup="dialog"]')).toBeNull();
+    // The counted days settings is the only dialog the team page offers.
+    expect(
+      container.querySelector('button[aria-haspopup="dialog"]:not([aria-label="rework.analytics.days.open"])'),
+    ).toBeNull();
     expect(container.querySelector('[aria-label="rework.analytics.aboutLabel"]')).not.toBeNull();
   });
 
   it("scopes every read to the team and never reads the platform team catalog", () => {
     asAdmin();
     expect(h.hooks.useAnalyticsOverviewQuery).toHaveBeenCalledWith(
-      { since: expect.any(String), until: expect.any(String), teamIds: ["team-1"] },
+      {
+        since: expect.any(String),
+        until: expect.any(String),
+        teamIds: ["team-1"],
+        excludeWeekends: true,
+        excludeHolidays: true,
+      },
       { refetchOnMountOrArgChange: 300 },
     );
     expect(h.hooks.useAnalyticsTeamsCatalogQuery).toHaveBeenCalledWith({}, expect.objectContaining({ skip: true }));

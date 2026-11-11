@@ -28,6 +28,7 @@ from unittest.mock import AsyncMock
 import pytest
 from control_plane_backend.kpi import api, export
 from control_plane_backend.kpi import scope as kpi_scope
+from control_plane_backend.kpi.counted_days import CountedDays
 from control_plane_backend.kpi.export_texts import EXPORT_ONLY, SHARED, Lang
 from control_plane_backend.kpi.export_workbook import (
     XLSX_MEDIA_TYPE,
@@ -451,6 +452,8 @@ def _call(**overrides: Any) -> dict[str, Any]:
             bucket="auto",
             tz="Europe/Paris",
             lang="fr",
+            exclude_weekends=False,
+            exclude_holidays=False,
             user=USER,
             store=SimpleNamespace(),
         ),
@@ -518,6 +521,27 @@ async def test_route_passes_the_user_filter_to_scope_and_sections(
             assert mock.await_args is not None
             assert mock.await_args.kwargs["user_ids"] == ("u1", "u2")
     assert "platform-filtered" in response.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_route_passes_the_counted_days_to_every_section(
+    presets: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope = AsyncMock(return_value=kpi_scope.KpiScope())
+    monkeypatch.setattr(export, "resolve_kpi_scope", scope)
+
+    response = await _route().endpoint(
+        **_call(exclude_weekends=True, exclude_holidays=True, lang="en")
+    )
+
+    expected = CountedDays(exclude_weekends=True, exclude_holidays=True)
+    for name, mock in presets.items():
+        if name != "team_catalog":
+            assert mock.await_args is not None
+            assert mock.await_args.kwargs["days"] == expected, name
+    about = load_workbook(io.BytesIO(response.body))["About"]
+    rows = {r[0]: r[1] for r in about.iter_rows(min_row=3, values_only=True)}
+    assert rows["Days counted"] == "Weekends and public holidays left out"
 
 
 @pytest.mark.asyncio

@@ -53,12 +53,15 @@ describe("exportAnalytics", () => {
       teamIds: ["t-a", "t-b"],
       tz: "Europe/Paris",
       lang: "en",
+      excludeWeekends: false,
+      excludeHolidays: true,
     });
 
     const [url, init] = fetchMock.mock.calls[0];
     const query = new URL(url, "http://host").searchParams;
     expect(new URL(url, "http://host").pathname).toBe("/control-plane/v1/kpi/analytics/export");
     expect(query.getAll("team_ids")).toEqual(["t-a", "t-b"]);
+    expect([query.get("exclude_weekends"), query.get("exclude_holidays")]).toEqual(["false", "true"]);
     expect([query.get("since"), query.get("tz"), query.get("lang")]).toEqual([
       "2026-09-25T22:00:00.000Z",
       "Europe/Paris",

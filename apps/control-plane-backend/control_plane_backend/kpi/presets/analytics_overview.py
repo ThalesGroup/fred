@@ -25,6 +25,7 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 from pydantic import AwareDatetime, BaseModel
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.analytics_common import (
     SESSIONS,
     TEAM_SPACE,
@@ -94,10 +95,11 @@ async def query_analytics_overview(
     request: Request,
     team_ids: Sequence[TeamId] = (),
     user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> AnalyticsOverviewResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
-    windows = Windows.of(since, until)
+    windows = Windows.of(since, until, days)
     response = await search(store, overview_body(windows, team_ids, user_ids))
 
     active_users = per_period(response, sub_value("turns", "users"))
@@ -129,4 +131,5 @@ ANALYTICS_OVERVIEW_PRESET = PresetDef(
     summary="Overview headline (visitors, active users, active teams, volumes, cost in EUR) for the period and the previous one",
     team_scopable=True,
     user_filterable=True,
+    day_filterable=True,
 )

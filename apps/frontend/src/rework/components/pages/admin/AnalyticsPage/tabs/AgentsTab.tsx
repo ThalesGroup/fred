@@ -28,9 +28,9 @@ import { formatValue, NO_VALUE } from "../analyticsFormat";
 import { allFailed, type AnalyticsTabProps, KPI_CACHE, kpiArgs } from "../analyticsQuery";
 import styles from "../AnalyticsPage.module.css";
 
-export default function AgentsTab({ timeRange, teamIds, mode = "platform", userFilter }: AnalyticsTabProps) {
+export default function AgentsTab({ timeRange, teamIds, mode = "platform", userFilter, days }: AnalyticsTabProps) {
   const { t, i18n } = useTranslation();
-  const args = kpiArgs(timeRange, teamIds, userFilter);
+  const args = kpiArgs(timeRange, teamIds, userFilter, days);
   const agents = useAnalyticsAgentsQuery(args, KPI_CACHE);
   // Agents existing today: configuration, not narrowed by a user filter.
   const agentsTotal = useAgentsTotalQuery(kpiArgs(timeRange, teamIds), KPI_CACHE);

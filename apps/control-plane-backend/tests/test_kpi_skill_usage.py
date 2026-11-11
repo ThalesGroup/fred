@@ -112,6 +112,9 @@ async def test_skill_usage_empty_and_router_authorization(monkeypatch):
         since=None,
         until=None,
         team_ids=[TeamId("team-1")],
+        tz="Europe/Paris",
+        exclude_weekends=False,
+        exclude_holidays=False,
         user=user,
         store=store,
     )

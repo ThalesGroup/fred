@@ -131,6 +131,7 @@ def lifecycle_body(
                     *HUMAN_EVENTS,
                     time_range(window_start, windows.until),
                     *user_filter(user_ids),
+                    *windows.days.query_filter(window_start, windows.until),
                 ]
             }
         },

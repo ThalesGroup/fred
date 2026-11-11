@@ -1991,6 +1991,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2007,6 +2009,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2023,6 +2027,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2039,6 +2045,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2055,6 +2063,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2071,6 +2081,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2087,6 +2099,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2103,6 +2117,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2119,6 +2135,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2135,6 +2153,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2151,6 +2171,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2167,6 +2189,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2183,6 +2207,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2199,6 +2225,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2215,6 +2243,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2231,6 +2261,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2247,6 +2279,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2263,6 +2297,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2279,6 +2315,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2295,6 +2333,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2311,6 +2351,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2327,6 +2369,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2343,6 +2387,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2359,6 +2405,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2375,6 +2423,8 @@ const injectedRtkApi = api.injectEndpoints({
           bucket: queryArg.bucket,
           tz: queryArg.tz,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2403,6 +2453,8 @@ const injectedRtkApi = api.injectEndpoints({
           tz: queryArg.tz,
           lang: queryArg.lang,
           user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -3727,6 +3779,10 @@ export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
   /** status 200 Successful Response */ SkillUsageResponse;
@@ -3743,6 +3799,10 @@ export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3759,6 +3819,10 @@ export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3775,6 +3839,10 @@ export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3791,6 +3859,10 @@ export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiAr
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3807,6 +3879,10 @@ export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3823,6 +3899,10 @@ export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3839,6 +3919,10 @@ export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
   /** status 200 Successful Response */ UserTopAgentsResponse;
@@ -3855,6 +3939,10 @@ export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3871,6 +3959,10 @@ export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
   /** status 200 Successful Response */ UserRecentAgentsResponse;
@@ -3887,6 +3979,10 @@ export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3903,6 +3999,10 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3919,6 +4019,10 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3935,6 +4039,10 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
   /** status 200 Successful Response */ CreationAssistantUsageResponse;
@@ -3951,6 +4059,10 @@ export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
   /** status 200 Successful Response */ TeamStorageResponse;
@@ -3967,6 +4079,10 @@ export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse =
   /** status 200 Successful Response */ WebResearchSummaryResponse;
@@ -3983,6 +4099,10 @@ export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiResponse =
   /** status 200 Successful Response */ AnalyticsTeamsCatalogResponse;
@@ -3999,6 +4119,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiResponse =
   /** status 200 Successful Response */ AnalyticsOverviewResponse;
@@ -4015,6 +4139,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiResponse =
   /** status 200 Successful Response */ AnalyticsActivityResponse;
@@ -4031,6 +4159,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg = 
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiResponse =
   /** status 200 Successful Response */ AnalyticsAdoptionResponse;
@@ -4047,6 +4179,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiResponse =
   /** status 200 Successful Response */ AnalyticsUsageResponse;
@@ -4063,6 +4199,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiResponse =
   /** status 200 Successful Response */ AnalyticsTeamsResponse;
@@ -4079,6 +4219,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiResponse =
   /** status 200 Successful Response */ AnalyticsAgentsResponse;
@@ -4095,6 +4239,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiResponse =
   /** status 200 Successful Response */ AnalyticsQualityCostResponse;
@@ -4111,6 +4259,10 @@ export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiArg = {
   tz?: string;
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiResponse =
   /** status 200 Successful Response */ UserFilterSummary;
@@ -4134,6 +4286,10 @@ export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg = {
   lang?: "fr" | "en";
   /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
   userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
