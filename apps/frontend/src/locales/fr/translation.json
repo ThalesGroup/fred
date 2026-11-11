@@ -2373,6 +2373,8 @@
       "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
+      "partialRows_one": "Résultat partiel : {{count}} première ligne",
+      "partialRows_other": "Résultat partiel : {{count}} premières lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
       "sqlQuery": "Requête :",

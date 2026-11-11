@@ -223,7 +223,7 @@ class TabularQueryRequest(BaseModel):
     max_rows: Optional[int] = Field(
         default=None,
         ge=1,
-        description="Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. For totals or statistics, aggregate in SQL rather than counting this preview.",
+        description="Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview.",
     )
 
     @property
@@ -244,10 +244,13 @@ class TabularQueryRequest(BaseModel):
 
 class RawSQLResponse(BaseModel):
     sql_query: str = Field(description="Validated SQL before the server adds its outer result-row LIMIT.")
-    rows: list[dict] = Field(default_factory=list, description="JSON objects keyed by selected SQL columns; values depend on the query. Bounded preview, without a completeness flag.")
+    rows: list[dict] = Field(default_factory=list, description="JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows.")
+    truncated: bool = Field(default=False, description="True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates.")
+    row_limit: int | None = Field(default=None, description="Result-row limit applied to this query.")
     error: Optional[str] = Field(default=None, description="Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error.")
     message: str | None = Field(
-        default=None, description="Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information."
+        default=None,
+        description="Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated.",
     )
     dataset_uids: list[str] = Field(default_factory=list, description="Document UUIDs of the mounted tables. A workbook UUID may appear more than once.")
     query_aliases: list[str] = Field(default_factory=list, description="Exact aliases of the mounted tables used by the query.")

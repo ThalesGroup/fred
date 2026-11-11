@@ -60,6 +60,9 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   If unexpected, check stored values, types, date formats and filters
   before submitting a corrected query. Do not repeat an unchanged
   successful query. A returned zero count or null aggregate is still a row.
+- `truncated=true` means `rows` holds only the first `row_limit` rows. Never
+  count, sum or conclude from them: compute it with SQL aggregates or a
+  narrower filter.
 - An empty query result does not prove that the whole document lacks the
   information. For Excel only, you can conclude absence without SQL when
   the inspected catalog unambiguously has no relevant column, table or

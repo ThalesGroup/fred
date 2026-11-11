@@ -412,6 +412,8 @@ export type SqlQueryResult = {
   sql_query: string;
   rows: Record<string, unknown>[];
   error?: string | null;
+  /** Knowledge Flow cut the result at its row limit: `rows` is partial. */
+  truncated?: boolean;
 };
 
 export type RagSearchResult = {
