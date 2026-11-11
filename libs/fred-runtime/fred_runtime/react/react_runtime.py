@@ -1297,14 +1297,15 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
+        # Per turn, and `tools` counts declared refs, not bound tools: DEBUG only.
         if delegation_enabled():
-            logger.info(
+            logger.debug(
                 "*** V2 BasicReAct/%s *** activated tools=%d",
                 type(self).__name__,
                 len(self.definition.declared_tool_refs),
             )
         else:
-            logger.info(
+            logger.debug(
                 "*** V2 BasicReAct/%s *** activated"
                 " agent_id=%s profile=%s session_id=%s tools=%s",
                 type(self).__name__,

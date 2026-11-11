@@ -167,7 +167,7 @@ def test_get_shared_stack_initializes_once_and_reuses_matching_tuning(
         }
     )
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         tuning_1, sync_1, async_1 = http_clients.get_shared_stack(cfg)
         tuning_2, sync_2, async_2 = http_clients.get_shared_stack(cfg)
 

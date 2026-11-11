@@ -271,7 +271,7 @@ def get_shared_stack(
 
             atexit.register(shutdown_shared_clients)
 
-            logger.info(
+            logger.debug(
                 "Shared HTTPX stack init provider=%s "
                 "limits(max_conn=%s keepalive=%s keepalive_expiry=%ss) "
                 "timeout(connect=%ss read=%ss write=%ss pool=%ss)",

@@ -272,7 +272,8 @@ class _LoggingSpan(Span):
             self._attrs[f"cost_{key}"] = value
 
     def end(self) -> None:
-        self.logger.info(
+        # Several spans per turn: the turn and tool outcome lines stay INFO.
+        self.logger.debug(
             "trace.span",
             extra={
                 "span": {
