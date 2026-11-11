@@ -1434,10 +1434,9 @@ async def test_home_agents_rank_filter_and_backfill(
         assert (await store.list_home_agents("alice", teams, suggestions))[
             0
         ].agent_instance_id == "c-default"
-        import control_plane_backend.sessions.store as session_store
-
         monkeypatch.setattr(
-            session_store, "_utcnow", lambda: datetime(2000, 1, 1, tzinfo=timezone.utc)
+            "control_plane_backend.sessions.store._utcnow",
+            lambda: datetime(2000, 1, 1, tzinfo=timezone.utc),
         )
         await sessions.update_metadata(
             "empty",

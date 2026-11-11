@@ -86,12 +86,13 @@ async def test_home_agents_authorization_failure_does_not_fall_back() -> None:
 
 
 def test_home_agents_route_limit_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    def empty_dependencies() -> SimpleNamespace:
+        return SimpleNamespace()
+
     app = FastAPI()
     app.include_router(product_api.router)
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(uid="alice")
-    app.dependency_overrides[get_product_service_dependencies] = lambda: (
-        SimpleNamespace()
-    )
+    app.dependency_overrides[get_product_service_dependencies] = empty_dependencies
     list_agents = AsyncMock(return_value=HomeAgentsResponse(agents=[]))
     monkeypatch.setattr(product_api, "list_home_agents", list_agents)
 
