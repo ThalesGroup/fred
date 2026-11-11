@@ -30,7 +30,7 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationResult,
 )
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from temporalio.client import Client
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
@@ -354,7 +354,7 @@ async def test_a_blocked_erasure_is_not_confirmed_and_does_not_hold_back_the_oth
 
 def _registering_worker(
     minimal_config, tmp_path, cp
-) -> tuple[PreparationWorker, object]:
+) -> tuple[PreparationWorker, tuple[httpx.AsyncClient, AsyncEngine]]:
     minimal_config.platform.control_plane_url = "http://cp.invalid/v1"
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'register.db'}")
     client = httpx.AsyncClient(transport=httpx.MockTransport(cp))
