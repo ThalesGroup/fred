@@ -1,6 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -363,7 +364,7 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
         assert all(not ack.objects_empty for ack in acknowledgments)
 
 
-def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor):
+def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor, caplog):
     from knowledge_flow_worker.features.manager_processing import cleanup
 
     failing, later = (
@@ -395,8 +396,13 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
     context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
-    cleanup.sweep(context)
+    with caplog.at_level(logging.WARNING, logger=cleanup.__name__):
+        cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
+    # One retry line carrying the cause, without a traceback repeated at every sweep.
+    [retry] = [record for record in caplog.records if record.name == cleanup.__name__]
+    assert retry.levelno == logging.WARNING and retry.exc_info is None
+    assert failing["generation"] in retry.getMessage() and "store unavailable" in retry.getMessage()
 
 
 @pytest.mark.parametrize("remaining", [0, 1])

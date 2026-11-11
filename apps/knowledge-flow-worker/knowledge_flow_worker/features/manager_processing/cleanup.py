@@ -22,8 +22,9 @@ def sweep(context):
             try:
                 work = Work.model_validate(candidate["work"])
                 clean(lambda: context.get_corpus_store(work.organization_id), client, artifacts, candidate)
-            except Exception:
-                logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s", candidate.get("generation"), exc_info=True)
+            except Exception as error:
+                # One line per sweep and candidate: the cause, not a repeated traceback.
+                logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s cause=%s", candidate.get("generation"), error)
 
 
 def clean(store, client, artifacts, candidate):
