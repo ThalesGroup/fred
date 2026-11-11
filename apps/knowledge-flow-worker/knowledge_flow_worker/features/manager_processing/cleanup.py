@@ -7,6 +7,9 @@ import itertools
 import logging
 from uuid import UUID, uuid5
 
+from fred_core.logs.log_setup import dependency_wait_level
+from fred_knowledge.artifacts.errors import ManagerError
+
 from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
 from knowledge_flow_worker.features.manager_processing.client import ManagerClient
 from knowledge_flow_worker.features.manager_processing.contracts import Cleaned, Work
@@ -24,7 +27,7 @@ def sweep(context):
                 clean(lambda: context.get_corpus_store(work.organization_id), client, artifacts, candidate)
             except Exception as error:
                 # One line per sweep and candidate: the cause, not a repeated traceback.
-                logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s cause=%s", candidate.get("generation"), error)
+                logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s cause=%s", candidate.get("generation"), _cause(error))
 
 
 def clean(store, client, artifacts, candidate):
@@ -93,6 +96,14 @@ async def run():
     while True:
         try:
             await asyncio.to_thread(sweep, context)
-        except Exception:
-            logging.getLogger(__name__).warning("Manager derived cleanup will retry")
+        except Exception as error:
+            # The Control Plane may still be starting: routine at first, a WARNING later.
+            logging.getLogger(__name__).log(dependency_wait_level(), "Manager derived cleanup will retry", extra={"reason": _cause(error)})
         await asyncio.sleep(30)
+
+
+def _cause(error: BaseException) -> str:
+    """Name a failure without its message: responses and credentials stay out of logs."""
+    if isinstance(error, ManagerError):
+        return f"{error.code} {error.reason}" if error.reason else error.code
+    return type(error).__name__

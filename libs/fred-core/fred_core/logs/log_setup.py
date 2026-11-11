@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 
 from fred_pod.common.config_files import flush_startup_logs
 from fred_pod.common.structures import LogOutputFormat
@@ -36,7 +37,21 @@ from fred_core.logs.reported_exceptions import AlreadyReportedExceptionFilter
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AUDIT_LOGGER_NAME", "KPI_LOGGER_NAME", "log_setup"]
+__all__ = ["AUDIT_LOGGER_NAME", "KPI_LOGGER_NAME", "dependency_wait_level", "log_setup"]
+
+# Services started together wait for each other (the Control Plane takes about 40 s
+# to listen): a dependency retry is routine for this long, then worth a WARNING.
+DEPENDENCY_STARTUP_GRACE_SECONDS = 120.0
+_started_at = time.monotonic()
+
+
+def dependency_wait_level() -> int:
+    """Level of a "dependency not reachable yet, will retry" line: INFO during the
+    startup grace period, WARNING after it."""
+    elapsed = time.monotonic() - _started_at
+    return (
+        logging.INFO if elapsed < DEPENDENCY_STARTUP_GRACE_SECONDS else logging.WARNING
+    )
 
 
 class UvicornAccessProbeFilter(logging.Filter):
@@ -137,6 +152,8 @@ def log_setup(
     # Fred formatting/handlers instead of raw stderr lines.
     logging.captureWarnings(True)
 
+    global _started_at
+    _started_at = time.monotonic()
     root = logging.getLogger()
     root.setLevel(log_level.upper())
     for h in list(root.handlers):

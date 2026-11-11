@@ -49,13 +49,17 @@ class ManagerClient:
         try:
             headers = {"Authorization": f"Bearer {self.tokens()}"}
             response = self.session.request(method, self.url + path, json=body.model_dump(mode="json") if body else None, headers=headers, stream=stream, timeout=(5, 30), allow_redirects=False)
-        except Exception:
-            raise ManagerError("worker_failed") from None
+        except Exception as error:
+            raise ManagerError("worker_failed", reason=type(error).__name__) from None
         if response.status_code == 401:
             self.tokens.force_refresh()
         if response.status_code >= 300:
             response.close()
-            raise ManagerError("access_changed" if response.status_code in (401, 403) else "worker_failed", permanent=response.status_code in (403, 404, 409, 422))
+            raise ManagerError(
+                "access_changed" if response.status_code in (401, 403) else "worker_failed",
+                permanent=response.status_code in (403, 404, 409, 422),
+                reason=f"status={response.status_code} {method} {path.split('?', 1)[0]}",
+            )
         return response
 
     @staticmethod

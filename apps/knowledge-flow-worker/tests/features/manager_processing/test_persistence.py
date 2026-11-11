@@ -1327,3 +1327,25 @@ async def test_cancelled_workspace_does_not_ack_when_thread_can_still_write(monk
         assert len(receipts) == 1, "a detached writer must not lose its durable receipt"
     finally:
         release.set()
+
+
+@pytest.mark.parametrize(("failure", "cause"), [("unreachable", "worker_failed ConnectionError"), (503, "worker_failed status=503 GET /document-processing/cleanup")])
+def test_a_manager_call_failure_keeps_a_bounded_cause(failure, cause):
+    import requests
+
+    from knowledge_flow_worker.features.manager_processing import cleanup
+    from knowledge_flow_worker.features.manager_processing.client import ManagerClient
+
+    def request(*_, **__):
+        if failure == "unreachable":
+            raise requests.ConnectionError("connection refused by 10.0.0.1 with secret body")
+        return SimpleNamespace(status_code=failure, close=lambda: None)
+
+    client = ManagerClient.__new__(ManagerClient)
+    client.url = "http://control-plane"
+    client.tokens = lambda: "token"
+    client.session = SimpleNamespace(request=request)
+    with pytest.raises(Exception) as error:
+        client.request("GET", "/document-processing/cleanup?after=x")
+    # The type or status names the cause; the message, body and query never appear.
+    assert cleanup._cause(error.value) == cause
