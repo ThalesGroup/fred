@@ -232,7 +232,7 @@ async def test_user_filter_keeps_matching_people_only(
     monkeypatch.setattr(
         counts,
         "get_application_container",
-        lambda _r: SimpleNamespace(get_rebac_engine=lambda: object()),
+        lambda _r: SimpleNamespace(get_rebac_engine=object),
     )
     monkeypatch.setattr(team_service, "_bulk_team_membership", _bulk)
     teams = (TeamId("a"), TeamId("b"))

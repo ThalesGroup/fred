@@ -117,7 +117,7 @@ async def test_catalog_bounds_concurrent_team_member_reads(
         "get_application_container",
         lambda request: SimpleNamespace(
             get_team_metadata_store=lambda: store,
-            get_rebac_engine=lambda: object(),
+            get_rebac_engine=object,
         ),
     )
     batches: list[list[TeamId]] = []

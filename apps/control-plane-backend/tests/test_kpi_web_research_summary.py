@@ -166,6 +166,6 @@ async def test_enabled_when_usable_by_a_team_or_personal_spaces(
     monkeypatch.setattr(
         module,
         "get_application_container",
-        lambda _r: SimpleNamespace(get_rebac_engine=lambda: object()),
+        lambda _r: SimpleNamespace(get_rebac_engine=object),
     )
     assert await web_research_enabled(cast(Any, None)) is expected

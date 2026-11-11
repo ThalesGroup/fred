@@ -739,7 +739,7 @@ async def test_team_export_cannot_request_platform_technical_data(
 ) -> None:
     scope = AsyncMock(return_value=kpi_scope.KpiScope(team_ids=(TeamId("t-big"),)))
     monkeypatch.setattr(export, "resolve_kpi_scope", scope)
-    container = SimpleNamespace(get_rebac_engine=lambda: _DenyAll())
+    container = SimpleNamespace(get_rebac_engine=_DenyAll)
     monkeypatch.setattr(export, "get_application_container", lambda r: container)
 
     with pytest.raises(AuthorizationError):
@@ -754,8 +754,12 @@ async def test_team_export_cannot_request_platform_technical_data(
 async def test_non_observer_is_forbidden_before_any_read(
     presets: dict[str, AsyncMock], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    container = SimpleNamespace(get_rebac_engine=lambda: _DenyAll())
-    monkeypatch.setattr(kpi_scope, "get_application_container", lambda r: container)
+    container = SimpleNamespace(get_rebac_engine=_DenyAll)
+
+    def get_container(_request: Any) -> SimpleNamespace:
+        return container
+
+    monkeypatch.setattr(kpi_scope, "get_application_container", get_container)
 
     with pytest.raises(AuthorizationError):
         await _route().endpoint(**_call())
