@@ -86,6 +86,8 @@ function SpacePicker({
   const [expanded, setExpanded] = useState<string[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  // Selected folders this space does not hold (another space of the path, or deleted).
+  const [absent, setAbsent] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [selectionError, setSelectionError] = useState(false);
   const mounted = useRef(true);
@@ -159,8 +161,11 @@ function SpacePicker({
           ...prev,
           [parentId]: { ...result, items: offset ? [...(prev[parentId]?.items ?? []), ...result.items] : result.items },
         }));
-      } catch {
-        if (mounted.current) setErrors((prev) => ({ ...prev, [parentId]: true }));
+        return result;
+      } catch (error) {
+        if (!mounted.current) return;
+        setErrors((prev) => ({ ...prev, [parentId]: true }));
+        if ((error as { status?: unknown }).status === 404) setAbsent((prev) => ({ ...prev, [parentId]: true }));
       } finally {
         loadingIds.current.delete(parentId);
         if (mounted.current) setLoading((prev) => ({ ...prev, [parentId]: false }));
@@ -172,6 +177,25 @@ function SpacePicker({
   useEffect(() => {
     if (spaceId) void load(ROOT);
   }, [load, spaceId]);
+
+  // Load every page of each selected folder, once, so a restored selection shows its
+  // real state without expanding anything. Bounded to the selection: a selected
+  // folder's directory lists its children and its ancestors, which places it.
+  const requested = useRef(new Set<string>());
+  useEffect(() => {
+    for (const id of value.folderIds) {
+      if (requested.current.has(id)) continue;
+      requested.current.add(id);
+      void (async () => {
+        let offset = 0;
+        let result: Directory | undefined;
+        do {
+          result = await load(id, offset);
+          offset += result?.items.length ?? 0;
+        } while (result?.items.length && offset < result.total);
+      })();
+    }
+  }, [value.folderIds, load]);
 
   // Selection uses fresh, complete directories, never just the visible page.
   // Offset pagination has no snapshot token: reject detectable concurrent edits.
@@ -256,19 +280,37 @@ function SpacePicker({
     });
   };
 
+  // A selected id is placed once a loaded directory lists it (or, for a folder, once
+  // its own directory is loaded: its ancestors, itself included, hold the selection).
+  // An unplaced id may sit in any unloaded folder.
+  const listed = new Set(
+    Object.values(directories).flatMap((directory) => directory.items.map((entry) => entry.data.id)),
+  );
+  const unplaced = [...value.folderIds, ...value.documentIds].some(
+    (id) => !listed.has(id) && !directories[id] && !absent[id],
+  );
+  const holdsSelection = new Set(
+    value.folderIds.flatMap((id) => directories[id]?.ancestors.map((ancestor) => ancestor.id) ?? []),
+  );
+
   const folderState = (id: string): { checked: boolean; partial: boolean; unknown: boolean } => {
     if (!value.folderIds.length && !value.documentIds.length) {
       return { checked: false, partial: false, unknown: false };
     }
     const own = value.folderIds.includes(id);
     const directory = directories[id];
-    const children = directory?.items ?? [];
+    if (!directory) {
+      // A selected folder is being loaded (or failed to load); another folder is
+      // unknown only if an unplaced selected id could be inside it.
+      const unknown = own || unplaced;
+      return { checked: false, partial: unknown || holdsSelection.has(id), unknown };
+    }
+    const children = directory.items;
     const subfolders = children.filter((entry) => entry.kind === "folder").map((entry) => folderState(entry.data.id));
     // All pages of this directory AND all descendant directories are required
     // before claiming a complete subtree. A restored id alone only covers its
     // direct documents; it says nothing about selected/excluded subfolders.
     const unknown =
-      !directory ||
       loading[id] ||
       errors[id] ||
       new Set(children.map((entry) => entry.data.id)).size !== directory.total ||
@@ -282,7 +324,12 @@ function SpacePicker({
       // Unlocated restored picks can belong to an unloaded descendant. Show an
       // explicitly unknown mixed state instead of claiming either all or none.
       partial:
-        !checked && (unknown || own || hasDocument || subfolders.some((child) => child.checked || child.partial)),
+        !checked &&
+        (unknown ||
+          own ||
+          hasDocument ||
+          holdsSelection.has(id) ||
+          subfolders.some((child) => child.checked || child.partial)),
       unknown,
     };
   };
