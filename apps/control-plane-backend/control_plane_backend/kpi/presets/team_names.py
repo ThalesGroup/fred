@@ -22,6 +22,7 @@ keycloak and sqlalchemy.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 from fastapi import Request
 from fred_core.common import TeamId
@@ -53,3 +54,30 @@ async def resolve_team_names(request: Request, team_ids: list[str]) -> dict[str,
         # both render as raw ids, and only this line tells the two apart.
         logger.warning("Falling back to raw team ids for KPI labels", exc_info=True)
         return {tid: tid for tid in team_ids}
+
+
+def build_agent_labels(
+    id_to_name: dict[str, str],
+    id_to_team_id: dict[str, str],
+    team_names: dict[str, str],
+) -> dict[str, str]:
+    """agent_instance_id -> the label its series is drawn under.
+
+    Instance names are not unique across teams, so a cross-team chart qualifies
+    each one with its owning team. Pass an empty `team_names` to keep bare
+    names, which is what a team-scoped request does.
+    """
+    qualified: dict[str, str] = {}
+    for instance_id, name in id_to_name.items():
+        team_name = team_names.get(id_to_team_id.get(instance_id, ""))
+        qualified[instance_id] = f"{name} - {team_name}" if team_name else name
+
+    # Two instances can still land on one label. The id stays the accumulation
+    # key throughout, so only the display label needs breaking apart.
+    label_counts = Counter(qualified.values())
+    return {
+        instance_id: f"{label} ({instance_id[:8]})"
+        if label_counts[label] > 1
+        else label
+        for instance_id, label in qualified.items()
+    }

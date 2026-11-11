@@ -21,16 +21,17 @@ elsewhere (upload flow, migration import/export); this preset adds no new
 state, it only exposes the existing fields through the same KPI preset
 surface every other dashboard widget uses. Not an OpenSearch query — the
 `store` parameter every preset handler receives is unused here (current-state
-gauge, not an event aggregation), consistent with how `documents_total` and
+gauge, not an event aggregation), consistent with how `analytics_agents` and
 `agents_total` already mix Postgres and OpenSearch sources behind the same
 preset contract.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
@@ -62,7 +63,7 @@ async def query_storage_by_team(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
 ) -> TeamStorageResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, store
@@ -71,18 +72,16 @@ async def query_storage_by_team(
     metadata_store = container.get_team_metadata_store()
     default_quota = container.configuration.app.default_team_max_resources_storage_size
 
-    if team_id is not None:
-        team = await metadata_store.get_by_team_id(team_id)
-        if team is None:
-            raise HTTPException(status_code=404, detail=f"team {team_id!r} not found")
-        rows = [_row(team, default_quota)]
+    if team_ids:
+        # Unknown ids are skipped: a deleted team simply has no row.
+        teams = list((await metadata_store.get_by_team_ids(list(team_ids))).values())
     else:
         teams = await metadata_store.list_all()
-        rows = sorted(
-            (_row(t, default_quota) for t in teams),
-            key=lambda r: r.used_bytes,
-            reverse=True,
-        )
+    rows = sorted(
+        (_row(t, default_quota) for t in teams),
+        key=lambda r: r.used_bytes,
+        reverse=True,
+    )
 
     return TeamStorageResponse(rows=rows, since=since, until=until)
 
@@ -91,10 +90,6 @@ STORAGE_BY_TEAM_PRESET = PresetDef(
     name="storage_by_team",
     response_model=TeamStorageResponse,
     handler=query_storage_by_team,
-    summary="Current resource storage usage vs. quota, per team (ranked platform-wide, or one team when scoped)",
+    summary="Current resource storage usage vs. quota, per team (ranked, platform-wide or for the selected teams)",
     team_scopable=True,
-    # Platform-wide (unscoped) call ranks every team's storage — admin-only
-    # (§2.4/§2.5's "Admin-only section"). Team-scoped calls (Page 2, one row)
-    # stay on the usual can_read_members check, unaffected by this flag.
-    platform_admin_only=True,
 )

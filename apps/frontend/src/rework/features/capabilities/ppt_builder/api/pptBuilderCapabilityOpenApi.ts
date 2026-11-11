@@ -48,13 +48,23 @@ const injectedRtkApi = api.injectEndpoints({
       query: () => ({ url: `/builtin/patterns.pdf` }),
     }),
     getPptBuilderAnalysis: build.query<GetPptBuilderAnalysisApiResponse, GetPptBuilderAnalysisApiArg>({
-      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}` }),
+      query: (queryArg) => ({
+        url: `/analysis/${queryArg.instanceId}`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     getPptBuilderAnalysisPatterns: build.query<
       GetPptBuilderAnalysisPatternsApiResponse,
       GetPptBuilderAnalysisPatternsApiArg
     >({
-      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}/patterns.pdf` }),
+      query: (queryArg) => ({
+        url: `/analysis/${queryArg.instanceId}/patterns.pdf`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
   }),
   overrideExisting: false,
@@ -86,10 +96,12 @@ export type GetPptBuilderBuiltinPatternsApiArg = void;
 export type GetPptBuilderAnalysisApiResponse = /** status 200 Successful Response */ AnalysisStatusResponse;
 export type GetPptBuilderAnalysisApiArg = {
   instanceId: string;
+  teamId?: string | null;
 };
 export type GetPptBuilderAnalysisPatternsApiResponse = /** status 200 Successful Response */ any;
 export type GetPptBuilderAnalysisPatternsApiArg = {
   instanceId: string;
+  teamId?: string | null;
 };
 export type AnalysisSummary = {
   patterns: number;
@@ -252,7 +264,6 @@ export type PlatformTemplateResponse = {
   replacement?: AnalysisStatusResponse | null;
   replacement_filename?: string | null;
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -267,11 +278,9 @@ export type HttpValidationError = {
 export type BodyPutPptBuilderPlatformTemplate = {
   file: string;
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type PlatformAnalysisRequest = {
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type PlatformOverridesRequest = {
   overrides?: PatternOverride[];

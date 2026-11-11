@@ -23,7 +23,7 @@ Every preset is a `PresetDef`:
 PresetDef(
     name="my_preset",          # becomes GET /kpi/presets/my_preset
     response_model=MyResponse, # Pydantic model — drives OpenAPI schema
-    handler=query_my_preset,   # called with (store, user=…, since=…, until=…, request=…[, team_id=…])
+    handler=query_my_preset,   # called with (store, user=…, since=…, until=…, request=…[, team_ids=…])
     summary="One-line description for OpenAPI docs",
     team_scopable=False,       # True only if the underlying KPI event carries dims.team_id
 )
@@ -37,18 +37,22 @@ The handler receives:
   `del user, request` if unused, matching the existing repo convention for
   intentionally-unused params.
 - `since / until: datetime` — the requested time range (UTC, always set)
-- `team_id: TeamId | None` — **only** passed when `team_scopable=True`. `None` means
-  platform-wide; otherwise filter the query on `{"term": {"dims.team_id": str(team_id)}}`.
+- `team_ids: Sequence[TeamId]` — **only** passed when `team_scopable=True`. Empty means
+  platform-wide; otherwise add `common.team_filter(team_ids)` (a `terms` clause on
+  `dims.team_id`) to the query filters.
 
 ## Authorization — one chokepoint, not one per preset
 
-`resolve_kpi_scope(request, user, team_id)` (`scope.py`) is called once by the router
-for every preset, before the handler runs:
-- `team_id=None` → requires `can_observe_platform` on the org.
-- `team_id` given → requires `can_read_members` on that team (same permission the task
-  bus's `scope=team` Activités view already requires).
+`resolve_kpi_scope(request, user, team_ids)` (`scope.py`) is called once by the router
+for every preset, before the handler runs (`team_ids` is the repeated query parameter):
+- no team → requires `can_observe_platform` on the org.
+- teams given → a platform observer (`can_observe_platform`) may read any set of
+  non-personal teams; anyone else needs `can_read_members` on every listed team (same
+  permission the task bus's `scope=team` Activités view requires). A personal space
+  always takes the member check. At most 200 teams (400 above).
 
-The router rejects a `team_id` query param with 400 for any preset whose
+There is no admin-only preset: observers read every preset, including storage and web
+research. The router rejects `team_ids` with 400 for any preset whose
 `team_scopable` is `False` — it never silently ignores it. **Never re-implement this
 check inside a preset handler** — that is exactly the duplicated-authorization pattern
 this module replaced (10 copies of the same three lines, pre-OBSERV-02-v3).
@@ -56,11 +60,9 @@ this module replaced (10 copies of the same three lines, pre-OBSERV-02-v3).
 **Setting `team_scopable=True` is not just a signature change.** Verify the underlying
 KPI event actually carries `dims.team_id` (grep its emission call site) before flipping
 the flag — several presets in this package are deliberately `team_scopable=False`
-because their source event has no team dimension (e.g. the generic HTTP middleware's
-`api.request_latency_ms`, by design — see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36) or because
-team-scoping them needs new store-layer work, not just a query filter (see
-`documents_total.py`'s comment). A preset silently returning unfiltered/wrong data for
-a team_id it doesn't actually honor is worse than not supporting team scoping at all.
+because their source event has no team dimension or because
+team-scoping them needs new store-layer work, not just a query filter. A preset silently returning unfiltered/wrong data for
+team ids it doesn't actually honor is worse than not supporting team scoping at all.
 
 ## Adding a preset
 
@@ -111,58 +113,13 @@ ScalarResponse(
 
 The frontend `KpiStatCard` molecule consumes this shape directly.
 
-**`DistributionResponse`** (`common.py`) — use for a "how many X per Y" histogram:
-
-```python
-DistributionResponse(
-    rows=[LabelValuePoint(label="2-3", value=12), …],  # every bucket, 0 when empty
-    median=3.0,    # None when the range holds no entity at all
-    since=since,
-    until=until,
-)
-```
-
-Build the query with `distribution_utils.distribution_body(metric_name=…,
-group_by=…, since=…, until=…, team_id=…)` and reduce the response with
-`distribution_from_terms_agg(resp, since=…, until=…)`, which turns one bucket
-per entity (`doc_count` = that entity's count) into the shared 11-bucket
-histogram (`1`, `2-3`, `4-5`, … `18-19`, `20+`) plus the median. Pass
-`require_group_by=True` when only some rows carry the grouping dim. Pass
-`cardinality_of="dims.<field>"` when the per-entity number is a distinct-value
-count rather than a row count: the body gains a `cardinality` sub-agg plus an
-`exists` filter on that field, and the reducer picks the sub-agg up per bucket
-automatically. Do not re-implement the filters or the bucketing — see
-`conversations_per_user.py` / `conversation_depth.py` / `agents_per_user.py`,
-all ~10 lines because of this.
-
-The frontend `HistogramChart` molecule consumes `rows` directly, `median` feeds a
-`KpiStatCard` beside it.
-
-**Trailing-window trend** (`trend_utils.py`) — a `TimeSeriesResponse` whose value
-is the same median, recomputed per bucket over a trailing window instead of once
-over the whole range:
-
-```python
-resolved = resolve_trend_interval(since, until)          # utils.py
-body = trend_body(metric_name=…, group_by=…, interval=resolved.interval,
-                  since=since - resolved.lookback, until=until, team_id=…)
-return trend_response(count_slices(resp, bucket=resolved.bucket),
-                      pool=pool_counts, resolved=resolved, since=since, until=until)
-```
-
-The window is always `TREND_WINDOW_BUCKETS` (7) × the resolved interval — 7 daily
-buckets are a 7-day window, 7 hourly buckets a 7-hour one — and
-`resolve_trend_interval` returns both so they cannot drift. It also returns the
-`lookback` the query must reach back by, so the first displayed point already
-pools a full window, and the `window` string (`"7d"`) the response carries in
-`TimeSeriesResponse.window` for the frontend to localize.
-
-Counts pool by sum (`count_slices` + `pool_counts`); distinct values pool by union
-(`distinct_slices` + `pool_distinct`, `trend_body(distinct_of=…)`) — per-bucket
-cardinalities cannot be added across a window, so that variant keeps the
-identities rather than a `cardinality` sub-agg. One OpenSearch pass per request,
-reduced in Python; never a query per bucket. Buckets whose whole window is empty
-are left out of `rows` rather than reported as 0, matching `median=None` above.
-The trailing bucket is trimmed when `until` falls inside it (it usually does —
-`until` is normally "now"): a window one short bucket wide would make the median
-dip systematically at the right edge.
+**Analytics section presets** (`analytics_*.py`) answer one tab section each,
+for the period and the previous one of the same length: build the body with
+`analytics_common.two_period_body(windows, team_ids, metrics, aggs)` (one search,
+a `filters` agg splits the periods) and read it with `per_period` /
+`PeriodValue`. Bodies with several 10 000-term aggs use `search_by_period`
+instead (one search per period, below `search.max_buckets`). Over-time presets
+set `bucketable=True` and use `utils.calendar_histogram` (calendar buckets in
+`tz`, ISO bucket starts); counts and medians of per-entity counts live in
+`distribution_utils.py`. Costs go through `analytics_common.token_aggs` /
+`token_totals` (euros).

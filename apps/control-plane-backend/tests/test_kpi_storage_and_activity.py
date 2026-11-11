@@ -32,7 +32,6 @@ from types import SimpleNamespace
 import pytest
 from control_plane_backend.kpi.presets import storage_by_team
 from control_plane_backend.kpi.presets.storage_by_team import query_storage_by_team
-from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
@@ -60,8 +59,10 @@ class _FakeMetadataStore:
     def __init__(self, teams: list[TeamMetadata]) -> None:
         self._by_id = {str(t.id): t for t in teams}
 
-    async def get_by_team_id(self, team_id: TeamId) -> TeamMetadata | None:
-        return self._by_id.get(str(team_id))
+    async def get_by_team_ids(
+        self, team_ids: list[TeamId]
+    ) -> dict[TeamId, TeamMetadata]:
+        return {t: self._by_id[str(t)] for t in team_ids if str(t) in self._by_id}
 
     async def list_all(self) -> list[TeamMetadata]:
         return list(self._by_id.values())
@@ -82,11 +83,11 @@ _SINCE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _UNTIL = datetime(2026, 1, 31, tzinfo=timezone.utc)
 
 
-def test_storage_by_team_preset_is_platform_admin_only() -> None:
-    """Regression guard for the §2.4 gate: the platform-wide (unscoped) call
-    ranks every team's storage and must require can_manage_platform, not the
-    weaker can_observe_platform every other platform-wide preset accepts."""
-    assert storage_by_team.STORAGE_BY_TEAM_PRESET.platform_admin_only is True
+def test_storage_by_team_preset_is_team_scopable_for_observers() -> None:
+    """Observers see the Technical tab: no admin-only flag is left on the preset."""
+    preset = storage_by_team.STORAGE_BY_TEAM_PRESET
+    assert preset.team_scopable is True
+    assert not hasattr(preset, "platform_admin_only")
 
 
 @pytest.mark.asyncio
@@ -106,7 +107,7 @@ async def test_storage_uses_per_team_override_over_platform_default(
         since=_SINCE,
         until=_UNTIL,
         request=None,
-        team_id=TeamId("t1"),
+        team_ids=(TeamId("t1"),),
     )
 
     assert result.rows == [
@@ -131,7 +132,7 @@ async def test_storage_falls_back_to_platform_default_when_no_override(
         since=_SINCE,
         until=_UNTIL,
         request=None,
-        team_id=TeamId("t1"),
+        team_ids=(TeamId("t1"),),
     )
 
     assert result.rows[0].quota_bytes == 99999
@@ -154,7 +155,7 @@ async def test_storage_unlimited_when_neither_override_nor_default(
         since=_SINCE,
         until=_UNTIL,
         request=None,
-        team_id=TeamId("t1"),
+        team_ids=(TeamId("t1"),),
     )
 
     assert result.rows[0].quota_bytes is None
@@ -181,30 +182,33 @@ async def test_storage_platform_wide_ranks_by_usage_descending(
         since=_SINCE,
         until=_UNTIL,
         request=None,
-        team_id=None,
+        team_ids=(),
     )
 
     assert [row.team_id for row in result.rows] == ["big", "medium", "small"]
 
 
 @pytest.mark.asyncio
-async def test_storage_unknown_team_raises_404(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_storage_selected_teams_skip_unknown_and_rank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teams = [_team("a", used=100, quota=None), _team("b", used=900, quota=None)]
     monkeypatch.setattr(
         storage_by_team,
         "get_application_container",
-        lambda request: _container([], default_quota=None),
+        lambda request: _container(teams, default_quota=None),
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        await query_storage_by_team(
-            store=None,
-            user=_user(),
-            since=_SINCE,
-            until=_UNTIL,
-            request=None,
-            team_id=TeamId("ghost"),
-        )
-    assert exc_info.value.status_code == 404
+    result = await query_storage_by_team(
+        store=None,
+        user=_user(),
+        since=_SINCE,
+        until=_UNTIL,
+        request=None,
+        team_ids=(TeamId("a"), TeamId("ghost"), TeamId("b")),
+    )
+
+    assert [row.team_id for row in result.rows] == ["b", "a"]
 
 
 def _expected_row(team_id: str, label: str, *, used: int, quota: int | None):

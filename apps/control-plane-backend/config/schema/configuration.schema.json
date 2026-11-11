@@ -1076,6 +1076,25 @@
           "title": "Enabled",
           "type": "boolean"
         },
+        "preparation_client_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Verified service client allowed to prepare this runtime's capabilities.",
+          "title": "Preparation Client Id"
+        },
+        "preparation_enabled": {
+          "default": false,
+          "title": "Preparation Enabled",
+          "type": "boolean"
+        },
         "ingress_prefix": {
           "anyOf": [
             {

@@ -17,9 +17,16 @@ from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
-from control_plane_backend.product.dependencies import ProductServiceDependencies
+from control_plane_backend.product import api as product_api
+from control_plane_backend.product.dependencies import (
+    ProductServiceDependencies,
+    get_product_service_dependencies,
+)
 from control_plane_backend.product.home_agents import list_home_agents
-from fred_core import KeycloakUser
+from control_plane_backend.product.schemas import HomeAgentsResponse
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from fred_core import KeycloakUser, get_current_user
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -44,12 +51,14 @@ async def test_home_agents_permissions_and_history_fallback() -> None:
     result = await list_home_agents(
         cast(KeycloakUser, SimpleNamespace(uid="alice")),
         cast(ProductServiceDependencies, deps),
+        limit=2,
     )
     assert result.agents == [] and result.history_unavailable
     args = store.list_home_agents.call_args_list
     assert set(args[0].args[1]) == {"allowed", "personal-alice"}
     assert set(args[0].args[2]) == {"allowed", "denied", "personal-alice"}
-    assert args[1].kwargs == {"include_history": False}
+    assert args[0].kwargs == {"limit": 2}
+    assert args[1].kwargs == {"include_history": False, "limit": 2}
 
 
 @pytest.mark.asyncio
@@ -74,6 +83,25 @@ async def test_home_agents_authorization_failure_does_not_fall_back() -> None:
             cast(ProductServiceDependencies, deps),
         )
     store.list_home_agents.assert_not_called()
+
+
+def test_home_agents_route_limit_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = FastAPI()
+    app.include_router(product_api.router)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(uid="alice")
+    app.dependency_overrides[get_product_service_dependencies] = lambda: (
+        SimpleNamespace()
+    )
+    list_agents = AsyncMock(return_value=HomeAgentsResponse(agents=[]))
+    monkeypatch.setattr(product_api, "list_home_agents", list_agents)
+
+    with TestClient(app) as client:
+        assert client.get("/me/home-agents").status_code == 200
+        assert client.get("/me/home-agents?limit=2").status_code == 200
+        assert client.get("/me/home-agents?limit=0").status_code == 422
+        assert client.get("/me/home-agents?limit=21").status_code == 422
+
+    assert [call.kwargs["limit"] for call in list_agents.call_args_list] == [5, 2]
 
 
 def test_activity_migration_preserves_unknown_dates_and_downgrades() -> None:

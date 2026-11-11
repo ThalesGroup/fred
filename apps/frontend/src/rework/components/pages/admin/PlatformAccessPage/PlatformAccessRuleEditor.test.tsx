@@ -56,6 +56,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
+import conditionStyles from "@shared/molecules/ClaimConditionList/ClaimConditionList.module.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement, root: Root, state: PlatformAccessState;
 const reload = vi.fn();
@@ -343,7 +344,7 @@ it("keeps the add button in the conditions header, before the list", () => {
 
 it("lays each condition out as one row under a single heading line and names every control", () => {
   render();
-  const [labels, row] = host.querySelectorAll<HTMLElement>(`.${styles.conditionRow}`);
+  const [labels, row] = host.querySelectorAll<HTMLElement>(`.${conditionStyles.conditionRow}`);
   expect(labels.getAttribute("aria-hidden")).toBe("true");
   expect(labels.children).toHaveLength(6);
   expect(row.children).toHaveLength(6);

@@ -229,22 +229,12 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
-    path: /control-plane/v1/kpi/presets/active_users_over_time
-    review_status: pending_review
-    required_permission: pending_review
+    path: /control-plane/v1/kpi/analytics/export
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/agent_prompt_length_distribution
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/agents_per_user
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/agents_per_user_trend
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
@@ -254,42 +244,47 @@ operations:
     required_permission: pending_review
   - service: control-plane
     method: GET
-    path: /control-plane/v1/kpi/presets/conversation_depth
-    review_status: pending_review
-    required_permission: pending_review
+    path: /control-plane/v1/kpi/presets/analytics_activity_over_time
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
-    path: /control-plane/v1/kpi/presets/conversation_depth_trend
-    review_status: pending_review
-    required_permission: pending_review
+    path: /control-plane/v1/kpi/presets/analytics_adoption
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
-    path: /control-plane/v1/kpi/presets/conversations_per_user
-    review_status: pending_review
-    required_permission: pending_review
+    path: /control-plane/v1/kpi/presets/analytics_agents
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
-    path: /control-plane/v1/kpi/presets/conversations_per_user_trend
-    review_status: pending_review
-    required_permission: pending_review
+    path: /control-plane/v1/kpi/presets/analytics_overview
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/analytics_quality_cost
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/analytics_teams
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/analytics_teams_catalog
+    review_status: approved
+    required_permission: organization.can_observe_platform (all non-personal teams) or team.can_read_analytics (team_admin) on every selected team
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/presets/analytics_usage
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/creation_assistant_usage
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/documents_total
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/messages_over_time
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/sessions_by_scope
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
@@ -301,42 +296,12 @@ operations:
     method: GET
     path: /control-plane/v1/kpi/presets/skill_usage
     review_status: approved
-    required_permission: organization.can_observe_platform (platform scope) or team.can_read_members (team scope)
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/storage_by_team
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/token_usage_by_agent
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/token_usage_by_model
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/token_usage_over_time
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/top_agents_by_conversations
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/top_teams_by_sessions
-    review_status: pending_review
-    required_permission: pending_review
-  - service: control-plane
-    method: GET
-    path: /control-plane/v1/kpi/presets/unique_users_total
-    review_status: pending_review
-    required_permission: pending_review
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/user_agents_used_total
@@ -390,8 +355,13 @@ operations:
   - service: control-plane
     method: GET
     path: /control-plane/v1/kpi/presets/web_research_summary
-    review_status: pending_review
-    required_permission: pending_review
+    review_status: approved
+    required_permission: organization.can_observe_platform (platform or any non-personal teams) or team.can_read_analytics (team_admin) on every selected team; user_filter needs organization.can_observe_platform
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/kpi/user-filter
+    review_status: approved
+    required_permission: organization.can_observe_platform
   - service: control-plane
     method: POST
     path: /control-plane/v1/lifecycle/run-once
@@ -1330,6 +1300,77 @@ operations:
     review_status: pending_review
     required_permission: can_manage_platform # The 100 newest exposure lines (a banner on air, an announced package) with their start, their end and the acting administrator's uid; packages themselves are read one at a time by the route above. Same catch-all gate as the other announcement admin routes.
 
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/preparations
+    review_status: approved
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry
+    review_status: approved
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}
+    review_status: approved
+    required_permission: authenticated_user
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/retry
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/refresh
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/settings
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/cleanup/claim
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/work
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/attempts/{attempt}
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/assets/{asset_id}
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/result
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_preparation_token
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/capability-preparations/{preparation_id}/cleanup/complete
+    review_status: approved
+    required_permission: configured_runtime_preparation_worker_and_cleanup_claim
+
   - service: knowledge-flow
     method: GET
     path: /healthz
@@ -1920,3 +1961,13 @@ operations:
     path: /knowledge-flow/v1/vector/visual-evidence-artifact
     review_status: pending_review
     required_permission: pending_review
+  - service: knowledge-flow
+    method: GET
+    path: /knowledge-flow/v1/vision/availability
+    review_status: approved
+    required_permission: authenticated_user
+  - service: knowledge-flow
+    method: POST
+    path: /knowledge-flow/v1/internal/vision/describe
+    review_status: approved
+    required_permission: configured_vision_worker_service_agent

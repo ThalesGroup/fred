@@ -33,6 +33,8 @@ export interface ThreadMessage {
   role: "user" | "assistant" | "hitl_request" | "hitl_response";
   text: string;
   isStreaming: boolean;
+  steeringState?: "pending";
+  pendingMessageId?: string;
   traceMessages: ChatMessage[];
   sources: VectorSearchHit[];
   /**

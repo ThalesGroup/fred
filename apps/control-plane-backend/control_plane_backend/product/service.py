@@ -71,6 +71,7 @@ from fred_sdk.contracts.capability.manifest import (
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.names import normalize_agent_name
@@ -93,12 +94,27 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    persist_agent_preparations,
+    stage_assets,
+)
+from control_plane_backend.capability_preparations.readiness import (
+    agent_preparation_readiness,
+    current_agent_snapshot,
+)
+from control_plane_backend.capability_preparations.service import (
+    current_agent_results,
+    current_platform_results,
+    retire_agent_preparations,
+)
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
+from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
@@ -1046,7 +1062,6 @@ async def _model_capabilities_for_source_uncached(
             # which then reads as on/off only.
             model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
             # Absent on an older pod: no profile reads as vision-capable.
-            model_vision_profile_ids=tuple(entry.get("vision_profile_ids") or ()),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1331,12 +1346,10 @@ def _validate_capability_ids(
 @dataclass(frozen=True)
 class CapabilityAssetFile:
     """
-    One uploaded capability asset relayed to the pod at agent save
-    (#1903, RFC AGENT-CAPABILITY §3.4).
+    One bounded uploaded capability asset at agent save.
 
-    Control-plane never opens the bytes: it is a pure multipart relay between
-    the browser and the pod's `validate-config` endpoint, which enforces the
-    declared `AssetSlot` (cardinality, extension) before capability code runs.
+    Validation still relays bytes to the pod. Capabilities declaring preparation
+    also store immutable originals in the control-plane object store.
     """
 
     slot_key: str
@@ -1825,6 +1838,7 @@ async def list_managed_agent_instances(
     records = await _refresh_pending_readiness(
         deps, await store.list_by_team(team_id), authorization=authorization
     )
+    preparation_verdicts = await _preparation_verdicts(deps, records)
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
@@ -1837,7 +1851,15 @@ async def list_managed_agent_instances(
     for record in records:
         catalog = catalog_by_source.get(record.source_runtime_id)
         if catalog is None:
-            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
+            summaries.append(
+                _record_to_summary(
+                    record,
+                    runtime_status="unavailable",
+                    preparation_verdict=preparation_verdicts.get(
+                        record.agent_instance_id
+                    ),
+                )
+            )
             continue
 
         warnings: list[str] = []
@@ -1851,7 +1873,13 @@ async def list_managed_agent_instances(
         for cid in record.tuning.selected_capability_ids or []:
             if cid in catalog and not catalog[cid]:
                 warnings.append(f"MCP server '{cid}' is disabled in the pod catalog.")
-        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
+        summaries.append(
+            _record_to_summary(
+                record,
+                catalog_warnings=warnings,
+                preparation_verdict=preparation_verdicts.get(record.agent_instance_id),
+            )
+        )
 
     return summaries
 
@@ -2584,7 +2612,31 @@ async def recheck_agent_instance_readiness(
     updated = await apply_capability_readiness(
         deps, record, authorization=authorization
     )
-    return _record_to_summary(updated)
+    verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated, preparation_verdict=verdicts.get(updated.agent_instance_id)
+    )
+
+
+async def _preparation_verdicts(
+    deps: ProductServiceDependencies,
+    records: Sequence[AgentInstanceRecord],
+) -> dict[str, ReadinessVerdict]:
+    session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+    if not records or session_factory_provider is None:
+        return {}
+    by_team: dict[str, list[str]] = {}
+    for record in records:
+        by_team.setdefault(str(record.team_id), []).append(record.agent_instance_id)
+    verdicts: dict[str, ReadinessVerdict] = {}
+    async with session_factory_provider()() as session:
+        for team_id, ids in by_team.items():
+            verdicts.update(
+                await agent_preparation_readiness(
+                    session, team_id=team_id, agent_instance_ids=ids
+                )
+            )
+    return verdicts
 
 
 def _make_slice_validator(*, base_url: str, team_id: TeamId):
@@ -2625,6 +2677,7 @@ def _record_to_summary(
     *,
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
+    preparation_verdict: ReadinessVerdict | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Build one frontend-facing summary from a DB-backed agent instance record.
@@ -2645,6 +2698,12 @@ def _record_to_summary(
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
     """
+    reason = record.suspension_reason
+    detail = record.suspension_detail
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        if reason is None or reason == SuspensionReason.CAPABILITY_PENDING.value:
+            reason = SuspensionReason.CAPABILITY_PENDING.value
+            detail = preparation_verdict.detail or detail
     return ManagedAgentInstanceSummary(
         agent_instance_id=record.agent_instance_id,
         team_id=record.team_id,
@@ -2655,12 +2714,8 @@ def _record_to_summary(
         usage_statement=record.tuning.usage_statement,
         recommended_chat_profile_id=record.tuning.recommended_chat_profile_id,
         status="enabled" if record.enabled else "disabled",
-        suspension_reason=(
-            SuspensionReason(record.suspension_reason)
-            if record.suspension_reason is not None
-            else None
-        ),
-        suspension_detail=record.suspension_detail,
+        suspension_reason=(SuspensionReason(reason) if reason is not None else None),
+        suspension_detail=detail,
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
@@ -3160,15 +3215,80 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
+    preparation_enabled = source.preparation_enabled and any(
+        entry.preparation is not None for entry in template.available_capabilities
+    )
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=template.available_capabilities,
+                selected_ids=tuning.selected_capability_ids or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        created = await store.create(
-            record, recommended_capability_id=recommended_capability_id
-        )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    created = await store.create(
+                        record,
+                        session=session,
+                        recommended_capability_id=recommended_capability_id,
+                    )
+                    await persist_agent_preparations(
+                        session,
+                        owner_id=agent_instance_id,
+                        team_id=str(team_id),
+                        runtime_id=source.runtime_id,
+                        available=template.available_capabilities,
+                        selected_ids=tuning.selected_capability_ids or [],
+                        capability_config=tuning.capability_config,
+                        staged=staged,
+                    )
+        else:
+            created = await store.create(
+                record, recommended_capability_id=recommended_capability_id
+            )
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, request.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     created = await settle_capability_save(deps, created, authorization=authorization)
     emit_agent_created_kpi(created, user=user, deps=deps)
-    return _record_to_summary(created)
+    preparation_verdicts = await _preparation_verdicts(deps, [created])
+    return _record_to_summary(
+        created,
+        preparation_verdict=preparation_verdicts.get(created.agent_instance_id),
+    )
 
 
 def emit_agent_created_kpi(
@@ -3265,6 +3385,7 @@ async def update_agent_instance(
 
     tuning_fields_set = request.model_fields_set
     new_tuning: ManagedAgentTuning | None = None
+    preparation_catalog: Sequence[CapabilityCatalogEntry] = ()
     if {
         "tuning_field_values",
         "capability_ids",
@@ -3332,6 +3453,7 @@ async def update_agent_instance(
                     "cannot be changed.",
                     http_status=503,
                 )
+            preparation_catalog = template.available_capabilities
             selected = (
                 request.capability_ids
                 if "capability_ids" in tuning_fields_set
@@ -3401,8 +3523,37 @@ async def update_agent_instance(
             update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
+    preparation_enabled = any(
+        source.runtime_id == record.source_runtime_id and source.preparation_enabled
+        for source in deps.configuration.platform.runtime_catalog_sources
+    ) and any(entry.preparation is not None for entry in preparation_catalog)
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=preparation_catalog,
+                selected_ids=(new_tuning or record.tuning).selected_capability_ids
+                or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        updated = await store.update(
+        update_kwargs: dict[str, Any] = dict(
             agent_instance_id=agent_instance_id,
             team_id=team_id,
             display_name=request.display_name,
@@ -3411,11 +3562,42 @@ async def update_agent_instance(
             tuning=new_tuning,
             updated_by=user.uid,
             recommended_capability_id=recommended_capability_id,
-            # Never write back a recommendation a policy write cleared meanwhile.
             keep_stored_recommendation=not recommendation_set,
         )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    updated = await store.update(**update_kwargs, session=session)
+                    if updated is not None:
+                        await persist_agent_preparations(
+                            session,
+                            owner_id=agent_instance_id,
+                            team_id=str(team_id),
+                            runtime_id=record.source_runtime_id,
+                            available=preparation_catalog,
+                            selected_ids=updated.tuning.selected_capability_ids or [],
+                            capability_config=updated.tuning.capability_config,
+                            staged=staged,
+                        )
+        else:
+            updated = await store.update(**update_kwargs)
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, exc.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     # A save that re-validated every ACTIVE capability slice through the pod
     # resolves any earlier suspension (RFC §3.9); readiness then decides, in
     # one write, whether the agent is available or `capability_pending`.
@@ -3442,7 +3624,13 @@ async def update_agent_instance(
             )
         except Exception:
             logger.exception("[control-plane][kpi] Failed to emit agent.updated")
-    return _record_to_summary(updated) if updated is not None else None
+    if updated is None:
+        return None
+    preparation_verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated,
+        preparation_verdict=preparation_verdicts.get(updated.agent_instance_id),
+    )
 
 
 async def unenroll_agent_instance(
@@ -3467,9 +3655,25 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(
-        agent_instance_id, team_id, actor_uid=user.uid if user else None
-    )
+    if deps.get_sql_session_factory is None:
+        deleted = await store.delete(
+            agent_instance_id, team_id, actor_uid=user.uid if user else None
+        )
+    else:
+        async with deps.get_sql_session_factory()() as session:
+            async with session.begin():
+                deleted = await store.delete(
+                    agent_instance_id,
+                    team_id,
+                    session=session,
+                    actor_uid=user.uid if user else None,
+                )
+                if deleted:
+                    await retire_agent_preparations(
+                        session,
+                        team_id=str(team_id),
+                        agent_instance_ids=[agent_instance_id],
+                    )
     if deleted:
         try:
             deps.get_kpi_writer().count(
@@ -3685,6 +3889,15 @@ async def prepare_execution(
             f"({instance.suspension_reason}): a capability it uses is broken or "
             "unavailable. An editor must fix it in the agent settings before it "
             "can run.",
+            http_status=409,
+        )
+    preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
+        instance.agent_instance_id
+    )
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        raise ExecutionPreparationError(
+            f"Agent instance {agent_instance_id!r} is waiting for capability "
+            f"preparation: {', '.join(preparation_verdict.capability_ids)}.",
             http_status=409,
         )
     # --- #1975 suspension guard — END -------------------------------------
@@ -3945,6 +4158,16 @@ async def get_runtime_binding_for_team(
     # Two concurrent sessions of short sequential reads: at most 2 pooled
     # connections per turn instead of one per read (design.md, D12 notes).
     async def _team_reads(session: AsyncSession | None):
+        if session is not None:
+            # Keep the agent revision stable until its preparation gate and result are read.
+            await session.execute(
+                select(AgentInstanceRow.agent_instance_id)
+                .where(
+                    AgentInstanceRow.agent_instance_id == agent_instance_id,
+                    AgentInstanceRow.team_id == str(team_id),
+                )
+                .with_for_update(read=True)
+            )
         instance = await deps.get_agent_instance_store().get_for_team(
             agent_instance_id, team_id, session=session
         )
@@ -3957,7 +4180,59 @@ async def get_runtime_binding_for_team(
         policy = await deps.get_team_routing_policy_store().get(
             team_id=team_id, session=session
         )
-        return instance, settings, policy
+        results: dict[str, str] = {}
+        platform_settings: dict[str, dict[str, object]] = {}
+        preparation_verdict = None
+        runtime_sources = getattr(
+            getattr(getattr(deps, "configuration", None), "platform", None),
+            "runtime_catalog_sources",
+            (),
+        )
+        platform_preparation_enabled = any(
+            source.runtime_id == instance.source_runtime_id
+            and source.enabled
+            and source.preparation_enabled
+            for source in runtime_sources
+        )
+        session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+        if session_factory_provider is not None:
+            if session is None:
+                async with session_factory_provider()() as results_session:
+                    results = await current_agent_results(
+                        results_session,
+                        agent_instance_id=agent_instance_id,
+                        team_id=str(team_id),
+                    )
+                    if platform_preparation_enabled:
+                        (
+                            platform_results,
+                            platform_settings,
+                        ) = await current_platform_results(
+                            results_session, runtime_id=instance.source_runtime_id
+                        )
+                        results.update(platform_results)
+            else:
+                results, preparation_verdict = await current_agent_snapshot(
+                    session,
+                    agent_instance_id=agent_instance_id,
+                    team_id=str(team_id),
+                )
+                if platform_preparation_enabled:
+                    (
+                        platform_results,
+                        platform_settings,
+                    ) = await current_platform_results(
+                        session, runtime_id=instance.source_runtime_id
+                    )
+                    results.update(platform_results)
+        return (
+            instance,
+            settings,
+            policy,
+            results,
+            platform_settings,
+            preparation_verdict,
+        )
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
@@ -3997,7 +4272,14 @@ async def get_runtime_binding_for_team(
     )
     if team_result is None:
         return None
-    instance, all_team_settings, routing_policy = team_result
+    (
+        instance,
+        all_team_settings,
+        routing_policy,
+        preparation_results,
+        platform_preparation_settings,
+        preparation_verdict,
+    ) = team_result
     (
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
@@ -4029,6 +4311,11 @@ async def get_runtime_binding_for_team(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+        preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
+        preparation_blocked=(
+            preparation_verdict is not None and not preparation_verdict.ready
+        ),
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         team_disabled_model_ids=(

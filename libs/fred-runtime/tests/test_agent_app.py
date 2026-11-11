@@ -2188,17 +2188,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         lambda config: StaticChatModelFactory(model),
     )
     monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
-    from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
-
-    seen_turn_ids: list[str | None] = []
-    original_before_model = TurnSteeringMiddleware.abefore_model
-
-    async def capture_steering_turn(self, state, runtime):
-        seen_turn_ids.append(self._turn_id)
-        return await original_before_model(self, state, runtime)
-
-    monkeypatch.setattr(TurnSteeringMiddleware, "abefore_model", capture_steering_turn)
-
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
     app = create_agent_app(
@@ -2217,7 +2206,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                 "agent_instance_id": "instance-1",
                 "input": "what team am I in?",
                 "session_id": "managed-session",
-                "steering_turn_id": "managed-turn",
                 "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
             },
         )
@@ -2234,7 +2222,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     )
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
-    assert seen_turn_ids == ["managed-turn" if stream else None] * 2
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(
@@ -2840,8 +2827,8 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     `agent.turn_completed` must carry `dims.session_id` (issue #2426).
 
     Why this exists:
-    - control-plane's `conversation_depth` preset groups turns by
-      `dims.session_id`; without the dim the whole preset returns nothing, and
+    - control-plane's `analytics_usage` preset groups turns by
+      `dims.session_id`; without the dim its per-conversation figures are empty, and
       nothing else in this suite asserts the dim reaches the KPI writer
     - the ring-buffer record sources `session_id` from the same `turn_dims`
       dict, and `KpiTurnRecord` requires that key while the surrounding `cast`
@@ -7086,52 +7073,3 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
-
-
-def test_steering_lifespan_sweeps_every_minute_and_joins_task(monkeypatch, tmp_path):
-    import threading
-
-    swept = threading.Event()
-    sleeps: list[float] = []
-    cancelled: list[bool] = []
-
-    class Clock:
-        def __getattr__(self, name):
-            return getattr(asyncio, name)
-
-        async def sleep(self, seconds):
-            if seconds != 60:
-                await asyncio.sleep(seconds)
-                return
-            sleeps.append(seconds)
-            if len(sleeps) == 1:
-                return
-            try:
-                await asyncio.Event().wait()
-            finally:
-                cancelled.append(True)
-
-    async def sweep():
-        if sleeps:
-            swept.set()
-
-    cleanup = AsyncMock(side_effect=sweep)
-    monkeypatch.setattr(agent_app_module, "asyncio", Clock())
-    monkeypatch.setattr(
-        agent_app_module.turn_steering_mailbox, "cleanup_expired", cleanup
-    )
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-    app = create_agent_app(
-        registry={_EchoAgent().agent_id: _EchoAgent()},
-        config=_build_test_config(tmp_path),
-    )
-    with TestClient(app):
-        assert swept.wait(timeout=2)
-        assert cleanup.await_count >= 2
-    assert sleeps == [60, 60]
-    assert cancelled == [True]

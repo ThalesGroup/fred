@@ -400,14 +400,9 @@
         },
         "use_vision": {
           "title": "Use a vision model",
-          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
-          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
-        },
-        "labelling_model": {
-          "title": "Model that reads the slides",
-          "description": "Leave the agent's model to use the one it answers with.",
-          "agentDefault": "The agent's model",
-          "rereadOnSave": "Changing the model reads the template again when you save the agent."
+          "description": "Knowledge Flow's vision model reads each slide to name it and understand its purpose.",
+          "availability_error": "Vision availability could not be checked. Your saved choice is unchanged.",
+          "unavailable": "Knowledge Flow's vision model is unavailable; slides are labelled by rules."
         },
         "variety_check": {
           "title": "Enforce variety",
@@ -444,13 +439,16 @@
         "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
       },
       "analysis": {
-        "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
-        "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
+        "staged": "The template will be read once you save your {{agentsNicknameSingular}}. Your {{agentsNicknameSingular}} becomes available when that is done.",
+        "inProgress": "Reading the template… Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
-        "failed": "The template could not be read. The agent stays unavailable until it is; save the agent to read it again.",
-        "interrupted": "Reading the template was interrupted. The agent stays unavailable until you save it to read the template again.",
-        "outdated": "This template was read with an older version. The agent keeps using it; save the agent to read it again and benefit from the latest improvements.",
-        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done."
+        "failed": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until it is; save your {{agentsNicknameSingular}} to read it again.",
+        "failedRetry": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until the analysis succeeds.",
+        "retry": "Run the analysis again",
+        "retryError": "The analysis could not be started again.",
+        "interrupted": "Reading the template was interrupted. Your {{agentsNicknameSingular}} stays unavailable until you save it to read the template again.",
+        "outdated": "This template was read with an older version. Your {{agentsNicknameSingular}} keeps using it; save your {{agentsNicknameSingular}} to read it again and benefit from the latest improvements.",
+        "refreshing": "Reading the template again… Your {{agentsNicknameSingular}} keeps using the previous reading until it is done."
       },
       "review": {
         "title": "Template slides",
@@ -567,12 +565,12 @@
         }
       },
       "platform": {
-        "intro": "Agents without a template of their own build their presentations on this one.",
+        "intro": "This template is used by {{agentsNicknamePlural}} without a template of their own.",
         "loading": "Loading the platform template…",
         "loadError": "The platform template could not be loaded.",
         "unavailable": "Presentation settings are not available right now: the service that builds presentations cannot be reached.",
         "current": "Platform template: {{name}}",
-        "fredTemplate": "Fred template (built-in)",
+        "builtinTemplate": "{{siteDisplayName}} template (built-in)",
         "upload": "Upload a .pptx template",
         "replace": "Replace the template",
         "uploadAria": "Platform PowerPoint template file",
@@ -580,26 +578,24 @@
         "uploadError": "The template was not accepted.",
         "uploadFailed": "Something went wrong while sending the file. Try again in a moment.",
         "analysing": {
-          "keepCurrent": "Analysing {{name}}… Agents keep the current template until it ends.",
-          "keepFred": "Analysing {{name}}… Agents keep the Fred template until it ends."
+          "keepCurrent": "Analysing {{name}}… The current template stays in use by {{agentsNicknamePlural}} until this finishes.",
+          "keepBuiltin": "Analysing {{name}}… The {{siteDisplayName}} template stays in use by {{agentsNicknamePlural}} until this finishes."
         },
         "failed": {
-          "keepCurrent": "{{name}} could not be read. Agents keep the current template; run the analysis again or upload another file.",
-          "keepFred": "{{name}} could not be read. Agents keep the Fred template; run the analysis again or upload another file."
+          "keepCurrent": "{{name}} could not be read. The current template stays in use by {{agentsNicknamePlural}}; run the analysis again or upload another file.",
+          "keepBuiltin": "{{name}} could not be read. The {{siteDisplayName}} template stays in use by {{agentsNicknamePlural}}; run the analysis again or upload another file."
         },
-        "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
-        "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
-        "defaultModel": "The platform's default AI model",
-        "visionRereads": "A new model is used the next time the template is read.",
+        "refreshing": "Reading the template again… The previous reading stays in use by {{agentsNicknamePlural}} until this finishes.",
+        "outdated": "This template was read by an older version. It remains in use by {{agentsNicknamePlural}}; run the analysis again to get the latest improvements.",
         "rerun": "Run the analysis again",
         "rerunStarted": "Analysis started again.",
         "rerunError": "The analysis could not be started again.",
-        "reset": "Reset to the Fred template",
-        "resetDone": "The Fred template is in use again.",
+        "reset": "Reset to the {{siteDisplayName}} template",
+        "resetDone": "The {{siteDisplayName}} template is in use again.",
         "resetError": "The template could not be reset.",
         "resetConfirm": {
-          "title": "Go back to the Fred template?",
-          "message": "The platform template and all your slide edits, including those of the Fred template, will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "title": "Go back to the {{siteDisplayName}} template?",
+          "message": "The platform template and all your slide edits, including those of the {{siteDisplayName}} template, will be deleted. After the reset, {{agentsNicknamePlural}} without a template of their own will use the {{siteDisplayName}} template.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },
@@ -644,17 +640,12 @@
       "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
-    "pendingMessages": {
-      "label": "Queued",
-      "send": "Send",
-      "actions": "Message actions",
-      "edit": "Edit",
-      "remove": "Remove",
-      "offered": "Sending...",
-      "retry": "Send again",
-      "retryWarning": "Check the conversation first. This may send a duplicate message.",
-      "textOnly": "Only plain text can wait during an active turn",
-      "forceUnavailable": "Could not send into the active turn. The message is still pending."
+    "steering": {
+      "pending": "Waiting for the agent",
+      "retry": "Retry pending message",
+      "textOnly": "Only plain text can be sent during an active turn",
+      "unavailable": "Could not send this message. Please try again.",
+      "waiting": "Your previous message is starting its turn. Please wait."
     },
     "newConversation": "New conversation with this agent",
     "hideNavPanel": "Hide navigation panel",
@@ -1885,92 +1876,24 @@
         "empty": "No skill loads recorded in this period.",
         "truncated": "Showing the 100 most loaded skills. Sorting applies to these results."
       },
-      "activeUsers": {
-        "title": "Active users",
-        "uniqueTotal": "Active users (over full period)",
-        "valueLabel": "Unique users"
-      },
       "agents": {
-        "deltaLabel": "Change over period",
         "promptLengthDistribution": {
-          "empty": "No agent data in this period.",
+          "empty": "No {{agentsNicknameSingularLowercase}} data in this period.",
           "title": "System prompt length distribution",
-          "valueLabel": "Agents"
-        },
-        "topByConversations": {
-          "title": "Most talked-to agents",
-          "valueLabel": "Messages"
-        },
-        "total": "Total agents number"
-      },
-      "conversations": {
-        "title": "Conversations",
-        "total": "Total conversations",
-        "valueLabel": "Sessions"
+          "valueLabel": "{{agentsNicknamePlural}}",
+          "agentCount_one": "on {{value}} {{agentsNicknameSingularLowercase}}",
+          "agentCount_other": "on {{value}} {{agentsNicknamePluralLowercase}}"
+        }
       },
       "conversationsByScope": {
         "empty": "No conversations in this period.",
         "personal": "Personal space",
-        "team": "Team",
-        "title": "Personal vs team conversations"
-      },
-      "documents": {
-        "deltaLabel": "Change over period",
-        "total": "Uploaded documents"
-      },
-      "engagement": {
-        "agentsPerUser": {
-          "empty": "No user activity in this period.",
-          "medianLabel": "Median agents per user",
-          "title": "Agents per user",
-          "valueLabel": "Users"
-        },
-        "agentsPerUserTrend": {
-          "empty": "Not enough activity in this period to plot a trend.",
-          "title": "Agents per user over time",
-          "valueLabel": "Median agents per user ({{window}})"
-        },
-        "conversationDepth": {
-          "empty": "No conversations in this period.",
-          "medianLabel": "Median messages per conversation",
-          "title": "Conversation depth",
-          "valueLabel": "Conversations"
-        },
-        "conversationDepthTrend": {
-          "empty": "Not enough conversations in this period to plot a trend.",
-          "title": "Conversation depth over time",
-          "valueLabel": "Median messages per conversation ({{window}})"
-        },
-        "conversationsPerUser": {
-          "empty": "No user activity in this period.",
-          "medianLabel": "Median conversations per user",
-          "title": "Conversations per user",
-          "valueLabel": "Users"
-        },
-        "conversationsPerUserTrend": {
-          "empty": "Not enough activity in this period to plot a trend.",
-          "title": "Conversations per user over time",
-          "valueLabel": "Median conversations per user ({{window}})"
-        },
-        "description": "Covers only users active over the selected period — anyone who started at least one conversation. Inactive users are not counted.",
-        "trendTitleWithWindow": "{{title}} ({{window}})",
-        "trendWindow": {
-          "day_one": "trailing {{count}} day",
-          "day_other": "trailing {{count}} days",
-          "hour_one": "trailing {{count}} hour",
-          "hour_other": "trailing {{count}} hours",
-          "minute_one": "trailing {{count}} minute",
-          "minute_other": "trailing {{count}} minutes",
-          "second_one": "trailing {{count}} second",
-          "second_other": "trailing {{count}} seconds"
-        }
-      },
-      "error": "Failed to load data.",
-      "loading": "Loading...",
-      "messages": {
-        "title": "Messages",
-        "total": "Total messages",
-        "valueLabel": "Turns"
+        "team": "Team spaces",
+        "teamCount_one": "{{value}} team conversation",
+        "teamCount_other": "{{value}} team conversations",
+        "personalCount_one": "{{value}} personal conversation",
+        "personalCount_other": "{{value}} personal conversations",
+        "shareChange": "{{change}} of team share vs previous period"
       },
       "presets": {
         "last24h": "Last 24 hours",
@@ -1978,49 +1901,13 @@
         "last7d": "Last 7 days",
         "thisMonth": "This month",
         "thisWeek": "This week",
-        "today": "Today"
-      },
-      "refresh": "Refresh",
-      "refreshing": "Refreshing...",
-      "sections": {
-        "administration": "Platform administration",
-        "agents": "Agents",
-        "conversations": "Conversations & Messages",
-        "engagement": "Engagement",
-        "overview": "Usage overview",
-        "resources": "Resources",
-        "tokenUsage": "Token usage",
-        "users": "Users",
-        "webResearch": "Web research"
-      },
-      "administration": {
-        "modelsGovernanceLink": "Manage models",
-        "storageByTeam": {
-          "empty": "No team is near its storage quota.",
-          "title": "Storage by team (% of quota used)",
-          "valueLabel": "% of quota"
-        }
+        "today": "Today",
+        "last3Months": "3 months",
+        "last12Months": "12 months"
       },
       "tokenUsage": {
         "byAgent": {
-          "empty": "No agent usage in this period.",
-          "creationAssistant": "Creation assistant",
-          "title": "Token usage by agent",
-          "valueLabel": "Tokens"
-        },
-        "byModel": {
-          "empty": "No model usage in this period.",
-          "title": "Token usage by model",
-          "valueLabel": "Tokens"
-        },
-        "creationAssistant": {
-          "drafts_one": "{{count, number}} use",
-          "drafts_other": "{{count, number}} uses",
-          "label": "Creation assistant"
-        },
-        "overTime": {
-          "title": "Token usage over time",
-          "valueLabel": "Tokens"
+          "creationAssistant": "Creation assistant"
         }
       },
       "timeRange": {
@@ -2032,18 +1919,10 @@
         "until": "To"
       },
       "title": "Analytics",
-      "topTeams": {
-        "empty": "No team conversations in this period.",
-        "title": "Teams with most conversations",
-        "valueLabel": "Conversations"
-      },
       "webResearch": {
-        "estimatedCost": "Estimated provider cost ($)",
-        "blocked": "Blocked (security)",
-        "saturated": "Rejected (saturation)",
-        "failed": "Other failures",
-        "p95": "p95 latency (ms)",
-        "users": "Distinct users",
+        "estimatedCost": "Estimated provider cost",
+        "refused": "Refused / saturated / failed",
+        "p95": "p95 latency",
         "reasonsTitle": "Rejected or failed requests by reason",
         "noRefusal": "No rejected or failed request in this period.",
         "reasons": {
@@ -2069,12 +1948,521 @@
           "toolCalls": "Searches + page reads. Counted since this version was deployed.",
           "searches": "web_search calls to the search provider: the only ones it bills.",
           "fetches": "fetch_url calls: read the site directly, not billed by the provider (costs LLM tokens).",
-          "estimatedCost": "Successful searches × cost_per_1000_searches ÷ 1,000. Excludes retries, free tiers and LLM tokens.",
-          "blocked": "Refused for security: non-public address, redirects, content or size. Details: restricted activity API.",
-          "saturated": "Refused for lack of capacity (busy): raise max_concurrency or replicas.",
-          "failed": "Provider, proxy or site failure, or timeout.",
-          "p95": "95% of calls finish faster than this.",
-          "users": "Users who made at least one call."
+          "estimatedCost": "Successful searches × cost_per_1000_searches ÷ 1,000, converted to euros at the rate set with the model prices. Excludes retries, free tiers and LLM tokens.",
+          "refused": "Refused for security (non-public address, redirects, content or size) / for lack of capacity (raise max_concurrency or replicas) / provider, proxy or site failure, or timeout.",
+          "p95": "95% of calls finish faster than this."
+        },
+        "pagesPerSearch": "{{value}} pages read per search",
+        "shareOfCalls": "{{value}} of calls"
+      },
+      "about": "Platform usage and adoption over the selected period. Each indicator is compared with the previous period of the same length.",
+      "aboutTeam": "Team usage and adoption over the selected period. Each indicator is compared with the previous period of the same length.",
+      "aboutLabel": "About this page",
+      "export": "Export",
+      "exporting": "Exporting…",
+      "exportError": "The export did not complete. Try again in a moment.",
+      "days": {
+        "open": "Days counted",
+        "title": "Days counted",
+        "intro": "Excluded days count in no indicator, nor in the export.",
+        "excludeWeekends": "Exclude weekends",
+        "excludeHolidays": "Exclude French public holidays"
+      },
+      "howToRead": "How to read it:",
+      "moreInfo": "More information: {{label}}",
+      "tabsLabel": "Topics",
+      "tabs": {
+        "overview": "Overview",
+        "adoption": "Adoption",
+        "usage": "Usage",
+        "teams": "Teams",
+        "agents": "{{agentsNicknamePlural}} and tools",
+        "cost": "Quality and cost",
+        "tech": "Technical"
+      },
+      "scope": {
+        "title": "Scope",
+        "platform": "Whole platform",
+        "teamsSelected_one": "{{count}} team selected",
+        "teamsSelected_other": "{{count}} teams selected",
+        "search": "Search for a team",
+        "searchPlaceholder": "Team name",
+        "clearSearch": "Clear search",
+        "selected": "Selected",
+        "otherTeams": "Other teams",
+        "noTeams": "No team matches.",
+        "members_one": "{{count, number}} member",
+        "members_other": "{{count, number}} members",
+        "membersTotal_one": "{{count, number}} member in total",
+        "membersTotal_other": "{{count, number}} members in total",
+        "more_one": "+ {{count}} other",
+        "more_other": "+ {{count}} others",
+        "apply": "Apply",
+        "cancel": "Cancel",
+        "notForTeams": "Not available for a team selection: this data is not attached to a team.",
+        "notForTeamsShort": "Not available for a team selection"
+      },
+      "userFilter": {
+        "title": "User filter",
+        "active_one": "User filter ({{count}} condition)",
+        "active_other": "User filter ({{count}} conditions)",
+        "intro": "Limits every figure to users whose account attributes match. Only the attributes the platform access rule records are available, with their last known value.",
+        "empty": "No condition: every user is counted.",
+        "noFields": "No attribute recorded: the platform access rule uses none.",
+        "fieldUsers_one": "{{count, number}} user with a value",
+        "fieldUsers_other": "{{count, number}} users with a value",
+        "inRule": "access rule",
+        "counting": "Counting…",
+        "matched_one": "{{count, number}} user matches",
+        "matched_other": "{{count, number}} users match",
+        "noData_one": "{{count, number}} without data",
+        "noData_other": "{{count, number}} without data",
+        "invalid": "This filter cannot be evaluated. Check the conditions, regular expressions in particular.",
+        "tooLong": "This filter is too long. Remove a condition or shorten a value.",
+        "clear": "Remove the filter",
+        "condition": "{{field}} {{operator}} \"{{value}}\"",
+        "and": "and",
+        "or": "or",
+        "notFiltered": "Activity figures only count the matching users. Not filtered: {{agentsNicknamePluralLowercase}} existing, {{agentsNicknamePluralLowercase}} equipped per capability, team member counts, storage and prompt length. \"Without data\": users for whom a filtered attribute is not recorded, for example because they have not signed in since the access rule started using it."
+      },
+      "sections": {
+        "reach": {
+          "eyebrow": "Reach",
+          "title": "Visitors and active users"
+        },
+        "volumes": {
+          "eyebrow": "Volumes",
+          "title": "Messages and conversations",
+          "def": "Messages sent by users to {{agentsNicknamePluralLowercase}}. {{agentsNicknameSingular}} replies are not counted.",
+          "how": "compare it with the number of active users: if messages grow faster than users, usage is intensifying."
+        },
+        "frequency": {
+          "eyebrow": "Frequency",
+          "title": "Usage frequency"
+        },
+        "distribution": {
+          "eyebrow": "Distribution",
+          "title": "Conversations per active user",
+          "def": "Active users grouped by the number of conversations they opened over the period. Each bar counts people, not conversations.",
+          "how": "if a few people account for most conversations, usage rests on a handful of champions and stays fragile. A spread-out distribution shows a habit shared by many."
+        },
+        "collective": {
+          "eyebrow": "Collective use",
+          "title": "Conversations by space",
+          "def": "Conversations split by the space they take place in: the user's personal space, or a team space (with its shared {{agentsNicknamePluralLowercase}} and corpora).",
+          "how": "a growing team share shows the platform is becoming a collective tool, beyond an individual assistant."
+        },
+        "diffusion": {
+          "eyebrow": "Spread",
+          "title": "Activity by team"
+        },
+        "agents": {
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "{{agentsNicknameSingular}} usage"
+        },
+        "skills": {
+          "eyebrow": "Skills",
+          "title": "Skill loads",
+          "def": "A skill is a set of instructions an {{agentsNicknameSingularLowercase}} loads for a specific task. The user can request it (command) or the model can load it on its own.",
+          "how": "a skill mostly loaded by the model is well described and found on its own. A skill never loaded should be reviewed or removed."
+        },
+        "knowledge": {
+          "eyebrow": "Knowledge",
+          "title": "Corpus documents and searches"
+        },
+        "cost": {
+          "eyebrow": "Cost and footprint",
+          "title": "Cost, tokens and footprint",
+          "def": "Tokens sent to the models (messages, history and documents passed along) and tokens generated in replies, for each interval of the period.",
+          "how": "sent tokens weigh most in the cost. If they grow faster than messages, conversations are getting longer or the documents passed along are getting bigger."
+        },
+        "webResearch": {
+          "eyebrow": "Web research",
+          "title": "Web research calls, cost and latency"
+        },
+        "storage": {
+          "eyebrow": "Storage by team",
+          "title": "Storage use and quotas by team",
+          "def": "Space currently used by each team's documents and resources, relative to the quota it was given.",
+          "how": "from 80%, warn the team or raise its quota before imports get blocked."
+        },
+        "agentBuild": {
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "{{agentsNicknameSingular}} creation and prompt length",
+          "def": "Size of each {{agentsNicknameSingularLowercase}}'s instructions (system prompt), in tokens. It is sent to the model with every message.",
+          "how": "very long prompts raise the cost of every exchange and can drown the important instructions."
+        },
+        "capabilities": {
+          "eyebrow": "Capabilities",
+          "title": "Capability usage"
+        },
+        "quality": {
+          "eyebrow": "Perceived quality",
+          "title": "Answer failures and single exchanges"
+        },
+        "activation": {
+          "eyebrow": "Activation and retention",
+          "title": "New user activation and retention"
+        },
+        "members": {
+          "eyebrow": "Spread",
+          "title": "Team member activity",
+          "def": "\"Active members\": team members who sent at least one message in a space of this team over the period. Members are counted as of today (no history of arrivals)."
+        }
+      },
+      "tiles": {
+        "conversations": {
+          "label": "Conversations",
+          "caption": "opened over the period",
+          "def": "Number of conversations started over the period, across all {{agentsNicknamePluralLowercase}} and spaces."
+        },
+        "messages": {
+          "label": "Messages sent",
+          "caption": "by users to {{agentsNicknamePluralLowercase}}",
+          "def": "Messages written by users. {{agentsNicknameSingular}} replies are not counted.",
+          "how": "the detail over time is in the Usage tab."
+        },
+        "conversationsPerUser": {
+          "label": "Conversations per active user",
+          "caption": "median over the period",
+          "def": "Number of conversations an active user opened over the period (median)."
+        },
+        "messagesPerConversation": {
+          "label": "Messages per conversation",
+          "caption": "median over the period",
+          "def": "Number of messages the user sent in a conversation (median).",
+          "how": "1 to 2 messages: one-off questions. Beyond 4: iterative work with the {{agentsNicknameSingularLowercase}} (writing, analysis)."
+        },
+        "creationAssistant": {
+          "label": "Creation assistant",
+          "caption": "drafts generated over the period · {{tokens, number}} tokens",
+          "def": "{{agentsNicknameSingular}} drafts proposed by the creation assistant, and the tokens used to produce them.",
+          "how": "compared with the {{agentsNicknamePluralLowercase}} created, shows whether the assistant really helps to start an {{agentsNicknameSingularLowercase}}."
+        },
+        "activeUsers": {
+          "label": "Active users",
+          "caption": "sent at least one message",
+          "def": "Distinct people who sent at least one message to an {{agentsNicknameSingularLowercase}} over the period. Signing in without writing does not count.",
+          "how": "this is the main adoption measure. Compared with the number of registered users, it gives the adoption rate."
+        },
+        "activeTeams": {
+          "label": "Active teams",
+          "caption_one": "out of {{count}} team",
+          "caption_other": "out of {{count}} teams",
+          "def": "Teams where at least one member sent a message in a team space over the period.",
+          "how": "measures how far use has spread across the organization, whatever the size of the teams. The detail is in the Teams tab."
+        },
+        "cost": {
+          "label": "Estimated cost",
+          "caption": "i.e. {{value}} per active user",
+          "def": "Tokens used multiplied by the configured price of each model.",
+          "how": "the cost per active user says more than the total: it should stay stable as adoption grows."
+        },
+        "activeUsersPerWorkday": {
+          "label": "Active users per day",
+          "caption": "average over counted days",
+          "def": "Average number of people who send at least one message, per counted day. Days left out in the counted days settings do not pull the average down."
+        },
+        "daysPerWeek": {
+          "label": "Days of use per week",
+          "caption": "median of active users",
+          "def": "Number of different days an active user sends at least one message, over a week. Half of the users are above, half below.",
+          "how": "above 2, the platform is part of everyday work. Around 1, use stays occasional."
+        },
+        "dailyUsage": {
+          "label": "Daily use",
+          "caption": "of active users send a message on a given day",
+          "def": "Active users per day (average) divided by the active users of the period.",
+          "how": "above 20%, use is settled. Below 10%, the platform stays an occasional tool."
+        },
+        "agentsUsed": {
+          "label": "{{agentsNicknamePlural}} used",
+          "caption_one": "out of {{count}} existing {{agentsNicknameSingularLowercase}}",
+          "caption_other": "out of {{count}} existing {{agentsNicknamePluralLowercase}}",
+          "def": "{{agentsNicknamePlural}} that received at least one message over the period.",
+          "how": "{{agentsNicknamePluralLowercase}} never used clutter the catalog: archive them or make them better known."
+        },
+        "agentsCreated": {
+          "label": "{{agentsNicknamePlural}} created",
+          "caption": "over the period",
+          "def": "{{agentsNicknamePlural}} created over the period, and among them those shared on the marketplace.",
+          "how": "regular creations show teams are making the platform their own beyond the {{agentsNicknamePluralLowercase}} provided.",
+          "published_one": "of which {{count}} published on the marketplace",
+          "published_other": "of which {{count}} published on the marketplace"
+        },
+        "documentsAdded": {
+          "label": "Documents added",
+          "caption": "to team corpora",
+          "def": "Documents imported into team corpora over the period."
+        },
+        "teamsFeedingCorpus": {
+          "label": "Teams feeding a corpus",
+          "caption": "at least one document added over the period",
+          "def": "Teams that added at least one document to one of their corpora over the period.",
+          "how": "a corpus nobody feeds grows old: answers then rely on outdated documents."
+        },
+        "corpusSearches": {
+          "label": "Corpus searches",
+          "caption": "made by {{agentsNicknamePluralLowercase}} to answer",
+          "def": "Number of times an {{agentsNicknameSingularLowercase}} searched a corpus to build its answer.",
+          "how": "compared with the documents added, shows whether corpora are really used or lie dormant."
+        },
+        "failedAnswers": {
+          "label": "Failed answers",
+          "caption": "did not complete because of an error",
+          "def": "Share of answers interrupted by a technical error (model unavailable, tool failure, timeout).",
+          "how": "above 3%, users feel it."
+        },
+        "singleExchange": {
+          "label": "Single-exchange conversations",
+          "caption": "one message, one answer, then nothing",
+          "def": "Share of conversations where the user sent only one message.",
+          "how": "read with care: it can be a question solved quickly as well as a drop-out. A sudden rise is worth a look at the {{agentsNicknamePluralLowercase}} involved."
+        },
+        "tokens": {
+          "label": "Tokens processed",
+          "caption": "input {{sent}} - output {{generated}}",
+          "def": "Volume of text processed by the models, in tokens (about three quarters of a word). Input: the question, the conversation context and the document extracts sent to the AI model. Output: the text the model generates."
+        },
+        "footprint": {
+          "label": "Estimated footprint (kg CO2e)",
+          "caption": "about {{value}} kWh",
+          "def": "Estimate from the tokens and average impact factors per model.",
+          "how": "an order of magnitude, not a measurement: useful to compare periods and models."
+        },
+        "newUsers": {
+          "label": "New users",
+          "caption": "first visit over the period",
+          "def": "People who came to the platform for the first time during this period.",
+          "how": "shows whether the platform keeps attracting people. A lasting drop while adoption stays low means the spread is levelling off."
+        },
+        "nextMonthReturn": {
+          "label": "Next-month return",
+          "caption": "of last month's newcomers came back",
+          "def": "Among the people who arrived the previous month, share of those who sent at least one message this month (the month the period ends in).",
+          "how": "above 50%, the first experience convinces. Below, look at onboarding and the {{agentsNicknamePluralLowercase}} offered by default."
+        },
+        "firstMessageWithin7Days": {
+          "label": "First message within 7 days",
+          "caption": "of new visitors wrote in their first week",
+          "def": "Among the people who signed in for the first time over the period, share of those who sent a message within 7 days.",
+          "how": "below 50%, newcomers arrive without knowing what to ask: a welcome message or suggestions can help."
+        },
+        "daysToFirstMessage": {
+          "label": "Time to first message",
+          "caption": "median",
+          "def": "Time between the first sign-in and the first message, for half of the new users."
+        }
+      },
+      "charts": {
+        "messagesOverTime": {
+          "valueLabel": "Messages",
+          "title": {
+            "hour": "Messages sent per hour",
+            "day": "Messages sent per day",
+            "week": "Messages sent per week",
+            "month": "Messages sent per month"
+          },
+          "def": "Messages sent by users to {{agentsNicknamePluralLowercase}} in each bucket. The last bucket may still be in progress."
+        },
+        "conversationDistribution": {
+          "users_one": "{{value}} user · {{share}}",
+          "users_other": "{{value}} users · {{share}}",
+          "bucket": {
+            "exact_one": "{{value}} conversation",
+            "exact_other": "{{value}} conversations",
+            "range": "{{low}} to {{high}} conversations",
+            "atLeast": "{{low}} conversations or more"
+          },
+          "title": "Active users by number of conversations",
+          "empty": "No user activity in this period.",
+          "topDecile": {
+            "lead": "The 10% most active people account for",
+            "rest": "of conversations · {{users}} active users over the period"
+          },
+          "def": "Active users grouped by the number of conversations they opened over the period, with each group's share of active users."
+        },
+        "activityOverTime": {
+          "title": {
+            "hour": "Active users and visitors per hour",
+            "day": "Active users and visitors per day",
+            "week": "Active users and visitors per week",
+            "month": "Active users and visitors per month"
+          },
+          "activeUsers": "Active users",
+          "visitors": "Visitors",
+          "valueLabel": "People",
+          "def": "Bars: people who sent at least one message to an {{agentsNicknameSingularLowercase}} in the bucket. Line: people who signed in, even without writing. The last bucket is the current one, still in progress."
+        },
+        "tokensOverTime": {
+          "title": {
+            "hour": "Tokens processed per hour",
+            "day": "Tokens processed per day",
+            "week": "Tokens processed per week",
+            "month": "Tokens processed per month"
+          },
+          "sent": "Input (sent to the model)",
+          "generated": "Output (generated by the model)",
+          "valueLabel": "Tokens",
+          "def": "Input (the question, the conversation context and the document extracts sent to the model) and output (the text it generates), stacked; the total is written above each bar.",
+          "periodTotals": "Over the period: {{sent}} input · {{generated}} output"
+        },
+        "topAgents": {
+          "title": "Most used {{agentsNicknamePluralLowercase}}",
+          "empty": "No {{agentsNicknameSingularLowercase}} used in this period.",
+          "def": "{{agentsNicknamePlural}} ranked by the number of conversations held with them over the period; on a tie, by the number of distinct people who sent them at least one message.",
+          "conversations_one": "{{value}} conversation",
+          "conversations_other": "{{value}} conversations",
+          "users_one": "{{value}} user",
+          "users_other": "{{value}} users"
+        }
+      },
+      "tables": {
+        "teams": {
+          "title": "Activity by team",
+          "def": "\"Active members\": team members who sent at least one message in a space of this team over the period. Members are counted as of today (no history of arrivals).",
+          "how": "a large team with a low share of active members is a good candidate for an onboarding session.",
+          "empty": "No team in this scope.",
+          "team": "Team",
+          "members": "Members",
+          "active": "Active members",
+          "share": "Share of active members",
+          "messages": "Messages sent",
+          "change": "Change in messages",
+          "activeTeams_one": "{{active}} active team(s) out of {{count}}",
+          "activeTeams_other": "{{active}} active teams out of {{count}}"
+        },
+        "capabilities": {
+          "title": "Use per capability",
+          "def": "\"{{agentsNicknamePlural}} equipped\": {{agentsNicknamePluralLowercase}} that have the capability turned on today. \"{{agentsNicknamePlural}} that used it\": {{agentsNicknamePluralLowercase}} whose model called at least one of its tools over the period. Calls recorded before per-capability tracking are not counted.",
+          "how": "a usage rate under 30% points to a capability mostly turned on \"just in case\". It weighs the {{agentsNicknameSingularLowercase}} down without serving: remove it, or describe it better in the {{agentsNicknameSingularLowercase}}'s instructions.",
+          "empty": "No {{agentsNicknameSingularLowercase}} has a capability turned on.",
+          "capability": "Capability",
+          "equipped": "{{agentsNicknamePlural}} equipped",
+          "used": "{{agentsNicknamePlural}} that used it",
+          "usageRate": "Usage rate",
+          "calls": "Calls",
+          "users": "Users reached",
+          "failed": "Failed calls"
+        },
+        "models": {
+          "title": "By model",
+          "empty": "No model used in this period.",
+          "model": "Model",
+          "share": "Share of messages",
+          "tokens": "Tokens processed",
+          "cost": "Estimated cost",
+          "footprint": "Footprint"
+        },
+        "agentCost": {
+          "title": "By {{agentsNicknameSingularLowercase}}",
+          "def": "{{agentsNicknamePlural}} that used the most tokens over the period, with the matching estimated cost.",
+          "how": "an expensive {{agentsNicknameSingularLowercase}} with few users deserves a look: a model too powerful for the task, or documents too large passed with every message.",
+          "empty": "No usage in this period.",
+          "agent": "{{agentsNicknameSingular}}",
+          "tokens": "Tokens processed",
+          "cost": "Estimated cost",
+          "perUser": "Cost per user"
+        },
+        "cohorts": {
+          "title": "Return by arrival month",
+          "def": "Each row follows the people who arrived in the same month. Each cell gives the share of them who sent at least one message 1, 2 or 3 months later.",
+          "how": "a share that levels off (around 40% for example) shows a settled core of users. Comparing rows tells whether onboarding improves.",
+          "empty": "No arrivals over these months.",
+          "month": "Arrived in",
+          "size": "New",
+          "monthPlus": "Month +{{n}}",
+          "notYet": "Not yet"
+        },
+        "storage": {
+          "title": "Storage by team",
+          "empty": "No team in this scope.",
+          "team": "Team",
+          "used": "Space used",
+          "quota": "Quota",
+          "share": "% used"
+        },
+        "skills": {
+          "title": "Skill loads",
+          "empty": "No skill loads recorded in this period.",
+          "skill": "Skill",
+          "loads": "Loads",
+          "split": "Loaded by the user / by the model",
+          "byUser": "By the user",
+          "byModel": "By the model"
+        }
+      },
+      "delta": {
+        "relative": "{{value}} vs previous period",
+        "points": "{{value}} pts",
+        "absolute": "{{value}}"
+      },
+      "buckets": {
+        "week": "W{{week}}"
+      },
+      "units": {
+        "kgCo2e": "{{value}} kg CO2e"
+      },
+      "funnel": {
+        "title": "From access to use",
+        "def": "Each step counts the people of the previous one who went further over the period: allowed to use the platform, came at least once, then sent at least one message.",
+        "how": "the biggest drop tells you what to do. People who do not come: a communication topic. Visitors who do not write: they lack use cases or ready-to-use {{agentsNicknamePluralLowercase}}.",
+        "unknown": "Not available",
+        "steps": {
+          "peopleWithAccess": {
+            "label": "Registered users",
+            "def": "People who have signed in at least once, in the selected scope. When access is restricted: those the access rule still admits or added individually. For a team selection: their current members. People allowed in who never came are not counted.",
+            "how": "this is the base of the adoption rate; it grows with each first sign-in."
+          },
+          "visitors": {
+            "label": "Visitors",
+            "def": "People who signed in at least once over the period, even without sending a message."
+          },
+          "activeUsers": {
+            "label": "Active users",
+            "def": "Distinct people who sent at least one message to an {{agentsNicknameSingularLowercase}} over the period. Signing in without writing does not count."
+          }
+        },
+        "rates": {
+          "visitRate": {
+            "name": "Visit rate",
+            "text": "came at least once",
+            "def": "Share of the registered users who came at least once over the period.",
+            "how": "a low rate is a communication topic: people do not know the tool exists or what it is for."
+          },
+          "visitorToActive": {
+            "name": "Visitors who moved to use",
+            "text": "of visitors sent at least one message",
+            "def": "Share of the people who signed in over the period who also sent at least one message.",
+            "how": "a drop points to visitors who do not know what to do: highlight use cases or ready-to-use {{agentsNicknamePluralLowercase}}."
+          }
+        },
+        "adoption": {
+          "label": "Adoption rate",
+          "text": "of the registered users sent at least one message",
+          "def": "Active users over the period divided by the number of registered users.",
+          "how": "the indicator to follow over time. The rest is the potential still to reach."
+        }
+      },
+      "trend": {
+        "show": "Show trend",
+        "title": {
+          "cumulative": {
+            "hour": "Running total by hour",
+            "day": "Running total by day",
+            "week": "Running total by week",
+            "month": "Running total by month"
+          },
+          "distinct": {
+            "hour": "By hour",
+            "day": "By day",
+            "week": "By week",
+            "month": "By month"
+          }
+        },
+        "distinctNote": {
+          "activeUsers": "Over the period: {{value}} (a person active in several intervals counts once)",
+          "visitors": "Over the period: {{value}} (a person who came in several intervals counts once)"
         }
       }
     },
@@ -2153,7 +2541,7 @@
     },
     "tokenUsageImpact": {
       "costTitle": "Estimated cost",
-      "costValue": "${{cost}} (estimated)",
+      "costValue": "{{cost}} (estimated)",
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
     },
     "teamUsage": {
@@ -2165,35 +2553,14 @@
         "valueLabel": "Tokens"
       },
       "byAgent": {
-        "empty": "No agent usage in this period.",
-        "title": "Usage by agent",
+        "empty": "No {{agentsNicknameSingularLowercase}} usage in this period.",
+        "title": "Usage by {{agentsNicknameSingularLowercase}}",
         "valueLabel": "Tokens"
       },
       "byModel": {
         "empty": "No model usage in this period.",
         "title": "Usage by model",
         "valueLabel": "Tokens"
-      },
-      "team": {
-        "skillsSectionTitle": "Team skill usage",
-        "pageTitle": "Team usage",
-        "sectionTitle": "Team usage",
-        "membersLabel": "Members",
-        "agentsLabel": "Agents",
-        "documentsLabel": "Documents",
-        "quota": {
-          "empty": "No storage quota configured for this team.",
-          "title": "Storage quota (% used)",
-          "valueLabel": "% of quota"
-        },
-        "conversationsOverTime": {
-          "title": "Conversations over time",
-          "valueLabel": "Conversations"
-        },
-        "mostActiveAgents": {
-          "title": "Most active agents",
-          "valueLabel": "Messages"
-        }
       }
     },
     "agentTodoPanel": {
@@ -3538,7 +3905,6 @@
         "members": "Members",
         "settings": "Settings",
         "activity": "Activity",
-        "usage": "Usage",
         "responsibilities": "Responsibilities",
         "routing": "Models",
         "retention": "Retention"

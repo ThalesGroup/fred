@@ -16,7 +16,7 @@ import { IconCategory, IconType, isCustomIcon, MaterialIconType } from "../../ut
 import styles from "./Icon.module.scss";
 
 export interface IconProps {
-  category: IconCategory;
+  category?: IconCategory;
   type: IconType;
   filled?: boolean;
   /** Caller-owned accessible name. Omit for decorative icons. */
@@ -44,7 +44,7 @@ export function MaterialIcon({ type, filled, accessibleName }: MaterialIconProps
   );
 }
 
-export default function Icon({ category, type, filled, accessibleName }: IconProps) {
+export default function Icon({ category = "outlined", type, filled, accessibleName }: IconProps) {
   if (isCustomIcon(type)) {
     const iconPath = `/images/icons/${type}.svg`;
 

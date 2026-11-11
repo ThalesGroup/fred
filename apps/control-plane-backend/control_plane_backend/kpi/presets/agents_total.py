@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -25,20 +27,23 @@ from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import ScalarWithDeltaResponse
+from control_plane_backend.kpi.presets.common import (
+    ScalarWithDeltaResponse,
+    team_filter,
+)
 
 logger = logging.getLogger(__name__)
 
 _AGENT_METRICS = ["agent.created_total", "agent.deleted_total"]
 
 
-async def _count_all_agents(request: Request, team_id: TeamId | None) -> int:
+async def _count_all_agents(request: Request, team_ids: Sequence[TeamId]) -> int:
     store = get_application_container(request).get_agent_instance_store()
-    if team_id is None:
+    if not team_ids:
         return await store.count_all()
-    # No dedicated count_by_team — list_by_team is the existing team-scoped
-    # lookup (reused as-is, per-team agent counts are small).
-    return len(await store.list_by_team(team_id))
+    # list_by_team is the existing team-scoped lookup; per-team counts are small.
+    per_team = await asyncio.gather(*(store.list_by_team(t) for t in team_ids))
+    return sum(len(agents) for agents in per_team)
 
 
 def _count_events(
@@ -46,7 +51,7 @@ def _count_events(
     metric_name: str,
     since: datetime,
     until: datetime,
-    team_id: TeamId | None,
+    team_ids: Sequence[TeamId],
 ) -> int:
     filters: list[dict[str, Any]] = [
         {
@@ -59,8 +64,7 @@ def _count_events(
         },
         {"term": {"metric.name": metric_name}},
     ]
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
+    filters.extend(team_filter(team_ids))
     body: dict[str, Any] = {
         "size": 0,
         "query": {"bool": {"filter": filters}},
@@ -71,7 +75,7 @@ def _count_events(
 
 
 def _has_any_agent_events_before(
-    store: OpenSearchKPIStore, cutoff: datetime, team_id: TeamId | None
+    store: OpenSearchKPIStore, cutoff: datetime, team_ids: Sequence[TeamId]
 ) -> bool:
     """Return True if any agent lifecycle KPI event was recorded before `cutoff`.
 
@@ -83,8 +87,7 @@ def _has_any_agent_events_before(
         {"range": {"@timestamp": {"lt": cutoff.isoformat()}}},
         {"terms": {"metric.name": _AGENT_METRICS}},
     ]
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
+    filters.extend(team_filter(team_ids))
     body: dict[str, Any] = {
         "size": 0,
         "query": {"bool": {"filter": filters}},
@@ -100,7 +103,7 @@ async def query_agents_total(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
 ) -> ScalarWithDeltaResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user
@@ -109,18 +112,18 @@ async def query_agents_total(
 
     # If no agent lifecycle events exist before `until`, instrumentation was not
     # deployed yet for this period — we cannot reconstruct the historical count.
-    if not _has_any_agent_events_before(store, until, team_id):
+    if not _has_any_agent_events_before(store, until, team_ids):
         return ScalarWithDeltaResponse(unavailable=True, since=since, until=until)
 
-    current_count = await _count_all_agents(request, team_id)
+    current_count = await _count_all_agents(request, team_ids)
     created_in_range = _count_events(
-        store, "agent.created_total", since, until, team_id
+        store, "agent.created_total", since, until, team_ids
     )
     deleted_in_range = _count_events(
-        store, "agent.deleted_total", since, until, team_id
+        store, "agent.deleted_total", since, until, team_ids
     )
-    created_after = _count_events(store, "agent.created_total", until, now, team_id)
-    deleted_after = _count_events(store, "agent.deleted_total", until, now, team_id)
+    created_after = _count_events(store, "agent.created_total", until, now, team_ids)
+    deleted_after = _count_events(store, "agent.deleted_total", until, now, team_ids)
 
     count_at_until = current_count - created_after + deleted_after
 

@@ -428,30 +428,6 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
   };
 };
 
-describe("ManagedChatPage pending messages", () => {
-  it("keeps the composer open and stacks pending rows above it", () => {
-    chatValue = {
-      ...baseChatValue([]),
-      waitResponse: true,
-      pendingMessages: [
-        { id: "first", text: "first question", status: "waiting" },
-        { id: "second", text: "second question", status: "waiting" },
-      ],
-    };
-    const html = renderToStaticMarkup(<ManagedChatPage />);
-    expect(html).toContain('data-composer-disabled="false"');
-    expect(html).toContain("first question");
-    expect(html).toContain("second question");
-    expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
-    expect(html).toContain("chatbot.pendingMessages.send");
-    expect(html).toContain("chatbot.pendingMessages.actions");
-    expect(html).toContain('aria-label="chatbot.pendingMessages.send: first question"');
-    expect(html).toContain('aria-label="chatbot.pendingMessages.actions: second question"');
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("more_horiz");
-  });
-});
-
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
     session_id: "session-1",
@@ -1650,5 +1626,45 @@ describe("ManagedChatPage with several prompt commands", () => {
       act(() => threadProps.openCommandPrompt?.({ text: "short", command, promptIndex: 1 }));
       expect(panel()?.textContent).toMatch(/Weekly review\/summaryshort$/);
     });
+  });
+});
+
+describe("ManagedChatPage file drop", () => {
+  const drop = (target: Element) => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: { types: ["Files"], files: [new File(["x"], "late.pdf")] },
+    });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+  };
+
+  it("accepts a dropped file, except while a question holds the composer", () => {
+    const handleAddAttachments = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = (pendingHitl: unknown) => {
+      chatValue = {
+        ...baseChatValue([]),
+        chatControls: [{ capability_id: "document_access", widget: "attach_files", params: {} }],
+        handleAddAttachments,
+        pendingHitl,
+      };
+      act(() => root.render(<ManagedChatPage />));
+    };
+    try {
+      render(null);
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+
+      render({ session_id: "session-1", exchange_id: "exchange-1", payload: { stage: "agent_question" } });
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 });

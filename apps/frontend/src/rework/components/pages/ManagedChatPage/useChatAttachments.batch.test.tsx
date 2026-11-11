@@ -68,7 +68,7 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
 const persistAttachmentBehavior = { rejectNext: false };
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery: () => ({
-    data: [],
+    currentData: [],
     isFetching: false,
   }),
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation: () => [
@@ -84,8 +84,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 
 type Hook = ReturnType<typeof useChatAttachments>;
 
-function TestHost({ onRender }: { onRender: (hook: Hook) => void }) {
-  onRender(useChatAttachments({ teamId: "team-1", sessionId: "session-1" }));
+function TestHost({ onRender, sessionId = "session-1" }: { onRender: (hook: Hook) => void; sessionId?: string }) {
+  onRender(useChatAttachments({ teamId: "team-1", sessionId }));
   return null;
 }
 
@@ -168,5 +168,33 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
 
     expect(statuses()).toEqual([["a.pdf", "error"]]);
     expect(deleteFastArtifactsCalls).toEqual([{ documentUid: "doc-a", sessionId: "session-1" }]);
+  });
+});
+
+describe("useChatAttachments — composer files stay in their conversation", () => {
+  it("hides a file dropped in another conversation and shows it again on return", async () => {
+    pendingIngests.length = 0;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let latest!: Hook;
+    const render = (sessionId: string) =>
+      act(() => root.render(<TestHost sessionId={sessionId} onRender={(hook) => (latest = hook)} />));
+
+    render("session-1");
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "drop", "session-1");
+    });
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "a" });
+    });
+
+    render("session-2");
+    expect(latest.attachments).toEqual([]);
+    // A send in session-2 clears its own ready chips only.
+    act(() => latest.clearReadyAttachments());
+
+    render("session-1");
+    expect(latest.attachments.map((attachment) => attachment.name)).toEqual(["a.pdf"]);
+    act(() => root.unmount());
   });
 });

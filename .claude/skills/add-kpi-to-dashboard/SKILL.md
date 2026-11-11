@@ -1,6 +1,6 @@
 ---
 name: add-kpi-to-dashboard
-description: Add a new KPI metric to the analytics dashboard. Covers: creating a backend preset, regenerating frontend types, wiring the RTK Query hook, and rendering it on AnalyticsPage.
+description: Add a new KPI metric to the analytics dashboard. Covers: creating a backend preset, regenerating frontend types, wiring the RTK Query hook, and rendering it in an AnalyticsPage tab.
 user-invocable: true
 ---
 
@@ -15,7 +15,7 @@ KPIWriter (fred-core)              writes events to OpenSearch
   → OpenAPI schema                 regenerated from source
   → controlPlaneOpenApi.ts         generated from OpenAPI (never hand-edit)
   → controlPlaneApiEnhancements.ts re-exports hooks with short names (hand-edited)
-  → AnalyticsPage.tsx              consumes hooks, renders chart molecules
+  → AnalyticsPage/tabs/*Tab.tsx    consumes hooks, renders chart molecules
 ```
 
 Available response types (`presets/common.py`) and their frontend molecule:
@@ -44,13 +44,13 @@ Before writing anything, confirm:
 See `apps/control-plane-backend/control_plane_backend/kpi/README.md` for the full preset authoring guide: file skeleton, OpenSearch query patterns, `resolve_interval()` usage, and registration in `__init__.py`.
 
 **If your preset filters or groups on a new dimension field** (a `dim.*` key not yet in the index mapping), you must also:
-1. Add the field to `KPI_INDEX_MAPPING` in `libs/fred-core/fred_core/kpi/opensearch_kpi_store.py` (under `dim.properties`).
-2. Add a matching `self._ensure_dim_mapping("<field>", {"type": "keyword"})` call in `ensure_ready()` so already-deployed indexes are patched on startup.
+1. Add the field to `KPI_INDEX_MAPPING` in `libs/fred-core/fred_core/kpi/opensearch_kpi_store.py` (under `dims.properties`); `ensure_ready()` adds it to already-deployed indexes on startup.
+2. Past events stay unsearchable on that field until reindexed: say so in the PR's migration note.
 
 Use these existing presets as models:
-- Time-series: `active_users_over_time.py`
-- Scalar: `unique_users_total.py`
-- Label/value: `sessions_by_scope.py`
+- Time-series: `sessions_over_time.py` (calendar buckets: `analytics_activity_over_time.py`)
+- Period vs previous period: `analytics_overview.py` (helpers in `analytics_common.py`)
+- Label/value: `user_token_usage_by_model.py`
 
 If you wish to test your Opensearch query, the dev Opensearch is running in docker, you can query it with user `admin` and password `Azerty123_`.
 
@@ -91,24 +91,18 @@ Place them under `rework.analytics`. Minimum per chart:
 
 ---
 
-## Step 7 — Render on AnalyticsPage
+## Step 7 — Render in an AnalyticsPage tab
 
-Edit `apps/frontend/src/rework/components/pages/admin/AnalyticsPage/AnalyticsPage.tsx`.
+Each tab is a component in `apps/frontend/src/rework/components/pages/admin/AnalyticsPage/tabs/` receiving `{ timeRange, teamIds }`.
 
 1. Import the hook from `controlPlaneApiEnhancements`.
-2. Call it at the top of the component:
+2. Call it with the shared helpers from `analyticsQuery.ts`:
    ```ts
-   const {
-     data: <name>Data,
-     isLoading: <name>IsLoading,
-     isError: <name>IsError,
-   } = use<ShortName>Query(
-     { since: timeRange.since, until: timeRange.until },
-     { refetchOnMountOrArgChange: true },
-   );
+   const result = use<ShortName>Query(zonedKpiArgs(timeRange, teamIds), KPI_CACHE);
    ```
-   Add `isFetching` for time-series charts (they show a loading overlay).
-3. Place the chart in an existing `<KpiSection>` or add a new one, inside a `<KpiRow>`.
+   Use `kpiArgs` when the preset takes no `tz`, and `platformOnly(teamIds)` instead of `KPI_CACHE` for a preset that is not team-scopable.
+3. Place the chart in an existing `<AnalyticsSection>` or add one; tiles use `InfoTile` / `KpiStatCard`, values go through `analyticsFormat.ts`.
+4. If the value belongs in the Excel export, add it in `control_plane_backend/kpi/export_workbook.py` with its texts in `export_texts.py` (a test checks them against the locales).
 
 ### Chart molecule reference
 
@@ -119,8 +113,6 @@ Edit `apps/frontend/src/rework/components/pages/admin/AnalyticsPage/AnalyticsPag
 | `LabelValueResponse` (2–5)     | `PieChart`            | `rows`, `emptyMessage`, `isLoading`, `isError`                         |
 | `LabelValueResponse` (many)    | `BarChart`            | `rows`, `valueLabel`, `emptyMessage`, `isLoading`, `isError`           |
 | `DistributionResponse`         | `HistogramChart`      | `rows`, `valueLabel`, `emptyMessage`, `isLoading`, `isError` (median → a companion `KpiStatCard` with `unavailable` when null) |
-
-Use `compactFirst` on `<KpiRow>` when the first child is a `KpiStatCard`, `compactLast` when the last is.
 
 ---
 
@@ -142,5 +134,5 @@ Report:
 - **Frontend types** regenerated
 - **Hook alias** added to `controlPlaneApiEnhancements.ts`
 - **i18n** keys added to both locale files
-- **AnalyticsPage** updated with the new chart
-- **Tests**: pass / none needed (preset queries are integration-tested against a live OpenSearch)
+- **AnalyticsPage** tab updated with the new chart
+- **Tests**: an offline preset test capturing the query body and parsing canned aggregations (see `tests/test_kpi_analytics_*.py`), plus the tab's case in `AnalyticsPage.test.tsx`

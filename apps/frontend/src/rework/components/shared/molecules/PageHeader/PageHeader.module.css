@@ -59,9 +59,18 @@
 
 .titleRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
   min-width: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
 }
 
 .title {

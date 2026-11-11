@@ -66,6 +66,9 @@ from control_plane_backend.agent_marketplace.store import (
     RemovedEntry,
     emit_unpublished,
 )
+from control_plane_backend.capability_preparations.service import (
+    retire_agent_preparations,
+)
 from control_plane_backend.common.avatar_image import read_avatar_upload
 from control_plane_backend.marketplace_settings.effective import (
     count_published_agents,
@@ -338,11 +341,22 @@ async def delete_team(
             RebacReference(Resource.TEAM, team_id)
         )
         # The team's agents go with it, and their marketplace entries cascade.
-        deleted = (
-            await deps.get_agent_instance_store().delete_by_team(team_id)
-            if deps.get_agent_instance_store is not None
-            else None
-        )
+        deleted = None
+        if deps.get_agent_instance_store is not None:
+            session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+            if session_factory_provider is None:
+                deleted = await deps.get_agent_instance_store().delete_by_team(team_id)
+            else:
+                async with session_factory_provider()() as session:
+                    async with session.begin():
+                        deleted = await deps.get_agent_instance_store().delete_by_team(
+                            team_id, session=session
+                        )
+                        await retire_agent_preparations(
+                            session,
+                            team_id=str(team_id),
+                            agent_instance_ids=deleted.agent_instance_ids,
+                        )
         await store.delete(team_id)
 
     if deleted is not None:
@@ -2103,6 +2117,21 @@ async def _bulk_team_membership(
         my_relations_map[team_id] = roles_by_user.get(user_id, set())
 
     return admin_ids_map, member_ids_map, my_relations_map, pending_admin_ids_map
+
+
+async def team_member_ids(
+    rebac: RebacEngine, team_ids: list[TeamId]
+) -> dict[TeamId, set[str]]:
+    """Member ids per team, from the same cached relation reads as the team list."""
+    _, member_ids_map, _, _ = await _bulk_team_membership(rebac, team_ids, "")
+    return {team_id: set(member_ids_map.get(team_id, set())) for team_id in team_ids}
+
+
+async def team_member_counts(
+    rebac: RebacEngine, team_ids: list[TeamId]
+) -> dict[TeamId, int]:
+    members = await team_member_ids(rebac, team_ids)
+    return {team_id: len(ids) for team_id, ids in members.items()}
 
 
 async def _enrich_teams_with_membership(

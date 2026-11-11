@@ -1202,6 +1202,100 @@ async def test_platform_bootstrap_store_advisory_lock_is_a_no_op_on_sqlite(
 
 
 @pytest.mark.asyncio
+async def test_home_agents_exclude_blocked_preparations_before_limit(
+    tmp_path: Path,
+) -> None:
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+    from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+    from control_plane_backend.models.capability_preparation_models import (
+        CapabilityPreparationRow,
+    )
+    from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+
+    engine = await _make_sqlite_engine(tmp_path, "home-preparations.sqlite3")
+    try:
+        async with AsyncSession(engine) as session:
+            for agent_id in (
+                "a-recent-pending",
+                "b-recent-ready",
+                "c-suggestion-failed",
+                "d-suggestion-ready",
+                "e-suggestion-nongating",
+            ):
+                session.add(
+                    AgentInstanceRow(
+                        agent_instance_id=agent_id,
+                        team_id="default",
+                        template_id="template",
+                        source_runtime_id="runtime",
+                        source_agent_id="agent",
+                        display_name=agent_id,
+                        enabled=True,
+                        tuning_json="{}",
+                    )
+                )
+            for agent_id, state, gates in (
+                ("a-recent-pending", "pending", True),
+                ("c-suggestion-failed", "failed", True),
+                ("e-suggestion-nongating", "pending", False),
+            ):
+                session.add(
+                    CapabilityPreparationRow(
+                        id=f"prep-{agent_id}",
+                        owner_kind="agent",
+                        owner_id=agent_id,
+                        team_id="default",
+                        runtime_id="runtime",
+                        capability_id="capability",
+                        input_revision="revision",
+                        rules_version="v1",
+                        config_json={},
+                        gates_readiness=gates,
+                        is_current=True,
+                        state=state,
+                        deadline_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+                        workflow_id=f"workflow-{agent_id}",
+                        task_queue="queue",
+                    )
+                )
+            for agent_id, date in (
+                ("a-recent-pending", 2),
+                ("b-recent-ready", 1),
+            ):
+                session.add(
+                    SessionMetadataRow(
+                        session_id=f"session-{agent_id}",
+                        agent_instance_id=agent_id,
+                        team_id="default",
+                        user_id="alice",
+                        last_activity_at=datetime(2026, 1, date, tzinfo=timezone.utc),
+                    )
+                )
+            await session.commit()
+
+        store = AgentInstanceStore(engine)
+        expected = [
+            "b-recent-ready",
+            "d-suggestion-ready",
+            "e-suggestion-nongating",
+        ]
+        assert [
+            row.agent_instance_id
+            for row in await store.list_home_agents(
+                "alice", ["default"], ["default"], limit=3
+            )
+        ] == expected
+        assert [
+            row.agent_instance_id
+            for row in await store.list_home_agents(
+                "alice", ["default"], ["default"], include_history=False, limit=3
+            )
+        ] == expected
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_home_agents_rank_filter_and_backfill(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1272,6 +1366,8 @@ async def test_home_agents_rank_filter_and_backfill(
             "c-default",
             "d-default",
         ]
+        limited = await store.list_home_agents("alice", teams, suggestions, limit=2)
+        assert [r.agent_instance_id for r in limited] == ["z-recent", "a-recent"]
         personal = await store.list_home_agents(
             "alice", ["personal-alice"], suggestions
         )
@@ -1285,6 +1381,13 @@ async def test_home_agents_rank_filter_and_backfill(
             "c-default",
             "d-default",
             "e-default",
+        ]
+        limited_fallback = await store.list_home_agents(
+            "alice", teams, suggestions, include_history=False, limit=2
+        )
+        assert [r.agent_instance_id for r in limited_fallback] == [
+            "a-recent",
+            "b-personal",
         ]
 
         sessions = SessionMetadataStore(engine)

@@ -25,7 +25,7 @@ import styles from "./RecentAgents.module.scss";
 export default function RecentAgents() {
   const { t } = useTranslation();
   const { availableTeams } = useFrontendBootstrap();
-  const { data, isLoading, isError, refetch } = useHomeAgentsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data, isLoading, isError, refetch } = useHomeAgentsQuery({}, { refetchOnMountOrArgChange: true });
   const title = t("rework.home.recentAgents.suggestedTitle");
 
   return (

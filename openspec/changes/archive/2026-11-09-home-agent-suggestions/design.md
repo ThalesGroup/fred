@@ -9,8 +9,8 @@ Keep the launcher independent of analytics and runtime availability. Do not chan
 ## Decisions
 - Add nullable last_activity_at to session_metadata and an owner/instance/activity index. Only an explicit activity PATCH stamps it with server UTC, monotonically. Title/context changes and empty session creation do not. Legacy dates stay NULL. This reuses the existing authenticated owner-scoped signal; it is activity, not proof of successful LLM execution.
 - Resolve allowed team ids with CAN_USE_TEAM_AGENTS using the existing ReBAC lookup, including personal space. Suggestions are limited to default teams plus personal; recent usable instances may come from any permitted team.
-- Aggregate max(last_activity_at) per caller/instance across non-deleted conversations, join enabled non-suspended instances and apply permissions before LIMIT 5. Alphabetical names and ids break ties. Query returns at most five records, no per-team runtime catalog calls or N+1.
-- GET /me/home-agents returns existing instance summaries and history_unavailable. On a SQL history-query error, retry a bounded suggestions-only query and report partial failure. Other failures remain explicit errors.
+- Aggregate max(last_activity_at) per caller/instance across non-deleted conversations, join enabled non-suspended instances and apply permissions before the SQL limit. Exclude current readiness-gating preparations that have not succeeded with an indexed SQL existence check, so blocked agents cannot consume launcher places. Alphabetical names and ids break ties. Query returns at most the requested number of records, no per-team runtime catalog calls or N+1.
+- GET /me/home-agents accepts optional `limit` (default 5, integer 1-20) and returns existing instance summaries and history_unavailable. Invalid limits receive 422. On a SQL history-query error, retry a bounded suggestions-only query with the same limit and report partial failure. Other failures remain explicit errors. The current home page uses the default.
 - Frontend consumes the generated hook. Existing KPI presets remain for analytics consumers.
 
 ## Risks / Trade-offs

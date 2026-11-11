@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 
 
 async def list_home_agents(
-    user: KeycloakUser, deps: ProductServiceDependencies
+    user: KeycloakUser, deps: ProductServiceDependencies, *, limit: int = 5
 ) -> HomeAgentsResponse:
-    """Resolve current agent-use permissions before reading five SQL launchers."""
+    """Resolve current agent-use permissions before reading bounded SQL launchers."""
     teams = deps.team_dependencies
     refs, defaults = await asyncio.gather(
         teams.rebac.lookup_user_resources(user, TeamPermission.CAN_USE_TEAM_AGENTS),
@@ -52,13 +52,15 @@ async def list_home_agents(
     store = deps.get_agent_instance_store()
     history_unavailable = False
     try:
-        records = await store.list_home_agents(user.uid, team_ids, suggestions)
+        records = await store.list_home_agents(
+            user.uid, team_ids, suggestions, limit=limit
+        )
     except SQLAlchemyError:
         logger.exception(
             "Home history lookup failed; falling back to agent suggestions"
         )
         records = await store.list_home_agents(
-            user.uid, team_ids, suggestions, include_history=False
+            user.uid, team_ids, suggestions, include_history=False, limit=limit
         )
         history_unavailable = True
     return HomeAgentsResponse(

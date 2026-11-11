@@ -1750,8 +1750,8 @@ Body (`multipart/form-data`):
 | `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files`                    |
 | `asset_files` | The uploaded binaries                                                                                                |
 
-Semantics: control-plane is a pure relay — it never opens the bytes. Files are
-grouped per capability and forwarded to the pod's
+Semantics: files are read with a 64 MiB per-file bound, grouped per capability
+and forwarded to the pod's
 `POST /agents/capabilities/{id}/validate-config` as multipart fields keyed by
 slot key; the pod's declared `AssetSlot` gate (cardinality, extension) and the
 capability's own content validation both run pod-side, and their 422 wording
@@ -2470,6 +2470,9 @@ yet do anything.
 email lands in any conversation store.
 
 ## 36. Contract Notes — KPI preset endpoints & authorization (OBSERV-02) (2026-07-26)
+
+**2026-10-28 - superseded by §74** for parameters, authorization and the preset list;
+the paragraphs below describe the earlier contract where they differ.
 
 Product/business analytics (active users, sessions, agent usage, tokens,
 storage) live entirely in `fred-control-plane`, backed by the shared
@@ -5250,9 +5253,9 @@ new conversation of this agent starts from, so a capability can call the agent's
 model during its save. No platform binding is sent. The pod
 `copy-config` call carries the same parameters for the destination team.
 
-**Vision flags.** `AvailableModelProfile.supports_vision` and
-`EffectiveChatModel.supports_vision` (default false) report whether the profile
-declares `supports_vision` in the pod catalog. A platform binding reports false.
+**Vision flags.** Removed by the reusable preparation cutover (§72). Routing
+profiles no longer advertise image-reading support. PPT template vision uses
+Knowledge Flow's configured model.
 
 ## 71. Contract Notes — capability platform settings fields (2026-10-22)
 
@@ -5267,20 +5270,21 @@ for a platform-wide choice, from the same service function called without a team
 no `can_use` check, but the model must hold the org `default_on` marker, the
 profile must be a chat profile available on every enabled pod, and
 `effective_default_profile_id` is the pods' common default. A capability's platform
-panel filters it on `supports_vision`, as the agent form filters the team list.
+panel no longer filters by vision support; PPT vision uses Knowledge Flow.
 
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
 `openspec/specs/ppt-builder/spec.md`.
 
-
 ## Home agent launchers (2026-11-09)
 
-`GET /control-plane/v1/me/home-agents` returns `HomeAgentsResponse`: at most
-five existing `ManagedAgentInstanceSummary` items in `agents`, plus
+`GET /control-plane/v1/me/home-agents` accepts optional `limit` (default 5,
+integer 1-20; invalid values return 422) and returns `HomeAgentsResponse`: at
+most that many existing `ManagedAgentInstanceSummary` items in `agents`, plus
 `history_unavailable` (normally false). Current `CAN_USE_TEAM_AGENTS` access,
-enabled state and suspension are checked before the limit. Known activity in
+enabled state, suspension and current readiness-gating preparations are checked
+before the limit. Known activity in
 the caller's non-deleted conversations ranks first, descending; case-insensitive
 name and instance id break ties. Remaining places use accessible platform-default
 teams and the caller's personal space, alphabetically. The endpoint needs SQL
@@ -5293,3 +5297,99 @@ activity, not a server-verified successful turn. Title/context edits alone do
 not establish activity. Legacy dates remain unknown until new activity.
 History-query SQL failure retries suggestions only and marks history unavailable;
 failed suggestions or authorization remain request errors.
+
+## 72. Contract Notes - reusable capability preparation (2026-11-06)
+
+A capability may advertise `preparation` with asset slots, rules version, input
+limit, retry count, timeout and readiness policy. For a declared preparation,
+agent saves keep bounded originals under immutable object keys and commit a
+current `capability_preparation` intention with the agent tuning transaction.
+Each capability has its own current preparation; an unchanged save keeps its
+existing intention. A new upload replaces only the uploaded slots. Superseded
+intentions remain historical and cannot publish a result.
+
+The following team routes require `CAN_UPDATE_AGENTS` and an own credential.
+Both first check that the agent belongs to the target team:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
+| `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
+
+The following internal routes require a verified workload whose client ID is
+configured as `preparation_client_id` for the preparation's runtime source.
+Wrong-runtime callers receive 404. Temporal history carries only the
+preparation ID, never asset bytes or configuration:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /internal/capability-preparations/{id}/work` | Bounded `PreparationWork` for a current running attempt. |
+| `POST /internal/capability-preparations/{id}/attempts/{attempt}` | Fences a Temporal activity attempt and returns its current bounded work, or `work=null` for a terminal or superseded intention. Attempts cannot exceed the declaration's limit. |
+| `GET /internal/capability-preparations/{id}/assets/{asset_id}` | Bounded asset bytes when that asset belongs to the current running attempt. |
+| `POST /internal/capability-preparations/{id}/result` | Accepts the input revision, attempt, state and a result reference or safe error. Publication succeeds only for the current running attempt; stale or duplicate completions return `accepted=false`. Result references must stay under `capability-results/{id}/{attempt}/`. |
+
+During the additive rollout, legacy capabilities still use pod-side
+`validate-config` and their existing readiness path. The current PPT Builder
+is migrated to these routes in the capability cutover.
+
+## 74. Contract Notes - admin analytics redesign (2026-10-28)
+
+OpenSpec change: `openspec/changes/redesign-admin-analytics/`.
+
+**Parameters.** `GET /control-plane/v1/kpi/presets/{name}` takes repeated
+`team_ids` (empty = whole platform, at most 200) instead of `team_id`, plus
+`bucket` (`auto|hour|day|week|month`) and `tz` (IANA, default
+`Europe/Paris`; 400 when unknown). A preset whose data has no team answers
+400 to a team scope; platform-only fields of section presets are `null` there.
+
+**Authorization** (`kpi/scope.py::resolve_kpi_scope`). No team:
+`organization#can_observe_platform`. Teams: an observer may pass any
+non-personal team; anyone else needs `team#can_read_analytics` (`team_admin`
+only) on every listed team. `self_scoped` presets stay open to any user for
+their own data. `PresetDef.platform_admin_only` is removed.
+
+**Presets.** Section presets return `PeriodValue {current, previous}`
+(`null` = no data) and `previous_since`: `analytics_overview`,
+`analytics_activity_over_time` (`{bucket, series, points: [{start,
+values}]}`, `start` in `tz`; values include `co2e_grams` and `kwh` for the
+trend dialog), `analytics_adoption`, `analytics_usage`,
+`analytics_teams`, `analytics_agents` (including `capabilities`, from
+`dims.capability_id` on tool KPIs, RUNTIME §8.126), `analytics_quality_cost`,
+and `analytics_teams_catalog` (`{rows: [{team_id, name, member_count}]}`).
+Costs are `cost_eur`, from `usd_per_eur` in `model_impact_factors.yaml`.
+`web_research_summary` returns `available` and `estimated_cost_eur`
+(`estimated_cost_usd` removed); `user_token_usage_*` report `cost_eur`.
+
+**Removed presets:** `active_users_over_time`, `unique_users_total`,
+`messages_over_time`, `sessions_by_scope`, `conversations_per_user`,
+`conversation_depth`, `agents_per_user`, the three `*_trend` presets,
+`top_teams_by_sessions`, `documents_total`, `token_usage_over_time`,
+`token_usage_by_agent`, `token_usage_by_model`, `top_agents_by_conversations`.
+
+**Export.** `GET /control-plane/v1/kpi/analytics/export` takes the preset
+parameters plus `lang` (`fr|en`) and returns an `.xlsx` attachment named
+`analytics_<scope>_<start>_<end>.xlsx`, built from the same section
+functions. Its texts (`kpi/export_texts.py`) are checked against the
+frontend i18n files by a test.
+
+**User filter** (platform page). User-filterable presets
+(`PresetDef.user_filterable`) and the export take `user_filter`: JSON
+`{combination: all|any, conditions: [{claim, operator, value,
+case_sensitive}]}`, 1 to 8 conditions, at most 2 000 characters; requires
+`can_observe_platform`; more than 50 000 matching users is 400. `GET
+/control-plane/v1/kpi/user-filter` (observers) returns `{fields: [{claim,
+users, in_rule}], known_users, matched, no_data}`. Not filtered:
+configuration figures (agents existing, agents equipped, team members,
+storage, prompt length).
+
+**Team usage page.** `team/:teamId/usage` shows a team admin the analytics
+tabs without Technical, fixed to that team; everyone else sees only their
+own usage.
+
+**Counted days (2026-10-28).** Day-filterable presets
+(`PresetDef.day_filterable`) and the export take `exclude_weekends` and
+`exclude_holidays` (default `false`). Holidays are the eleven French public
+holidays (`kpi/counted_days.py`), days are local days in `tz`; excluded days
+leave every search as merged `must_not` ranges and per-day figures divide by
+counted days. State presets ignore them; more than four years with
+exclusions is 400. The export's About sheet states the counted days.

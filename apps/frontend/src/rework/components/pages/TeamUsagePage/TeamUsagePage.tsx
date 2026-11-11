@@ -12,367 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import styles from "./TeamUsagePage.module.css";
-import {
-  useAgentsTotalQuery,
-  useSkillUsageQuery,
-  useUserSkillUsageQuery,
-  useDocumentsTotalQuery,
-  useSessionsOverTimeQuery,
-  useStorageByTeamQuery,
-  useTokenUsageByAgentQuery,
-  useTokenUsageByModelQuery,
-  useTokenUsageOverTimeQuery,
-  useTopAgentsByConversationsQuery,
-  useUserTokenUsageOverTimeQuery,
-  useUserTokenUsageByAgentQuery,
-  useUserTokenUsageByModelQuery,
-} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
-import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
-import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
-import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
-import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
-import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
-import BarChart from "@shared/molecules/BarChart/BarChart";
-import { agentUsageRows } from "@rework/utils/agentUsageRows";
-import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
+import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
+import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import AnalyticsView from "../admin/AnalyticsPage/AnalyticsView";
+import { ANALYTICS_PRESETS } from "../admin/AnalyticsPage/analyticsQuery";
+import PersonalUsage from "./PersonalUsage";
+import styles from "./TeamUsagePage.module.css";
 
 /**
- * Personal usage dashboard — OBSERV-02 / BACKLOG.md §7b — extended in
- * place (v3, §2.5 Page 2) with capability-conditional team sections prepended
- * above it. In-page gating only, no route guard (`FRONTEND-AUTHZ-PATTERN.md`):
- * a plain `team_member` (or anyone on a personal team, which has no elevated
- * roles at all) sees their personal token sections below. Skill usage always
- * follows the selected space: personal in personal space, team in team space.
+ * A team admin (`can_read_analytics`) sees the platform analytics limited to their team, plus
+ * their own usage as a last tab. Everyone else, and any personal space, sees only their own usage.
  */
 export default function TeamUsagePage() {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
-
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
-  // The personal team is granted `can_update_resources`/`can_update_agents`
-  // unconditionally (`teams/system.py::build_personal_team`) so its owner can
-  // manage their own docs/agents — that's a real permission, not an elevated
-  // *team* role. Without excluding it here, every user would see the
-  // collaborative-team sections below while sitting in personal space, since
-  // those flags would read exactly as they do for a real team_editor/admin.
-  const elevated = hasElevatedTeamRole(capabilities) && !isPersonalTeam;
-  // This page is majority team-scoped content for an elevated viewer (KPIs,
-  // charts, storage quota below) with personal consumption at the
-  // bottom — calling it "My token usage" for that viewer was misleading (a
-  // team_admin reported it read as a personal-usage page while looking at
-  // team-wide data). Plain members/personal-team viewers only ever see the
-  // personal sections, so the personal usage title stays correct for them.
-  const pageTitle = elevated ? t("rework.teamUsage.team.pageTitle") : t("rework.teamUsage.title");
 
-  // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
-  // client-side TTL, does not re-fetch on every render" policy
-  // KPI-ANALYTICS-RFC.md §2.6 already documents — every preset below used
-  // `true` instead, which ignored cache age and refetched on every mount.
-  const {
-    data: overTimeData,
-    isLoading: overTimeIsLoading,
-    isFetching: overTimeIsFetching,
-    isError: overTimeIsError,
-  } = useUserTokenUsageOverTimeQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-
-  const {
-    data: byAgentData,
-    isLoading: byAgentIsLoading,
-    isError: byAgentIsError,
-  } = useUserTokenUsageByAgentQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-
-  const {
-    data: byModelData,
-    isLoading: byModelIsLoading,
-    isError: byModelIsError,
-  } = useUserTokenUsageByModelQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-
-  const {
-    currentData: personalSkillUsageData,
-    isFetching: personalSkillUsageIsFetching,
-    isLoading: personalSkillUsageIsLoading,
-    isError: personalSkillUsageIsError,
-  } = useUserSkillUsageQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { skip: !isPersonalTeam, refetchOnMountOrArgChange: 300 },
-  );
-
-  // Team-scoped shared section (§2.5 Page 2) — skipped entirely for anyone
-  // without an elevated role, both to avoid the wasted/rejected call and
-  // because `hasElevatedTeamRole` is this frontend's single source of truth
-  // for the distinction.
-  const teamArgs = { since: timeRange.since, until: timeRange.until, teamId };
-  const teamQueryOpts = { skip: !elevated || !teamId, refetchOnMountOrArgChange: 300 };
-
-  const {
-    currentData: skillUsageData,
-    isFetching: skillUsageIsFetching,
-    isLoading: skillUsageIsLoading,
-    isError: skillUsageIsError,
-  } = useSkillUsageQuery(teamArgs, teamQueryOpts);
-
-  const { data: teamAgentsTotalData, isLoading: teamAgentsTotalIsLoading } = useAgentsTotalQuery(
-    teamArgs,
-    teamQueryOpts,
-  );
-  const { data: teamDocumentsTotalData, isLoading: teamDocumentsTotalIsLoading } = useDocumentsTotalQuery(
-    teamArgs,
-    teamQueryOpts,
-  );
-  const {
-    data: teamTopAgentsData,
-    isLoading: teamTopAgentsIsLoading,
-    isFetching: teamTopAgentsIsFetching,
-    isError: teamTopAgentsIsError,
-  } = useTopAgentsByConversationsQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamSessionsData,
-    isLoading: teamSessionsIsLoading,
-    isFetching: teamSessionsIsFetching,
-    isError: teamSessionsIsError,
-  } = useSessionsOverTimeQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamTokenOverTimeData,
-    isLoading: teamTokenOverTimeIsLoading,
-    isFetching: teamTokenOverTimeIsFetching,
-    isError: teamTokenOverTimeIsError,
-  } = useTokenUsageOverTimeQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamTokenByAgentData,
-    isLoading: teamTokenByAgentIsLoading,
-    isError: teamTokenByAgentIsError,
-  } = useTokenUsageByAgentQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamTokenByModelData,
-    isLoading: teamTokenByModelIsLoading,
-    isError: teamTokenByModelIsError,
-  } = useTokenUsageByModelQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamStorageData,
-    isLoading: teamStorageIsLoading,
-    isError: teamStorageIsError,
-  } = useStorageByTeamQuery(teamArgs, teamQueryOpts);
-  const teamStorageRows = useMemo(
-    () =>
-      (teamStorageData?.rows ?? [])
-        .filter((r) => r.quota_bytes != null && r.quota_bytes > 0)
-        .map((r) => ({ label: r.label, value: Math.round((r.used_bytes / r.quota_bytes!) * 100) })),
-    [teamStorageData],
-  );
-
-  const handleRangeChange = (range: TimeRange) => {
-    setTimeRange(range);
-  };
-
-  const handleRefresh = () => {
-    setTimeRange(refreshTimeRange(timeRange));
-  };
-
-  const serviceDown = [
-    overTimeIsError,
-    byAgentIsError,
-    byModelIsError,
-    isPersonalTeam ? personalSkillUsageIsError : !elevated || !teamId || skillUsageIsError,
-  ].every(Boolean);
-
-  if (serviceDown) {
+  if (teamId && capabilities.canReadAnalytics && !isPersonalTeam) {
     return (
-      <div className={styles.page}>
-        <PageHeader title={pageTitle} />
-        <ServiceNotice
-          icon="cloud_off"
-          title={t("rework.serviceNotice.controlPlane.title")}
-          description={t("rework.serviceNotice.controlPlane.description")}
-          centered
-        />
-      </div>
+      <AnalyticsView
+        title={t("rework.analytics.title")}
+        mode="team"
+        teamIds={[teamId]}
+        extraTab={{
+          label: t("rework.teamUsage.personalSectionTitle"),
+          render: (range) => <PersonalUsage timeRange={range} withSkills={false} />,
+        }}
+      />
     );
   }
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        title={pageTitle}
-        sticky
-        actions={
-          <>
-            <TimeRangeSelector value={timeRange} onChange={handleRangeChange} />
-            <IconButton
-              color="primary"
-              variant="icon"
-              size="small"
-              icon={{ category: "outlined", type: "refresh" }}
-              onClick={handleRefresh}
-              disabled={overTimeIsFetching}
-              title={t("common.refresh")}
-            />
-          </>
-        }
-      />
-
-      {elevated && teamId && (
-        <Disclosure title={t("rework.teamUsage.team.sectionTitle")} defaultOpen>
-          <div className={styles.kpiRow}>
-            <KpiStatCard
-              label={t("rework.teamUsage.team.membersLabel")}
-              value={selectedTeam?.member_count ?? undefined}
-              isLoading={false}
-              isError={false}
-            />
-            <KpiStatCard
-              label={t("rework.teamUsage.team.agentsLabel")}
-              value={teamAgentsTotalData?.value}
-              delta={teamAgentsTotalData?.delta}
-              unavailable={teamAgentsTotalData?.unavailable}
-              isLoading={teamAgentsTotalIsLoading}
-              isError={false}
-            />
-            <KpiStatCard
-              label={t("rework.teamUsage.team.documentsLabel")}
-              value={teamDocumentsTotalData?.value}
-              delta={teamDocumentsTotalData?.delta}
-              unavailable={teamDocumentsTotalData?.unavailable}
-              isLoading={teamDocumentsTotalIsLoading}
-              isError={false}
-            />
-          </div>
-
-          <div className={styles.chartGrid}>
-            <div className={styles.cellFull}>
-              <TimeSeriesLineChart
-                title={t("rework.analytics.tokenUsage.overTime.title")}
-                rows={teamTokenOverTimeData?.rows ?? []}
-                interval={teamTokenOverTimeData?.interval}
-                valueLabel={t("rework.analytics.tokenUsage.overTime.valueLabel")}
-                isFetching={teamTokenOverTimeIsFetching}
-                isLoading={teamTokenOverTimeIsLoading}
-                isError={teamTokenOverTimeIsError}
-              />
-              <TokenUsageImpact rows={teamTokenOverTimeData?.rows} isLoading={teamTokenOverTimeIsLoading} />
-            </div>
-            <BarChart
-              title={t("rework.analytics.tokenUsage.byAgent.title")}
-              rows={agentUsageRows(teamTokenByAgentData?.rows, t)}
-              valueLabel={t("rework.analytics.tokenUsage.byAgent.valueLabel")}
-              emptyMessage={t("rework.analytics.tokenUsage.byAgent.empty")}
-              isLoading={teamTokenByAgentIsLoading}
-              isError={teamTokenByAgentIsError}
-            />
-            <BarChart
-              title={t("rework.analytics.tokenUsage.byModel.title")}
-              rows={teamTokenByModelData?.rows ?? []}
-              valueLabel={t("rework.analytics.tokenUsage.byModel.valueLabel")}
-              emptyMessage={t("rework.analytics.tokenUsage.byModel.empty")}
-              isLoading={teamTokenByModelIsLoading}
-              isError={teamTokenByModelIsError}
-            />
-            <BarChart
-              title={t("rework.teamUsage.team.quota.title")}
-              rows={teamStorageRows}
-              valueLabel={t("rework.teamUsage.team.quota.valueLabel")}
-              emptyMessage={t("rework.teamUsage.team.quota.empty")}
-              isLoading={teamStorageIsLoading}
-              isError={teamStorageIsError}
-            />
-            <TimeSeriesLineChart
-              title={t("rework.teamUsage.team.conversationsOverTime.title")}
-              rows={teamSessionsData?.rows ?? []}
-              interval={teamSessionsData?.interval}
-              valueLabel={t("rework.teamUsage.team.conversationsOverTime.valueLabel")}
-              isFetching={teamSessionsIsFetching}
-              isLoading={teamSessionsIsLoading}
-              isError={teamSessionsIsError}
-            />
-            <div className={styles.cellFull}>
-              <MultiSeriesLineChart
-                title={t("rework.teamUsage.team.mostActiveAgents.title")}
-                rows={teamTopAgentsData?.rows ?? []}
-                series={teamTopAgentsData?.series ?? []}
-                interval={teamTopAgentsData?.interval}
-                valueLabel={t("rework.teamUsage.team.mostActiveAgents.valueLabel")}
-                isFetching={teamTopAgentsIsFetching}
-                isLoading={teamTopAgentsIsLoading}
-                isError={teamTopAgentsIsError}
-              />
-            </div>
-          </div>
-        </Disclosure>
-      )}
-
-      {elevated && teamId && (
-        <Disclosure title={t("rework.teamUsage.team.skillsSectionTitle")} defaultOpen>
-          <SkillUsageTable
-            data={skillUsageData}
-            isLoading={skillUsageIsLoading || (skillUsageIsFetching && !skillUsageData)}
-            isError={skillUsageIsError}
-          />
-        </Disclosure>
-      )}
-
-      {isPersonalTeam && (
-        <Disclosure title={t("rework.teamUsage.personalSkillsSectionTitle")} defaultOpen>
-          <SkillUsageTable
-            data={personalSkillUsageData}
-            isLoading={personalSkillUsageIsLoading || (personalSkillUsageIsFetching && !personalSkillUsageData)}
-            isError={personalSkillUsageIsError}
-          />
-        </Disclosure>
-      )}
-
-      <Disclosure title={t("rework.teamUsage.personalSectionTitle")} defaultOpen>
-        <div className={styles.chartGrid}>
-          <div className={styles.cellFull}>
-            <TimeSeriesLineChart
-              title={t("rework.teamUsage.tokensOverTime.title")}
-              rows={overTimeData?.rows ?? []}
-              interval={overTimeData?.interval}
-              valueLabel={t("rework.teamUsage.tokensOverTime.valueLabel")}
-              isFetching={overTimeIsFetching}
-              isLoading={overTimeIsLoading}
-              isError={overTimeIsError}
-            />
-            <TokenUsageImpact rows={overTimeData?.rows} isLoading={overTimeIsLoading} />
-          </div>
-          <BarChart
-            title={t("rework.teamUsage.byAgent.title")}
-            rows={agentUsageRows(byAgentData?.rows, t)}
-            valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
-            emptyMessage={t("rework.teamUsage.byAgent.empty")}
-            isLoading={byAgentIsLoading}
-            isError={byAgentIsError}
-          />
-          <BarChart
-            title={t("rework.teamUsage.byModel.title")}
-            rows={byModelData?.rows ?? []}
-            valueLabel={t("rework.teamUsage.byModel.valueLabel")}
-            emptyMessage={t("rework.teamUsage.byModel.empty")}
-            isLoading={byModelIsLoading}
-            isError={byModelIsError}
-          />
-        </div>
-      </Disclosure>
+      <div className={styles.header}>
+        <PageHeader
+          title={t("rework.teamUsage.title")}
+          actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} presetKeys={ANALYTICS_PRESETS} />}
+        />
+      </div>
+      <div className={styles.body}>
+        <PersonalUsage timeRange={timeRange} withSkills={isPersonalTeam} />
+      </div>
     </div>
   );
 }
