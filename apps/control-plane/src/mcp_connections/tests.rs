@@ -110,6 +110,9 @@ async fn server(mode: &'static str) -> (String, tokio::task::JoinHandle<()>) {
         let id=request["id"].clone();
         match request["method"].as_str().unwrap_or_default() {
             "server/discover" => Json(json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"legacy fixture"}})).into_response(),
+            // Strict like MCP Toolbox: protocol 2026-07-28 removed `initialize`, so a handshake
+            // naming it (or a later revision) is refused instead of being silently downgraded.
+            "initialize" if request["params"]["protocolVersion"].as_str().is_none_or(|v| v >= "2026-07-28") => (StatusCode::NOT_FOUND, Json(json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"invalid method initialize"}}))).into_response(),
             "initialize" => Json(json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"fixture","version":"1"}}})).into_response(),
             "notifications/initialized" => StatusCode::ACCEPTED.into_response(),
             "tools/list" if mode=="rejected" && request["params"]["cursor"].as_str()==Some("next") => StatusCode::UNAUTHORIZED.into_response(),

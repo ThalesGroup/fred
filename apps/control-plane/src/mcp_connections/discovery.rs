@@ -6,7 +6,7 @@ use super::{
 };
 use rmcp::{
     ServiceExt,
-    model::PaginatedRequestParams,
+    model::{ClientConfig, PaginatedRequestParams, ProtocolVersion},
     transport::{
         StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
     },
@@ -87,7 +87,12 @@ pub(super) async fn discover(
         },
         transport_config,
     );
-    let mut service = tokio::time::timeout(Duration::from_secs(15), ().serve(transport))
+    // `serve` performs the `initialize` handshake, so it must name a protocol version
+    // that still has one: rmcp's default (LATEST, 2026-07-28) removed `initialize`, and
+    // strict servers such as MCP Toolbox reject it with -32601.
+    let client =
+        ClientConfig::default().with_protocol_version(ProtocolVersion::LATEST_WITH_INITIALIZE);
+    let mut service = tokio::time::timeout(Duration::from_secs(15), client.serve(transport))
         .await
         .map_err(|_| "timeout")?
         .map_err(|_| "connection_rejected")?;
