@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import Optional, TypeVar
 
-from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.kpi import BaseKPIWriter
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import operation_log_scope
 from fred_sdk.contracts.context import (
@@ -37,6 +37,7 @@ from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.request_context_helpers import turn_kpi_actor
 from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.runtime_support.authority import RunStopError
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -160,7 +161,9 @@ class ToolExecution:
         kpi = self._kpi
         timer_ctx = (
             kpi.timer(
-                "agent.tool_latency_ms", dims=base_dims, actor=KPIActor(type="system")
+                "agent.tool_latency_ms",
+                dims=base_dims,
+                actor=turn_kpi_actor(self._binding),
             )
             if kpi is not None
             else nullcontext()
@@ -218,7 +221,7 @@ class ToolExecution:
                             "error_code": type(e).__name__,
                             "exception_type": type(e).__name__,
                         },
-                        actor=KPIActor(type="system"),
+                        actor=turn_kpi_actor(self._binding),
                     )
                 reason = e.reason if isinstance(e, RunStopError) else type(e).__name__
                 if isinstance(e, RunStopError):
@@ -261,7 +264,7 @@ class ToolExecution:
                                 "error_code": error_code,
                                 "exception_type": "none",
                             },
-                            actor=KPIActor(type="system"),
+                            actor=turn_kpi_actor(self._binding),
                         )
                     if confined:
                         emit_audit_log(
