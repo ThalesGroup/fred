@@ -38,8 +38,8 @@ from pydantic import Field
 from fred_runtime.common.kf_base_client import reported_failure
 from fred_runtime.common.mcp_utils import (
     MCP_DELEGATED_METADATA_KEY,
-    MCP_SERVICE_METADATA_KEY,
     MCP_SERVER_ID_METADATA_KEY,
+    MCP_SERVICE_METADATA_KEY,
 )
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.token_expiry import (

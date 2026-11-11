@@ -8,9 +8,9 @@ from uuid import UUID
 
 import httpx2
 import pytest
-from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
-from fred_runtime.common import managed_mcp
 from fred_runtime.capabilities.registry import CapabilityRegistry
+from fred_runtime.common import managed_mcp
+from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
 from mcp.types import TextContent, Tool
 
 ID = UUID("8cfd2a56-2d35-4d18-b67c-5e42b0a9c122")
@@ -49,7 +49,7 @@ class FakeClient:
     instances = []
     pages = []
     fail = False
-    gate = None
+    gate: asyncio.Event | None = None
 
     def __init__(self, transport, **kwargs):
         self.transport = transport
@@ -97,7 +97,7 @@ def test_local_destination_and_secret_are_verified(monkeypatch):
     local = McpCredentialBinding(
         credential_binding="provider",
         url=admitted.configuration.url,
-        secret_env="FRED_TEST_MCP_KEY",
+        secret_env="FRED_TEST_MCP_KEY",  # pragma: allowlist secret - test environment variable name
     )
     monkeypatch.delenv("FRED_TEST_MCP_KEY", raising=False)
     with pytest.raises(managed_mcp.ManagedMcpError, match="credential_missing"):
@@ -271,7 +271,26 @@ async def test_failure_redacts_provider_body_and_cancellation_closes():
 
 
 @pytest.mark.asyncio
-async def test_http_uses_only_provider_key_and_refuses_redirect(monkeypatch):
+@pytest.mark.parametrize(
+    ("auth", "expected_headers"),
+    [
+        (
+            {
+                "kind": "api_key",
+                "credential_binding": "provider",
+                "header": "x-api-key",
+            },
+            {"x-api-key": "synthetic-secret"},
+        ),
+        (
+            {"kind": "bearer", "credential_binding": "provider"},
+            {"authorization": "Bearer synthetic-secret"},
+        ),
+    ],
+)
+async def test_http_uses_only_provider_key_and_refuses_redirect(
+    monkeypatch, auth, expected_headers
+):
     seen = []
 
     def receive(request):
@@ -286,14 +305,29 @@ async def test_http_uses_only_provider_key_and_refuses_redirect(monkeypatch):
             **kwargs, transport=httpx2.MockTransport(receive), trust_env=False
         ),
     )
-    factory = managed_mcp._client_factory({"x-api-key": "synthetic-secret"})
-    client = factory(headers={"Accept": "application/json"}, follow_redirects=True)
+    admitted = binding(auth=auth)
+    local = McpCredentialBinding(
+        credential_binding="provider",
+        url=admitted.configuration.url,
+        secret_env="FRED_TEST_MCP_KEY",  # pragma: allowlist secret - test environment variable name
+    )
+    monkeypatch.setenv("FRED_TEST_MCP_KEY", "synthetic-secret")
+    factory = managed_mcp._client_factory(
+        managed_mcp.credential_headers(admitted, [local])
+    )
+    client = factory(
+        {"Accept": "application/json"}, httpx2.Timeout(5), None, follow_redirects=True
+    )
     async with client:
         with pytest.raises(httpx2.TooManyRedirects):
             await client.post("https://tools.invalid/mcp")
     assert len(seen) == 1
-    assert seen[0].headers["x-api-key"] == "synthetic-secret"
-    assert "authorization" not in seen[0].headers
+    assert {
+        name: value
+        for name, value in seen[0].headers.items()
+        if name in {"authorization", "x-api-key"}
+    } == expected_headers
+    assert str(seen[0].url) == admitted.configuration.url
     assert not any(name.startswith("x-fred") for name in seen[0].headers)
 
 

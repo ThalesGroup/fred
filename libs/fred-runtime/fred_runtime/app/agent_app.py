@@ -141,6 +141,7 @@ from fred_sdk.contracts.execution import (
     RuntimeExecuteRequest,
     check_session_id,
 )
+from fred_sdk.contracts.managed_mcp import McpBinding
 from fred_sdk.contracts.models import (
     AgentTuning,
     AgentTuningExportRequest,
@@ -232,6 +233,7 @@ from fred_runtime.capabilities.objects import bind_capability_objects
 from fred_runtime.capabilities.platform_ports import team_authorizer_binder
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.common.managed_mcp import ManagedMcpError, validate_admission
 from fred_runtime.common.outbound_credentials import (
     DelegatedCredentialProvider,
     OutboundCredentialProvider,
@@ -253,8 +255,6 @@ from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.turn import TurnAuthority, current_turn
-from fred_sdk.contracts.managed_mcp import McpBinding
-from fred_runtime.common.managed_mcp import validate_admission, ManagedMcpError
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,

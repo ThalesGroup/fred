@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Every way out of the runtime, and what happens when one is refused.
+"""Fred outbound credentials, and what happens when a delegated call is refused.
 
 The first half enumerates the outbound paths and proves each one takes its
 grant from the provider and its bearer from the shared authentication adapter,
@@ -20,6 +20,10 @@ through the real workload-token provider — a new path that forgets to is what
 the source check at the end is for. The second half pins the refusal: one
 renewal after a first 401 and nothing more, no fallback, no upstream text, and a
 run-stopping error that reaches the engine instead of the model.
+
+Managed MCP has a separate technical credential bound to an exact destination.
+Only its credential builder is exempt from the Fred provider requirement;
+test_managed_mcp covers that credential's origin, destination and transport.
 """
 
 from __future__ import annotations
@@ -362,8 +366,19 @@ async def test_a_failed_acquisition_stops_the_run_before_any_request(monkeypatch
     ]
 
 
-def _has_authorization_outside_header_reads(source: str) -> bool:
+def _has_authorization_outside_header_reads(
+    source: str, *, technical_credential_builder: str | None = None
+) -> bool:
     tree = ast.parse(source)
+    # Exempt one explicitly owned builder, never its entire module.
+    tree.body = [
+        node
+        for node in tree.body
+        if not (
+            isinstance(node, ast.FunctionDef)
+            and node.name == technical_credential_builder
+        )
+    ]
     # Reading an inbound bearer for a CP decision does not construct a header.
     # Exclude only that expression, never the whole module containing the read.
     header_reads = {
@@ -404,10 +419,32 @@ def test_header_guard_distinguishes_reads_from_construction(source, expected):
     assert _has_authorization_outside_header_reads(source) is expected
 
 
-def test_no_outbound_path_builds_an_authorization_header_of_its_own():
+@pytest.mark.parametrize(
+    ("extra_source", "expected"),
+    [
+        ("", False),
+        ('\nheaders = {"Authorization": bearer}', True),
+        ('\ndef another_path():\n    return {"Authorization": bearer}', True),
+    ],
+)
+def test_technical_builder_exception_keeps_other_header_constructors_guarded(
+    extra_source, expected
+):
+    source = 'def credential_headers():\n    return {"Authorization": secret}\n'
+    # Without an explicit owner (including in other modules), this is forbidden.
+    assert _has_authorization_outside_header_reads(source)
+    assert (
+        _has_authorization_outside_header_reads(
+            source + extra_source, technical_credential_builder="credential_headers"
+        )
+        is expected
+    )
+
+
+def test_authorization_headers_have_a_credential_owner():
     """The enumeration above covers the paths that exist today; this covers the
-    one added tomorrow. A module that sets an Authorization header must be a
-    module that asks the provider for it."""
+    one added tomorrow. Fred calls use the provider; the managed MCP builder
+    alone owns the external service's locally provisioned technical key."""
     runtime_root = pathlib.Path(agent_app_module.__file__).parent.parent
     searched = [
         *(runtime_root / "common").glob("*.py"),
@@ -421,7 +458,14 @@ def test_no_outbound_path_builds_an_authorization_header_of_its_own():
         source = path.read_text()
         if (
             "outbound_credentials" not in source
-            and _has_authorization_outside_header_reads(source)
+            and _has_authorization_outside_header_reads(
+                source,
+                technical_credential_builder=(
+                    "credential_headers"
+                    if path == runtime_root / "common" / "managed_mcp.py"
+                    else None
+                ),
+            )
         ):
             offenders.append(path.name)
 

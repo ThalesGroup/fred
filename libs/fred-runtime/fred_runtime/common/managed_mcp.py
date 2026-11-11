@@ -14,13 +14,14 @@ import json
 import os
 from collections.abc import Sequence
 
+import httpx2
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
 from langchain.mcp import as_langchain_tool
 from langchain_core.tools import BaseTool, StructuredTool
 
-from .mcp_utils import _mcp_http_client_factory, MCP_SERVER_ID_METADATA_KEY
+from .mcp_utils import MCP_SERVER_ID_METADATA_KEY, _mcp_http_client_factory
 
 
 class ManagedMcpError(ValueError):
@@ -86,13 +87,15 @@ def _guard_call(call, secrets=()):
         try:
             result = await call(**arguments)
             serialized = json.dumps(result, default=str) if secrets else ""
-            if not any(
+            safe_to_return = not any(
                 secret in serialized or json.dumps(secret)[1:-1] in serialized
                 for secret in secrets
-            ):
-                return result
+            )
         except Exception:
-            pass
+            result = None
+            safe_to_return = False
+        if safe_to_return:
+            return result
         # Raise outside the handler: legacy error unwrappers inspect __context__
         # even when Python suppresses its display with `from None`.
         raise ManagedMcpError("mcp_tool_unavailable")
@@ -100,10 +103,18 @@ def _guard_call(call, secrets=()):
     return guarded
 
 
-def _client_factory(credential_headers):
-    def factory(headers=None, **kwargs):
+def _client_factory(credential_headers: dict[str, str]):
+    def factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx2.Timeout | None = None,
+        auth: httpx2.Auth | None = None,
+        follow_redirects: bool = False,
+    ) -> httpx2.AsyncClient:
         return _mcp_http_client_factory(
-            headers={**(headers or {}), **credential_headers}, **kwargs
+            headers={**(headers or {}), **credential_headers},
+            timeout=timeout,
+            auth=auth,
+            follow_redirects=follow_redirects,
         )
 
     return factory

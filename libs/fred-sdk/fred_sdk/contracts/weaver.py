@@ -16,8 +16,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .skills import SkillCatalog
 from .managed_mcp import McpBinding
+from .skills import SkillCatalog
 
 
 class ResolverFact(BaseModel):

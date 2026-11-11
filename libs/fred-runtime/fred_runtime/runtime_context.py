@@ -17,14 +17,13 @@ Shared runtime context used by fred-runtime adapters.
 
 from __future__ import annotations
 
-from fred_sdk.contracts.managed_mcp import McpCredentialBinding
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.managed_mcp import McpCredentialBinding
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.web_research import WebResearchPort
 from langchain_core.language_models.chat_models import BaseChatModel
