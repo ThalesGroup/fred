@@ -45,6 +45,7 @@
   }
 
   &:checked + .box,
+  &[data-checked] + .box,
   &[data-indeterminate] + .box {
     --checkbox-border-color: var(--primary);
     --checkbox-background-color: var(--primary);
@@ -55,13 +56,14 @@
     }
   }
 
-  &:not(:checked):not([data-indeterminate]) + .box {
+  &:not(:checked):not([data-checked]):not([data-indeterminate]) + .box {
     .state-layer:hover {
       --checkbox-state-layer-background-color: var(--state-on-surface-hover);
     }
   }
 
   &:checked + .box .state-layer:hover,
+  &[data-checked] + .box .state-layer:hover,
   &[data-indeterminate] + .box .state-layer:hover {
     --checkbox-state-layer-background-color: var(--state-on-primary-hover);
   }

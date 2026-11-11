@@ -185,6 +185,24 @@ describe("Weaver document picker", () => {
     });
   });
 
+  it("shows a clicked folder's expected state at once, keeps the tree usable and reads it only once", async () => {
+    const onChange = await renderPicker({ folderIds: [], documentIds: [] });
+    const pending = deferredDirectory();
+    pages.set("folder-1:0", pending.promise);
+    await act(async () => checkbox("folder-1").click());
+    expect(checkbox("folder-1").checked).toBe(true);
+    expect(checkbox("folder-1").disabled).toBe(false);
+    await act(async () => pending.resolve(directory([doc("doc-1"), doc("doc-2")], 3)));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ folderIds: ["folder-1"], documentIds: [] });
+    await renderPicker({ folderIds: ["folder-1"], documentIds: [] }, { onChange });
+    expect(checkbox("folder-1").checked).toBe(true);
+    expect(checkbox("folder-1").indeterminate).toBe(false);
+    // The subtree read by the click is reused: the restore effect does not read it again.
+    const reads = browse.mock.calls.filter(([arg]) => arg.parentId === "folder-1" && arg.offset === 0);
+    expect(reads).toHaveLength(1);
+  });
+
   it("replaces a folder with ALL other direct documents, keeping subfolders and outside picks", async () => {
     const onChange = await renderPicker({ folderIds: ["folder-1", "child"], documentIds: ["doc-1", "outside"] });
     await expand();

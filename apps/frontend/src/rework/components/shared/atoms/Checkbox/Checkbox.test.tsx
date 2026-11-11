@@ -85,3 +85,17 @@ describe("Checkbox indeterminate", () => {
     expect(ref.current?.indeterminate).toBe(true);
   });
 });
+
+describe("Checkbox checked state", () => {
+  it("mirrors a controlled checked value in an attribute the styles can rely on", () => {
+    render(<Checkbox checked={false} onChange={() => {}} />);
+    expect(input().hasAttribute("data-checked")).toBe(false);
+    // A controlled update after mount changes only the DOM property; Chrome may keep
+    // the sibling box's unchecked style unless an attribute changes too.
+    act(() => root.render(<Checkbox checked onChange={() => {}} />));
+    expect(input().checked).toBe(true);
+    expect(input().hasAttribute("data-checked")).toBe(true);
+    act(() => root.render(<Checkbox checked={false} onChange={() => {}} />));
+    expect(input().hasAttribute("data-checked")).toBe(false);
+  });
+});

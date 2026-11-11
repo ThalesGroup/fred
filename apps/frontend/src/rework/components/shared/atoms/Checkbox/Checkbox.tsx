@@ -53,6 +53,9 @@ export default function Checkbox({
         className={styles["native-input"]}
         aria-checked={indeterminate ? "mixed" : undefined}
         data-indeterminate={indeterminate || undefined}
+        // Styles follow this attribute, not only `:checked`: Chrome can keep the box's
+        // unchecked style when a controlled update changes only the DOM property.
+        data-checked={rest.checked || undefined}
         {...rest}
         onChange={(event) => {
           // Native activation clears this property even if the controlled prop stays true.
