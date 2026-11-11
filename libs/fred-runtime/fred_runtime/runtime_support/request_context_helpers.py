@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from fred_sdk.contracts.context import RuntimeContext
+from fred_core.kpi import KPIActor
+from fred_sdk.contracts.context import BoundRuntimeContext, RuntimeContext
 
 # Type alias for context provider functions
 RuntimeContextProvider = Callable[[], Optional[RuntimeContext]]
@@ -219,3 +220,15 @@ def get_language(context: RuntimeContext | None) -> str:
     if not context:
         return ""
     return context.language or ""
+
+
+def turn_kpi_actor(binding: BoundRuntimeContext) -> KPIActor:
+    """The KPI actor of everything one bound turn does (turn, LLM calls, tools).
+
+    A turn acting for a person is `human`, like `agent.turn_completed`; only work
+    bound to no person is `system`. Prometheus keeps `actor_type`, never `user_id`.
+    """
+    user_id = binding.portable_context.user_id
+    return (
+        KPIActor(type="human", user_id=user_id) if user_id else KPIActor(type="system")
+    )

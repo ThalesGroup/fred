@@ -113,7 +113,9 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
 /** Curated view for the tabular/SQL tool: the executed query plus a row preview. */
 function SqlToolDetail({ data }: { data: SqlQueryResult }) {
   const { t } = useTranslation();
-  const rowCount = t("rework.chatTrace.rows", { count: data.rows.length });
+  const rowCount = data.truncated
+    ? t("rework.chatTrace.partialRows", { count: data.rows.length })
+    : t("rework.chatTrace.rows", { count: data.rows.length });
   const formattedQuery = formatSqlForDisplay(data.sql_query);
 
   return (

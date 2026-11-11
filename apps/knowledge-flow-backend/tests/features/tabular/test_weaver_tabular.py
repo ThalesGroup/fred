@@ -428,6 +428,20 @@ async def test_description_columns_are_compact_for_the_model(published):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("max_rows", "truncated"), [(3, True), (4, False)])
+async def test_a_result_cut_at_the_row_limit_says_it_is_partial(published, max_rows, truncated):
+    """Four rows (a 2x2 self join): above the limit the response is flagged, at exactly the limit it is not."""
+    service = published.service()
+    alias = {document.document_uid: document.tables[0].query_alias for document in await service.list_documents(PERSON)}[str(D1)]
+    result = await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select a.amount from {alias} a, {alias} b", max_rows=max_rows))
+    assert len(result.rows) == min(4, max_rows)
+    assert result.truncated is truncated and result.row_limit == max_rows
+    assert (result.message is not None) is truncated
+    if truncated:
+        assert "aggregate" in result.message
+
+
+@pytest.mark.asyncio
 async def test_zero_rows_and_column_errors_explain_themselves_from_mounted_tables_only(published):
     service = published.service()
     documents = {document.document_uid: document.tables[0].query_alias for document in await service.list_documents(PERSON)}

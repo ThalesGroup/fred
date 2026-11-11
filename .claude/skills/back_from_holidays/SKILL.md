@@ -163,26 +163,26 @@ gh issue list --state open --assignee "$ME" --json number,title,milestone
 Whole block ≈ 25 lines. If it does not fit on one screen, it is too long — cut, don't scroll.
 
 ```
-## Retour de congé — <YYYY-MM-DD> → <YYYY-MM-DD> (<N> changements sur <branche>)
+## Back from holidays — <YYYY-MM-DD> → <YYYY-MM-DD> (<N> changes on <branch>)
 
 ### 💻 Dev
 **🚀 Features**
-- #2354 — Nom d'affichage des modèles pilotable depuis models_catalog.yaml — <auteur>
-**🐛 Corrections**
-- #2350 — Le budget de tour ReAct compte désormais la taille, plus seulement le nombre de messages — <auteur>
+- #2354 — Model display names configurable from models_catalog.yaml — <author>
+**🐛 Fixes**
+- #2350 — The ReAct turn budget now counts size, not only the number of messages — <author>
 **🧹 Maintenance**
 - ...
-**📦 Dépendances** — 4 bumps (pypdf, mermaid, …)
+**📦 Dependencies** — 4 bumps (pypdf, mermaid, …)
 
-### 🛠️ DevOps            ← omis si rien de devops sur la période
-- #2053 — Montage des extraVolumes dans le hook de migration du chart — <auteur>
+### 🛠️ DevOps            ← omitted if nothing devops in the period
+- #2053 — Mount extraVolumes in the chart's migration hook — <author>
 
-### ⚠️ À regarder en priorité
-- 10 releases pendant ton absence : v2.1.25 → v2.1.34   ← une seule ligne, jamais la liste des tags
-- 1 nouvelle migration Alembic (session_history) → schéma modifié
-- AGENTS.md modifié (méthode métier et schéma)
-- Ta branche feat/2360-quota-precheck a 37 commits de retard sur swift
-- 2 PR à toi ouvertes, 1 review qui t'attend (#2361)
+### ⚠️ Needs your attention
+- 10 releases while you were away: v2.1.25 → v2.1.34   ← one line, never the list of tags
+- 1 new Alembic migration (session_history) → schema changed
+- AGENTS.md changed (business method and schema)
+- Your branch feat/2360-quota-precheck is 37 commits behind swift
+- 2 of your PRs open, 1 review waiting for you (#2361)
 ```
 
 End with a concise read-only digest and its date/branch limits; no mandatory

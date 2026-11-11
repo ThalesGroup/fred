@@ -1109,7 +1109,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             if getattr(self, "strict_operations", False):
                 refreshed = self._client.indices.refresh(index=self._index)
                 shards = refreshed.get("_shards", {})
-                if shards.get("failed", 0) or shards.get("successful") != shards.get("total") or "total" not in shards:
+                # `total` also counts unassigned replicas (single-node cluster, replica
+                # recovery), which are neither successful nor failed. Deletion only needs
+                # the refreshed primary; a failed copy or no refreshed copy is refused.
+                if shards.get("failed", 0) or not shards.get("successful"):
                     raise RuntimeError("Vector refresh was incomplete.")
             # conflicts="proceed": the purge is idempotent and may race a second pass on a
             # cancelled ingestion. refresh: deleted chunks must stop being searchable and
@@ -1119,9 +1122,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 raise RuntimeError("Vector deletion was incomplete.")
             deleted = int(resp.get("deleted", 0))
             logger.info("deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
-        except Exception:
-            logger.exception("failed to delete vectors for document_uid=%s.", document_uid)
-            raise RuntimeError("Failed to delete vectors from OpenSearch.")
+        except Exception as error:
+            # Callers decide whether this is retried or fatal and log it once.
+            raise RuntimeError(f"Failed to delete vectors from OpenSearch: {error}") from error
 
     def get_document_chunk_count(self, *, document_uid: str) -> int:
         """

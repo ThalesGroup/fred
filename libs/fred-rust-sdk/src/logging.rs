@@ -274,8 +274,16 @@ fn render(
         Some(other) => other.to_string(),
         None => String::new(),
     };
-    // Dependencies keep severity, source and context, never their own text or fields.
-    let properties = if own { fields } else { Map::new() };
+    // Dependencies keep severity, source, context and their numeric or boolean fields
+    // (such as a slow acquire's `elapsed_secs`), never their own text or text fields.
+    let properties = if own {
+        fields
+    } else {
+        fields
+            .into_iter()
+            .filter(|(_, value)| value.is_number() || value.is_boolean())
+            .collect()
+    };
     let mut out: Map<String, Value> = properties.into_iter().filter(|(k, _)| keep(k)).collect();
     out.extend(context.into_iter().filter(|(k, _)| keep(k)));
     let severity = match *meta.level() {
@@ -473,13 +481,17 @@ mod tests {
 
     // Proves: I11
     #[test]
-    fn dependencies_get_a_fixed_message_without_their_fields() {
+    fn dependencies_get_a_fixed_message_and_only_numeric_fields() {
         let line = json_line(|| {
-            tracing::warn!(target: "sqlx::query", statement = "select secret", "slow statement");
+            tracing::warn!(target: "sqlx::query", statement = "select secret", error = ?"secret", elapsed_secs = 3.5, rows_affected = 2_u64, "slow statement");
         });
         assert_eq!(line["message"], "Dependency diagnostic");
         assert_eq!(line["logger"], "sqlx::query");
         assert!(line.get("statement").is_none());
+        assert!(line.get("error").is_none());
+        // A bounded cause stays diagnosable.
+        assert_eq!(line["elapsed_secs"], 3.5);
+        assert_eq!(line["rows_affected"], 2);
     }
 
     #[test]

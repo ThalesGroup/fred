@@ -177,7 +177,7 @@ Schema limits appear in the reference; additional service behavior matters:
 | Extraction | Input above 2,000,000 characters is reduced to head and tail. `truncated` reports this cap only; individual model window failures can yield partial results without setting it. A 200 is not proof of exhaustive extraction |
 | Tabular list | No pagination or fixed response-count cap; scope the request when needed |
 | Tabular schemas | 1 to 1000 document IDs in repeated query parameters; total described tables also bounded by configured `max_selected_datasets`. One workbook may contain several tables |
-| Tabular query | `max_rows` defaults to configured `default_max_rows`, clamped to configured `max_rows`; no completeness flag or continuation. SQL must read at least one authorized alias. Omitted/null `dataset_uids` uses the authorized scope; `[]` selects nothing and returns 400 |
+| Tabular query | `max_rows` defaults to configured `default_max_rows`, clamped to configured `max_rows`; `truncated` reports more rows than `row_limit`, without continuation. SQL must read at least one authorized alias. Omitted/null `dataset_uids` uses the authorized scope; `[]` selects nothing and returns 400 |
 | Tabular search | Stripped keyword must have at least two characters and normalize to nonempty. At most 5 rows per table and 30 matching tables, with lower caller limits allowed. Dataset scan ceiling may truncate coverage; `[]` dataset selection returns 400 |
 
 Tabular execution budgets live in `storage.tabular_store.query`. Source defaults

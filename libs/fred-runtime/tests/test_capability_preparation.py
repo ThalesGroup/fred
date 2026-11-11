@@ -369,9 +369,19 @@ def _registering_worker(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("after_grace", "level"), [(False, logging.INFO), (True, logging.WARNING)]
+)
 async def test_registration_waits_for_an_unreachable_control_plane(
-    minimal_config, tmp_path, monkeypatch, caplog
+    minimal_config, tmp_path, monkeypatch, caplog, after_grace, level
 ):
+    from fred_core.logs import log_setup as log_setup_module
+
+    # Retries are routine while the platform starts, worth a WARNING after that.
+    if after_grace:
+        monkeypatch.setattr(log_setup_module, "DEPENDENCY_STARTUP_GRACE_SECONDS", 0.0)
+    else:
+        monkeypatch.setattr(log_setup_module, "DEPENDENCY_STARTUP_GRACE_SECONDS", 1e9)
     replies = iter(["down", 503, "up"])
 
     def cp(request: httpx.Request) -> httpx.Response:
@@ -389,13 +399,14 @@ async def test_registration_waits_for_an_unreachable_control_plane(
         lambda awaitable, timeout: real_wait_for(awaitable, 0.001),
     )
     worker, (client, engine) = _registering_worker(minimal_config, tmp_path, cp)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         binding = await worker.register(asyncio.Event())
     await client.aclose()
     await engine.dispose()
     assert binding == {"task_queue": "q", "installation_id": "i"}
     retries = [r for r in caplog.records if "registration will retry" in r.getMessage()]
     assert [r.retry_in_s for r in retries] == [1.0, 2.0]
+    assert {r.levelno for r in retries} == {level}
 
 
 @pytest.mark.asyncio

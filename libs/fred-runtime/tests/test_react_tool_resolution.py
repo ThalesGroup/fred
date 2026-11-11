@@ -348,7 +348,7 @@ async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
                 "sql_query": "SELECT * FROM d_sales WHERE 1=0",
                 "rows": [],
                 "error": None,
-                "message": "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+                "message": "Query succeeded: 0 rows matched the conditions.",
             },
         ),
         (

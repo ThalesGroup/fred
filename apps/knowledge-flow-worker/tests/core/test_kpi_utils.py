@@ -74,7 +74,7 @@ def test_emit_temporal_activity_queue_wait_kpi_emits_timer_metric(monkeypatch):
     assert call["dims"]["activity_type"] == "get_push_file_metadata"
 
 
-def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypatch):
+def test_emit_temporal_activity_result_kpis_emits_one_duration_per_outcome(monkeypatch):
     class _FakeWriter:
         def __init__(self) -> None:
             self.emit_calls = []
@@ -127,8 +127,9 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
     )
 
     assert duration_ms is not None
+    # The timer's count is the activity-outcome count; no separate counter repeats it.
     assert len(fake_writer.emit_calls) == 1
-    assert len(fake_writer.count_calls) == 1
+    assert fake_writer.count_calls == []
     emit_call = fake_writer.emit_calls[0]
     assert emit_call["name"] == "temporal.system.activity_duration_ms"
     assert emit_call["type"] == "timer"
@@ -140,9 +141,6 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
     assert emit_call["dims"]["source_type"] == "push"
     assert emit_call["dims"]["source_tag"] == "sharepoint"
     assert "quantities" not in emit_call
-    count_args, count_kwargs = fake_writer.count_calls[0]
-    assert count_args == ("temporal.ingestion.documents_total", 1)
-    assert count_kwargs["dims"]["status"] == "success"
 
 
 def test_emit_temporal_workflow_status_kpi_emits_counter(monkeypatch):

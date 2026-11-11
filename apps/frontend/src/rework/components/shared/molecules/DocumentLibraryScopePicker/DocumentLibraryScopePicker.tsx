@@ -86,7 +86,11 @@ function SpacePicker({
   const [expanded, setExpanded] = useState<string[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  // Selected folders this space does not hold (another space of the path, or deleted).
+  const [absent, setAbsent] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  // The clicked folder shows its expected state while its subtree is read.
+  const [pending, setPending] = useState<{ id: string; checked: boolean } | null>(null);
   const [selectionError, setSelectionError] = useState(false);
   const mounted = useRef(true);
   // Scope ids are sets: new objects, ordering and duplicate ids do not change
@@ -159,8 +163,11 @@ function SpacePicker({
           ...prev,
           [parentId]: { ...result, items: offset ? [...(prev[parentId]?.items ?? []), ...result.items] : result.items },
         }));
-      } catch {
-        if (mounted.current) setErrors((prev) => ({ ...prev, [parentId]: true }));
+        return result;
+      } catch (error) {
+        if (!mounted.current) return;
+        setErrors((prev) => ({ ...prev, [parentId]: true }));
+        if ((error as { status?: unknown }).status === 404) setAbsent((prev) => ({ ...prev, [parentId]: true }));
       } finally {
         loadingIds.current.delete(parentId);
         if (mounted.current) setLoading((prev) => ({ ...prev, [parentId]: false }));
@@ -173,21 +180,46 @@ function SpacePicker({
     if (spaceId) void load(ROOT);
   }, [load, spaceId]);
 
+  // Load every page of each selected folder, once, so a restored selection shows its
+  // real state without expanding anything. Bounded to the selection: a selected
+  // folder's directory lists its children and its ancestors, which places it.
+  const requested = useRef(new Set<string>());
+  useEffect(() => {
+    for (const id of value.folderIds) {
+      if (requested.current.has(id)) continue;
+      requested.current.add(id);
+      void (async () => {
+        let offset = 0;
+        let result: Directory | undefined;
+        do {
+          result = await load(id, offset);
+          offset += result?.items.length ?? 0;
+        } while (result?.items.length && offset < result.total);
+      })();
+    }
+  }, [value.folderIds, load]);
+
   // Selection uses fresh, complete directories, never just the visible page.
   // Offset pagination has no snapshot token: reject detectable concurrent edits.
   const allEntries = async (parentId: string): Promise<Entry[]> => {
     const entries: Entry[] = [];
     let total: number | undefined;
+    let last: Directory | undefined;
     do {
-      const result = await page(parentId, entries.length);
-      if (total !== undefined && result.total !== total) throw new Error("Directory changed");
-      total = result.total;
-      if (!result.items.length && entries.length < total) throw new Error("Incomplete directory");
-      entries.push(...result.items);
+      last = await page(parentId, entries.length);
+      if (total !== undefined && last.total !== total) throw new Error("Directory changed");
+      total = last.total;
+      if (!last.items.length && entries.length < total) throw new Error("Incomplete directory");
+      entries.push(...last.items);
     } while (entries.length < total);
     if (entries.length !== total || new Set(entries.map((entry) => entry.data.id)).size !== total) {
       throw new Error("Directory changed");
     }
+    // Keep the complete listing: the tree shows it without reading it again.
+    const complete = { ...last, items: entries, offset: 0 };
+    requested.current.add(parentId);
+    setDirectories((prev) => ({ ...prev, [parentId]: complete }));
+    setErrors((prev) => ({ ...prev, [parentId]: false }));
     return entries;
   };
 
@@ -205,12 +237,16 @@ function SpacePicker({
       if (isCurrent()) setSelectionError(true);
     } finally {
       selecting.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+        setPending(null);
+      }
     }
   };
 
   const toggleFolder = (folder: Folder) => {
-    if (disableLibrarySelection) return;
+    if (disableLibrarySelection || disabled || selecting.current) return;
+    setPending({ id: folder.id, checked: !folderState(folder.id).checked });
     void change(async () => {
       // Swift selects every existing sub-folder. Each selected folder covers
       // its direct documents; it is not a recursive server-side scope.
@@ -256,19 +292,37 @@ function SpacePicker({
     });
   };
 
+  // A selected id is placed once a loaded directory lists it (or, for a folder, once
+  // its own directory is loaded: its ancestors, itself included, hold the selection).
+  // An unplaced id may sit in any unloaded folder.
+  const listed = new Set(
+    Object.values(directories).flatMap((directory) => directory.items.map((entry) => entry.data.id)),
+  );
+  const unplaced = [...value.folderIds, ...value.documentIds].some(
+    (id) => !listed.has(id) && !directories[id] && !absent[id],
+  );
+  const holdsSelection = new Set(
+    value.folderIds.flatMap((id) => directories[id]?.ancestors.map((ancestor) => ancestor.id) ?? []),
+  );
+
   const folderState = (id: string): { checked: boolean; partial: boolean; unknown: boolean } => {
     if (!value.folderIds.length && !value.documentIds.length) {
       return { checked: false, partial: false, unknown: false };
     }
     const own = value.folderIds.includes(id);
     const directory = directories[id];
-    const children = directory?.items ?? [];
+    if (!directory) {
+      // A selected folder is being loaded (or failed to load); another folder is
+      // unknown only if an unplaced selected id could be inside it.
+      const unknown = own || unplaced;
+      return { checked: false, partial: unknown || holdsSelection.has(id), unknown };
+    }
+    const children = directory.items;
     const subfolders = children.filter((entry) => entry.kind === "folder").map((entry) => folderState(entry.data.id));
     // All pages of this directory AND all descendant directories are required
     // before claiming a complete subtree. A restored id alone only covers its
     // direct documents; it says nothing about selected/excluded subfolders.
     const unknown =
-      !directory ||
       loading[id] ||
       errors[id] ||
       new Set(children.map((entry) => entry.data.id)).size !== directory.total ||
@@ -282,7 +336,12 @@ function SpacePicker({
       // Unlocated restored picks can belong to an unloaded descendant. Show an
       // explicitly unknown mixed state instead of claiming either all or none.
       partial:
-        !checked && (unknown || own || hasDocument || subfolders.some((child) => child.checked || child.partial)),
+        !checked &&
+        (unknown ||
+          own ||
+          hasDocument ||
+          holdsSelection.has(id) ||
+          subfolders.some((child) => child.checked || child.partial)),
       unknown,
     };
   };
@@ -296,7 +355,8 @@ function SpacePicker({
           const { id, name } = entry.data;
           if (entry.kind === "folder") {
             const isExpanded = expanded.includes(id);
-            const state = folderState(id);
+            const state =
+              pending?.id === id ? { checked: pending.checked, partial: false, unknown: false } : folderState(id);
             return (
               <li key={id} className={styles.node}>
                 <div
@@ -322,7 +382,7 @@ function SpacePicker({
                     checked={state.checked}
                     indeterminate={state.partial}
                     aria-description={state.unknown ? t("rework.weaverAgents.documentSelectionUnknown") : undefined}
-                    disabled={disabled || busy || disableLibrarySelection}
+                    disabled={disabled || disableLibrarySelection}
                     onChange={() => toggleFolder(entry.data)}
                   />
                   <span className={styles.folderIcon} style={{ color: FOLDER_ICON.color }} aria-hidden>
@@ -348,7 +408,7 @@ function SpacePicker({
                   className={styles.checkbox}
                   aria-label={name}
                   checked={covered || value.documentIds.includes(id)}
-                  disabled={disabled || busy || (covered && disableLibrarySelection)}
+                  disabled={disabled || (covered && disableLibrarySelection)}
                   onChange={(event) => toggleDocument(id, parentId, event.target.checked)}
                 />
               )}
@@ -415,11 +475,6 @@ function SpacePicker({
           {t("chatbot.documentScopePanel.clearSelection")}
         </Button>
       </div>
-      {busy && (
-        <p role="status" className={styles.loadingText}>
-          {t("rework.loading")}
-        </p>
-      )}
       {selectionError && (
         <p role="alert" className={styles.stateText}>
           {t("rework.weaverAgents.documentSelectionFailed")}

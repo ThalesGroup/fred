@@ -1,85 +1,85 @@
 ---
 name: weaver-check-fix-or-remove
-description: Examiner la pertinence des tests Fred pendant la migration Weaver et ReBAC, puis corriger le code, adapter ou supprimer les tests selon les contrats encore valides. Utiliser pour des échecs de tests ou une demande ciblée de tri des tests de migration, sans déclencher un audit général.
+description: Examine the relevance of Fred tests during the Weaver and ReBAC migration, then fix the code, adapt or remove the tests according to the contracts still valid. Use for test failures or a targeted request to triage migration tests, without triggering a general audit.
 ---
 
-# Weaver : vérifier la pertinence avant de réparer
+# Weaver: check relevance before repairing
 
-Le résultat attendu est une couverture utile du comportement convenu pour Fred.
-Un test vert ne suffit pas : ne pas préserver un mécanisme Swift abandonné,
-ni supprimer une garantie encore nécessaire parce que son test échoue.
+The expected result is useful coverage of Fred's agreed behavior. A green test
+is not enough: do not preserve an abandoned Swift mechanism, nor remove a
+guarantee that is still needed because its test fails.
 
-Lire `AGENTS.md` et `fred-reconstruction-method` du checkout actif. Appliquer
-la réduction du code de production, la réutilisation et la suppression des chemins
-remplacés, sans affaiblir les garanties ni supprimer des tests utiles.
+Read the active checkout's `AGENTS.md` and `fred-reconstruction-method`. Apply
+production code reduction, reuse and removal of replaced paths, without
+weakening guarantees or removing useful tests.
 
-## Établir le contrat
+## Establish the contract
 
-- Localiser le checkout demandé, lire ses instructions applicables et les skills
-  qu'elles imposent. Utiliser les chemins du checkout actif, sans chemin Fred
-  personnel figé. Vérifier la branche et les modifications déjà présentes.
-- Partir des échecs fournis et annoncer un lot limité. Lire les assertions,
-  fixtures, mocks, contrats producteurs et consommateurs, et le chemin réellement
-  exécuté. Remonter au premier échec causal derrière une erreur HTTP générique.
-- Formuler ce que chaque test protège, indépendamment de son implémentation.
-  Distinguer le comportement actuel observé, la cible Weaver acceptée et le
-  comportement Swift historique. Consulter les décisions pertinentes du dépôt ;
-  ni le code actuel ni une ancienne spécification ne suffisent seuls à établir
-  le comportement attendu. Une cible écrite n'est pas un parcours déjà intégré.
-- Une lacune de migration n'est pas une obsolescence. Si l'attendu reste ambigu,
-  préciser la décision manquante et avancer sur les cas indépendants.
+- Locate the requested checkout, read its applicable instructions and the skills
+  they require. Use the active checkout's paths, without a fixed personal Fred
+  path. Check the branch and the changes already present.
+- Start from the failures provided and announce a bounded batch. Read the
+  assertions, fixtures, mocks, producer and consumer contracts, and the path
+  actually executed. Trace back to the first causal failure behind a generic
+  HTTP error.
+- State what each test protects, independently of its implementation.
+  Distinguish the current observed behavior, the accepted Weaver target and the
+  historical Swift behavior. Consult the repository's relevant decisions; neither
+  the current code nor an old specification alone establishes the expected
+  behavior. A written target is not an already integrated path.
+- A migration gap is not obsolescence. If the expectation remains ambiguous,
+  state the missing decision and proceed with the independent cases.
 
-## Choisir et appliquer
+## Choose and apply
 
-| Diagnostic étayé | Action |
+| Supported diagnosis | Action |
 | --- | --- |
-| Garantie toujours requise, code en régression | Corriger le code et conserver une assertion qui détecte la régression. |
-| Garantie utile, fixture ou assertion liée à un ancien contrat | Adapter le test au contrat Weaver réel en préservant sa portée. |
-| Comportement explicitement abandonné, sans garantie résiduelle | Supprimer le test et les seules fixtures devenues inutilisées. |
-| Couverture réellement redondante | Fusionner ou supprimer en identifiant le test conservé et les cas qu'il couvre. |
-| Environnement ou dépendance défaillante | Corriger la configuration de test dans le lot, ou signaler le blocage sans changer l'attendu métier. |
-| Fonction requise mais migration incomplète | Rendre l'écart explicite ; ne pas déclarer le test obsolète ni implémenter toute la migration hors du lot. |
+| Guarantee still required, code regressed | Fix the code and keep an assertion that detects the regression. |
+| Useful guarantee, fixture or assertion tied to an old contract | Adapt the test to the real Weaver contract while preserving its scope. |
+| Behavior explicitly abandoned, no residual guarantee | Remove the test and only the fixtures that became unused. |
+| Truly redundant coverage | Merge or remove, naming the kept test and the cases it covers. |
+| Failing environment or dependency | Fix the test configuration in the batch, or report the blocker without changing the business expectation. |
+| Required function but incomplete migration | Make the gap explicit; do not declare the test obsolete nor implement the whole migration outside the batch. |
 
-Une demande « check and fix or remove » demande l'application des corrections
-justifiées dans le lot, pas seulement un rapport. Une demande de diagnostic seul
-reste en lecture seule. Respecter les changements en cours des autres auteurs.
+A "check and fix or remove" request asks for the justified fixes to be applied
+in the batch, not just a report. A diagnosis-only request stays read-only.
+Respect other authors' changes in progress.
 
-Avant une suppression, rechercher les usages statiques et dynamiques pertinents
-(enregistrement, configuration, routes, identifiants). Identifier la décision qui
-abandonne le comportement ou la couverture qui le remplace. Préserver les cas
-négatifs utiles et toute garantie de sécurité portée par un ancien test.
-L'absence d'implémentation Weaver ne prouve pas que la garantie a disparu.
+Before a removal, search for the relevant static and dynamic usages
+(registration, configuration, routes, identifiers). Identify the decision that
+abandons the behavior or the coverage that replaces it. Preserve useful negative
+cases and any security guarantee carried by an old test. The absence of a Weaver
+implementation does not prove the guarantee has disappeared.
 
-Pour ReBAC, préserver les garanties aux frontières convenues : identité fiable,
-délégation, isolation, admission, accès aux ressources et cycle de vie. Relire
-les arbitrages actuels du dépôt sur leur temporalité ; ne pas recopier une
-ancienne stratégie de vérification dans le nouveau modèle.
+For ReBAC, preserve the guarantees at the agreed boundaries: reliable identity,
+delegation, isolation, admission, resource access and lifecycle. Reread the
+repository's current trade-offs on their timing; do not copy an old verification
+strategy into the new model.
 
-## Éviter les faux correctifs
+## Avoid false fixes
 
-- Ne pas affaiblir une validation de production ou ajouter un défaut permissif
-  pour accepter une réponse simulée incomplète. Vérifier aussi le producteur réel.
-- Simuler les dépendances externes au bon niveau. Ne pas court-circuiter le
-  mécanisme que le test prétend vérifier, notamment l'admission ou le streaming.
-- Ne pas recréer de fallback Swift, d'alias ou de chemin d'autorisation parallèle
-  pour sauver un test hérité.
-- Ne pas remplacer un échec par `skip`, `xfail` ou une assertion plus faible pour
-  obtenir du vert. Distinguer les échecs des `xfail` attendus ; n'étendre l'examen
-  à ces derniers que s'ils expliquent le problème ou font partie de la demande.
-  Un problème amont doit avoir une preuve et une condition de réexamen précises.
-- Réutiliser une fixture partagée lorsqu'elle est accessible et adaptée ; ne pas
-  ajouter une abstraction ou un import entre suites seulement pour une ligne.
+- Do not weaken a production validation or add a permissive default to accept an
+  incomplete mocked response. Also check the real producer.
+- Mock external dependencies at the right level. Do not short-circuit the
+  mechanism the test claims to verify, notably admission or streaming.
+- Do not recreate a Swift fallback, alias or parallel authorization path to save
+  an inherited test.
+- Do not replace a failure with `skip`, `xfail` or a weaker assertion to get
+  green. Distinguish failures from expected `xfail`s; extend the examination to
+  the latter only if they explain the problem or are part of the request. An
+  upstream problem must have precise evidence and a re-examination condition.
+- Reuse a shared fixture when it is accessible and suitable; do not add an
+  abstraction or a cross-suite import just for one line.
 
-## Vérifier et restituer
+## Verify and report
 
-Appliquer le formatage et les contrôles qualité exigés par le dépôt. Respecter
-son périmètre d'exécution des tests et la demande de l'utilisateur : une relance
-autorisée commence par les tests concernés et les voisins affectés, sans campagne
-générale automatique. Si les tests ne sont pas exécutés, le dire explicitement.
+Apply the formatting and quality checks the repository requires. Respect its
+test execution scope and the user's request: an authorized rerun starts with the
+tests concerned and the affected neighbors, without an automatic general
+campaign. If the tests are not run, say so explicitly.
 
-Rendre un bilan court : test ou groupe, garantie protégée, décision et preuve,
-fichiers changés, commandes réellement exécutées et résultats. Pour une
-suppression, indiquer la couverture conservée ou pourquoi elle n'a plus lieu
-d'être. Séparer diagnostic statique, réussite des tests et validation produit.
-Ne pas recréer de workflow RFC ou de journal parallèle. Un commit ou une PR
-requiert l'autorisation de l'utilisateur.
+Give a short report: test or group, protected guarantee, decision and evidence,
+files changed, commands actually run and results. For a removal, state the
+coverage kept or why it no longer applies. Separate static diagnosis, test
+success and product validation. Do not recreate an RFC workflow or a parallel
+journal. A commit or a PR requires the user's authorization.

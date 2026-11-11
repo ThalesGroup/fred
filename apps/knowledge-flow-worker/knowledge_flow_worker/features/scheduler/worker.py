@@ -30,6 +30,7 @@ from datetime import timedelta
 
 from fred_core.scheduler.temporal_client_provider import route_temporal_core_logs
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from knowledge_flow_worker.common.structures import IngestionWorkerRole, TemporalSchedulerConfig, extraction_task_queue
@@ -148,9 +149,12 @@ async def run_worker(
 
     logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
     route_temporal_core_logs()
+    # Activities exchange Pydantic models (`FileToProcess`, `DocumentMetadata`); the
+    # Control Plane starts workflows with plain JSON, which this converter also reads.
     client = await Client.connect(
         target_host=config.host,
         namespace=config.namespace,
+        data_converter=pydantic_data_converter,
     )
 
     workers = [

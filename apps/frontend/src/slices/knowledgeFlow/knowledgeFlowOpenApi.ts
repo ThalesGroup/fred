@@ -460,13 +460,17 @@ export type TabularDocumentDescriptionResponse = {
 export type RawSqlResponse = {
   /** Validated SQL before the server adds its outer result-row LIMIT. */
   sql_query: string;
-  /** JSON objects keyed by selected SQL columns; values depend on the query. Bounded preview, without a completeness flag. */
+  /** JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows. */
   rows?: {
     [key: string]: any;
   }[];
+  /** True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates. */
+  truncated?: boolean;
+  /** Result-row limit applied to this query. */
+  row_limit?: number | null;
   /** Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. */
   error?: string | null;
-  /** Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. */
+  /** Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated. */
   message?: string | null;
   /** Document UUIDs of the mounted tables. A workbook UUID may appear more than once. */
   dataset_uids?: string[];
@@ -478,7 +482,7 @@ export type TabularQueryRequest = {
   sql: string;
   /** Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. */
   dataset_uids?: string[] | null;
-  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. For totals or statistics, aggregate in SQL rather than counting this preview. */
+  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {

@@ -415,7 +415,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### POST /tabular/query
 
-Run one read-only DuckDB SELECT over discovered tables. Run one read-only DuckDB SELECT after describing every document it reads. Use exact query_alias values from describe_tabular_documents in FROM/JOIN. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset ceilings come from storage.tabular_store.query. Results are row-limited without a truncation flag or pagination token: compute totals and aggregates in SQL instead of inferring them from previews. rows=[] with error=null is a successful query with zero matching rows and an explicit success message. A zero count or null aggregate is still a row. Reuse successful results; inspect types and filters before changing an unexpectedly empty query instead of repeating it unchanged. HTTP 400 requires correcting SQL or arguments. Retry capacity 503 with bounded backoff; for 504 narrow the query. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
+Run one read-only DuckDB SELECT over discovered tables. Run one read-only DuckDB SELECT after describing every document it reads. Use exact query_alias values from describe_tabular_documents in FROM/JOIN. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset ceilings come from storage.tabular_store.query. Results stop at row_limit, without pagination; truncated=true means rows is partial. Compute totals and aggregates in SQL instead of inferring them from previews. rows=[] with error=null is a successful query with zero matching rows and an explicit success message. A zero count or null aggregate is still a row. Reuse successful results; inspect types and filters before changing an unexpectedly empty query instead of repeating it unchanged. HTTP 400 requires correcting SQL or arguments. Retry capacity 503 with bounded backoff; for 504 narrow the query. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `query_tabular_documents`.
 
@@ -623,10 +623,12 @@ Existing HTTP error envelope. Request-validation errors use HTTPValidationError 
 | --- | --- | --- | --- |
 | `dataset_uids` | array of string |  | Document UUIDs of the mounted tables. A workbook UUID may appear more than once. |
 | `error` | string or null |  | Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. |
-| `message` | string or null |  | Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. |
+| `message` | string or null |  | Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated. |
 | `query_aliases` | array of string |  | Exact aliases of the mounted tables used by the query. |
-| `rows` | array of object |  | JSON objects keyed by selected SQL columns; values depend on the query. Bounded preview, without a completeness flag. |
+| `row_limit` | integer or null |  | Result-row limit applied to this query. |
+| `rows` | array of object |  | JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows. |
 | `sql_query` | string | yes | Validated SQL before the server adds its outer result-row LIMIT. |
+| `truncated` | boolean |  | True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates. Default: `false`. |
 
 ### SearchPolicyName
 
@@ -716,7 +718,7 @@ One read-only DuckDB SELECT over authorized document tables. sql uses discovered
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `dataset_uids` | array of string, max items 1000 or null |  | Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. |
-| `max_rows` | integer, >= 1.0 or null |  | Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. For totals or statistics, aggregate in SQL rather than counting this preview. |
+| `max_rows` | integer, >= 1.0 or null |  | Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview. |
 | `sql` | string, min length 1 | yes | One read-only DuckDB SELECT/WITH using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UUIDs or filenames. Must reference an authorized dataset; SELECT 1, writes and external reads are refused. |
 
 ### TabularSearchRequest

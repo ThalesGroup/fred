@@ -719,6 +719,8 @@ async def test_native_capability_tool_gets_kpi_and_audit_coverage() -> None:
     assert latency.dims["source"] == "capability"
     assert latency.dims["tool_name"] == native_capability_tool.name
     assert latency.dims["status"] == "ok"
+    # A tool call of a person's turn has the turn's actor (B5), not "system".
+    assert latency.dims["actor_type"] == "human"
 
     assert audit.event_names() == [
         "agent.tool.invocation.started",

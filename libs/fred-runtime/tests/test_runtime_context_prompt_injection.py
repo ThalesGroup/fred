@@ -173,7 +173,7 @@ async def test_react_build_executor_injects_context_prompt_into_compiled_agent(
 
 @pytest.mark.asyncio
 async def test_react_uses_one_complete_capability_tool_name_inventory(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     captured: dict[str, object] = {}
 
@@ -201,11 +201,18 @@ async def test_react_uses_one_complete_capability_tool_name_inventory(
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
-    executor = await runtime.build_executor(_binding())
+    with caplog.at_level(logging.INFO, logger=react_mod.__name__):
+        executor = await runtime.build_executor(_binding())
 
     expected = ("capability_direct", "capability_middleware")
     assert captured["compiled_names"] == expected
     assert executor._available_tool_names == frozenset(expected)  # type: ignore[attr-defined]
+    # One INFO line per turn names the tools the model actually receives.
+    [line] = [
+        r for r in caplog.records if r.getMessage().startswith("model tools bound")
+    ]
+    assert line.levelno == logging.INFO
+    assert (line.tool_count, line.tool_names) == (2, list(expected))  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

@@ -51,8 +51,7 @@ class McpToolkit(BaseToolkit):
         super().__init__()
         self._client = client
         self._agent = agent
-        # 🟢 LOG 1: Initialization success
-        logger.info(
+        logger.debug(
             "initialized. Client: %s, Agent: %s",
             type(client).__name__,
             type(agent).__name__,

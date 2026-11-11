@@ -8,8 +8,7 @@ This page describes current instrumentation, not a completed per-profile dashboa
 | KPI name | Meaning | Current coverage / limitation |
 | --- | --- | --- |
 | `temporal.system.activity_queue_wait_ms` | `started_time - scheduled_time`, in milliseconds | Called by push/pull metadata activities only; no extraction/indexing queue-wait emission yet |
-| `temporal.system.activity_duration_ms` | Elapsed time until an instrumented activity outcome | Metadata, extraction and output call sites; not a complete document end-to-end duration |
-| `temporal.ingestion.documents_total` | One count per instrumented activity outcome | Counts stages/attempts, **not unique documents** |
+| `temporal.system.activity_duration_ms` | Elapsed time until an instrumented activity outcome | Metadata, extraction and output call sites; not a complete document end-to-end duration. Its sample count is the number of activity outcomes (stages and attempts, **not unique documents**) |
 | `temporal.ingestion.workflows_total` | Helper for recording workflow status | Helper and unit test exist, but no production caller currently wires it into the pipeline |
 
 Helpers emit only inside a Temporal activity. Emission failures are logged and do

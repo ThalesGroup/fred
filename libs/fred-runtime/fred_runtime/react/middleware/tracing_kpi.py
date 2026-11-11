@@ -49,6 +49,7 @@ from fred_runtime.runtime_support.llm_diagnostics import (
     streaming_selection,
 )
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
+from fred_runtime.runtime_support.request_context_helpers import turn_kpi_actor
 from fred_runtime.runtime_support.trace_payloads import (
     final_assistant_message,
     model_request_char_sizes,
@@ -291,10 +292,15 @@ class TracingKpiMiddleware(AgentMiddleware):
                 with suppress(Exception):
                     span.end()
             if self._kpi is not None:
-                actor = KPIActor(type="system")
+                # In-flight calls are a process gauge (same series at start and end);
+                # each completed call belongs to the turn's actor.
+                actor = turn_kpi_actor(self._binding)
                 with suppress(Exception):
                     self._kpi.gauge(
-                        MetricNames.LLM_ACTIVE_CALLS, active, dims=dims, actor=actor
+                        MetricNames.LLM_ACTIVE_CALLS,
+                        active,
+                        dims=dims,
+                        actor=KPIActor(type="system"),
                     )
                 terminal_dims: Dims = {
                     **dims,

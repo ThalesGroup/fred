@@ -12,7 +12,7 @@ from uuid import UUID
 
 import httpx
 from fred_core.logs.context import operation_log_scope
-from fred_core.logs.log_setup import log_setup
+from fred_core.logs.log_setup import dependency_wait_level, log_setup
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
@@ -242,7 +242,9 @@ class PreparationWorker:
                     error.response.status_code not in (502, 503, 504)
                 ):
                     raise
-                logger.warning(
+                # Routine while the platform starts together; a WARNING afterwards.
+                logger.log(
+                    dependency_wait_level(),
                     "Control Plane unavailable; worker registration will retry",
                     extra={
                         "error_code": "capability_worker_registration_retry",

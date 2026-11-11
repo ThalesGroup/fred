@@ -157,7 +157,8 @@ class CapabilityRegistry:
                     f"failed to load: {exc}"
                 ) from exc
             cap_id = self.register(_as_capability(ep.name, target))
-            logger.info(
+            # One "registry ready" INFO line lists them all.
+            logger.debug(
                 "discovered '%s' from entry point '%s' (%s)",
                 cap_id,
                 ep.name,

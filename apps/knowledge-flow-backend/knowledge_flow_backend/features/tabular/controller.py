@@ -117,9 +117,9 @@ class TabularController:
             Use exact query_alias values from describe_tabular_documents in FROM/JOIN.
             dataset_uids narrows the active selection; a workbook UID includes all its
             tables. SQL must reference at least one dataset. Execution, memory, row and
-            dataset ceilings come from storage.tabular_store.query. Results are
-            row-limited without a truncation flag or pagination token: compute totals and
-            aggregates in SQL instead of inferring them from previews.
+            dataset ceilings come from storage.tabular_store.query. Results stop at
+            row_limit, without pagination; truncated=true means rows is partial. Compute
+            totals and aggregates in SQL instead of inferring them from previews.
 
             rows=[] with error=null is a successful query with zero matching rows and an
             explicit success message. A zero count or null aggregate is still a row. Reuse

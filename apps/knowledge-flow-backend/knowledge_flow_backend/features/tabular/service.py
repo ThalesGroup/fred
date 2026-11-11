@@ -585,7 +585,7 @@ class TabularService:
             query_config.max_rows,
         )
 
-        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], list[ResolvedDataset]]:
+        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], bool, list[ResolvedDataset]]:
             connection = open_duckdb_connection(handle, config=query_config)
             try:
                 handle.raise_if_aborted()
@@ -600,35 +600,53 @@ class TabularService:
                 )
                 self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
                 handle.raise_if_aborted()
-                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
+                # One extra row tells a complete result from a truncated one without a second query.
+                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows + 1}"
                 with _redacting_query_execution_errors(
                     diagnostic_relations=validated.diagnostic_relations,
                     mounted_columns={dataset.query_alias: [column.name for column in dataset.artifact.columns] for dataset in mounted_datasets},
                 ):
                     rows_df = connection.execute(limited_query).df()
-                return validated.sql, dataframe_to_records(rows_df), mounted_datasets
+                truncated = len(rows_df) > effective_max_rows
+                return validated.sql, dataframe_to_records(rows_df.head(effective_max_rows)), truncated, mounted_datasets
             finally:
                 close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
-        sql_query, rows, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
+        sql_query, rows, truncated, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
 
         duration_ms = (time.perf_counter() - started_at) * 1000
+        # The request context already carries user_id. Aliases are not logged: they
+        # derive from document names; the SQL is logged as a hash only.
+        dataset_uids = [dataset.metadata.document_uid for dataset in mounted_datasets]
         logger.info(
-            "user=%s datasets=%s aliases=%s sql_sha256=%s rows=%s duration_ms=%.2f",
-            user.uid,
-            [dataset.metadata.document_uid for dataset in mounted_datasets],
-            [dataset.query_alias for dataset in mounted_datasets],
-            hashlib.sha256(sql_query.encode("utf-8")).hexdigest(),
+            "tabular query rows=%s truncated=%s duration_ms=%.2f",
             len(rows),
+            truncated,
             duration_ms,
+            extra={
+                "dataset_uids": dataset_uids,
+                "sql_sha256": hashlib.sha256(sql_query.encode("utf-8")).hexdigest(),
+                "rows": len(rows),
+                "truncated": truncated,
+                "row_limit": effective_max_rows,
+                "duration_ms": round(duration_ms, 2),
+            },
         )
 
+        if truncated:
+            message = f"Partial result: only the first {effective_max_rows} rows are returned. Compute counts, totals and statistics with SQL aggregates, or filter further."
+        elif not rows:
+            message = "Query succeeded: 0 rows matched the conditions."
+        else:
+            message = None
         return RawSQLResponse(
             sql_query=sql_query,
             rows=rows,
+            truncated=truncated,
+            row_limit=effective_max_rows,
             error=None,
-            message="Requête exécutée avec succès : 0 ligne correspondant aux conditions." if not rows else None,
+            message=message,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )
@@ -686,12 +704,7 @@ class TabularService:
         # document is left out of `searched_dataset_uids` entirely.
         dropped_document_uids = {dataset.metadata.document_uid for dataset in selected_datasets[query_config.max_selected_datasets :]}
         if selection_truncated:
-            logger.info(
-                "search selection capped user=%s selected=%s scanned=%s",
-                user.uid,
-                len(selected_datasets),
-                len(scanned_datasets),
-            )
+            logger.info("search selection capped selected=%s scanned=%s", len(selected_datasets), len(scanned_datasets))
 
         def _job(handle: DuckDBAbortHandle) -> tuple[str, list[TabularTableMatch], bool]:
             connection = open_duckdb_connection(handle, config=query_config)
@@ -736,12 +749,16 @@ class TabularService:
         # The keyword itself is not logged: it may carry sensitive terms, exactly
         # as query_read logs a SQL hash rather than the SQL text.
         logger.info(
-            "search user=%s datasets=%s matches=%s tables_truncated=%s duration_ms=%.2f",
-            user.uid,
-            [dataset.metadata.document_uid for dataset in scanned_datasets],
+            "tabular search matches=%s tables_truncated=%s duration_ms=%.2f",
             len(matches),
             tables_truncated,
             duration_ms,
+            extra={
+                "dataset_uids": [dataset.metadata.document_uid for dataset in scanned_datasets],
+                "matches": len(matches),
+                "tables_truncated": tables_truncated,
+                "duration_ms": round(duration_ms, 2),
+            },
         )
 
         return TabularSearchResponse(

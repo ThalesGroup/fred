@@ -128,7 +128,7 @@ def test_logging_tracer_emits_parent_and_runtime_attributes(
     logger = logging.getLogger("fred_core.tests.traces")
     tracer = observability.LoggingTracer(logger=logger)
 
-    with caplog.at_level(logging.INFO, logger=logger.name):
+    with caplog.at_level(logging.DEBUG, logger=logger.name):
         span = tracer.start_span(
             "agent.run",
             attributes={"agent_id": "demo"},

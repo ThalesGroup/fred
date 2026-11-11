@@ -187,7 +187,7 @@ def _patch_vertex_maas_auth(model: Any) -> None:
 
 def _info_provider(cfg: ModelConfiguration, settings: Dict[str, Any]) -> None:
     # Settings may contain custom headers and signed URLs; never dump them.
-    logger.info("Provider=%s Name=%s", cfg.provider, cfg.name)
+    logger.debug("Provider=%s Name=%s", cfg.provider, cfg.name)
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ def _create_model(
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."
             )
         _info_provider(cfg, settings)
-        logger.info(
+        logger.debug(
             "Constructing ChatOpenAI model=%s with explicit timeout=%s stream_usage=%s (overriding SDK default)",
             cfg.name,
             base_kwargs.get("timeout"),

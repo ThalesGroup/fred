@@ -39,7 +39,9 @@ import re
 import shutil
 import subprocess  # nosec
 import tempfile
+import time
 import unicodedata
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable, Optional, cast
 
@@ -51,6 +53,7 @@ from tabulate import tabulate
 
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError, StoredObjectInfo
 from knowledge_flow_worker.core.processors.input.excel_processor.excel_extractor import DetectedTable, ExcelExtractor, SheetSummary, _a1, _setup_log_file, _step, log
+from knowledge_flow_worker.core.processors.tabular_outcome import log_tabular_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +189,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
         # Route the pipeline log first so the whole run is captured (debug only).
         self._setup_pipeline_log(output_dir)
 
+        started = time.perf_counter()
         try:
             extractor = self._build_extractor(str(file_path))
             summaries = extractor.extract()
@@ -193,7 +197,9 @@ class ExcelProcessor(BaseMarkdownProcessor):
             log.info("\n" + "=" * 70)
             log.info("EXPORT")
             log.info("=" * 70)
-            self._export(extractor.all_tables, summaries, output_dir, source_path=file_path, document_uid=document_uid)
+            entries = self._export(extractor.all_tables, summaries, output_dir, source_path=file_path, document_uid=document_uid)
+            if document_uid:
+                self._log_outcome(document_uid, extractor.all_tables, summaries, entries, duration_ms=(time.perf_counter() - started) * 1000)
         except InputConversionError:
             raise
         except Exception as exc:
@@ -271,8 +277,8 @@ class ExcelProcessor(BaseMarkdownProcessor):
         *,
         source_path: Optional[Path] = None,
         document_uid: Optional[str] = None,
-    ) -> None:
-        """Export under `output_dir`.
+    ) -> list[dict]:
+        """Export under `output_dir` and return the `tables.json` catalog entries.
 
         Always produces, directly under `output_dir`:
           • `tables.json` — the machine-readable catalog of the extracts,
@@ -331,6 +337,24 @@ class ExcelProcessor(BaseMarkdownProcessor):
         md_path = output_dir / "output.md"
         self._write_markdown_summary(str(md_path), extract_links, summaries, aliases=aliases, object_keys=object_keys)
         _step("EXPORT", f"export finished under {output_dir}")
+        return entries
+
+    def _log_outcome(self, document_uid: str, tables: list[DetectedTable], summaries: list[SheetSummary], entries: list[dict], *, duration_ms: float) -> None:
+        """The document's tabular outcome, counts only: sheet, table and column names
+        derive from the workbook's content and never reach the logs."""
+        lost = Counter(residual.type for summary in summaries for residual in summary.residuals if residual.status in ("dropped", "failed"))
+        if lost:
+            logger.warning("Excel extraction left tables out document_uid=%s reasons=%s", document_uid, dict(lost), extra={"document_uid": document_uid, "skipped_tables": dict(lost)})
+        log_tabular_outcome(
+            document_uid,
+            tables=[(entry["row_count"], len(entry["columns"])) for entry in entries],
+            size_bytes=sum(entry.get("file_size_bytes", 0) for entry in entries),
+            duration_ms=duration_ms,
+            sheets=len(summaries),
+            hidden_sheets_skipped=sum(1 for summary in summaries if not summary.visible and not self.include_hidden_sheets),
+            empty_sheets=sum(1 for summary in summaries if summary.is_empty),
+            empty_tables=len(tables) - len(entries),
+        )
 
     @staticmethod
     def _table_is_empty(t: DetectedTable) -> bool:

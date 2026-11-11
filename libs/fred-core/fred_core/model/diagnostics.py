@@ -91,7 +91,9 @@ def effective_model_settings(
 def log_model_settings(
     provider: str, model_name: str, settings: tuple[tuple[str, object], ...]
 ) -> None:
-    logger.info(
+    # Repeated for each model client a turn builds: a DEBUG detail. The client
+    # versions below stay INFO, once per process.
+    logger.debug(
         "event=llm_model_configuration provider=%s model=%s settings=%s",
         provider,
         model_name,

@@ -1120,7 +1120,15 @@ def test_reader_rejects_incompatible_index_without_writing(monkeypatch):
     assert client.search_pipeline.put_calls == []
 
 
-@pytest.mark.parametrize("failure", ["refresh", "delete_timeout", "delete_partial", "conflict", "count_partial", "count_error", "none"])
+REFRESH_SHARDS = {
+    "refresh_failed": {"total": 2, "successful": 1, "failed": 1},
+    "refresh_none": {"total": 2, "successful": 0, "failed": 0},
+    # Single-node cluster or replica recovery: the replica is counted but unassigned.
+    "unassigned_replica": {"total": 2, "successful": 1, "failed": 0},
+}
+
+
+@pytest.mark.parametrize("failure", ["refresh_failed", "refresh_none", "delete_timeout", "delete_partial", "conflict", "count_partial", "count_error", "unassigned_replica", "none"])
 def test_manager_purge_refuses_partial_visibility_and_failed_counts(failure):
     from types import SimpleNamespace
 
@@ -1131,7 +1139,7 @@ def test_manager_purge_refuses_partial_visibility_and_failed_counts(failure):
         events.append("refresh")
         visible.update(pending)
         pending.clear()
-        return {"_shards": {"total": 2, "successful": 1 if failure == "refresh" else 2, "failed": 0}}
+        return {"_shards": REFRESH_SHARDS.get(failure, {"total": 2, "successful": 2, "failed": 0})}
 
     def delete(**_):
         events.append("delete")
@@ -1149,7 +1157,7 @@ def test_manager_purge_refuses_partial_visibility_and_failed_counts(failure):
     store._index = "fixture"
     store.strict_operations = True
     store.client = SimpleNamespace(indices=SimpleNamespace(refresh=refresh), delete_by_query=delete, count=count)
-    if failure == "none":
+    if failure in ("none", "unassigned_replica"):
         store.delete_vectors_for_document(document_uid="document")
         assert store.get_document_chunk_count(document_uid="document") == 0
         assert events == ["refresh", "delete", "count"]

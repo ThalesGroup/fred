@@ -1297,22 +1297,6 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
-        if delegation_enabled():
-            logger.info(
-                "*** V2 BasicReAct/%s *** activated tools=%d",
-                type(self).__name__,
-                len(self.definition.declared_tool_refs),
-            )
-        else:
-            logger.info(
-                "*** V2 BasicReAct/%s *** activated"
-                " agent_id=%s profile=%s session_id=%s tools=%s",
-                type(self).__name__,
-                self.definition.agent_id,
-                getattr(self.definition, "react_profile_id", "N/A"),
-                binding.portable_context.session_id,
-                [r.tool_ref for r in self.definition.declared_tool_refs],
-            )
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -1352,14 +1336,6 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
-        if delegation_enabled():
-            logger.debug("bound_tools=%d", len(bound_tools))
-        else:
-            logger.debug(
-                "bound_tools=%d names=%r",
-                len(bound_tools),
-                [bt.tool.name for bt in bound_tools],
-            )
         tuning_tokens = {
             k.replace(".", "_"): str(v)
             for k, v in self.definition.tuning_values.items()
@@ -1408,6 +1384,17 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         available_tool_names = collect_available_tool_names(
             (bound_tool.runtime_name for bound_tool in bound_tools),
             self._capability_block,
+        )
+        # One line per turn: tells "no tool available" from "the model chose none".
+        # Tool names are runtime metadata, never arguments or results.
+        logger.info(
+            "model tools bound count=%d names=%s",
+            len(available_tool_names),
+            ",".join(available_tool_names),
+            extra={
+                "tool_count": len(available_tool_names),
+                "tool_names": list(available_tool_names),
+            },
         )
 
         compiled_agent = _create_compiled_react_agent(

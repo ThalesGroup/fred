@@ -61,12 +61,8 @@ class ExcelTableRegistrationProcessor(BaseOutputProcessor):
 
         write_tabular_multi_artifact(metadata, TabularMultiArtifactV1(tables=tables))
         metadata.file.row_count = sum(table.row_count for table in tables)
-        logger.info(
-            "Registered %d table(s) for document %s: %s",
-            len(tables),
-            metadata.document_uid,
-            [table.query_alias for table in tables],
-        )
+        # The extraction stage logged the outcome; aliases derive from sheet names.
+        logger.debug("Registered %d table(s) for document %s", len(tables), metadata.document_uid)
 
         metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
         return metadata

@@ -44,7 +44,7 @@ def test_headers_are_allowlisted_and_body_not_read(allow_ids):
 def test_safe_configuration_does_not_dump_model_or_settings(caplog):
     import logging
 
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
     model = SimpleNamespace(
         streaming=True,
         stream_chunk_timeout=45,

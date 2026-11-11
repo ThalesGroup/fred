@@ -289,12 +289,9 @@ class PgVectorStoreAdapter(BaseVectorStore):
                     self.collection_name,
                     deleted,
                 )
-        except Exception:
-            logger.exception(
-                "failed to delete vectors for document_uid=%s",
-                document_uid,
-            )
-            raise RuntimeError("Failed to delete vectors from PGVector.")
+        except Exception as error:
+            # Callers decide whether this is retried or fatal and log it once.
+            raise RuntimeError(f"Failed to delete vectors from PGVector: {error}") from error
 
     def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
         """Set 'retrievable' on every chunk of a document; `ann_search` post-filters on it."""

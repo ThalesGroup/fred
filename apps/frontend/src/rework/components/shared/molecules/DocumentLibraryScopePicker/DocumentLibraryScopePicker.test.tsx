@@ -46,7 +46,8 @@ const doc = (id: string, parentId: string | null = "folder-1") => ({
   kind: "document",
   data: { id, name: `${id}.txt`, space_id: "space-1", folder_id: parentId },
 });
-const directory = (items: unknown[], total = items.length) => ({ items, total });
+// `ancestors` lists the directory's own folder last, root first (Control Plane contract).
+const directory = (items: unknown[], total = items.length, ancestors: unknown[] = []) => ({ items, total, ancestors });
 let container: HTMLDivElement;
 let root: Root;
 
@@ -82,6 +83,8 @@ async function renderPicker(
   await act(async () =>
     root.render(<DocumentLibraryScopePicker spaceId="space-1" value={value} onChange={onChange} {...extra} />),
   );
+  // Let the restored selection's directory reads settle.
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   return onChange;
 }
 async function expand() {
@@ -126,13 +129,78 @@ describe("Weaver document picker", () => {
 
   it("shows direct documents covered by a selected folder", async () => {
     await renderPicker({ folderIds: ["folder-1"], documentIds: [] });
-    await expand();
-    expect(checkbox("folder-1").checked).toBe(false);
-    expect(checkbox("folder-1").indeterminate).toBe(true);
-    expect(checkbox("doc-1.txt").checked).toBe(true);
-    expect(checkbox("doc-2.txt").checked).toBe(true);
-    await loadMore();
+    // The restored folder's directory is read in full: no expansion or paging needed.
     expect(checkbox("folder-1").checked).toBe(true);
+    await expand();
+    expect(checkbox("doc-1.txt").checked).toBe(true);
+    expect(checkbox("doc-3.txt").checked).toBe(true);
+  });
+
+  describe("restored selection among collapsed folders", () => {
+    const top = ["ArxivAi", "Cyber", "Quality"];
+    beforeEach(() => {
+      pages.set(":0", directory(top.map((id) => folder(id))));
+    });
+
+    it("renders the one selected folder checked and its siblings unchecked without any expansion", async () => {
+      pages.set("Quality:0", directory([doc("q-doc", "Quality")], 1, [folder("Quality").data]));
+      await renderPicker({ folderIds: ["Quality"], documentIds: [] });
+      expect(checkbox("Quality").checked).toBe(true);
+      expect(checkbox("Quality").indeterminate).toBe(false);
+      for (const id of ["ArxivAi", "Cyber"]) {
+        expect(checkbox(id).checked).toBe(false);
+        expect(checkbox(id).indeterminate).toBe(false);
+      }
+      // Bounded to the selection: unselected folders are never read.
+      expect(browse).not.toHaveBeenCalledWith(expect.objectContaining({ parentId: "Cyber" }));
+      expect(browse).not.toHaveBeenCalledWith(expect.objectContaining({ parentId: "ArxivAi" }));
+    });
+
+    it("renders a selected folder whose subtree is only partly selected as partial", async () => {
+      pages.set(
+        "Quality:0",
+        directory([folder("Audits", "Quality"), doc("q-doc", "Quality")], 2, [folder("Quality").data]),
+      );
+      await renderPicker({ folderIds: ["Quality"], documentIds: [] });
+      expect(checkbox("Quality").checked).toBe(false);
+      expect(checkbox("Quality").indeterminate).toBe(true);
+      expect(checkbox("Quality").hasAttribute("aria-description")).toBe(false);
+      expect(checkbox("Cyber").indeterminate).toBe(false);
+    });
+
+    it("renders a collapsed folder holding a selected descendant as partial", async () => {
+      pages.set("Deep:0", directory([], 0, [folder("Cyber").data, folder("Deep", "Cyber").data]));
+      await renderPicker({ folderIds: ["Deep"], documentIds: [] });
+      expect(checkbox("Cyber").indeterminate).toBe(true);
+      expect(checkbox("Cyber").hasAttribute("aria-description")).toBe(false);
+      expect(checkbox("Quality").indeterminate).toBe(false);
+    });
+
+    it("keeps the explicit mixed state for a selected document that cannot be placed", async () => {
+      await renderPicker({ folderIds: [], documentIds: ["unplaced-doc"] });
+      for (const id of top) {
+        expect(checkbox(id).indeterminate).toBe(true);
+        expect(checkbox(id).getAttribute("aria-description")).toContain("documentSelectionUnknown");
+      }
+    });
+  });
+
+  it("shows a clicked folder's expected state at once, keeps the tree usable and reads it only once", async () => {
+    const onChange = await renderPicker({ folderIds: [], documentIds: [] });
+    const pending = deferredDirectory();
+    pages.set("folder-1:0", pending.promise);
+    await act(async () => checkbox("folder-1").click());
+    expect(checkbox("folder-1").checked).toBe(true);
+    expect(checkbox("folder-1").disabled).toBe(false);
+    await act(async () => pending.resolve(directory([doc("doc-1"), doc("doc-2")], 3)));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ folderIds: ["folder-1"], documentIds: [] });
+    await renderPicker({ folderIds: ["folder-1"], documentIds: [] }, { onChange });
+    expect(checkbox("folder-1").checked).toBe(true);
+    expect(checkbox("folder-1").indeterminate).toBe(false);
+    // The subtree read by the click is reused: the restore effect does not read it again.
+    const reads = browse.mock.calls.filter(([arg]) => arg.parentId === "folder-1" && arg.offset === 0);
+    expect(reads).toHaveLength(1);
   });
 
   it("replaces a folder with ALL other direct documents, keeping subfolders and outside picks", async () => {
@@ -266,23 +334,19 @@ describe("Weaver document picker", () => {
         documentIds: [],
       };
       const onChange = await renderPicker(restored);
-      // A restored folder id alone cannot prove that the whole subtree is picked.
-      expect(checkbox("folder-1").checked).toBe(false);
-      expect(checkbox("folder-1").indeterminate).toBe(true);
-      expect(checkbox("folder-1").getAttribute("aria-description")).toContain("documentSelectionUnknown");
+      // The selected subtrees are read on open: the state is known before any expansion.
+      expect(checkbox("folder-1").checked).toBe(complete);
+      expect(checkbox("folder-1").indeterminate).toBe(!complete);
+      expect(checkbox("folder-1").hasAttribute("aria-description")).toBe(false);
       await act(async () => checkbox("folder-1").click());
       const closedResult = onChange.mock.calls[0][0];
       onChange.mockClear();
 
       await expand();
-      expect(checkbox("folder-1").checked).toBe(false);
       await act(async () => checkbox("folder-1").click());
       expect(onChange).toHaveBeenCalledExactlyOnceWith(closedResult);
       onChange.mockClear();
 
-      await loadMore();
-      // Even all direct entries do not prove that the child subtrees are complete.
-      expect(checkbox("folder-1").checked).toBe(false);
       await expandFolder("kept");
       await expandFolder("excluded");
       expect(checkbox("folder-1").checked).toBe(complete);
@@ -342,10 +406,14 @@ it("offers only the current search path and preserves combined selections across
     "parent",
     "space-1",
   ]);
+  // Each browsed space reads its own root (restored folders are also read there).
+  const root = (id: string) => expect.objectContaining({ id, parentId: undefined, offset: 0 });
+  browse.mockClear();
   await act(async () => container.querySelector<HTMLButtonElement>('[data-space="parent"]')!.click());
-  expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ id: "parent", offset: 0 }));
+  expect(browse).toHaveBeenCalledWith(root("parent"));
   expect(onChange).not.toHaveBeenCalled();
+  browse.mockClear();
   await act(async () => container.querySelector<HTMLButtonElement>('[data-space="space-1"]')!.click());
-  expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ id: "space-1", offset: 0 }));
+  expect(browse).toHaveBeenCalledWith(root("space-1"));
   expect(onChange).not.toHaveBeenCalled();
 });

@@ -48,6 +48,7 @@ vi.mock("react-i18next", () => ({
         return `Reading the summary of document “${options?.name}”.`;
       if (key === "rework.chatTrace.tabular.catalogForWorkbook") return "Reading the workbook summary.";
       if (key === "rework.chatTrace.rows") return `${options?.count ?? 0} rows`;
+      if (key === "rework.chatTrace.partialRows") return `Partial result: first ${options?.count ?? 0} rows`;
       if (key === "rework.chatTrace.tables")
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
@@ -241,6 +242,46 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
     expect(html).toContain("0 rows");
     expect(html).toContain('<pre data-language="json">[]</pre>');
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(2);
+  });
+
+  it("says a result cut at the row limit is partial", () => {
+    const sqlEntry = (truncated: boolean): TraceEntry => ({
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        parts: [
+          {
+            type: "tool_call",
+            call_id: "call-3",
+            name: "mcp__knowledge_flow__query_tabular_documents",
+            args: { sql: "SELECT * FROM d_sales" },
+          },
+        ],
+      }),
+      result: message({
+        channel: "tool_result",
+        role: "tool",
+        parts: [
+          {
+            type: "tool_result",
+            call_id: "call-3",
+            content: JSON.stringify({
+              sql_query: "SELECT * FROM d_sales",
+              rows: [{ a: 1 }, { a: 2 }],
+              truncated,
+              row_limit: 2,
+            }),
+            latency_ms: 5,
+          },
+        ],
+      }),
+    });
+
+    const partial = renderToStaticMarkup(<TraceDetailDrawer entry={sqlEntry(true)} onClose={() => undefined} />);
+    expect(partial).toContain("Partial result: first 2 rows");
+    const complete = renderToStaticMarkup(<TraceDetailDrawer entry={sqlEntry(false)} onClose={() => undefined} />);
+    expect(complete).toContain("2 rows");
+    expect(complete).not.toContain("Partial result");
   });
 });
 

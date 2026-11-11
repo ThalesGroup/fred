@@ -138,7 +138,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
                 dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
                 return dialect.delimiter
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to detect delimiter for %s with encoding '%s': %s", file_path, enc, exc)
+                logger.warning("Failed to detect the CSV delimiter with encoding '%s': %s", enc, exc)
         return None
 
     def detect_source_encoding(self, path: Path, encodings: list[str]) -> str:
@@ -193,51 +193,27 @@ class CsvTabularProcessor(BaseTabularProcessor):
         duckdb_encoding = self.normalize_duckdb_encoding_name(source_encoding)
 
         if duckdb_encoding not in _DUCKDB_NATIVE_ENCODINGS:
-            logger.info(
-                "Transcoding %s from '%s' to UTF-8 before DuckDB inspection",
-                path,
-                source_encoding,
-            )
+            logger.info("Transcoding the CSV from '%s' to UTF-8 before DuckDB inspection", source_encoding)
             utf8_path = self.transcode_csv_to_utf8(path, source_encoding)
             try:
                 self._validate_duckdb_read(utf8_path, delimiter=delimiter, encoding="utf-8")
             except Exception as utf8_exc:  # noqa: BLE001
-                logger.error(
-                    "DuckDB could not read %s after transcoding to UTF-8 (delimiter '%s'): %s",
-                    utf8_path,
-                    delimiter,
-                    utf8_exc,
-                )
+                logger.error("DuckDB could not read the CSV after transcoding to UTF-8 (delimiter '%s'): %s", delimiter, utf8_exc)
                 raise
             return CsvReadOptions(delimiter=delimiter, encoding="utf-8", header=True, source_path=utf8_path)
 
         try:
             self._validate_duckdb_read(path, delimiter=delimiter, encoding=duckdb_encoding)
-            logger.info(
-                "CSV inspection succeeded for %s (delimiter '%s', encoding '%s')",
-                path,
-                delimiter,
-                duckdb_encoding,
-            )
+            logger.info("CSV inspection succeeded (delimiter '%s', encoding '%s')", delimiter, duckdb_encoding)
             return CsvReadOptions(delimiter=delimiter, encoding=duckdb_encoding, header=True)
 
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "DuckDB could not read %s with encoding '%s' (%s) — transcoding to UTF-8",
-                path,
-                duckdb_encoding,
-                exc,
-            )
+            logger.warning("DuckDB could not read the CSV with encoding '%s' (%s) — transcoding to UTF-8", duckdb_encoding, exc)
             utf8_path = self.transcode_csv_to_utf8(path, source_encoding)
             try:
                 self._validate_duckdb_read(utf8_path, delimiter=delimiter, encoding="utf-8")
             except Exception as utf8_exc:  # noqa: BLE001
-                logger.error(
-                    "DuckDB could not read %s after transcoding to UTF-8 (delimiter '%s'): %s",
-                    utf8_path,
-                    delimiter,
-                    utf8_exc,
-                )
+                logger.error("DuckDB could not read the CSV after transcoding to UTF-8 (delimiter '%s'): %s", delimiter, utf8_exc)
                 raise
             return CsvReadOptions(delimiter=delimiter, encoding="utf-8", header=True, source_path=utf8_path)
 

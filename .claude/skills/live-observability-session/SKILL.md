@@ -57,6 +57,13 @@ as evidence, not as proof that emitted logs meet these requirements:
 
 ## Verify the collection path
 
+Local collectors differ by variant. k3d: Fluent Bit -> OpenSearch `k3d-logs-*`.
+Docker Compose: `make fred-json FRED_CHECKOUT=<checkout>` in deployment-factory
+starts Loki, Alloy and Grafana, then every Fred process with JSON logs in
+`/tmp/fred-structured-logs/<component>.log`, which Alloy collects. The developer
+reads them at <http://localhost:3002/d/fred-local-logs/fred-logs>. Without it,
+plain `make run` output is not collected.
+
 For a Fluent Bit -> OpenSearch deployment, verify the actual input (container
 stdout or mounted host files), parser, metadata, output/index and recent arrival
 of this session's events. Observe collected logs through bounded queries when

@@ -1,6 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -363,7 +364,7 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
         assert all(not ack.objects_empty for ack in acknowledgments)
 
 
-def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor):
+def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor, caplog):
     from knowledge_flow_worker.features.manager_processing import cleanup
 
     failing, later = (
@@ -395,8 +396,13 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
     context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
-    cleanup.sweep(context)
+    with caplog.at_level(logging.WARNING, logger=cleanup.__name__):
+        cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
+    # One retry line carrying the cause, without a traceback repeated at every sweep.
+    [retry] = [record for record in caplog.records if record.name == cleanup.__name__]
+    assert retry.levelno == logging.WARNING and retry.exc_info is None
+    assert failing["generation"] in retry.getMessage() and "store unavailable" in retry.getMessage()
 
 
 @pytest.mark.parametrize("remaining", [0, 1])
@@ -1321,3 +1327,25 @@ async def test_cancelled_workspace_does_not_ack_when_thread_can_still_write(monk
         assert len(receipts) == 1, "a detached writer must not lose its durable receipt"
     finally:
         release.set()
+
+
+@pytest.mark.parametrize(("failure", "cause"), [("unreachable", "worker_failed ConnectionError"), (503, "worker_failed status=503 GET /document-processing/cleanup")])
+def test_a_manager_call_failure_keeps_a_bounded_cause(failure, cause):
+    import requests
+
+    from knowledge_flow_worker.features.manager_processing import cleanup
+    from knowledge_flow_worker.features.manager_processing.client import ManagerClient
+
+    def request(*_, **__):
+        if failure == "unreachable":
+            raise requests.ConnectionError("connection refused by 10.0.0.1 with secret body")
+        return SimpleNamespace(status_code=failure, close=lambda: None)
+
+    client = ManagerClient.__new__(ManagerClient)
+    client.url = "http://control-plane"
+    client.tokens = lambda: "token"
+    client.session = SimpleNamespace(request=request)
+    with pytest.raises(Exception) as error:
+        client.request("GET", "/document-processing/cleanup?after=x")
+    # The type or status names the cause; the message, body and query never appear.
+    assert cleanup._cause(error.value) == cause
