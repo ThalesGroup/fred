@@ -129,6 +129,10 @@ vi.mock("./CapabilityPlatformDrawer", () => ({
   },
 }));
 
+vi.mock("../McpConnectionsPage/McpConnectionsPage", () => ({
+  default: ({ spaceId }: { spaceId: string }) => <p data-mcp-space={spaceId}>MCP {spaceId}</p>,
+}));
+
 import FeaturesPage from "./FeaturesPage";
 
 function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {
@@ -338,4 +342,15 @@ it("opens the common-template drawer from the Swift settings gear on ppt_builder
     runtimeId: "pod-b",
     capability: { id: "ppt_builder", route_base_url: "/pod-b/ppt_builder" },
   });
+});
+
+it("places MCP beside models and passes the selected organization space", () => {
+  act(() => root.render(<FeaturesPage organizationId="org-a" />));
+  const tabs = [...container.querySelectorAll("button")];
+  const models = tabs.findIndex((button) => button.textContent?.endsWith("kindFilter.model"));
+  expect(tabs[models + 1].textContent).toContain("kindFilter.mcp");
+  act(() => tabs[models + 1].click());
+  expect(container.querySelector("[data-mcp-space]")?.getAttribute("data-mcp-space")).toBe("org-a");
+  act(() => root.render(<FeaturesPage organizationId="org-b" />));
+  expect(container.querySelector("[data-mcp-space]")?.getAttribute("data-mcp-space")).toBe("org-b");
 });

@@ -92,9 +92,9 @@ it does not give the model unrestricted access. The answer streams from the pod
 to the frontend. Knowledge Flow embeds the question with the corpus model of the
 space's organization, not with the conversation's generation model.
 
-Organization-level policy limits which models and pod offers may be used; local
-capability restrictions can narrow it. Roles in the working space determine what
-the person may do. [Security](03-security.md) explains these two controls;
+Organization-level policy limits which models, pod offers and MCP connections
+may be used; local capability restrictions can narrow it. Roles in the working
+space determine what the person may do. [Security](03-security.md) explains these two controls;
 [journey 2.3](02.3-agent-administration.md) shows how people use them.
 
 ## 1.4. Model decisions and credentials
@@ -145,3 +145,33 @@ unusable corpus model stops processing and search instead of being replaced. The
 [model reference](A13-models.md) connects these boundaries to the SQL schema,
 configuration types and runtime contracts, including the narrower transport that
 Ralph and Knowledge Flow support.
+
+## 1.5. From an MCP connection to an agent's tools
+
+<a id="mcp-connection-to-agent-tools"></a>
+
+An MCP (Model Context Protocol) connection gives an assistant access to a tool
+server. It belongs to a space. Its current management scope is the
+organization, through **Features > MCP**. Control Plane retains the connection and
+reviewed inventory; it exposes an offer through the existing capability catalogue.
+A compatible Agent Pod executes the selected tools.
+
+```mermaid
+flowchart TB
+    ui["Organization UI<br/>Connection and authorization"] -->|"Manage"| cp
+    cp["Control Plane<br/>Catalogue and admission"]
+    cp -->|"Discover tools"| server["MCP server"]
+    pod["Agent Pod<br/>Selected connection"] -->|"Request turn admission"| cp
+    cp -->|"Admitted connection<br/>and reviewed tools"| pod
+    pod -->|"Call tools"| server
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class ui,cp,pod fred
+    class server neutral
+```
+
+The endpoint and any required credentials must work from the executing pod as
+well as from Control Plane. A credential reference is not a secret value or an
+authorization. The [administration journey](02.3-agent-administration.md#models-and-mcp)
+separates discovery, validation and use; the
+[technical boundary](A13-models.md#mcp-connection-boundary) traces the runtime contract.

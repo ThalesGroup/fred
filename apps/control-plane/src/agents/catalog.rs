@@ -10,6 +10,7 @@ use anyhow::{Result, ensure};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{PgConnection, types::Json};
+use uuid::Uuid;
 
 pub struct CapabilityOffer {
     pub capability_id: String,
@@ -198,12 +199,14 @@ pub async fn observation<'e>(
 pub async fn capabilities<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     runtime_id: &str,
+    space_id: Uuid,
 ) -> sqlx::Result<Vec<StoredCapability>> {
     sqlx::query_as(
         "select source_id, capability_id, version, descriptor, advertised
-         from capability_offer where source_id = $1 order by capability_id",
+         from capability_offer o where source_id = $1 and (connection_id is null or exists (select 1 from mcp_connection c join space s on s.id=c.space_id where c.id=o.connection_id and c.space_id=$2 and s.deletion_id is null)) order by capability_id",
     )
     .bind(runtime_id)
+    .bind(space_id)
     .fetch_all(ex)
     .await
 }

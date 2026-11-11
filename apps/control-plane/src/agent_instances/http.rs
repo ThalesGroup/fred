@@ -145,9 +145,36 @@ pub struct ManagedAgentInstanceSummary {
     pub updated_at: DateTime<Utc>,
     pub created_by: String,
     pub updated_by: String,
+    pub created_by_name: Option<String>,
+    pub updated_by_name: Option<String>,
     pub tuning_field_values: BTreeMap<String, Value>,
     pub selected_capability_ids: Option<Vec<String>>,
+    /// Canonical names of selected managed MCP offers, including withdrawn offers.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[schema(required = false)]
+    pub selected_capability_names: BTreeMap<String, String>,
     pub capability_config: BTreeMap<String, BTreeMap<String, Value>>,
+}
+
+/// Resolve one page's authors together, outside SQL transactions. Missing profiles are display data only.
+async fn resolve_authors(s: &AppState, items: &mut [ManagedAgentInstanceSummary]) {
+    let subjects = items
+        .iter()
+        .flat_map(|item| [item.created_by.clone(), item.updated_by.clone()])
+        .collect();
+    let names = async {
+        crate::api::organization_directory(s)?
+            .display_names(subjects)
+            .await
+    };
+    let names = names.await.unwrap_or_else(|_| {
+        tracing::warn!("Agent author names unavailable");
+        Default::default()
+    });
+    for item in items {
+        item.created_by_name = names.get(&item.created_by).cloned();
+        item.updated_by_name = names.get(&item.updated_by).cloned();
+    }
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -157,7 +184,10 @@ pub enum AgentInstanceStatus {
     Disabled,
 }
 
-fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSummary> {
+fn record_to_summary(
+    record: AgentInstance,
+    managed_offers: &[agents::catalog::StoredCapability],
+) -> AppResult<ManagedAgentInstanceSummary> {
     #[derive(Deserialize)]
     struct SavedTuning {
         role: String,
@@ -174,7 +204,26 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
     }
     let tuning: SavedTuning =
         serde_json::from_value(record.tuning.0).context("invalid saved agent tuning")?;
+    let selected_capability_names = managed_offers
+        .iter()
+        .filter(|offer| {
+            tuning
+                .selected_capability_ids
+                .as_ref()
+                .is_some_and(|ids| ids.contains(&offer.capability_id))
+        })
+        .filter_map(|offer| {
+            offer
+                .descriptor
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|name| (offer.capability_id.clone(), name.to_owned()))
+        })
+        .collect();
     Ok(ManagedAgentInstanceSummary {
+        selected_capability_names,
+        created_by_name: None,
+        updated_by_name: None,
         configuration_revision: record.configuration_revision,
         preparation_state: record.preparation_state,
         preparation_error: record.preparation_error,
@@ -264,8 +313,15 @@ async fn create_agent_instance(
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     let record = save_created(&mut tx, &user, &space, &instance, body.powerpoint.as_ref()).await?;
-    let summary = record_to_summary(record)?;
+    let managed_offers = agents::catalog::capabilities(
+        &mut *tx,
+        crate::mcp_connections::SOURCE_ID,
+        space.organization,
+    )
+    .await?;
+    let mut summary = record_to_summary(record, &managed_offers)?;
     tx.commit().await?;
+    resolve_authors(&s, std::slice::from_mut(&mut summary)).await;
     Ok((StatusCode::CREATED, Json(summary)))
 }
 
@@ -418,10 +474,17 @@ async fn list_agent_instances(
     } else {
         None
     };
-    let items = records
+    let managed_offers = agents::catalog::capabilities(
+        &s.pool,
+        crate::mcp_connections::SOURCE_ID,
+        space.organization,
+    )
+    .await?;
+    let mut items = records
         .into_iter()
-        .map(record_to_summary)
+        .map(|record| record_to_summary(record, &managed_offers))
         .collect::<AppResult<Vec<_>>>()?;
+    resolve_authors(&s, &mut items).await;
     Ok(Json(AgentInstancePage { items, next_cursor }))
 }
 
@@ -453,7 +516,15 @@ async fn get_agent_instance(
     if !authorization::can_use_agent(&s.pool, record.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    Ok(Json(record_to_summary(record)?))
+    let managed_offers = agents::catalog::capabilities(
+        &s.pool,
+        crate::mcp_connections::SOURCE_ID,
+        space.organization,
+    )
+    .await?;
+    let mut summary = record_to_summary(record, &managed_offers)?;
+    resolve_authors(&s, std::slice::from_mut(&mut summary)).await;
+    Ok(Json(summary))
 }
 
 fn instance_write_error(error: sqlx::Error) -> AppError {
@@ -622,8 +693,15 @@ async fn update_agent_instance(
     let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    let summary = record_to_summary(record)?;
+    let managed_offers = agents::catalog::capabilities(
+        &mut *tx,
+        crate::mcp_connections::SOURCE_ID,
+        space.organization,
+    )
+    .await?;
+    let mut summary = record_to_summary(record, &managed_offers)?;
     tx.commit().await?;
+    resolve_authors(&s, std::slice::from_mut(&mut summary)).await;
     Ok(Json(summary))
 }
 

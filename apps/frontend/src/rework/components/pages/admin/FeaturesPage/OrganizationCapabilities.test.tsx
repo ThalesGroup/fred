@@ -203,3 +203,14 @@ describe("OrganizationCapabilities", () => {
     expect(h.refreshes).toEqual([]);
   });
 });
+
+it("keeps managed MCP out of the capabilities navigation", async () => {
+  h.query.currentData = [
+    pod({ runtime_id: "fred-agents" }),
+    pod({ runtime_id: null, source_id: "$mcp", origin: "managed_mcp", capabilities: [offer("managed-mcp:one")] }),
+  ];
+  await render();
+  expect(container.textContent).toContain("fred-agents");
+  expect(container.textContent).not.toContain("$mcp");
+  expect(container.textContent).not.toContain("rework.mcp.centralSource");
+});

@@ -41,10 +41,11 @@ export function OrganizationCapabilities({
   const { t } = useTranslation();
   const { showError } = useToast();
   const {
-    currentData: pods,
+    currentData: inventory,
     isFetching,
     isError,
   } = useOrganizationCapabilitiesQuery({ organizationId }, { refetchOnMountOrArgChange: true });
+  const pods = inventory?.filter((source) => source.origin === "pod");
   const [refreshInventory] = useRefreshOrganizationCapabilitiesMutation();
   const [refreshing, setRefreshing] = useState<string[]>([]);
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export function OrganizationCapabilities({
     // A fresh installation has no inventory yet; later refreshes stay manual.
     initialRefreshStarted.current = true;
     pods
-      .filter((pod) => pod.origin === "pod" && pod.enabled && pod.observation === "not_observed")
+      .filter((pod) => pod.enabled && pod.observation === "not_observed")
       .forEach((pod) => void refresh(pod.source_id));
   }, [pods, isFetching, isError, refresh]);
 
@@ -82,22 +83,13 @@ export function OrganizationCapabilities({
     {
       label: t(`${prefix}.col.pod`),
       size: "2fr",
-      cellRenderer: (pod) => (
-        <EntityIdentity
-          name={pod.origin === "managed_mcp" ? t("rework.mcp.centralSource") : pod.source_id}
-          icon="hub"
-          dimmed={!pod.enabled}
-        />
-      ),
+      cellRenderer: (pod) => <EntityIdentity name={pod.source_id} icon="hub" dimmed={!pod.enabled} />,
     },
     {
       label: t(`${prefix}.col.observation`),
       size: "1fr",
       cellRenderer: (pod) => (
-        <StatusBadge
-          label={pod.origin === "managed_mcp" ? t("rework.mcp.origin") : t(`${prefix}.observation.${pod.observation}`)}
-          tone={pod.origin === "managed_mcp" ? "neutral" : OBSERVATION_TONE[pod.observation]}
-        />
+        <StatusBadge label={t(`${prefix}.observation.${pod.observation}`)} tone={OBSERVATION_TONE[pod.observation]} />
       ),
     },
     {
@@ -114,7 +106,6 @@ export function OrganizationCapabilities({
       label: t("rework.admin.capabilities.col.actions"),
       size: "1fr",
       cellRenderer: (pod) => {
-        if (pod.origin === "managed_mcp") return null;
         const button = (
           <Button
             color="on-surface"
@@ -161,9 +152,7 @@ export function OrganizationCapabilities({
           >
             {t(`${prefix}.backToPods`)}
           </Button>
-          <span className={styles.capName}>
-            {selectedPod.origin === "managed_mcp" ? t("rework.mcp.centralSource") : selectedPod.source_id}
-          </span>
+          <span className={styles.capName}>{selectedPod.source_id}</span>
         </div>
         {selectedPod.observation === "unavailable" && (
           <p className={styles.statusWarning} role="status">

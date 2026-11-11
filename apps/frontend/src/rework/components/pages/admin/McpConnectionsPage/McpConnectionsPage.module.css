@@ -27,3 +27,26 @@
   align-items: center;
   gap: var(--spacing-s);
 }
+
+.identity {
+  min-width: 0;
+}
+.description {
+  margin: var(--spacing-xs) 0 0;
+  overflow: hidden;
+  color: var(--on-surface-muted);
+  font-size: var(--font-size-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail {
+  overflow-wrap: anywhere;
+}
+.detail p,
+.detail h3 {
+  margin: 0;
+}
+.toolDescription {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

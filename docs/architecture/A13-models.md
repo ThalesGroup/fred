@@ -1,4 +1,4 @@
-# Reference: model governance and execution
+# Reference: model and MCP governance
 
 Companion to [model responsibilities](01-system-overview.md#14-model-decisions-and-credentials)
 and [turn admission](02.3-agent-administration.md#2-configure-an-assistant-for-the-task).
@@ -7,6 +7,43 @@ owns precedence, diagnostics and withdrawal fallback; the
 [action/role matrix](A7-action-role-matrix.md#model-administration-and-the-first-managed-chat)
 owns administration permissions. This reference supplies their generated technical
 facts and implementation entry points, not another policy definition.
+
+## MCP connection boundary
+
+Companion to [the administration journey](02.3-agent-administration.md#models-and-mcp)
+and [runtime responsibilities](01-system-overview.md#mcp-connection-to-agent-tools).
+Model sources remain deployment-configured; MCP connections are space-owned SQL
+resources, currently managed only for organization spaces. Shared governance does
+not imply identical provisioning, defaults or transport.
+
+| Boundary | Canonical reference |
+| --- | --- |
+| Ownership and identity | [SQL migration 0023](../../apps/control-plane/migrations/0023_mcp_space_ownership.sql): required owning space, stable UUID and logical name unique per space |
+| Connection management and validation | [MCP HTTP contract](../../apps/control-plane/src/mcp_connections/http.rs), [organization-scoped REST inventory](A12-control-plane-api.md#spaces-routes) |
+| Permission | [Existing offer governance](../../apps/control-plane/src/agents/enablement.rs) and [role matrix](A7-action-role-matrix.md#model-administration-and-the-first-managed-chat) |
+| Execution | [Managed MCP runtime](../../libs/fred-runtime/fred_runtime/common/managed_mcp.py) and [tool integration](../../libs/fred-runtime/fred_runtime/common/mcp_runtime.py) |
+
+The following fragments are generated from existing responsibility anchors; they
+identify the catalogue/admission bridge without copying its implementation.
+
+<!-- generated: source-map apps/control-plane/src/mcp_connections/store.rs::available_offers apps/control-plane/src/mcp_connections/store.rs::bindings -->
+| Implementation anchor | Responsibility declared in source |
+| --- | --- |
+| [`store.rs::available_offers`](../../apps/control-plane/src/mcp_connections/store.rs#L50) | Read the offer projection maintained in the same transaction as each connection mutation. Template pickers never need observed/published tool contracts. |
+| [`store.rs::bindings`](../../apps/control-plane/src/mcp_connections/store.rs#L135) | Resolve in the admission snapshot. Caller has checked the same selection's organization/local policy. Network discovery never occurs in this transaction. |
+<!-- end generated -->
+
+Observation, reviewed publication, technical activation, permission and agent
+selection are separate facts. The UI calls publication **Validate tools** or
+**Apply changes**; REST retains its publication operation. A connection is one
+governed capability offer, not one permission per discovered tool. Admission uses
+the reviewed inventory and checks the selected connection in the trusted context.
+
+The [connection contract](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending)
+owns credential provisioning and runtime checks. A successful Control Plane
+discovery or a UI check with simulated APIs is not proof of a tool call from a
+deployed pod. This reference establishes responsibilities and contract boundaries;
+it does not certify every deletion, replacement or in-flight execution scenario.
 
 ## Responsibility and implementation
 

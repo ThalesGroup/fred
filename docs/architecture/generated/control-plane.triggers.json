@@ -147,10 +147,24 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - MCP connection owner",
+    "function": "protect_mcp_owner",
+    "table": "mcp_connection",
+    "trigger": "mcp_owner",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - capability policy belongs to an organization",
     "function": "require_organization_space",
     "table": "organization_capability",
     "trigger": "organization_capability_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - MCP offer authorization stays in its owning organization",
+    "function": "require_mcp_permission_scope",
+    "table": "organization_capability",
+    "trigger": "organization_mcp_scope",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -238,6 +252,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: register the pod capability source",
+    "function": "register_pod_capability_source",
+    "table": "runtime_catalog",
+    "trigger": "runtime_catalog_source",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
     "comment": "assertion: consistency - same-organization conversation association and immutable ownership",
     "function": "protect_session_association",
     "table": "session_metadata",
@@ -278,6 +299,13 @@
     "table": "space",
     "trigger": "space_pending_uploads",
     "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - local MCP permission stays in its owning organization",
+    "function": "require_mcp_permission_scope",
+    "table": "space_capability_permission",
+    "trigger": "local_mcp_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - local capability policy belongs to a team or project",

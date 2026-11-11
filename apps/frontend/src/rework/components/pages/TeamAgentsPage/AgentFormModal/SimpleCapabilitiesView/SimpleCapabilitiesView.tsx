@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/runtime/runtimeOpenApi";
@@ -114,7 +113,6 @@ export function SimpleCapabilitiesView({
                 key={capability.id}
                 name={capability.name}
                 description={capability.description}
-                badge={<StatusBadge label={t("rework.mcp.origin")} tone="neutral" />}
                 checked={activeIds.has(capability.id)}
                 disabled={disabled}
                 onToggle={() =>
@@ -138,8 +136,16 @@ export function SimpleCapabilitiesView({
               {includedCapabilities.map((capability) => (
                 <CapabilityCard
                   key={capability.id}
-                  name={t(capability.name, { defaultValue: capability.name })}
-                  description={t(capability.description, { defaultValue: capability.description })}
+                  name={
+                    capability.id.startsWith("managed-mcp:")
+                      ? capability.name
+                      : t(capability.name, { defaultValue: capability.name })
+                  }
+                  description={
+                    capability.id.startsWith("managed-mcp:")
+                      ? capability.description
+                      : t(capability.description, { defaultValue: capability.description })
+                  }
                   included
                   subForm={renderIncludedOptions?.(capability)}
                 />

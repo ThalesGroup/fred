@@ -9,9 +9,11 @@ creation provenance does not grant a private right over collective content.
 | Resource | Placement / authority | Stored definition | Use and lifecycle boundary |
 | --- | --- | --- | --- |
 | Prompt | Any of the four spaces; Control Plane | SQL text, metadata, local category and caller favorites | Reusable current text; source-space permissions and deletion |
+| Skill | Owning space; Control Plane | Instruction package and text references | Agent Skills format within Fred's supported profile; instructions grant no tool rights |
 | Agent instance | Team, project or personal space; Control Plane | SQL configuration referring to a pod template | Configuration is distinct from the person's conversations |
 | Agent template | Supplied by an Agent Pod; organization authorization | Pod declaration and Control Plane policy | Defines available behavior; an instance selects and configures it |
 | Tool capability offer | Supplied by a pod; organization ceiling and local restrictions | Pod declaration, SQL catalogue and policy | Offer governance; not the four-space prompt CRUD contract |
+| MCP connection | Owning space; currently managed at organization level | Endpoint, credential reference and reviewed tool inventory | Exposed as a capability offer; authorized and selected for a compatible agent |
 | Model offer | Model source catalogue; organization policy | SQL observations and policy; protected connection configuration | Selected at turn admission; credentials stay out of the browser |
 | Document | Space drive or private conversation | SQL placement and lifecycle; object storage for bytes | Processing and cleanup are explicit operations |
 | Conversation | A person within a space | Conversation metadata and execution history | Access to the space alone does not open another person's history |
@@ -20,9 +22,37 @@ creation provenance does not grant a private right over collective content.
 and [security](03-security.md) explain their domain boundaries. Sharing an ownership
 concept does not mean all resources use the same storage or management API.
 
-## Prompts
+People identify resources by their display name and, when useful, their logical
+name and owning space. Internal identifiers preserve references; they are not
+user-facing names. A connection's address locates a service, not its business identity.
+
+## Prompts and skills: two forms of instructions
+
+<a id="instruction-formats"></a>
 
 **Legend:** ⬜ Concepts
+
+```mermaid
+flowchart TB
+    need["Reuse instructions"] --> prompt["Prompt<br/>A reusable text"]
+    need --> skill["Skill<br/>Instructions + references"]
+    prompt --> text["Insert into a draft<br/>or copy into agent instructions"]
+    skill --> package["Agent Skills package<br/>SKILL.md + text resources"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class need,prompt,skill,text,package neutral
+```
+
+The [Agent Skills format](https://agentskills.io/specification) combines Markdown
+instructions with YAML metadata and optional accompanying files. Fred's supported
+profile accepts text resources, not binary assets or script execution. This format
+compatibility concerns **skills**; it does not turn every simple prompt into a package.
+Neither form grants access to a model, document or MCP tool.
+
+The [format reference](A5-user-journeys.md#skill-format-boundary) identifies the
+validation anchor and supported limits. The prompt library below remains the
+canonical explanation of simple text reuse.
+
+## Prompts
 
 ```mermaid
 flowchart TB

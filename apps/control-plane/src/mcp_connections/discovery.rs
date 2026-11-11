@@ -15,13 +15,14 @@ use std::{collections::HashSet, time::Duration};
 
 /// Stable diagnostic codes only: neither provider bodies nor credentials cross this boundary.
 pub(super) async fn discover(
+    space_id: uuid::Uuid,
     config: &McpConfiguration,
     bindings: &[McpCredentialBinding],
     knowledge_flow_url: Option<&str>,
     directory: Option<&crate::keycloak::Directory>,
 ) -> Result<Vec<McpTool>, &'static str> {
     config
-        .validate(bindings)
+        .validate(space_id, bindings)
         .map_err(|_| "destination_mismatch")?;
     config
         .trusted_destination(knowledge_flow_url)
@@ -36,7 +37,11 @@ pub(super) async fn discover(
         .map(|reference| {
             bindings
                 .iter()
-                .find(|b| b.credential_binding == reference && b.url == config.url)
+                .find(|b| {
+                    b.space_id == space_id
+                        && b.credential_binding == reference
+                        && b.url == config.url
+                })
                 .and_then(|b| std::env::var(&b.secret_env).ok())
                 .filter(|v| !v.is_empty())
                 .ok_or("credential_missing")

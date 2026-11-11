@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Platform-owned MCP connections. Governance belongs to agents::enablement;
+//! Space-owned MCP connections. Governance belongs to agents::enablement;
 //! this module owns configuration, observation and admitted technical facts only.
 mod discovery;
 mod http;
@@ -54,6 +54,7 @@ pub struct McpConfiguration {
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct McpCredentialBinding {
+    pub space_id: Uuid,
     pub credential_binding: String,
     pub url: String,
     pub secret_env: String,
@@ -74,7 +75,7 @@ impl McpConfiguration {
         Ok(())
     }
 
-    pub fn validate(&self, bindings: &[McpCredentialBinding]) -> Result<()> {
+    pub fn validate(&self, space_id: Uuid, bindings: &[McpCredentialBinding]) -> Result<()> {
         ensure!(
             crate::model_catalog::config::approved_url(&self.url, self.allow_insecure_http),
             "invalid MCP destination"
@@ -93,9 +94,9 @@ impl McpConfiguration {
         }
         if let Some(reference) = self.credential_reference() {
             ensure!(
-                bindings
-                    .iter()
-                    .any(|b| b.credential_binding == reference && b.url == self.url),
+                bindings.iter().any(|b| b.space_id == space_id
+                    && b.credential_binding == reference
+                    && b.url == self.url),
                 "MCP credential destination mismatch"
             );
         }
@@ -162,6 +163,14 @@ pub struct McpTool {
     pub annotations: Option<Value>,
 }
 
+/// Differences from the reviewed inventory, using the same complete contracts as admission.
+#[derive(Serialize, ToSchema)]
+pub struct McpToolChanges {
+    pub added: Vec<String>,
+    pub modified: Vec<String>,
+    pub removed: Vec<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct McpBinding {
     pub connection_id: Uuid,
@@ -174,6 +183,7 @@ pub struct McpBinding {
 
 #[derive(Clone, sqlx::FromRow)]
 pub(super) struct Connection {
+    pub space_id: Uuid,
     pub id: Uuid,
     pub logical_name: String,
     pub display_name: String,
@@ -192,6 +202,41 @@ pub(super) struct Connection {
 }
 
 impl Connection {
+    pub fn tool_changes(&self) -> Option<McpToolChanges> {
+        if self.observation_state != "available" || self.observation_revision != Some(self.revision)
+        {
+            return None;
+        }
+        let mut changes = McpToolChanges {
+            added: vec![],
+            modified: vec![],
+            removed: vec![],
+        };
+        for tool in self.observed_tools.iter() {
+            match self
+                .published_tools
+                .iter()
+                .find(|previous| previous.name == tool.name)
+            {
+                None => changes.added.push(tool.name.clone()),
+                Some(previous) if previous != tool => changes.modified.push(tool.name.clone()),
+                Some(_) => {}
+            }
+        }
+        changes.removed = self
+            .published_tools
+            .iter()
+            .filter(|tool| {
+                !self
+                    .observed_tools
+                    .iter()
+                    .any(|current| current.name == tool.name)
+            })
+            .map(|tool| tool.name.clone())
+            .collect();
+        Some(changes)
+    }
+
     pub fn capability_id(&self) -> String {
         format!("managed-mcp:{}", self.id)
     }

@@ -18295,11 +18295,16 @@
                           "secret_env": {
                             "type": "string"
                           },
+                          "space_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
                           "url": {
                             "type": "string"
                           }
                         },
                         "required": [
+                          "space_id",
                           "credential_binding",
                           "url",
                           "secret_env"
@@ -20670,11 +20675,16 @@
                           "secret_env": {
                             "type": "string"
                           },
+                          "space_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
                           "url": {
                             "type": "string"
                           }
                         },
                         "required": [
+                          "space_id",
                           "credential_binding",
                           "url",
                           "secret_env"

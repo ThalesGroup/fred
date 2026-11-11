@@ -2,11 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
 
-async fn publish_fixture(e: &Env, app: &Router, identity: &support::IdentityServer) -> Value {
+async fn publish_fixture(
+    e: &Env,
+    app: &Router,
+    identity: &support::IdentityServer,
+    space_id: Uuid,
+) -> Value {
     publish_configured_fixture(
         e,
         app,
         identity,
+        space_id,
         json!({"url":"https://tools.invalid/mcp","authentication":{"kind":"none"}}),
     )
     .await
@@ -16,6 +22,7 @@ async fn publish_configured_fixture(
     e: &Env,
     app: &Router,
     identity: &support::IdentityServer,
+    space_id: Uuid,
     configuration: Value,
 ) -> Value {
     let body = json!({"logical_name":"tool","display_name":"Central tools","description":"Shared endpoint",
@@ -23,25 +30,26 @@ async fn publish_configured_fixture(
     let (status, denied) = request(
         app,
         identity,
-        Some("alice"),
+        Some("fixture-root"),
         "POST",
-        "/platform/mcp-connections",
+        &format!("/spaces/{space_id}/mcp-connections"),
         body.clone(),
     )
     .await;
-    assert_eq!(status, 403, "{denied}"); // Business Owner cannot create technical connections.
+    assert_eq!(status, 404, "{denied}"); // Platform administration confers no space management.
     let (status, created) = request(
         app,
         identity,
-        Some("fixture-root"),
+        Some("alice"),
         "POST",
-        "/platform/mcp-connections",
+        &format!("/spaces/{space_id}/mcp-connections"),
         body,
     )
     .await;
     assert_eq!(status, 201, "{created}");
     assert_eq!(created["available"], false);
     assert_eq!(created["enabled"], false);
+    assert_eq!(created["tool_changes"], Value::Null);
     let id = created["id"].as_str().unwrap();
     let tools = json!([{"name":"search","description":"Find","input_schema":{"type":"object"},"output_schema":null,"annotations":null}]);
     // Discovery has its own local HTTP test. This fixture establishes its successful observation.
@@ -50,23 +58,31 @@ async fn publish_configured_fixture(
     let (_, list) = request(
         app,
         identity,
-        Some("fixture-root"),
+        Some("alice"),
         "GET",
-        "/platform/mcp-connections",
+        &format!("/spaces/{space_id}/mcp-connections"),
         Value::Null,
     )
     .await;
+    assert_eq!(
+        list[0]["tool_changes"],
+        json!({"added":["search"],"modified":[],"removed":[]})
+    );
     let (status, published) = request(
         app,
         identity,
-        Some("fixture-root"),
+        Some("alice"),
         "POST",
-        &format!("/platform/mcp-connections/{id}/publish"),
+        &format!("/spaces/{space_id}/mcp-connections/{id}/publish"),
         json!({"expected_revision":1,"expected_checked_at":list[0]["checked_at"]}),
     )
     .await;
     assert_eq!(status, 200, "{published}");
-    let (status,enabled)=request(app,identity,Some("fixture-root"),"PUT",&format!("/platform/mcp-connections/{id}"),
+    assert_eq!(
+        published["tool_changes"],
+        json!({"added":[],"modified":[],"removed":[]})
+    );
+    let (status,enabled)=request(app,identity,Some("alice"),"PUT",&format!("/spaces/{space_id}/mcp-connections/{id}"),
         json!({"expected_revision":published["revision"],"display_name":"Central tools","description":"Shared endpoint","configuration":published["configuration"],"enabled":true})).await;
     assert_eq!(status, 200, "{enabled}");
     assert_eq!(enabled["available"], true);
@@ -88,11 +104,17 @@ async fn knowledge_flow_one_offer_two_pods_and_local_ceiling() {
 async fn central_offer_two_pods(trusted: bool) {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
+    let space_id = org.id;
     grant(&e, team.id, Role::Editor, "alice").await;
-    let other = support::member_organization(&e.pool, "Other MCP organization", "bob")
+    let other = support::member_organization(&e.pool, "Other MCP organization", "alice")
         .await
         .unwrap();
     let identity = support::IdentityServer::start().await;
+    identity
+        .users
+        .lock()
+        .await
+        .insert("alice".into(), "Alice Martin".into());
     let first = Catalog::start().await;
     let second = Catalog::start().await;
     for catalog in [&first, &second] {
@@ -129,12 +151,22 @@ async fn central_offer_two_pods(trusted: bool) {
             &e,
             &app,
             &identity,
+            space_id,
             json!({"url":"", "authentication":{"kind":"knowledge_flow_tabular"}}),
         )
         .await
     } else {
-        publish_fixture(&e, &app, &identity).await
+        publish_fixture(&e, &app, &identity, space_id).await
     };
+    let foreign = publish_configured_fixture(
+        &e,
+        &app,
+        &identity,
+        other.id,
+        connection["configuration"].clone(),
+    )
+    .await;
+    assert_ne!(connection["id"], foreign["id"]);
     if trusted {
         assert_eq!(
             connection["configuration"]["url"],
@@ -150,7 +182,7 @@ async fn central_offer_two_pods(trusted: bool) {
                 422,
             ),
         ] {
-            let (status, _) = request(&app, &identity, Some("fixture-root"), "POST", "/platform/mcp-connections", json!({
+            let (status, _) = request(&app, &identity, Some("alice"), "POST", &format!("/spaces/{space_id}/mcp-connections"), json!({
                 "logical_name":"another", "display_name":"Another", "description":"Test", "configuration":configuration
             })).await;
             assert_eq!(status, expected);
@@ -173,7 +205,7 @@ async fn central_offer_two_pods(trusted: bool) {
         )
         .await
         .0,
-        403
+        404
     );
     assert_eq!(
         request(
@@ -240,6 +272,10 @@ async fn central_offer_two_pods(trusted: bool) {
                 json!({capability.clone(): {"chat_options.documents_selection":true}});
         }
         let instance = create(&app, &identity, team.id, body).await;
+        assert_eq!(
+            instance["selected_capability_names"],
+            json!({capability.clone(): "Central tools"})
+        );
         let runtime = format!("{}/runtime", item(team.id, &instance));
         let (status, admitted) =
             request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null).await;
@@ -252,6 +288,21 @@ async fn central_offer_two_pods(trusted: bool) {
             );
         }
         instances.push((runtime, admitted));
+    }
+    // A team role is sufficient for use; no direct organization role is required.
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','editor')")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert!(!reads(&e, "bob", org.id).await);
+    for (runtime, _) in &instances {
+        assert_eq!(
+            request(&app, &identity, Some("bob"), "GET", runtime, Value::Null)
+                .await
+                .0,
+            200
+        );
     }
     let count: i64 =
         sqlx::query_scalar("select count(*) from capability_offer where connection_id=$1")
@@ -284,6 +335,12 @@ async fn central_offer_two_pods(trusted: bool) {
         204
     );
     for (runtime, admitted) in &instances {
+        assert_eq!(
+            request(&app, &identity, Some("bob"), "GET", runtime, Value::Null)
+                .await
+                .0,
+            422
+        );
         assert_eq!(
             request(&app, &identity, Some("alice"), "GET", runtime, Value::Null)
                 .await
@@ -332,9 +389,36 @@ async fn central_offer_two_pods(trusted: bool) {
     .await;
     assert_eq!(status, 200, "{native_admission}");
     assert_eq!(native_admission["mcp_bindings"], json!([]));
-    let (status, next_connection) = request(&app, &identity, Some("fixture-root"), "PUT", &format!("/platform/mcp-connections/{id}"),
+    let (status, next_connection) = request(&app, &identity, Some("alice"), "PUT", &format!("/spaces/{space_id}/mcp-connections/{id}"),
         json!({"expected_revision":connection["revision"],"display_name":"Renamed centrally","description":"Shared endpoint","configuration":connection["configuration"],"enabled":true})).await;
     assert_eq!(status, 200, "{next_connection}");
+    assert_eq!(next_connection["capability_id"], capability);
+    identity.control.lock().await.subject_lookups.clear();
+    let (status, list) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &collection(team.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{list}");
+    assert_eq!(identity.control.lock().await.subject_lookups, vec!["alice"]);
+    for item in list["items"].as_array().unwrap() {
+        assert_eq!(item["created_by_name"], "Alice Martin");
+        assert_eq!(item["updated_by_name"], "Alice Martin");
+    }
+
+    assert_eq!(
+        list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["selected_capability_names"][&capability] == "Renamed centrally")
+            .count(),
+        2
+    );
     for (runtime, old_admission) in &instances {
         let (status, next) =
             request(&app, &identity, Some("alice"), "GET", runtime, Value::Null).await;
@@ -348,6 +432,24 @@ async fn central_offer_two_pods(trusted: bool) {
             connection["revision"]
         );
     }
+    identity.users.lock().await.remove("alice");
+    let (status, missing_author) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        instances[0].0.strip_suffix("/runtime").unwrap(),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{missing_author}");
+    assert_eq!(missing_author["created_by_name"], Value::Null);
+    assert_eq!(missing_author["created_by"], "alice");
+    identity
+        .users
+        .lock()
+        .await
+        .insert("alice".into(), "Alice Martin".into());
     // Template support is checked again for a new admission, including fixed templates.
     first.state.lock().await.templates[0]["supports_capabilities"] = json!(false);
     assert_eq!(
@@ -381,14 +483,29 @@ async fn central_offer_two_pods(trusted: bool) {
         request(
             &app,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
-            &format!("/platform/mcp-connections/{id}"),
+            &format!("/spaces/{space_id}/mcp-connections/{id}"),
             edit.clone()
         )
         .await
         .0,
         200
+    );
+    // A withdrawn connection is still named from its canonical offer, without enabling it.
+    let (status, detail) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        instances[1].0.strip_suffix("/runtime").unwrap(),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{detail}");
+    assert_eq!(
+        detail["selected_capability_names"],
+        json!({capability.clone(): "Central tools"})
     );
     let (status, templates) = request(
         &app,
@@ -412,9 +529,9 @@ async fn central_offer_two_pods(trusted: bool) {
         request(
             &app,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
-            &format!("/platform/mcp-connections/{id}"),
+            &format!("/spaces/{space_id}/mcp-connections/{id}"),
             edit
         )
         .await
@@ -438,13 +555,18 @@ async fn central_offer_two_pods(trusted: bool) {
         instances[1].1["mcp_bindings"][0]["revision"],
         connection["revision"]
     );
-    assert!(
-        sqlx::query("delete from mcp_connection where id=$1")
+    sqlx::query("delete from mcp_connection where id=$1")
+        .bind(Uuid::parse_str(id).unwrap())
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("select count(*) from capability_offer where connection_id=$1")
             .bind(Uuid::parse_str(id).unwrap())
-            .execute(&e.pool)
+            .fetch_one(&e.pool)
             .await
-            .is_err()
-    );
+            .unwrap();
+    assert_eq!(remaining, 0);
 }
 
 #[tokio::test]
@@ -452,11 +574,12 @@ async fn central_offer_two_pods(trusted: bool) {
 async fn slow_discovery_cannot_overwrite_a_new_destination() {
     use axum::{http::StatusCode, response::IntoResponse};
     let e = env().await;
-    org_and_team(&e).await;
+    let (org, _) = org_and_team(&e).await;
+    let space_id = org.id;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
     let application = app(&e, &identity, &catalog).await;
-    let connection = publish_fixture(&e, &application, &identity).await;
+    let connection = publish_fixture(&e, &application, &identity, space_id).await;
     let gate = Arc::new(support::Gate::default());
     let server_gate = gate.clone();
     let server=Router::new().route("/mcp",post(move |Json(body):Json<Value>| {
@@ -480,7 +603,7 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
     let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
     let server = tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
     let path = format!(
-        "/platform/mcp-connections/{}",
+        "/spaces/{space_id}/mcp-connections/{}",
         connection["id"].as_str().unwrap()
     );
     let mut edit = json!({"expected_revision":connection["revision"],"display_name":"Central tools","description":"Shared endpoint","enabled":true,
@@ -488,7 +611,7 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
     let (status, current) = request(
         &application,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "PUT",
         &path,
         edit.clone(),
@@ -499,7 +622,7 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
     let discover = request(
         &application,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "POST",
         &test_path,
         json!({"expected_revision":current["revision"]}),
@@ -508,15 +631,7 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
         gate.entered.notified().await;
         edit["expected_revision"] = current["revision"].clone();
         edit["configuration"] = connection["configuration"].clone();
-        let result = request(
-            &application,
-            &identity,
-            Some("fixture-root"),
-            "PUT",
-            &path,
-            edit,
-        )
-        .await;
+        let result = request(&application, &identity, Some("alice"), "PUT", &path, edit).await;
         gate.release.notify_one();
         result
     };
@@ -533,7 +648,7 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
     let (status, _) = request(
         &application,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "POST",
         &format!("{path}/publish"),
         json!({"expected_revision":new["revision"],"expected_checked_at":connection["checked_at"]}),
@@ -544,9 +659,10 @@ async fn slow_discovery_cannot_overwrite_a_new_destination() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn platform_impact_is_aggregate_without_business_visibility() {
+async fn impact_counts_only_the_owning_organization() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
+    let space_id = org.id;
     let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
         .await
         .unwrap();
@@ -559,7 +675,7 @@ async fn platform_impact_is_aggregate_without_business_visibility() {
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
     let app = app(&e, &identity, &catalog).await;
-    let connection = publish_fixture(&e, &app, &identity).await;
+    let connection = publish_fixture(&e, &app, &identity, space_id).await;
     let capability = format!("managed-mcp:{}", connection["id"].as_str().unwrap());
     let mut private_values = Vec::new();
     for (space, owner) in [
@@ -609,14 +725,14 @@ async fn platform_impact_is_aggregate_without_business_visibility() {
     let (status, inventory) = request(
         &app,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "GET",
-        "/platform/mcp-connections",
+        &format!("/spaces/{space_id}/mcp-connections"),
         Value::Null,
     )
     .await;
     assert_eq!(status, 200, "{inventory}");
-    assert_eq!(inventory[0]["affected_instance_count"], 3);
+    assert_eq!(inventory[0]["affected_instance_count"], 2);
     assert!(inventory[0].get("affected_instances").is_none());
     let response = inventory.to_string();
     for private in private_values {
@@ -624,7 +740,6 @@ async fn platform_impact_is_aggregate_without_business_visibility() {
     }
     for field in [
         "agent_instance_id",
-        "space_id",
         "space_name",
         "space_kind",
         "owner_name",
@@ -637,7 +752,8 @@ async fn platform_impact_is_aggregate_without_business_visibility() {
 #[ignore = "needs disposable Postgres: make test-integration"]
 async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_validation() {
     let e = env().await;
-    org_and_team(&e).await;
+    let (org, _) = org_and_team(&e).await;
+    let space_id = org.id;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
     let auth = Arc::new(identity.auth().await);
@@ -656,16 +772,17 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
         })
     };
     let provisioned = configured_app(vec![control_plane::mcp_connections::McpCredentialBinding {
+        space_id,
         credential_binding: "withdrawn".into(),
         url: "https://tools.invalid/mcp".into(),
         secret_env: "UNUSED_FIXTURE_MCP_SECRET".into(),
     }]);
-    let (status, created) = request(&provisioned, &identity, Some("fixture-root"), "POST", "/platform/mcp-connections",
+    let (status, created) = request(&provisioned, &identity, Some("alice"), "POST", &format!("/spaces/{space_id}/mcp-connections"),
         json!({"logical_name":"withdrawal", "display_name":"Tools", "description":"", "configuration":{
             "url":"https://tools.invalid/mcp", "authentication":{"kind":"bearer", "credential_binding":"withdrawn"}}})).await;
     assert_eq!(status, 201, "{created}");
     let path = format!(
-        "/platform/mcp-connections/{}",
+        "/spaces/{space_id}/mcp-connections/{}",
         created["id"].as_str().unwrap()
     );
     let mut edit = json!({"expected_revision":created["revision"], "display_name":"Tools", "description":"",
@@ -673,7 +790,7 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
     let (status, enabled) = request(
         &provisioned,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "PUT",
         &path,
         edit.clone(),
@@ -687,7 +804,7 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
         request(
             &withdrawn,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
             &path,
             edit.clone()
@@ -701,49 +818,35 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
         request(
             &withdrawn,
             &identity,
-            Some("alice"),
+            Some("fixture-root"),
             "PUT",
             &path,
             edit.clone()
         )
         .await
         .0,
-        403
+        404
     );
     let mut invalid = edit.clone();
     invalid["configuration"]["url"] = json!("https://different.invalid/mcp");
     assert_eq!(
-        request(
-            &withdrawn,
-            &identity,
-            Some("fixture-root"),
-            "PUT",
-            &path,
-            invalid
-        )
-        .await
-        .0,
+        request(&withdrawn, &identity, Some("alice"), "PUT", &path, invalid)
+            .await
+            .0,
         422
     );
     let mut invalid = edit.clone();
     invalid["display_name"] = json!("");
     assert_eq!(
-        request(
-            &withdrawn,
-            &identity,
-            Some("fixture-root"),
-            "PUT",
-            &path,
-            invalid
-        )
-        .await
-        .0,
+        request(&withdrawn, &identity, Some("alice"), "PUT", &path, invalid)
+            .await
+            .0,
         422
     );
     let (status, disabled) = request(
         &withdrawn,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "PUT",
         &path,
         edit.clone(),
@@ -760,16 +863,9 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
     edit["expected_revision"] = disabled["revision"].clone();
     edit["enabled"] = json!(true);
     assert_eq!(
-        request(
-            &withdrawn,
-            &identity,
-            Some("fixture-root"),
-            "PUT",
-            &path,
-            edit
-        )
-        .await
-        .0,
+        request(&withdrawn, &identity, Some("alice"), "PUT", &path, edit)
+            .await
+            .0,
         422
     );
 }
@@ -779,6 +875,7 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
 async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configuration() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
+    let space_id = org.id;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
@@ -840,6 +937,7 @@ async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configurat
         &e,
         &app,
         &identity,
+        space_id,
         json!({"url":"","authentication":{"kind":"knowledge_flow_tabular"}}),
     )
     .await;
@@ -1027,7 +1125,7 @@ async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configurat
             if restricted { 422 } else { 200 }
         );
     }
-    assert_eq!(request(&app,&identity,Some("fixture-root"),"PUT",&format!("/platform/mcp-connections/{id}"),json!({"expected_revision":connection["revision"],"display_name":"Tabular","description":"Included","configuration":connection["configuration"],"enabled":false})).await.0,200);
+    assert_eq!(request(&app,&identity,Some("alice"),"PUT",&format!("/spaces/{space_id}/mcp-connections/{id}"),json!({"expected_revision":connection["revision"],"display_name":"Tabular","description":"Included","configuration":connection["configuration"],"enabled":false})).await.0,200);
     assert_eq!(
         request(
             &app,
@@ -1070,4 +1168,432 @@ async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configurat
         .find(|row| row["template_id"] == template.to_string())
         .unwrap();
     assert_eq!(summary["status"], "dependency_unavailable");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn space_ownership_isolates_management_credentials_catalogs_and_purge() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Editor, "alice").await;
+    let other = support::member_organization(&e.pool, "Other owner", "alice")
+        .await
+        .unwrap();
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    catalog.state.lock().await.templates[0]["supports_managed_mcp"] = json!(true);
+    let mut config = catalog.config();
+    config.knowledge_flow_url = Some("https://kf.invalid/api".into());
+    config.mcp_credentials = vec![control_plane::mcp_connections::McpCredentialBinding {
+        space_id: other.id,
+        credential_binding: "other-secret".into(),
+        url: "https://tools.invalid/mcp".into(),
+        secret_env: "UNUSED_FIXTURE_MCP_SECRET".into(),
+    }];
+    let app = routes(AppState {
+        pool: e.pool.clone(),
+        agent_catalog: config,
+        auth: Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let a = publish_fixture(&e, &app, &identity, org.id).await;
+    let b = publish_fixture(&e, &app, &identity, other.id).await;
+    assert_eq!(a["logical_name"], b["logical_name"]);
+    assert_ne!(a["id"], b["id"]);
+    let foreign = b["id"].as_str().unwrap();
+    let capability = format!("managed-mcp:{foreign}");
+    let collection_path = format!("/spaces/{}/mcp-connections", org.id);
+    let edit = json!({"expected_revision":b["revision"],"display_name":"Foreign","description":"", "configuration":b["configuration"],"enabled":false});
+    for (method, path, body) in [
+        ("PUT", format!("{collection_path}/{foreign}"), edit),
+        (
+            "POST",
+            format!("{collection_path}/{foreign}/test"),
+            json!({"expected_revision":b["revision"]}),
+        ),
+        (
+            "POST",
+            format!("{collection_path}/{foreign}/publish"),
+            json!({"expected_revision":b["revision"],"expected_checked_at":b["checked_at"]}),
+        ),
+    ] {
+        let (status, response) = request(&app, &identity, Some("alice"), method, &path, body).await;
+        assert_eq!(status, 404, "{response}");
+    }
+    let (_, listed) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &collection_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["id"], a["id"]);
+    let (_, credentials) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("/spaces/{}/mcp-credentials", org.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(credentials, json!([]));
+    let (status, _) = request(&app, &identity, Some("alice"), "POST", &collection_path,
+        json!({"logical_name":"foreign-secret","display_name":"Foreign","description":"", "configuration":{"url":"https://tools.invalid/mcp","authentication":{"kind":"bearer","credential_binding":"other-secret"}}})).await;
+    assert_eq!(status, 422);
+    // The public journey rejects team management, even for a direct team Owner.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!("/spaces/{}/mcp-connections", team.id),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("fixture-root"),
+            "GET",
+            "/platform/mcp-connections",
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    let policy = format!(
+        "/organizations/{}/capabilities/$mcp/{capability}/default-on",
+        org.id
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &policy,
+            json!({"default_on":true})
+        )
+        .await
+        .0,
+        404
+    );
+    assert!(sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'$mcp',$2,'alice')")
+        .bind(org.id).bind(&capability).execute(&e.pool).await.is_err());
+    sqlx::query(
+        "insert into space_role_grant(space_id,subject,role) values($1,'bob','organization_admin')",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    for (method, path, body) in [
+        ("GET", collection_path.clone(), Value::Null),
+        (
+            "GET",
+            format!("/spaces/{}/mcp-credentials", org.id),
+            Value::Null,
+        ),
+        (
+            "POST",
+            format!("{collection_path}/{}/test", a["id"].as_str().unwrap()),
+            json!({"expected_revision":a["revision"]}),
+        ),
+        (
+            "POST",
+            format!("{collection_path}/{}/publish", a["id"].as_str().unwrap()),
+            json!({"expected_revision":a["revision"],"expected_checked_at":a["checked_at"]}),
+        ),
+    ] {
+        assert_eq!(
+            request(&app, &identity, Some("bob"), method, &path, body)
+                .await
+                .0,
+            403
+        );
+    }
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!(
+                "/organizations/{}/capabilities/$mcp/{capability}/revoke-impact",
+                org.id
+            ),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("/spaces/{}/capability-policies/$mcp", team.id),
+            json!({"expected_revision":0,"restricted":true,"permitted_ids":[capability]})
+        )
+        .await
+        .0,
+        422
+    );
+    let template = enable(&e, org.id, "custom", true).await;
+    for path in [
+        format!("/organizations/{}/capabilities", org.id),
+        format!("/spaces/{}/agent-templates", team.id),
+        format!("/spaces/{}/capability-policies", team.id),
+    ] {
+        let (status, inventory) =
+            request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
+        assert_eq!(status, 200, "{inventory}");
+        assert!(!inventory.to_string().contains(foreign));
+    }
+    let mut body = creation(template, "Foreign selection");
+    body["capability_ids"] = json!([capability]);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &collection(team.id),
+            body
+        )
+        .await
+        .0,
+        422
+    );
+    let instance = create(&app, &identity, team.id, creation(template, "Local agent")).await;
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item(team.id, &instance),
+            json!({"capability_ids":[capability]})
+        )
+        .await
+        .0,
+        422
+    );
+    // Marketplace import keeps the same organization boundary and current policy.
+    let own_capability = format!("managed-mcp:{}", a["id"].as_str().unwrap());
+    let own_policy = format!(
+        "/organizations/{}/capabilities/$mcp/{own_capability}/default-on",
+        org.id
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &own_policy,
+            json!({"default_on":true})
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item(team.id, &instance),
+            json!({"capability_ids":[own_capability]})
+        )
+        .await
+        .0,
+        200
+    );
+    let revision = saved(&e, team.id, &instance).await.configuration_revision;
+    let proposals = format!("/spaces/{}/marketplace/proposals", org.id);
+    let (status, proposal) = support::request_with_headers(&app,&identity,Some("alice"),"POST",&proposals,
+        json!({"source_space_id":team.id,"source_resource_id":instance["agent_instance_id"],"kind":"agent","expected_revision":revision.to_string()}),
+        &[("Idempotency-Key",Uuid::new_v4().to_string())]).await;
+    assert_eq!(status, 200, "{proposal}");
+    let decision = format!(
+        "{proposals}/{}/decision",
+        proposal["proposal_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &decision,
+            json!({"approve":true,"expected_publication_version":0})
+        )
+        .await
+        .0,
+        200
+    );
+    let installation = format!(
+        "/spaces/{}/marketplace/entries/{}/installations",
+        org.id,
+        proposal["entry_id"].as_str().unwrap()
+    );
+    let install = json!({"proposal_id":proposal["proposal_id"],"destination_space_id":team.id,"options":{"kind":"agent","display_name":"Imported","logical_name":"imported"}});
+    let (status, imported) = support::request_with_headers(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &installation,
+        install.clone(),
+        &[("Idempotency-Key", Uuid::new_v4().to_string())],
+    )
+    .await;
+    assert_eq!(status, 200, "{imported}");
+    let (other_personal, _) = spaces::create_personal_space(&e.pool, "alice", other.id)
+        .await
+        .unwrap();
+    let mut foreign_install = install.clone();
+    foreign_install["destination_space_id"] = json!(other_personal.id);
+    assert_eq!(
+        support::request_with_headers(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &installation,
+            foreign_install,
+            &[("Idempotency-Key", Uuid::new_v4().to_string())]
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &own_policy,
+            json!({"default_on":false})
+        )
+        .await
+        .0,
+        204
+    );
+    let (status, rejected) = support::request_with_headers(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &installation,
+        install,
+        &[("Idempotency-Key", Uuid::new_v4().to_string())],
+    )
+    .await;
+    assert_eq!(status, 422, "{rejected}");
+    // A corrupted saved selection must still fail at admission.
+    sqlx::query("update agent_instance set tuning=jsonb_set(tuning,'{selected_capability_ids}',$2) where agent_instance_id=$1")
+        .bind(Uuid::parse_str(instance["agent_instance_id"].as_str().unwrap()).unwrap())
+        .bind(json!([capability])).execute(&e.pool).await.unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!("{}/runtime", item(team.id, &instance)),
+            Value::Null
+        )
+        .await
+        .0,
+        422
+    );
+    // Each organization can own Tabular without colliding with the other.
+    for space in [org.id, other.id] {
+        let body = json!({"logical_name":"tabular","display_name":"Tabular","description":"", "configuration":{"url":"","authentication":{"kind":"knowledge_flow_tabular"}}});
+        let path = format!("/spaces/{space}/mcp-connections");
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "POST", &path, body.clone())
+                .await
+                .0,
+            201
+        );
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "POST", &path, body)
+                .await
+                .0,
+            409
+        );
+    }
+    assert!(
+        sqlx::query("update mcp_connection set space_id=$2 where id=$1")
+            .bind(Uuid::parse_str(foreign).unwrap())
+            .bind(org.id)
+            .execute(&e.pool)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!(
+                "/organizations/{}/capabilities/$mcp/{capability}/default-on",
+                other.id
+            ),
+            json!({"default_on":true})
+        )
+        .await
+        .0,
+        204
+    );
+    // Exercise the existing retirement and bounded purge, without external storage.
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    let receipt = lifecycle
+        .accept(&e.pool, "fixture-root", other.id, false)
+        .await
+        .unwrap();
+    sqlx::query("update deletion set due_at=clock_timestamp() where id=$1")
+        .bind(receipt.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    for _ in 0..8 {
+        control_plane::lifecycle::cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+            .await
+            .unwrap();
+    }
+    let remaining: (i64, i64, i64) = sqlx::query_as("select (select count(*) from mcp_connection where space_id=$1), (select count(*) from capability_offer where capability_id=$2), (select count(*) from organization_capability where capability_id=$2)")
+        .bind(other.id).bind(&capability).fetch_one(&e.pool).await.unwrap();
+    assert_eq!(remaining, (0, 0, 0));
+    assert_eq!(
+        control_plane::lifecycle::store::status(&e.pool, "fixture-root", receipt.id)
+            .await
+            .unwrap()
+            .status,
+        control_plane::lifecycle::Status::Completed
+    );
 }

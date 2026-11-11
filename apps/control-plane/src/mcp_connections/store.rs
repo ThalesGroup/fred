@@ -11,17 +11,26 @@ use sqlx::{PgConnection, types::Json};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-pub(super) async fn get<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppResult<Connection> {
-    sqlx::query_as("select * from mcp_connection where id=$1")
+pub(super) async fn get<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space_id: Uuid,
+    id: Uuid,
+) -> AppResult<Connection> {
+    sqlx::query_as("select * from mcp_connection where id=$1 and space_id=$2")
         .bind(id)
+        .bind(space_id)
         .fetch_optional(ex)
         .await?
         .ok_or(AppError::NotFound)
 }
 
-pub(super) async fn list<'e>(ex: impl sqlx::PgExecutor<'e>) -> AppResult<Vec<Connection>> {
+pub(super) async fn list<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space_id: Uuid,
+) -> AppResult<Vec<Connection>> {
     Ok(
-        sqlx::query_as("select * from mcp_connection order by logical_name")
+        sqlx::query_as("select * from mcp_connection where space_id=$1 order by logical_name")
+            .bind(space_id)
             .fetch_all(ex)
             .await?,
     )
@@ -40,10 +49,11 @@ pub(super) async fn update_offer(conn: &mut PgConnection, value: &Connection) ->
 /// mutation. Template pickers never need observed/published tool contracts.
 pub(crate) async fn available_offers<'e>(
     ex: impl sqlx::PgExecutor<'e>,
+    space_id: Uuid,
 ) -> AppResult<Vec<BTreeMap<String, Value>>> {
     let rows: Vec<Json<BTreeMap<String, Value>>> = sqlx::query_scalar(
-        "select descriptor from capability_offer where source_id=$1 and advertised order by capability_id")
-        .bind(SOURCE_ID).fetch_all(ex).await?;
+        "select o.descriptor from capability_offer o join mcp_connection c on c.id=o.connection_id join space s on s.id=c.space_id where o.source_id=$1 and c.space_id=$2 and s.deletion_id is null and o.advertised order by o.capability_id")
+        .bind(SOURCE_ID).bind(space_id).fetch_all(ex).await?;
     Ok(rows.into_iter().map(|row| row.0).collect())
 }
 
@@ -124,6 +134,8 @@ pub(crate) fn capability_owner<'a>(template: &'a AgentTemplateSummary, id: &'a s
 /// organization/local policy. Network discovery never occurs in this transaction.
 pub(crate) async fn bindings(
     conn: &mut PgConnection,
+    space_id: Uuid,
+    credentials: &[super::McpCredentialBinding],
     selected: &[String],
     knowledge_flow_url: Option<&str>,
 ) -> AppResult<Vec<McpBinding>> {
@@ -133,8 +145,12 @@ pub(crate) async fn bindings(
             .strip_prefix("managed-mcp:")
             .and_then(|id| Uuid::parse_str(id).ok())
             .ok_or_else(|| crate::agents::enablement::not_enabled(id))?;
-        let connection = get(&mut *conn, key).await?;
+        let connection = get(&mut *conn, space_id, key).await?;
         if !connection.available()
+            || connection
+                .configuration
+                .validate(space_id, credentials)
+                .is_err()
             || connection
                 .configuration
                 .trusted_destination(knowledge_flow_url)

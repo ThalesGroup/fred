@@ -51,6 +51,7 @@ import styles from "./FeaturesPage.module.css";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer";
 import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
+import McpConnectionsPage from "../McpConnectionsPage/McpConnectionsPage";
 import { OrganizationModels } from "./OrganizationModels";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
@@ -63,8 +64,8 @@ import {
 
 // Tabs: "tool" lists pod capability offers, "agent" agent templates, "model" the organization models;
 // "knowledge_base" and "app" (behind the deployment flag) list the legacy enablement catalog.
-type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
-const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
+type CapabilityKind = "tool" | "agent" | "model" | "mcp" | "app" | "knowledge_base";
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "mcp", "knowledge_base"];
 
 // A pod offer shares the default-on switch; (pod, capability) is its identity.
 type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
@@ -84,7 +85,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   const discoveringModels = activeKindFilter === "model";
   const discoveringCapabilities = activeKindFilter === "tool";
   // Models and capabilities render their own organization panel below the tabs.
-  const organizationPanel = discoveringModels || discoveringCapabilities;
+  const organizationPanel = discoveringModels || discoveringCapabilities || activeKindFilter === "mcp";
   const organizationCatalog = discoveringAgents || organizationPanel;
   const discovery = useOrganizationAgentsQuery(discoveringAgents ? { organizationId } : skipToken, {
     refetchOnMountOrArgChange: true,
@@ -395,7 +396,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       },
     },
     // Agents and pod offers render their own health cell under this header.
-    ...(discoveringCapabilities || hasAgentInstanceLifecycle(activeKindFilter)
+    ...(discoveringCapabilities || (activeKindFilter !== "mcp" && hasAgentInstanceLifecycle(activeKindFilter))
       ? [{ field: "health" as const, label: t("rework.admin.capabilities.col.health"), size: "1fr" }]
       : []),
     {
@@ -524,6 +525,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         }
       />
 
+      {activeKindFilter === "mcp" && <McpConnectionsPage spaceId={organizationId} />}
       {discoveringModels && (
         <OrganizationModels
           key={organizationId}

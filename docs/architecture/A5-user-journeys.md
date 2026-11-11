@@ -5,6 +5,24 @@ developers and coding assistants. It retains admission, provisioning, directory
 and folder contracts, persisted effects and links to implementation. These
 contracts describe behavior; they are not a record of a manually validated run.
 
+## Skill format boundary
+
+Companion to [prompts and skills](06-resources.md#instruction-formats). The existing
+[package contract](../../apps/control-plane/README.md#space-skills) owns size limits,
+supported text resources and Fred metadata. Format compatibility does not imply
+support for every package's dependencies, scripts or external tools.
+
+<!-- generated: source-map apps/control-plane/src/skills/package.rs::validate -->
+| Implementation anchor | Responsibility declared in source |
+| --- | --- |
+| [`package.rs::validate`](../../apps/control-plane/src/skills/package.rs#L44) | Validate once at the content owner. Optional tool declarations never grant tools. |
+<!-- end generated -->
+
+The source anchor checks that the validator and its responsibility comment exist.
+The package tests and the reference-validator evidence in the component contract
+are distinct from deployed acceptance of a conversation using a skill. Simple
+prompts retain their [own evidence map](A2-manager-contracts.md#prompt-implementation-anchors).
+
 ## From an empty platform to an organization's first user
 
 | Step | Person and action | Visible result | What is retained |

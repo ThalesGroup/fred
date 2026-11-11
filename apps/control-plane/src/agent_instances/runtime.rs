@@ -354,6 +354,8 @@ async fn resolve_runtime_binding(
     }
     let mcp_bindings = crate::mcp_connections::bindings(
         &mut tx,
+        space.organization,
+        &state.agent_catalog.mcp_credentials,
         &selected,
         state.agent_catalog.knowledge_flow_url.as_deref(),
     )

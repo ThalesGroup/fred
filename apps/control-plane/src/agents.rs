@@ -436,7 +436,7 @@ pub(crate) async fn enrollable_template(
                 if summary.supports_managed_mcp {
                     crate::mcp_connections::extend_template(
                         &mut summary,
-                        &crate::mcp_connections::available_offers(pool).await?,
+                        &crate::mcp_connections::available_offers(pool, organization).await?,
                     );
                 } else {
                     crate::mcp_connections::extend_template(&mut summary, &[]);
@@ -556,7 +556,8 @@ async fn space_agent_templates(
         let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
         usable.insert(catalog.runtime_id.clone(), ids);
     }
-    let managed_offers = crate::mcp_connections::available_offers(&s.pool).await?;
+    let managed_offers =
+        crate::mcp_connections::available_offers(&s.pool, space.organization).await?;
     let managed_offers = &managed_offers;
     let authorization_pool = &s.pool;
     let space = &space;
@@ -643,7 +644,7 @@ async fn organization_agents(
     let mut items = project(
         organization_id,
         discover(&s.agent_catalog).await?,
-        &crate::mcp_connections::available_offers(&s.pool).await?,
+        &crate::mcp_connections::available_offers(&s.pool, organization_id).await?,
     )?;
     for item in &mut items {
         item.default_on =
@@ -678,7 +679,7 @@ async fn set_organization_agent_default(
     let items = project(
         organization_id,
         discover(&s.agent_catalog).await?,
-        &crate::mcp_connections::available_offers(&s.pool).await?,
+        &crate::mcp_connections::available_offers(&s.pool, organization_id).await?,
     )?;
     let item = items
         .iter()
@@ -834,7 +835,7 @@ pub(crate) async fn editable_template(
     if summary.supports_managed_mcp {
         crate::mcp_connections::extend_template(
             &mut summary,
-            &crate::mcp_connections::available_offers(pool).await?,
+            &crate::mcp_connections::available_offers(pool, organization).await?,
         );
     } else {
         crate::mcp_connections::extend_template(&mut summary, &[]);

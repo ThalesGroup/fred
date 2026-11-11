@@ -17,7 +17,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { user?: string }) => (options?.user ? `${key}: ${options.user}` : key),
     i18n: { language: "en" },
   }),
 }));
@@ -188,4 +188,37 @@ it("keeps central selection across Simple and Advanced and submits its distinct 
   advanced();
   expect(container.querySelector<HTMLInputElement>('[aria-label="Central search"]')!.checked).toBe(true);
   expect(await submit()).toMatchObject({ capability_ids: [id] });
+});
+
+it("uses resolved audit names and a neutral label for inaccessible authors", () => {
+  render(template, {
+    ...INSTANCE,
+    created_by: "author-one",
+    updated_by: "unresolved-author",
+    created_by_name: "Alice Martin",
+    updated_by_name: null,
+  });
+  expect(container.textContent).toContain("Alice Martin");
+  expect(container.textContent).toContain("rework.mcp.authorUnavailable");
+  expect(container.textContent).not.toContain("unresolved-author");
+  expect(container.textContent).not.toContain("author-one");
+});
+it("preserves unresolved MCP selections until explicitly removed, without exposing the reference", async () => {
+  const id = "managed-mcp:8cfd2a56-2d35-4d18-b67c-5e42b0a9c122";
+  render(template, { ...INSTANCE, selected_capability_ids: [id] });
+  section("tools");
+  expect(container.textContent).toContain("rework.mcp.connectionUnavailable");
+  expect(container.textContent).not.toContain(id);
+  click(container.querySelector<HTMLInputElement>('[aria-label="rework.mcp.connectionUnavailable"]')!);
+  expect(container.textContent).not.toContain("rework.mcp.connectionUnavailable");
+});
+
+it("names a selected withdrawn connection from the canonical agent projection", () => {
+  const id = "managed-mcp:unavailable";
+  render(template, { ...INSTANCE, selected_capability_ids: [id], selected_capability_names: { [id]: "Postal Demo" } });
+  section("tools");
+  expect(container.textContent).toContain("Postal Demo");
+  expect(container.textContent).toContain("rework.mcp.unavailableSelection");
+  expect(container.textContent).not.toContain(id);
+  expect(container.textContent).not.toContain("rework.mcp.connectionUnavailable");
 });

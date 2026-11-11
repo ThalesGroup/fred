@@ -17,6 +17,9 @@ export function resolveAgentSpace(spaces: MySpace[] | undefined, routeId: string
 }
 
 export function agentErrorText(error: unknown, t: TFunction): string {
+  if ((error as { data?: { code?: string } } | null)?.data?.code === "agent_capability_unavailable") {
+    return t("rework.weaverAgents.errors.capabilityUnavailable");
+  }
   const status = (error as { status?: number | string } | null)?.status;
   const key =
     typeof status === "number"
@@ -65,7 +68,11 @@ export function updateAgentRequest(
     request.tuning_field_values = payload.tuningFieldValues as UpdateAgentInstanceRequest["tuning_field_values"];
   }
   // As in Swift, a template with an inventory resubmits its selection for pod validation.
-  if (payload.templateHasCapabilities) {
+  const previousIds = saved.selected_capability_ids ?? [];
+  const selectionChanged =
+    payload.selectedCapabilityIds.length !== previousIds.length ||
+    payload.selectedCapabilityIds.some((id) => !previousIds.includes(id));
+  if (payload.templateHasCapabilities || selectionChanged) {
     request.capability_ids = payload.selectedCapabilityIds;
     request.capability_config_values = payload.capabilityConfigValues;
   }

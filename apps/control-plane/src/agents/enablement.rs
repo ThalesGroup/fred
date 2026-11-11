@@ -164,10 +164,11 @@ pub(super) async fn set_default_on(
     // Shared row lock: a concurrent refresh cannot withdraw the offer before we write.
     let advertised: bool = sqlx::query_scalar(
         "select advertised from capability_offer
-         where source_id = $1 and capability_id = $2 for share",
+         where source_id = $1 and capability_id = $2 and (connection_id is null or exists (select 1 from mcp_connection c where c.id=capability_offer.connection_id and c.space_id=$3)) for share",
     )
     .bind(source_id)
     .bind(capability_id)
+    .bind(organization_id)
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(AppError::NotFound)?;

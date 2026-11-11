@@ -122,7 +122,7 @@ async fn space_capability_policies(
         let (revision, restricted, permitted_ids) = stored(&mut tx, id, &source_id).await?;
         let observation = catalog::observation(&mut *tx, &source_id).await?;
         let mut offers = Vec::new();
-        for offer in catalog::capabilities(&mut *tx, &source_id).await? {
+        for offer in catalog::capabilities(&mut *tx, &source_id, space.organization).await? {
             offers.push(LocalOffer {
                 parent_permitted: enablement::usable(
                     &policy,
@@ -191,9 +191,10 @@ async fn replace_space_capability_policy(
     }
     // Keep discovery stable through the write. No network call under this lock.
     let offers: Vec<(String, bool)> = sqlx::query_as(
-        "select capability_id, advertised from capability_offer where source_id=$1 for share",
+        "select capability_id, advertised from capability_offer o where source_id=$1 and (connection_id is null or exists (select 1 from mcp_connection c where c.id=o.connection_id and c.space_id=$2)) for share",
     )
     .bind(&runtime)
+    .bind(space.organization)
     .fetch_all(&mut *tx)
     .await?;
     for id in &ids {

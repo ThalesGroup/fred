@@ -6,7 +6,7 @@ import {
   defaultCapabilitySelection,
   extractCapabilityConfigValues,
 } from "./AgentFormModal";
-import { createAgentRequest, updateAgentRequest, resolveAgentSpace } from "../weaverAgents";
+import { agentErrorText, createAgentRequest, updateAgentRequest, resolveAgentSpace } from "../weaverAgents";
 import { INSTANCE, SPACES, TEMPLATE } from "../weaverAgentFixtures";
 
 const form = () => ({
@@ -128,4 +128,33 @@ it.each([
     updateAgentRequest({ ...payload, templateHasCapabilities: true, capabilityConfigValues: reopened }, saved)
       .capability_config_values?.document_access,
   ).toEqual(config);
+});
+
+it("persists removal of a missing MCP connection even when no offer remains in the catalog", () => {
+  const saved = { ...INSTANCE, selected_capability_ids: ["managed-mcp:unresolved"] };
+  const retained = buildAgentFormSubmitPayload(
+    { ...form(), selectedCapabilityIds: saved.selected_capability_ids },
+    TEMPLATE,
+  );
+  expect(updateAgentRequest(retained, saved)).not.toHaveProperty("capability_ids");
+  expect(updateAgentRequest({ ...retained, selectedCapabilityIds: [] }, saved).capability_ids).toEqual([]);
+});
+
+it("localizes unavailable-capability errors without displaying internal references", async () => {
+  const { createInstance } = await import("i18next");
+  const fr = await import("../../../../../locales/fr/translation.json");
+  const i18n = createInstance();
+  await i18n.init({ lng: "fr", resources: { fr: { translation: fr.default } } });
+  const text = agentErrorText(
+    {
+      status: 422,
+      data: {
+        code: "agent_capability_unavailable",
+        detail: "Capability managed-mcp:8cfd2a56-2d35-4d18-b67c-5e42b0a9c122 is not enabled.",
+      },
+    },
+    i18n.t,
+  );
+  expect(text).toContain("connexion sélectionnée est indisponible");
+  expect(text).not.toContain("managed-mcp:");
 });

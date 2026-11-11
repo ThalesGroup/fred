@@ -144,6 +144,15 @@ async function refreshMarketplace(
   ]);
 }
 
+const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceId: string }) =>
+  [
+    { type: "McpConnections", id: spaceId },
+    { type: "OrganizationCapabilities", id: spaceId },
+    { type: "OrganizationAgents", id: spaceId },
+    "AgentTemplates",
+    "SpaceCapabilityPolicies",
+  ] as const;
+
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
@@ -168,23 +177,27 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Attachments",
     "Wiki",
     "McpConnections",
+    "SpaceCapabilityPolicies",
   ],
   endpoints: {
-    mcpConnections: { providesTags: ["McpConnections"] },
+    spaceCapabilityPolicies: {
+      providesTags: (_result, _error, { spaceId }) => [{ type: "SpaceCapabilityPolicies", id: spaceId }],
+    },
+    mcpConnections: { providesTags: (_result, _error, { spaceId }) => [{ type: "McpConnections", id: spaceId }] },
     createMcpConnection: {
-      invalidatesTags: ["McpConnections", "OrganizationCapabilities", "AgentTemplates"],
+      invalidatesTags: mcpInvalidates,
       extraOptions: { retryUnauthorized: false },
     },
     updateMcpConnection: {
-      invalidatesTags: ["McpConnections", "OrganizationCapabilities", "AgentTemplates"],
+      invalidatesTags: mcpInvalidates,
       extraOptions: { retryUnauthorized: false },
     },
     testMcpConnection: {
-      invalidatesTags: ["McpConnections", "OrganizationCapabilities", "AgentTemplates"],
+      invalidatesTags: mcpInvalidates,
       extraOptions: { retryUnauthorized: false },
     },
     publishMcpConnection: {
-      invalidatesTags: ["McpConnections", "OrganizationCapabilities", "AgentTemplates"],
+      invalidatesTags: mcpInvalidates,
       extraOptions: { retryUnauthorized: false },
     },
     wikiAvailability: { providesTags: ["Wiki", "OrganizationCapabilities", "AgentTemplates"] },

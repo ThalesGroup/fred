@@ -96,12 +96,16 @@ The ordinary admission and organization-isolation conditions above still apply.
 | --- | --- | --- |
 | Configure model connections and inference destinations | Deployment credentials, outside the Fred role API | Technical prerequisite; does not authorize business use or grant content rights. |
 | Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme owner role qualifies. A team owner, editor or organization admin alone does not. |
+| List, declare or edit MCP connections; discover and validate tools; activate a connection | `Manage` on the owning organization | Same business Owner boundary; a platform or organization Admin role alone does not qualify. Current management accepts organization spaces only. |
+| Authorize use of an MCP offer | `Manage` on the organization | Existing capability governance, restricted to the connection's owning organization. Does not select the connection for every agent. |
 | Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
 | Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
 | Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's owner role alone does not qualify. |
 
 Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
+[`mcp_connections/http.rs`](../../apps/control-plane/src/mcp_connections/http.rs),
+[`agents/enablement.rs`](../../apps/control-plane/src/agents/enablement.rs),
 [`agent_instances/http.rs`](../../apps/control-plane/src/agent_instances/http.rs),
 [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs),
 [`runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs) and

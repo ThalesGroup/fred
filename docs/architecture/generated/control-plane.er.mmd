@@ -25,8 +25,10 @@ erDiagram
 "control_plane.artifact" }o--|| "control_plane.generation" : "generation_id"
 "control_plane.agent_instance" }o--|| "control_plane.space" : "space_id"
 "control_plane.agent_instance" }o--o| "control_plane.capability_preparation" : "preparation_id"
-"control_plane.runtime_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
-"control_plane.runtime_template_capability" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
+"control_plane.capability_offer" }o--|| "control_plane.capability_source" : "source_id"
+"control_plane.capability_offer" |o--o| "control_plane.mcp_connection" : "connection_id"
+"control_plane.runtime_template_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
+"control_plane.runtime_template_capability" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
@@ -39,7 +41,7 @@ erDiagram
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
 "control_plane.session_metadata" }o--o| "control_plane.deletion" : "deletion_id"
 "control_plane.organization_capability" }o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_capability" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
+"control_plane.organization_capability" }o--|| "control_plane.capability_offer" : "source_id, capability_id"
 "control_plane.space_role_grant" }o--|| "control_plane.space" : "space_id"
 "control_plane.agent_template_policy" }o--|| "control_plane.space" : "organization_id"
 "control_plane.storage_budget" }o--|| "control_plane.space" : "space_id"
@@ -52,14 +54,14 @@ erDiagram
 "control_plane.organization_model_source" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_initialization" |o--|| "control_plane.space" : "organization_id"
 "control_plane.space_capability_policy" }o--|| "control_plane.space" : "space_id"
-"control_plane.space_capability_policy" }o--|| "control_plane.runtime_catalog" : "runtime_id"
-"control_plane.space_capability_permission" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
-"control_plane.space_capability_permission" }o--|| "control_plane.space_capability_policy" : "space_id, runtime_id"
+"control_plane.space_capability_policy" }o--|| "control_plane.capability_source" : "source_id"
+"control_plane.space_capability_permission" }o--|| "control_plane.capability_offer" : "source_id, capability_id"
+"control_plane.space_capability_permission" }o--|| "control_plane.space_capability_policy" : "space_id, source_id"
 "control_plane.powerpoint_file" }o--o| "control_plane.space" : "live_space_id"
 "control_plane.powerpoint_file" }o--o| "control_plane.agent_instance" : "live_agent_id, live_space_id"
 "control_plane.capability_preparation" }o--|| "control_plane.powerpoint_file" : "file_id"
 "control_plane.organization_powerpoint_settings" }o--|| "control_plane.space" : "organization_id"
-"control_plane.organization_powerpoint_settings" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
+"control_plane.organization_powerpoint_settings" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
 "control_plane.organization_powerpoint_settings" }o--o| "control_plane.powerpoint_file" : "file_id"
 "control_plane.embedded_agent_conversation" |o--|| "control_plane.session_metadata" : "session_id"
 "control_plane.document_content" }o--|| "control_plane.document" : "document_id"
@@ -79,6 +81,8 @@ erDiagram
 "control_plane.marketplace_installation" }o--o| "control_plane.agent_instance" : "agent_instance_id, live_space_id"
 "control_plane.marketplace_installation" }o--o| "control_plane.prompt" : "prompt_id, live_space_id"
 "control_plane.marketplace_installation" }o--o| "control_plane.skill" : "skill_id, live_space_id"
+"control_plane.capability_source" |o--o| "control_plane.runtime_catalog" : "runtime_id"
+"control_plane.mcp_connection" }o--|| "control_plane.space" : "space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -306,12 +310,13 @@ erDiagram
   timestamp_with_time_zone checked_at
   timestamp_with_time_zone observed_at
 }
-"control_plane.runtime_capability" {
-  text runtime_id FK
+"control_plane.capability_offer" {
+  text source_id FK
   text capability_id
   text version
   jsonb descriptor
   boolean advertised
+  uuid connection_id FK
 }
 "control_plane.runtime_template_capability" {
   text runtime_id FK
@@ -398,7 +403,7 @@ erDiagram
 }
 "control_plane.organization_capability" {
   uuid organization_id FK
-  text runtime_id FK
+  text source_id FK
   text capability_id FK
   text enabled_by
   timestamp_with_time_zone enabled_at
@@ -493,7 +498,7 @@ erDiagram
 }
 "control_plane.space_capability_policy" {
   uuid space_id FK
-  text runtime_id FK
+  text source_id FK
   bigint revision
   boolean restricted
   text updated_by
@@ -501,7 +506,7 @@ erDiagram
 }
 "control_plane.space_capability_permission" {
   uuid space_id FK
-  text runtime_id FK
+  text source_id FK
   text capability_id FK
 }
 "control_plane.powerpoint_file" {
@@ -733,4 +738,30 @@ erDiagram
   bigint snapshot_revision
   bigint policy_revision
   boolean available
+}
+"control_plane.capability_source" {
+  text source_id
+  text origin
+  text runtime_id FK
+}
+"control_plane.mcp_connection" {
+  uuid id
+  text logical_name
+  text display_name
+  text description
+  bigint revision
+  jsonb configuration
+  boolean enabled
+  uuid refresh_token
+  bigint observation_revision
+  text observation_state
+  text error_code
+  timestamp_with_time_zone checked_at
+  timestamp_with_time_zone last_success_at
+  jsonb observed_tools
+  jsonb published_tools
+  bigint published_revision
+  text updated_by
+  timestamp_with_time_zone updated_at
+  uuid space_id FK
 }

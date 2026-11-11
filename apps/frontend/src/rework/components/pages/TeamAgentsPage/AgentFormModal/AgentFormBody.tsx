@@ -30,7 +30,7 @@ import type {
   CapabilityCatalogEntry,
   FieldSpec as ManagedAgentFieldSpec,
 } from "../../../../../slices/runtime/runtimeOpenApi";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
+import { relativeTime } from "@rework/features/tasks/taskLabels";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
@@ -83,21 +83,6 @@ const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }
 function routeField(field: ManagedAgentFieldSpec): "prompts" | "general" {
   const g = (field.ui?.group ?? "").toLowerCase().trim();
   return g === "prompts" ? "prompts" : "general";
-}
-
-function formatRelativeDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 30) return `${diffDays} days ago`;
-  const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths === 1) return "1 month ago";
-  if (diffMonths < 12) return `${diffMonths} months ago`;
-  return `${Math.floor(diffMonths / 12)} year(s) ago`;
 }
 
 type AgentFormBodyProps = {
@@ -200,6 +185,9 @@ export function AgentFormBody({
   // False: `capabilities` are included with the agent, always on, only configured.
   const availableCapabilityIds = new Set(capabilities.map((item) => item.id));
   const supportsCapabilities = selectedTemplate?.supports_capabilities ?? true;
+  const unavailableConnections = selectedCapabilityIds.filter(
+    (id) => id.startsWith("managed-mcp:") && !availableCapabilityIds.has(id),
+  );
 
   // Config widgets may call their capability's own pod routes before any
   // session exists, so the base URLs come straight from the template catalog.
@@ -497,6 +485,33 @@ export function AgentFormBody({
                     />
                   </label>
                 </div>
+                {unavailableConnections.length > 0 && (
+                  <ul className={styles.toolsList}>
+                    {unavailableConnections.map((id) => {
+                      const name =
+                        editInstance?.selected_capability_names?.[id] ?? t("rework.mcp.connectionUnavailable");
+                      return supportsCapabilities ? (
+                        <CapabilityCard
+                          key={id}
+                          name={name}
+                          description={t("rework.mcp.unavailableSelection")}
+                          checked
+                          disabled={isSubmitting}
+                          onToggle={() =>
+                            onCapabilitySelectionChange(selectedCapabilityIds.filter((selected) => selected !== id))
+                          }
+                        />
+                      ) : (
+                        <CapabilityCard
+                          key={id}
+                          name={name}
+                          description={t("rework.mcp.dependencyUnavailable")}
+                          included
+                        />
+                      );
+                    })}
+                  </ul>
+                )}
                 {capabilityView === "simple" ? (
                   <SimpleCapabilitiesView
                     availableIds={availableCapabilityIds}
@@ -512,8 +527,11 @@ export function AgentFormBody({
                 ) : (
                   <ul className={styles.toolsList}>
                     {capabilities.map((capability) => {
-                      const name = t(capability.name, { defaultValue: capability.name });
-                      const description = t(capability.description, { defaultValue: capability.description });
+                      const managed = capability.id.startsWith("managed-mcp:");
+                      const name = managed ? capability.name : t(capability.name, { defaultValue: capability.name });
+                      const description = managed
+                        ? capability.description
+                        : t(capability.description, { defaultValue: capability.description });
                       if (!supportsCapabilities) {
                         return (
                           <CapabilityCard
@@ -541,7 +559,7 @@ export function AgentFormBody({
                           disabled={isSubmitting}
                           onToggle={toggle}
                           badge={
-                            capability.id.startsWith("managed-mcp:") ? (
+                            managed ? (
                               <StatusBadge label={t("rework.mcp.origin")} tone="neutral" />
                             ) : (
                               BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />
@@ -577,16 +595,16 @@ export function AgentFormBody({
       {mode === "edit" && editInstance?.created_by && (
         <p className={styles.metadataFooter}>
           {t("rework.teams.formAgent.createdBy", {
-            user: userDisplayName(editInstance.created_by, undefined),
+            user: editInstance.created_by_name ?? t("rework.mcp.authorUnavailable"),
           })}
-          {editInstance.created_at && ` · ${formatRelativeDate(editInstance.created_at)}`}
+          {editInstance.created_at && ` · ${relativeTime(Date.parse(editInstance.created_at), t)}`}
           {editInstance.updated_by && (
             <>
               {" — "}
               {t("rework.teams.formAgent.updatedBy", {
-                user: userDisplayName(editInstance.updated_by, undefined),
+                user: editInstance.updated_by_name ?? t("rework.mcp.authorUnavailable"),
               })}
-              {editInstance.updated_at && ` · ${formatRelativeDate(editInstance.updated_at)}`}
+              {editInstance.updated_at && ` · ${relativeTime(Date.parse(editInstance.updated_at), t)}`}
             </>
           )}
         </p>

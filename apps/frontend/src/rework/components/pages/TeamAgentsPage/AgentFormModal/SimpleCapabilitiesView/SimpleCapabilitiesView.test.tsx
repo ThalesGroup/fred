@@ -170,7 +170,7 @@ it("shows a central offer in the default view only for a flexible template", () 
       />,
     );
   expect(show(true)).toContain("Central search");
-  expect(show(true)).toContain("rework.mcp.origin");
+  expect(show(true)).not.toContain("rework.mcp.origin");
   expect(show(false)).not.toContain("Central search");
 });
 

@@ -1365,14 +1365,15 @@ than dropping a capability. No Swift storage adapter or second workflow is used.
 
 ## Managed MCP connections (reception pending)
 
-The platform administrator owns a connection's destination, technical credential
-reference, observation and activation at `/admin/mcp-connections`. Create → test
+Each connection belongs to a space. The supported management journey is the
+organization Owner's MCP panel in Features, beside models. Its space routes check
+Manage permission for configuration, observation, publication and activation. Create → test
 → review the tool contracts → publish → enable. Testing only negotiates MCP and
 paginates `tools/list`; it does not invoke a business tool. A successful test is
 not a business authorization and cannot prove that every pod has its credential.
 
-Platform impact is an aggregate `affected_instance_count`, including saved
-selections in private or other-organization spaces. It contains no agent or
+Impact is an aggregate `affected_instance_count` of saved selections within the
+owning organization. It contains no agent or
 space details; the existing business revoke-impact route retains its own rights.
 Disabling with the exact stored configuration remains possible after provisioning
 has been removed. Role, revision and metadata validation still apply. Activation
@@ -1398,6 +1399,11 @@ source has no runtime, ingress or template. Each connection has one linked offer
 The same offer and business permission serve every compatible pod. There is no
 second permission store and no local YAML fallback for managed selections.
 
+Migration `0023_mcp_space_ownership.sql` adds mandatory space ownership and per-space
+logical-name/Tabular uniqueness. It requires an empty MCP table; existing unowned
+connections require a fresh installation, without backfill. Space purge cascades
+through connections, offers and permissions. `$mcp` is technical provenance only.
+
 Template choices read only advertised descriptors from `capability_offer`, once
 per template-list request. Every connection mutation updates this projection in
 its transaction. Admission loads detailed contracts only for selected connections
@@ -1411,11 +1417,13 @@ Provision a reference in Control Plane's `platform.mcp_credentials`:
 ```yaml
 platform:
   mcp_credentials:
-    - credential_binding: external-search
+    - space_id: <owning-organization-space-uuid>
+      credential_binding: external-search
       url: https://tools.example.org/mcp
       secret_env: EXTERNAL_SEARCH_KEY
 ```
 
+Control Plane only proposes and accepts references assigned to the owning space.
 Provision the same logical reference and exact URL in **each executing pod**,
 under its top-level `mcp_credentials`. The environment variable name and value
 may differ between workloads. Supply the value through the workload's existing
@@ -1485,7 +1493,7 @@ adapted to the renamed SQL tables and remain relevant for regression testing.
    Register two Python pods using this runtime, with distinct runtime IDs and
    flexible templates. For authenticated peers, provision the same reference/URL
    in CP and both pods. The unauthenticated local fixture below needs none.
-2. As platform administrator, create one connection to a controlled MCP server,
+2. As organization Owner in Features > MCP, create one connection to a controlled MCP server,
    test it, inspect/publish its inventory and enable it. Verify no business tool
    was called during discovery, and no permission appeared automatically.
 3. As organization owner, authorize its single central offer. Create one agent
@@ -1570,7 +1578,7 @@ configuration is `authentication: {kind: knowledge_flow_tabular}`, with an empty
 `/mcp/tabular`. It uses its existing `security.m2m` Directory token cache and
 single rejected-token refresh. There is no static credential field for this mode.
 An explicitly supplied URL must equal that configured destination. Migration
-`0022_knowledge_flow_mcp.sql` enforces one trusted Tabular connection, including
+`0023_mcp_space_ownership.sql` enforces one trusted Tabular connection per space, including
 when disabled; no permission, selection or connection is seeded.
 
 Each Python pod uses its existing `ai.knowledge_flow_url` (including API prefix)
@@ -1696,7 +1704,7 @@ book.save(out / 'sales.xlsx')
 PY
 ```
 
-1. As platform administrator at `/admin/mcp-connections`, create the trusted
+1. As organization Owner in Features > MCP, create the trusted
    Tabular connection. Discover through Rust, inspect the observed schemas, then
    publish and enable explicitly. Verify the stored URL is
    `http://localhost:8111/knowledge-flow/v2/mcp/tabular`, with no credential value.
@@ -1739,7 +1747,7 @@ PY
 7. Ask a native `document_access` agent to search/read an authorized text document.
    Observe its REST `/documents/search` path. Then withdraw only central Tabular:
    native document access must remain available. Check Tabular instructions and
-   attachment/document-scope controls on ReAct/Deep, plus aggregate-only platform
+   attachment/document-scope controls on ReAct/Deep, plus aggregate organization
    impact, before recording reception as accepted.
 
 Additional targeted tests to run yourself (all **NON EXECUTED**):

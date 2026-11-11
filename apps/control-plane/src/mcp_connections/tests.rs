@@ -12,6 +12,7 @@ fn connection() -> Connection {
         annotations: None,
     };
     Connection {
+        space_id: Uuid::nil(),
         id: Uuid::new_v4(),
         logical_name: "search".into(),
         display_name: "Search".into(),
@@ -64,6 +65,7 @@ fn publication_is_distinct_from_observation_and_configuration() {
 #[test]
 fn credential_destination_and_reserved_headers_are_checked() {
     let local = vec![McpCredentialBinding {
+        space_id: Uuid::nil(),
         credential_binding: "provider".into(),
         url: "https://tools.invalid/mcp".into(),
         secret_env: "MCP_TEST_KEY".into(),
@@ -72,20 +74,21 @@ fn credential_destination_and_reserved_headers_are_checked() {
     config.authentication = McpAuthentication::Bearer {
         credential_binding: "provider".into(),
     };
-    assert!(config.validate(&local).is_ok());
+    assert!(config.validate(Uuid::nil(), &local).is_ok());
+    assert!(config.validate(Uuid::new_v4(), &local).is_err());
     config.url = "https://other.invalid/mcp".into();
-    assert!(config.validate(&local).is_err());
+    assert!(config.validate(Uuid::nil(), &local).is_err());
     config.url = local[0].url.clone();
     config.authentication = McpAuthentication::ApiKey {
         credential_binding: "provider".into(),
         header: "x-fred-user".into(),
     };
-    assert!(config.validate(&local).is_err());
+    assert!(config.validate(Uuid::nil(), &local).is_err());
     config.authentication = McpAuthentication::None;
     config.url = "http://internal/mcp".into();
-    assert!(config.validate(&[]).is_err());
+    assert!(config.validate(Uuid::nil(), &[]).is_err());
     config.allow_insecure_http = true;
-    assert!(config.validate(&[]).is_ok());
+    assert!(config.validate(Uuid::nil(), &[]).is_ok());
 }
 
 /// Deterministic HTTP fixture implementing only negotiation/listing, never a tool call.
@@ -130,6 +133,7 @@ async fn discovery_paginates_and_rejects_partial_or_cyclic_inventory() {
     for mode in ["ok", "cycle", "rejected"] {
         let (url, task) = server(mode).await;
         let result = discovery::discover(
+            Uuid::nil(),
             &McpConfiguration {
                 url,
                 authentication: McpAuthentication::None,
@@ -251,7 +255,7 @@ async fn trusted_discovery_uses_shared_m2m_renewal_without_document_context() {
         authentication: McpAuthentication::KnowledgeFlowTabular,
         allow_insecure_http: true,
     };
-    let tools = discovery::discover(&config, &[], Some(base), Some(&directory))
+    let tools = discovery::discover(Uuid::nil(), &config, &[], Some(base), Some(&directory))
         .await
         .unwrap();
     assert_eq!(tools.len(), 2);
@@ -275,9 +279,65 @@ async fn trusted_discovery_does_not_renew_a_forbidden_credential() {
         allow_insecure_http: true,
     };
     assert_eq!(
-        discovery::discover(&config, &[], Some(base), Some(&directory)).await,
+        discovery::discover(Uuid::nil(), &config, &[], Some(base), Some(&directory)).await,
         Err("connection_rejected")
     );
     assert_eq!(directory.access_token().await.unwrap(), "service-0");
     task.abort();
+}
+
+#[test]
+fn inventory_changes_compare_complete_contracts_and_require_a_fresh_observation() {
+    let mut c = connection();
+    let changes = c.tool_changes().unwrap();
+    assert!(changes.added.is_empty() && changes.modified.is_empty() && changes.removed.is_empty());
+    for changed in [
+        McpTool {
+            description: Some("new description".into()),
+            ..c.observed_tools[0].clone()
+        },
+        McpTool {
+            input_schema: json!({"type":"object","required":["query"]}),
+            ..c.observed_tools[0].clone()
+        },
+        McpTool {
+            output_schema: Some(json!({"type":"array"})),
+            ..c.observed_tools[0].clone()
+        },
+        McpTool {
+            annotations: Some(json!({"readOnlyHint":true})),
+            ..c.observed_tools[0].clone()
+        },
+    ] {
+        c.observed_tools.0 = vec![changed];
+        assert_eq!(c.tool_changes().unwrap().modified, vec!["search"]);
+    }
+    c.published_tools.0.push(McpTool {
+        name: "removed".into(),
+        ..c.published_tools[0].clone()
+    });
+    c.observed_tools.0.push(McpTool {
+        name: "added".into(),
+        ..c.observed_tools[0].clone()
+    });
+    let changes = c.tool_changes().unwrap();
+    assert_eq!(changes.added, vec!["added"]);
+    assert_eq!(changes.removed, vec!["removed"]);
+    c.observation_state = "unavailable".into();
+    assert!(c.tool_changes().is_none());
+    c.observation_state = "available".into();
+    c.revision += 1;
+    assert!(c.tool_changes().is_none());
+}
+
+#[test]
+fn display_name_does_not_change_identity_or_inventory() {
+    let mut c = connection();
+    let id = c.capability_id();
+    c.display_name = "Postal Demo".into();
+    assert_eq!(c.capability_id(), id);
+    assert_eq!(c.descriptor()["name"], "Postal Demo");
+    assert_eq!(c.descriptor()["source_id"], "search");
+    assert!(c.available());
+    assert!(c.tool_changes().unwrap().modified.is_empty());
 }

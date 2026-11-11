@@ -602,3 +602,39 @@ it.each([false, true])(
     }
   },
 );
+
+it("keeps MCP caches separate and refreshes dependent catalogs after publication", async () => {
+  const { store, fetch } = setup([]);
+  await Promise.all([
+    store.dispatch(api.endpoints.mcpConnections.initiate({ spaceId: "org-a" })),
+    store.dispatch(api.endpoints.mcpConnections.initiate({ spaceId: "org-b" })),
+    store.dispatch(api.endpoints.organizationAgents.initiate({ organizationId: "org-a" })),
+    store.dispatch(api.endpoints.organizationAgents.initiate({ organizationId: "org-b" })),
+    store.dispatch(api.endpoints.organizationCapabilities.initiate({ organizationId: "org-a" })),
+    store.dispatch(api.endpoints.spaceAgentTemplates.initiate({ spaceId: "team-a" })),
+    store.dispatch(api.endpoints.spaceCapabilityPolicies.initiate({ spaceId: "team-a" })),
+  ]);
+  fetch.mockClear();
+  await store.dispatch(
+    api.endpoints.publishMcpConnection.initiate({
+      spaceId: "org-a",
+      id: "connection-a",
+      mcpPublication: { expected_revision: 1, expected_checked_at: "2026-11-11T10:00:00Z" },
+    }),
+  );
+  await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+  const paths = fetch.mock.calls.map(([request]) => new URL(request.url).pathname);
+  expect(paths).toEqual(
+    expect.arrayContaining([
+      "/control-plane/v1/spaces/org-a/mcp-connections/connection-a/publish",
+      "/control-plane/v1/spaces/org-a/mcp-connections",
+      "/control-plane/v1/organizations/org-a/agents",
+      "/control-plane/v1/organizations/org-a/capabilities",
+      "/control-plane/v1/spaces/team-a/agent-templates",
+      "/control-plane/v1/spaces/team-a/capability-policies",
+    ]),
+  );
+  expect(paths.some((path) => path.includes("org-b"))).toBe(false);
+  expect(api.endpoints.mcpConnections.select({ spaceId: "org-b" })(store.getState()).data).toEqual([]);
+  store.dispatch(api.util.resetApiState());
+});

@@ -12,7 +12,6 @@ const PLATFORM_ADMIN_ROUTES = new Set([
   "/admin/organizations",
   "/admin/provisioning",
   "/admin/monitor",
-  "/admin/mcp-connections",
   "/admin/self-test",
 ]);
 

@@ -1,10 +1,18 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import Switch from "@shared/atoms/Switch/Switch";
+import { EntityIdentity } from "@shared/molecules/EntityIdentity/EntityIdentity";
+import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { formatDateTime } from "@rework/utils/formatDateTime";
+import TextArea from "@shared/atoms/TextArea/TextArea";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
@@ -14,6 +22,8 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import {
   useMcpConnectionsQuery,
+  useOrganizationCapabilitiesQuery,
+  useSetOrganizationCapabilityDefaultMutation,
   useMcpCredentialsQuery,
   useCreateMcpConnectionMutation,
   useUpdateMcpConnectionMutation,
@@ -25,7 +35,15 @@ import styles from "./McpConnectionsPage.module.css";
 
 const key = "rework.mcp";
 
-function ConnectionForm({ connection, onClose }: { connection: McpConnectionView | null; onClose: () => void }) {
+function ConnectionForm({
+  spaceId,
+  connection,
+  onClose,
+}: {
+  spaceId: string;
+  connection: McpConnectionView | null;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const [logicalName, setLogicalName] = useState(connection?.logical_name ?? "");
   const [name, setName] = useState(connection?.display_name ?? "");
@@ -41,7 +59,7 @@ function ConnectionForm({ connection, onClose }: { connection: McpConnectionView
   );
   const [header, setHeader] = useState(initialAuth?.kind === "api_key" ? initialAuth.header : "x-api-key");
   const [error, setError] = useState("");
-  const credentials = useMcpCredentialsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const credentials = useMcpCredentialsQuery({ spaceId }, { refetchOnMountOrArgChange: true });
   const [create, creating] = useCreateMcpConnectionMutation();
   const [update, updating] = useUpdateMcpConnectionMutation();
   const busy = creating.isLoading || updating.isLoading;
@@ -72,6 +90,7 @@ function ConnectionForm({ connection, onClose }: { connection: McpConnectionView
     try {
       if (connection)
         await update({
+          spaceId,
           id: connection.id,
           updateMcpConnection: {
             expected_revision: connection.revision,
@@ -83,11 +102,12 @@ function ConnectionForm({ connection, onClose }: { connection: McpConnectionView
         }).unwrap();
       else
         await create({
+          spaceId,
           createMcpConnection: { logical_name: logicalName, display_name: name, description, configuration },
         }).unwrap();
       onClose();
     } catch (e) {
-      setError(normalizeApiError(e).detail ?? t(`${key}.error`));
+      setError(t(`${key}.${normalizeApiError(e).status === 409 ? "conflict" : "error"}`));
     }
   };
   return (
@@ -120,8 +140,8 @@ function ConnectionForm({ connection, onClose }: { connection: McpConnectionView
           maxLength={255}
           required
         />
-        <TextInput
-          size="small"
+        <TextArea
+          rows={3}
           label={t(`${key}.description`)}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -189,30 +209,97 @@ function ConnectionForm({ connection, onClose }: { connection: McpConnectionView
   );
 }
 
-export default function McpConnectionsPage() {
+export default function McpConnectionsPage({ spaceId }: { spaceId: string }) {
+  return <Connections key={spaceId} spaceId={spaceId} />;
+}
+
+function Connections({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation();
-  const access = useManagerPlatformAdmin(false, true);
-  const query = useMcpConnectionsQuery(undefined, { skip: !access.isAdmin, refetchOnMountOrArgChange: true });
+  const access = useSpaceAccess(spaceId, "manage");
+  const query = useMcpConnectionsQuery({ spaceId }, { skip: !access.allowed, refetchOnMountOrArgChange: true });
+  const inventory = useOrganizationCapabilitiesQuery(
+    { organizationId: spaceId },
+    { skip: !access.allowed, refetchOnMountOrArgChange: true },
+  );
+  const source = inventory.currentData?.find((item) => item.origin === "managed_mcp");
+  const [setPermission] = useSetOrganizationCapabilityDefaultMutation();
   const [editing, setEditing] = useState<McpConnectionView | null | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ row: McpConnectionView; action: "revoke" | "disable" } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const [test] = useTestMcpConnectionMutation();
   const [publish] = usePublishMcpConnectionMutation();
   const [update] = useUpdateMcpConnectionMutation();
-  const rows = access.isAdmin && !query.isError ? (query.currentData ?? []) : [];
+  const rows = access.allowed && !query.isError ? (query.currentData ?? []) : [];
   const selected = rows.find((row) => row.id === selectedId);
+  const changes = selected?.tool_changes;
+  const hasChanges = changes && !!(changes.added.length + changes.modified.length + changes.removed.length);
+  const toolRows = selected
+    ? changes
+      ? [...selected.observed_tools, ...selected.published_tools.filter((tool) => changes.removed.includes(tool.name))]
+      : selected.published_tools
+    : [];
   const run = async (action: () => Promise<unknown>) => {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
       await action();
     } catch (e) {
-      setError(normalizeApiError(e).detail ?? t(`${key}.error`));
+      setError(t(`${key}.${normalizeApiError(e).status === 409 ? "conflict" : "error"}`));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
+  };
+  const permit = (row: McpConnectionView, default_on: boolean) => {
+    if (!source || inventory.isError) return;
+    return run(() =>
+      setPermission({
+        organizationId: spaceId,
+        sourceId: source.source_id,
+        capabilityId: row.capability_id,
+        setDefaultOnRequest: { default_on },
+      }).unwrap(),
+    );
+  };
+  const activate = (row: McpConnectionView, enabled: boolean) =>
+    run(() =>
+      update({
+        spaceId,
+        id: row.id,
+        updateMcpConnection: {
+          expected_revision: row.revision,
+          display_name: row.display_name,
+          description: row.description,
+          configuration: row.configuration,
+          enabled,
+        },
+      }).unwrap(),
+    );
+  const permissionControl = (row: McpConnectionView) => {
+    const offer = !inventory.isError && source?.capabilities.find((item) => item.capability_id === row.capability_id);
+    if (!offer) return <span>{t(`${key}.permissionUnknown`)}</span>;
+    const blocked = !offer.default_on && !offer.advertised;
+    const control = (
+      <Switch
+        size="small"
+        checked={offer.default_on}
+        disabled={busy || query.isFetching || inventory.isFetching || blocked}
+        aria-label={t(`${key}.allowNamed`, { name: row.display_name })}
+        onChange={() => (offer.default_on ? setPending({ row, action: "revoke" }) : void permit(row, true))}
+      />
+    );
+    return blocked ? (
+      <Tooltip text={t(`${key}.permissionRequiresReady`)}>
+        <span tabIndex={0}>{control}</span>
+      </Tooltip>
+    ) : (
+      control
+    );
   };
   return (
     <div className={styles.page}>
@@ -220,50 +307,87 @@ export default function McpConnectionsPage() {
         title={t(`${key}.title`)}
         subtitle={t(`${key}.scope`)}
         actions={
-          access.isAdmin && (
+          access.allowed && (
             <Button color="primary" variant="filled" size="medium" onClick={() => setEditing(null)}>
               {t(`${key}.add`)}
             </Button>
           )
         }
       />
-      {(access.isError || query.isError || error) && <p role="alert">{error || t(`${key}.error`)}</p>}
-      {!access.isLoading && !access.isAdmin && <p role="alert">{t("rework.spaceMembers.forbidden")}</p>}
-      {access.isAdmin && (
-        <>
-          <DataTable
-            data={rows}
-            rowKey={(row) => row.id}
-            onRowClick={(row) => setSelectedId(row.id)}
-            size="medium"
-            columns={[
-              { label: t(`${key}.name`), cellRenderer: (row) => row.display_name },
-              {
-                label: t(`${key}.activation`),
-                cellRenderer: (row) => t(`${key}.${row.enabled ? "enabled" : "disabled"}`),
-              },
-              {
-                label: t(`${key}.observation`),
-                cellRenderer: (row) => (
+      {(access.error || query.isError || inventory.isError || error) && (
+        <p role="alert">{error || t(`${key}.error`)}</p>
+      )}
+      {access.settled && !access.allowed && <p role="alert">{t("rework.spaceMembers.forbidden")}</p>}
+      {(!access.settled || query.isFetching) && <p role="status">{t("common.loading")}</p>}
+      {access.allowed && !query.isError && !query.isFetching && !rows.length && (
+        <PageEmptyState icon="extension" message={t(`${key}.empty`)} />
+      )}
+      {access.allowed && rows.length > 0 && (
+        <DataTable
+          data={rows}
+          rowKey={(row) => row.id}
+          size="medium"
+          columns={[
+            { label: t(`${key}.permission`), size: "1.5fr", cellRenderer: permissionControl },
+            {
+              label: t(`${key}.name`),
+              size: "3fr",
+              cellRenderer: (row) => (
+                <div className={styles.identity}>
+                  <EntityIdentity name={row.display_name} sourceId={row.logical_name} icon="extension" />
+                  <p className={styles.description} title={row.description}>
+                    {row.description}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              label: t(`${key}.observation`),
+              size: "1.8fr",
+              cellRenderer: (row) => (
+                <div className={styles.identity}>
                   <StatusBadge
                     label={t(`${key}.state.${row.observation_state}`)}
-                    tone={row.observation_state === "available" ? "success" : "neutral"}
+                    tone={row.observation_state === "unavailable" ? "error" : "neutral"}
                   />
-                ),
-              },
-              {
-                label: t(`${key}.execution`),
-                cellRenderer: (row) => t(`${key}.${row.available ? "available" : "unavailable"}`),
-              },
-            ]}
-          />
-          {selected && (
-            <section className={styles.detail}>
-              <h2>{selected.display_name}</h2>
+                  {!row.enabled && <p className={styles.description}>{t(`${key}.disabled`)}</p>}
+                </div>
+              ),
+            },
+            { label: t(`${key}.tools`), size: "1fr", cellRenderer: (row) => row.published_tools.length },
+            {
+              label: t("rework.admin.capabilities.col.actions"),
+              size: "1fr",
+              cellRenderer: (row) => (
+                <Button
+                  color="on-surface"
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setSelectedId(row.id)}
+                  aria-label={t(`${key}.detailsNamed`, { name: row.display_name })}
+                >
+                  {t(`${key}.details`)}
+                </Button>
+              ),
+            },
+          ]}
+        />
+      )}
+      {access.allowed && selectedId && (
+        <InlineDrawer
+          open
+          width="var(--content-prose-max-width)"
+          onClose={() => {
+            if (editing === undefined && !pending) setSelectedId(null);
+          }}
+          title={selected?.display_name ?? t(`${key}.connectionUnavailable`)}
+          closeLabel={t("common.close")}
+        >
+          {selected ? (
+            <div className={styles.detail}>
+              <p>{selected.logical_name}</p>
               <p>{selected.description}</p>
-              <p>{t(`${key}.revision`, { revision: selected.revision })}</p>
-              <p>{t(`${key}.discoveryScope`)}</p>
-              {selected.error_code && <p role="status">{t(`${key}.diagnostic`, { code: selected.error_code })}</p>}
+              {error && <p role="alert">{error}</p>}
               <div className={styles.actions}>
                 <Button
                   color="primary"
@@ -278,91 +402,158 @@ export default function McpConnectionsPage() {
                   color="primary"
                   variant="outlined"
                   size="small"
-                  disabled={busy}
+                  disabled={busy || query.isFetching}
                   onClick={() =>
                     void run(() =>
-                      test({ id: selected.id, mcpRevision: { expected_revision: selected.revision } }).unwrap(),
+                      test({
+                        spaceId,
+                        id: selected.id,
+                        mcpRevision: { expected_revision: selected.revision },
+                      }).unwrap(),
                     )
                   }
                 >
                   {t(`${key}.test`)}
                 </Button>
-                <Button
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                  disabled={
-                    busy ||
-                    selected.observation_state !== "available" ||
-                    selected.observation_revision !== selected.revision ||
-                    !selected.observed_tools.length ||
-                    !selected.checked_at
-                  }
-                  onClick={() =>
-                    void run(() =>
-                      publish({
-                        id: selected.id,
-                        mcpPublication: {
-                          expected_revision: selected.revision,
-                          expected_checked_at: selected.checked_at!,
-                        },
-                      }).unwrap(),
-                    )
-                  }
-                >
-                  {t(`${key}.publish`)}
-                </Button>
-                <Button
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() =>
-                      update({
-                        id: selected.id,
-                        updateMcpConnection: {
-                          expected_revision: selected.revision,
-                          display_name: selected.display_name,
-                          description: selected.description,
-                          configuration: selected.configuration,
-                          enabled: !selected.enabled,
-                        },
-                      }).unwrap(),
-                    )
-                  }
-                >
-                  {t(`${key}.${selected.enabled ? "disable" : "enable"}`)}
-                </Button>
               </div>
-              <p>{t(`${key}.publicationHint`)}</p>
+              <h3>{t(`${key}.observation`)}</h3>
+              <div className={styles.actions}>
+                <StatusBadge
+                  label={t(`${key}.state.${selected.observation_state}`)}
+                  tone={selected.observation_state === "unavailable" ? "error" : "neutral"}
+                />
+              </div>
+              <p>{t(`${key}.checkedAt`, { date: formatDateTime(selected.checked_at) })}</p>
+              <p>{t(`${key}.discoveryScope`)}</p>
+              {selected.observation_state === "unavailable" && <p role="alert">{t(`${key}.discoveryFailed`)}</p>}
+              <h3>{t(`${key}.inventory`)}</h3>
+              {!changes ? (
+                <p role="status">{t(`${key}.previousInventory`)}</p>
+              ) : selected.published_revision !== null && !hasChanges ? (
+                <p role="status">
+                  {t(`${key}.${selected.published_revision === selected.revision ? "upToDate" : "validationRequired"}`)}
+                </p>
+              ) : (
+                <p role="status">
+                  {t(`${key}.changes`, {
+                    added: changes.added.length,
+                    modified: changes.modified.length,
+                    removed: changes.removed.length,
+                  })}
+                </p>
+              )}
               <DataTable
-                data={selected.observed_tools}
+                data={toolRows}
                 rowKey={(tool) => tool.name}
                 size="small"
                 columns={[
-                  { label: t(`${key}.tool`), cellRenderer: (tool) => tool.name },
-                  { label: t(`${key}.description`), cellRenderer: (tool) => tool.description },
+                  { label: t(`${key}.tool`), size: "1.5fr", cellRenderer: (tool) => tool.name },
                   {
-                    label: t(`${key}.publication`),
-                    cellRenderer: (tool) =>
-                      t(
-                        `${key}.${selected.published_tools.some((p) => p.name === tool.name) ? "published" : "unpublished"}`,
-                      ),
+                    label: t(`${key}.description`),
+                    size: "3fr",
+                    cellRenderer: (tool) => <span className={styles.toolDescription}>{tool.description}</span>,
                   },
+                  ...(hasChanges
+                    ? [
+                        {
+                          label: t(`${key}.change`),
+                          size: "1.3fr",
+                          cellRenderer: (tool: McpConnectionView["observed_tools"][number]) => {
+                            const change = changes.removed.includes(tool.name)
+                              ? "removed"
+                              : changes.modified.includes(tool.name)
+                                ? "modified"
+                                : changes.added.includes(tool.name)
+                                  ? "added"
+                                  : null;
+                            return change ? (
+                              <StatusBadge
+                                label={t(`${key}.${change}`)}
+                                tone={change === "removed" ? "warning" : "info"}
+                              />
+                            ) : null;
+                          },
+                        },
+                      ]
+                    : []),
                 ]}
               />
+              {!toolRows.length && <p>{t(`${key}.noTools`)}</p>}
               <details>
                 <summary>{t(`${key}.contracts`)}</summary>
                 <pre className={styles.contracts}>
                   {JSON.stringify({ observed: selected.observed_tools, published: selected.published_tools }, null, 2)}
                 </pre>
               </details>
+              <p>{t(`${key}.publicationHint`)}</p>
+              <Button
+                color="primary"
+                variant="filled"
+                size="small"
+                disabled={
+                  busy ||
+                  query.isFetching ||
+                  !changes ||
+                  !selected.observed_tools.length ||
+                  !selected.checked_at ||
+                  (!hasChanges && selected.published_revision === selected.revision)
+                }
+                onClick={() =>
+                  void run(() =>
+                    publish({
+                      spaceId,
+                      id: selected.id,
+                      mcpPublication: {
+                        expected_revision: selected.revision,
+                        expected_checked_at: selected.checked_at!,
+                      },
+                    }).unwrap(),
+                  )
+                }
+              >
+                {t(`${key}.${selected.published_revision === null ? "publish" : "applyChanges"}`)}
+              </Button>
+              <h3>{t(`${key}.permission`)}</h3>
+              {permissionControl(selected)}
+              <p>{t(`${key}.permissionHint`)}</p>
+              <h3>{t(`${key}.activation`)}</h3>
+              <p>{t(`${key}.${selected.enabled ? "enabled" : "disabled"}`)}</p>
+              <p>{t(`${key}.activationHint`)}</p>
+              <Button
+                color="on-surface"
+                variant="outlined"
+                size="small"
+                disabled={busy || query.isFetching}
+                onClick={() =>
+                  selected.enabled ? setPending({ row: selected, action: "disable" }) : void activate(selected, true)
+                }
+              >
+                {t(`${key}.${selected.enabled ? "disable" : "enable"}`)}
+              </Button>
               <p>{t(`${key}.impact`, { count: selected.affected_instance_count })}</p>
-            </section>
+            </div>
+          ) : (
+            <p role="status">{t(`${key}.connectionUnavailable`)}</p>
           )}
-          {editing !== undefined && <ConnectionForm connection={editing} onClose={() => setEditing(undefined)} />}
-        </>
+        </InlineDrawer>
+      )}
+      <ConfirmationDialog
+        open={pending !== null}
+        title={t(`${key}.${pending?.action ?? "revoke"}Title`, { name: pending?.row.display_name })}
+        message={t(`${key}.${pending?.action ?? "revoke"}Hint`)}
+        details={pending && <p>{t(`${key}.impact`, { count: pending.row.affected_instance_count })}</p>}
+        criticalAction
+        confirmLabel={t(`${key}.${pending?.action ?? "revoke"}`)}
+        cancelLabel={t("common.cancel")}
+        confirmDisabled={busy}
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending) void (pending.action === "revoke" ? permit(pending.row, false) : activate(pending.row, false));
+          setPending(null);
+        }}
+      />
+      {access.allowed && editing !== undefined && (
+        <ConnectionForm spaceId={spaceId} connection={editing} onClose={() => setEditing(undefined)} />
       )}
     </div>
   );

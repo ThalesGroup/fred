@@ -458,40 +458,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
     }),
-    mcpConnections: build.query<McpConnectionsApiResponse, McpConnectionsApiArg>({
-      query: () => ({ url: `/control-plane/v1/platform/mcp-connections` }),
-    }),
-    createMcpConnection: build.mutation<CreateMcpConnectionApiResponse, CreateMcpConnectionApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/mcp-connections`,
-        method: "POST",
-        body: queryArg.createMcpConnection,
-      }),
-    }),
-    updateMcpConnection: build.mutation<UpdateMcpConnectionApiResponse, UpdateMcpConnectionApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}`,
-        method: "PUT",
-        body: queryArg.updateMcpConnection,
-      }),
-    }),
-    publishMcpConnection: build.mutation<PublishMcpConnectionApiResponse, PublishMcpConnectionApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}/publish`,
-        method: "POST",
-        body: queryArg.mcpPublication,
-      }),
-    }),
-    testMcpConnection: build.mutation<TestMcpConnectionApiResponse, TestMcpConnectionApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}/test`,
-        method: "POST",
-        body: queryArg.mcpRevision,
-      }),
-    }),
-    mcpCredentials: build.query<McpCredentialsApiResponse, McpCredentialsApiArg>({
-      query: () => ({ url: `/control-plane/v1/platform/mcp-credentials` }),
-    }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
     }),
@@ -731,6 +697,40 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/marketplace-installations/${queryArg.installationId}`,
       }),
+    }),
+    mcpConnections: build.query<McpConnectionsApiResponse, McpConnectionsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-connections` }),
+    }),
+    createMcpConnection: build.mutation<CreateMcpConnectionApiResponse, CreateMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-connections`,
+        method: "POST",
+        body: queryArg.createMcpConnection,
+      }),
+    }),
+    updateMcpConnection: build.mutation<UpdateMcpConnectionApiResponse, UpdateMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-connections/${queryArg.id}`,
+        method: "PUT",
+        body: queryArg.updateMcpConnection,
+      }),
+    }),
+    publishMcpConnection: build.mutation<PublishMcpConnectionApiResponse, PublishMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-connections/${queryArg.id}/publish`,
+        method: "POST",
+        body: queryArg.mcpPublication,
+      }),
+    }),
+    testMcpConnection: build.mutation<TestMcpConnectionApiResponse, TestMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-connections/${queryArg.id}/test`,
+        method: "POST",
+        body: queryArg.mcpRevision,
+      }),
+    }),
+    mcpCredentials: build.query<McpCredentialsApiResponse, McpCredentialsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-credentials` }),
     }),
     resolvePowerpointTemplate: build.query<ResolvePowerpointTemplateApiResponse, ResolvePowerpointTemplateApiArg>({
       query: (queryArg) => ({
@@ -1576,29 +1576,6 @@ export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
 };
-export type McpConnectionsApiResponse = /** status 200 undefined */ McpConnectionView[];
-export type McpConnectionsApiArg = void;
-export type CreateMcpConnectionApiResponse = /** status 201 undefined */ McpConnectionView;
-export type CreateMcpConnectionApiArg = {
-  createMcpConnection: CreateMcpConnection;
-};
-export type UpdateMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
-export type UpdateMcpConnectionApiArg = {
-  id: string;
-  updateMcpConnection: UpdateMcpConnection;
-};
-export type PublishMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
-export type PublishMcpConnectionApiArg = {
-  id: string;
-  mcpPublication: McpPublication;
-};
-export type TestMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
-export type TestMcpConnectionApiArg = {
-  id: string;
-  mcpRevision: McpRevision;
-};
-export type McpCredentialsApiResponse = /** status 200 undefined */ McpCredentialReference[];
-export type McpCredentialsApiArg = void;
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
@@ -1811,6 +1788,37 @@ export type MarketplaceInstallationApiResponse = /** status 200 undefined */ Ins
 export type MarketplaceInstallationApiArg = {
   spaceId: string;
   installationId: string;
+};
+export type McpConnectionsApiResponse = /** status 200 undefined */ McpConnectionView[];
+export type McpConnectionsApiArg = {
+  spaceId: string;
+};
+export type CreateMcpConnectionApiResponse = /** status 201 undefined */ McpConnectionView;
+export type CreateMcpConnectionApiArg = {
+  spaceId: string;
+  createMcpConnection: CreateMcpConnection;
+};
+export type UpdateMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type UpdateMcpConnectionApiArg = {
+  spaceId: string;
+  id: string;
+  updateMcpConnection: UpdateMcpConnection;
+};
+export type PublishMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type PublishMcpConnectionApiArg = {
+  spaceId: string;
+  id: string;
+  mcpPublication: McpPublication;
+};
+export type TestMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type TestMcpConnectionApiArg = {
+  spaceId: string;
+  id: string;
+  mcpRevision: McpRevision;
+};
+export type McpCredentialsApiResponse = /** status 200 undefined */ McpCredentialReference[];
+export type McpCredentialsApiArg = {
+  spaceId: string;
 };
 export type ResolvePowerpointTemplateApiResponse = /** status 200 undefined */ PowerPointResolution;
 export type ResolvePowerpointTemplateApiArg = {
@@ -3190,79 +3198,6 @@ export type TeamSupervisionDetail = {
   organization_id: string;
   team: TeamSupervision;
 };
-export type McpAuthentication =
-  | {
-      kind: "none";
-    }
-  | {
-      kind: "knowledge_flow_tabular";
-    }
-  | {
-      credential_binding: string;
-      kind: "bearer";
-    }
-  | {
-      credential_binding: string;
-      header: string;
-      kind: "api_key";
-    };
-export type McpConfiguration = {
-  allow_insecure_http?: boolean;
-  authentication: McpAuthentication;
-  url: string;
-};
-export type McpTool = {
-  annotations?: any;
-  description?: string | null;
-  input_schema: any;
-  name: string;
-  output_schema?: any;
-};
-export type McpConnectionView = {
-  /** Aggregate technical impact only; platform authority grants no business visibility. */
-  affected_instance_count: number;
-  available: boolean;
-  checked_at?: string | null;
-  configuration: McpConfiguration;
-  description: string;
-  display_name: string;
-  enabled: boolean;
-  error_code?: string | null;
-  id: string;
-  last_success_at?: string | null;
-  logical_name: string;
-  observation_revision?: number | null;
-  observation_state: string;
-  observed_tools: McpTool[];
-  published_revision?: number | null;
-  published_tools: McpTool[];
-  revision: number;
-};
-export type CreateMcpConnection = {
-  configuration: McpConfiguration;
-  description: string;
-  display_name: string;
-  logical_name: string;
-};
-export type UpdateMcpConnection = {
-  configuration: McpConfiguration;
-  description: string;
-  display_name: string;
-  enabled: boolean;
-  expected_revision: number;
-};
-export type McpPublication = {
-  expected_checked_at: string;
-  expected_revision: number;
-};
-export type McpRevision = {
-  expected_revision: number;
-};
-export type McpCredentialReference = {
-  available: boolean;
-  credential_binding: string;
-  url: string;
-};
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
   agent_instance_id: string | null;
@@ -3500,6 +3435,7 @@ export type ManagedAgentInstanceSummary = {
   configuration_revision: number;
   created_at: string;
   created_by: string;
+  created_by_name?: string | null;
   description?: string | null;
   display_name: string;
   logical_name: string;
@@ -3511,6 +3447,10 @@ export type ManagedAgentInstanceSummary = {
   recommended_model?: ModelOfferKey | null;
   role: string;
   selected_capability_ids?: string[] | null;
+  /** Canonical names of selected managed MCP offers, including withdrawn offers. */
+  selected_capability_names?: {
+    [key: string]: string;
+  };
   source_agent_id: string;
   source_runtime_id: string;
   space_id: string;
@@ -3522,6 +3462,7 @@ export type ManagedAgentInstanceSummary = {
   };
   updated_at: string;
   updated_by: string;
+  updated_by_name?: string | null;
   usage_statement: string;
 };
 export type AgentInstancePage = {
@@ -3728,6 +3669,34 @@ export type RuntimeAttachment = {
   mime: string;
   name: string;
 };
+export type McpAuthentication =
+  | {
+      kind: "none";
+    }
+  | {
+      kind: "knowledge_flow_tabular";
+    }
+  | {
+      credential_binding: string;
+      kind: "bearer";
+    }
+  | {
+      credential_binding: string;
+      header: string;
+      kind: "api_key";
+    };
+export type McpConfiguration = {
+  allow_insecure_http?: boolean;
+  authentication: McpAuthentication;
+  url: string;
+};
+export type McpTool = {
+  annotations?: any;
+  description?: string | null;
+  input_schema: any;
+  name: string;
+  output_schema?: any;
+};
 export type McpBinding = {
   capability_id: string;
   configuration: McpConfiguration;
@@ -3847,6 +3816,59 @@ export type ReplaceSpaceCapabilityPolicy = {
   expected_revision: number;
   permitted_ids: string[];
   restricted: boolean;
+};
+export type McpToolChanges = {
+  added: string[];
+  modified: string[];
+  removed: string[];
+};
+export type McpConnectionView = {
+  /** Instances in the owning organization that select this connection. */
+  affected_instance_count: number;
+  available: boolean;
+  capability_id: string;
+  checked_at?: string | null;
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  enabled: boolean;
+  error_code?: string | null;
+  id: string;
+  last_success_at?: string | null;
+  logical_name: string;
+  observation_revision?: number | null;
+  observation_state: string;
+  observed_tools: McpTool[];
+  published_revision?: number | null;
+  published_tools: McpTool[];
+  revision: number;
+  space_id: string;
+  tool_changes?: McpToolChanges | null;
+};
+export type CreateMcpConnection = {
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  logical_name: string;
+};
+export type UpdateMcpConnection = {
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  enabled: boolean;
+  expected_revision: number;
+};
+export type McpPublication = {
+  expected_checked_at: string;
+  expected_revision: number;
+};
+export type McpRevision = {
+  expected_revision: number;
+};
+export type McpCredentialReference = {
+  available: boolean;
+  credential_binding: string;
+  url: string;
 };
 export type PowerPointSource = "agent" | "organization" | "builtin";
 export type PowerPointResolution = {
@@ -4270,14 +4292,6 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
-  useMcpConnectionsQuery,
-  useLazyMcpConnectionsQuery,
-  useCreateMcpConnectionMutation,
-  useUpdateMcpConnectionMutation,
-  usePublishMcpConnectionMutation,
-  useTestMcpConnectionMutation,
-  useMcpCredentialsQuery,
-  useLazyMcpCredentialsQuery,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useDefaultSkillsQuery,
@@ -4329,6 +4343,14 @@ export const {
   useReplaceSpaceCapabilityPolicyMutation,
   useMarketplaceInstallationQuery,
   useLazyMarketplaceInstallationQuery,
+  useMcpConnectionsQuery,
+  useLazyMcpConnectionsQuery,
+  useCreateMcpConnectionMutation,
+  useUpdateMcpConnectionMutation,
+  usePublishMcpConnectionMutation,
+  useTestMcpConnectionMutation,
+  useMcpCredentialsQuery,
+  useLazyMcpCredentialsQuery,
   useResolvePowerpointTemplateQuery,
   useLazyResolvePowerpointTemplateQuery,
   useUploadPowerpointTemplateMutation,

@@ -316,7 +316,7 @@ pub(super) async fn read_inventory(
     let mut items = Vec::new();
     for source in &s.agent_catalog.runtime_catalog_sources {
         let observation = catalog::observation(&mut *tx, &source.runtime_id).await?;
-        let offers = catalog::capabilities(&mut *tx, &source.runtime_id).await?;
+        let offers = catalog::capabilities(&mut *tx, &source.runtime_id, organization_id).await?;
         let links = catalog::template_capabilities(&mut *tx, &source.runtime_id).await?;
         items.push(CapabilityInventory {
             source_id: source.runtime_id.clone(),
@@ -392,7 +392,9 @@ pub(super) async fn read_inventory(
         capabilities: Vec::new(),
         template_capabilities: Vec::new(),
     };
-    for offer in catalog::capabilities(&mut *tx, crate::mcp_connections::SOURCE_ID).await? {
+    for offer in
+        catalog::capabilities(&mut *tx, crate::mcp_connections::SOURCE_ID, organization_id).await?
+    {
         central.capabilities.push(CapabilityInventoryOffer {
             source_id: offer.source_id.clone(),
             origin: OfferOrigin::ManagedMcp,
@@ -655,7 +657,7 @@ async fn organization_capability_revoke_impact(
         .await?;
     require_source(&s, &runtime_id)?;
     let mut tx = read_snapshot(&s).await?;
-    if !catalog::capabilities(&mut *tx, &runtime_id)
+    if !catalog::capabilities(&mut *tx, &runtime_id, organization_id)
         .await?
         .iter()
         .any(|offer| offer.capability_id == capability_id)
