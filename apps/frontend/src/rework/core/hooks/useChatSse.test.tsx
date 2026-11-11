@@ -523,6 +523,76 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     },
   );
 
+  describe("support reference of a live tool failure", () => {
+    const failedSearch = [
+      { kind: "tool_call", call_id: "search", tool_name: "search_documents", arguments: { query: "q" } },
+      {
+        kind: "tool_result",
+        call_id: "search",
+        failure: { code: "service_error", status: 500 },
+        content: "The service could not complete this operation.",
+      },
+      { kind: "final", content: "Sorry.", finish_reason: "stop" },
+    ];
+    const references = (messages: typeof latest.messages) =>
+      groupTraceEntries(messages)
+        .filter((entry) => entry.kind === "combo")
+        .map((entry) => toolFailureDetail(entry)?.reference);
+    const stream = (headers: Record<string, string>) =>
+      vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(failedSearch.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers }),
+        );
+
+    it("is the exchange_id the runtime announced, before and after a reload", async () => {
+      const fetchSpy = stream({ "X-Fred-Exchange-Id": "exchange-from-runtime" });
+      mount();
+      await act(async () => {
+        await latest.send("find it", "session-1");
+      });
+      expect(references(latest.messages)).toEqual(["exchange-from-runtime"]);
+      // The optimistic user message joined the runtime's exchange too.
+      expect(new Set(latest.messages.map((message) => message.exchange_id))).toEqual(
+        new Set(["exchange-from-runtime"]),
+      );
+      // The runtime saves the turn under the id it announced (fred-runtime's
+      // test_stream_announces_the_exchange_id_its_logs_and_history_carry):
+      // the reloaded rows show the same reference.
+      const row = { session_id: "session-1", exchange_id: "exchange-from-runtime", timestamp: "", metadata: {} };
+      const reloaded: typeof latest.messages = [
+        {
+          ...row,
+          rank: 1,
+          role: "assistant",
+          channel: "tool_call",
+          parts: [{ type: "tool_call", call_id: "search", name: "search_documents", args: { query: "q" } }],
+        },
+        {
+          ...row,
+          rank: 2,
+          role: "tool",
+          channel: "tool_result",
+          parts: [
+            { type: "tool_result", call_id: "search", content: "", failure: { code: "service_error", status: 500 } },
+          ],
+        },
+      ];
+      expect(references(reloaded)).toEqual(references(latest.messages));
+      fetchSpy.mockRestore();
+    });
+
+    it("is never the browser's own name when the stream announces none", async () => {
+      const fetchSpy = stream({});
+      mount();
+      await act(async () => {
+        await latest.send("find it", "session-1");
+      });
+      expect(references(latest.messages)).toEqual([null]);
+      fetchSpy.mockRestore();
+    });
+  });
+
   it("preserves safe tabular failure details across streaming and a history round trip in a partial batch", async () => {
     const events = [
       {

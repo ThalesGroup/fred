@@ -42,7 +42,7 @@ import type {
   TurnPersistedEvent,
   SessionTitleRuntimeEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
-import { toolResultCallId, upsertOne } from "./chatSseUtils";
+import { EXCHANGE_ID_HEADER, localExchangeId, toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
   detachTurn,
   readTurnMessages,
@@ -1016,6 +1016,19 @@ export function useChatSse(
 
       onAccepted?.();
 
+      // The runtime names the exchange once, on the response: the turn's live
+      // messages, the optimistic user message included, take that name.
+      const announced = response.headers.get(EXCHANGE_ID_HEADER);
+      if (announced && announced !== exchangeId) {
+        writeTurnMessages(
+          turn,
+          readTurnMessages(turn).map((message) =>
+            message.exchange_id === exchangeId ? { ...message, exchange_id: announced } : message,
+          ),
+        );
+        exchangeId = announced;
+      }
+
       const visibleRanks = readTurnMessages(turn)
         .filter((message) => message.rank >= 0)
         .map((message) => message.rank);
@@ -1231,7 +1244,7 @@ export function useChatSse(
           space_id: spaceId,
           language: i18n.language?.split("-")[0] || undefined,
         };
-        exchangeId = uuidv4();
+        exchangeId = localExchangeId(uuidv4());
         effectiveSessionId = sessionId ?? "draft";
       } catch (err) {
         // Was previously unguarded: a rejection here (e.g. an unknown/foreign

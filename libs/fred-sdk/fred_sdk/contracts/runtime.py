@@ -221,6 +221,11 @@ class ExecutionConfig(FrozenModel):
     interruption_id: str | None = None
 
 
+# Set once on an execute/stream response: the turn's exchange_id, the value its
+# logs and saved history carry. Events do not repeat it.
+EXCHANGE_ID_HEADER = "X-Fred-Exchange-Id"
+
+
 class RuntimeEventBase(FrozenModel):
     sequence: int = Field(default=0, ge=0)
     rank: int | None = None

@@ -18,6 +18,18 @@
 
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 
+/** Set once on the stream response by the runtime: the turn's exchange_id, as
+ * logged and saved in history. Mirrors fred_sdk's `EXCHANGE_ID_HEADER`. */
+export const EXCHANGE_ID_HEADER = "X-Fred-Exchange-Id";
+
+// The browser names a turn before its stream answers, for the optimistic user
+// message. That name is never a support reference: it reaches no log.
+const LOCAL_EXCHANGE_PREFIX = "local-";
+
+export const localExchangeId = (uuid: string) => `${LOCAL_EXCHANGE_PREFIX}${uuid}`;
+
+export const isLocalExchangeId = (exchangeId: string) => exchangeId.startsWith(LOCAL_EXCHANGE_PREFIX);
+
 export const keyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
 export const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;

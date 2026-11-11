@@ -47,6 +47,7 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.logs.context import current_context
 from fred_core.security.delegation import (
     get_delegation_config,
     initialize_delegation,
@@ -81,12 +82,13 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import (
+    EXCHANGE_ID_HEADER,
     ConversationScratchpadFileNotFoundError,
     HistoryStorePort,
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
-from pydantic import ValidationError
+from pydantic import AnyHttpUrl, ValidationError
 from weaver_fixtures import (
     INSTANCE_ID,
     SPACE_ID,
@@ -3426,6 +3428,84 @@ def test_resume_reuses_exchange_id_from_the_interrupted_turn(
         f"expected one shared exchange_id across the interrupted turn and its "
         f"resume, got {exchange_ids}"
     )
+
+
+_LOGGED_EXCHANGE_IDS: list[object] = []
+
+
+@tool("context.probe", description="Record the turn's log context.")
+async def _context_probe(ctx: ToolContext) -> str:
+    """Record the exchange_id the turn's log lines carry while a tool runs."""
+
+    _LOGGED_EXCHANGE_IDS.append(current_context().get("exchange_id"))
+    return "recorded"
+
+
+class _ContextProbeAgent(ReActAgent):
+    agent_id: str = "rags.sample.echo"
+    role: str = "Context probe"
+    description: str = "Calls one tool that records the log context."
+    system_prompt_template: str = "Call context_probe, then answer briefly."
+    tools = (_context_probe,)
+
+
+def test_stream_announces_the_exchange_id_its_logs_and_history_carry(
+    monkeypatch, tmp_path
+) -> None:
+    """The support reference shown live must be the one logged and saved."""
+
+    _LOGGED_EXCHANGE_IDS.clear()
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "call-probe", "name": "context_probe", "args": {}}],
+            ),
+            AIMessage(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _ContextProbeAgent()
+    config = _build_test_config(tmp_path)
+    # A browser on another origin can read the header only if CORS exposes it.
+    config.security.authorized_origins = [AnyHttpUrl("http://frontend.test")]
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=config,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute/stream",
+            headers={"Origin": "http://frontend.test"},
+            json=managed_payload(
+                {
+                    "agent_id": "rags.sample.echo",
+                    "input": "hello",
+                    "session_id": "session-exchange-header",
+                    "runtime_context": {"user_id": "alice"},
+                }
+            ),
+        )
+        assert response.status_code == 200
+        history_store = get_runtime_context().config.history_store
+        assert history_store is not None
+        rows = asyncio.run(history_store.get("session-exchange-header"))
+
+    announced = response.headers[EXCHANGE_ID_HEADER]
+    assert announced
+    exposed = response.headers["access-control-expose-headers"].lower().split(", ")
+    assert EXCHANGE_ID_HEADER.lower() in exposed
+    # Announced once, by the header: no event repeats it.
+    assert "exchange_id" not in response.text
+    assert _LOGGED_EXCHANGE_IDS == [announced]
+    assert rows
+    assert {row.exchange_id for row in rows} == {announced}
 
 
 # ---------------------------------------------------------------------------

@@ -155,6 +155,7 @@ from fred_sdk.contracts.models import (
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
+    EXCHANGE_ID_HEADER,
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
@@ -6633,6 +6634,16 @@ def _build_agent_router(
         "/execute/stream",
         operation_id="execute_agent_stream",
         dependencies=[Depends(_declare_grant_parameters)],
+        responses={
+            200: {
+                "headers": {
+                    EXCHANGE_ID_HEADER: {
+                        "description": "The turn's exchange_id, as logged and saved in history.",
+                        "schema": {"type": "string"},
+                    }
+                }
+            }
+        },
     )
     async def execute_stream(
         request: RuntimeExecuteRequest,
@@ -6648,7 +6659,9 @@ def _build_agent_router(
         POST <configured base_url>/agents/execute/stream
         Authorization: Bearer <user JWT>
         Body: RuntimeExecuteRequest (agent_instance_id + canonical runtime_context.space_id)
-        Response: text/event-stream, each `data:` line is a RuntimeEvent JSON
+        Response: text/event-stream, each `data:` line is a RuntimeEvent JSON;
+        the `X-Fred-Exchange-Id` header names the turn's exchange_id once, for
+        every event of the stream
 
         Stream termination:
         - The stream ends by connection close after the `final` event is delivered.
@@ -6694,14 +6707,15 @@ def _build_agent_router(
                 request.effective_session_id(),
                 request.effective_user_id() or "unknown",
             )
-            exchange_id = None
+            # Resolved here, once: the response header announces the value
+            # the turn then logs and writes to history.
+            exchange_id = await _resolve_exchange_id(
+                resume_payload=internal_req.resume_payload,
+                session_id=request.effective_session_id(),
+                history_store=get_runtime_context().config.history_store,
+            )
             prewritten_initial = False
             if internal_req.agent_instance_id:
-                exchange_id = await _resolve_exchange_id(
-                    resume_payload=internal_req.resume_payload,
-                    session_id=request.effective_session_id(),
-                    history_store=get_runtime_context().config.history_store,
-                )
                 prewritten_initial = await _claim_initial_opening(
                     get_runtime_context().config.history_store,
                     internal_req,
@@ -6729,7 +6743,7 @@ def _build_agent_router(
                     await history.release_initial_user_message(
                         request.effective_session_id() or "",
                         request.effective_user_id() or "unknown",
-                        exchange_id or "",
+                        exchange_id,
                     )
 
         stream = _stream(
@@ -6751,6 +6765,7 @@ def _build_agent_router(
         return _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
+            headers={EXCHANGE_ID_HEADER: exchange_id},
             background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
 
@@ -7025,7 +7040,7 @@ def create_agent_app(
             allow_origins=authorized_origins,
             allow_methods=["GET", "POST"],
             allow_headers=["Content-Type", "Authorization"],
-            expose_headers=REFERENCE_HEADERS,
+            expose_headers=[*REFERENCE_HEADERS, EXCHANGE_ID_HEADER],
         )
         logger.debug("CORS allow_origins=%s", authorized_origins)
 

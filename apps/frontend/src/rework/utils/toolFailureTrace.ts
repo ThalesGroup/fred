@@ -22,6 +22,7 @@ import {
   type TraceEntry,
 } from "./traceUtils";
 import { tabularToolKind } from "./tabularTrace";
+import { isLocalExchangeId } from "../core/hooks/chatSseUtils";
 
 const ARGUMENTS: Record<string, string[]> = {
   read_conversation_file: ["document_id", "workspace_path"],
@@ -83,7 +84,8 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
     errorKey: `rework.chatTrace.failure.${failure.code}`,
     status: failure.status ?? null,
     declined,
-    reference: declined ? null : entry.result.exchange_id,
+    // Only the runtime's exchange_id is in the logs; a browser-made one is not.
+    reference: declined || isLocalExchangeId(entry.result.exchange_id) ? null : entry.result.exchange_id,
     // Conversation-file failures carry Fred's own recovery sentence; an
     // unexpected one may carry an uncaught exception text instead.
     error: sqlFailure?.error
