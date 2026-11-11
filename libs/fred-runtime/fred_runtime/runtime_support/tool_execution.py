@@ -37,9 +37,9 @@ from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
-from fred_runtime.runtime_support.request_context_helpers import turn_kpi_actor
 from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.runtime_support.authority import RunStopError
+from fred_runtime.runtime_support.request_context_helpers import turn_kpi_actor
 from fred_runtime.runtime_support.run_scope import RunScope
 
 logger = logging.getLogger(__name__)

@@ -399,10 +399,11 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
     with caplog.at_level(logging.WARNING, logger=cleanup.__name__):
         cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
-    # One retry line carrying the cause, without a traceback repeated at every sweep.
+    # One retry line carrying the error type, without its message or traceback.
     [retry] = [record for record in caplog.records if record.name == cleanup.__name__]
     assert retry.levelno == logging.WARNING and retry.exc_info is None
-    assert failing["generation"] in retry.getMessage() and "store unavailable" in retry.getMessage()
+    assert failing["generation"] in retry.getMessage() and "cause=RuntimeError" in retry.getMessage()
+    assert "store unavailable" not in caplog.text
 
 
 @pytest.mark.parametrize("remaining", [0, 1])

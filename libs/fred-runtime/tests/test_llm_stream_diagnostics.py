@@ -9,7 +9,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 from unittest.mock import Mock
 
 import httpx
@@ -25,7 +25,12 @@ from fred_runtime.runtime_support.llm_diagnostics import (
     classify_error,
     failed_calls,
 )
-from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
@@ -205,10 +210,16 @@ async def stream_server(mode: str):
 
 
 def middleware(kpi=None, role="root"):
-    binding = cast(
-        BoundRuntimeContext,
-        SimpleNamespace(
-            portable_context=SimpleNamespace(agent_id="test", agent_name="test")
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(),
+        portable_context=PortableContext(
+            request_id="test-request",
+            correlation_id="test-correlation",
+            actor="system",
+            tenant="test",
+            environment=PortableEnvironment.DEV,
+            agent_id="test",
+            agent_name="test",
         ),
     )
     return TracingKpiMiddleware(tracer=None, kpi=kpi, binding=binding, role=role)

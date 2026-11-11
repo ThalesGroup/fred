@@ -73,7 +73,7 @@ def test_logging_span_records_content_sizes_but_never_the_content(
     logger = logging.getLogger("fred_core.tests.traces.io")
     tracer = observability.LoggingTracer(logger=logger)
 
-    with caplog.at_level(logging.INFO, logger=logger.name):
+    with caplog.at_level(logging.DEBUG, logger=logger.name):
         span = tracer.start_span("v2.react.model")
         span.set_io(input="a secret question", output="a secret answer")
         span.end()
@@ -94,7 +94,7 @@ def test_logging_span_records_usage_in_full(
     logger = logging.getLogger("fred_core.tests.traces.usage")
     tracer = observability.LoggingTracer(logger=logger)
 
-    with caplog.at_level(logging.INFO, logger=logger.name):
+    with caplog.at_level(logging.DEBUG, logger=logger.name):
         span = tracer.start_span("v2.react.model")
         span.set_usage(
             model="gpt-4o", usage={"input": 812, "output": 96}, cost={"total": 0.02}
