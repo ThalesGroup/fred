@@ -14,6 +14,7 @@
 
 import logging
 import tempfile
+import time
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,7 @@ from knowledge_flow_worker.application_context import ApplicationContext
 from knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvReadOptions, CsvTabularProcessor
 from knowledge_flow_worker.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_worker.core.processors.output.vectorization_processor.vectorization_utils import flat_metadata_from, sanitize_chunk_metadata
+from knowledge_flow_worker.core.processors.tabular_outcome import log_tabular_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +152,7 @@ class TabularProcessor(BaseOutputProcessor):
           Attachment Datasets").
         """
         try:
-            # The temporary path embeds the original filename: log the document id only.
-            logger.info("document_uid=%s processing tabular file", metadata.document_uid)
+            started = time.perf_counter()
             csv_path = Path(file_path)
             csv_read_options = self._inspect_csv_source(csv_path)
             artifact = self._persist_parquet_artifact(
@@ -161,6 +162,13 @@ class TabularProcessor(BaseOutputProcessor):
             )
             metadata.file.row_count = artifact.row_count
             write_tabular_artifact(metadata, artifact)
+            # Counts only: the temporary path and the column names derive from the upload.
+            log_tabular_outcome(
+                metadata.document_uid,
+                tables=[(artifact.row_count, len(artifact.columns))],
+                size_bytes=artifact.file_size_bytes or 0,
+                duration_ms=(time.perf_counter() - started) * 1000,
+            )
 
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
@@ -322,16 +330,6 @@ class TabularProcessor(BaseOutputProcessor):
             )
         finally:
             cleanup_generated_parquet_file(parquet_path)
-
-        logger.info(
-            "document_uid=%s object_key=%s rows=%s size_bytes=%s format=%s compression=%s",
-            metadata.document_uid,
-            stored_object.key,
-            generated_metadata.row_count,
-            stored_object.size,
-            self.tabular_config.format,
-            self.tabular_config.compression,
-        )
 
         return TabularArtifactV1(
             dataset_uid=metadata.document_uid,

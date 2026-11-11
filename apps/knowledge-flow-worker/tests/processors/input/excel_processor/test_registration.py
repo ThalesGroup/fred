@@ -25,6 +25,7 @@ canonique `tabular/datasets/<uid>/<rev>/…` et son entrée `tables.json` gagne
 from __future__ import annotations
 
 import json
+import logging
 
 from fred_knowledge.tabular.artifacts import build_table_query_alias
 
@@ -121,3 +122,26 @@ def test_registration_survives_missing_application_context(run_export, monkeypat
     assert len(entries) == 1
     assert "object_key" not in entries[0]
     assert (r.output_dir / entries[0]["path"]).is_file()
+
+
+def test_one_outcome_per_workbook_counts_tables_and_reports_what_was_left_out(run_export, caplog):
+    ApplicationContext.get_instance().get_content_store().clear()
+    with caplog.at_level(logging.INFO):
+        r = run_export(
+            [
+                {"name": "Salaires confidentiels", "cells": {"A1": "Nom", "B1": "Montant", "A2": "Alice", "B2": 10, "A3": "Bob", "B3": 20}},
+                # The empty "Note" column is dropped, leaving a single-column table that is left out.
+                {"name": "Notes privées", "cells": {"A1": "Produit", "B1": "Note", "A2": "Stylo", "A3": "Cahier", "A4": "Gomme"}},
+            ],
+            extract_format="parquet",
+            drop_empty_cols=True,
+        )
+    [outcome] = [record for record in caplog.records if record.getMessage().startswith("tabular outcome")]
+    assert outcome.document_uid == r.document_uid
+    assert (outcome.tables, outcome.rows, outcome.columns, outcome.sheets, outcome.empty_tables) == (1, 2, [2], 2, 0)
+    assert outcome.size_bytes > 0
+    [warning] = [record for record in caplog.records if hasattr(record, "skipped_tables")]
+    assert warning.levelno == logging.WARNING
+    assert warning.skipped_tables == {"single_column_table": 1}
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "Salaires" not in messages and "Notes" not in messages and str(r.path.name) not in messages
