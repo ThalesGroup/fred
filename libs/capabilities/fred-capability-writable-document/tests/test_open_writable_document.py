@@ -33,6 +33,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import (
     ConversationFilesystemPermissionError,
     ConversationFilesystemPort,
@@ -107,7 +108,7 @@ async def test_rejects_non_markdown_before_reading(fake_store):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
     _result, artifact = await _run_tool(filesystem, path="/results.csv", title="Report")
 
-    assert artifact.is_error
+    assert artifact.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
     filesystem.read_text.assert_not_awaited()
     assert await fake_store.list_for_session("session-1") == []
 
@@ -128,33 +129,41 @@ async def test_imported_nul_markdown_is_cleaned_and_saved(fake_store):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("path", "error"),
+    ("path", "error", "code"),
     [
         (
             "report.md",
             ConversationScratchpadInvalidPathError("Absolute path required"),
+            ToolFailureCode.invalid_arguments,
         ),
-        ("/../secret.md", ConversationScratchpadInvalidPathError("Unsafe path")),
+        (
+            "/../secret.md",
+            ConversationScratchpadInvalidPathError("Unsafe path"),
+            ToolFailureCode.invalid_arguments,
+        ),
         (
             "/mounted/private.md",
             ConversationFilesystemPermissionError("Access denied"),
+            ToolFailureCode.resource_unavailable,
         ),
     ],
 )
-async def test_respects_filesystem_path_and_permission_checks(fake_store, path, error):
+async def test_respects_filesystem_path_and_permission_checks(
+    fake_store, path, error, code
+):
     filesystem = AsyncMock(spec=ConversationFilesystemPort)
     filesystem.read_text.side_effect = error
     _result, artifact = await _run_tool(filesystem, path=path, title="Report")
 
     filesystem.read_text.assert_awaited_once_with(path, origin="agent")
-    assert artifact.is_error
+    assert artifact.failure == ToolFailure(code=code)
     assert await fake_store.list_for_session("session-1") == []
 
 
 @pytest.mark.asyncio
 async def test_requires_filesystem(fake_store):
     _result, unavailable = await _run_tool(None, path="/report.md", title="Report")
-    assert unavailable.is_error
+    assert unavailable.failure == ToolFailure(code=ToolFailureCode.resource_unavailable)
 
     assert await fake_store.list_for_session("session-1") == []
 

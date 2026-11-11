@@ -2212,6 +2212,10 @@ export type UpdateOrganization = {
   name?: string | null;
   owner_username?: string | null;
 };
+export type ToolFailureCode = "unexpected";
+export type ToolFailure = {
+  code: ToolFailureCode;
+};
 export type SearchHit = {
   chunk_kind?: string | null;
   content: string;
@@ -2254,7 +2258,7 @@ export type RuntimeEvent =
   | {
       call_id: string;
       content: string;
-      is_error: boolean;
+      failure?: ToolFailure | null;
       kind: "tool_result";
       latency_ms: number;
       sequence: number;
@@ -2320,7 +2324,7 @@ export type MessagePart =
   | {
       call_id: string;
       content: string;
-      ok: boolean;
+      failure?: ToolFailure | null;
       type: "tool_result";
     };
 export type ChatMessage = {
@@ -2591,7 +2595,8 @@ export type Descriptor = {
   max_chunks: number;
   max_output_bytes: number;
   mime: string;
-  /** Models admitted for this stage under the organization's policy. */
+  /** Models admitted for this stage under the organization's policy; empty when the
+    descriptor replays a committed stage, which runs no inference. */
   models: StageModels;
   name: string;
   organization_id: string;

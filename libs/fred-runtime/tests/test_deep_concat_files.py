@@ -32,6 +32,7 @@ from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import build_conversation_filesystem
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from langchain_core.messages import ToolMessage
 
 
@@ -142,7 +143,9 @@ async def test_mounted_input_keeps_exact_long_text_and_denies_mounted_output() -
         paths=["/.deep/artifact.txt"],
         output_path="/.deep/denied.txt",
     )
-    assert getattr(denied.artifact, "is_error", False)
+    assert denied.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable
+    )
     assert "Permission denied" in str(denied.content)
     assert not await workspace.exists(".deep/denied.txt")
     assert (
@@ -226,7 +229,9 @@ async def test_output_cannot_replace_an_input_even_with_replace_enabled() -> Non
         replace=True,
     )
 
-    assert getattr(result.artifact, "is_error", False)
+    assert result.artifact.failure == ToolFailure(
+        code=ToolFailureCode.invalid_arguments
+    )
     assert await scratchpad.read_text("part.md") == "keep this"
 
 

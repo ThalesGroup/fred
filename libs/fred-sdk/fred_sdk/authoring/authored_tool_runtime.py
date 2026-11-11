@@ -52,6 +52,8 @@ from ..contracts.context import (
     PublishedArtifact,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -316,7 +318,7 @@ def _bind_tool_handler(
                     text=f"Tool '{request.tool_ref}' failed: {exc}",
                     data=None,
                 ),
-                is_error=True,
+                failure=ToolFailure(code=ToolFailureCode.unexpected),
             )
 
     return handle
@@ -360,7 +362,7 @@ def _coerce_tool_return(
             blocks=_build_blocks(text=value.text, data=value.data),
             ui_parts=value.ui_parts,
             sources=value.sources or collected_sources,
-            is_error=value.is_error,
+            failure=value.failure,
         )
 
     if isinstance(value, PublishedArtifact):

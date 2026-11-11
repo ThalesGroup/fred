@@ -19,6 +19,8 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.web_research import (
@@ -52,6 +54,24 @@ ERROR_GUIDANCE = {
     "quota_exceeded.fetch_url": "The user's daily page-read quota is reached until midnight UTC; do not read more pages, answer with what you have and tell the user.",
     "rejected": "The request was rejected; do not retry it.",
     "invalid_response": "The response could not be read; try another source.",
+}
+
+# Each bounded web research code, in the shared tool failure vocabulary.
+_FAILURE_CODES = {
+    "unsafe_destination": ToolFailureCode.resource_unavailable,
+    "proxy_refused": ToolFailureCode.resource_unavailable,
+    "http_error": ToolFailureCode.resource_unavailable,
+    "unsupported_content": ToolFailureCode.resource_unavailable,
+    "response_too_large": ToolFailureCode.resource_unavailable,
+    "too_many_redirects": ToolFailureCode.resource_unavailable,
+    "timed_out": ToolFailureCode.timeout,
+    "busy": ToolFailureCode.service_busy,
+    "provider_failed": ToolFailureCode.service_error,
+    "unavailable": ToolFailureCode.service_error,
+    "activity_unavailable": ToolFailureCode.service_error,
+    "quota_exceeded": ToolFailureCode.rate_limited,
+    "rejected": ToolFailureCode.invalid_arguments,
+    "invalid_response": ToolFailureCode.service_error,
 }
 
 
@@ -105,7 +125,7 @@ class WebResearchCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
                 )
                 return content, ToolInvocationResult(
                     tool_ref=f"web_research.{request.operation}",
-                    is_error=True,
+                    failure=ToolFailure(code=_FAILURE_CODES[exc.code]),
                     blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
                 )
             content = json.dumps(

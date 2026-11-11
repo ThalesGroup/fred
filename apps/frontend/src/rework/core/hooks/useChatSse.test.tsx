@@ -535,11 +535,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       {
         kind: "tool_result",
         call_id: "failed-call",
-        is_error: true,
-        content:
-          "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        failure: { code: "authentication_required", status: 401 },
+        content: "Authentication must be restored before retrying.",
       },
-      { kind: "tool_result", call_id: "successful-call", is_error: false, content: "[]" },
+      { kind: "tool_result", call_id: "successful-call", content: "[]" },
     ];
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -558,7 +557,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(live).toHaveLength(2);
     expect(live[0]).toMatchObject({
       arguments: { document_uids: ["bad-id"] },
-      errorKey: "rework.chatTrace.failure.authentication",
+      errorKey: "rework.chatTrace.failure.authentication_required",
+      status: 401,
     });
     expect(live[1]).toBeNull();
     expect(details(JSON.parse(JSON.stringify(latest.messages)))).toEqual(live);

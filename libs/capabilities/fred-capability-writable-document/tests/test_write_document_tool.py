@@ -34,6 +34,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from port_fakes import FakeWritableDocumentStore
@@ -130,7 +131,7 @@ async def test_no_session_returns_graceful_error(
     )
 
     assert "no active session" in content.lower()
-    assert artifact.is_error is True
+    assert artifact.failure == ToolFailure(code=ToolFailureCode.unexpected)
     assert artifact.ui_parts == ()
     # Nothing persisted.
     assert await fake_store.list_for_session("s-1") == []

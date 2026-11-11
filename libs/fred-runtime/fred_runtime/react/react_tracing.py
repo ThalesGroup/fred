@@ -63,7 +63,7 @@ async def tool_span(
     # Nested execution belongs beneath the invoking tool.
     token = active_agent_span.set(span)
     # Set optimistically, before the body runs, so a caller that detects a
-    # failure the CM cannot see (a tool returning an `is_error` artifact rather
+    # failure the CM cannot see (a tool returning a `failure` artifact rather
     # than raising) can overwrite it — last write wins on every backend.
     span.set_attribute("status", "ok")
     try:

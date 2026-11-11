@@ -92,7 +92,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const failure = entry.kind === "combo" && !isCancelled ? toolFailureDetail(entry) : null;
   const failureText =
     isCrashLine && entry.kind === "solo"
-      ? (executionFailureText(textOf(entry.message)) ?? t("rework.chatTrace.failure.unknown"))
+      ? (executionFailureText(textOf(entry.message)) ?? t("rework.chatTrace.failure.unexpected"))
       : failure
         ? (failure.error ?? t(failure.errorKey))
         : "";
@@ -152,7 +152,9 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
       {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
-      {failureText && <div className={styles.failureText}>{failureText}</div>}
+      {failureText && (
+        <div className={`${styles.failureText} ${failure?.declined ? styles.declinedText : ""}`}>{failureText}</div>
+      )}
       {hitlAnswerSummary && (
         <div className={styles.answerWrap}>
           <HitlAnswerSummary summary={hitlAnswerSummary} inTrace />

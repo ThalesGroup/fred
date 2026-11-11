@@ -44,7 +44,7 @@ const result = (exchange: string, id: string) =>
   msg(exchange, {
     channel: "tool_result",
     role: "tool",
-    parts: [{ type: "tool_result", call_id: id, ok: true, content: "{}" }],
+    parts: [{ type: "tool_result", call_id: id, content: "{}" }],
   });
 const answer = (exchange: string, text: string) => msg(exchange, { parts: [{ type: "text", text }] });
 

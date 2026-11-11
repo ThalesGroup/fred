@@ -48,6 +48,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     HitlGateRequest,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
     DocumentExtractionPort,
@@ -443,7 +444,9 @@ async def test_403_failure_teaches_uid_recovery() -> None:
         "extract_from_document",
         {"document_uid": "cahier.pdf", "what_to_extract": "x"},
     )
-    assert msg.artifact.is_error is True
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=403
+    )
     assert "opaque uid" in msg.content
     assert "not a file name or Workspace path" in msg.content
     # The recovery hint must also land in the artifact blocks (Graph agent path).
@@ -463,7 +466,9 @@ async def test_read_refusal_gives_bounded_guidance_without_claiming_existence(
     )
     msg = await _invoke(cap, ctx, "read_document", {"document_uid": "cahier.pdf"})
 
-    assert msg.artifact.is_error is True
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=status
+    )
     assert "exact opaque uid" in msg.content
     assert "does not establish whether the document exists" in msg.content
     assert "continue with accessible sources" in msg.content
@@ -510,7 +515,7 @@ async def test_scope_refusal_is_not_told_as_a_service_failure() -> None:
     )
 
     msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
-    assert msg.artifact.is_error is True
+    assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.scope_refused)
     assert "restricted this conversation" in msg.content
     assert "Knowledge Flow" not in msg.content
     assert msg.artifact.blocks[0].text == msg.content
@@ -532,7 +537,7 @@ async def test_extract_scope_refusal_is_not_told_as_a_service_failure() -> None:
         "extract_from_document",
         {"document_uid": "u-42", "what_to_extract": "every risk"},
     )
-    assert msg.artifact.is_error is True
+    assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.scope_refused)
     assert "restricted this conversation" in msg.content
     assert "Knowledge Flow" not in msg.content
 
@@ -548,9 +553,27 @@ async def test_timeout_failure_names_the_document() -> None:
     )
 
     msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
-    assert msg.artifact.is_error is True
+    assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.timeout)
     assert "timed out" in msg.content
     assert "document_uid=u-42" in msg.content
+
+
+@pytest.mark.asyncio
+async def test_downstream_500_is_a_service_error_with_its_status() -> None:
+    # The 2026-11-10 incident: Knowledge Flow answered read_document with a 500.
+    port = _FakeMarkdownPort(
+        error=DocumentPortCallError("server error", status_code=500)
+    )
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.service_error, status=500
+    )
+    assert "HTTP 500" in msg.content
 
 
 def test_config_model_accepts_empty() -> None:

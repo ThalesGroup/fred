@@ -42,12 +42,12 @@ function toolResultPart(message: ChatMessage): ToolResultPart | null {
 
 /** Call IDs whose latest explicit result reports that the tool did not commit its update. */
 export function failedToolCallIds(messages: readonly ChatMessage[]): ReadonlySet<string> {
-  const resultByCallId = new Map<string, boolean | null | undefined>();
+  const failedByCallId = new Map<string, boolean>();
   for (const message of messages) {
     const result = toolResultPart(message);
-    if (result?.call_id) resultByCallId.set(result.call_id, result.ok);
+    if (result?.call_id) failedByCallId.set(result.call_id, Boolean(result.failure));
   }
-  return new Set([...resultByCallId].filter(([, ok]) => ok === false).map(([callId]) => callId));
+  return new Set([...failedByCallId].filter(([, failed]) => failed).map(([callId]) => callId));
 }
 
 function parseTodo(value: unknown): AgentTodo | null {
@@ -100,7 +100,7 @@ export function isAgentTodoSnapshotSettled(messages: readonly ChatMessage[], cal
   let hasFinal = false;
   for (const message of messages) {
     if (message.exchange_id !== exchangeId) continue;
-    if (message.channel === "error" || toolResultPart(message)?.ok === false) return false;
+    if (message.channel === "error" || toolResultPart(message)?.failure) return false;
     if (message.role === "assistant" && message.channel === "final") hasFinal = true;
   }
   return hasFinal;

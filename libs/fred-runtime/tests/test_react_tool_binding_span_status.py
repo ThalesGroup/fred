@@ -13,7 +13,7 @@
 # limitations under the License.
 """
 Regression tests: `ReActToolBinder`'s tracing span reflects a returned
-`is_error=True` artifact, not only a raised exception. `_invoke_bound_tool`
+`failure` artifact, not only a raised exception. `_invoke_bound_tool`
 used to stamp `status="ok"` on any non-raising return, so a tool that catches
 its own failure (the convention every capability tool follows) looked
 successful in the trace even though the user saw an error.
@@ -33,6 +33,8 @@ from fred_runtime.react.react_tool_resolution import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 
@@ -103,7 +105,7 @@ async def _invoke_via_binder(spec: FredRuntimeToolSpec, tracer: _RecordingTracer
 
 @pytest.mark.asyncio
 async def test_tool_span_reflects_returned_is_error_artifact() -> None:
-    """A tool that catches its own failure and returns `is_error=True` (never
+    """A tool that catches its own failure and returns a `failure` (never
     raising) must mark its span `status="error"`, the same as a raised
     exception would."""
 
@@ -111,7 +113,7 @@ async def test_tool_span_reflects_returned_is_error_artifact() -> None:
     spec = _spec_returning(
         ToolInvocationResult(
             tool_ref="test_tool",
-            is_error=True,
+            failure=ToolFailure(code=ToolFailureCode.service_error, status=500),
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="boom"),),
         )
     )
@@ -120,7 +122,7 @@ async def test_tool_span_reflects_returned_is_error_artifact() -> None:
 
     assert len(tracer.spans) == 1
     assert tracer.spans[0].attributes.get("status") == "error"
-    assert tracer.spans[0].attributes.get("error_type") == "tool_error_artifact"
+    assert tracer.spans[0].attributes.get("error_type") == "service_error"
     assert tracer.spans[0].ended is True
 
 

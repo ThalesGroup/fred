@@ -14,7 +14,7 @@
 
 import i18next, { type i18n as I18n } from "i18next";
 import { beforeAll, describe, it, expect } from "vitest";
-import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ToolFailure } from "../../slices/runtime/runtimeOpenApi";
 import en from "../../locales/en/translation.json";
 import { toolFailureDetail } from "./toolFailureTrace";
 import fr from "../../locales/fr/translation.json";
@@ -73,11 +73,19 @@ function toolCallMsg(callId: string, name: string, args: Record<string, unknown>
   });
 }
 
-function toolResultMsg(callId: string, content: string, ok = true, latencyMs?: number): ChatMessage {
+function toolResultMsg(
+  callId: string,
+  content: string,
+  ok = true,
+  latencyMs?: number,
+  failure: ToolFailure = { code: "unexpected" },
+): ChatMessage {
   return msg({
     channel: "tool_result",
     role: "tool",
-    parts: [{ type: "tool_result", call_id: callId, ok, content, latency_ms: latencyMs ?? null }],
+    parts: [
+      { type: "tool_result", call_id: callId, failure: ok ? null : failure, content, latency_ms: latencyMs ?? null },
+    ],
   });
 }
 
@@ -370,17 +378,18 @@ describe("categorized tool labels", () => {
   it.each(["en", "fr"] as const)("localizes safe failure causes and recovery advice in %s", (language) => {
     const [entry] = groupTraceEntries([
       toolCallMsg("failed", "describe_tabular_documents", { document_uids: ["invalid-id"] }),
-      toolResultMsg(
-        "failed",
-        "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
-        false,
-      ),
+      toolResultMsg("failed", "Authentication must be restored before retrying.", false, undefined, {
+        code: "authentication_required",
+        status: 401,
+      }),
     ]);
     if (entry.kind !== "combo") throw new Error("Expected paired tool messages");
     const detail = toolFailureDetail(entry);
     expect(detail?.arguments).toEqual({ document_uids: ["invalid-id"] });
+    expect(detail?.status).toBe(401);
     const cause = instances[language].t(detail!.errorKey);
-    expect(cause).toContain("HTTP 401");
+    // The status has one source, the structured failure; no phrase repeats it.
+    expect(cause).not.toContain("HTTP");
     expect(cause).toMatch(/before retrying|avant de réessayer/i);
     for (const field of Object.keys(en.rework.chatTrace.failure)) {
       const key = `rework.chatTrace.failure.${field}`;
@@ -480,7 +489,7 @@ describe("isCancelledByUser", () => {
     const result = msg({
       channel: "tool_result",
       role: "tool",
-      parts: [{ type: "tool_result", call_id: "c1", ok: false, content: "", latency_ms: null }],
+      parts: [{ type: "tool_result", call_id: "c1", failure: { code: "not_approved" }, content: "", latency_ms: null }],
       metadata: { extras: { cancelled_by_user: true } },
     });
     const entry = { kind: "combo", call, result } as const;
@@ -1292,6 +1301,8 @@ describe("asFailedSqlQueryResult", () => {
           "LINE 1: SELECT amount_typo FROM d_sales\n" +
           "                       ^",
         false,
+        undefined,
+        { code: "invalid_arguments", status: 400 },
       ),
     };
 
@@ -1314,8 +1325,19 @@ describe("asFailedSqlQueryResult", () => {
       result: toolResultMsg("c2", "provider error", false),
     };
 
+    const otherCode = {
+      kind: "combo" as const,
+      call: toolCallMsg("c3", "query_tabular_documents", { sql: "SELECT 1" }),
+      result: toolResultMsg("c3", "Binder Error: looks like SQL", false, undefined, {
+        code: "service_error",
+        status: 500,
+      }),
+    };
+
     expect(asFailedSqlQueryResult(successful)).toBeNull();
     expect(asFailedSqlQueryResult(unrelated)).toBeNull();
+    // The SQL view follows the failure code, never an SQL-looking text.
+    expect(asFailedSqlQueryResult(otherCode)).toBeNull();
   });
 });
 

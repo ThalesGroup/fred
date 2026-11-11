@@ -92,7 +92,8 @@ def test_mounted_failure_retains_registered_metadata_and_receiver_references(cap
         response = _call(client, "describe_document", {"uid": "PATH-CANARY", **dict.fromkeys(_GRANT, "FORGED-CANARY")}, context=encode_log_context({"session_id": "session-a", "team_id": "team-a"}))
     result = response.json()["result"]
     assert result["isError"] is True
-    assert result["content"][0]["text"] == "Tool request failed."
+    # The status the agent runtime classifies on, never the downstream body.
+    assert result["content"][0]["text"] == f"Error calling describe_document. Status code: {status}. Response: {{}}"
     assert "BODY-CANARY" not in response.text
     [failure] = [record for record in caplog.records if record.getMessage() == "mcp.inner_http_failure"]
     assert failure.levelno == (logging.ERROR if status >= 500 else logging.WARNING)

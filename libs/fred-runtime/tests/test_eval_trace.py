@@ -47,7 +47,7 @@ def _normal_payloads() -> list[dict]:
             "tool_name": "knowledge.text.search",
             "call_id": "c1",
             "content": "Some retrieved text",
-            "is_error": False,
+            "failure": None,
         },
         {
             "kind": "final",
@@ -78,7 +78,7 @@ def _hitl_payloads() -> list[dict]:
             "tool_name": "bank.risk_guard.score_transfer",
             "call_id": "c2",
             "content": "risk_score=0.72",
-            "is_error": False,
+            "failure": None,
         },
         {"kind": "awaiting_human"},
     ]
@@ -173,7 +173,7 @@ class TestBuildEvalTrace:
                 "tool_name": "search",
                 "call_id": "c1",
                 "content": "raw content",
-                "is_error": False,
+                "failure": None,
                 "sources": [
                     {"content": "source A"},
                     {"content": "source B"},
@@ -213,7 +213,7 @@ class TestBuildEvalTrace:
                 "tool_name": "prometheus.query",
                 "call_id": "c3",
                 "content": "",
-                "is_error": True,
+                "failure": {"code": "service_error", "status": 500},
             },
             {
                 "kind": "node_error",
@@ -255,7 +255,7 @@ class TestBuildEvalTrace:
                 "tool_name": "tool_a",
                 "call_id": "c1",
                 "content": "a",
-                "is_error": False,
+                "failure": None,
             },
             {
                 "kind": "tool_call",
@@ -268,7 +268,7 @@ class TestBuildEvalTrace:
                 "tool_name": "tool_b",
                 "call_id": "c2",
                 "content": "b",
-                "is_error": False,
+                "failure": None,
             },
             {
                 "kind": "final",
@@ -293,7 +293,7 @@ class TestBuildEvalTrace:
                 "tool_name": "bad_tool",
                 "call_id": "c1",
                 "content": "error details",
-                "is_error": True,
+                "failure": {"code": "service_error", "status": 500},
             },
             {
                 "kind": "final",

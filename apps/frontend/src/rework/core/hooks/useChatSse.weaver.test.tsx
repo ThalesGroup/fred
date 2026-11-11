@@ -129,7 +129,6 @@ describe("Weaver execution context and HTTP diagnostics", () => {
                 tool_name: "search_documents",
                 call_id: "search-1",
                 content: "[]",
-                is_error: false,
                 latency_ms: 12,
               },
             ]
@@ -162,7 +161,7 @@ describe("Weaver execution context and HTTP diagnostics", () => {
         expect(latest.messages.find((message) => message.channel === "tool_result")?.parts).toContainEqual({
           type: "tool_result",
           call_id: "search-1",
-          ok: true,
+          failure: null,
           content: "[]",
           latency_ms: 12,
         });

@@ -44,6 +44,8 @@ import time
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
@@ -113,9 +115,9 @@ def document_tool_failure(
     document_uid: str,
 ) -> tuple[str, ToolInvocationResult]:
     """Turn a document-read tool-call failure into a non-empty, actionable error
-    message plus an ``is_error=True`` artifact.
+    message plus a ``failure`` artifact.
 
-    The v2 ReAct runtime surfaces ``ToolInvocationResult.is_error`` directly to
+    The v2 ReAct runtime surfaces ``ToolInvocationResult.failure`` directly to
     the user (and suppresses LLM hallucination), so a failing tool MUST return
     such a result instead of raising. Transport detail (timeout, HTTP status)
     arrives via the SDK-typed ``DocumentPortCallError`` attributes the adapters
@@ -153,7 +155,7 @@ def document_tool_failure(
         )
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        is_error=True,
+        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 
@@ -182,7 +184,7 @@ def document_scope_refusal(
     )
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        is_error=True,
+        failure=ToolFailure(code=ToolFailureCode.scope_refused),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 

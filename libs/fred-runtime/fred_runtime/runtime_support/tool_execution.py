@@ -26,7 +26,12 @@ from typing import Optional, TypeVar
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import operation_log_scope
-from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
@@ -38,6 +43,27 @@ from fred_runtime.runtime_support.run_scope import RunScope
 
 logger = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
+_UNEXPECTED = ToolFailure(code=ToolFailureCode.unexpected)
+
+
+def result_failure(result: object) -> ToolFailure | None:
+    """The failure one tool call reported, or ``None`` when it succeeded.
+
+    A typed artifact's ``failure`` wins. A LangChain ``ToolMessage`` with
+    ``status="error"`` and no typed failure carries no downstream status.
+    """
+    artifact = (
+        result
+        if isinstance(result, ToolInvocationResult)
+        else getattr(result, "artifact", None)
+    )
+    if isinstance(artifact, ToolInvocationResult) and artifact.failure is not None:
+        return artifact.failure
+    if isinstance(artifact, dict) and artifact.get("failure"):
+        return ToolFailure.model_validate(artifact["failure"])
+    if isinstance(result, ToolMessage) and result.status == "error":
+        return _UNEXPECTED
+    return None
 
 
 class ToolExecution:
@@ -82,12 +108,14 @@ class ToolExecution:
     ) -> _Result:
         started = time.perf_counter()
         outcome = "failed"
+        failure: ToolFailure | None = None
         with operation_log_scope(tool_name=tool_name):
             try:
                 result = await self._run(
                     invoke, tool_name=tool_name, source=source, span=span
                 )
-                outcome = "failed" if self._result_is_error(result)[0] else "succeeded"
+                failure = result_failure(result)
+                outcome = "failed" if failure is not None else "succeeded"
                 return result
             except GraphBubbleUp:
                 outcome = "awaiting_human"
@@ -96,31 +124,24 @@ class ToolExecution:
                 outcome = "cancelled"
                 raise
             finally:
-                logger.info(
-                    "Tool invocation completed",
-                    extra={
-                        "outcome": outcome,
-                        "duration_ms": (time.perf_counter() - started) * 1000,
-                    },
-                )
-
-    @staticmethod
-    def _result_is_error(result: object) -> tuple[bool, str]:
-        artifact = (
-            result
-            if isinstance(result, ToolInvocationResult)
-            else getattr(result, "artifact", None)
-        )
-        artifact_is_error = (
-            bool(artifact.get("is_error"))
-            if isinstance(artifact, dict)
-            else bool(getattr(artifact, "is_error", False))
-        )
-        status_is_error = isinstance(result, ToolMessage) and result.status == "error"
-        return (
-            status_is_error or artifact_is_error,
-            "tool_error_status" if status_is_error else "tool_error_artifact",
-        )
+                duration_ms = (time.perf_counter() - started) * 1000
+                if failure is not None:
+                    # Operations need the cause, never the content, arguments
+                    # or downstream body; `tool_name` comes from the log scope.
+                    logger.warning(
+                        "Tool invocation failed",
+                        extra={
+                            "outcome": outcome,
+                            "failure_code": failure.code.value,
+                            "failure_status": failure.status,
+                            "duration_ms": duration_ms,
+                        },
+                    )
+                else:
+                    logger.info(
+                        "Tool invocation completed",
+                        extra={"outcome": outcome, "duration_ms": duration_ms},
+                    )
 
     async def _run(
         self,
@@ -218,8 +239,9 @@ class ToolExecution:
                     )
                 raise
             else:
-                failed, error_code = self._result_is_error(result)
-                if failed:
+                failure = result_failure(result)
+                if failure is not None:
+                    error_code = failure.code.value
                     if span is not None:
                         span.set_attribute("status", "error")
                         span.set_attribute("error_type", error_code)

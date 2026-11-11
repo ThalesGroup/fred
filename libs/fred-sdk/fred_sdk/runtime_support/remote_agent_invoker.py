@@ -37,7 +37,12 @@ from fred_pod.security.backend_to_backend_auth import (
 )
 from pydantic import TypeAdapter
 
-from ..contracts.context import AgentInvocationRequest, AgentInvocationResult
+from ..contracts.context import (
+    AgentInvocationRequest,
+    AgentInvocationResult,
+    ToolFailure,
+    ToolFailureCode,
+)
 from ..contracts.runtime import (
     AgentInvokerPort,
     AssistantDeltaRuntimeEvent,
@@ -112,6 +117,8 @@ class _SseEvent:
 
 
 _RUNTIME_EVENT_ADAPTER = TypeAdapter(RuntimeEvent)
+# A remote run that ended without a final answer carries no downstream status.
+_UNEXPECTED = ToolFailure(code=ToolFailureCode.unexpected)
 
 
 async def _iter_sse_events(lines: AsyncIterator[str]) -> AsyncIterator[_SseEvent]:
@@ -283,7 +290,7 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
                     return AgentInvocationResult(
                         agent_id=request.agent_id,
                         content=f"Remote agent error {response.status_code}: {detail}",
-                        is_error=True,
+                        failure=ToolFailure.from_http_status(response.status_code),
                     )
 
                 async for event in _iter_sse_events(response.aiter_lines()):
@@ -304,14 +311,15 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
                             content=runtime_event.content,
                             sources=runtime_event.sources,
                             ui_parts=runtime_event.ui_parts,
-                            is_error=False,
                         )
 
         except Exception as exc:
             return AgentInvocationResult(
                 agent_id=request.agent_id,
                 content=f"Remote agent invocation failed: {exc}",
-                is_error=True,
+                failure=ToolFailure.from_http_status(
+                    None, timed_out=isinstance(exc, httpx.TimeoutException)
+                ),
             )
         finally:
             if self._owns_client:
@@ -323,20 +331,20 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
             return AgentInvocationResult(
                 agent_id=request.agent_id,
                 content=error_message,
-                is_error=True,
+                failure=_UNEXPECTED,
             )
 
         if streamed_chunks:
             return AgentInvocationResult(
                 agent_id=request.agent_id,
                 content="".join(streamed_chunks),
-                is_error=True,
+                failure=_UNEXPECTED,
             )
 
         return AgentInvocationResult(
             agent_id=request.agent_id,
             content="Remote agent stream ended without a final event.",
-            is_error=True,
+            failure=_UNEXPECTED,
         )
 
     def _build_headers(self, request: AgentInvocationRequest) -> dict[str, str]:

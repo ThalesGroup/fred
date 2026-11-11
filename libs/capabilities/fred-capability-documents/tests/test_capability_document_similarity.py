@@ -38,6 +38,7 @@ from fred_runtime.capabilities.registry import (
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import CapabilityContext, CapabilityIdentity
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
     DocumentScopeRefusedError,
@@ -270,7 +271,9 @@ async def test_a_malformed_call_is_an_error_artifact_and_never_reaches_the_port(
 
     message = await _invoke(_ctx(port), args)
 
-    assert message.artifact.is_error
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.invalid_arguments
+    )
     assert message.content
     # Targeting is the point of this mode: an empty target must never widen
     # into a corpus-wide search.
@@ -285,7 +288,8 @@ async def test_a_port_failure_degrades_to_an_error_artifact() -> None:
 
     message = await _invoke(_ctx(port), {"anchor": "x", "document_uids": ["doc-b"]})
 
-    assert message.artifact.is_error
+    # No status reached the capability: nothing tells why it failed.
+    assert message.artifact.failure == ToolFailure(code=ToolFailureCode.unexpected)
     assert "find similar passages" in message.content
 
 
@@ -328,7 +332,7 @@ async def test_a_scope_refusal_is_never_rendered_as_no_matches() -> None:
 
     message = await _invoke(_ctx(port), {"anchor": "x", "document_uids": ["doc-x"]})
 
-    assert message.artifact.is_error
+    assert message.artifact.failure == ToolFailure(code=ToolFailureCode.scope_refused)
     assert "doc-x" in message.content
     assert "NOT a 'no matches' answer" in message.content
     # Not the transport wording - nothing failed downstream.

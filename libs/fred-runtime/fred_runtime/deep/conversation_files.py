@@ -11,6 +11,8 @@ import httpx
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
@@ -80,6 +82,7 @@ class ConversationFilesMiddleware(AgentMiddleware):
             if await filesystem.exists(workspace_path, origin="agent"):
                 return _error(
                     TOOL_NAMES[1],
+                    ToolFailure(code=ToolFailureCode.invalid_arguments),
                     "Reading the conversation file failed: the workspace path already "
                     "exists. Choose another unused workspace_path and retry. "
                     "The existing file was not changed.",
@@ -91,6 +94,7 @@ class ConversationFilesMiddleware(AgentMiddleware):
                     raise
                 return _error(
                     TOOL_NAMES[1],
+                    ToolFailure.from_http_status(exc.response.status_code),
                     "Reading the conversation file failed: the file is unavailable "
                     "in this conversation or document_id is invalid. "
                     "Call list_conversation_files and copy the file's document_id "
@@ -100,6 +104,7 @@ class ConversationFilesMiddleware(AgentMiddleware):
             except httpx.TransportError:
                 return _error(
                     TOOL_NAMES[1],
+                    _CONNECTION_FAILED,
                     "Reading the conversation file failed: the connection failed. "
                     "Retry with the same document_id. No workspace file was created.",
                 )
@@ -150,6 +155,7 @@ class ConversationFilesMiddleware(AgentMiddleware):
             except httpx.TransportError:
                 return _error(
                     TOOL_NAMES[2],
+                    _CONNECTION_FAILED,
                     "Publishing the conversation file failed: delivery is unconfirmed "
                     f"because the connection failed. Replay request_key={key} with identical "
                     "arguments and unchanged workspace bytes.",
@@ -169,13 +175,19 @@ class ConversationFilesMiddleware(AgentMiddleware):
         ]
 
 
-def _error(tool_name: str, message: str) -> tuple[str, ToolInvocationResult]:
+# A transport failure carries no downstream status.
+_CONNECTION_FAILED = ToolFailure(code=ToolFailureCode.unexpected)
+
+
+def _error(
+    tool_name: str, failure: ToolFailure, message: str
+) -> tuple[str, ToolInvocationResult]:
     # The model reads the text; streamed and persisted UI errors use the trusted
     # artifact blocks. Keep the same safe cause and recovery instruction in both.
     return message, ToolInvocationResult(
         tool_ref=f"runtime:{tool_name}",
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
-        is_error=True,
+        failure=failure,
     )
 
 

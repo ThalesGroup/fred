@@ -44,6 +44,8 @@ from fred_sdk.contracts.context import (
     LinkPart,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -254,11 +256,11 @@ def _jsonable(value: Any) -> Any:
     return value.model_dump() if isinstance(value, BaseModel) else str(value)
 
 
-def _error(message: str) -> tuple[str, ToolInvocationResult]:
+def _error(message: str, code: ToolFailureCode) -> tuple[str, ToolInvocationResult]:
     """A failure (bad call, storage, render): Fred-owned text, so the runtime shows it."""
     return message, ToolInvocationResult(
         tool_ref=_TOOL_REF,
-        is_error=True,
+        failure=ToolFailure(code=code),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 
@@ -1688,7 +1690,9 @@ def build_builder_tools(
         try:
             validated: Any = args_schema(**kwargs)
             if validated.deck_conflict:
-                return _error(validated.deck_conflict)
+                return _error(
+                    validated.deck_conflict, ToolFailureCode.invalid_arguments
+                )
             plan = _to_plan(validated)
             changes = None if validated.changes is None else _to_changes(validated)
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
@@ -1696,7 +1700,8 @@ def build_builder_tools(
             return _error(
                 "No deck was built: the slide plan could not be read. Call build_presentation "
                 "again with 'slides' as a list of objects, each with its content (title, "
-                "bullets, items…)."
+                "bullets, items…).",
+                ToolFailureCode.invalid_arguments,
             )
         base: Optional[DeckPlan] = None
         cleared: Dict[int, List[str]] = {}
@@ -1705,16 +1710,19 @@ def build_builder_tools(
         if changes is not None and (changes or not plan.slides):
             if plan.slides:
                 has_deck = await delivered_before(None)
-                return _error(_BOTH_MODES[0] + _BOTH_MODES[2 if has_deck else 1])
+                return _error(
+                    _BOTH_MODES[0] + _BOTH_MODES[2 if has_deck else 1],
+                    ToolFailureCode.invalid_arguments,
+                )
             if not changes:
-                return _error(_NO_CHANGE)
+                return _error(_NO_CHANGE, ToolFailureCode.invalid_arguments)
             try:
                 base = turn_base[0] if turn_base else await plans.read()
             except Exception:  # noqa: BLE001 - the model can resend the whole deck
                 logger.warning("base plan unreadable", exc_info=True)
-                return _error(_BASE_UNREADABLE)
+                return _error(_BASE_UNREADABLE, ToolFailureCode.unexpected)
             if base is None:
-                return _error(_NO_BASE)
+                return _error(_NO_BASE, ToolFailureCode.invalid_arguments)
             try:
                 changed = apply_changes(
                     base,
@@ -1729,7 +1737,8 @@ def build_builder_tools(
                 return _error(
                     "No deck was built: some changes cannot be applied to the previous "
                     "deck (nothing was changed). Fix them and send all the changes again:\n"
-                    + "\n".join(exc.problems)
+                    + "\n".join(exc.problems),
+                    ToolFailureCode.invalid_arguments,
                 )
             show = getattr(validated, "show_takeaways", None)
             no_closing = getattr(validated, "no_closing", None)
@@ -1778,12 +1787,14 @@ def build_builder_tools(
             return _error(
                 "No deck was built: these changes remove every slide of the deck "
                 "(nothing was changed). Keep at least one slide, or to start a new "
-                "deck send it whole in `slides`."
+                "deck send it whole in `slides`.",
+                ToolFailureCode.invalid_arguments,
             )
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
                 "No deck was built: every slide of the plan is empty. Write each slide's "
-                "content (title, bullets, items…) and call build_presentation again."
+                "content (title, bullets, items…) and call build_presentation again.",
+                ToolFailureCode.invalid_arguments,
             )
         image_ids = _image_ids(plan)
         if image_ids and services.document_content is None:
@@ -1828,7 +1839,7 @@ def build_builder_tools(
             )
         except Exception:  # noqa: BLE001 - a checker bug must not escape the tool
             logger.exception("plan evaluation FAILED")
-            return _error(_INTERNAL_ERROR)
+            return _error(_INTERNAL_ERROR, ToolFailureCode.unexpected)
         first, called = not called, True
         unloadable = [f"image '{uid}' {_unusable(prefetched[uid])}." for uid in bad]
         workspace = services.workspace_fs
@@ -1918,11 +1929,12 @@ def build_builder_tools(
             logger.exception("template load FAILED")
             return _error(
                 "No deck was built: the presentation template could not be loaded right now. "
-                "Tell the user and suggest trying again in a moment."
+                "Tell the user and suggest trying again in a moment.",
+                ToolFailureCode.unexpected,
             )
 
         if not acquire_heavy_job_slot():
-            return _error(_BUSY_MESSAGE)
+            return _error(_BUSY_MESSAGE, ToolFailureCode.service_busy)
         try:
             result = await in_slot_thread(
                 _prepare_and_render,
@@ -1935,11 +1947,13 @@ def build_builder_tools(
                 assignment.starts,
             )
         except RenderError as exc:
-            return _error(f"No deck was built: {exc}")
+            return _error(
+                f"No deck was built: {exc}", ToolFailureCode.invalid_arguments
+            )
         except Exception:  # noqa: BLE001 - wrapped uniformly for the agent
             elapsed = time.monotonic() - started
             logger.exception("render FAILED after %.0fs", elapsed)
-            return _error(_INTERNAL_ERROR)
+            return _error(_INTERNAL_ERROR, ToolFailureCode.unexpected)
 
         try:
             pptx_artifact = await workspace.write(
@@ -1953,7 +1967,8 @@ def build_builder_tools(
             logger.exception("upload FAILED")
             return _error(
                 "The deck was built but could not be saved to the conversation files, so the "
-                "user cannot get it. Tell the user and suggest trying again in a moment."
+                "user cannot get it. Tell the user and suggest trying again in a moment.",
+                ToolFailureCode.unexpected,
             )
         prints = result.fingerprints
         if len(prints) == len(deck.slides):

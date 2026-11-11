@@ -2540,14 +2540,20 @@
       "failure": {
         "arguments": "Arguments de l'appel :",
         "error": "Erreur :",
-        "invalidArguments": "Les arguments de l'appel ont été refusés. Vérifiez et corrigez les arguments de l'appel avant de réessayer.",
-        "authentication": "La demande d'authentification a été refusée (HTTP 401). Rétablissez l'authentification avant de réessayer.",
-        "unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès. Choisissez une ressource disponible dans votre périmètre d'accès actuel.",
-        "rateLimited": "La limite de requêtes du service a été atteinte (HTTP 429). Attendez la réinitialisation de la limite avant de réessayer.",
-        "busy": "Le service est temporairement indisponible ou à capacité (HTTP 503). Réessayez plus tard.",
-        "timeout": "L'opération a dépassé son délai maximal (HTTP 504). Réduisez la demande avant de réessayer.",
-        "service": "Le service n'a pas pu terminer cette opération (HTTP 500). Réessayez plus tard ; contactez le support si le problème persiste.",
-        "unknown": "L'appel a échoué. Aucun diagnostic supplémentaire exploitable n'a été enregistré. Consultez les détails de l'appel et contactez le support en indiquant la conversation et toute référence de diagnostic affichée."
+        "invalid_arguments": "Les arguments de l'appel ont été refusés. Vérifiez et corrigez les arguments de l'appel avant de réessayer.",
+        "not_approved": "Appel refusé par l'utilisateur.",
+        "authentication_required": "La demande d'authentification a été refusée. Rétablissez l'authentification avant de réessayer.",
+        "resource_unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès. Choisissez une ressource disponible dans votre périmètre d'accès actuel.",
+        "scope_refused": "Cet appel visait des documents hors de la sélection de cette conversation : rien n'a été lu.",
+        "rate_limited": "La limite de requêtes du service a été atteinte. Attendez la réinitialisation de la limite avant de réessayer.",
+        "service_busy": "Le service est temporairement indisponible ou à capacité. Réessayez plus tard.",
+        "timeout": "L'opération a dépassé son délai maximal. Réduisez la demande avant de réessayer.",
+        "service_error": "Le service n'a pas pu terminer cette opération. Réessayez plus tard ; contactez le support si le problème persiste.",
+        "unexpected": "Cette étape a échoué de façon inattendue. Réessayez ; contactez le support si le problème persiste.",
+        "httpStatus": "Statut HTTP {{status}}",
+        "reference": "Référence :",
+        "copyReference": "Copier la référence",
+        "referenceCopied": "Référence copiée"
       }
     },
     "collapse": "Réduire",

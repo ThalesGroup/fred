@@ -56,7 +56,13 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    LinkKind,
+    LinkPart,
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
 from pptx import Presentation
@@ -424,7 +430,7 @@ async def test_template_fetch_failure_returns_error_result(no_pdf):
 
     content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
 
-    assert artifact.is_error is True
+    assert artifact.failure == ToolFailure(code=ToolFailureCode.unexpected)
     assert artifact.ui_parts == ()
     assert "template" in content.lower()
 
@@ -794,7 +800,8 @@ async def test_image_key_in_table_cell_is_refused(no_pdf, marker):
 
     content, artifact = await _fill_tool(ctx).coroutine(slide_1={"logo": "doc-logo"})
 
-    assert artifact.is_error is True
+    # A rejected image placement is a value the model can correct.
+    assert artifact.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
     assert "table cell" in content.lower()
     assert workspace.writes == []
 

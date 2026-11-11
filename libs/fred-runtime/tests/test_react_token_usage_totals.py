@@ -1004,7 +1004,10 @@ async def test_a_turn_cut_short_by_a_tool_error_still_reports_its_context() -> N
                             content="Tool error:\nboom",
                             tool_call_id="call-1",
                             name="t",
-                            artifact={"tool_ref": "t", "is_error": True},
+                            artifact={
+                                "tool_ref": "t",
+                                "failure": {"code": "unexpected"},
+                            },
                         )
                     ]
                 }

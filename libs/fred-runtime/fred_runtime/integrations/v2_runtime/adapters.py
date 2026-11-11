@@ -70,6 +70,8 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -1206,7 +1208,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                         },
                     ),
                 ),
-                is_error=True,
+                failure=ToolFailure(code=ToolFailureCode.unexpected),
             )
 
         return ToolInvocationResult(
@@ -1541,7 +1543,7 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
             )
         except Exception as exc:
             # Same SDK-typed mapping the other document adapters apply, so the
-            # capability can render an `is_error` result without importing httpx.
+            # capability can render a `failure` result without importing httpx.
             raise _wrap_document_port_error(exc) from exc
         return DocumentSearchResult(hits=tuple(hits))
 
@@ -1733,7 +1735,7 @@ def _redact_urls(text: str) -> str:
 def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     """
     Map an httpx transport failure onto the SDK-typed `DocumentPortCallError`
-    so capabilities can render an actionable `is_error` tool result without
+    so capabilities can render an actionable `failure` tool result without
     importing the adapter's HTTP stack.
     """
 

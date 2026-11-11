@@ -132,6 +132,8 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
@@ -721,6 +723,9 @@ def _build_media_fetcher(
 # The reason a child's terminal event carries when the platform stopped it. The
 # parent must end on that same reason, so each one maps back to the error the
 # engines already turn into a terminal event.
+# A child turn that failed reports a message, never a downstream status.
+_CHILD_FAILURE = ToolFailure(code=ToolFailureCode.unexpected)
+
 _CHILD_STOP_ERRORS: dict[str, type[RunStopError]] = {
     error.reason: error
     for error in (
@@ -775,7 +780,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             return AgentInvocationResult(
                 agent_id=request.agent_id,
                 content=f"Agent '{request.agent_id}' is not registered in this pod.",
-                is_error=True,
+                failure=ToolFailure(code=ToolFailureCode.resource_unavailable),
             )
 
         context_dict = request.context.model_dump(mode="json")
@@ -871,7 +876,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                     agent_id=request.agent_id,
                     content=str(payload.get("content") or ""),
                     structured=payload.get("structured"),
-                    is_error=False,
                 )
                 continue
             if kind == "execution_error":
@@ -884,7 +888,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 final_result = AgentInvocationResult(
                     agent_id=request.agent_id,
                     content=str(payload.get("message") or ""),
-                    is_error=True,
+                    failure=_CHILD_FAILURE,
                 )
                 continue
 
@@ -894,7 +898,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 return AgentInvocationResult(
                     agent_id=request.agent_id,
                     content=payload.get("error_message", "Unknown error"),
-                    is_error=True,
+                    failure=_CHILD_FAILURE,
                 )
         if final_result is not None:
             return final_result
@@ -902,7 +906,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         return AgentInvocationResult(
             agent_id=request.agent_id,
             content="".join(content_parts),
-            is_error=not content_parts,
+            failure=None if content_parts else _CHILD_FAILURE,
         )
 
 
@@ -3308,7 +3312,11 @@ async def _write_turn_history(
                     positions.require_row(),
                     call_id=payload["call_id"],
                     content=payload.get("content", ""),
-                    ok=not payload.get("is_error", False),
+                    failure=(
+                        ToolFailure.model_validate(payload["failure"])
+                        if payload.get("failure")
+                        else None
+                    ),
                     latency_ms=payload.get("latency_ms"),
                 )
             )
@@ -3613,7 +3621,7 @@ def _build_eval_trace(
                 tools_called.append(p["tool_name"])
         elif kind == "tool_result":
             content = p.get("content", "")
-            is_err = p.get("is_error", False)
+            is_err = p.get("failure") is not None
             steps.append(
                 EvalStep(
                     kind="tool_result",

@@ -19,6 +19,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_core.history.history_schema import (
+    ToolFailure,
+    ToolFailureCode,
     make_assistant_final,
     make_tool_call,
     make_tool_result,
@@ -60,7 +62,12 @@ async def test_rejected_document_turn_is_durable_and_idempotent() -> None:
             make_user_text("s1", "e1", 0, "Write a report"),
             call,
             make_tool_result(
-                "s1", "e1", 2, "write-1", "INVALID_DOCUMENT_CONTENT", ok=False
+                "s1",
+                "e1",
+                2,
+                "write-1",
+                "INVALID_DOCUMENT_CONTENT",
+                failure=ToolFailure(code=ToolFailureCode.invalid_arguments),
             ),
             make_assistant_final("s1", "e1", 3, "The document was not saved."),
         ]
@@ -76,7 +83,10 @@ async def test_rejected_document_turn_is_durable_and_idempotent() -> None:
         assert recorded["args"]["content_markdown"] == content.replace(
             "\x00", "[U+0000]"
         )
-        assert restored[2].parts[0].model_dump()["ok"] is False
+        assert restored[2].parts[0].model_dump(mode="json")["failure"] == {
+            "code": "invalid_arguments",
+            "status": None,
+        }
         assert call.parts[0].model_dump()["args"]["content_markdown"] == content
     finally:
         await engine.dispose()

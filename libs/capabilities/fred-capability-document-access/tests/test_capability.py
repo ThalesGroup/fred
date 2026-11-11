@@ -70,6 +70,8 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
 )
 from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
@@ -1076,7 +1078,9 @@ async def test_tree_tool_failure_returns_is_error_result() -> None:
 
     message = await _invoke_named_tool(cap, ctx, "list_document_tree", {})
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.service_busy, status=503
+    )
     assert "HTTP 503" in message.content
     # CAPAB-02: the diagnostic must also live in `blocks` — a Graph agent's
     # plain-dict invocation keeps only the artifact half of a
@@ -1104,7 +1108,9 @@ async def test_search_tool_failure_returns_is_error_result() -> None:
 
     message = await _invoke_named_tool(cap, ctx, "search_documents", {"question": "q"})
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.authentication_required, status=401
+    )
     assert "HTTP 401" in message.content
     assert "search documents" in message.content
     # CAPAB-02: the diagnostic must reach a Graph node too, which keeps only

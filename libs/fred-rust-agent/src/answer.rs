@@ -21,6 +21,7 @@ use tokio::time::Instant;
 
 use crate::{
     RuntimeEvent,
+    events::ToolFailure,
     search::{self, SearchHit, SearchTool},
     turn::{InferenceError, InferenceTurn, public_error},
 };
@@ -148,7 +149,7 @@ where
                             tool_name: search::TOOL_NAME,
                             call_id,
                             content: public_error(&error).into(),
-                            is_error: true,
+                            failure: Some(ToolFailure::UNEXPECTED),
                             latency_ms: started.elapsed().as_millis() as u64,
                         };
                     }
@@ -203,7 +204,7 @@ where
                                 _ => None,
                             })
                             .collect(),
-                        is_error: tool_result.is_error,
+                        failure: ToolFailure::of(tool_result.is_error),
                         latency_ms: started.elapsed().as_millis() as u64,
                     };
                     started = Instant::now();
@@ -640,10 +641,7 @@ mod tests {
             if after_result {
                 assert!(matches!(
                     events.next().await,
-                    Some(RuntimeEvent::ToolResult {
-                        is_error: false,
-                        ..
-                    })
+                    Some(RuntimeEvent::ToolResult { failure: None, .. })
                 ));
                 assert!(searched.load(std::sync::atomic::Ordering::SeqCst));
             }
@@ -687,7 +685,10 @@ mod tests {
         tokio::time::advance(TURN_TIMEOUT).await;
         assert!(matches!(
             events.next().await,
-            Some(RuntimeEvent::ToolResult { is_error: true, .. })
+            Some(RuntimeEvent::ToolResult {
+                failure: Some(_),
+                ..
+            })
         ));
         assert!(matches!(
             events.next().await,
@@ -835,7 +836,7 @@ mod tests {
                 if call_id == "call-search" && arguments["query"] == "manual question")
             );
             assert!(
-                matches!(&events[2], RuntimeEvent::ToolResult { call_id, content, is_error: false, .. }
+                matches!(&events[2], RuntimeEvent::ToolResult { call_id, content, failure: None, .. }
                 if call_id == "call-search" && *content == expected.tool_content)
             );
             assert_eq!(
@@ -934,7 +935,13 @@ mod tests {
                 "{failure}"
             );
             assert_eq!(
-                matches!(&events[2], RuntimeEvent::ToolResult { is_error: true, .. }),
+                matches!(
+                    &events[2],
+                    RuntimeEvent::ToolResult {
+                        failure: Some(_),
+                        ..
+                    }
+                ),
                 answered,
                 "{failure}"
             );

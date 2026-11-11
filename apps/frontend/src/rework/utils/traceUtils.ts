@@ -17,6 +17,7 @@ import type {
   ChatMessage,
   SkillLoadAttribution,
   ToolCallPart,
+  ToolFailure,
   ToolResultPart,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
@@ -294,8 +295,13 @@ export function toolArgs(msg: ChatMessage): Record<string, unknown> {
   return toolCallPart(msg)?.args ?? {};
 }
 
+/** The typed failure this result recorded; `null` means the call succeeded. */
+export function toolResultFailure(result: ChatMessage): ToolFailure | null {
+  return toolResultPart(result)?.failure ?? null;
+}
+
 export function toolResultOk(result: ChatMessage): boolean {
-  return toolResultPart(result)?.ok !== false;
+  return toolResultFailure(result) === null;
 }
 
 export function toolResultLatencyMs(result: ChatMessage): number | null {
@@ -336,7 +342,7 @@ export function skillFileReadOf(
   if (entry.kind !== "combo" || !entry.result) return null;
   const result = toolResultPart(entry.result);
   const file = skillFilePathOf(entry);
-  return result && result.ok !== false && file ? { ...file, content: result.content } : null;
+  return result && !result.failure && file ? { ...file, content: result.content } : null;
 }
 
 export function textOf(msg: ChatMessage): string {
@@ -455,7 +461,7 @@ export function asFailedSqlQueryResult(entry: TraceEntry): SqlQueryResult | null
   if (
     entry.kind !== "combo" ||
     !entry.result ||
-    toolResultOk(entry.result) ||
+    toolResultFailure(entry.result)?.code !== "invalid_arguments" ||
     toolSlug(toolName(entry.call)) !== "query_tabular_documents"
   ) {
     return null;

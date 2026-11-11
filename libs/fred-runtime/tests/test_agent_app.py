@@ -2294,6 +2294,44 @@ async def test_local_registry_invoker_reuses_runtime_execute_projection(
 
 
 @pytest.mark.asyncio
+async def test_local_registry_child_failure_is_an_unexpected_failure(
+    monkeypatch,
+) -> None:
+    from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
+
+    async def _failing_child(*_args, **_kwargs):
+        yield {"kind": "execution_error", "sequence": 0, "message": "child failed"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _failing_child
+    )
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition}, access_token="token-1"
+    )
+
+    with active_turn("rags.sample.echo", session="session-1"):
+        result = await invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=invocation_context(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    session_id="session-1",
+                    user_id="alice",
+                ),
+            )
+        )
+
+    assert result.content == "child failed"
+    assert result.failure == ToolFailure(code=ToolFailureCode.unexpected)
+
+
+@pytest.mark.asyncio
 async def test_local_registry_child_never_receives_the_user_chat_choice(
     monkeypatch,
 ) -> None:

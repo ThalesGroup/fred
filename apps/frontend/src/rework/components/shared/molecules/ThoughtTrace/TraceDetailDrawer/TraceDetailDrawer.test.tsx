@@ -15,7 +15,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ToolFailure } from "../../../../../../slices/runtime/runtimeOpenApi";
 import type { TraceEntry } from "../../../../../utils/traceUtils";
 import { TraceDetailDrawer } from "./TraceDetailDrawer";
 
@@ -23,7 +23,14 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (
       key: string,
-      options?: { answer?: string; count?: number; duration?: string; name?: string; number?: number },
+      options?: {
+        answer?: string;
+        count?: number;
+        duration?: string;
+        name?: string;
+        number?: number;
+        status?: number;
+      },
     ) => {
       if (key === "chatbot.hitlOtherAnswerWithText") return `Other: ${options?.answer ?? ""}`;
       if (key === "rework.chatTrace.sqlQuery") return "Query";
@@ -32,9 +39,10 @@ vi.mock("react-i18next", () => ({
         return "Query executed successfully: 0 rows matched the conditions.";
       if (key === "rework.chatTrace.failure.arguments") return "Call arguments:";
       if (key === "rework.chatTrace.failure.error") return "Error:";
-      if (key === "rework.chatTrace.failure.authentication") return "Authentication was refused (HTTP 401).";
-      if (key === "rework.chatTrace.failure.unknown")
-        return "The call failed. No further usable diagnostic was recorded.";
+      if (key === "rework.chatTrace.failure.authentication_required") return "Authentication was refused.";
+      if (key === "rework.chatTrace.failure.unexpected") return "This step failed unexpectedly.";
+      if (key === "rework.chatTrace.failure.httpStatus") return `HTTP status ${options?.status ?? ""}`;
+      if (key === "rework.chatTrace.failure.reference") return "Reference:";
       if (key === "rework.chatTrace.tabular.keyword") return "Search term:";
       if (key === "rework.chatTrace.tabular.catalogForDocument")
         return `Reading the summary of document “${options?.name}”.`;
@@ -102,6 +110,9 @@ vi.mock("../../InlineDrawer/InlineDrawer", () => ({
   ),
 }));
 
+const INVALID: ToolFailure = { code: "invalid_arguments", status: 400 };
+const UNEXPECTED: ToolFailure = { code: "unexpected" };
+
 function message(overrides: Partial<ChatMessage>): ChatMessage {
   return {
     session_id: "s1",
@@ -155,7 +166,7 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
           {
             type: "tool_result",
             call_id: "call-1",
-            ok: false,
+            failure: { code: "invalid_arguments", status: 400 },
             content:
               'Binder Error: Referenced column "amount_typo" not found in FROM clause!\n' +
               'Candidate bindings: "amount"\n\n' +
@@ -180,7 +191,7 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
     expect(html).not.toContain("Binder Error");
     expect(html).not.toContain("Candidate bindings");
     expect(html).not.toContain("LINE 1");
-    expect(html).not.toContain("HTTP 400");
+    expect(html).toContain("HTTP status 400");
     expect(html).not.toContain("0 row");
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(1);
   });
@@ -206,7 +217,6 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
           {
             type: "tool_result",
             call_id: "call-2",
-            ok: true,
             content: JSON.stringify({
               sql_query: "SELECT * FROM d_sales WHERE 1 = 0",
               rows: [],
@@ -237,7 +247,7 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
 function tabularEntry(
   name: string,
   content: unknown,
-  ok = true,
+  failure: ToolFailure | null = null,
   callId = "tabular-1",
 ): Extract<TraceEntry, { kind: "combo" }> {
   return {
@@ -253,7 +263,7 @@ function tabularEntry(
         {
           type: "tool_result",
           call_id: callId,
-          ok,
+          failure,
           content: typeof content === "string" ? content : JSON.stringify(content),
           latency_ms: 18,
         },
@@ -268,14 +278,14 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
     "Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.",
     "Out of Range Error: overflow in addition",
   ])("preserves existing curated SQL errors: %s", (content) => {
-    const entry = webEntry("query_tabular_documents", { sql: "SELECT 1", dataset_uids: ["bad-id"] }, content, false);
+    const entry = webEntry("query_tabular_documents", { sql: "SELECT 1", dataset_uids: ["bad-id"] }, content, INVALID);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
     expect(html).toContain(content);
-    expect(html).not.toContain("No further usable diagnostic");
+    expect(html).not.toContain("failed unexpectedly");
   });
 
   it.each([42, null])("keeps invalid SQL arguments inspectable: %s", (sql) => {
-    const entry = webEntry("query_tabular_documents", { sql }, "", false);
+    const entry = webEntry("query_tabular_documents", { sql }, "", INVALID);
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
     expect(html).toContain(`&quot;sql&quot;: ${String(sql)}`);
   });
@@ -285,14 +295,14 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
     "Provider Error: password=example-secret",
     "Authentication Error: access_token=example-token",
     "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying. extra provider text",
-  ])("does not invent diagnoses from malformed catalog content: %s", (content) => {
+  ])("never derives a diagnosis or the SQL view from the result text: %s", (content) => {
     const html = renderToStaticMarkup(
       <TraceDetailDrawer
-        entry={webEntry("query_tabular_documents", { sql: "SELECT 1" }, content, false)}
+        entry={webEntry("query_tabular_documents", { sql: "SELECT 1" }, content, UNEXPECTED)}
         onClose={() => undefined}
       />,
     );
-    expect(html).toContain("No further usable diagnostic");
+    expect(html).toContain("failed unexpectedly");
     expect(html).not.toContain("Authentication was refused");
     expect(html).not.toContain("provider content");
     expect(html).not.toContain("example-secret");
@@ -309,16 +319,15 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
         team_id: "hidden-team",
       },
       "",
-      false,
+      UNEXPECTED,
     );
     if (entry.result)
       entry.result.parts = [
         {
           type: "tool_result",
           call_id: "web-1",
-          ok: false,
-          content:
-            "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+          failure: { code: "authentication_required", status: 401 },
+          content: "Authentication must be restored before retrying.",
         },
       ];
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
@@ -326,7 +335,8 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
     expect(html).toContain("invalid-workbook.xlsx");
     expect(html).toContain("table_names");
     expect(html).toContain("Commandes");
-    expect(html).toContain("Authentication was refused (HTTP 401).");
+    expect(html).toContain("Authentication was refused.");
+    expect(html).toContain("HTTP status 401");
     for (const hidden of [
       "private-token",
       "hidden-team",
@@ -344,9 +354,9 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
   it.each(["", "private exception https://internal.example/?token=secret"])(
     "keeps no-argument failures understandable and redacted: %s",
     (content) => {
-      const entry = tabularEntry("list_tabular_documents", content, false);
+      const entry = tabularEntry("list_tabular_documents", content, UNEXPECTED);
       const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-      expect(html).toContain("No further usable diagnostic");
+      expect(html).toContain("failed unexpectedly");
       expect(html).toContain("{}");
       expect(html).not.toContain("private exception");
       expect(html).not.toContain("internal.example");
@@ -566,13 +576,13 @@ describe("TraceDetailDrawer tabular tools", () => {
     const list = tabularEntry(
       "list_tabular_documents",
       [{ document_uid: "uid-book", document_name: "Budget.xlsx", kind: "spreadsheet", tables: [] }],
-      true,
+      null,
       "list-1",
     );
     const laterList = tabularEntry(
       "list_tabular_documents",
       [{ document_uid: "uid-book", document_name: "Renamed.xlsx", kind: "spreadsheet", tables: [] }],
-      true,
+      null,
       "list-2",
     );
     const html = renderToStaticMarkup(
@@ -740,26 +750,29 @@ describe("TraceDetailDrawer tabular tools", () => {
     const opaque = { sql_query: "SELECT secret", rows: [{ secret: "private" }] };
     for (const entry of [
       tabularEntry("list_tabular_documents", opaque),
-      tabularEntry("list_tabular_documents", opaque, false),
+      tabularEntry("list_tabular_documents", opaque, UNEXPECTED),
     ]) {
       const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
       expect(html).not.toContain("private");
       expect(html).not.toContain("SELECT secret");
       expect(html).toContain(
-        entry.result?.parts.some((part) => part.type === "tool_result" && !part.ok)
-          ? "No further usable diagnostic"
+        entry.result?.parts.some((part) => part.type === "tool_result" && part.failure)
+          ? "failed unexpectedly"
           : "action",
       );
     }
     const failed = renderToStaticMarkup(
-      <TraceDetailDrawer entry={tabularEntry("list_tabular_documents", opaque, false)} onClose={() => undefined} />,
+      <TraceDetailDrawer
+        entry={tabularEntry("list_tabular_documents", opaque, UNEXPECTED)}
+        onClose={() => undefined}
+      />,
     );
     expect(failed).toContain("Failed");
   });
 });
 
-function webEntry(name: string, args: Record<string, unknown>, content: unknown, ok = true) {
-  const entry = tabularEntry(name, content, ok, "web-1");
+function webEntry(name: string, args: Record<string, unknown>, content: unknown, failure: ToolFailure | null = null) {
+  const entry = tabularEntry(name, content, failure, "web-1");
   return {
     ...entry,
     call: message({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "web-1", name, args }] }),
@@ -803,7 +816,7 @@ describe("TraceDetailDrawer web research", () => {
       "fetch_url",
       { url: "http://169.254.169.254/" },
       { error_code: "unsafe_destination" },
-      false,
+      UNEXPECTED,
     );
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
     expect(html).toContain("rework.chatTrace.webResearch.page");
@@ -815,17 +828,17 @@ describe("TraceDetailDrawer web research", () => {
   it.each(["unrecognized provider failure", { results: [{ snippet: "private provider content" }] }])(
     "keeps unrecognized failed web payloads behind the safe failure view",
     (content) => {
-      const entry = webEntry("web_search", { query: "python" }, content, false);
+      const entry = webEntry("web_search", { query: "python" }, content, UNEXPECTED);
       const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-      expect(html).toContain("The call failed.");
+      expect(html).toContain("This step failed unexpectedly.");
       expect(html).not.toContain("unrecognized provider failure");
       expect(html).not.toContain("private provider content");
     },
   );
 
   it("says which daily quota is spent", () => {
-    const search = webEntry("web_search", { query: "python" }, { error_code: "quota_exceeded" }, false);
-    const fetch = webEntry("fetch_url", { url: "https://python.org/" }, { error_code: "quota_exceeded" }, false);
+    const search = webEntry("web_search", { query: "python" }, { error_code: "quota_exceeded" }, UNEXPECTED);
+    const fetch = webEntry("fetch_url", { url: "https://python.org/" }, { error_code: "quota_exceeded" }, UNEXPECTED);
     const searchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={search} onClose={() => undefined} />);
     const fetchHtml = renderToStaticMarkup(<TraceDetailDrawer entry={fetch} onClose={() => undefined} />);
     expect(searchHtml).toContain("rework.chatTrace.webResearch.errors.quota_exceeded<");

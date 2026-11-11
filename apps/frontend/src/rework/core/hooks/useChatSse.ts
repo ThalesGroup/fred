@@ -697,12 +697,12 @@ export function useChatSse(
         }
 
         case "tool_result": {
-          console.debug(`[useChatSse] tool_result call_id=${event.call_id} ok=${!event.is_error}`);
+          console.debug(`[useChatSse] tool_result call_id=${event.call_id} failure=${event.failure?.code ?? "none"}`);
           const toolResultParts: ChatMessage["parts"] = [
             {
               type: "tool_result",
               call_id: event.call_id,
-              ok: !event.is_error,
+              failure: event.failure ?? null,
               content: event.content ?? "",
               latency_ms: event.latency_ms ?? null,
             },
@@ -1615,7 +1615,13 @@ export function useChatSse(
                   role: "tool",
                   channel: "tool_result",
                   parts: [
-                    { type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null },
+                    {
+                      type: "tool_result",
+                      call_id: call.tool_call_id,
+                      failure: { code: "not_approved" },
+                      content: "",
+                      latency_ms: null,
+                    },
                   ],
                   metadata: { extras: { cancelled_by_user: true } },
                 });

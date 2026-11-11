@@ -190,7 +190,7 @@ mod tests {
                     tool_name: "search_documents",
                     call_id: "search".into(),
                     content: "[]".into(),
-                    is_error: false,
+                    failure: None,
                     latency_ms: 1,
                 },
                 RuntimeEvent::Final {

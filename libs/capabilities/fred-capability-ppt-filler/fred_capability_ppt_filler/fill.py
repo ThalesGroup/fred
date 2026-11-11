@@ -60,6 +60,8 @@ from fred_sdk.contracts.context import (
     LinkKind,
     LinkPart,
     PublishedArtifact,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
     UiPart,
 )
@@ -792,7 +794,10 @@ def build_fill_tools(
                 "says what to put there; use the document tools when it points "
                 "at documents or the conversation's attached files), then call "
                 "this tool again with the values filled in.",
-                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                ToolInvocationResult(
+                    tool_ref=_TOOL_REF,
+                    failure=ToolFailure(code=ToolFailureCode.invalid_arguments),
+                ),
             )
 
         session_id = identity.session_id
@@ -837,7 +842,9 @@ def build_fill_tools(
                 f"config storage after {elapsed:.0f}s [{type(exc).__name__}: {exc}]."
             )
             logger.exception("template fetch failed")
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+            return message, ToolInvocationResult(
+                tool_ref=_TOOL_REF, failure=ToolFailure(code=ToolFailureCode.unexpected)
+            )
 
         # 2. Prefetch every candidate image's bytes concurrently (bounded),
         #    BEFORE the sync phase below (#2183) — a thread worker cannot
@@ -858,7 +865,10 @@ def build_fill_tools(
             return (
                 "The server is busy filling other PowerPoint templates right "
                 "now. Please try again in a moment.",
-                ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                ToolInvocationResult(
+                    tool_ref=_TOOL_REF,
+                    failure=ToolFailure(code=ToolFailureCode.service_busy),
+                ),
             )
         try:
             filled_bytes, fill_error = await asyncio.to_thread(
@@ -876,13 +886,18 @@ def build_fill_tools(
                 f"[{type(exc).__name__}: {exc}]."
             )
             logger.exception("fill failed")
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+            return message, ToolInvocationResult(
+                tool_ref=_TOOL_REF, failure=ToolFailure(code=ToolFailureCode.unexpected)
+            )
         finally:
             release_heavy_job_slot()
 
         if fill_error is not None:
             logger.warning("image fill rejected -> %s", fill_error)
-            return fill_error, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+            return fill_error, ToolInvocationResult(
+                tool_ref=_TOOL_REF,
+                failure=ToolFailure(code=ToolFailureCode.invalid_arguments),
+            )
         assert filled_bytes is not None  # fill_error is None here
 
         # 4. Publish through the conversation filesystem (so outputs of
@@ -903,7 +918,9 @@ def build_fill_tools(
                 f"{elapsed:.0f}s [{type(exc).__name__}: {exc}]."
             )
             logger.exception("upload failed")
-            return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+            return message, ToolInvocationResult(
+                tool_ref=_TOOL_REF, failure=ToolFailure(code=ToolFailureCode.unexpected)
+            )
 
         logger.info(
             "filled deck uploaded session=%s key=%s",

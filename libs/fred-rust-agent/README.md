@@ -95,8 +95,9 @@ KF remains responsible for access, publication and lifecycle checks.
 Search uses the default KF policy, `top_k=5`, no reranking or retry, and a 30-second
 timeout including service-token acquisition. The wire response is capped at
 512 KiB. Empty results are valid. A transport, authorization or invalid-response
-failure, like invalid arguments, closes the tool row with `is_error` and a fixed
-message; the model then answers, as it does after a Python tool's failure.
+failure, like invalid arguments, closes the tool row with a fixed message and the
+failure code `unexpected`: Rig reports that a tool failed, not why. The model then
+answers, as it does after a Python tool's failure.
 
 The `search` module owns this contract; the host's `kf_search` only transports the hits. It
 produces what the Python `search_documents` capability produces, so the shared chat

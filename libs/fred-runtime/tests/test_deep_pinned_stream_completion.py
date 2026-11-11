@@ -22,7 +22,7 @@ from fred_runtime.react.react_stream_adapter import (
     split_stream_event_mode,
 )
 from fred_runtime.skills.catalog import PlatformSkills
-from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.context import ToolFailure, ToolInvocationResult
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AssistantDeltaRuntimeEvent,
@@ -57,6 +57,8 @@ from test_platform_skills import Model, binding, compiled
 from test_skill_eligibility import publish
 
 ANSWER = "```mermaid\ngraph TD\nA --> B\n```"
+# A downstream HTTP 500, as in the 2026-11-10 read_document incident.
+_SERVICE_ERROR = ToolFailure.from_http_status(500)
 USAGE: UsageMetadata = {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
 
 
@@ -124,7 +126,7 @@ async def test_deep_repaired_checkpoint_emits_and_saves_only_current_calls(
     async def current_tool(fail: bool = False) -> tuple[str, ToolInvocationResult]:
         """Return a current result, including a recoverable tool failure."""
         return "Current result", ToolInvocationResult(
-            tool_ref="runtime:current_tool", is_error=fail
+            tool_ref="runtime:current_tool", failure=_SERVICE_ERROR if fail else None
         )
 
     model = ToolFriendlyFakeChatModel(
@@ -204,7 +206,10 @@ async def test_deep_repaired_checkpoint_emits_and_saves_only_current_calls(
     results = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert [e.call_id for e in calls] == ["new-list", "new-read"]
     assert [e.call_id for e in results] == ["new-list", "new-read"]
-    assert [e.is_error for e in results] == [False, read_fails]
+    assert [e.failure for e in results] == [
+        None,
+        _SERVICE_ERROR if read_fails else None,
+    ]
     assert all(e.latency_ms is not None and e.latency_ms >= 0 for e in results)
     [final] = [e for e in events if isinstance(e, FinalRuntimeEvent)]
     assert final.content == ANSWER
@@ -244,11 +249,11 @@ async def test_deep_repaired_checkpoint_emits_and_saves_only_current_calls(
         p.call_id for m in reloaded for p in m.parts if isinstance(p, ToolCallPart)
     ] == ["new-list", "new-read"]
     assert [
-        (p.call_id, p.ok, p.latency_ms)
+        (p.call_id, p.failure, p.latency_ms)
         for m in reloaded
         for p in m.parts
         if isinstance(p, ToolResultPart)
-    ] == [(e.call_id, not e.is_error, e.latency_ms) for e in results]
+    ] == [(e.call_id, e.failure, e.latency_ms) for e in results]
 
 
 class _StreamingModel(Model):

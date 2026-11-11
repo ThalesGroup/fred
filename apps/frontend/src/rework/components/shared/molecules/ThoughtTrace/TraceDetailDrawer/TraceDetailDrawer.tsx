@@ -23,7 +23,6 @@ import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
 import {
   PHASE_LABELS,
-  asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
   detailTextForEntry,
@@ -50,7 +49,10 @@ import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/t
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
-import { executionFailureText, toolFailureDetail } from "../../../../../utils/toolFailureTrace";
+import { executionFailureText, toolFailureDetail, type ToolFailureDetail } from "../../../../../utils/toolFailureTrace";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { useCopyConfirmation } from "../../../../../core/hooks/useCopyConfirmation";
+import { writeRichClipboard } from "../../../../../utils/clipboardUtils";
 import { historicalDocumentTreeText, parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
 import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
@@ -170,8 +172,9 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
   );
 }
 
-function FailedToolDetail({ detail }: { detail: NonNullable<ReturnType<typeof toolFailureDetail>> }) {
+function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
   const { t } = useTranslation();
+  const { copied, confirmCopied } = useCopyConfirmation();
   const { sql, ...argumentsWithoutSql } = detail.arguments ?? {};
   const argumentsToDisplay = typeof sql === "string" ? argumentsWithoutSql : detail.arguments;
   return (
@@ -190,7 +193,31 @@ function FailedToolDetail({ detail }: { detail: NonNullable<ReturnType<typeof to
       )}
       <div className={styles.toolSection}>
         <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.error")}</p>
-        <div className={styles.errorBox}>{detail.error ?? t(detail.errorKey)}</div>
+        <div className={detail.declined ? styles.declinedBox : styles.errorBox}>
+          {detail.error ?? t(detail.errorKey)}
+        </div>
+        {detail.status !== null && (
+          <p className={styles.failureMeta}>{t("rework.chatTrace.failure.httpStatus", { status: detail.status })}</p>
+        )}
+        {detail.reference && (
+          <div className={styles.failureReference}>
+            <span className={styles.failureMeta}>{t("rework.chatTrace.failure.reference")}</span>
+            <code className={styles.failureReferenceValue}>{detail.reference}</code>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
+              aria-label={t(
+                copied ? "rework.chatTrace.failure.referenceCopied" : "rework.chatTrace.failure.copyReference",
+              )}
+              onClick={() => {
+                void writeRichClipboard("", detail.reference ?? "").then((ok) => {
+                  if (ok) confirmCopied();
+                });
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -238,8 +265,6 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   const data = entry.result ? parseToolResultContent(entry.result) : null;
   const sqlResult = asSqlQueryResult(data);
   if (sqlResult) return <SqlToolDetail data={sqlResult} />;
-  const failedSqlResult = asFailedSqlQueryResult(entry);
-  if (failedSqlResult) return <SqlToolDetail data={failedSqlResult} />;
   const ragResult = asRagSearchResult(data);
   if (ragResult) return <RagToolDetail data={ragResult} />;
   const name = toolName(entry.call);
@@ -263,7 +288,7 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
 /** Safe runtime explanation and support reference, preserved in history. */
 function ErrorDetail({ entry }: { entry: TraceEntry }) {
   const { t } = useTranslation();
-  const text = executionFailureText(detailTextForEntry(entry)) ?? t("rework.chatTrace.failure.unknown");
+  const text = executionFailureText(detailTextForEntry(entry)) ?? t("rework.chatTrace.failure.unexpected");
   return (
     <div className={styles.detail}>
       <div className={styles.errorDetailBox}>{text}</div>

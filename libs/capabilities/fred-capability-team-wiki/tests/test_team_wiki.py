@@ -55,6 +55,8 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
 )
 from fred_sdk.contracts.runtime import (
     RunStopError,
@@ -417,7 +419,9 @@ def test_a_refusal_carries_the_server_own_reason() -> None:
     )
     message = _call(port, "wiki_read_page", {"path": "X"})
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=403
+    )
     assert "not allowed" in message.content
     assert "rules page cannot be changed by an agent" in message.content
 
@@ -429,7 +433,9 @@ def test_an_unknown_path_is_an_error_not_an_empty_page() -> None:
     port = _FakePort(pages=(_page("s1", "Onboarding"),))
     message = _call(port, "wiki_read_page", {"path": "Ghost"})
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable
+    )
     assert "no wiki page at 'Ghost'" in message.content
     # Says how to address one, since that is the mistake being made.
     assert "Parent page / Child page" in message.content
@@ -450,7 +456,9 @@ def test_an_ambiguous_path_lists_the_candidates_instead_of_guessing() -> None:
     )
     message = _call(port, "wiki_read_page", {"path": "Espagne"})
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.invalid_arguments
+    )
     assert "Ventes / Espagne" in message.content
     assert "Achats / Espagne" in message.content
 

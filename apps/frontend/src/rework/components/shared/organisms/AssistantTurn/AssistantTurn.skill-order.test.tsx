@@ -121,7 +121,7 @@ describe("AssistantTurn skill load placement", () => {
         message(9, {
           role: "tool",
           channel: "tool_result",
-          parts: [{ type: "tool_result", call_id: "read", ok: true, content: "Notes" }],
+          parts: [{ type: "tool_result", call_id: "read", content: "Notes" }],
         }),
         message(10, { parts: [{ type: "text", text: "Answer" }] }),
       ],

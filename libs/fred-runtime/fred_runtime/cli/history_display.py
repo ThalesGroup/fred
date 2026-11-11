@@ -127,9 +127,9 @@ def print_history(
             elif ptype == "tool_result":
                 content = part.get("content", "")
                 preview = content[:120] + ("…" if len(content) > 120 else "")
-                ok = part.get("ok")
-                ok_marker = "" if ok is None else ("✓ " if ok else "✗ ")
-                lines.append(f"{ok_marker}{preview}")
+                failure = part.get("failure")
+                marker = f"✗ [{failure.get('code')}] " if failure else "✓ "
+                lines.append(f"{marker}{preview}")
             elif ptype == "code":
                 lang = part.get("language") or ""
                 code = part.get("code", "")
@@ -277,7 +277,7 @@ def print_runtime_event(
         message = (
             content if isinstance(content, str) and content else "(tool completed)"
         )
-        color = ANSI_RED if event.get("is_error") else ANSI_GREEN
+        color = ANSI_RED if event.get("failure") else ANSI_GREEN
         print(colorize(f"[tool_result] {message}", color=color, enabled=color_enabled))
         return saw_assistant_delta
     if kind == "awaiting_human":

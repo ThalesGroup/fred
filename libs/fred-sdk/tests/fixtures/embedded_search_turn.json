@@ -36,7 +36,7 @@
     "tool_name": "search_documents",
     "call_id": "call-search",
     "content": "{\"query\":\"manual question\",\"hits\":[{\"uid\":\"doc-1\",\"title\":\"Manual\",\"content\":\"Evidence\",\"file_name\":\"manual.pdf\",\"page\":2,\"section\":\"Install\",\"score\":0.8},{\"uid\":\"doc-2\",\"title\":\"Annex\",\"content\":\"Unrelated\",\"file_name\":null,\"page\":null,\"section\":null,\"score\":0.2}]}",
-    "is_error": false,
+    "failure": null,
     "latency_ms": 12
   },
   "final": {
@@ -111,7 +111,7 @@
         {
           "type": "tool_result",
           "call_id": "call-search",
-          "ok": true,
+          "failure": null,
           "content": "{\"query\":\"manual question\",\"hits\":[{\"uid\":\"doc-1\",\"title\":\"Manual\",\"content\":\"Evidence\",\"file_name\":\"manual.pdf\",\"page\":2,\"section\":\"Install\",\"score\":0.8},{\"uid\":\"doc-2\",\"title\":\"Annex\",\"content\":\"Unrelated\",\"file_name\":null,\"page\":null,\"section\":null,\"score\":0.2}]}"
         }
       ],

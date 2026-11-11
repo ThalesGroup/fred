@@ -152,7 +152,7 @@ describe("chatMessagesToMessage", () => {
     const toolResult = msg({
       channel: "tool_result",
       role: "tool" as ChatMessage["role"],
-      parts: [{ type: "tool_result", call_id: "c1", ok: true, content: "result", latency_ms: null }],
+      parts: [{ type: "tool_result", call_id: "c1", content: "result", latency_ms: null }],
     });
     const result = chatMessagesToMessage([userMsg("q"), toolCall, toolResult]);
     const roles = result?.trace.map((t) => t.role);

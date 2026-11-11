@@ -12,6 +12,8 @@ from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
@@ -204,7 +206,7 @@ def build_skill_tools(
                 binding=binding,
             )
         except ValueError as exc:
-            return result("platform.load_skill", str(exc), error=True)
+            return result("platform.load_skill", str(exc), failure=_REFUSED)
         get_stream_writer()(
             StatusRuntimeEvent(status="skill_loaded", skill_load=attribution)
         )
@@ -221,7 +223,7 @@ def build_skill_tools(
                 ),
             )
         except ValueError as exc:
-            return result("platform.read_skill_file", str(exc), error=True)
+            return result("platform.read_skill_file", str(exc), failure=_REFUSED)
 
     return [
         FredRuntimeToolSpec(
@@ -241,11 +243,15 @@ def build_skill_tools(
     ]
 
 
+# An unknown skill or file is a refused argument the model can correct.
+_REFUSED = ToolFailure(code=ToolFailureCode.invalid_arguments)
+
+
 def result(
-    tool_ref: str, content: str, *, error: bool = False
+    tool_ref: str, content: str, *, failure: ToolFailure | None = None
 ) -> tuple[str, ToolInvocationResult]:
     return content, ToolInvocationResult(
         tool_ref=tool_ref,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=content),),
-        is_error=error,
+        failure=failure,
     )

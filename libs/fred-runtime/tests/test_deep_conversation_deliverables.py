@@ -14,7 +14,11 @@ from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
 )
-from fred_sdk.contracts.context import PublishedArtifact
+from fred_sdk.contracts.context import (
+    PublishedArtifact,
+    ToolFailure,
+    ToolFailureCode,
+)
 from fred_sdk.contracts.runtime import (
     ConversationFileContent,
     ConversationFileEntry,
@@ -154,7 +158,7 @@ async def test_read_error_allows_relisting_and_correcting_only_the_file_identity
         document_id=document_id,
         workspace_path="/read.md",
     )
-    assert result.artifact.is_error
+    assert result.artifact.failure == ToolFailure.from_http_status(status)
     assert not result.artifact.ui_parts
     assert "list_conversation_files" in result.content
     assert "document_id" in result.content and "content_id" in result.content
@@ -193,7 +197,8 @@ async def test_read_transport_failure_returns_a_sanitized_retry_hint():
         document_id="doc",
         workspace_path="/read.md",
     )
-    assert result.artifact.is_error
+    # A transport failure carries no downstream status.
+    assert result.artifact.failure == ToolFailure(code=ToolFailureCode.unexpected)
     assert not result.artifact.ui_parts
     assert "Retry with the same document_id" in result.content
     assert "private transport diagnostic" not in result.content

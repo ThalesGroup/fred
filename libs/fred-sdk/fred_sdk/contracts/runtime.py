@@ -35,6 +35,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Final,
     Generic,
     List,
@@ -46,7 +47,12 @@ from typing import (
 
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.tree import DocumentTreeResult as DocumentTreeResult
-from fred_core.history.history_schema import FinishReason, coerce_finish_reason
+from fred_core.history.history_schema import (
+    FinishReason,
+    ToolFailure,
+    ToolFailureCode,
+    coerce_finish_reason,
+)
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
@@ -293,7 +299,7 @@ class ToolResultRuntimeEvent(RuntimeEventBase):
     call_id: str = Field(..., min_length=1)
     content: str = Field(default="")
     tool_name: str | None = None
-    is_error: bool = False
+    failure: ToolFailure | None = None
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
     latency_ms: int | None = None
@@ -724,7 +730,7 @@ class AgentInvokerPort(ABC):
 
         The implementation decides the execution strategy (in-process, child
         workflow, remote call). It must populate ``AgentInvocationResult`` with
-        at least ``content`` and ``is_error``.
+        at least ``content`` and, on failure, ``failure``.
         """
 
 
@@ -820,27 +826,42 @@ class WorkspaceFsPort(ABC):
 
 
 class ConversationScratchpadError(Exception):
-    """Base error for conversation-bound scratchpad operations."""
+    """Base error for conversation-bound scratchpad operations.
+
+    ``failure_code`` is how a tool reports this error in the shared vocabulary.
+    """
+
+    failure_code: ClassVar[ToolFailureCode] = ToolFailureCode.unexpected
 
 
 class ConversationScratchpadInvalidPathError(ConversationScratchpadError):
     """Raised before storage access when a scratchpad-relative path is invalid."""
 
+    failure_code = ToolFailureCode.invalid_arguments
+
 
 class ConversationScratchpadFileNotFoundError(ConversationScratchpadError):
     """Raised when a requested scratchpad file does not exist."""
+
+    failure_code = ToolFailureCode.resource_unavailable
 
 
 class ConversationScratchpadUnsupportedContentError(ConversationScratchpadError):
     """Raised when a caller supplies content other than UTF-8 text."""
 
+    failure_code = ToolFailureCode.invalid_arguments
+
 
 class ConversationScratchpadEditConflictError(ConversationScratchpadError):
     """Raised when an expected-text edit does not match the latest file content."""
 
+    failure_code = ToolFailureCode.invalid_arguments
+
 
 class ConversationScratchpadQuotaExceededError(ConversationScratchpadError):
     """Raised before a mutation would exceed a conversation namespace quota."""
+
+    failure_code = ToolFailureCode.invalid_arguments
 
     def __init__(self, *, resource: str, limit: int, attempted: int) -> None:
         self.resource = resource
@@ -854,9 +875,13 @@ class ConversationScratchpadQuotaExceededError(ConversationScratchpadError):
 class ConversationScratchpadStorageError(ConversationScratchpadError):
     """Raised when the shared storage operation fails."""
 
+    failure_code = ToolFailureCode.service_error
+
 
 class ConversationFilesystemPermissionError(ConversationScratchpadError):
     """Raised when an agent access is denied by its filesystem policy."""
+
+    failure_code = ToolFailureCode.resource_unavailable
 
 
 class ConversationFilesystemInterruptError(ConversationFilesystemPermissionError):
@@ -865,6 +890,8 @@ class ConversationFilesystemInterruptError(ConversationFilesystemPermissionError
 
 class ConversationFilesystemQuotaError(ConversationScratchpadError):
     """Raised when the selected physical namespace rejects a write."""
+
+    failure_code = ToolFailureCode.invalid_arguments
 
 
 class ConversationFilesystemPort(ABC):
@@ -1199,7 +1226,7 @@ class DocumentPortCallError(Exception):
     """
     Typed transport failure raised by document port adapters.
 
-    Why this exists: a failing document tool must surface a clean `is_error`
+    Why this exists: a failing document tool must surface a clean `failure`
     tool result (actionable detail, never a raised exception reaching the
     runtime's ToolNode) — but the capability must not import the adapter's
     HTTP stack to introspect the failure. Adapters map their transport errors
@@ -1464,7 +1491,7 @@ class TeamWikiPortError(Exception):
     Typed transport failure raised by team wiki port adapters.
 
     Same doctrine as `DocumentPortCallError`: a failing wiki tool surfaces a
-    clean `is_error` tool result carrying an actionable message, and the
+    clean `failure` tool result carrying an actionable message, and the
     capability reads the failure's shape off these attributes rather than
     importing the adapter's HTTP stack.
     """

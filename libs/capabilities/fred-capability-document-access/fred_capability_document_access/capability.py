@@ -26,7 +26,7 @@ What this capability ships (and deliberately does NOT):
   through `ctx.services.document_search`
 - `list_document_tree`: exposed only when `ctx.services.document_tree` exists.
   The Weaver pod supplies this corpus-only port. Failures surface as
-  `is_error` tool results with actionable detail (timeout/HTTP status), never
+  `failure` tool results with actionable detail (timeout/HTTP status), never
   raised exceptions.
 - NOT `summarize_document` — that tool is its own capability,
   `document_summarize` (`fred-capability-documents`, its own package),
@@ -92,6 +92,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import (
@@ -152,9 +153,9 @@ def _document_tool_failure(
     document_uid: str | None = None,
 ) -> tuple[str, ToolInvocationResult]:
     """Turn any document tool-call failure into a non-empty, actionable error
-    message plus an ``is_error=True`` artifact.
+    message plus a ``failure`` artifact.
 
-    The v2 ReAct runtime surfaces ``ToolInvocationResult.is_error`` directly to
+    The v2 ReAct runtime surfaces ``ToolInvocationResult.failure`` directly to
     the user (and suppresses LLM hallucination), so a failing tool MUST return
     such a result instead of raising — a raised exception is re-raised by the
     default ``ToolNode`` handler, which leaves the tool call pending in the
@@ -172,7 +173,7 @@ def _document_tool_failure(
     # a developer looks. Degrading is right for the turn; being silent about
     # WHY is not.
     logger.error(
-        "Document tool failure (%s, %.1fs) — degraded to an is_error artifact.",
+        "Document tool failure (%s, %.1fs) — degraded to a failure artifact.",
         action,
         elapsed_s,
         exc_info=exc,
@@ -212,11 +213,11 @@ def _document_tool_failure(
     # `blocks` carries the same diagnostic as `content` (CAPAB-02, same reason
     # as the success-path artifacts above): a Graph agent's plain-dict
     # invocation keeps only the artifact half of a `content_and_artifact`
-    # return — an artifact with `is_error=True` but no message tells a Graph
+    # return — an artifact with a `failure` but no message tells a Graph
     # node THAT the call failed but not WHY.
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        is_error=True,
+        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 
@@ -703,7 +704,7 @@ class DocumentAccessCapability(
                 if run_stop is not None:
                     raise run_stop from None
                 # Same contract as the sibling tools: a failing tool returns an
-                # `is_error=True` artifact rather than raising, or the default
+                # `failure` artifact rather than raising, or the default
                 # ToolNode handler re-raises and the whole turn dies with an
                 # empty error detail. Observed live on an expired-token 401
                 # (#2073 Item 3) — this is the most-used RAG tool, so it was

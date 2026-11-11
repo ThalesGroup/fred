@@ -1434,6 +1434,24 @@ async def test_reference_read_escapes_reserved_tags_only_for_model_messages(
     assert result.blocks[0].text == content
 
 
+@pytest.mark.asyncio
+async def test_an_unknown_skill_file_is_a_refused_argument(tmp_path: Path) -> None:
+    from fred_runtime.skills.tools import build_skill_tools
+    from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
+
+    skill(tmp_path)
+    reader = next(
+        tool
+        for tool in build_skill_tools(
+            PlatformSkills.from_directory(str(tmp_path)), binding()
+        )
+        if tool.runtime_name == "read_skill_file"
+    )
+    _content, result = await reader.invoke({"skill_id": "example", "path": "nope.md"})
+    assert result is not None
+    assert result.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
+
+
 class RecordingSkillKPIStore(BaseKPIStore):
     def __init__(self, fail: bool = False) -> None:
         self.events: list[KPIEvent] = []

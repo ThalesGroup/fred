@@ -63,6 +63,7 @@ from fred_runtime.runtime_support.ask_user import (
     AskUserArgs,
     ask_user,
 )
+from fred_runtime.runtime_support.tool_execution import result_failure
 
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
@@ -520,7 +521,9 @@ class ReActRuntimeToolResolver:
                 )
                 if raw_result.status == "error" and artifact is None:
                     artifact = normalize_runtime_provider_artifact(
-                        ToolInvocationResult(tool_ref=tool_name, is_error=True)
+                        ToolInvocationResult(
+                            tool_ref=tool_name, failure=result_failure(raw_result)
+                        )
                     )
                 if artifact is not None and artifact.is_error:
                     return (render_tool_result(artifact), artifact)

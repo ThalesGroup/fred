@@ -60,6 +60,8 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
     UiPart,
 )
@@ -162,7 +164,9 @@ async def save_writable_document(
     if not session_id:
         return (
             "Cannot save the document: no active session.",
-            ToolInvocationResult(tool_ref=tool_ref, is_error=True),
+            ToolInvocationResult(
+                tool_ref=tool_ref, failure=ToolFailure(code=ToolFailureCode.unexpected)
+            ),
         )
 
     removed_nul = [

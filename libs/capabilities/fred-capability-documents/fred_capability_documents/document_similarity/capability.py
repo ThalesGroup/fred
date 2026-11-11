@@ -39,6 +39,8 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
@@ -221,7 +223,8 @@ class DocumentSimilarityCapability(
                     "nothing was searched. This is NOT a 'no matches' answer. "
                     "Use a document that is in scope - resolve one from a search "
                     "hit or the document tree - or tell the user the document is "
-                    "out of scope."
+                    "out of scope.",
+                    ToolFailureCode.scope_refused,
                 )
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)
@@ -268,13 +271,15 @@ def _clamp(value: int, bounds: tuple[int, int]) -> int:
     return max(low, min(value, high))
 
 
-def _bad_call(message: str) -> tuple[str, ToolInvocationResult]:
-    """A malformed tool call, answered as an `is_error` artifact the model can
+def _bad_call(
+    message: str, code: ToolFailureCode = ToolFailureCode.invalid_arguments
+) -> tuple[str, ToolInvocationResult]:
+    """A malformed tool call, answered as a `failure` artifact the model can
     act on. Not `document_tool_failure`: nothing failed downstream, so its
     transport wording ("the Knowledge Flow service ...") would be a lie."""
 
     return message, ToolInvocationResult(
         tool_ref=DOCUMENT_SIMILARITY_TOOL_REF,
-        is_error=True,
+        failure=ToolFailure(code=code),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )

@@ -80,6 +80,8 @@ from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.context import (
@@ -94,6 +96,9 @@ from langchain_core.tools import BaseTool, StructuredTool, tool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
+
+# A tool failure with no downstream status, the shape most of these tests need.
+_FAILED = ToolFailure(code=ToolFailureCode.unexpected)
 
 
 @pytest.fixture(autouse=True)
@@ -403,9 +408,6 @@ async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
     as failed in the user's trace.
     """
 
-    class _Artifact:
-        is_error = True
-
     store, kpi = _install_recording_kpi_writer()
     middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
     request = _request(name="fake.native", tool_obj=None)
@@ -415,7 +417,10 @@ async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
             content="Could not search documents: HTTP 401",
             name="fake.native",
             tool_call_id="call-1",
-            artifact=_Artifact(),
+            artifact=ToolInvocationResult(
+                tool_ref="fake.native",
+                failure=ToolFailure.from_http_status(401),
+            ),
         )
 
     with _AuditEvents() as audit:
@@ -431,7 +436,7 @@ async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
     # nothing was raised: PrometheusKPIStore freezes a metric's label-name
     # tuple on its FIRST sample, so a handled failure arriving first would
     # otherwise drop `exception_type` from every raised failure thereafter.
-    assert failed[0].dims["error_code"] == "tool_error_artifact"
+    assert failed[0].dims["error_code"] == "authentication_required"
     assert failed[0].dims["exception_type"] == "none"
     # And NOT on the latency histogram. Writing them there looks like richer
     # telemetry and delivers none: the first `agent.tool_latency_ms` sample in a
@@ -443,7 +448,7 @@ async def test_awrap_tool_call_is_error_artifact_marks_failed() -> None:
     assert "error_code" not in latency_dims
     assert "exception_type" not in latency_dims
     assert audit.records[1].outcome == "failed"  # type: ignore[attr-defined]
-    assert audit.records[1].reason == "tool_error_artifact"  # type: ignore[attr-defined]
+    assert audit.records[1].reason == "authentication_required"  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -464,7 +469,10 @@ async def test_awrap_tool_call_dict_is_error_artifact_marks_failed() -> None:
             content="boom",
             name="fake.native",
             tool_call_id="call-1",
-            artifact={"is_error": True},
+            artifact={
+                "tool_ref": "fake.native",
+                "failure": {"code": "service_error", "status": 500},
+            },
         )
 
     with _AuditEvents() as audit:
@@ -478,9 +486,6 @@ async def test_awrap_tool_call_dict_is_error_artifact_marks_failed() -> None:
 async def test_awrap_tool_call_success_artifact_stays_succeeded() -> None:
     """The artifact check must not turn ordinary successes into failures."""
 
-    class _Artifact:
-        is_error = False
-
     store, kpi = _install_recording_kpi_writer()
     middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
     request = _request(name="fake.native", tool_obj=None)
@@ -490,7 +495,7 @@ async def test_awrap_tool_call_success_artifact_stays_succeeded() -> None:
             content="ok",
             name="fake.native",
             tool_call_id="call-1",
-            artifact=_Artifact(),
+            artifact=ToolInvocationResult(tool_ref="fake.native"),
         )
 
     with _AuditEvents() as audit:
@@ -1107,8 +1112,12 @@ async def test_cancelled_capability_span_ends_and_restores_parent() -> None:
 @pytest.mark.parametrize(
     "status,artifact,error_type",
     [
-        ("error", None, "tool_error_status"),
-        ("success", {"is_error": True}, "tool_error_artifact"),
+        ("error", None, "unexpected"),
+        (
+            "success",
+            {"tool_ref": "t", "failure": {"code": "rate_limited"}},
+            "rate_limited",
+        ),
     ],
 )
 async def test_returned_capability_error_marks_trace(
@@ -1300,7 +1309,8 @@ async def test_runtime_tool_guarantees_match(
         if outcome == "cancelled":
             raise asyncio.CancelledError()
         return ToolInvocationResult(
-            tool_ref="probe", is_error=outcome == "reported_error"
+            tool_ref="probe",
+            failure=_FAILED if outcome == "reported_error" else None,
         )
 
     @tool("probe", response_format="content_and_artifact")
@@ -1406,7 +1416,7 @@ async def test_runtime_tool_guarantees_match(
         0 if outcome in ("success", "cancelled") else 1
     )
     if outcome == "reported_error":
-        assert _failed_events(store)[0].dims["error_code"] == "tool_error_artifact"
+        assert _failed_events(store)[0].dims["error_code"] == "unexpected"
     assert not metrics.timers  # Graph no longer emits a second, generic tool timer.
     assert "private result" not in audit.payload_text()
     assert "private failure detail" not in audit.payload_text()
@@ -1459,4 +1469,4 @@ async def test_graph_mcp_keeps_handled_failure_for_audit_kpi_and_event(
     assert getattr(audit.records[-1], "outcome") == ("failed" if fails else "succeeded")
     results = [event for event in events if isinstance(event, ToolResultRuntimeEvent)]
     assert len(results) == 1
-    assert results[0].is_error == fails
+    assert (results[0].failure is not None) == fails

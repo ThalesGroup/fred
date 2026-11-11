@@ -72,7 +72,6 @@ const TRACE: ChatMessage[] = [
       {
         type: "tool_result",
         call_id: "c1",
-        ok: true,
         content: JSON.stringify({ sql_query: "SELECT 1", rows: [{ a: 1 }, { a: 2 }] }),
         latency_ms: 258,
       },
@@ -85,7 +84,7 @@ const TRACE: ChatMessage[] = [
   msg({
     channel: "tool_result",
     role: "tool",
-    parts: [{ type: "tool_result", call_id: "c2", ok: true, content: "opaque", latency_ms: 310 }],
+    parts: [{ type: "tool_result", call_id: "c2", content: "opaque", latency_ms: 310 }],
   }),
 ];
 

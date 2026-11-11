@@ -47,6 +47,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     HitlGateRequest,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
@@ -323,7 +324,9 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
         cap, ctx, "summarize_document", {"document_uid": "diff_main_swift.md"}
     )
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=403
+    )
     assert "opaque uid" in message.content
     assert "list_document_tree" in message.content
     # Distinguish the current tree's document references from folder records.
@@ -383,7 +386,7 @@ async def test_summarize_timeout_failure_names_the_document() -> None:
         cap, ctx, "summarize_document", {"document_uid": "u-42"}
     )
 
-    assert message.artifact.is_error is True
+    assert message.artifact.failure == ToolFailure(code=ToolFailureCode.timeout)
     assert "timed out" in message.content
     assert "document_uid=u-42" in message.content
 

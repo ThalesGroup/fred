@@ -41,7 +41,15 @@ function toolResult(callId: string, ok: boolean, rank: number): ChatMessage {
     timestamp: "2026-09-17T00:00:00.000Z",
     role: "tool",
     channel: "tool_result",
-    parts: [{ type: "tool_result", call_id: callId, ok, content: "", latency_ms: null }],
+    parts: [
+      {
+        type: "tool_result",
+        call_id: callId,
+        failure: ok ? null : { code: "unexpected" },
+        content: "",
+        latency_ms: null,
+      },
+    ],
   };
 }
 

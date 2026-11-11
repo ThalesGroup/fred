@@ -51,6 +51,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
@@ -346,7 +347,8 @@ async def test_several_builds_of_one_answer_land_on_one_preview(
 @pytest.mark.asyncio
 async def test_empty_plan_is_an_error_the_user_can_read():
     text, result = await _build(slides=[{"kind": "bullets"}])
-    assert result.is_error and "every slide of the plan is empty" in text
+    assert result.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
+    assert "every slide of the plan is empty" in text
     assert "and call build_presentation again" in text
     # The text travels in the result so the runtime shows it, not a generic failure.
     assert result.blocks and result.blocks[0].text == text
@@ -384,7 +386,8 @@ async def test_a_checker_bug_is_a_tool_error_not_an_exception(monkeypatch):
 
     monkeypatch.setattr(tools_mod, "_evaluate", _broken)
     text, result = await _build(slides=[COVER])
-    assert result.is_error and "internal problem" in text
+    assert result.failure == ToolFailure(code=ToolFailureCode.unexpected)
+    assert "internal problem" in text
     assert "secret" not in text
 
 
@@ -559,7 +562,8 @@ async def test_a_malformed_first_call_does_not_use_up_the_variety_ask():
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=[{"kind": "bullets"}])
-    assert result.is_error and "every slide of the plan is empty" in text
+    assert result.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
+    assert "every slide of the plan is empty" in text
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error and '"variety": [' in text
 

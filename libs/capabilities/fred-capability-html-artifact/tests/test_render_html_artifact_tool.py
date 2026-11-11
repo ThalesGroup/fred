@@ -33,6 +33,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
+from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -136,7 +137,7 @@ async def test_over_cap_returns_error_and_no_part():
     big = "x" * (MAX_ARTIFACT_BYTES + 1)
     content, artifact = await _tool().coroutine(title="Big", html=big)
 
-    assert artifact.is_error is True
+    assert artifact.failure == ToolFailure(code=ToolFailureCode.invalid_arguments)
     assert artifact.ui_parts == ()
     assert "too large" in content.lower()
 

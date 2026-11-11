@@ -213,6 +213,11 @@
   overflow-wrap: anywhere;
 }
 
+/* A declined call is the person's decision, not an error. */
+.declinedText {
+  color: var(--on-surface-muted);
+}
+
 /* Trailing latency */
 .secondary {
   flex-shrink: 0;

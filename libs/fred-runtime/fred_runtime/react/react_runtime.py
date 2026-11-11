@@ -45,6 +45,8 @@ from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
     UiPart,
 )
@@ -96,6 +98,7 @@ from fred_runtime.runtime_support.run_scope import (
     complete_cleanup,
     terminal_stop_event,
 )
+from fred_runtime.runtime_support.tool_execution import result_failure
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_model_request,
     to_langfuse_usage,
@@ -200,6 +203,10 @@ __all__ = [
     "ReActToolCall",
     "_to_runnable_config",
 ]
+
+
+# A call still open when the run fails ends with the run's failure, not its own.
+_INTERRUPTED_TOOL_FAILURE = ToolFailure(code=ToolFailureCode.unexpected)
 
 
 def _user_facing_tool_error_text(artifact: ToolInvocationResult | None) -> str:
@@ -690,7 +697,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         sequence=sequence,
                         call_id=call_id,
                         content="",
-                        is_error=True,
+                        failure=_INTERRUPTED_TOOL_FAILURE,
                     )
                 )
                 sequence += 1
@@ -919,11 +926,10 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         collected_ui_parts = _merge_ui_parts(
                             collected_ui_parts, ui_parts
                         )
-                        # Either signal alone means failure — mirrors
-                        # ToolObservabilityMiddleware's already-correct rule.
-                        status_is_error = message.status == "error"
-                        artifact_is_error = artifact is not None and artifact.is_error
-                        is_error = status_is_error or artifact_is_error
+                        # Either signal alone means failure, the rule `ToolExecution`
+                        # applies to the same call.
+                        failure = result_failure(message)
+                        is_error = failure is not None
                         tool_result_content = (
                             _user_facing_tool_error_text(artifact)
                             if is_error
@@ -954,7 +960,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             call_id=message.tool_call_id,
                             content=tool_result_content,
                             tool_name=message.name,
-                            is_error=is_error,
+                            failure=failure,
                             sources=sources,
                             ui_parts=ui_parts,
                             latency_ms=tool_latency_ms,

@@ -83,7 +83,7 @@ async def test_cleaned_document_and_original_arguments_are_durable(
         messages = [
             make_user_text("s1", "e1", 0, "Write a report"),
             call,
-            make_tool_result("s1", "e1", 2, "write-1", content, ok=True),
+            make_tool_result("s1", "e1", 2, "write-1", content),
             make_assistant_final("s1", "e1", 3, "The document was saved."),
         ]
         await PostgresHistoryStore(engine).save("s1", messages, "u1")
@@ -91,7 +91,7 @@ async def test_cleaned_document_and_original_arguments_are_durable(
         restored = await PostgresHistoryStore(engine).get("s1", "u1")
         assert len(restored) == 4
         assert restored[2].parts[0].model_dump()["call_id"] == "write-1"
-        assert restored[2].parts[0].model_dump()["ok"] is True
+        assert restored[2].parts[0].model_dump()["failure"] is None
         assert restored[1].parts[0].model_dump()["args"][
             "content_markdown"
         ] == body.replace("\x00", "[U+0000]")

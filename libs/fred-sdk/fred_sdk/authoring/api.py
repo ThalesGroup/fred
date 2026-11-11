@@ -35,6 +35,8 @@ from pydantic import BaseModel, Field
 
 from ..contracts.context import (
     BoundRuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationRequest,
     ToolInvocationResult,
     UiPart,
@@ -89,7 +91,7 @@ class ToolOutput:
     data: dict[str, object] | None = None
     ui_parts: tuple[UiPart, ...] = ()
     sources: tuple[VectorSearchHit, ...] = ()
-    is_error: bool = False
+    failure: ToolFailure | None = None
 
 
 _MISSING: Any = object()
@@ -410,7 +412,9 @@ class ToolContext:
             sources=self._collected_sources(),
         )
 
-    def error(self, message: str) -> ToolOutput:
+    def error(
+        self, message: str, *, code: ToolFailureCode = ToolFailureCode.unexpected
+    ) -> ToolOutput:
         """
         Return a handled error message.
 
@@ -420,6 +424,8 @@ class ToolContext:
 
         How to use it:
         - pass the message you want the assistant to receive
+        - pass ``code`` when the cause is known (for example
+          ``ToolFailureCode.invalid_arguments`` for a refused argument)
 
         Example::
 
@@ -430,7 +436,7 @@ class ToolContext:
         return ToolOutput(
             text=message,
             sources=self._collected_sources(),
-            is_error=True,
+            failure=ToolFailure(code=code),
         )
 
     def _record_sources(self, sources: Sequence[VectorSearchHit]) -> None:

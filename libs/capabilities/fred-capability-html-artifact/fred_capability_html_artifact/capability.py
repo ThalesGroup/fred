@@ -47,7 +47,12 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SidePanelSpec,
 )
-from fred_sdk.contracts.context import ToolInvocationResult, UiPart
+from fred_sdk.contracts.context import (
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+    UiPart,
+)
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
@@ -169,7 +174,10 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
                 )
                 return (
                     message,
-                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                    ToolInvocationResult(
+                        tool_ref=_TOOL_REF,
+                        failure=ToolFailure(code=ToolFailureCode.invalid_arguments),
+                    ),
                 )
 
             aid = artifact_id or uuid.uuid4().hex

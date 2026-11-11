@@ -132,7 +132,7 @@ def test_tool_result_recorded_in_steps() -> None:
                 "kind": "tool_result",
                 "tool_name": "search",
                 "content": "result text",
-                "is_error": False,
+                "failure": None,
             }
         ]
     )
@@ -153,7 +153,7 @@ def test_tool_result_error_sets_error_field() -> None:
                 "kind": "tool_result",
                 "tool_name": "search",
                 "content": "timeout",
-                "is_error": True,
+                "failure": {"code": "service_error", "status": 500},
             }
         ]
     )
@@ -168,7 +168,7 @@ def test_tool_result_error_does_not_override_earlier_error() -> None:
                 "kind": "tool_result",
                 "tool_name": "search",
                 "content": "second",
-                "is_error": True,
+                "failure": {"code": "service_error", "status": 500},
             },
         ]
     )
@@ -207,7 +207,7 @@ def test_error_field_present_on_tool_result_not_treated_as_top_level_error() -> 
                 "kind": "tool_result",
                 "tool_name": "search",
                 "content": "some result",
-                "is_error": False,
+                "failure": None,
                 "error": "should be ignored as top-level",
             }
         ]
@@ -227,7 +227,7 @@ def test_full_turn_order_preserved_in_steps() -> None:
             "kind": "tool_result",
             "tool_name": "search",
             "content": "cats are great",
-            "is_error": False,
+            "failure": None,
         },
         {"kind": "final", "content": "Cats are indeed great."},
     ]

@@ -326,11 +326,11 @@ class ReActToolBinder:
                 rendered_result, artifact = await spec.invoke(normalized_payload)
                 if span is not None:
                     # A tool that catches its own failure returns an
-                    # `is_error=True` artifact instead of raising — the span
+                    # `failure` artifact instead of raising — the span
                     # must reflect that outcome too, not just a raised exception.
-                    if artifact is not None and artifact.is_error:
+                    if artifact is not None and artifact.failure is not None:
                         span.set_attribute("status", "error")
-                        span.set_attribute("error_type", "tool_error_artifact")
+                        span.set_attribute("error_type", artifact.failure.code.value)
                     if self._tracer is not None and self._tracer.captures_content:
                         span.set_io(output=rendered_result)
                 return (rendered_result, artifact)

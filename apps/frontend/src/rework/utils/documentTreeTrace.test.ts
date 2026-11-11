@@ -112,7 +112,6 @@ it("reads actual Graph ToolInvocationResult envelopes without exposing other blo
       { kind: "text", text: "Listing incomplete: omitted documents may be more recent.\n" + tree },
       { kind: "json", data: { private: "do not render" } },
     ],
-    is_error: false,
     sources: [],
     ui_parts: [],
   });

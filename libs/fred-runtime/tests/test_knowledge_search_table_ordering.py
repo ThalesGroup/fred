@@ -422,3 +422,37 @@ def test_a_prose_document_keeps_its_place_while_a_table_document_is_grouped():
         ("tbl", 1),
         ("tbl", 3),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_trace_summary_is_an_unexpected_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
+    from fred_sdk.support.builtins.catalog import (
+        TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    )
+
+    def _broken(**_kwargs: Any) -> object:
+        raise RuntimeError("langfuse down")
+
+    monkeypatch.setattr(
+        adapters_module, "_langfuse_credentials", lambda: ("host", "pk", "sk")
+    )
+    monkeypatch.setattr(adapters_module, "_summarize_langfuse_conversation", _broken)
+    client_cls, _calls = _client_returning([], [])
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", client_cls)
+    binding = _binding()
+    invoker = adapters_module.FredKnowledgeSearchToolInvoker(
+        binding=binding, settings=_FakeSettings()
+    )
+    with active_turn("agent-1", session="s-1"):
+        result = await invoker.invoke(
+            ToolInvocationRequest(
+                tool_ref=TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+                payload={},
+                context=binding.portable_context,
+            )
+        )
+
+    assert result.failure == ToolFailure(code=ToolFailureCode.unexpected)

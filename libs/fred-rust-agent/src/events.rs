@@ -7,6 +7,31 @@ use serde::Serialize;
 
 use crate::search::SearchHit;
 
+/// Wire subset of fred-core/history/history_schema.py::ToolFailure. Rig reports
+/// only that a tool call failed, never why nor with which status, so every
+/// failure of this agent is `unexpected`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+pub struct ToolFailure {
+    code: ToolFailureCode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolFailureCode {
+    Unexpected,
+}
+
+impl ToolFailure {
+    pub const UNEXPECTED: Self = Self {
+        code: ToolFailureCode::Unexpected,
+    };
+
+    /// The failure of one Rig tool result, `None` when it succeeded.
+    pub fn of(is_error: bool) -> Option<Self> {
+        is_error.then_some(Self::UNEXPECTED)
+    }
+}
+
 // Wire subset of fred-sdk/contracts/runtime.py::RuntimeEvent.
 #[derive(Serialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -37,7 +62,7 @@ pub enum RuntimeEvent {
         tool_name: &'static str,
         call_id: String,
         content: String,
-        is_error: bool,
+        failure: Option<ToolFailure>,
         latency_ms: u64,
     },
     Status {

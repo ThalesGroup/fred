@@ -198,22 +198,21 @@ class _ToolErrorPolicy(Middleware):
             response = http_error.response
             status = response.status_code
             if status in (401, 403) or (status == 503 and response.headers.get(DENIAL_CAUSE_HEADER) == ACCOUNT_STATUS_UNAVAILABLE_CAUSE):
-                return ToolResult(
-                    content="Tool access was refused.",
-                    structured_content={"cause": "authority_lost"},
-                    is_error=True,
-                )
+                return ToolResult(content="Tool access was refused.", is_error=True)
+            body: dict[str, str] = {}
             if status == 400 and context.message.name == "query_tabular_documents":
                 try:
                     detail = response.json().get("detail")
                 except (ValueError, AttributeError):
                     detail = None
                 if isinstance(detail, str) and detail:
-                    return ToolResult(
-                        content=("Error calling query_tabular_documents. Status code: 400. Response: " + json.dumps({"detail": detail}, ensure_ascii=False)),
-                        is_error=True,
-                    )
-            return ToolResult(content="Tool request failed.", is_error=True)
+                    body = {"detail": detail}
+            # The agent runtime reads the status from this envelope to classify the
+            # failure. Only the curated SQL detail above travels with it, never a body.
+            return ToolResult(
+                content=f"Error calling {context.message.name}. Status code: {status}. Response: " + json.dumps(body, ensure_ascii=False),
+                is_error=True,
+            )
 
 
 def _mcp_http_client(app: FastAPI) -> httpx2.AsyncClient:

@@ -47,6 +47,7 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
     PreparationResult,
 )
+from fred_sdk.contracts.context import ToolFailureCode
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
     CapabilityTeamAuthorizer,
@@ -506,11 +507,13 @@ class _PptBuilderMiddleware(AgentMiddleware):
 
     async def _deferred_build(self, **kwargs: object) -> Any:
         tools = await self._resolve()
+        # The template is still being analysed, or its analysis failed: in both
+        # cases there is no template to build on yet.
         if tools is None:
-            return _error(self._refusal)
+            return _error(self._refusal, ToolFailureCode.resource_unavailable)
         coroutine = getattr(tools[0], "coroutine", None)
         if coroutine is None:  # pragma: no cover - build_builder_tools contract
-            return _error(_NOT_READY_MESSAGE)
+            return _error(_NOT_READY_MESSAGE, ToolFailureCode.resource_unavailable)
         return await coroutine(**{k: _plain(v) for k, v in kwargs.items()})
 
     async def awrap_model_call(

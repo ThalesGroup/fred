@@ -156,6 +156,39 @@
   overflow-wrap: anywhere;
 }
 
+/* A call the person declined: a decision, so the box drops the error colours. */
+.declinedBox {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
+}
+
+.failureMeta {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+/* The exchange reference support needs: label, id, copy. The id wraps rather
+   than overflowing the drawer. */
+.failureReference {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.failureReferenceValue {
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  font-family: var(--font-family-mono);
+  overflow-wrap: anywhere;
+}
+
 /* Turn-crash error message: same error-container look, but the raw message can
    be long/unwrapped (e.g. a provider JSON error), so preserve newlines and
    break long tokens instead of overflowing the drawer. */

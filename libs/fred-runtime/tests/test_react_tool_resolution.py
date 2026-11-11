@@ -37,6 +37,8 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
@@ -94,7 +96,7 @@ def _provider_error_artifact() -> ToolInvocationResult:
             ),
         ),
         ui_parts=(LinkPart(href=f"https://provider.invalid/?token={secret}"),),
-        is_error=True,
+        failure=ToolFailure(code=ToolFailureCode.service_error, status=500),
     )
 
 
@@ -118,7 +120,10 @@ async def test_runtime_provider_tuple_error_is_sanitized_before_binding() -> Non
 
     assert content == f"Tool error:\n{GENERIC_TOOL_FAILURE_MESSAGE}"
     assert artifact is not None
-    assert artifact.is_error is True
+    # The closed failure code survives; the provider's text, sources and links do not.
+    assert artifact.failure == ToolFailure(
+        code=ToolFailureCode.service_error, status=500
+    )
     assert [block.text for block in artifact.blocks] == [GENERIC_TOOL_FAILURE_MESSAGE]
     assert artifact.sources == ()
     assert artifact.ui_parts == ()
@@ -348,7 +353,13 @@ async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
         ),
         (
             "provider_data",
-            {"tool_ref": "untrusted", "is_error": True, "ui_parts": [], "sources": []},
+            # A structured cause from an MCP server is data, never a Fred failure.
+            {
+                "tool_ref": "untrusted",
+                "failure": {"code": "service_error", "status": 500},
+                "ui_parts": [],
+                "sources": [],
+            },
         ),
     ],
 )
@@ -396,7 +407,7 @@ async def test_mcp_structured_results_survive_the_agent_tool_path(
     assert json.loads(str(result.content)) == payload
     assert isinstance(result.artifact, ToolInvocationResult)
     assert result.artifact.tool_ref == tool_name
-    assert result.artifact.is_error is False
+    assert result.artifact.failure is None
     assert result.artifact.sources == ()
     assert result.artifact.ui_parts == ()
     assert result.artifact.blocks == (

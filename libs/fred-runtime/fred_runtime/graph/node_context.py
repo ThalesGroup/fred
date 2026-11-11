@@ -40,6 +40,8 @@ from fred_sdk.contracts.context import (
     InvocationScope,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -449,9 +451,10 @@ class NodeContext:
         return is_tool_approval_granted(interrupt(request.model_dump(mode="json")))
 
     def _refused_tool(self, name: str, call_id: str) -> ToolInvocationResult:
+        # Returned before `ToolExecution`: a refusal is no incident to log.
         result = ToolInvocationResult(
             tool_ref=name,
-            is_error=True,
+            failure=ToolFailure(code=ToolFailureCode.not_approved),
             blocks=(
                 ToolContentBlock(
                     kind=ToolContentKind.TEXT, text="Tool execution was not approved."
@@ -464,7 +467,7 @@ class NodeContext:
                 call_id=call_id,
                 tool_name=name,
                 content=_render_tool_result(result),
-                is_error=True,
+                failure=result.failure,
             )
         )
         return result
@@ -522,7 +525,7 @@ class NodeContext:
                 call_id=call_id,
                 tool_name=tool_ref,
                 content=_render_tool_result(result),
-                is_error=result.is_error,
+                failure=result.failure,
                 sources=result.sources,
                 ui_parts=result.ui_parts,
                 latency_ms=obs.elapsed_ms,
@@ -578,9 +581,11 @@ class NodeContext:
                     span=obs.span,
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
+                failure: ToolFailure | None = None
                 if isinstance(raw_result, ToolMessage):
                     if raw_result.status == "error":
-                        obs.fail()
+                        # A failed ToolMessage carries no downstream status.
+                        failure = ToolFailure(code=ToolFailureCode.unexpected)
                     artifact = raw_result.artifact
                     if isinstance(artifact, ToolInvocationResult):
                         if (
@@ -604,13 +609,15 @@ class NodeContext:
                             artifact if artifact is not None else raw_result.content
                         )
                 normalized = _normalize_runtime_tool_output(raw_result)
-                # A capability tool reports failure with an is_error result rather
+                # A capability tool reports failure with a `failure` result rather
                 # than raising; read it off the typed result before normalization
                 # erases it, never off a dict key a plain tool might also carry.
                 typed_result = (
                     raw_result if isinstance(raw_result, ToolInvocationResult) else None
                 )
-                if typed_result is not None and typed_result.is_error:
+                if typed_result is not None and typed_result.failure is not None:
+                    failure = typed_result.failure
+                if failure is not None:
                     obs.fail()
                 self.sink(
                     ToolResultRuntimeEvent(
@@ -618,7 +625,7 @@ class NodeContext:
                         call_id=call_id,
                         tool_name=tool_name,
                         content=_stringify_content(normalized),
-                        is_error=obs.failed,
+                        failure=failure,
                         sources=typed_result.sources if typed_result else (),
                         ui_parts=typed_result.ui_parts if typed_result else (),
                         latency_ms=obs.elapsed_ms,
@@ -634,7 +641,7 @@ class NodeContext:
                         call_id=call_id,
                         tool_name=tool_name,
                         content=str(exc),
-                        is_error=True,
+                        failure=ToolFailure(code=ToolFailureCode.unexpected),
                         latency_ms=obs.elapsed_ms,
                     )
                 )

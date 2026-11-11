@@ -2540,14 +2540,20 @@
       "failure": {
         "arguments": "Call arguments:",
         "error": "Error:",
-        "invalidArguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
-        "authentication": "Authentication was refused (HTTP 401). Restore authentication before retrying.",
-        "unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
-        "rateLimited": "The service request limit was reached (HTTP 429). Wait for the limit to reset before retrying.",
-        "busy": "The service is temporarily unavailable or at capacity (HTTP 503). Try again later.",
-        "timeout": "The operation exceeded its time budget (HTTP 504). Narrow the request before retrying.",
-        "service": "The service could not complete this operation (HTTP 500). Try again later; contact support if the problem persists.",
-        "unknown": "The call failed. No further usable diagnostic was recorded. Review the call details and contact support with the conversation and any diagnostic reference shown."
+        "invalid_arguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
+        "not_approved": "Call declined by the user.",
+        "authentication_required": "Authentication was refused. Restore authentication before retrying.",
+        "resource_unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
+        "scope_refused": "This call targeted documents outside the selection of this conversation, so nothing was read.",
+        "rate_limited": "The service request limit was reached. Wait for the limit to reset before retrying.",
+        "service_busy": "The service is temporarily unavailable or at capacity. Try again later.",
+        "timeout": "The operation exceeded its time budget. Narrow the request before retrying.",
+        "service_error": "The service could not complete this operation. Try again later; contact support if the problem persists.",
+        "unexpected": "This step failed unexpectedly. Try again; contact support if the problem persists.",
+        "httpStatus": "HTTP status {{status}}",
+        "reference": "Reference:",
+        "copyReference": "Copy the reference",
+        "referenceCopied": "Reference copied"
       }
     },
     "collapse": "Collapse",

@@ -71,7 +71,7 @@ it("keeps a provisional user message at the bottom while tool trace advances", (
         role: "tool",
         channel: "tool_result",
         rank: 2,
-        parts: [{ type: "tool_result", call_id: "c1", ok: true, content: "done" }],
+        parts: [{ type: "tool_result", call_id: "c1", content: "done" }],
       }),
     ],
     true,
@@ -130,7 +130,7 @@ it("shows a steered user message in the current exchange", () => {
         role: "tool",
         channel: "tool_result",
         rank: 3,
-        parts: [{ type: "tool_result", call_id: "call-1", ok: true, content: "Found notes" }],
+        parts: [{ type: "tool_result", call_id: "call-1", content: "Found notes" }],
       }),
       msg({
         role: "user",
@@ -832,8 +832,8 @@ describe("persisted tool refusals", () => {
       false,
     ).find((row) => row.role === "assistant")!;
     expect(assistant.traceMessages.flatMap((m) => m.parts)).toEqual([
-      { type: "tool_result", call_id: "c1", ok: false, content: "" },
-      { type: "tool_result", call_id: "c2", ok: false, content: "" },
+      { type: "tool_result", call_id: "c1", failure: { code: "not_approved" }, content: "" },
+      { type: "tool_result", call_id: "c2", failure: { code: "not_approved" }, content: "" },
     ]);
   });
 
@@ -842,7 +842,14 @@ describe("persisted tool refusals", () => {
       role: "tool",
       channel: "tool_result",
       rank: 3,
-      parts: [{ type: "tool_result", call_id: "call-1", ok: !optimistic, content: "result" }],
+      parts: [
+        {
+          type: "tool_result",
+          call_id: "call-1",
+          ...(optimistic ? { failure: { code: "not_approved" as const } } : {}),
+          content: "result",
+        },
+      ],
       metadata: optimistic ? { extras: { cancelled_by_user: true } } : {},
     });
     const assistant = toThreadMessages(
@@ -927,7 +934,7 @@ describe("HITL runtime availability", () => {
         role: "tool",
         channel: "tool_result",
         rank: 3,
-        parts: [{ type: "tool_result", call_id: "call", ok: true, content: "answered" }],
+        parts: [{ type: "tool_result", call_id: "call", content: "answered" }],
       }),
     ];
     const entries = groupTraceEntries(

@@ -13,7 +13,7 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SaveContext,
 )
-from fred_sdk.contracts.context import LinkKind
+from fred_sdk.contracts.context import LinkKind, ToolFailure, ToolFailureCode
 from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.contracts.web_research import (
     WebPage,
@@ -104,7 +104,7 @@ async def test_tool_result_has_sources_and_shared_error_signal():
             "args": {"query": "evidence"},
         }
     )
-    assert result.artifact.is_error
+    assert result.artifact.failure == ToolFailure(code=ToolFailureCode.timeout)
     assert json.loads(result.content) == {
         "error_code": "timed_out",
         "message": "The request timed out; retry at most once.",

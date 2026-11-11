@@ -79,7 +79,7 @@ function render(
     rank: 0,
     role: "tool",
     channel: "tool_result",
-    parts: [{ type: "tool_result", call_id: "publish", ok: true, content: "Published" }, ...parts],
+    parts: [{ type: "tool_result", call_id: "publish", content: "Published" }, ...parts],
   };
   const messages = carrier === "tool_result" ? [toolResult, message] : [message];
   const [turn] = toThreadMessages(JSON.parse(JSON.stringify(messages)), streaming);

@@ -40,6 +40,8 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
@@ -52,6 +54,9 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.tools import tool as lc_tool
 from weaver_fixtures import in_turn, local_binding
+
+# A tool failure with no downstream status, the shape most of these tests need.
+_FAILED = ToolFailure(code=ToolFailureCode.unexpected)
 
 
 @lc_tool("corpus_search", response_format="content_and_artifact")
@@ -143,7 +148,7 @@ def test_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     # full `sources` payload, uid included.
     assert isinstance(result, dict)
     assert result["sources"][0]["uid"] == "d1"
-    assert result["is_error"] is False
+    assert result["failure"] is None
 
 
 @pytest.mark.asyncio
@@ -176,12 +181,12 @@ async def test_mcp_structured_content_survives_graph_runtime_and_events() -> Non
 
     assert isinstance(result, dict)
     assert result["blocks"][0]["data"] == payload
-    assert result["is_error"] is False
+    assert result["failure"] is None
     tool_result = next(
         event for event in events if isinstance(event, ToolResultRuntimeEvent)
     )
     assert json.loads(tool_result.content) == result
-    assert tool_result.is_error is False
+    assert tool_result.failure is None
     assert tool_result.sources == ()
     assert tool_result.ui_parts == ()
 
@@ -339,7 +344,7 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
     async def _failing_probe(x: str) -> tuple[str, ToolInvocationResult]:
         """A tool that reports failure via is_error, never raises."""
         del x
-        return "boom", ToolInvocationResult(tool_ref="failing_probe", is_error=True)
+        return "boom", ToolInvocationResult(tool_ref="failing_probe", failure=_FAILED)
 
     native_tool = _failing_probe
     events: list[RuntimeEvent] = []
@@ -350,10 +355,10 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
     )
 
     assert isinstance(result, dict)
-    assert result["is_error"] is True
+    assert result["failure"] is not None
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.tool_name == "failing_probe"
-    assert event.is_error is True
+    assert event.failure is not None
 
 
 @pytest.mark.parametrize("failure", ["execution", "validation"])
@@ -381,9 +386,8 @@ def test_native_handled_error_status_requires_artifact_format(
         )
     )
     assert isinstance(result, str)
-    assert next(
-        e for e in events if isinstance(e, ToolResultRuntimeEvent)
-    ).is_error == (response_format == "content_and_artifact")
+    event = next(e for e in events if isinstance(e, ToolResultRuntimeEvent))
+    assert (event.failure is not None) == (response_format == "content_and_artifact")
 
 
 def test_native_tool_validates_and_supplies_defaults_before_execution() -> None:
@@ -469,7 +473,7 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "raising_probe"
     ]
     assert error_event.latency_ms is not None
-    assert error_event.is_error is True
+    assert error_event.failure is not None
 
 
 def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> None:
@@ -512,7 +516,7 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
     async def _mcp_like_probe(x: str) -> dict:
         """A plain (non-capability) tool returning an ordinary dict payload."""
         del x
-        return {"is_error": "not-a-bool-business-value", "answer": 42}
+        return {"failure": "not-a-tool-failure-business-value", "answer": 42}
 
     events: list[RuntimeEvent] = []
     ctx = _node_context({"mcp_like_probe": _mcp_like_probe}, events=events)
@@ -521,9 +525,9 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
         in_turn(_binding(), ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
     )
 
-    assert result == {"is_error": "not-a-bool-business-value", "answer": 42}
+    assert result == {"failure": "not-a-tool-failure-business-value", "answer": 42}
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
-    assert event.is_error is False
+    assert event.failure is None
 
 
 # ---------------------------------------------------------------------------

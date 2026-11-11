@@ -26,6 +26,8 @@ from fred_sdk.contracts.context import (
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -36,6 +38,7 @@ from fred_sdk.contracts.runtime import (
     FinalRuntimeEvent,
     RuntimeServices,
     ToolCallRuntimeEvent,
+    ToolResultRuntimeEvent,
 )
 from fred_sdk.graph.runtime import GraphNodeContext
 from langchain_core.tools import tool
@@ -72,7 +75,7 @@ def binding() -> BoundRuntimeContext:
 @pytest.mark.parametrize("decision", ["proceed", "cancel", "invalid"])
 @pytest.mark.parametrize("gate_mode", ["required", "conditional", "disabled", "broken"])
 async def test_capability_gate_survives_rebuild_without_replaying_prior_tools(
-    tmp_path, monkeypatch, decision, gate_mode, tool_path
+    tmp_path, monkeypatch, caplog, decision, gate_mode, tool_path
 ):
     replay_arguments = {"label": "first"}
     replay_tool_name = ["write_probe"]
@@ -213,6 +216,13 @@ async def test_capability_gate_survives_rebuild_without_replaying_prior_tools(
         second = events[-1]
         assert isinstance(second, AwaitingHumanRuntimeEvent), events
         assert calls == (["first"] if decision == "proceed" else [])
+        if decision != "proceed":
+            # The person declined the call: a decision, not an incident to log.
+            (refused,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
+            assert refused.failure == ToolFailure(code=ToolFailureCode.not_approved)
+            assert not [
+                r for r in caplog.records if r.getMessage() == "Tool invocation failed"
+            ]
         assert len(audits) == (2 if decision == "proceed" else 0)
         # A later task has a different interrupt id, even in the same authored node.
         assert second.request.interrupt_id != first.request.interrupt_id

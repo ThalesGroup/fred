@@ -50,7 +50,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -153,6 +153,80 @@ def coerce_finish_reason(raw: object) -> Optional[FinishReason]:
     return _FINISH_REASON_ALIASES.get(str(raw).strip().lower(), FinishReason.other)
 
 
+class ToolFailureCode(StrEnum):
+    """
+    Closed vocabulary of tool failures, shared by every tool producer.
+
+    Why this exists:
+    - the tool result, the live runtime event and the persisted history must
+      classify a failure the same way; the model-facing text guides the model
+      and is never parsed to classify the failure
+    """
+
+    invalid_arguments = "invalid_arguments"
+    # The person declined the proposed call: a decision, not an incident.
+    not_approved = "not_approved"
+    authentication_required = "authentication_required"
+    resource_unavailable = "resource_unavailable"
+    scope_refused = "scope_refused"
+    rate_limited = "rate_limited"
+    service_busy = "service_busy"
+    timeout = "timeout"
+    service_error = "service_error"
+    unexpected = "unexpected"
+
+
+_HTTP_FAILURE_CODES: Dict[int, ToolFailureCode] = {
+    401: ToolFailureCode.authentication_required,
+    403: ToolFailureCode.resource_unavailable,
+    404: ToolFailureCode.resource_unavailable,
+    408: ToolFailureCode.timeout,
+    429: ToolFailureCode.rate_limited,
+    503: ToolFailureCode.service_busy,
+    504: ToolFailureCode.timeout,
+}
+
+
+class ToolFailure(BaseModel):
+    """
+    Why one tool call failed: a code, plus the downstream HTTP status when one exists.
+
+    How to use it:
+    - ``ToolFailure.from_http_status(exc.status_code)`` for a downstream HTTP failure
+    - ``ToolFailure(code=ToolFailureCode.invalid_arguments)`` when the tool itself
+      refuses the call
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    code: ToolFailureCode
+    status: Optional[int] = None
+
+    @classmethod
+    def from_http_status(
+        cls, status: Optional[int], *, timed_out: bool = False
+    ) -> "ToolFailure":
+        """The one translation of a downstream HTTP status into a failure code.
+
+        Any other 4xx is a refused request (``invalid_arguments``), any other 5xx
+        a ``service_error``; no status at all is ``unexpected`` unless the call
+        timed out.
+        """
+        if timed_out:
+            code = ToolFailureCode.timeout
+        elif status is None:
+            code = ToolFailureCode.unexpected
+        elif status in _HTTP_FAILURE_CODES:
+            code = _HTTP_FAILURE_CODES[status]
+        elif 400 <= status < 500:
+            code = ToolFailureCode.invalid_arguments
+        elif 500 <= status < 600:
+            code = ToolFailureCode.service_error
+        else:
+            code = ToolFailureCode.unexpected
+        return cls(code=code, status=status)
+
+
 # ---------------------------------------------------------------------------
 # Message parts
 # ---------------------------------------------------------------------------
@@ -230,11 +304,12 @@ class ToolResultPart(BaseModel):
 
     How to use it:
     - ``content`` accepts str, dict, or list; non-str values are JSON-serialized
+    - ``failure`` is ``None`` for a successful call
     """
 
     type: Literal["tool_result"] = "tool_result"
     call_id: str
-    ok: Optional[bool] = None
+    failure: Optional[ToolFailure] = None
     latency_ms: Optional[int] = None
     content: str
 
@@ -597,7 +672,7 @@ def make_tool_result(
     call_id: str,
     content: str,
     *,
-    ok: Optional[bool] = None,
+    failure: Optional[ToolFailure] = None,
     latency_ms: Optional[int] = None,
 ) -> ChatMessage:
     """
@@ -615,7 +690,10 @@ def make_tool_result(
         channel=Channel.tool_result,
         parts=[
             ToolResultPart(
-                call_id=call_id, ok=ok, latency_ms=latency_ms, content=content
+                call_id=call_id,
+                failure=failure,
+                latency_ms=latency_ms,
+                content=content,
             )
         ],
     )

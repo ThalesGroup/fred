@@ -42,6 +42,8 @@ from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional
 from urllib.parse import urlsplit
 
+from fred_core.history.history_schema import ToolFailure as ToolFailure
+from fred_core.history.history_schema import ToolFailureCode as ToolFailureCode
 from fred_core.model.models import ModelProvider
 from fred_core.store import VectorSearchHit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
@@ -787,7 +789,11 @@ class ToolInvocationResult(FrozenModel):
     blocks: tuple[ToolContentBlock, ...] = ()
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
-    is_error: bool = False
+    failure: ToolFailure | None = None
+
+    @property
+    def is_error(self) -> bool:
+        return self.failure is not None
 
 
 class InvocationScope(FrozenModel):
@@ -896,8 +902,12 @@ class AgentInvocationResult(FrozenModel):
     ui_parts: tuple[UiPart, ...] = ()
     """Structured UI elements produced by the agent (maps, download links, etc.)."""
 
-    is_error: bool = False
-    """True when the agent failed; ``content`` may contain an error description."""
+    failure: ToolFailure | None = None
+    """Why the agent failed; ``None`` on success. ``content`` may describe it."""
+
+    @property
+    def is_error(self) -> bool:
+        return self.failure is not None
 
 
 class PublishedArtifact(FrozenModel):

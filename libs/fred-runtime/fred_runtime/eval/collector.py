@@ -103,10 +103,10 @@ def collect_eval_trace(
                     "kind": "tool_result",
                     "name": event.get("tool_name", ""),
                     "output": event.get("content"),
-                    "is_error": bool(event.get("is_error", False)),
+                    "is_error": event.get("failure") is not None,
                 }
             )
-            if event.get("is_error") and error is None:
+            if event.get("failure") and error is None:
                 error = str(event.get("content") or "tool_result error")
 
         elif kind == "node_error":

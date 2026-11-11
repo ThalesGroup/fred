@@ -30,6 +30,8 @@ from fred_core.history.history_schema import (
     CommandDescriptor,
     CommandPromptDescriptor,
     HitlRequestPart,
+    ToolFailure,
+    ToolFailureCode,
     make_assistant_final,
     make_hitl_request,
     make_tool_call,
@@ -73,7 +75,12 @@ async def test_invalid_write_history_survives_without_mutating_live_arguments(
     call.metadata = ChatMetadata.model_validate({"note": "invalid\x00metadata"})
     before = call.model_dump(mode="json")
     failure = make_tool_result(
-        "s1", "e1", 1, "write-1", "INVALID_DOCUMENT_CONTENT", ok=False
+        "s1",
+        "e1",
+        1,
+        "write-1",
+        "INVALID_DOCUMENT_CONTENT",
+        failure=ToolFailure(code=ToolFailureCode.invalid_arguments),
     )
     final = make_assistant_final("s1", "e1", 2, "The document was not saved.")
 
@@ -92,7 +99,8 @@ async def test_invalid_write_history_survives_without_mutating_live_arguments(
     metadata = messages[0].metadata.model_dump()
     assert metadata["note"] == "invalid[U+0000]metadata"
     result = messages[1].parts[0].model_dump()
-    assert result["call_id"] == "write-1" and result["ok"] is False
+    assert result["call_id"] == "write-1"
+    assert result["failure"] == {"code": "invalid_arguments", "status": None}
     assert [m.rank for m in messages] == [0, 1, 2]
     assert call.model_dump(mode="json") == before
 

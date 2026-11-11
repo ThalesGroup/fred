@@ -58,6 +58,8 @@ from fred_sdk.contracts.capability.hitl import HitlSpec
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec
@@ -117,9 +119,9 @@ def _wiki_tool_failure(
     *, action: str, exc: Exception, elapsed_s: float
 ) -> tuple[str, ToolInvocationResult]:
     """Turn a wiki tool-call failure into an actionable message plus an
-    ``is_error=True`` artifact.
+    ``failure`` artifact.
 
-    The runtime surfaces `ToolInvocationResult.is_error` directly, so a failing
+    The runtime surfaces `ToolInvocationResult.failure` directly, so a failing
     tool returns such a result instead of raising. Failure shape arrives via
     the SDK-typed `TeamWikiPortError` attributes read with `getattr` — this
     module never imports the adapter's HTTP stack. A run stop anywhere in the
@@ -154,7 +156,7 @@ def _wiki_tool_failure(
 
     logger.warning(
         "Team wiki tool failure (%s, %.1fs) — status=%s timed_out=%s; "
-        "degraded to an is_error artifact.",
+        "degraded to a failure artifact.",
         action,
         elapsed_s,
         status_code,
@@ -170,7 +172,7 @@ def _wiki_tool_failure(
     # agent's plain-dict invocation keeps only the artifact half.
     return message, ToolInvocationResult(
         tool_ref=TEAM_WIKI_TOOL_REF,
-        is_error=True,
+        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 
@@ -582,10 +584,14 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     tree = list(await _require_port().list_pages())
                 return tree
 
-        def _resolution_failure(message: str) -> tuple[str, ToolInvocationResult]:
+        def _resolution_failure(
+            message: str, code: ToolFailureCode = ToolFailureCode.invalid_arguments
+        ) -> tuple[str, ToolInvocationResult]:
+            # Every refusal here asks the model to correct its call, except a
+            # path that names no page.
             return message, ToolInvocationResult(
                 tool_ref=TEAM_WIKI_TOOL_REF,
-                is_error=True,
+                failure=ToolFailure(code=code),
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
             )
 
@@ -620,7 +626,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 return _resolution_failure(
                     f"There is no wiki page at '{path}'. Address a page by its "
                     "path in the index in your instructions, parent first, "
-                    "like 'Parent page / Child page'."
+                    "like 'Parent page / Child page'.",
+                    ToolFailureCode.resource_unavailable,
                 )
             return page
 

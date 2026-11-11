@@ -22,7 +22,11 @@ import io
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 
-from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.context import (
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.runtime import (
     ConversationFilesystemPort,
     ConversationScratchpadError,
@@ -59,12 +63,21 @@ class ConcatFilesMiddleware(AgentMiddleware):
             bounded summary, not the merged content.
             """
             if not paths:
-                return _error("concat_files needs at least one input path.")
+                return _error(
+                    "concat_files needs at least one input path.",
+                    ToolFailureCode.invalid_arguments,
+                )
             if output_path in paths:
-                return _error("Output path must differ from every input path.")
+                return _error(
+                    "Output path must differ from every input path.",
+                    ToolFailureCode.invalid_arguments,
+                )
             try:
                 if not replace and await filesystem.exists(output_path, origin="agent"):
-                    return _error(f"Output already exists: {output_path}.")
+                    return _error(
+                        f"Output already exists: {output_path}.",
+                        ToolFailureCode.invalid_arguments,
+                    )
                 contents = []
                 for path in paths:
                     try:
@@ -72,13 +85,18 @@ class ConcatFilesMiddleware(AgentMiddleware):
                             await filesystem.read_text(path, origin="agent")
                         )
                     except ConversationScratchpadError as exc:
-                        return _error(f"Cannot read {path}: {exc}")
+                        return _error(f"Cannot read {path}: {exc}", exc.failure_code)
                 merged = await asyncio.to_thread(
                     _assemble, paths, contents, heading_per_file
                 )
                 await filesystem.write_text(output_path, merged, origin="agent")
-            except (ConversationScratchpadError, ValueError) as exc:
-                return _error(f"Cannot concatenate files: {exc}")
+            except ConversationScratchpadError as exc:
+                return _error(f"Cannot concatenate files: {exc}", exc.failure_code)
+            except ValueError as exc:
+                return _error(
+                    f"Cannot concatenate files: {exc}",
+                    ToolFailureCode.invalid_arguments,
+                )
             return (
                 f"Concatenated {len(paths)} file(s) into {output_path}.",
                 ToolInvocationResult(tool_ref=_TOOL_REF),
@@ -87,8 +105,10 @@ class ConcatFilesMiddleware(AgentMiddleware):
         self.tools: Sequence[BaseTool] = [concat_files]
 
 
-def _error(message: str) -> tuple[str, ToolInvocationResult]:
-    return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+def _error(message: str, code: ToolFailureCode) -> tuple[str, ToolInvocationResult]:
+    return message, ToolInvocationResult(
+        tool_ref=_TOOL_REF, failure=ToolFailure(code=code)
+    )
 
 
 def _heading(path: str) -> str:

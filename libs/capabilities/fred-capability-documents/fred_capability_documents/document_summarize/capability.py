@@ -67,6 +67,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
@@ -125,9 +126,9 @@ def _document_tool_failure(
     document_uid: str | None = None,
 ) -> tuple[str, ToolInvocationResult]:
     """Turn any document tool-call failure into a non-empty, actionable error
-    message plus an ``is_error=True`` artifact.
+    message plus a ``failure`` artifact.
 
-    The v2 ReAct runtime surfaces ``ToolInvocationResult.is_error`` directly to
+    The v2 ReAct runtime surfaces ``ToolInvocationResult.failure`` directly to
     the user (and suppresses LLM hallucination), so a failing tool MUST return
     such a result instead of raising — a raised exception is re-raised by the
     default ``ToolNode`` handler, which leaves the tool call pending in the
@@ -155,7 +156,7 @@ def _document_tool_failure(
     message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        is_error=True,
+        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 

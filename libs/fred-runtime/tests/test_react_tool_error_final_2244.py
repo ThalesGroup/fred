@@ -41,6 +41,8 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
+    ToolFailureCode,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
@@ -53,6 +55,9 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from weaver_fixtures import active_turn
+
+# A tool failure with no downstream status, the shape most of these tests need.
+_FAILED = ToolFailure(code=ToolFailureCode.unexpected)
 
 
 class _FakePortable:
@@ -164,7 +169,7 @@ def _error_result(call_id: str, text: str) -> ToolMessage:
         name="summarize_document",
         artifact=ToolInvocationResult(
             tool_ref="summarize_document",
-            is_error=True,
+            failure=_FAILED,
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
         ),
     )
@@ -205,7 +210,6 @@ def _contradictory_result(call_id: str, text: str) -> ToolMessage:
         status="error",
         artifact=ToolInvocationResult(
             tool_ref="summarize_document",
-            is_error=False,
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
         ),
     )
@@ -224,7 +228,7 @@ def _content_divergent_error_result(
         status="error",
         artifact=ToolInvocationResult(
             tool_ref="summarize_document",
-            is_error=True,
+            failure=_FAILED,
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=safe_text),),
         ),
     )
@@ -239,7 +243,7 @@ def _blocks_empty_error_result(call_id: str, real_message: str) -> ToolMessage:
         tool_call_id=call_id,
         name="ppt_filler",
         status="error",
-        artifact=ToolInvocationResult(tool_ref="ppt_filler", is_error=True),
+        artifact=ToolInvocationResult(tool_ref="ppt_filler", failure=_FAILED),
     )
 
 
@@ -251,7 +255,7 @@ def _query_tabular_documents_error_result(call_id: str) -> ToolMessage:
         name="query_tabular_documents",
         artifact=ToolInvocationResult(
             tool_ref="query_tabular_documents",
-            is_error=True,
+            failure=_FAILED,
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=detail),),
         ),
     )
@@ -262,7 +266,7 @@ def test_typed_error_artifact_is_rendered_via_render_tool_result() -> None:
     Fred's own presentation prefix removed — never from `message.content`."""
     artifact = ToolInvocationResult(
         tool_ref="summarize_document",
-        is_error=True,
+        failure=_FAILED,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="boom"),),
     )
     assert _user_facing_tool_error_text(artifact) == "boom"
@@ -275,7 +279,6 @@ def test_untyped_failure_without_artifact_is_the_generic_message() -> None:
 def test_untyped_failure_with_non_erroring_artifact_is_the_generic_message() -> None:
     artifact = ToolInvocationResult(
         tool_ref="summarize_document",
-        is_error=False,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="boom"),),
     )
     assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
@@ -283,7 +286,7 @@ def test_untyped_failure_with_non_erroring_artifact_is_the_generic_message() -> 
 
 def test_typed_error_artifact_with_no_blocks_falls_back_to_generic_message() -> None:
     """An empty typed failure must render a useful generic explanation."""
-    artifact = ToolInvocationResult(tool_ref="ppt_filler", is_error=True)
+    artifact = ToolInvocationResult(tool_ref="ppt_filler", failure=_FAILED)
     assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
@@ -293,7 +296,7 @@ def test_error_renderer_fills_empty_text_blocks(text: str) -> None:
 
     artifact = ToolInvocationResult(
         tool_ref="query_tabular_documents",
-        is_error=True,
+        failure=_FAILED,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
     )
     assert (
@@ -330,7 +333,7 @@ async def test_query_tabular_documents_error_event_keeps_engine_detail_and_drops
     [tool_result] = [
         event for event in collected if isinstance(event, ToolResultRuntimeEvent)
     ]
-    assert tool_result.is_error is True
+    assert tool_result.failure is not None
     assert tool_result.content == (
         "Binder Error: Referenced column amount_typo not found"
     )
@@ -377,7 +380,7 @@ async def test_partial_round_failure_keeps_llm_synthesis_as_final() -> None:
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
 
 
 @pytest.mark.asyncio
@@ -424,7 +427,7 @@ async def test_wholly_failed_round_keeps_the_model_answer() -> None:
 
     assert _final(collected).content == "I could not do it, sorry!"
     errored = [e for e in collected if isinstance(e, ToolResultRuntimeEvent)]
-    assert errored[0].is_error is True
+    assert errored[0].failure is not None
     assert errored[0].content == "403 Forbidden"
 
 
@@ -487,7 +490,7 @@ async def test_tool_call_cap_refusal_keeps_the_model_answer() -> None:
 
     assert _final(collected).content == "Here is the deck outline."
     [row] = [e for e in collected if isinstance(e, ToolResultRuntimeEvent)]
-    assert row.is_error is True
+    assert row.failure is not None
     assert row.content == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
@@ -590,7 +593,7 @@ async def test_failed_tool_then_human_pause_has_no_stale_final() -> None:
     assert any(
         isinstance(event, ToolResultRuntimeEvent)
         and event.call_id == "failed"
-        and event.is_error
+        and event.failure is not None
         for event in collected
     )
     assert any(
@@ -790,7 +793,7 @@ async def test_raw_status_error_with_no_artifact_still_surfaces_as_final() -> No
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
@@ -822,7 +825,7 @@ async def test_status_error_with_non_erroring_artifact_still_classified_as_error
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
@@ -856,7 +859,7 @@ async def test_partial_round_raw_status_error_keeps_synthesis() -> None:
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
 
 
@@ -886,7 +889,7 @@ async def test_untyped_status_error_never_leaks_secret_or_langgraph_instruction(
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     for leaked in (
         "sk-live-SECRET-TOKEN",
         "/etc/shadow",
@@ -931,7 +934,7 @@ async def test_typed_error_ignores_divergent_message_content() -> None:
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     assert final.content == "safe Fred error text"
     assert errored[0].content == "safe Fred error text"
     assert sensitive not in final.content
@@ -962,7 +965,7 @@ async def test_typed_error_with_empty_blocks_shows_generic_message_not_empty() -
         for e in collected
         if isinstance(e, ToolResultRuntimeEvent) and e.call_id == "c1"
     ]
-    assert errored and errored[0].is_error is True
+    assert errored and errored[0].failure is not None
     assert final.content == _GENERIC_TOOL_FAILURE_MESSAGE
     assert errored[0].content == _GENERIC_TOOL_FAILURE_MESSAGE
     assert final.content != ""

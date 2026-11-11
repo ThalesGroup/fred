@@ -1390,7 +1390,7 @@ describe("ManagedChatPage skill reference preview", () => {
         rank: 2,
         role: "tool",
         channel: "tool_result",
-        parts: [{ type: "tool_result", call_id: "ref", ok: true, content: "## Stored reference\n**Historical** text" }],
+        parts: [{ type: "tool_result", call_id: "ref", content: "## Stored reference\n**Historical** text" }],
       };
       chatValue = baseChatValue([call, result]);
       chatValue.threadMessages = [

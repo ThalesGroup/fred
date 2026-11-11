@@ -17,32 +17,11 @@ import {
   toolArgs,
   toolName,
   toolResultContent,
-  toolResultOk,
+  toolResultFailure,
   toolSlug,
   type TraceEntry,
 } from "./traceUtils";
 import { tabularToolKind } from "./tabularTrace";
-
-// These exact Fred-owned messages are the versioned text boundary used by history.
-const ERROR_MESSAGES: Record<string, string> = {
-  "INVALID_ARGUMENTS: The tool rejected its arguments. Check the tool schema before correcting the request.":
-    "invalidArguments",
-  "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.":
-    "authentication",
-  "RESOURCE_UNAVAILABLE: The requested resource is unavailable in this access scope (HTTP 403). Use only authorized discovered references.":
-    "unavailable",
-  "RESOURCE_UNAVAILABLE: The requested resource could not be resolved (HTTP 404). Check the discovered references and resource readiness.":
-    "unavailable",
-  "INVALID_ARGUMENTS: The tool rejected the argument format (HTTP 422). Check the tool schema before correcting the request.":
-    "invalidArguments",
-  "RATE_LIMITED: The service is rate limited (HTTP 429). Avoid repeating requests while the limit applies.":
-    "rateLimited",
-  "SERVICE_BUSY: The service is temporarily unavailable or at capacity (HTTP 503). A later attempt may succeed.":
-    "busy",
-  "TOOL_TIMEOUT: The operation exceeded its time budget (HTTP 504). Narrow the request before retrying.": "timeout",
-  "SERVICE_ERROR: The service could not complete this operation (HTTP 500). No further safe diagnostic is available.":
-    "service",
-};
 
 const ARGUMENTS: Record<string, string[]> = {
   read_conversation_file: ["document_id", "workspace_path"],
@@ -75,16 +54,19 @@ function displayArgument(value: unknown, budget = { remaining: 20000 }): unknown
   return value === null || typeof value === "number" || typeof value === "boolean" ? value : "[invalid argument type]";
 }
 
-/** Project recorded business arguments and safe diagnoses without revealing provider content. */
+/** Project the recorded failure code, business arguments and safe diagnoses.
+ *
+ * The message comes only from `failure.code`; the result text guides the model
+ * and never classifies the failure. It is shown only where its producer owns it.
+ */
 export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>) {
-  if (!entry.result || toolResultOk(entry.result)) return null;
+  const failure = entry.result ? toolResultFailure(entry.result) : null;
+  if (!entry.result || !failure) return null;
   const name = toolName(entry.call);
   const slug = toolSlug(name);
   const query = /^(?:mcp__knowledge_flow__)?query_tabular_documents(?:_\d+)?$/.test(name);
   const tabular = query || tabularToolKind(name) !== null;
   const conversationFile = ["read_conversation_file", "publish_conversation_file"].includes(name);
-  const content = toolResultContent(entry.result).trim();
-  const errorKey = Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, content) ? ERROR_MESSAGES[content] : undefined;
   const args = toolArgs(entry.call);
   const budget = { remaining: 20000 };
   const displayed =
@@ -93,24 +75,26 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
           (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
         )
       : null;
-  const sqlFailure =
-    query &&
-    !errorKey &&
-    /^(?:(?:Binder|Parser|Catalog|Conversion|Invalid Input|Invalid Type|Out of Range|Type Mismatch|Syntax) Error:|Invalid SQL query:|Exactly one SQL statement is allowed|Unable to parse SQL query|Query exceeded the per-query memory budget|Reading this dataset exceeded the per-query memory budget|Query references|Query uses|Table functions|No authorized|Description references|Empty SQL|Only SELECT)/.test(
-      content,
-    )
-      ? asFailedSqlQueryResult(entry)
-      : null;
+  const sqlFailure = query ? asFailedSqlQueryResult(entry) : null;
+  // A refusal by the person is a decision, not an incident to report.
+  const declined = failure.code === "not_approved";
   return {
     arguments: displayed,
-    errorKey: `rework.chatTrace.failure.${errorKey ?? "unknown"}`,
+    errorKey: `rework.chatTrace.failure.${failure.code}`,
+    status: failure.status ?? null,
+    declined,
+    reference: declined ? null : entry.result.exchange_id,
+    // Conversation-file failures carry Fred's own recovery sentence; an
+    // unexpected one may carry an uncaught exception text instead.
     error: sqlFailure?.error
       ? String(displayArgument(sqlFailure.error))
-      : conversationFile && /^(Reading|Publishing) the conversation file failed: /.test(content)
-        ? String(displayArgument(content))
+      : conversationFile && failure.code !== "unexpected"
+        ? String(displayArgument(toolResultContent(entry.result).trim()))
         : null,
   };
 }
+
+export type ToolFailureDetail = NonNullable<ReturnType<typeof toolFailureDetail>>;
 
 /** Current runtime failures carry a safe explanation and a server diagnostic reference.
  * Older provider dumps must not become visible when expanding inline errors. */

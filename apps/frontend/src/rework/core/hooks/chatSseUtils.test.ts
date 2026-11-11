@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ToolResultPart } from "../../../slices/runtime/runtimeOpenApi";
 import {
   keyOf,
   exchangeKeyOf,
@@ -276,7 +276,7 @@ function cancelledToolResult(callId: string, rank: number): ChatMessage {
     rank,
     role: "tool",
     channel: "tool_result",
-    parts: [{ type: "tool_result", call_id: callId, ok: false, content: "", latency_ms: null }],
+    parts: [{ type: "tool_result", call_id: callId, failure: { code: "not_approved" }, content: "", latency_ms: null }],
     metadata: { extras: { cancelled_by_user: true } },
   });
 }
@@ -286,7 +286,7 @@ function realToolResult(callId: string, rank: number, content = "done"): ChatMes
     rank,
     role: "tool",
     channel: "tool_result",
-    parts: [{ type: "tool_result", call_id: callId, ok: true, content, latency_ms: 12 }],
+    parts: [{ type: "tool_result", call_id: callId, content, latency_ms: 12 }],
   });
 }
 
@@ -294,7 +294,7 @@ describe("upsertOne — optimistic cancellation supersession", () => {
   it("a real tool_result replaces the optimistic cancellation for the same call_id", () => {
     const state = upsertOne([cancelledToolResult("call-1", 1_700_000_000_000)], realToolResult("call-1", 7));
     expect(state).toHaveLength(1);
-    expect((state[0].parts?.[0] as { ok?: boolean }).ok).toBe(true);
+    expect((state[0].parts?.[0] as ToolResultPart).failure).toBeUndefined();
   });
 
   it("does not touch an optimistic cancellation for a different call_id", () => {

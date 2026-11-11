@@ -130,7 +130,7 @@ def normalize_runtime_provider_artifact(
         return ToolInvocationResult(
             tool_ref=result.tool_ref,
             blocks=result.blocks,
-            is_error=True,
+            failure=result.failure,
         )
     return ToolInvocationResult(
         tool_ref=result.tool_ref,
@@ -140,7 +140,7 @@ def normalize_runtime_provider_artifact(
                 text=GENERIC_TOOL_FAILURE_MESSAGE,
             ),
         ),
-        is_error=True,
+        failure=result.failure,
     )
 
 

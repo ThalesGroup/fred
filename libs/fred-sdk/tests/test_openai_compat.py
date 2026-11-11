@@ -119,7 +119,7 @@ def test_tool_result_without_sources_returns_empty_delta() -> None:
         "kind": "tool_result",
         "call_id": "call-abc",
         "content": "some result",
-        "is_error": False,
+        "failure": None,
         "sources": [],
         "sequence": 3,
     }
@@ -135,7 +135,7 @@ def test_tool_result_with_sources_populates_fred_sources() -> None:
         "kind": "tool_result",
         "call_id": "call-abc",
         "content": "found it",
-        "is_error": False,
+        "failure": None,
         "sources": [
             {
                 "title": "Doc A",
@@ -355,7 +355,7 @@ def test_tool_result_with_ui_parts_populates_fred_ui_parts() -> None:
         "kind": "tool_result",
         "call_id": "call-abc",
         "content": "map data",
-        "is_error": False,
+        "failure": None,
         "sources": [],
         "ui_parts": [
             {

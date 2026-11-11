@@ -1144,10 +1144,25 @@ export type ToolCallRuntimeEvent = {
   sequence?: number;
   tool_name: string;
 };
+export type ToolFailureCode =
+  | "invalid_arguments"
+  | "not_approved"
+  | "authentication_required"
+  | "resource_unavailable"
+  | "scope_refused"
+  | "rate_limited"
+  | "service_busy"
+  | "timeout"
+  | "service_error"
+  | "unexpected";
+export type ToolFailure = {
+  code: ToolFailureCode;
+  status?: number | null;
+};
 export type ToolResultRuntimeEvent = {
   call_id: string;
   content?: string;
-  is_error?: boolean;
+  failure?: ToolFailure | null;
   kind?: "tool_result";
   latency_ms?: number | null;
   rank?: number | null;
@@ -1314,8 +1329,8 @@ export type ToolCallPart = {
 export type ToolResultPart = {
   call_id: string;
   content: string;
+  failure?: ToolFailure | null;
   latency_ms?: number | null;
-  ok?: boolean | null;
   type?: "tool_result";
 };
 export type Role = "user" | "assistant" | "tool" | "system";

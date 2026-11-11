@@ -158,7 +158,8 @@ async def test_v2_mount_redacts_receiver_refusal(monkeypatch) -> None:
     assert response.status_code == 200
     result = response.json()["result"]
     assert result["isError"] is True
-    assert result["structuredContent"] == {"cause": "authority_lost"}
+    assert result["content"] == [{"type": "text", "text": "Tool access was refused."}]
+    assert result.get("structuredContent") is None
     assert "private receiver body" not in response.text
 
 
@@ -231,7 +232,8 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch,
             response = await _request(client, "tools/call", {"name": "read_protected", "arguments": {}})
     result = response.json()["result"]
     assert result["isError"] is True
-    assert (result.get("structuredContent") == {"cause": "authority_lost"}) is authority_lost
+    assert (result["content"][0]["text"] == "Tool access was refused.") is authority_lost
+    assert result.get("structuredContent") is None
     assert "synthetic-identifier" not in response.text
 
 
@@ -269,7 +271,9 @@ async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name
     result = response.json()["result"]
     assert result["isError"] is True
     assert "private" not in response.text
+    text = result["content"][0]["text"]
+    assert text.startswith(f"Error calling {tool_name}. Status code: {status}. Response: ")
     if expected_detail is None:
-        assert "Tool request failed." in response.text
+        assert text.endswith("Response: {}")
     else:
-        assert expected_detail in response.text
+        assert expected_detail in text

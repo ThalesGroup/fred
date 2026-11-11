@@ -11,7 +11,10 @@ use rig_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::search::{self, SearchHit};
+use crate::{
+    events::ToolFailure,
+    search::{self, SearchHit},
+};
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ChatMessage {
@@ -38,7 +41,7 @@ pub enum MessagePart {
     },
     ToolResult {
         call_id: String,
-        ok: bool,
+        failure: Option<ToolFailure>,
         content: String,
     },
 }
@@ -112,7 +115,7 @@ pub fn messages(conversation: &Conversation, session_id: &str) -> Vec<ChatMessag
                             "tool_result",
                             MessagePart::ToolResult {
                                 call_id: result.call.to_string(),
-                                ok: !result.is_error,
+                                failure: ToolFailure::of(result.is_error),
                                 content,
                             },
                             vec![],
@@ -245,7 +248,10 @@ mod tests {
         ]);
         let wire = serde_json::to_value(messages(&conversation, "session")).unwrap();
         assert_eq!(wire.as_array().unwrap().len(), 4);
-        assert_eq!(wire[2]["parts"][0]["ok"], false);
+        assert_eq!(
+            wire[2]["parts"][0]["failure"],
+            json!({"code": "unexpected"})
+        );
         assert_eq!(wire[3]["metadata"]["sources"], json!([]));
         assert!(!wire.to_string().contains("private thought"));
     }

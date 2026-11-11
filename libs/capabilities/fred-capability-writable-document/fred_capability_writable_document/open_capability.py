@@ -26,7 +26,11 @@ from fred_sdk.contracts.capability import (
     CapabilityManifest,
     EmptyModel,
 )
-from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.context import (
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.runtime import ConversationScratchpadError
 from langchain_core.tools import BaseTool, tool
 
@@ -37,8 +41,10 @@ logger = logging.getLogger(__name__)
 _TOOL_REF = "open_writable_document"
 
 
-def _error(message: str) -> tuple[str, ToolInvocationResult]:
-    return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+def _error(message: str, code: ToolFailureCode) -> tuple[str, ToolInvocationResult]:
+    return message, ToolInvocationResult(
+        tool_ref=_TOOL_REF, failure=ToolFailure(code=code)
+    )
 
 
 class OpenWritableDocumentCapability(
@@ -78,17 +84,29 @@ class OpenWritableDocumentCapability(
             """
 
             if not session_id:
-                return _error("Cannot open a file without an active conversation.")
+                return _error(
+                    "Cannot open a file without an active conversation.",
+                    ToolFailureCode.unexpected,
+                )
             if filesystem is None:
-                return _error("Conversation files are unavailable on this agent.")
+                return _error(
+                    "Conversation files are unavailable on this agent.",
+                    ToolFailureCode.resource_unavailable,
+                )
             if not title.strip():
-                return _error("Give the document a non-empty title.")
+                return _error(
+                    "Give the document a non-empty title.",
+                    ToolFailureCode.invalid_arguments,
+                )
             if PurePosixPath(path).suffix.lower() != ".md":
-                return _error("Only Markdown (.md) files can be opened in this editor.")
+                return _error(
+                    "Only Markdown (.md) files can be opened in this editor.",
+                    ToolFailureCode.invalid_arguments,
+                )
             try:
                 content = await filesystem.read_text(path, origin="agent")
             except ConversationScratchpadError as exc:
-                return _error(f"Cannot open {path}: {exc}")
+                return _error(f"Cannot open {path}: {exc}", exc.failure_code)
             try:
                 return await save_writable_document(
                     session_id=session_id,
@@ -101,6 +119,9 @@ class OpenWritableDocumentCapability(
                 logger.exception(
                     "Failed to import workspace Markdown for session=%s", session_id
                 )
-                return _error("Could not save the Markdown file in the editor.")
+                return _error(
+                    "Could not save the Markdown file in the editor.",
+                    ToolFailureCode.unexpected,
+                )
 
         return [open_writable_document]

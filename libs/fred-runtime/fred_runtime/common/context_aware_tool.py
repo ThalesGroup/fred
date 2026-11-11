@@ -26,6 +26,7 @@ from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
+    ToolFailure,
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
@@ -184,7 +185,7 @@ def _build_tool_error_artifact(
     if detail:
         return ToolInvocationResult(
             tool_ref=tool_name,
-            is_error=True,
+            failure=ToolFailure.from_http_status(400),
             blocks=(
                 ToolContentBlock(
                     kind=ToolContentKind.TEXT,
@@ -212,7 +213,7 @@ def _build_tool_error_artifact(
     explanation = explanations.get(status) if status is not None else None
     return ToolInvocationResult(
         tool_ref=tool_name,
-        is_error=True,
+        failure=ToolFailure.from_http_status(status),
         blocks=(
             ToolContentBlock(
                 kind=ToolContentKind.TEXT,
@@ -460,18 +461,6 @@ class ContextAwareTool(BaseTool):
         """Ensure mapping input and drop explicit null values."""
         return {k: v for k, v in (kwargs or {}).items() if v is not None}
 
-    def _check_delegated_result(self, result: Any) -> None:
-        if not (self.base_tool.metadata or {}).get(MCP_DELEGATED_METADATA_KEY):
-            return
-        if not isinstance(result, tuple) or len(result) != 2:
-            return
-        artifact = result[1]
-        if not isinstance(artifact, dict):
-            return
-        structured = artifact.get("structured_content")
-        if isinstance(structured, dict) and structured.get("cause") == "authority_lost":
-            raise AuthorityLostError() from None
-
     def _normalize_result(self, result: Any) -> Any:
         result = normalize_mcp_content(result)
         if (
@@ -481,7 +470,10 @@ class ContextAwareTool(BaseTool):
             and set(result[1]) == {"structured_content"}
             and isinstance(result[1]["structured_content"], dict)
         ):
-            # MCP structured content is data, never trusted Fred status or UI metadata.
+            # MCP structured content is data, never trusted Fred status or UI
+            # metadata. A failure never arrives here with its structured content:
+            # the adapter raises on `isError` and drops it, so a failure's status
+            # comes only from the error envelope read by `_build_tool_error_artifact`.
             return result[0], ToolInvocationResult(
                 tool_ref=self.name,
                 blocks=(
@@ -508,7 +500,6 @@ class ContextAwareTool(BaseTool):
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
             result = self.base_tool._run(**kwargs)
-            self._check_delegated_result(result)
         except Exception as e:
             run_stop = unwrap_run_stop_error(e)
             if run_stop is not None:
@@ -546,7 +537,6 @@ class ContextAwareTool(BaseTool):
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
             result = await self.base_tool._arun(config=config, **kwargs)
-            self._check_delegated_result(result)
         except asyncio.CancelledError:
             # Never swallow cancellation — re-raise so asyncio's cancellation
             # semantics stay intact. `ToolObservabilityMiddleware` records the
