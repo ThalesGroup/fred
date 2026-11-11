@@ -87,12 +87,13 @@ pub async fn request_logging(request: Request, next: Next) -> Response {
     response
 }
 
-/// Routes the workers poll every few seconds. A successful poll is routine: DEBUG, so
-/// INFO keeps the requests that act. Failures keep WARN/ERROR; the work found is
-/// logged by its own handler and report.
-const POLLED_ROUTES: [&str; 2] = [
+/// Routes the workers poll every few seconds, and the onboarding status the UI polls
+/// every minute. A successful poll is routine: DEBUG, so INFO keeps the requests that
+/// act. Failures keep WARN/ERROR; the work found is logged by its own handler and report.
+const POLLED_ROUTES: [&str; 3] = [
     "/capability-preparations/cleanup",
     "/document-processing/cleanup",
+    "/me/onboarding",
 ];
 
 struct Completion {
@@ -111,7 +112,10 @@ impl Completion {
             return;
         }
         let duration_ms = self.started.elapsed().as_secs_f64() * 1000.0;
-        let route_label = route.clone().unwrap_or_else(|| "<unmatched>".into());
+        // Without a template (no route matched, or cancelled before routing), the path
+        // alone locates the caller; `Uri::path` never carries the query string.
+        let unmatched_path = route.is_none().then_some(self.path.as_str());
+        let route_label = route.clone().unwrap_or_else(|| self.path.clone());
         let status_label = status.map_or("no response".to_string(), |s| s.to_string());
         let suffix = if outcome == "responded" {
             String::new()
@@ -134,6 +138,7 @@ impl Completion {
                     duration_ms,
                     outcome,
                     route = %route,
+                    path = unmatched_path,
                     http_status,
                     "{}",
                     message
@@ -284,6 +289,48 @@ mod tests {
         for line in &lines {
             assert_eq!(line["request_id"], request_id.as_str());
         }
+    }
+
+    #[tokio::test]
+    async fn an_unmatched_request_names_its_path_without_the_query() {
+        use axum::{Router, body::Body, routing::get};
+        use tower::ServiceExt;
+
+        let buffer = Buffer::default();
+        let sink = buffer.clone();
+        let subscriber = tracing_subscriber::registry().with(StdoutLayer::new(
+            identity("api"),
+            LogFormat::Json,
+            false,
+            move || sink,
+        ));
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let app = Router::new()
+            .route("/spaces/{id}", get(|| async { "ok" }))
+            .route_layer(axum::middleware::from_fn(expose_route))
+            .layer(axum::middleware::from_fn(request_logging));
+        let request = |uri: &str| Request::builder().uri(uri).body(Body::empty()).unwrap();
+        app.clone()
+            .oneshot(request("/retired/7?secret=x"))
+            .await
+            .unwrap();
+        app.oneshot(request("/spaces/42?secret=x")).await.unwrap();
+
+        let text = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        let lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2, "{text}");
+        assert_eq!(lines[0]["severity"], "WARNING");
+        let message = lines[0]["message"].as_str().unwrap();
+        assert!(message.starts_with("GET /retired/7 → 404 |"), "{text}");
+        assert_eq!(lines[0]["path"], "/retired/7");
+        assert_eq!(lines[0]["route"], "");
+        // A matched request keeps its template and carries no raw path.
+        assert_eq!(lines[1]["route"], "/spaces/{id}");
+        assert!(lines[1].get("path").is_none(), "{text}");
+        assert!(!text.contains("secret"), "{text}");
     }
 
     #[tokio::test]

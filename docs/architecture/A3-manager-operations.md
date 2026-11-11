@@ -28,14 +28,16 @@ refused the write upstream.
   `cookie`, `password`, `secret`, `email`, `user`, `prompt`, `completion`, `content`,
   `body`, `arguments`, `result`, `url` or `signed_url` are dropped (I11).
 - Crates outside the service and `fred_*` log from WARNING only, as `Dependency
-  diagnostic`, without their text or fields (I11). An error field carries the error
+  diagnostic`, without their text or text fields; numeric and boolean fields such as
+  a slow acquire's `elapsed_secs` remain (I11). An error field carries the error
   chain's text, without the query string of a failed HTTP call.
 - Each request gets `X-Request-ID` and `X-Correlation-ID`; its lines carry
   `request_id`, `correlation_id` and, once authenticated, `user_id`. It ends with one
   event on logger `http`: `METHOD route → status | Nms`, fields `http_method`, `route`
-  (template), `http_status`, `duration_ms`, `outcome`; INFO below 400, WARNING for
-  other 4xx, ERROR for 5xx; omitted for a successful `/healthz`; `cancelled` when the
-  client goes away (I13).
+  (template), `http_status`, `duration_ms`, `outcome`; without a matched route, the
+  message and a `path` field name the request path, never its query string; INFO
+  below 400, WARNING for other 4xx, ERROR for 5xx; omitted for a successful `/healthz`;
+  `cancelled` when the client goes away (I13).
 - Acknowledged role writes emit one `authz.relation.granted` or `authz.relation.revoked`
   on `fred.security.audit`, with `actor_uid` when known, `subject`, `relation`,
   `resource` and `outcome: succeeded`; no other event carries those names. Revoking a
