@@ -15,6 +15,7 @@
 import type { ReactNode } from "react";
 import type { StatusBadgeTone } from "../../atoms/StatusBadge/StatusBadge.tsx";
 import { MaterialIcon } from "../../atoms/Icon/Icon.tsx";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import styles from "./KpiStatCard.module.scss";
 
@@ -23,6 +24,8 @@ export interface KpiStatCardProps {
   /** Definition shown in an info bubble beside the label: a string wraps as prose, a node brings
    *  its own layout (the bubble is then named after the label). */
   hint?: ReactNode;
+  /** A "show trend" button beside the hint; its label is the tooltip, and with the card's label its name. */
+  trendAction?: { label: string; onClick: () => void };
   /** Fixed number of decimals, e.g. 4 for a cost; locale default when unset. */
   fractionDigits?: number;
   tone?: StatusBadgeTone;
@@ -52,6 +55,7 @@ export interface KpiStatCardProps {
 export default function KpiStatCard({
   label,
   hint,
+  trendAction,
   fractionDigits,
   tone = "neutral",
   value,
@@ -100,15 +104,32 @@ export default function KpiStatCard({
       data-nested={nested || undefined}
       data-size={size}
       data-hint={hint ? true : undefined}
+      data-action={trendAction ? true : undefined}
     >
       <span className={styles.label}>{label}</span>
-      {hint && (
+      {(hint || trendAction) && (
         <span className={styles.hintCorner}>
-          <Tooltip content={hint}>
-            <span className={styles.hint} tabIndex={0} aria-label={typeof hint === "string" ? hint : label}>
-              <MaterialIcon type="info" />
-            </span>
-          </Tooltip>
+          {trendAction && (
+            <Tooltip text={trendAction.label}>
+              <IconButton
+                className={styles.action}
+                variant="icon"
+                size="medium"
+                color="on-surface-retreat"
+                iconSize="2xs"
+                icon={{ category: "outlined", type: "show_chart" }}
+                aria-label={`${trendAction.label} - ${label}`}
+                onClick={trendAction.onClick}
+              />
+            </Tooltip>
+          )}
+          {hint && (
+            <Tooltip content={hint}>
+              <span className={styles.hint} tabIndex={0} aria-label={typeof hint === "string" ? hint : label}>
+                <MaterialIcon type="info" />
+              </span>
+            </Tooltip>
+          )}
         </span>
       )}
       {isLoading && <span className={styles.state}>{loadingLabel}</span>}

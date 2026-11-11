@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MaterialIcon } from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import type { AnalyticsAdoptionResponse, PeriodValue } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { InfoHint } from "./AnalyticsSection";
 import { formatValue, periodDelta } from "./analyticsFormat";
+import KpiTrendDialog, { type ActivityArgs } from "./KpiTrendDialog";
+import type { TrendId } from "./kpiTrend";
 import styles from "./AnalyticsPage.module.css";
 
 const KEY = "rework.analytics.funnel";
@@ -26,22 +31,32 @@ interface AdoptionFunnelProps {
   data: AnalyticsAdoptionResponse | undefined;
   isLoading: boolean;
   isError: boolean;
+  /** The tab's activity arguments: visitors and active users then offer their trend. */
+  trendArgs?: ActivityArgs;
 }
 
 /** Access, then visitors, then active users, each with the rate of the step that leads to it. */
-export default function AdoptionFunnel({ data, isLoading, isError }: AdoptionFunnelProps) {
+export default function AdoptionFunnel({ data, isLoading, isError, trendArgs }: AdoptionFunnelProps) {
   const { t, i18n } = useTranslation();
+  const [trend, setTrend] = useState<{ id: TrendId; label: string; value: number | null } | null>(null);
   const lng = i18n.language;
   const title = t(`${KEY}.title`);
   const steps = [
     { id: "peopleWithAccess", value: data?.people_with_access ?? null, how: true },
-    { id: "visitors", value: data?.visitors.current ?? null, rate: { id: "visitRate", period: data?.visit_rate } },
+    {
+      id: "visitors",
+      value: data?.visitors.current ?? null,
+      rate: { id: "visitRate", period: data?.visit_rate },
+      trend: "visitors" as const,
+    },
     {
       id: "activeUsers",
       value: data?.active_users.current ?? null,
       rate: { id: "visitorToActive", period: data?.visitor_to_active_rate },
+      trend: "activeUsers" as const,
     },
   ];
+  const trendLabel = t("rework.analytics.trend.show");
   const max = Math.max(0, ...steps.map((s) => s.value ?? 0));
 
   return (
@@ -62,10 +77,11 @@ export default function AdoptionFunnel({ data, isLoading, isError }: AdoptionFun
         <>
           {steps.map((step) => {
             const label = t(`${KEY}.steps.${step.id}.label`);
+            const trendId = step.trend;
             return (
               <div key={step.id} className={styles.funnelStep}>
                 {step.rate && <StepRate id={step.rate.id} period={step.rate.period} />}
-                <div className={styles.funnelRow}>
+                <div className={styles.funnelRow} data-trend={trendArgs ? true : undefined}>
                   <span className={styles.funnelLabel}>
                     {label}
                     <InfoHint
@@ -80,12 +96,39 @@ export default function AdoptionFunnel({ data, isLoading, isError }: AdoptionFun
                   <span className={styles.funnelValue}>
                     {step.value == null ? t(`${KEY}.unknown`) : formatValue(step.value, "count", lng)}
                   </span>
+                  {trendArgs &&
+                    (trendId ? (
+                      <Tooltip text={trendLabel}>
+                        <IconButton
+                          className={styles.funnelAction}
+                          variant="icon"
+                          size="medium"
+                          color="on-surface-retreat"
+                          iconSize="2xs"
+                          icon={{ category: "outlined", type: "show_chart" }}
+                          aria-label={`${trendLabel} - ${label}`}
+                          onClick={() => setTrend({ id: trendId, label, value: step.value })}
+                        />
+                      </Tooltip>
+                    ) : (
+                      <span />
+                    ))}
                 </div>
               </div>
             );
           })}
           <AdoptionRate period={data?.adoption_rate} />
         </>
+      )}
+      {trendArgs && (
+        <KpiTrendDialog
+          id={trend?.id ?? "visitors"}
+          label={trend?.label ?? ""}
+          value={trend?.value}
+          args={trendArgs}
+          open={trend !== null}
+          onClose={() => setTrend(null)}
+        />
       )}
     </section>
   );

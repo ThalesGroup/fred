@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Activity per calendar bucket: visitors, active users, conversations, messages, tokens, cost."""
+"""Activity per calendar bucket: visitors, active users, conversations, messages, tokens, cost, footprint."""
 
 from __future__ import annotations
 
@@ -56,6 +56,8 @@ SERIES = (
     "input_tokens",
     "output_tokens",
     "cost_eur",
+    "co2e_grams",
+    "kwh",
 )
 
 
@@ -120,6 +122,8 @@ def point(bucket: dict[str, Any]) -> BucketPoint:
             "input_tokens": tokens.input_tokens,
             "output_tokens": tokens.output_tokens,
             "cost_eur": tokens.cost_eur,
+            "co2e_grams": tokens.co2e_grams,
+            "kwh": tokens.kwh,
         },
     )
 
@@ -165,7 +169,7 @@ ANALYTICS_ACTIVITY_OVER_TIME_PRESET = PresetDef(
     name="analytics_activity_over_time",
     response_model=AnalyticsActivityResponse,
     handler=query_analytics_activity_over_time,
-    summary="Visitors, active users, conversations, messages, tokens and cost (EUR) per calendar bucket",
+    summary="Visitors, active users, conversations, messages, tokens, cost (EUR) and footprint (gCO2e, kWh) per calendar bucket",
     team_scopable=True,
     user_filterable=True,
     bucketable=True,

@@ -42,10 +42,23 @@
   padding-inline-end: var(--spacing-l);
 }
 
+/* Hint and trend button share the corner; the label then keeps clear of both. */
+.card[data-action] .label {
+  padding-inline-end: calc(2 * var(--spacing-l));
+}
+
 .hintCorner {
+  display: inline-flex;
   position: absolute;
   top: var(--spacing-m);
   right: var(--spacing-m);
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* The button keeps its full hit area without moving the corner: the glyph lines up with the hint. */
+.action {
+  margin: calc((var(--spacing-m) - var(--spacing-2xl)) / 2);
 }
 
 .hint {

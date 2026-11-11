@@ -26,6 +26,7 @@ from control_plane_backend.kpi.presets.analytics_activity_over_time import (
     ANALYTICS_ACTIVITY_OVER_TIME_PRESET,
     query_analytics_activity_over_time,
 )
+from control_plane_backend.kpi.presets.analytics_common import model_totals
 from control_plane_backend.kpi.scope import KpiScope
 from control_plane_backend.kpi.utils import calendar_histogram, resolve_bucket
 from fastapi import HTTPException, Request
@@ -122,6 +123,9 @@ async def test_points_carry_every_series_per_bucket() -> None:
     assert point.values["active_users"] == 4 and point.values["visitors"] == 6
     assert point.values["messages"] == 12 and point.values["conversations"] == 3
     assert point.values["input_tokens"] == 100 and point.values["output_tokens"] == 20
+    footprint = model_totals(model("m", 100, 20))
+    assert point.values["co2e_grams"] == footprint.co2e_grams
+    assert point.values["kwh"] == footprint.kwh
     assert set(point.values) == set(result.series)
 
 
