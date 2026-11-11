@@ -1,182 +1,177 @@
 ---
 name: fred
-description: Démarrer les composants Fred locaux et, sur demande, un pod fred-samples et son serveur de test ; observer et challenger la qualité de leurs logs et des KPI disponibles pendant les essais UI, sans campagne de tests ou de mesure automatique.
+description: Start local Fred components and, on request, a fred-samples pod and its test server; observe and challenge the quality of their logs and available KPIs during UI testing, without any automatic test or measurement campaign.
 ---
 
-# Fred — démarrage et observation locale
+# Fred — local startup and observation
 
-Le développeur pilote l’UI et gère Docker Compose (Keycloak, Postgres,
-Temporal, OpenSearch et autres services d’infrastructure). L’assistant
-lance les applications demandées, lit leurs logs et aide au diagnostic.
+The developer drives the UI and manages Docker Compose (Keycloak, Postgres,
+Temporal, OpenSearch and other infrastructure services). The assistant starts
+the requested applications, reads their logs and helps with diagnosis.
 
-## Périmètre et accord
+## Scope and agreement
 
-- Une demande de préparation ou de modification de ce skill ne lance rien.
-- Avant un démarrage, annoncer les composants, commandes et répertoires. Une
-  demande explicite de démarrage autorise ce périmètre ; sinon attendre l’accord.
-- Vérifier que le développeur a terminé de démarrer son infrastructure. Ne pas
-  lancer, arrêter, reconstruire ni réinitialiser son Docker Compose.
-- Demander avant tout élargissement : tests, requêtes métier, publication de KB,
-  modification de configuration/code, installation supplémentaire ou dépannage long.
-  Ne lancer ni `make test`, ni `make code-quality`, ni campagne automatique.
-- À chaque session, appliquer les critères de qualité de
-  [live-observability-session](../live-observability-session/SKILL.md) aux logs,
-  audits et KPI disponibles : confidentialité à la source, INFO sobre, coût et
-  utilité diagnostique. Le recâblage incomplet des KPI Swift dans Weaver ne
-  dispense pas de signaler les lacunes ; il ne déclenche pas une campagne.
+- A request to prepare or modify this skill starts nothing.
+- Before starting anything, state the components, commands and directories. An
+  explicit start request authorizes that scope; otherwise wait for agreement.
+- Check that the developer has finished starting the infrastructure. Do not
+  start, stop, rebuild or reset their Docker Compose.
+- Ask before any widening: tests, business requests, KB publication,
+  configuration/code changes, extra installation or long troubleshooting.
+  Run neither `make test`, nor `make code-quality`, nor an automatic campaign.
+- In every session, apply the quality criteria of
+  [live-observability-session](../live-observability-session/SKILL.md) to the
+  available logs, audits and KPIs: confidentiality at the source, concise INFO,
+  cost and diagnostic value. Incomplete rewiring of Swift KPIs in Weaver does not
+  exempt from reporting gaps; it does not trigger a campaign.
 
-## Répertoires et composants
+## Directories and components
 
-Utiliser le checkout choisi dans la conversation, jamais un autre checkout
-par commodité. Repères usuels : Fred `~/Fred/fred`, samples `~/Fred/fred-samples`.
-Vérifier les chemins, la branche et les consignes du dépôt ; ne jamais supposer
-que ces chemins désignent le checkout choisi.
+Use the checkout chosen in the conversation, never another checkout for
+convenience. Check paths, branch and repository instructions; never assume a
+usual location designates the chosen checkout.
 
-| Composant | Répertoire relatif à Fred | Commande |
+| Component | Directory relative to Fred | Command |
 |---|---|---|
-| Control Plane API et tâches de fond | `apps/control-plane` | `make run` |
+| Control Plane API and background tasks | `apps/control-plane` | `make run` |
 | Knowledge Flow API | `apps/knowledge-flow-backend` | `make run` |
 | Knowledge Flow worker | `apps/knowledge-flow-worker` | `make run` |
 | Fred Agents API | `apps/fred-agents` | `make run` |
-| Fred Agents worker de préparation des capacités | `apps/fred-agents` | `make run-worker` |
+| Fred Agents capability preparation worker | `apps/fred-agents` | `make run-worker` |
 | Frontend | `apps/frontend` | `make run` |
 
-Ce sont des commandes disponibles, pas une liste de processus obligatoires.
-Respecter le profil et les composants demandés ; vérifier leurs dépendances dans
-le checkout actuel.
+These are available commands, not a list of mandatory processes. Respect the
+requested profile and components; check their dependencies in the current checkout.
 
-## Configuration et authentification
+## Configuration and authentication
 
-Lire `AGENTS.md`, les README et Makefiles actuels des composants avant le lancement.
-Le Control Plane Rust sert l'API et ses tâches de fond dans le même processus ;
-ne pas chercher un ancien worker Python séparé. Le profil réellement choisi
-détermine quels services Python sont utiles. Ne pas démarrer un composant seulement
-parce qu'il apparaît dans un ancien scénario Swift.
+Read `AGENTS.md` and the components' current READMEs and Makefiles before starting.
+The Rust Control Plane serves the API and its background tasks in one process;
+do not look for an old separate Python worker. The selected profile determines
+which Python services are useful. Do not start a component only because it
+appears in an old Swift scenario.
 
-Inspecter la configuration effective et les prérequis sans afficher les secrets.
-Pour Control Plane, suivre `apps/control-plane/README.md` ; une migration de base
-n'est pas un effet annexe autorisé par une demande de lecture de logs. Pour les
-composants Python, vérifier leurs mécanismes actuels de délégation et d'identité.
-Ne jamais assouplir audience, issuer, isolation ou contrôle d'accès pour démarrer.
-Un refus d'authentification est à diagnostiquer, pas à contourner.
+Inspect the effective configuration and prerequisites without displaying secrets.
+For the Control Plane, follow `apps/control-plane/README.md`; a database migration
+is not a side effect authorized by a request to read logs. For Python components,
+check their current delegation and identity mechanisms. Never relax audience,
+issuer, isolation or access control to get started. An authentication refusal
+is to be diagnosed, not bypassed.
 
-Les campagnes de mesure et les tests de renouvellement ne font pas partie du
-démarrage. L'observation utilise les émetteurs/exporteurs actuels et les références
-d'exploitation arc42. Ne pas réactiver d'anciens réglages
-ou scripts Swift sans vérifier leur compatibilité. Les modifications de durée de
-jeton, publications, migrations et campagnes doivent appartenir au périmètre demandé.
+Measurement campaigns and token renewal tests are not part of startup.
+Observation uses the current emitters/exporters and the arc42 operations
+references. Do not reactivate old Swift settings or scripts without checking
+their compatibility. Token lifetime changes, publications, migrations and
+campaigns must belong to the requested scope.
 
-## Avant de lancer
+## Before starting
 
-1. Lire les cibles Makefile et leurs prérequis. `make run` peut installer des
-   dépendances, et le worker Knowledge Flow peut télécharger des modèles.
-   Signaler un coût de préparation important avant de le déclencher.
-   Pour le frontend, comparer le Node actif à `.nvmrc` et au contrôle de
-   `scripts/makefiles/node.mk` ; sélectionner une version compatible déjà
-   installée avant d'envisager une installation.
-2. Vérifier `config/.env` et le fichier désigné par `CONFIG_FILE`, puis les
-   éventuels overrides du Makefile. En Docker, un checkout sans `config/.env`
-   n'est pas préparé : `make docker-prepare DIR=<checkout>` depuis
-   deployment-factory, avec accord. La base `fred_weaver` est partagée entre
-   checkouts : comparer les migrations avant de basculer.
-   Dans le profil local Compose actuel, les API Control Plane, Knowledge Flow et
-   Fred Agents utilisent `configuration_prod.yaml` ; le worker Knowledge Flow
-   utilise son propre `configuration_worker.yaml`. Les deux processus Fred Agents
-   partagent le même `.env` et YAML, avec `scheduler.enabled` pour le worker.
-   Vérifier les ports publiés par Compose et le namespace Temporal commun, sans
-   confondre les noms DNS internes des conteneurs et les adresses vues de l'hôte.
-   Lire uniquement les valeurs nécessaires ; ne jamais afficher les secrets ou
-   recopier le `.env` entier dans une réponse. Vérifier les destinations locales,
-   l’authentification et la cohérence API/worker ; ne rien réécrire silencieusement.
-   Pour le frontend, vérifier son Makefile, sa configuration Vite et ses proxies.
-3. Repérer les ports occupés et les processus existants avec une inspection
-   locale en lecture seule. Un port occupé n’est pas une preuve de disponibilité
-   du bon checkout. Ne pas tuer un processus inconnu ; demander s’il faut le
-   conserver ou le remplacer. Ne pas utiliser un nettoyage global « kill-stale ».
+1. Read the Makefile targets and their prerequisites. `make run` may install
+   dependencies, and the Knowledge Flow worker may download models. Report a
+   significant preparation cost before triggering it. For the frontend, compare
+   the active Node with `.nvmrc` and the check in `scripts/makefiles/node.mk`;
+   select a compatible version already installed before considering an install.
+2. Check `config/.env` and the file named by `CONFIG_FILE`, then any Makefile
+   overrides. On Docker, a checkout without `config/.env` is not prepared:
+   `make docker-prepare DIR=<checkout>` from deployment-factory, with agreement.
+   The `fred_weaver` database is shared between checkouts: compare migrations
+   before switching.
+   In the current local Compose profile, the Control Plane, Knowledge Flow and
+   Fred Agents APIs use `configuration_prod.yaml`; the Knowledge Flow worker uses
+   its own `configuration_worker.yaml`. Both Fred Agents processes share the same
+   `.env` and YAML, with `scheduler.enabled` for the worker. Check the ports
+   published by Compose and the shared Temporal namespace, without confusing
+   containers' internal DNS names with addresses seen from the host.
+   Read only the values needed; never display secrets or copy the whole `.env`
+   into a reply. Check local destinations, authentication and API/worker
+   consistency; rewrite nothing silently.
+   For the frontend, check its Makefile, Vite configuration and proxies.
+3. Identify occupied ports and existing processes with a read-only local
+   inspection. An occupied port does not prove the right checkout is available.
+   Do not kill an unknown process; ask whether to keep or replace it. Do not use
+   a global "kill-stale" cleanup.
 
-## Lancement et logs
+## Startup and logs
 
-- En Docker, pour une session d'observation, lancer tout Fred par
-  `make fred-json FRED_CHECKOUT=<checkout>` depuis deployment-factory, en
-  arrière-plan : mêmes commandes et ports que `make run`, logs JSON par composant
-  dans `/tmp/fred-structured-logs/`, collectés dans Loki et visibles par le
-  développeur sur <http://localhost:3002/d/fred-local-logs/fred-logs>.
-  `make fred-stop` l'arrête. Sinon, ou pour un composant isolé :
-- Un processus supervisé par composant, lancé depuis son propre répertoire, avec
-  le mécanisme persistant de l’outil utilisé : sessions `exec_command` /
-  `write_stdin` dans Codex, commande Bash en arrière-plan dans Claude Code. Lire
-  ensuite les fichiers de log ; ne pas supposer un outil propre à l’autre agent.
-- Conserver stdout ET stderr complets dans un fichier par composant, sous un
-  répertoire de session unique tel que `/tmp/fred-live-<session>/`. Éviter de
-  filtrer à la capture : les lignes d’activités Temporal sont utiles à l’ingestion.
-  Garder ces fichiers privés. Vérifier si le collecteur de la plateforme lit
-  effectivement ces processus : une capture locale de `make run` n'est pas
-  automatiquement collectée par Fluent Bit ni consultable dans OpenSearch.
-- Tenir un petit journal de session dans ce répertoire : composant, checkout,
-  commande, identifiant de session/processus, log, état constaté. Cela permet
-  de reprendre l’observation sans démarrer de doublons après une interruption.
-- Démarrer les processus autorisés, puis lire chaque log. Vérifier le message
-  de disponibilité et que le processus reste vivant ; pour les API/front, vérifier
-  aussi les ports attendus. Un worker n’a pas nécessairement de port HTTP : sa
-  connexion Temporal et son message de polling sont les preuves recherchées.
-- Après environ deux minutes sans disponibilité, donner l’état et la dernière
-  erreur utile plutôt que multiplier les relances. Ne pas masquer un échec par
-  une boucle de redémarrage ni changer la configuration sans accord.
-- Donner au développeur un tableau court : prêt / en démarrage / bloqué, URL UI
-  lorsqu’elle est connue, et emplacement des logs.
+- On Docker, for an observation session, start all of Fred with
+  `make fred-json FRED_CHECKOUT=<checkout>` from deployment-factory, in the
+  background: same commands and ports as `make run`, JSON logs per component in
+  `/tmp/fred-structured-logs/`, collected into Loki and visible to the developer
+  at <http://localhost:3002/d/fred-local-logs/fred-logs>. `make fred-stop` stops
+  it. Otherwise, or for a single component:
+- One supervised process per component, started from its own directory, with
+  the tool's persistent mechanism: `exec_command` / `write_stdin` sessions in
+  Codex, a background Bash command in Claude Code. Then read the log files; do
+  not assume a tool specific to the other agent.
+- Keep complete stdout AND stderr in one file per component, under a unique
+  session directory such as `/tmp/fred-live-<session>/`. Avoid filtering at
+  capture: Temporal activity lines are useful for ingestion. Keep these files
+  private. Check whether the platform collector actually reads these processes:
+  a local capture of `make run` is not automatically collected by Fluent Bit or
+  Loki.
+- Keep a small session journal in that directory: component, checkout, command,
+  session/process identifier, log, observed state. This allows resuming
+  observation without starting duplicates after an interruption.
+- Start the authorized processes, then read each log. Check the readiness message
+  and that the process stays alive; for APIs/frontend, also check the expected
+  ports. A worker does not necessarily have an HTTP port: its Temporal connection
+  and polling message are the evidence sought.
+- After about two minutes without readiness, give the state and the last useful
+  error rather than multiplying restarts. Do not hide a failure behind a restart
+  loop or change configuration without agreement.
+- Give the developer a short table: ready / starting / blocked, UI URL when
+  known, and log location.
 
-## Observation pendant les essais UI
+## Observation during UI testing
 
-Lire les nouvelles lignes de TOUS les processus de la session avec des curseurs,
-par petits lots pendant les tours actifs et à chaque signal du développeur.
-Ne pas relire tout l’historique, ni surveiller seulement le dernier backend lancé.
-Les fichiers continuent de recevoir les logs entre les tours ; ne pas prétendre
-les analyser en continu lorsque l’assistant n’est plus actif.
+Read new lines from ALL session processes with cursors, in small batches during
+active turns and at each developer signal. Do not reread the whole history, nor
+watch only the last backend started. Files keep receiving logs between turns; do
+not claim to analyze them continuously when the assistant is no longer active.
 
-Pour chaque action rapportée dans l’UI, corréler les horodatages et les identifiants
-présents (task_id, document_uid, workflow_id, run_id). Rapporter brièvement :
-ce qui a été observé, le composant, l’extrait utile expurgé de secrets, puis
-l’hypothèse éventuelle et la prochaine action proposée. Une absence de log ne
-prouve pas que l’action n’a pas eu lieu. Lire le code ciblé si cela aide à expliquer
-les traces ; demander avant de corriger ou de reproduire soi-même l’action.
+For each action reported in the UI, correlate timestamps and the identifiers
+present (task_id, document_uid, workflow_id, run_id). Report briefly: what was
+observed, the component, the useful excerpt redacted of secrets, then any
+hypothesis and the next proposed action. An absent log does not prove the action
+did not happen. Read targeted code if it helps explain the traces; ask before
+fixing or reproducing the action yourself.
 
-## Samples, uniquement sur demande
+## Samples, on request only
 
-Pour WebDAV, travailler dans `~/Fred/fred-samples/knowledge-bases/webdav` :
+For WebDAV, work in the fred-samples checkout's `knowledge-bases/webdav`:
 
-- Pod KB : `make run`, avec son `config/.env` et son YAML. C’est un worker
-  Temporal sans port entrant. Vérifier également le SDK réellement installé et
-  le checkout visé par une installation editable, sans le réinstaller par défaut.
-- Avec ou sans délégation, le pod KB lit le contexte de son run avec sa propre
-  identité (compte de service du client lié à la définition) et écrit dans sa
-  bibliothèque via le droit créé avec l’instance ; aucun grant n’est attendu.
-  Un 403 sur le contexte signale un mauvais client ou un rôle de service absent.
-- Serveur de test : lire la cible actuelle `make share-run` avant de la lancer.
-  Elle peut construire une image et remplacer un conteneur existant : annoncer
-  ces effets et demander avant remplacement. Le serveur de test demandé est
-  distinct de l’infrastructure Docker Compose gérée par le développeur.
-- Observer aussi `make share-logs`, les logs du pod, Knowledge Flow API/worker
-  et Control Plane. Ne pas exécuter `make sync` / `make watch` automatiquement.
-- `make publish` modifie le catalogue Fred : le proposer si la déclaration doit
-  être créée ou actualisée, puis attendre l’accord. Ne pas changer d’identité
-  M2M pour contourner un refus.
+- KB pod: `make run`, with its `config/.env` and YAML. It is a Temporal worker
+  without an inbound port. Also check the SDK actually installed and the checkout
+  targeted by an editable install, without reinstalling it by default.
+- With or without delegation, the KB pod reads its run context with its own
+  identity (service account of the client bound to the definition) and writes to
+  its library through the right created with the instance; no grant is expected.
+  A 403 on the context signals a wrong client or a missing service role.
+- Test server: read the current `make share-run` target before running it. It
+  may build an image and replace an existing container: state these effects and
+  ask before replacing. The requested test server is distinct from the Docker
+  Compose infrastructure managed by the developer.
+- Also observe `make share-logs`, the pod logs, Knowledge Flow API/worker and
+  Control Plane. Do not run `make sync` / `make watch` automatically.
+- `make publish` modifies the Fred catalog: propose it if the declaration must be
+  created or refreshed, then wait for agreement. Do not change M2M identity to
+  bypass a refusal.
 
-Pour un autre compagnon, lire son README/Makefile et ajouter seulement les
-processus demandés au même journal de session. Ne pas ajouter l’évaluateur
-ou d’autres services par défaut.
+For another companion, read its README/Makefile and add only the requested
+processes to the same session journal. Do not add the evaluator or other
+services by default.
 
-## Arrêt
+## Shutdown
 
-Une instruction d’arrêt annule immédiatement les démarrages/redémarrages encore
-prévus. Si des processus viennent déjà de repartir, les arrêter et le dire ; ne
-pas reprendre la relance sur la base d’une autorisation antérieure. À la reprise
-d’une session, vérifier les PID, groupes, ports et destinations de logs actuels :
-un ancien journal ne prouve pas qu’un processus tourne encore. Les sessions
-existantes peuvent avoir leurs logs sous `~/.local/state/fred-live/logs` ; vérifier
-le checkout et la propriété des processus avant de les réutiliser ou remplacer.
+A stop instruction immediately cancels any starts/restarts still planned. If
+processes have just restarted, stop them and say so; do not resume restarting on
+the basis of an earlier authorization. When resuming a session, check current
+PIDs, groups, ports and log destinations: an old journal does not prove a
+process is still running. Check the checkout and process ownership before
+reusing or replacing existing processes.
 
-À la demande du développeur, interrompre proprement seulement les processus
-lancés par cette session et vérifier leur arrêt, y compris leurs enfants.
-Pour un serveur de test, n’arrêter que le conteneur créé par cette session et
-inclus dans la demande. Ne pas arrêter l’infrastructure ni les processus du
-développeur. Conserver les logs et annoncer explicitement ce qui reste actif.
+At the developer's request, cleanly stop only the processes started by this
+session and verify they stopped, including their children. For a test server,
+stop only the container created by this session and included in the request. Do
+not stop the infrastructure or the developer's processes. Keep the logs and state
+explicitly what remains running.
