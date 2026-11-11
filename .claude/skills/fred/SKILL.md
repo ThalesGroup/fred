@@ -75,7 +75,10 @@ jeton, publications, migrations et campagnes doivent appartenir au périmètre d
    `scripts/makefiles/node.mk` ; sélectionner une version compatible déjà
    installée avant d'envisager une installation.
 2. Vérifier `config/.env` et le fichier désigné par `CONFIG_FILE`, puis les
-   éventuels overrides du Makefile.
+   éventuels overrides du Makefile. En Docker, un checkout sans `config/.env`
+   n'est pas préparé : `make docker-prepare DIR=<checkout>` depuis
+   deployment-factory, avec accord. La base `fred_weaver` est partagée entre
+   checkouts : comparer les migrations avant de basculer.
    Dans le profil local Compose actuel, les API Control Plane, Knowledge Flow et
    Fred Agents utilisent `configuration_prod.yaml` ; le worker Knowledge Flow
    utilise son propre `configuration_worker.yaml`. Les deux processus Fred Agents
@@ -93,6 +96,12 @@ jeton, publications, migrations et campagnes doivent appartenir au périmètre d
 
 ## Lancement et logs
 
+- En Docker, pour une session d'observation, lancer tout Fred par
+  `make fred-json FRED_CHECKOUT=<checkout>` depuis deployment-factory, en
+  arrière-plan : mêmes commandes et ports que `make run`, logs JSON par composant
+  dans `/tmp/fred-structured-logs/`, collectés dans Loki et visibles par le
+  développeur sur <http://localhost:3002/d/fred-local-logs/fred-logs>.
+  `make fred-stop` l'arrête. Sinon, ou pour un composant isolé :
 - Un processus supervisé par composant, lancé depuis son propre répertoire, avec
   le mécanisme persistant de l’outil utilisé : sessions `exec_command` /
   `write_stdin` dans Codex, commande Bash en arrière-plan dans Claude Code. Lire
