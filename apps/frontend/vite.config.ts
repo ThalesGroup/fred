@@ -46,6 +46,9 @@ const baseConfig = defineConfig({
     host: "0.0.0.0",
     port: parseInt(process.env.VITE_PORT || "5173"),
     allowedHosts: (process.env.VITE_ALLOWED_HOSTS || "").split(",").filter(Boolean),
+    // A coverage run writes hundreds of report files: watching them reloads every
+    // open page of a dev server running from the same checkout.
+    watch: { ignored: ["**/coverage/**"] },
     proxy: {
       "/fred": process.env.VITE_BACKEND_URL_FRED_AGENTS || "http://localhost:8000",
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
