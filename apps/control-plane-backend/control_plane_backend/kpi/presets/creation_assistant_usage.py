@@ -19,6 +19,8 @@ provider errors carry no tokens and are left to the latency/status analytics."""
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -26,10 +28,12 @@ from fastapi import Request
 from fred_core import KeycloakUser
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.kpi.presets.common import (
     CREATION_ASSISTANT_ANSWERED_FILTER,
     CreationAssistantUsageResponse,
+    user_filter,
 )
 
 
@@ -40,6 +44,8 @@ async def query_creation_assistant_usage(
     since: datetime,
     until: datetime,
     request: Request,
+    user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> CreationAssistantUsageResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope).
     del user, request
@@ -54,11 +60,13 @@ async def query_creation_assistant_usage(
                         "range": {
                             "@timestamp": {
                                 "gte": since.isoformat(),
-                                "lte": until.isoformat(),
+                                "lt": until.isoformat(),
                             }
                         }
                     },
                     CREATION_ASSISTANT_ANSWERED_FILTER,
+                    *user_filter(user_ids),
+                    *days.query_filter(since, until),
                 ]
             }
         },
@@ -68,7 +76,7 @@ async def query_creation_assistant_usage(
         },
     }
 
-    resp = store.client.search(index=store.index, body=body)
+    resp = await asyncio.to_thread(store.client.search, index=store.index, body=body)
     aggs = resp.get("aggregations", {})
     input_tokens = int(aggs.get("sum_input", {}).get("value") or 0)
     output_tokens = int(aggs.get("sum_output", {}).get("value") or 0)
@@ -89,4 +97,6 @@ CREATION_ASSISTANT_USAGE_PRESET = PresetDef(
     response_model=CreationAssistantUsageResponse,
     handler=query_creation_assistant_usage,
     summary="Creation assistant token consumption and number of drafts, platform-wide",
+    user_filterable=True,
+    day_filterable=True,
 )

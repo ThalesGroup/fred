@@ -164,6 +164,8 @@ class TeamPermission(str, Enum):
     CAN_UPDATE_RESOURCES = "can_update_resources"
     CAN_UPDATE_AGENTS = "can_update_agents"
     CAN_READ_MEMEBERS = "can_read_members"
+    # Team usage analytics (KPI presets, export): team_admin only.
+    CAN_READ_ANALYTICS = "can_read_analytics"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     # AUTHZ-05 (RFC §26): renamed from CAN_ADMINISTER_MANAGERS/CAN_ADMINISTER_OWNERS.
     CAN_ADMINISTER_EDITORS = "can_administer_editors"

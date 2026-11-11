@@ -4534,10 +4534,10 @@ needs them, and per-turn tracing already has them in history rows and SSE logs.
 in `KPI_INDEX_MAPPING` (added for the CTRLP-12 A3 erasure `update_by_query`), so
 the new dim is `term`-aggregatable on existing indexes with no migration.
 
-**Consumer.** Control-plane's `conversation_depth` KPI preset (`GET
-/kpi/presets/conversation_depth`) — a `terms` agg on `dims.session_id` behind an
-`exists` filter, so pre-#2426 turn rows are excluded rather than collapsing into
-one bucket.
+**Consumer.** Control-plane's `analytics_usage` KPI preset (messages per
+conversation and the conversation distribution; `conversation_depth` until
+2026-10-28, see `CONTROL-PLANE-PRODUCT-CONTRACT.md` §74) — a `terms` agg on `dims.session_id`; pre-#2426 turn rows,
+which lack it, fall outside every bucket rather than collapsing into one.
 
 ---
 
@@ -7425,3 +7425,21 @@ the corresponding migration note for validation and compatibility limits.
 `RuntimeContext` gains optional `attachments` (see §2.3), stored on the user row
 as `metadata.extras.attachments`. Older pods ignore it; older rows render as
 before. The `managed-conversations` specification owns the acceptance contract.
+
+### 8.126 KPI events: capability on tool calls, team on API requests (2026-10-28)
+
+- `agent.tool_latency_ms` and `agent.tool_failed_total` carry
+  `dims.capability_id` when the tool came from a capability
+  (`build_capability_agent_block` stamps `metadata["fred.capability_id"]`;
+  `ToolExecution.run(capability_id=...)` emits it). Built-in tools and Graph
+  `tool_ref` calls carry none.
+- `KPIMiddleware` adds `dims.team_id` to `api.request_latency_ms` when the
+  route has a `team_id` path parameter and the request is authenticated and
+  not refused (4xx).
+- `KPI_INDEX_MAPPING` adds `dims.capability_id`,
+  `quantities.cache_read_tokens` and `quantities.tool_count`; startup adds
+  them to an existing index.
+
+All three are OpenSearch-only: no Prometheus label, Grafana unchanged. Past
+events are completed only by the optional `fred-control-plane-kpi-backfill`
+command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).

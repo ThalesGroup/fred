@@ -12,11 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  BarChart as RechartsBarChart,
+  Bar,
+  LabelList,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import type { LabelValuePoint } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./BarChart.module.scss";
+
+const MAX_LABELLED_BARS = 16;
 
 function useCssVars(ref: React.RefObject<HTMLElement | null>, ...names: string[]) {
   const [vars, setVars] = useState<Record<string, string>>({});
@@ -56,6 +67,17 @@ interface BarChartProps {
    *  applies its own `'10%'` default — only `HistogramChart` passes it, to make
    *  adjacent buckets read as one contiguous distribution. */
   barCategoryGap?: string | number;
+  /** Drawn on the parent's surface, without a card of its own (inside a dashboard section). */
+  flat?: boolean;
+  /** Vertical only: bars with their values written above instead of a value
+   *  axis and grid, flat ticks.
+   *  Past 16 bars the labels would collide, so the axis comes back. */
+  labelled?: boolean;
+  /** With `labelled`: each bar's share of the total under its value. */
+  shareLabels?: boolean;
+  maxBarSize?: number;
+  /** Rendered right after the title, e.g. an info icon. */
+  titleAction?: ReactNode;
 }
 
 export default function BarChart({
@@ -70,8 +92,13 @@ export default function BarChart({
   orientation = "horizontal",
   compact = false,
   barCategoryGap,
+  flat = false,
+  labelled = false,
+  shareLabels = false,
+  maxBarSize,
+  titleAction,
 }: BarChartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
     sectionRef,
@@ -81,6 +108,7 @@ export default function BarChart({
     "--surface-floating",
     "--on-surface",
     "--primary",
+    "--outline-variant",
     "--font-family-base",
     "--radius-s",
   );
@@ -88,15 +116,59 @@ export default function BarChart({
   const displayRows = sortOrder === "desc" ? [...rows].sort((a, b) => b.value - a.value) : rows;
 
   const isVertical = orientation === "vertical";
+  const valueLabels = labelled && displayRows.length <= MAX_LABELLED_BARS;
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const number = (v: number) => v.toLocaleString(i18n.language);
+  const share = (v: number) =>
+    new Intl.NumberFormat(i18n.language, { style: "percent", maximumFractionDigits: 0 }).format(total ? v / total : 0);
+  // Value (and share) above each bar, in place of a value axis.
+  const renderLabel = (props: {
+    x?: number | string;
+    y?: number | string;
+    width?: number | string;
+    value?: unknown;
+  }) => {
+    const x = Number(props.x) + Number(props.width) / 2;
+    const y = Number(props.y);
+    const value = Number(props.value);
+    const font = css["--font-family-base"];
+    return shareLabels ? (
+      <text x={x} textAnchor="middle" fontFamily={font}>
+        <tspan x={x} y={y - 22} fontSize={12} fontWeight={500} fill={css["--on-surface"]}>
+          {number(value)}
+        </tspan>
+        <tspan x={x} y={y - 7} fontSize={11} fill={css["--on-surface-retreat"]}>
+          {share(value)}
+        </tspan>
+      </text>
+    ) : (
+      <text x={x} y={y - 7} textAnchor="middle" fontFamily={font} fontSize={11} fill={css["--on-surface-retreat"]}>
+        {number(value)}
+      </text>
+    );
+  };
 
   // Horizontal: height grows with number of bars. Vertical: fixed height, width is unrestricted.
   // Compact: fits a 120px card (12px padding + a small title leave ~76px for the chart itself).
   const chartHeight = compact ? 76 : isVertical ? 220 : Math.max(180, displayRows.length * barHeight + 40);
+  const verticalMargin = compact
+    ? { top: 2, right: 2, left: 2, bottom: 2 }
+    : valueLabels
+      ? { top: shareLabels ? 36 : 20, right: 8, left: 8, bottom: 4 }
+      : { top: 8, right: 8, left: 8, bottom: labelled ? 4 : 40 };
 
   return (
-    <section ref={sectionRef} className={styles.section} data-compact={compact || undefined}>
+    <section
+      ref={sectionRef}
+      className={styles.section}
+      data-compact={compact || undefined}
+      data-flat={flat || undefined}
+    >
       <div className={styles.header}>
-        <h2 className={styles.title}>{title}</h2>
+        <h2 className={styles.title}>
+          {title}
+          {titleAction}
+        </h2>
       </div>
 
       {isLoading && !rows.length && <div className={styles.state}>{t("common.loading")}</div>}
@@ -112,10 +184,12 @@ export default function BarChart({
               <RechartsBarChart
                 data={displayRows}
                 layout="horizontal"
-                margin={compact ? { top: 2, right: 2, left: 2, bottom: 2 } : { top: 8, right: 8, left: 8, bottom: 40 }}
+                margin={verticalMargin}
                 barCategoryGap={barCategoryGap}
               >
-                {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} vertical={false} />}
+                {!compact && !valueLabels && (
+                  <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} vertical={false} />
+                )}
                 <XAxis
                   type="category"
                   dataKey="label"
@@ -125,10 +199,10 @@ export default function BarChart({
                     fontFamily: css["--font-family-base"],
                   }}
                   tickLine={false}
-                  axisLine={compact ? false : { stroke: css["--outline-muted"] }}
-                  angle={compact ? 0 : -35}
-                  textAnchor={compact ? "middle" : "end"}
-                  interval={0}
+                  axisLine={compact ? false : { stroke: css[labelled ? "--outline-variant" : "--outline-muted"] }}
+                  angle={compact || labelled ? 0 : -35}
+                  textAnchor={compact || labelled ? "middle" : "end"}
+                  interval={labelled ? "preserveStartEnd" : 0}
                   // Only pass `height` in compact mode. Spreading it instead of
                   // `height={compact ? 14 : undefined}` matters: Recharts reads
                   // `child.props.height` directly when it computes the chart
@@ -145,7 +219,7 @@ export default function BarChart({
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
                   axisLine={false}
-                  hide={compact}
+                  hide={compact || valueLabels}
                 />
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
@@ -158,9 +232,18 @@ export default function BarChart({
                     fontFamily: css["--font-family-base"],
                   }}
                   labelStyle={{ color: css["--on-surface-retreat"] }}
+                  itemStyle={{ color: css["--on-surface"] }}
                   formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
                 />
-                <Bar dataKey="value" fill={css["--primary"]} radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="value"
+                  fill={css["--primary"]}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={maxBarSize}
+                  isAnimationActive={false}
+                >
+                  {valueLabels && <LabelList dataKey="value" content={renderLabel} />}
+                </Bar>
               </RechartsBarChart>
             ) : (
               <RechartsBarChart
@@ -196,9 +279,10 @@ export default function BarChart({
                     fontFamily: css["--font-family-base"],
                   }}
                   labelStyle={{ color: css["--on-surface-retreat"] }}
+                  itemStyle={{ color: css["--on-surface"] }}
                   formatter={(v: number) => (valueLabel ? [v, valueLabel] : [v])}
                 />
-                <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="value" fill={css["--primary"]} radius={[0, 4, 4, 0]} isAnimationActive={false} />
               </RechartsBarChart>
             )}
           </ResponsiveContainer>

@@ -21,11 +21,15 @@ config, plus the unlisted/missing-model fallback to `default`.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fred_core.kpi.model_impact_factors import (
     ModelImpactFactors,
     estimate_green_cost,
     load_model_impact_factors,
+    load_usd_per_eur,
+    usd_to_eur,
 )
 
 _FACTORS = {
@@ -150,3 +154,21 @@ def test_shipped_config_loads_and_has_a_default_row() -> None:
 
     assert "default" in factors
     assert isinstance(factors["default"], ModelImpactFactors)
+
+
+def test_shipped_eur_rate_converts_usd_to_eur() -> None:
+    assert load_usd_per_eur() == pytest.approx(1.12)
+    assert usd_to_eur(112) == pytest.approx(100)
+
+
+def test_eur_rate_defaults_when_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "factors.yaml"
+    path.write_text("models: {}\n", encoding="utf-8")
+    monkeypatch.setattr("fred_core.kpi.model_impact_factors._FACTORS_YAML_PATH", path)
+    load_usd_per_eur.cache_clear()
+    try:
+        assert load_usd_per_eur() == pytest.approx(1.12)
+    finally:
+        load_usd_per_eur.cache_clear()

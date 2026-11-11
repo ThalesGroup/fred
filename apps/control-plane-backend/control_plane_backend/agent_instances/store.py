@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -24,7 +24,7 @@ from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -38,12 +38,20 @@ from control_plane_backend.agent_marketplace.store import (
 )
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.agent_marketplace_models import (
+    AgentMarketplaceEntryRow,
+)
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
+
+
+def _aware(moment: datetime) -> datetime:
+    """SQLite returns naive datetimes; stored ones are UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -289,6 +297,76 @@ class AgentInstanceStore:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(select(func.count()).select_from(AgentInstanceRow))
             return result.scalar_one()
+
+    async def count_published_created(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str] = (),
+        *,
+        created_by: Collection[str] | None = None,
+        excluded: Sequence[tuple[datetime, datetime]] = (),
+    ) -> list[int]:
+        """Agents created in each `[start, end)` window that were published to the
+        marketplace at least once (the entry outlives a removal). One statement.
+        `created_by` keeps the agents those users created; agents created in an
+        `excluded` `[start, end)` range are left out."""
+        if not windows:
+            return []
+        if created_by is not None or excluded:
+            return await self._count_published_created_in_python(
+                windows,
+                team_ids,
+                None if created_by is None else set(created_by),
+                excluded,
+            )
+        created = AgentInstanceRow.created_at
+        statement = select(
+            *(
+                func.coalesce(
+                    func.sum(case(((created >= start) & (created < end), 1), else_=0)),
+                    0,
+                )
+                for start, end in windows
+            )
+        ).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            )
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            row = (await s.execute(statement)).one()
+        return [int(value or 0) for value in row]
+
+    async def _count_published_created_in_python(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str],
+        creators: set[str] | None,
+        excluded: Sequence[tuple[datetime, datetime]],
+    ) -> list[int]:
+        # Counted in Python: a filter can hold tens of thousands of ids, above
+        # driver bind limits, while published agents of the windows stay few.
+        created = AgentInstanceRow.created_at
+        statement = select(created, AgentInstanceRow.created_by).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            ),
+            created >= min(start for start, _ in windows),
+            created < max(end for _, end in windows),
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(statement)).all()
+        mine = [
+            at
+            for at, creator in ((_aware(at), creator) for at, creator in rows)
+            if (creators is None or creator in creators)
+            and not any(low <= at < high for low, high in excluded)
+        ]
+        return [sum(1 for at in mine if start <= at < end) for start, end in windows]
 
     async def list_by_team(
         self,

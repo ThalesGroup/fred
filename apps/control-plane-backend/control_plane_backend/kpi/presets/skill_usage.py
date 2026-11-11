@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -12,8 +13,13 @@ from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
+from control_plane_backend.kpi.counted_days import ALL_DAYS, CountedDays
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import SkillUsageResponse, SkillUsageRow
+from control_plane_backend.kpi.presets.common import (
+    SkillUsageResponse,
+    SkillUsageRow,
+    scope_filter,
+)
 
 TOP_SKILLS = 100
 
@@ -25,15 +31,20 @@ async def query_skill_usage(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
+    user_ids: Sequence[str] | None = None,
+    days: CountedDays = ALL_DAYS,
 ) -> SkillUsageResponse:
     # The preset router owns authorization for both team and platform scope.
     del user, request
-    filters: list[dict[str, Any]] = []
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
     return await _query_skill_usage(
-        store, since=since, until=until, scope_filters=filters
+        store,
+        since=since,
+        until=until,
+        scope_filters=[
+            *scope_filter(team_ids, user_ids),
+            *days.query_filter(since, until),
+        ],
     )
 
 
@@ -64,7 +75,7 @@ async def _query_skill_usage(
     filters: list[dict[str, Any]] = [
         {"term": {"metric.name": "agent.skill_loaded_total"}},
         {"terms": {"dims.skill_origin": ["user", "agent"]}},
-        {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
+        {"range": {"@timestamp": {"gte": since.isoformat(), "lt": until.isoformat()}}},
         *scope_filters,
     ]
     body = {
@@ -121,6 +132,8 @@ SKILL_USAGE_PRESET = PresetDef(
     handler=query_skill_usage,
     summary="Successful skill loads by user or model over the selected time range",
     team_scopable=True,
+    user_filterable=True,
+    day_filterable=True,
 )
 
 

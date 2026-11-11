@@ -31,6 +31,7 @@ const TEAM_PERMISSION_ROLES: Record<TeamPermission, UserTeamRelation[]> = {
   can_update_resources: ["team_editor"],
   can_update_agents: ["team_editor"],
   can_read_members: TEAM_ROLES,
+  can_read_analytics: ["team_admin"],
   can_administer_members: ["team_admin"],
   can_administer_editors: ["team_admin"],
   can_administer_analysts: ["team_admin"],
