@@ -73,6 +73,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "admin",
       "admin/supervision",
       "admin/organizations",
+      "admin/mcp-connections",
       "admin/monitor",
       "admin/provisioning",
       "admin/platform-prompt",

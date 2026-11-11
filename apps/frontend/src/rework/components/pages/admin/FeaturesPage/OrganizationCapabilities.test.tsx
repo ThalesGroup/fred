@@ -132,7 +132,7 @@ describe("OrganizationCapabilities", () => {
     ];
     await render();
     await render();
-    expect(h.refreshes).toEqual([{ organizationId: "O1", runtimeId: "fresh" }]);
+    expect(h.refreshes).toEqual([{ organizationId: "O1", sourceId: "fresh" }]);
     expect(container.textContent).toContain("observation.not_observed");
   });
 

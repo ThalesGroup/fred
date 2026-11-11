@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { act } from "react";
@@ -33,6 +34,7 @@ import McpConnectionsPage from "./McpConnectionsPage";
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
   h.admin = true;
   h.error = false;
@@ -67,7 +69,11 @@ afterEach(() => {
 });
 const render = () => act(() => root.render(<McpConnectionsPage />));
 const select = () =>
-  act(() => [...container.querySelectorAll("td")].find((cell) => cell.textContent === "Shared tools")!.click());
+  act(() =>
+    [...container.querySelectorAll<HTMLElement>("[data-activatable]")]
+      .find((cell) => cell.textContent?.includes("Shared tools"))!
+      .click(),
+  );
 const button = (key: string) =>
   [...container.querySelectorAll("button")].find((item) => item.textContent === `rework.mcp.${key}`)!;
 it("denies business admins and hides cached technical inventory after access loss", () => {
