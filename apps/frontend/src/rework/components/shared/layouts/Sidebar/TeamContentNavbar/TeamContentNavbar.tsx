@@ -115,10 +115,10 @@ export default function TeamContentNavbar() {
     if (teamId) recordTeamVisit(teamId);
   }, [teamId]);
 
-  // Return content readers to agents; owner-only users return to Home rather
+  // Return content readers through their space landing; owner-only users return to Home rather
   // than looping through the neutral landing back to this management page.
   const handleBack = () => {
-    navigate(canReadContent ? `/team/${teamId}/agents` : "/home");
+    navigate(canReadContent ? `/team/${teamId}` : "/home");
   };
   const capabilities = useTeamCapabilities(selectedTeam);
 

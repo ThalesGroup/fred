@@ -88,7 +88,7 @@ export default function TeamSelectionListItem({
       </span>
     </>
   );
-  const className = `${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}${description ? ` ${styles.withDescription}` : ""}`;
+  const className = `${styles.item}${description ? ` ${styles.withDescription}` : ""}`;
   return onActivate ? (
     <button
       type="button"

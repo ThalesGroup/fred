@@ -2662,7 +2662,10 @@
       "uploadFailedDetail": "Veuillez réessayer dans un instant."
     },
     "home": {
-      "organizationPrompts": "Prompts de l'organisation",
+      "organizationSpace": "Espace de l'organisation",
+      "yourSpaces": "Vos espaces",
+      "personalSpace": "Mon espace personnel",
+      "personalSpaceDescription": "Votre espace privé",
       "title": "Accueil",
       "organizationOf": "Organisation de {{name}}",
       "projectsOf": "Projets de {{name}}",

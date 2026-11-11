@@ -23,8 +23,14 @@
   min-height: 0;
 }
 
-.personalSpace {
-  padding: 0 var(--spacing-xs);
+.spaces {
+  padding: var(--spacing-xs);
+
+  > h3 {
+    margin: 0 var(--spacing-xs) var(--spacing-2xs);
+    color: var(--on-surface-retreat);
+    font: var(--font-body-small);
+  }
 }
 
 .teamList {

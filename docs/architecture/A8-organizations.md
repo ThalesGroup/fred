@@ -45,6 +45,11 @@ by an accessible space's name. Search retains the parent of a matching project.
 [TeamContentNavbar](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
 uses the same memberships for its shared breadcrumb and project links. These
 presentation rules add no inherited access; routes retain their permission checks.
+Home groups the organization workspace and personal workspace as peers, and offers
+an organization selector only when multiple scopes are available. The shared
+[space landing](../../apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamLandingPage.tsx)
+routes content readers to organization resources or to agents in other space kinds;
+management-only users retain the members-settings destination.
 
 ## Spaces and memberships
 

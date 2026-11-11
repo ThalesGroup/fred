@@ -7,6 +7,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
+  kind: "team",
+  spacesLoading: false,
+  spacesError: false,
   manage: true,
   read: false,
   settled: true,
@@ -28,7 +31,10 @@ vi.mock("@core/hooks/useSpaceAccess", () => ({
   }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useMySpacesQuery: () => ({ currentData: [{ id: "pilote", name: "Pilote", roles: ["owner"] }] }),
+  useMySpacesQuery: () => ({
+    currentData: h.spacesLoading ? undefined : [{ id: "pilote", name: "Pilote", kind: h.kind, roles: ["owner"] }],
+    isError: h.spacesError,
+  }),
   useSpaceMembersQuery: (...args: unknown[]) => {
     h.roster(...args);
     return {
@@ -54,6 +60,9 @@ import TeamLandingPage from "./TeamLandingPage";
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+  h.kind = "team";
+  h.spacesLoading = false;
+  h.spacesError = false;
   h.manage = true;
   h.read = false;
   h.settled = true;
@@ -125,5 +134,41 @@ it("loads eligible parent users only on explicit request", async () => {
   )!;
   await act(async () => button.click());
   expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  expect(h.grant).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["organization", "resources"],
+  ["team", "agents"],
+  ["project", "agents"],
+  ["personal", "agents"],
+])("lands a reader of a %s space on %s", async (kind, destination) => {
+  h.kind = kind;
+  h.read = true;
+  h.manage = false;
+  await render(true);
+  expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
+  expect(h.grant).not.toHaveBeenCalled();
+});
+
+it("waits for the organization kind and never falls through to agents after a failed lookup", async () => {
+  h.kind = "organization";
+  h.read = true;
+  h.spacesLoading = true;
+  await render(true);
+  expect(container.textContent).toBe("common.loading");
+  h.spacesLoading = false;
+  h.spacesError = true;
+  await render(true);
+  expect(container.textContent).toBe("rework.manager.unavailable");
+});
+
+it("preserves management-only and forbidden organization landings", async () => {
+  h.kind = "organization";
+  await render(true);
+  expect(container.textContent).toBe("navigate:/team/pilote/settings/members");
+  h.manage = false;
+  await render(true);
+  expect(container.textContent).toBe("rework.spaceMembers.forbidden");
   expect(h.grant).not.toHaveBeenCalled();
 });

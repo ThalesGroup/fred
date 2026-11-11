@@ -74,7 +74,16 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
           ]),
       ...state.extraSpaces,
       ...(state.personal
-        ? [{ id: "personal", kind: "personal", name: "priya", personal_owner: "priya", roles: ["member"] }]
+        ? [
+            {
+              id: "personal",
+              kind: "personal",
+              name: "priya",
+              organization_id: "org",
+              personal_owner: "priya",
+              roles: ["member"],
+            },
+          ]
         : []),
     ];
     return {
@@ -129,7 +138,7 @@ afterEach(async () => {
   state.organizationRead = false;
   vi.clearAllMocks();
 });
-const entry = () => node.querySelector<HTMLButtonElement>('button[aria-label="rework.sidebar.team.userTeam"]');
+const entry = () => node.querySelector<HTMLButtonElement>('button[aria-label="rework.home.personalSpace"]');
 it("creates only on explicit action, blocks duplicate activation and ignores completion after account change", async () => {
   let resolve!: (value: { id: string }) => void;
   state.open.mockReturnValue({
@@ -272,39 +281,39 @@ it("keeps the Home title without an organization", async () => {
   expect(node.querySelector("h2")?.previousElementSibling).toBeNull();
 });
 
-it("opens organization prompts through the ordinary page only with the server's Read permission", async () => {
+it("opens the organization workspace through its landing only with the server's Read permission", async () => {
   state.roles = ["organization_admin"];
   await render();
-  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/org"]')).toBeNull();
   state.organizationRead = true;
   await render();
-  expect(node.querySelector('a[href="/team/org/prompts"]')?.textContent).toContain("rework.home.organizationPrompts");
+  expect(node.querySelector('a[href="/team/org"]')?.textContent).toContain("rework.home.organizationSpace");
   state.fail = true;
   await render();
-  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/org"]')).toBeNull();
 });
 
-it("lets a member choose the organization for both prompt and personal-space access", async () => {
+it("lets a member choose the organization for both organization and personal-space access", async () => {
   state.otherOrganization = true;
   state.organizationRead = true;
   state.roles = ["member"];
   state.open.mockReturnValue({ unwrap: async () => ({ id: "new-personal" }) });
   await render();
-  expect(node.querySelector('a[href="/team/other/prompts"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/other"]')).not.toBeNull();
   await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
   const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
     (el) => el.textContent === "Demo",
   )!;
   await act(async () => option.click());
-  expect(node.querySelector('a[href="/team/org/prompts"]')).not.toBeNull();
-  expect(node.querySelector('a[href="/team/other/prompts"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/org"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/other"]')).toBeNull();
   await act(async () => entry()!.click());
   expect(state.open).toHaveBeenCalledExactlyOnceWith({ createPersonalSpace: { organization_id: "org" } });
   state.organization = false;
   state.hideTeam = true;
   await render();
-  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
-  expect(node.querySelector('a[href="/team/other/prompts"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/org"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/other"]')).not.toBeNull();
 });
 
 const atlas = {
@@ -405,6 +414,23 @@ it("keeps an isolated project's organization selectable alongside an ordinary me
   )!;
   await act(async () => option.click());
   expect(node.querySelector('a[href="/team/atlas"]')).not.toBeNull();
-  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/org"]')).toBeNull();
   expect(entry()).toBeNull();
+});
+
+it("keeps a single-organization editor's spaces as peers without an organization picker", async () => {
+  state.roles = ["member"];
+  state.teamRoles = ["editor"];
+  state.organizationRead = true;
+  await render();
+  expect(node.querySelector('button[aria-haspopup="listbox"]')).toBeNull();
+  const group = node.querySelector('section[aria-labelledby="home-spaces-title"]')!;
+  const organization = group.querySelector('a[href="/team/org"]')!;
+  const personal = entry()!;
+  expect(organization.parentElement).toBe(group);
+  expect(personal.parentElement).toBe(group);
+  expect(organization.textContent).toContain("rework.home.organizationSpace");
+  expect(personal.textContent).toContain("rework.home.personalSpaceDescription");
+  expect(node.querySelector('a[href="/team/fredlab"]')).not.toBeNull();
+  expect(state.open).not.toHaveBeenCalled();
 });

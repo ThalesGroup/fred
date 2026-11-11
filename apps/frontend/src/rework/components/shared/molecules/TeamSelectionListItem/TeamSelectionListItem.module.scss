@@ -20,15 +20,10 @@
   cursor: pointer;
   box-sizing: border-box;
   border-radius: var(--radius-s);
-  padding: 0 var(--spacing-s);
-  height: 48px;
+  padding: var(--spacing-xs) var(--spacing-s);
+  min-height: 48px;
   color: var(--on-surface);
   text-decoration: none;
-}
-
-/* The personal space is set apart from the team list by its own outline. */
-.itemPersonal {
-  border: 1px solid var(--outline-muted);
 }
 
 /* M3 state layer: the majority text/icon colour (`on-surface`) at 8% over the
@@ -62,8 +57,7 @@
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-label-large);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .roles {
@@ -75,6 +69,7 @@
 }
 
 .command {
+  border: 0;
   background: transparent;
   width: 100%;
   font: inherit;
@@ -82,10 +77,6 @@
 }
 
 .withDescription {
-  padding-block: var(--spacing-xs);
-  height: auto;
-  min-height: 48px;
-
   .name,
   .roles {
     white-space: normal;

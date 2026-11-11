@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
 import type { MySpace } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
+import Separator from "@shared/atoms/Separator/Separator";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Select from "@shared/molecules/Select/Select";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
@@ -180,29 +181,35 @@ export default function HomeNavPanel() {
         />
       )}
 
-      {org && organizationContent.allowed && (
-        <TeamSelectionListItem
-          redirection={`/team/${org.id}/prompts`}
-          name={t("rework.home.organizationPrompts")}
-          roles={org.roles}
-          avatarName={org.name}
-        />
-      )}
-
-      {canOpen && (
-        <div className={styles.personalSpace}>
-          <TeamSelectionListItem
-            onActivate={() => void activatePersonal()}
-            pending={opening}
-            name={t("rework.sidebar.team.userTeam")}
-            personal
-            imgUrl={bootstrap?.current_user?.avatar_image_url ?? undefined}
-            avatarName={KeyCloakService.GetUserFullName()}
-            avatarColor={PERSONAL_TEAM_COLOR}
-          />
-          {opening && <p role="status">{t("common.loading")}</p>}
-          {failed && <p role="alert">{t("rework.manager.unavailable")}</p>}
-        </div>
+      {((org && organizationContent.allowed) || canOpen) && (
+        <section className={styles.spaces} aria-labelledby="home-spaces-title">
+          <h3 id="home-spaces-title">{t("rework.home.yourSpaces")}</h3>
+          {org && organizationContent.allowed && (
+            <TeamSelectionListItem
+              redirection={`/team/${org.id}`}
+              name={t("rework.home.organizationSpace")}
+              roles={org.roles}
+              avatarName={org.name}
+            />
+          )}
+          {canOpen && (
+            <>
+              <TeamSelectionListItem
+                onActivate={() => void activatePersonal()}
+                pending={opening}
+                name={t("rework.home.personalSpace")}
+                description={t("rework.home.personalSpaceDescription")}
+                personal
+                imgUrl={bootstrap?.current_user?.avatar_image_url ?? undefined}
+                avatarName={KeyCloakService.GetUserFullName()}
+                avatarColor={PERSONAL_TEAM_COLOR}
+              />
+              {opening && <p role="status">{t("common.loading")}</p>}
+              {failed && <p role="alert">{t("rework.manager.unavailable")}</p>}
+            </>
+          )}
+          <Separator margin="var(--spacing-s) var(--spacing-xs) 0" />
+        </section>
       )}
 
       <div className={styles.teamList}>
