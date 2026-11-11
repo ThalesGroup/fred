@@ -91,74 +91,57 @@ class ApplicationContext:
     def get_text_splitter(self) -> BaseTextSplitter:
         return SemanticSplitter(**self.configuration.text_splitter.model_dump())
 
-    def _log_sensitive(self, name: str, value: Optional[str]):
-        logger.info("%s configured: %s", name, bool(value))
-
     def _log_config_summary(self):
+        """Validate the security, vector and tabular settings, then report them as one
+        structured startup event. Secrets are only checked for presence."""
         sec = self.configuration.security.user
+        if sec.enabled and sec.provider == "keycloak":
+            try:
+                split_realm_url(str(sec.realm_url))
+            except Exception as e:
+                logger.error("keycloak_url invalid (expected …/realms/<realm>): %s", e)
+                raise ValueError("Invalid Keycloak URL") from e
+        summary: dict[str, object] = {
+            "security_enabled": sec.enabled,
+            "security_provider": sec.provider,
+            "client_id": sec.client_id,
+            "realm_url": str(sec.realm_url) if sec.realm_url else None,
+            # Models are admitted per organization by the Control Plane.
+            "inference_credential_bindings": len(self.configuration.inference_credentials),
+        }
 
-        logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
-        logger.info("     • enabled: %s", sec.enabled)
-        logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • %s: %s", "issuer" if sec.provider == "oidc" else "keycloak_url", sec.realm_url or "<unset>")
-
-        if sec.enabled:
-            if sec.provider == "keycloak":
-                try:
-                    base, realm = split_realm_url(str(sec.realm_url))
-                    logger.info("     • realm: %s  (base=%s)", realm, base)
-                except Exception as e:
-                    logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
-                    raise ValueError("Invalid Keycloak URL") from e
-        logger.info("  🧠 models: admitted per organization by the Control Plane; %d credential binding(s)", len(self.configuration.inference_credentials))
-
-        vector_type = self.configuration.storage.vector_store
-        logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
             store = self.configuration.storage.vector_store
-
             if isinstance(store, OpenSearchIndexConfig):
                 s = self.configuration.storage.opensearch
                 if not s:
-                    logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
+                    logger.error("Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
                     raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
                 _require_env(OPENSEARCH_PASSWORD_ENV)
-                logger.info(f"     ↳ Host: {s.host}")
-                logger.info(f"     ↳ Vector Index: {store.index}")
-                logger.info(f"     ↳ Secure (TLS): {s.secure}")
-                logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
-                logger.info(f"     ↳ Username: {s.username}")
-                self._log_sensitive(OPENSEARCH_PASSWORD_ENV, os.getenv(OPENSEARCH_PASSWORD_ENV))
+                summary.update(vector_backend="opensearch", vector_host=s.host, vector_index=store.index, vector_tls=s.secure, vector_verify_certs=s.verify_certs, vector_account=s.username)
             elif isinstance(store, PgVectorStorageConfig):
                 pg = self.configuration.storage.postgres
                 _require_env(POSTGRES_PASSWORD_ENV)
-                logger.info("     ↳ Backend: pgvector")
-                logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
-                logger.info("     ↳ Collection: %s", store.collection_name)
-                logger.info("     ↳ Username: %s", pg.username)
-                self._log_sensitive(POSTGRES_PASSWORD_ENV, os.getenv(POSTGRES_PASSWORD_ENV))
+                summary.update(vector_backend="pgvector", vector_host=pg.host, vector_port=pg.port, vector_database=pg.database, vector_collection=store.collection_name, vector_account=pg.username)
         except Exception:
-            logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
+            logger.warning("Failed to load vector store settings; some variables may be missing or misconfigured.")
 
         try:
             tabular_store: TabularStoreConfig = self.configuration.storage.tabular_store
-            logger.info("  📊 Tabular runtime:")
-            logger.info(
-                "     • prefix=%s  format=%s  compression=%s",
-                tabular_store.artifacts_prefix,
-                tabular_store.format,
-                tabular_store.compression,
-            )
-            logger.info(
-                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  internal_presigned_ttl_seconds=%s",
-                tabular_store.query.engine,
-                tabular_store.query.access_mode,
-                tabular_store.query.default_max_rows,
-                tabular_store.query.max_rows,
-                tabular_store.query.internal_presigned_ttl_seconds,
+            summary.update(
+                tabular_prefix=tabular_store.artifacts_prefix,
+                tabular_format=tabular_store.format,
+                tabular_compression=tabular_store.compression,
+                tabular_engine=tabular_store.query.engine,
+                tabular_access=tabular_store.query.access_mode,
+                tabular_default_max_rows=tabular_store.query.default_max_rows,
+                tabular_max_rows=tabular_store.query.max_rows,
+                tabular_presigned_ttl_seconds=tabular_store.query.internal_presigned_ttl_seconds,
             )
         except Exception:
-            logger.warning("  ⚠️ Failed to read tabular runtime section.")
+            logger.warning("Failed to read the tabular runtime settings.")
+
+        logger.info("Knowledge Flow configuration", extra={key: value for key, value in summary.items() if value is not None})
 
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
@@ -385,17 +368,9 @@ def _classify_connection_failures(engine: AsyncEngine) -> None:
             raise failure from error
 
 
-def _mask(value: Optional[str]) -> str:
-    """Never reveal any character of a secret — a partial preview is still a leak
-    (a short secret's `left`/`right` window can cover most of its length)."""
-    return "<empty>" if not value else "<redacted>"
-
-
 def _require_env(var: str) -> None:
-    """Log presence of a required env var or raise loudly if missing."""
-    val = os.getenv(var, "")
-    if val:
-        logger.info("     • %s: present (%s)", var, _mask(val))
+    """Raise loudly if a required secret is missing; its value is never logged."""
+    if os.getenv(var, ""):
         return
-    logger.error("     ❌ %s is not set", var)
+    logger.error("%s is not set", var)
     raise ValueError(f"Missing required environment variable: {var}")
