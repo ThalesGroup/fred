@@ -2664,11 +2664,15 @@
     "home": {
       "organizationPrompts": "Organization prompts",
       "title": "Home",
-      "searchPlaceholder": "Search a team",
+      "organizationOf": "Organization of {{name}}",
+      "projectsOf": "Projects in {{name}}",
+      "spaceLocation": "Space hierarchy",
+      "noSpaces": "No teams or projects to display.",
+      "searchPlaceholder": "Search teams or projects",
       "searchClear": "Clear search",
-      "yourTeams": "Your teams",
+      "yourTeams": "Your teams and projects",
       "sort": {
-        "aria": "Sort teams",
+        "aria": "Sort teams and projects",
         "recent": "Recently viewed",
         "alpha": "Alphabetical"
       },
@@ -4965,10 +4969,7 @@
       }
     },
     "weaver": {
-      "title": "Weaver migration",
-      "description": "These journeys are preserved for incremental migration. They are not yet available in Weaver.",
       "pending": "Pending migration",
-      "all": "All features",
       "previewTitle": "Swift preview — fictional data",
       "previewStart": "Locally, run make swift-preview in apps/frontend, then open a preview.",
       "openPreview": "Open Swift screen (local development)",

@@ -150,7 +150,6 @@ const applicationRoutes: RouteObject[] = [
     path: "/",
     element: <MainLayout />,
     children: [
-      { path: "weaver/features", element: <WeaverFeaturePage /> },
       {
         // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
         // in the Home nav panel; the personal-space agents page is reached from

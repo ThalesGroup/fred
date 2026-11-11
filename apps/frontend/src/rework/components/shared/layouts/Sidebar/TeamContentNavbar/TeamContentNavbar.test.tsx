@@ -20,7 +20,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   canManage: false,
   canRead: true,
-  memberships: [] as { id: string; kind: string; name: string; roles: string[] }[],
+  memberships: [] as {
+    id: string;
+    kind: string;
+    name: string;
+    roles: string[];
+    parent_id?: string;
+    organization_id?: string;
+  }[],
   isPersonalTeam: false,
   pathname: "/team/team-1/resources",
   relations: ["team_member"] as string[],
@@ -72,6 +79,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("react-router-dom", () => ({
+  Link: ({ to, children }) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: h.pathname }),
   useNavigate: () => vi.fn(),
   NavLink: ({ to, children }: { to: string; children: ReactNode | ((args: { isActive: boolean }) => ReactNode) }) => (
@@ -379,7 +387,7 @@ describe("TeamContentNavbar — pending knowledge base entry", () => {
     h.refetchKnowledgeBases.mockClear();
     h.canUseKnowledgeBases = true;
     const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain("/weaver/features");
+    expect(html).not.toContain("/weaver/features");
     expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
     expect(h.refetchKnowledgeBases).not.toHaveBeenCalled();
   });
@@ -450,4 +458,41 @@ it.each(["organization", "team", "project"])("offers the same prompts entry for 
   }
   h.canRead = false;
   expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/prompts"');
+});
+
+it("shows the project kind and its organization/team breadcrumb from current memberships", () => {
+  h.memberships = [
+    { id: "org", kind: "organization", name: "Acme", roles: ["member"] },
+    { id: "research", kind: "team", name: "Research", organization_id: "org", roles: ["member"] },
+    { id: "team-1", kind: "project", name: "Atlas", organization_id: "org", parent_id: "research", roles: ["member"] },
+  ];
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(<TeamContentNavbar />);
+  const breadcrumb = container.querySelector('nav[aria-label="rework.home.spaceLocation"]')!;
+  expect(Array.from(breadcrumb.querySelectorAll("button")).map((button) => button.textContent)).toEqual([
+    "Acme",
+    "Research",
+  ]);
+  expect(breadcrumb.querySelector('[aria-current="page"]')?.textContent).toBe("Atlas");
+  expect(container.textContent).toContain("rework.userSettings.spaceKinds.project");
+  h.memberships = h.memberships.filter((space) => space.id !== "research");
+  expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("Research");
+});
+
+it("offers only member projects of the current team", () => {
+  h.memberships = [
+    { id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["member"] },
+    { id: "atlas", kind: "project", name: "Atlas", organization_id: "org", parent_id: "team-1", roles: ["member"] },
+    {
+      id: "other",
+      kind: "project",
+      name: "Other project",
+      organization_id: "org",
+      parent_id: "another-team",
+      roles: ["member"],
+    },
+  ];
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(html).toContain('href="/team/atlas"');
+  expect(html).not.toContain('href="/team/other"');
 });

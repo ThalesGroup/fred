@@ -37,6 +37,15 @@ active spaces across all their organizations, each with its `organization_id`.
 Team/project selection uses a space identifier; a supplied identifier never changes
 server authority.
 
+The frontend [HomeNavPanel](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/HomeNavPanel/HomeNavPanel.tsx)
+filters these memberships by organization and groups projects under their visible
+team using `parent_id`. An isolated project remains selectable, including when
+its organization has no membership row; the selector then identifies the scope
+by an accessible space's name. Search retains the parent of a matching project.
+[TeamContentNavbar](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
+uses the same memberships for its shared breadcrumb and project links. These
+presentation rules add no inherited access; routes retain their permission checks.
+
 ## Spaces and memberships
 
 An organization is a root. A team belongs to one organization; a project belongs

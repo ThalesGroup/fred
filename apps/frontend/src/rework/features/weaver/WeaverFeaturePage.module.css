@@ -5,12 +5,3 @@
   padding: 24px;
   overflow: auto;
 }
-.feature {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.feature h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}

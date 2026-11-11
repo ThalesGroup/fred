@@ -2664,11 +2664,15 @@
     "home": {
       "organizationPrompts": "Prompts de l'organisation",
       "title": "Accueil",
-      "searchPlaceholder": "Rechercher une équipe",
+      "organizationOf": "Organisation de {{name}}",
+      "projectsOf": "Projets de {{name}}",
+      "spaceLocation": "Rattachement de l'espace",
+      "noSpaces": "Aucune équipe ni aucun projet à afficher.",
+      "searchPlaceholder": "Rechercher une équipe ou un projet",
       "searchClear": "Effacer la recherche",
-      "yourTeams": "Vos équipes",
+      "yourTeams": "Vos équipes et projets",
       "sort": {
-        "aria": "Trier les équipes",
+        "aria": "Trier les équipes et projets",
         "recent": "Récemment consultées",
         "alpha": "Ordre alphabétique"
       },
@@ -4965,10 +4969,7 @@
       }
     },
     "weaver": {
-      "title": "Portage Weaver",
-      "description": "Les parcours ci-dessous sont conservés pour être raccordés par petits lots. Ils ne sont pas encore disponibles dans Weaver.",
       "pending": "À porter",
-      "all": "Toutes les fonctionnalités",
       "previewTitle": "Aperçu Swift — données fictives",
       "previewStart": "En local, lancez make swift-preview dans apps/frontend, puis ouvrez un aperçu.",
       "openPreview": "Ouvrir l’écran Swift (développement local)",

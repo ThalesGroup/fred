@@ -28,6 +28,8 @@ interface TeamSelectionListItemProps {
   pending?: boolean;
   /** Display name: the team name, or the personal-space label. */
   name: string;
+  /** Optional context such as the space kind, above the roles. */
+  description?: string;
   /** The current user's folded roles on this team (from `Team.my_relations`).
    *  Ignored for the personal space (`personal`), which shows no role line. */
   roles?: (UserTeamRelation | import("../../../../../slices/controlPlane/controlPlaneOpenApi").Role)[];
@@ -53,6 +55,7 @@ export default function TeamSelectionListItem({
   onActivate,
   pending = false,
   name,
+  description,
   roles = [],
   personal = false,
   imgUrl,
@@ -73,12 +76,19 @@ export default function TeamSelectionListItem({
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}
       <span className={styles.labels}>
-        <span className={styles.name}>{name}</span>
-        {!personal && <span className={styles.roles}>{roleLabel}</span>}
+        <span className={styles.name} title={name}>
+          {name}
+        </span>
+        {description && <span className={styles.roles}>{description}</span>}
+        {!personal && (
+          <span className={styles.roles} title={roleLabel}>
+            {roleLabel}
+          </span>
+        )}
       </span>
     </>
   );
-  const className = `${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}`;
+  const className = `${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}${description ? ` ${styles.withDescription}` : ""}`;
   return onActivate ? (
     <button
       type="button"

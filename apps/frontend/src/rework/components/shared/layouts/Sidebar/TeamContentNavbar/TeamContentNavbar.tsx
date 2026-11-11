@@ -26,6 +26,8 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { teamRoleLabel } from "@shared/utils/teamRoleLabel";
 import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
+import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
+import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -72,6 +74,24 @@ export default function TeamContentNavbar() {
         agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
       )
     : undefined;
+  const organization = space && memberships.currentData?.find((item) => item.id === space.organization_id);
+  const parentTeam =
+    space?.kind === "project"
+      ? memberships.currentData?.find(
+          (item) =>
+            item.id === space.parent_id && item.kind === "team" && item.organization_id === space.organization_id,
+        )
+      : undefined;
+  const projects =
+    space?.kind === "team"
+      ? (memberships.currentData ?? [])
+          .filter(
+            (item) =>
+              item.kind === "project" && item.parent_id === space.id && item.organization_id === space.organization_id,
+          )
+          .sort((a, b) => a.name.localeCompare(b.name))
+      : [];
+  const ancestors = [organization, parentTeam].filter((item) => item !== undefined && item.id !== space?.id);
   const publicationTeams = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), {
     skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
     refetchOnMountOrArgChange: true,
@@ -226,12 +246,6 @@ export default function TeamContentNavbar() {
         },
       ]
     : [];
-  navigationItems.push({
-    type: "link",
-    label: t("rework.weaver.title"),
-    icon: { category: "outlined", type: "build", filled: false },
-    linkProps: { to: "/weaver/features" },
-  });
   if (showKnowledgeBases) {
     navigationItems.push({
       type: "link",
@@ -291,24 +305,40 @@ export default function TeamContentNavbar() {
 
   return (
     <div className={styles.mainNavPanel}>
-      {/* Team panel header (#2298): flat surface-container-high header. For a
-          real team it shows the "Equipe" kicker, the team name and the user's
-          roles; for the personal space, just the "Espace personnel" name (no
-          kicker/roles). Present in both normal and settings/usage mode so the
-          user always sees where they are. The gear opens team settings for a
-          team, or the usage dashboard for the personal space. */}
+      {space && ancestors.length > 0 && (
+        <div className={styles.breadcrumb}>
+          <Breadcrumb
+            label={t("rework.home.spaceLocation")}
+            segments={[
+              ...ancestors.map((ancestor) => ({
+                label: ancestor.name,
+                onClick: () => navigate(`/team/${ancestor.id}`),
+              })),
+              { label: teamDisplayName },
+            ]}
+          />
+        </div>
+      )}
       <div className={styles.teamPanelHeader}>
         <div className={styles.teamPanelHeaderText}>
           <div className={styles.teamPanelIdentity}>
             {teamAvatar}
             <div className={styles.teamPanelTitle}>
-              {!isPersonalTeam && <span className={styles.teamPanelKicker}>{t("rework.sidebar.team.spaceLabel")}</span>}
-              <span className={styles.teamPanelName}>
+              {!isPersonalTeam && (
+                <span className={styles.teamPanelKicker}>
+                  {t(space ? `rework.userSettings.spaceKinds.${space.kind}` : "rework.sidebar.team.spaceLabel")}
+                </span>
+              )}
+              <span className={styles.teamPanelName} title={teamDisplayName}>
                 {isPersonalTeam ? t("rework.sidebar.team.userTeam") : (space?.name ?? selectedTeam?.name)}
               </span>
             </div>
           </div>
-          {showRoleLabel && <span className={styles.teamPanelRoles}>{roleLabel}</span>}
+          {showRoleLabel && (
+            <span className={styles.teamPanelRoles} title={roleLabel}>
+              {roleLabel}
+            </span>
+          )}
         </div>
         {!isPersonalTeam && canOpenTeamSettings && !inSettings && (
           <span className={styles.teamPanelSettingsButton}>
@@ -347,6 +377,22 @@ export default function TeamContentNavbar() {
         ) : (
           <>
             <NavigationMenu items={navigationItems} />
+            {projects.length > 0 && (
+              <section className={styles.projects} aria-label={t("rework.home.projectsOf", { name: space!.name })}>
+                <p>{t("rework.home.projectsOf", { name: space!.name })}</p>
+                {projects.map((project) => (
+                  <TeamSelectionListItem
+                    key={project.id}
+                    redirection={`/team/${project.id}`}
+                    name={project.name}
+                    description={t("rework.userSettings.spaceKinds.project")}
+                    roles={project.roles}
+                    imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
+                    avatarName={project.name}
+                  />
+                ))}
+              </section>
+            )}
             <Separator margin={"var(--spacing-m)"} />
             {canReadContent && hasAgentWorkspace && <ChatList teamId={teamId} spaceId={space?.id} />}
           </>

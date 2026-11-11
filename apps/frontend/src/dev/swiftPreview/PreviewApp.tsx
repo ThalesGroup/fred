@@ -79,7 +79,7 @@ function PreviewApp() {
           title={t("rework.weaver.previewTitle")}
           description={t("rework.weaver.previewDisclaimer")}
         />
-        <nav className={styles.navigation} aria-label={t("rework.weaver.title")}>
+        <nav className={styles.navigation} aria-label={t("rework.weaver.previewTitle")}>
           {weaverFeatures.map((feature) => (
             <Link key={feature.id} to={feature.preview}>
               {t(`rework.weaver.features.${feature.id}.title`)}

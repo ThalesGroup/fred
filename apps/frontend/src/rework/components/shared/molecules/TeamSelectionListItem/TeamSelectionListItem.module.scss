@@ -80,3 +80,15 @@
   font: inherit;
   text-align: left;
 }
+
+.withDescription {
+  padding-block: var(--spacing-xs);
+  height: auto;
+  min-height: 48px;
+
+  .name,
+  .roles {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

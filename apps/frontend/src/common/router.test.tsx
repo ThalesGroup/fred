@@ -49,7 +49,6 @@ describe("Fred UI parity during manager reconstruction", () => {
       "/platform-access-denied",
       "/join/:token",
       "/",
-      "weaver/features",
       "home",
       "team/:teamId/agents",
       "team/:teamId/managed-chat/:agentInstanceId",

@@ -25,6 +25,23 @@
   min-height: 0;
 }
 
+.breadcrumb {
+  padding: var(--spacing-xs) var(--spacing-xs) 0;
+}
+
+.projects {
+  margin: var(--spacing-s) var(--spacing-xs) 0;
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-xs);
+
+  > p {
+    margin: 0 var(--spacing-xs);
+    color: var(--on-surface-retreat);
+    font: var(--font-body-small);
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Team panel header: flat, on the panel's own background. Labels on the left,
  * settings gear on the right, vertically centred. */
 .teamPanelHeader {

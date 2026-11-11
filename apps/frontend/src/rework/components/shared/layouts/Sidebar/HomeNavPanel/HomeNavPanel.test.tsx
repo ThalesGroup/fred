@@ -6,6 +6,15 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  extraSpaces: [] as {
+    id: string;
+    kind: string;
+    name: string;
+    parent_id: string;
+    organization_id: string;
+    roles: string[];
+  }[],
+  hideTeam: false,
   user: "priya",
   roles: ["owner"],
   teamRoles: ["editor", "analyst"],
@@ -51,7 +60,19 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
       ...(state.organization
         ? [{ id: "org", kind: "organization", path: ["org"], name: "Demo", organization_id: "org", roles: state.roles }]
         : []),
-      { id: "fredlab", kind: state.teamKind, name: "fredlab", organization_id: "org", roles: state.teamRoles },
+      ...(state.hideTeam
+        ? []
+        : [
+            {
+              id: "fredlab",
+              kind: state.teamKind,
+              name: "fredlab",
+              parent_id: "org",
+              organization_id: "org",
+              roles: state.teamRoles,
+            },
+          ]),
+      ...state.extraSpaces,
       ...(state.personal
         ? [{ id: "personal", kind: "personal", name: "priya", personal_owner: "priya", roles: ["member"] }]
         : []),
@@ -69,7 +90,12 @@ vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({ useFrontendBoot
 vi.mock("../../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({}) }));
 vi.mock("@shared/atoms/UserAvatar/UserAvatar.tsx", () => ({ default: () => <span>avatar</span> }));
 vi.mock("@shared/atoms/TeamInitials/TeamInitials.tsx", () => ({ default: () => <span>initials</span> }));
-vi.mock("@shared/molecules/SearchInput/SearchInput", () => ({ default: () => <input /> }));
+vi.mock("@shared/molecules/SearchInput/SearchInput.tsx", () => ({
+  default: ({ value, onChange, ariaLabel }) => (
+    <input aria-label={ariaLabel} value={value} onInput={(event) => onChange(event.currentTarget.value)} />
+  ),
+}));
+import { setCurrentUserPreferences } from "../../../../../../app/userPreferences";
 import HomeNavPanel from "./HomeNavPanel";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,6 +114,10 @@ afterEach(async () => {
   node?.remove();
   node = undefined!;
   root = undefined!;
+  state.extraSpaces = [];
+  state.hideTeam = false;
+  localStorage.clear();
+  setCurrentUserPreferences({});
   state.user = "priya";
   state.roles = ["owner"];
   state.teamRoles = ["editor", "analyst"];
@@ -271,7 +301,110 @@ it("lets a member choose the organization for both prompt and personal-space acc
   await act(async () => entry()!.click());
   expect(state.open).toHaveBeenCalledExactlyOnceWith({ createPersonalSpace: { organization_id: "org" } });
   state.organization = false;
+  state.hideTeam = true;
   await render();
   expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
   expect(node.querySelector('a[href="/team/other/prompts"]')).not.toBeNull();
+});
+
+const atlas = {
+  id: "atlas",
+  kind: "project",
+  name: "Atlas",
+  parent_id: "fredlab",
+  organization_id: "org",
+  roles: ["member"],
+};
+
+it("nests projects, keeps their parent when searching and reveals matches in a collapsed team", async () => {
+  state.extraSpaces = [atlas];
+  await render();
+  const projects = () => node.querySelector<HTMLUListElement>("#projects-fredlab")!;
+  expect(projects().querySelector('a[href="/team/atlas"]')).not.toBeNull();
+  expect(node.querySelectorAll('a[href="/team/atlas"]')).toHaveLength(1);
+  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-controls="projects-fredlab"]')!.click());
+  expect(projects().hidden).toBe(true);
+  await act(async () =>
+    node.querySelector<HTMLButtonElement>('button[aria-label="rework.home.searchPlaceholder"]')!.click(),
+  );
+  const search = node.querySelector<HTMLInputElement>('input[aria-label="rework.home.searchPlaceholder"]')!;
+  await act(async () => {
+    search.value = "atlas";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(projects().hidden).toBe(false);
+  expect(node.querySelector('a[href="/team/fredlab"]')).not.toBeNull();
+  await act(async () => {
+    search.value = "missing";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
+  expect(node.querySelector('[role="status"]')?.textContent).toBe("rework.home.noSpaces");
+});
+
+it("filters both teams and their projects by the selected organization", async () => {
+  state.otherOrganization = true;
+  state.extraSpaces = [
+    atlas,
+    { id: "support", kind: "team", name: "Support", parent_id: "other", organization_id: "other", roles: ["member"] },
+  ];
+  await render();
+  expect(node.querySelector('a[href="/team/support"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/fredlab"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
+  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (el) => el.textContent === "Demo",
+  )!;
+  await act(async () => option.click());
+  expect(node.querySelector('a[href="/team/support"]')).toBeNull();
+  expect(node.querySelector('#projects-fredlab a[href="/team/atlas"]')).not.toBeNull();
+  state.organization = false;
+  state.hideTeam = true;
+  state.extraSpaces = state.extraSpaces.filter((space) => space.organization_id !== "org");
+  await render();
+  expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
+  expect(node.querySelector('a[href="/team/support"]')).not.toBeNull();
+});
+
+it("retains a project without a visible parent and removes stale entries on authority failure", async () => {
+  state.hideTeam = true;
+  state.extraSpaces = [atlas];
+  await render();
+  expect(node.querySelector('a[href="/team/atlas"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/fredlab"]')).toBeNull();
+  state.fail = true;
+  await render();
+  expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
+  expect(node.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+it("ranks a team by recent project visits and still supports alphabetical sorting", async () => {
+  state.extraSpaces = [
+    atlas,
+    { id: "alpha", kind: "team", name: "Alpha", parent_id: "org", organization_id: "org", roles: ["member"] },
+  ];
+  localStorage.setItem("fred.teamRecency", JSON.stringify({ atlas: 100, alpha: 50 }));
+  await render();
+  const links = () => Array.from(node.querySelectorAll("a")).map((link) => link.getAttribute("href"));
+  expect(links()).toEqual(["/team/fredlab", "/team/atlas", "/team/alpha"]);
+  await act(async () => setCurrentUserPreferences({ team_sort_mode: "alpha" }));
+  expect(links()).toEqual(["/team/alpha", "/team/fredlab", "/team/atlas"]);
+});
+
+it("keeps an isolated project's organization selectable alongside an ordinary membership", async () => {
+  state.organization = false;
+  state.otherOrganization = true;
+  state.hideTeam = true;
+  state.extraSpaces = [atlas];
+  await render();
+  expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
+  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (el) => el.textContent === "rework.home.organizationOf",
+  )!;
+  await act(async () => option.click());
+  expect(node.querySelector('a[href="/team/atlas"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/org/prompts"]')).toBeNull();
+  expect(entry()).toBeNull();
 });

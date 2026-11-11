@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./HomeNavPanel.module.scss";
+import type { MySpace } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Select from "@shared/molecules/Select/Select";
@@ -58,10 +59,21 @@ export default function HomeNavPanel() {
     };
   }, [me.data?.user_id]);
   const [selectedOrganization, setSelectedOrganization] = useState<string>();
-  const organizations = spaces.isError
-    ? []
-    : (spaces.currentData ?? []).filter((space) => space.kind === "organization");
-  const org = organizations.find((space) => space.id === selectedOrganization) ?? organizations[0];
+  const availableSpaces = spaces.isError ? [] : (spaces.currentData ?? []);
+  const organizations = availableSpaces.filter((space) => space.kind === "organization");
+  const organizationOptions = new Map(organizations.map((space) => [space.id, space.name]));
+  // A direct project membership can survive without an organization membership.
+  // Keep its scope selectable, using only names already disclosed by /me/spaces.
+  for (const space of availableSpaces) {
+    if (!organizationOptions.has(space.organization_id)) {
+      organizationOptions.set(space.organization_id, t("rework.home.organizationOf", { name: space.name }));
+    }
+  }
+  const organizationId =
+    selectedOrganization && organizationOptions.has(selectedOrganization)
+      ? selectedOrganization
+      : organizationOptions.keys().next().value;
+  const org = organizations.find((space) => space.id === organizationId);
   const organizationContent = useSpaceAccess(spaces.isError ? undefined : org?.id, "read");
   const canOpen =
     !spaces.isError &&
@@ -109,28 +121,44 @@ export default function HomeNavPanel() {
     setTeamSortMode(mode);
   };
 
-  const collaborativeTeams = spaces.isError
-    ? []
-    : (spaces.currentData ?? []).filter((space) => space.kind === "team" || space.kind === "project");
+  const [collapsedTeams, setCollapsedTeams] = useState<string[]>([]);
   const query = search.trim().toLowerCase();
-  const visibleTeams = query
-    ? collaborativeTeams.filter((team) => team.name.toLowerCase().includes(query))
-    : collaborativeTeams;
-
-  const sortedTeams = useMemo(() => {
-    const list = [...visibleTeams];
-    if (sortMode === "alpha") {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      // Most recently visited first; never-visited teams fall to the bottom,
-      // tie-broken alphabetically.
-      list.sort((a, b) => {
-        const diff = (recency[b.id] ?? 0) - (recency[a.id] ?? 0);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
-      });
+  const groups = useMemo(() => {
+    if (spaces.isError) return [];
+    const available = (spaces.currentData ?? []).filter(
+      (space) =>
+        (space.kind === "team" || space.kind === "project") &&
+        (!organizationId || space.organization_id === organizationId),
+    );
+    const compare = (a: MySpace, b: MySpace) =>
+      (sortMode === "recent" ? (recency[b.id] ?? 0) - (recency[a.id] ?? 0) : 0) || a.name.localeCompare(b.name);
+    available.sort(compare);
+    const teams = new Set(available.filter((space) => space.kind === "team").map((space) => space.id));
+    const children = new Map<string, MySpace[]>();
+    for (const space of available) {
+      if (space.kind === "project" && space.parent_id && teams.has(space.parent_id)) {
+        const projects = children.get(space.parent_id) ?? [];
+        projects.push(space);
+        children.set(space.parent_id, projects);
+      }
     }
-    return list;
-  }, [visibleTeams, sortMode, recency]);
+    // A project without a visible parent remains a direct entry. Memberships,
+    // not the hierarchy, determine which spaces can be displayed.
+    return available
+      .filter((space) => space.kind === "team" || !space.parent_id || !teams.has(space.parent_id))
+      .map((space) => {
+        const projects = children.get(space.id) ?? [];
+        return {
+          space,
+          recent: projects.reduce((last, project) => Math.max(last, recency[project.id] ?? 0), recency[space.id] ?? 0),
+          projects: space.name.toLowerCase().includes(query)
+            ? projects
+            : projects.filter((project) => project.name.toLowerCase().includes(query)),
+        };
+      })
+      .filter(({ space, projects }) => space.name.toLowerCase().includes(query) || projects.length > 0)
+      .sort((a, b) => (sortMode === "recent" ? b.recent - a.recent : 0) || a.space.name.localeCompare(b.space.name));
+  }, [spaces.currentData, spaces.isError, organizationId, query, sortMode, recency]);
 
   const sortOptions: TeamSortOption<TeamSortMode>[] = [
     { value: "recent", label: t("rework.home.sort.recent") },
@@ -140,13 +168,13 @@ export default function HomeNavPanel() {
   return (
     <div className={styles.panel}>
       <SpaceHeader eyebrow={org?.name} title={t("rework.home.title")} />
-      {organizations.length > 1 && (
+      {organizationOptions.size > 1 && (
         <Select
           size="small"
           compact
           label={t("rework.userSettings.spaceKinds.organization")}
-          value={org?.id}
-          options={organizations.map((space) => ({ key: space.id, value: space.id, label: space.name }))}
+          value={organizationId}
+          options={Array.from(organizationOptions, ([id, name]) => ({ key: id, value: id, label: name }))}
           onChange={setSelectedOrganization}
           disabled={opening}
         />
@@ -214,18 +242,62 @@ export default function HomeNavPanel() {
             ariaLabel={t("rework.home.sort.aria")}
           />
         </div>
-        <div className={styles.scroll}>
-          {sortedTeams.map((team) => (
-            <TeamSelectionListItem
-              key={team.id}
-              redirection={`/team/${team.id}`}
-              name={team.name}
-              roles={team.roles}
-              imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
-              avatarName={team.name}
-            />
-          ))}
-        </div>
+        <ul className={styles.scroll}>
+          {groups.map(({ space, projects }) => {
+            const expanded = !!query || !collapsedTeams.includes(space.id);
+            return (
+              <li key={space.id}>
+                <div className={styles.teamRow}>
+                  <TeamSelectionListItem
+                    redirection={`/team/${space.id}`}
+                    name={space.name}
+                    description={t(`rework.userSettings.spaceKinds.${space.kind}`)}
+                    roles={space.roles}
+                    imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
+                    avatarName={space.name}
+                  />
+                  {projects.length > 0 && (
+                    <IconButton
+                      size="small"
+                      variant="icon"
+                      icon={{ category: "outlined", type: expanded ? "expand_more" : "chevron_right" }}
+                      aria-label={t("rework.home.projectsOf", { name: space.name })}
+                      aria-expanded={expanded}
+                      aria-controls={`projects-${space.id}`}
+                      disabled={!!query}
+                      onClick={() =>
+                        setCollapsedTeams((ids) =>
+                          ids.includes(space.id) ? ids.filter((id) => id !== space.id) : [...ids, space.id],
+                        )
+                      }
+                    />
+                  )}
+                </div>
+                {projects.length > 0 && (
+                  <ul id={`projects-${space.id}`} className={styles.projects} hidden={!expanded}>
+                    {projects.map((project) => (
+                      <li key={project.id}>
+                        <TeamSelectionListItem
+                          redirection={`/team/${project.id}`}
+                          name={project.name}
+                          description={t("rework.userSettings.spaceKinds.project")}
+                          roles={project.roles}
+                          imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
+                          avatarName={project.name}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+          {!groups.length && !spaces.isLoading && (
+            <li className={styles.empty} role={spaces.isError ? "alert" : "status"}>
+              {t(spaces.isError ? "rework.manager.unavailable" : "rework.home.noSpaces")}
+            </li>
+          )}
+        </ul>
       </div>
     </div>
   );

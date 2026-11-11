@@ -1,9 +1,9 @@
 # Swift UI preview during the Weaver migration
 
 From `apps/frontend`, run `make swift-preview`, then open
-<http://localhost:5174/swift-preview.html>. The regular development UI exposes
-links under **Portage Weaver** (`/weaver/features`). This is a separate Vite
-server, not a backend or a deployment mode. It has no backend proxy. The root
+<http://localhost:5174/swift-preview.html>. This developer gallery is accessed
+directly, outside the product navigation. It is a separate Vite server, not a
+backend or a deployment mode. It has no backend proxy. The root
 HTML is not a production build entry; its bootstrap refuses other modes.
 
 The original Swift components stay at their original paths to keep upcoming

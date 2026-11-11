@@ -83,8 +83,33 @@
  * stays constant whether or not it is scrolling. */
 .scroll {
   flex: 1;
+  margin: 0;
   padding: 0 var(--spacing-xs);
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  list-style: none;
+}
+
+.teamRow {
+  display: flex;
+  align-items: center;
+
+  > a {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.projects {
+  margin: 0 0 var(--spacing-xs) var(--spacing-m);
+  border-left: 1px solid var(--outline-muted);
+  padding: 0 0 0 var(--spacing-xs);
+  list-style: none;
+}
+
+.empty {
+  padding: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }

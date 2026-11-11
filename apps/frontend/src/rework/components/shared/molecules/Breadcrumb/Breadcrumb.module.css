@@ -30,6 +30,16 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.link,
+.current,
+.plain {
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .link {
