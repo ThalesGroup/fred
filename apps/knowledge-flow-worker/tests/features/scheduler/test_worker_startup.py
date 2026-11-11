@@ -18,23 +18,29 @@ manager cleanup loop."""
 from __future__ import annotations
 
 import asyncio
+import json
+import warnings
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from temporalio.api.common.v1 import Payload
+from temporalio.contrib.pydantic import pydantic_data_converter
 
 from knowledge_flow_worker.common.structures import IngestionWorkerRole, SchedulerConfig, TemporalSchedulerConfig
 from knowledge_flow_worker.features.scheduler import worker as worker_module
+from knowledge_flow_worker.features.scheduler.scheduler_structures import FileToProcess, PipelineDefinition
 
 _CONFIG = TemporalSchedulerConfig(host="temporal:7233", task_queue="ingestion", workflow_id_prefix="pipeline")
 
 
-def _run_worker_with(*, roles: list[IngestionWorkerRole] | None = None, **kwargs) -> tuple[AsyncMock, MagicMock]:
+def _run_worker_with(*, roles: list[IngestionWorkerRole] | None = None, connect: AsyncMock | None = None, **kwargs) -> tuple[AsyncMock, MagicMock]:
     client = MagicMock()
     cleanup = AsyncMock()
     worker_cls = MagicMock()
     worker_cls.return_value.run = AsyncMock()
     with (
-        patch.object(worker_module.Client, "connect", AsyncMock(return_value=client)),
+        patch.object(worker_module.Client, "connect", connect or AsyncMock(return_value=client)),
         patch.object(worker_module, "manager_cleanup", cleanup),
         patch.object(worker_module, "Worker", worker_cls),
     ):
@@ -150,3 +156,27 @@ def test_worker_roles_default_to_serving_every_queue() -> None:
 def test_an_unusable_role_list_is_refused(roles, message) -> None:
     with pytest.raises(ValueError, match=message):
         SchedulerConfig(temporal=_CONFIG, worker_roles=roles)
+
+
+# ── payload conversion ────────────────────────────────────────────────────────
+
+
+def test_the_worker_converts_payloads_with_pydantic() -> None:
+    connect = AsyncMock(return_value=MagicMock())
+    _run_worker_with(roles=[IngestionWorkerRole.common], connect=connect)
+    assert connect.await_args.kwargs["data_converter"] is pydantic_data_converter
+
+
+def test_control_plane_submissions_and_activity_models_round_trip_through_the_converter() -> None:
+    """The Control Plane encodes a submission as `json/plain` serde JSON; the worker
+    decodes it and exchanges its files between workflow and activities as models."""
+    fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/submissions.json"
+    converter = pydantic_data_converter.payload_converter
+    for submitted in json.loads(fixture.read_text()):
+        payload = Payload(metadata={"encoding": b"json/plain"}, data=json.dumps(submitted).encode())
+        [definition] = converter.from_payloads([payload], [PipelineDefinition])
+        assert definition == PipelineDefinition.model_validate(submitted)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            encoded = converter.to_payloads([definition.files[0]])
+        assert converter.from_payloads(encoded, [FileToProcess]) == [definition.files[0]]

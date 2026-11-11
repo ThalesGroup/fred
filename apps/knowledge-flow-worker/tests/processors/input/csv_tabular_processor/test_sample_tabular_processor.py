@@ -138,6 +138,20 @@ def test_inspect_read_options_logs_when_utf8_fallback_also_fails(tmp_path, caplo
     assert any("after transcoding to UTF-8" in record.message for record in caplog.records)
 
 
+@pytest.mark.parametrize("encoding", ["utf-8", "cp1252"])
+def test_inspection_logs_never_name_the_original_file(tmp_path, caplog, encoding):
+    """The working copy keeps the uploaded filename; logs carry ids, never names."""
+    processor = CsvTabularProcessor()
+    csv_path = tmp_path / "salaires-confidentiels.csv"
+    csv_path.write_bytes("ville;montant\nMálaga €;10\nLyon;25\n".encode(encoding))
+
+    with caplog.at_level(logging.DEBUG):
+        processor.inspect_read_options(csv_path)
+
+    assert caplog.records
+    assert not [record.getMessage() for record in caplog.records if "salaires" in record.getMessage() or str(tmp_path) in record.getMessage()]
+
+
 # Verbatim excerpt from a real semicolon-delimited export (issue #2366's
 # export-exigences.csv) — bisected down to the shortest prefix that reliably
 # breaks csv.Sniffer, then closed into a syntactically complete CSV. The

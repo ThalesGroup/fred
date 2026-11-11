@@ -150,7 +150,8 @@ class TabularProcessor(BaseOutputProcessor):
           Attachment Datasets").
         """
         try:
-            logger.info("Processing tabular file %s for document %s", file_path, metadata.document_uid)
+            # The temporary path embeds the original filename: log the document id only.
+            logger.info("document_uid=%s processing tabular file", metadata.document_uid)
             csv_path = Path(file_path)
             csv_read_options = self._inspect_csv_source(csv_path)
             artifact = self._persist_parquet_artifact(

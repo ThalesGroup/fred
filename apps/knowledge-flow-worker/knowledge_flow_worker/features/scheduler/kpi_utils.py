@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 TEMPORAL_SYSTEM_ACTIVITY_QUEUE_WAIT_MS = "temporal.system.activity_queue_wait_ms"
 TEMPORAL_SYSTEM_ACTIVITY_DURATION_MS = "temporal.system.activity_duration_ms"
-TEMPORAL_INGESTION_DOCUMENTS_TOTAL = "temporal.ingestion.documents_total"
 TEMPORAL_INGESTION_WORKFLOWS_TOTAL = "temporal.ingestion.workflows_total"
 
 
@@ -253,12 +252,6 @@ def emit_temporal_activity_result_kpis(
             type="timer",
             value=duration_ms,
             unit="ms",
-            dims=dims,
-            actor=actor,
-        )
-        kpi.count(
-            TEMPORAL_INGESTION_DOCUMENTS_TOTAL,
-            1,
             dims=dims,
             actor=actor,
         )
