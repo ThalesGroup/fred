@@ -121,6 +121,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     command?: TurnCommand;
     skills?: SkillInvocation[];
     attachments?: TurnAttachment[];
+    preserveComposer?: boolean;
   } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
@@ -433,6 +434,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   // user's text/attachments on a prepare-execution failure (404/503/network).
   const handleTurnStarted = useCallback(() => {
     preparingComposerRef.current = null;
+    if (submittedDraftRef.current?.preserveComposer) return;
     setInput("");
     attachments.clearReadyAttachments();
   }, [attachments.clearReadyAttachments]);
@@ -866,7 +868,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         showWarn({ summary: t("chatbot.steering.waiting") });
         return false;
       }
-      if (sendAttemptRef.current && !sendAttemptRef.current.cancelled) {
+      if (
+        (sendAttemptRef.current && !sendAttemptRef.current.cancelled) ||
+        (preparingComposerRef.current && !preparingComposerRef.current.cancelled)
+      ) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return false;
       }
@@ -972,6 +977,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           command: turnCommand,
           skills,
           attachments: turnAttachments,
+          preserveComposer: interrupted?.action === "restart",
         };
         const result = send(
           text,
@@ -980,7 +986,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
             ...runtimeContext,
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
-            ...(turnAttachments.length ? { attachments: turnAttachments } : {}),
+            attachments: turnAttachments,
             ...(autoTitle ? { auto_title: true } : {}),
           },
           turnOptions,

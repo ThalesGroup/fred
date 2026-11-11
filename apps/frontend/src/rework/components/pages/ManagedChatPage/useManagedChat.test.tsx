@@ -667,7 +667,7 @@ describe("useManagedChat — session write reliability", () => {
     }
   });
 
-  it("sends no attachments key on a turn without files", async () => {
+  it("marks a turn without files with an empty attachment list", async () => {
     mount();
     act(() => latest.setInput("question"));
     rerender();
@@ -676,7 +676,7 @@ describe("useManagedChat — session write reliability", () => {
       await latest.handleSend();
     });
 
-    expect("attachments" in (sendMock.mock.calls[0][2] as Record<string, unknown>)).toBe(false);
+    expect(sendMock.mock.calls[0][2]).toMatchObject({ attachments: [] });
   });
 
   it("sends no reasoning value when the chosen model cannot reason, and no choice when none is made", async () => {
@@ -1399,6 +1399,29 @@ describe("useManagedChat — session write reliability", () => {
     } finally {
       chatAttachmentsValue.attachments = [];
     }
+  });
+
+  it("keeps composer ownership when a second send arrives during transport preflight", async () => {
+    const pendingSend = deferred<boolean>();
+    sendMock.mockImplementationOnce(() => pendingSend.promise);
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("question"));
+    const firstSend = latest.handleSend();
+    await tick();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+
+    await latest.handleSend();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    act(() => latest.handleAddAttachments([new File(["x"], "late.pdf")], "drop"));
+    expect(chatAttachmentsValue.addFiles).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pendingSend.resolve(true);
+      await firstSend;
+    });
+    act(() => latest.handleAddAttachments([new File(["x"], "next.pdf")], "drop"));
+    expect(chatAttachmentsValue.addFiles).toHaveBeenCalledTimes(1);
   });
 
   it("does not let a failed session-creation from a previous session contaminate a newly navigated-to session", async () => {
@@ -2130,6 +2153,58 @@ describe("useManagedChat — session write reliability", () => {
       expect(sendMock.mock.calls[1][2]).toMatchObject({
         attachments: [{ attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" }],
       });
+    } finally {
+      chatAttachmentsValue.attachments = [];
+    }
+  });
+
+  it("keeps new composer drafts when restarting an interrupted turn", async () => {
+    chatAttachmentsValue.attachments = [
+      {
+        id: "original",
+        name: "original.pdf",
+        mime: "application/pdf",
+        status: "ready",
+        size: 1,
+        isImage: false,
+        taskIds: [],
+      },
+    ];
+    try {
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("original request"));
+      rerender();
+      await act(async () => {
+        await latest.handleSend();
+      });
+
+      chatAttachmentsValue.attachments = [
+        {
+          id: "new-draft",
+          name: "later.pdf",
+          mime: "application/pdf",
+          status: "ready",
+          size: 1,
+          isImage: false,
+          taskIds: [],
+        },
+      ];
+      act(() => latest.setInput("next question"));
+      act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+      rerender();
+      await act(async () => {
+        latest.handleHitlAnswer("restart");
+        await Promise.resolve();
+      });
+
+      expect(sendMock.mock.calls[1][2]).toMatchObject({
+        attachments: [{ attachment_id: "original" }],
+      });
+      act(() => capturedOnTurnStarted?.());
+      expect(chatAttachmentsValue.clearReadyAttachments).not.toHaveBeenCalled();
+      expect(latest.input).toBe("next question");
+      expect(chatAttachmentsValue.attachments).toMatchObject([{ id: "new-draft" }]);
     } finally {
       chatAttachmentsValue.attachments = [];
     }

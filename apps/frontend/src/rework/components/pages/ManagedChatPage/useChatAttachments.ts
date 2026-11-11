@@ -136,9 +136,8 @@ export function excludeDeletedAttachments(
   return persisted.filter((attachment) => !deletedAttachmentIds.has(attachment.attachmentId));
 }
 
-// A row is sent once a user message lists it. Rows older than the latest composer message
-// count as sent too: messages stored before the per-message list carry none. HITL answers,
-// steered text and the optimistic row (browser clock) never carried composer files.
+// A row is sent once a user message lists it. Older messages without a file list
+// need a timestamp fallback; newer messages record an empty list explicitly.
 export function splitSessionAttachments(persisted: SessionAttachment[], messages: ChatMessage[]) {
   const userMessages = messages.filter((message) => message.role === "user");
   const composerMessages = userMessages.filter(
@@ -155,9 +154,13 @@ export function splitSessionAttachments(persisted: SessionAttachment[], messages
         : [];
     }),
   );
-  const latestUserMessageAt = Math.max(...composerMessages.map((message) => Date.parse(message.timestamp)));
+  const latestLegacyMessageAt = Math.max(
+    ...composerMessages
+      .filter((message) => !Array.isArray(message.metadata?.extras?.attachments))
+      .map((message) => Date.parse(message.timestamp)),
+  );
   const isSent = (attachment: SessionAttachment) =>
-    listedIds.has(attachment.attachmentId) || Date.parse(attachment.createdAt ?? "") < latestUserMessageAt;
+    listedIds.has(attachment.attachmentId) || Date.parse(attachment.createdAt ?? "") < latestLegacyMessageAt;
   return {
     sent: persisted.filter(isSent),
     drafts: persisted.filter((attachment) => !isSent(attachment)),

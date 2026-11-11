@@ -106,4 +106,13 @@ describe("splitSessionAttachments", () => {
     expect(ids(sent)).toEqual(["old"]);
     expect(ids(drafts)).toEqual(["new"]);
   });
+
+  it("keeps drafts older than a new message with an explicit empty file list", () => {
+    const { sent, drafts } = splitSessionAttachments(
+      [row("draft", "2026-11-08T11:00:00Z")],
+      [userMessage("2026-11-08T10:00:00Z"), userMessage("2026-11-08T12:00:00Z", [])],
+    );
+    expect(ids(sent)).toEqual([]);
+    expect(ids(drafts)).toEqual(["draft"]);
+  });
 });

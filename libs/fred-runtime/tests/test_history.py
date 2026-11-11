@@ -381,6 +381,26 @@ def test_write_turn_history_stores_the_turn_attachments_next_to_skills() -> None
     ]
 
 
+def test_write_turn_history_records_an_empty_attachment_list() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="No files yet",
+            attachments=[],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    user = store.save.call_args.kwargs["messages"][0]
+    assert user.metadata.extras["attachments"] == []
+
+
 def test_write_turn_history_does_not_duplicate_a_pending_steered_user_row() -> None:
     store = AsyncMock()
     store.next_rank = AsyncMock(return_value=4)

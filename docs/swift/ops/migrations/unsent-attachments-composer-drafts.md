@@ -3,8 +3,8 @@ schema: 1
 title: "Unsent chat attachments stay drafts of their conversation"
 impact: none
 configuration: none
-configuration_reason: "Frontend-only change to the chat composer; no configuration keys or defaults change."
-no_action_reason: "Attachment rows and APIs are unchanged; whether an attachment was sent is derived from the stored user messages."
+configuration_reason: "Composer and runtime metadata change; no configuration keys or defaults change."
+no_action_reason: "Attachment rows and APIs are unchanged; new user messages record an empty attachment list when no files are sent."
 ---
 ## Applicability
 
