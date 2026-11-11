@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.kpi.http_middleware import KPIMiddleware
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -102,6 +102,51 @@ class TestKPIMiddlewareEmitsMetric:
         self.client.get("/error")
         kwargs = self.spy.call_args.kwargs
         assert kwargs["http_status"] == 500
+
+
+class TestKPIMiddlewareTeamAttribution:
+    def setup_method(self) -> None:
+        self.app, self.spy = _make_app()
+
+        @self.app.get("/teams/{team_id}/ping")
+        def team_ping(team_id: str):
+            return {"team_id": team_id}
+
+        self.client = TestClient(self.app, raise_server_exceptions=False)
+
+    def _get_as_user(self, path: str) -> None:
+        fake_user = MagicMock()
+        fake_user.uid = "user-123"
+        with patch("fred_core.kpi.http_middleware.decode_jwt", return_value=fake_user):
+            self.client.get(path, headers={"Authorization": "Bearer fake.token.here"})
+
+    def test_team_route_tags_team_id_from_path(self) -> None:
+        self._get_as_user("/teams/team-a/ping")
+        kwargs = self.spy.call_args.kwargs
+        assert kwargs["route"] == "/teams/{team_id}/ping"
+        assert kwargs["extra_dims"] == {"team_id": "team-a"}
+
+    def test_refused_team_route_has_no_team_dim(self) -> None:
+        @self.app.get("/teams/{team_id}/secret")
+        def team_secret(team_id: str):
+            raise HTTPException(status_code=403, detail="forbidden")
+
+        self._get_as_user("/teams/someone-else/secret")
+        assert self.spy.call_args.kwargs["http_status"] == 403
+        assert self.spy.call_args.kwargs["extra_dims"] is None
+
+    def test_route_without_team_has_no_team_dim(self) -> None:
+        self._get_as_user("/ok")
+        assert self.spy.call_args.kwargs["extra_dims"] is None
+
+    def test_anonymous_team_route_has_no_team_dim(self) -> None:
+        self.client.get("/teams/team-a/ping")
+        assert self.spy.call_args.kwargs["extra_dims"] == {"actor_subtype": "anonymous"}
+
+    def test_team_id_is_never_a_prometheus_label(self) -> None:
+        from fred_core.kpi.prometheus_kpi_store import PROMETHEUS_ALLOWED_LABELS
+
+        assert "team_id" not in PROMETHEUS_ALLOWED_LABELS
 
 
 class TestKPIMiddlewareSkipPaths:

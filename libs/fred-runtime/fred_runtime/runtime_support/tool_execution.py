@@ -42,6 +42,17 @@ from fred_runtime.runtime_support.run_scope import RunScope
 logger = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
 
+# Stamped on capability tools at assembly; tags tool KPIs with their capability.
+CAPABILITY_ID_METADATA_KEY = "fred.capability_id"
+
+
+def capability_id_of(tool: object) -> str | None:
+    metadata = getattr(tool, "metadata", None)
+    value = (
+        metadata.get(CAPABILITY_ID_METADATA_KEY) if isinstance(metadata, dict) else None
+    )
+    return value if isinstance(value, str) and value else None
+
 
 class ToolExecution:
     """Run one authorized call without changing its return value or exceptions."""
@@ -52,9 +63,13 @@ class ToolExecution:
         self._kpi = kpi
         self._binding = binding
 
-    def _base_dims(self, *, tool_name: str, source: str) -> dict[str, Optional[str]]:
+    def _base_dims(
+        self, *, tool_name: str, source: str, capability_id: str | None = None
+    ) -> dict[str, Optional[str]]:
         portable = self._binding.portable_context
         dims: dict[str, Optional[str]] = {"tool_name": tool_name, "source": source}
+        if capability_id:
+            dims["capability_id"] = capability_id
         if portable.session_id:
             dims["session_id"] = portable.session_id
         if portable.user_id:
@@ -124,13 +139,18 @@ class ToolExecution:
         tool_name: str,
         source: str,
         span: SpanPort | None = None,
+        capability_id: str | None = None,
     ) -> _Result:
         started = time.perf_counter()
         outcome = "failed"
         with operation_log_scope(tool_name=tool_name):
             try:
                 result = await self._run(
-                    invoke, tool_name=tool_name, source=source, span=span
+                    invoke,
+                    tool_name=tool_name,
+                    source=source,
+                    span=span,
+                    capability_id=capability_id,
                 )
                 outcome = "failed" if self._result_is_error(result)[0] else "succeeded"
                 return result
@@ -174,8 +194,11 @@ class ToolExecution:
         tool_name: str,
         source: str,
         span: SpanPort | None = None,
+        capability_id: str | None = None,
     ) -> _Result:
-        base_dims = self._base_dims(tool_name=tool_name, source=source)
+        base_dims = self._base_dims(
+            tool_name=tool_name, source=source, capability_id=capability_id
+        )
         # Keep latency labels stable; failure taxonomy belongs on the counter.
         kpi = self._kpi
         timer_ctx = (
