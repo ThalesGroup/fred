@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [chat-in-thread-message-cutover]
 title: "Compact tabular schemas, preserve dates and explain SQL failures"
 impact: minor
 configuration: none
@@ -24,9 +25,11 @@ SQL aliases and document UIDs do not change.
 
 ## Upgrade
 
-Deploy the compatible frontend first. Drain active turns as appropriate and
-upgrade Knowledge Flow API/ingestion workers and agent pods to the same release,
-so compact responses and packaged instructions agree. Restart long-lived local
+For v3.11.0, use the coordinated maintenance window required by the in-thread
+message cutover. Stage the compatible frontend, then upgrade Knowledge Flow
+API/ingestion workers and agent pods before reopening user traffic, so compact
+responses and packaged instructions agree. Do not expose the new frontend to
+old runtime replicas. Restart long-lived local
 processes when testing without reload.
 
 New Excel ingestion preserves temporal Parquet types. Existing files stay

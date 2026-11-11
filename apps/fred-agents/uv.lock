@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -878,7 +878,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-document-access"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-document-access" }
 dependencies = [
     { name = "fred-core" },
@@ -919,7 +919,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-documents"
-version = "4.5.3"
+version = "4.5.4"
 source = { editable = "../../libs/capabilities/fred-capability-documents" }
 dependencies = [
     { name = "fred-core" },
@@ -960,7 +960,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-html-artifact" }
 dependencies = [
     { name = "fred-core" },
@@ -1004,7 +1004,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-mcp"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-mcp" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
@@ -1059,7 +1059,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.3"
+version = "4.5.4"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1185,7 +1185,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -1234,7 +1234,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.0"
+version = "4.6.1"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1380,7 +1380,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.6.0"
+version = "4.6.1"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1457,7 +1457,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.0"
+version = "4.6.1"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

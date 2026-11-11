@@ -363,7 +363,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.2.0",
+        version="0.2.1",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",

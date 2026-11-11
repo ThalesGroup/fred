@@ -1,3 +1,34 @@
+**v3.11.0** - 2026-11-12
+
+- **Summary**
+
+  Send follow-up messages directly in a running conversation and see which files accompanied each message. Explore usage trends and export analytics to Excel. A refreshed layout makes conversations and their side panels easier to navigate.
+
+- **Features**
+
+  - Post text messages while an agent answers and follow their delivery in the conversation (#3492)
+  - See the files sent with each message, with unsent attachments kept in their conversation draft (#3490, #3502)
+  - Explore team analytics, costs in euros and activity trends, then export them to Excel (#3310)
+
+- **Improvements**
+
+  - Navigate conversations with a collapsible sidebar, clearer panels and improved keyboard focus (#3485, #3486)
+  - Keep the team wiki tree open where you left it and manage page titles and parents while editing (#3491)
+  - Prepare presentation templates in the background and retry a failed preparation without uploading again (#3482)
+  - Discover available chat models through authenticated Azure gateways (#3254)
+  - Read spreadsheet dates more reliably and get clearer explanations when a table query fails (#3458)
+
+- **Bug Fixes**
+
+  - Find five suggested agents on the home page even when activity history is unavailable (#3510)
+  - Follow document references consistently when searching, reading and summarizing (#3477)
+  - Save generated documents containing stray null characters and download documents with international titles (#3477, #3468)
+  - Open generated HTML results from their preview without misleading download links (#3512)
+
+- **Deployment note**
+
+  This upgrade requires a coordinated service rollout and database migrations. Follow the operator guide for pending messages, presentation templates, permissions and custom integrations before deploying.
+
 **v3.10.0** - 2026-11-04
 
 - **Summary**

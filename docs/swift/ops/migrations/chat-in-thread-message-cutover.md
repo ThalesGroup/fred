@@ -3,11 +3,17 @@ schema: 1
 after: [chat-active-turn-steering]
 covers: [28d9ee7c7a232247dfa01838a2624ce21028c53c]
 title: "Replace active-turn steering with in-thread messages"
-impact: major
+impact: minor
 configuration: none
 configuration_reason: "The new runtime uses the existing shared session_history table and adds no configuration keys, but the schema migration removes the old steering mailbox."
 ---
 ## Applicability
+
+Release classification: the integrator explicitly selected v3.11.0 on
+2026-11-12, overriding the original major version classification for this
+cutover. This release-specific decision does not make the schema backward
+compatible: the required drain, discarded pending messages and rollback
+limitations below still apply.
 
 Fred deployments upgrading from the browser queue and runtime steering mailbox
 to in-thread messages during active ReAct and Deep turns.
