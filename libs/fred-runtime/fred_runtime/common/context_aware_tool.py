@@ -39,6 +39,7 @@ from fred_runtime.common.kf_base_client import reported_failure
 from fred_runtime.common.mcp_utils import (
     MCP_DELEGATED_METADATA_KEY,
     MCP_SERVICE_METADATA_KEY,
+    MCP_SERVER_ID_METADATA_KEY,
 )
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.token_expiry import (
@@ -342,6 +343,10 @@ class ContextAwareTool(BaseTool):
         Keep injection conservative + schema-aware. For now we only add "tags" if the
         tool supports it and caller didn't pass it.
         """
+        # Only native, Fred-owned MCP receives inferred workspace/document context.
+        origin = (self.base_tool.metadata or {}).get(MCP_SERVER_ID_METADATA_KEY)
+        if isinstance(origin, str) and origin.startswith("managed-mcp:"):
+            return kwargs
         context = self.context_provider()
         if not context:
             return kwargs

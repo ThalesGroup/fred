@@ -17,6 +17,8 @@ Shared runtime context used by fred-runtime adapters.
 
 from __future__ import annotations
 
+from fred_sdk.contracts.managed_mcp import McpCredentialBinding
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
@@ -135,6 +137,7 @@ class RuntimeConfig:
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)
     mcp_configuration: McpConfigurationLike | None = None
+    mcp_credentials: tuple[McpCredentialBinding, ...] = ()
     chat_model_provider: Callable[[], BaseChatModel] | None = None
     chat_model_factory: Any | None = (
         None  # ChatModelFactoryPort — avoids circular import

@@ -209,6 +209,39 @@
           "title": "Inference Credentials",
           "type": "array"
         },
+        "mcp_credentials": {
+          "default": [],
+          "items": {
+            "additionalProperties": false,
+            "description": "Provisioned locally in each workload. Never received through admission.",
+            "properties": {
+              "credential_binding": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Credential Binding",
+                "type": "string"
+              },
+              "url": {
+                "title": "Url",
+                "type": "string"
+              },
+              "secret_env": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "title": "Secret Env",
+                "type": "string"
+              }
+            },
+            "required": [
+              "credential_binding",
+              "url",
+              "secret_env"
+            ],
+            "title": "McpCredentialBinding",
+            "type": "object"
+          },
+          "title": "Mcp Credentials",
+          "type": "array"
+        },
         "security": {
           "properties": {
             "m2m": {

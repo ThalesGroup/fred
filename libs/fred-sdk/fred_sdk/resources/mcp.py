@@ -32,6 +32,10 @@ class McpCatalog(BaseModel):
         seen: set[str] = set()
         duplicates: list[str] = []
         for server in self.servers:
+            if server.id.startswith("managed-mcp:"):
+                raise ValueError(
+                    "managed-mcp: is reserved for Control Plane connections"
+                )
             if server.id in seen and server.id not in duplicates:
                 duplicates.append(server.id)
             seen.add(server.id)

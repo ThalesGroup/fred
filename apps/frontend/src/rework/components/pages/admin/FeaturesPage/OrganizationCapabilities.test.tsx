@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CapabilityInventoryOffer,
-  PodCapabilityInventory,
+  CapabilityInventory,
   RefreshOrganizationCapabilitiesApiArg,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
@@ -22,7 +22,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
   query: { currentData: undefined, isFetching: false, isError: false } as {
-    currentData?: PodCapabilityInventory[];
+    currentData?: CapabilityInventory[];
     isFetching: boolean;
     isError: boolean;
   },
@@ -61,8 +61,10 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
 
-const pod = (over: Partial<PodCapabilityInventory> & Pick<PodCapabilityInventory, "runtime_id">) =>
+const pod = (over: Partial<CapabilityInventory> & Pick<CapabilityInventory, "runtime_id">) =>
   ({
+    source_id: over.runtime_id!,
+    origin: "pod",
     enabled: true,
     observation: "observed",
     checked_at: "2026-10-28T08:00:00Z",
@@ -70,9 +72,11 @@ const pod = (over: Partial<PodCapabilityInventory> & Pick<PodCapabilityInventory
     capabilities: [],
     template_capabilities: [],
     ...over,
-  }) satisfies PodCapabilityInventory;
+  }) satisfies CapabilityInventory;
 
 const offer = (capability_id: string, advertised = true): CapabilityInventoryOffer => ({
+  source_id: "fred-agents",
+  origin: "pod",
   runtime_id: "fred-agents",
   capability_id,
   version: "1",
@@ -180,7 +184,7 @@ describe("OrganizationCapabilities", () => {
     h.refreshFails = true;
     await render();
     await act(async () => button("discovery.refresh").click());
-    expect(h.refreshes).toEqual([{ organizationId: "O1", runtimeId: "fred-agents" }]);
+    expect(h.refreshes).toEqual([{ organizationId: "O1", sourceId: "fred-agents" }]);
     expect(h.errors).toEqual(["rework.admin.capabilities.organizationCapabilities.refreshError:fred-agents"]);
     expect(container.textContent).not.toContain("offer-");
   });

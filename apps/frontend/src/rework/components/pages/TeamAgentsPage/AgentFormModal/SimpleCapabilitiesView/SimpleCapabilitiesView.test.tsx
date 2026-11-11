@@ -155,3 +155,21 @@ describe("SimpleCapabilitiesView for an agent without free selection", () => {
     expect(html).not.toContain(NOTHING_INCLUDED_KEY);
   });
 });
+
+it("shows a central offer in the default view only for a flexible template", () => {
+  const capability = { ...DOCUMENT_ACCESS, id: "managed-mcp:one", name: "Central search" };
+  const show = (flexible: boolean) =>
+    renderToStaticMarkup(
+      <SimpleCapabilitiesView
+        availableIds={new Set([capability.id])}
+        supportsCapabilities={flexible}
+        managedCapabilities={[capability]}
+        selection={selection}
+        disabled={false}
+        onSelectionChange={() => {}}
+      />,
+    );
+  expect(show(true)).toContain("Central search");
+  expect(show(true)).toContain("rework.mcp.origin");
+  expect(show(false)).not.toContain("Central search");
+});

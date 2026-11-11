@@ -1449,6 +1449,7 @@ export type AgentTemplateSummary = {
   max_chat_input_chars: number;
   supports_capabilities?: boolean;
   supports_hitl: boolean;
+  supports_managed_mcp?: boolean;
   template_agent_id: string;
   title: string;
 };

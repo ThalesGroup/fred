@@ -524,6 +524,27 @@
       ],
       "type": "object"
     },
+    "McpCredentialBinding": {
+      "additionalProperties": false,
+      "description": "Local deployment attestation; names only. Never sent to browsers or admission.",
+      "properties": {
+        "credential_binding": {
+          "type": "string"
+        },
+        "secret_env": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "credential_binding",
+        "url",
+        "secret_env"
+      ],
+      "type": "object"
+    },
     "ModelAuth": {
       "additionalProperties": false,
       "description": "Authentication facts only: the secrets stay in the workload's local binding.",
@@ -794,6 +815,12 @@
             "string",
             "null"
           ]
+        },
+        "mcp_credentials": {
+          "items": {
+            "$ref": "#/$defs/McpCredentialBinding"
+          },
+          "type": "array"
         },
         "model_sources": {
           "items": {

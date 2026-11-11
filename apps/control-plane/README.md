@@ -1362,3 +1362,194 @@ checks the source revision and resolved configuration again. Existing PowerPoint
 upload receipts, quotas, original storage and capability preparation are reused.
 An unsupported file owner or configuration rejects the whole operation rather
 than dropping a capability. No Swift storage adapter or second workflow is used.
+
+## Managed MCP connections (reception pending)
+
+The platform administrator owns a connection's destination, technical credential
+reference, observation and activation at `/admin/mcp-connections`. Create → test
+→ review the tool contracts → publish → enable. Testing only negotiates MCP and
+paginates `tools/list`; it does not invoke a business tool. A successful test is
+not a business authorization and cannot prove that every pod has its credential.
+
+Platform impact is an aggregate `affected_instance_count`, including saved
+selections in private or other-organization spaces. It contains no agent or
+space details; the existing business revoke-impact route retains its own rights.
+Disabling with the exact stored configuration remains possible after provisioning
+has been removed. Role, revision and metadata validation still apply. Activation
+and any configuration change use normal destination/reference validation.
+
+Organization owners use the existing capabilities page to authorize the central
+offer. Team/project restrictions use the existing parent ceiling. Editors select
+it in the existing agent form, in Simple or Advanced mode. Flexible Python
+ReAct/Deep/Graph templates explicitly advertise `supports_managed_mcp`; fixed or
+older templates do not acquire support implicitly. The embedded Rust agent does
+not advertise this support.
+
+Migration `0021_managed_mcp.sql` preserves native offer identities while renaming
+`runtime_capability` to `capability_offer`, and governance keys to `source_id`.
+`capability_source` records `pod` or `managed_mcp` provenance. The central `$mcp`
+source has no runtime, ingress or template. Each connection has one linked offer
+`managed-mcp:<UUID>`; this namespace is reserved in native inventories/catalogs.
+The same offer and business permission serve every compatible pod. There is no
+second permission store and no local YAML fallback for managed selections.
+
+Template choices read only advertised descriptors from `capability_offer`, once
+per template-list request. Every connection mutation updates this projection in
+its transaction. Admission loads detailed contracts only for selected connections
+and rechecks their actual availability with policy in its SQL snapshot. Model
+names remain stable collision-safe aliases; descriptions always include the exact
+remote tool name, even if the remote description is absent. The published contract
+and the name sent in MCP calls remain unchanged.
+
+Provision a reference in Control Plane's `platform.mcp_credentials`:
+
+```yaml
+platform:
+  mcp_credentials:
+    - credential_binding: external-search
+      url: https://tools.example.org/mcp
+      secret_env: EXTERNAL_SEARCH_KEY
+```
+
+Provision the same logical reference and exact URL in **each executing pod**,
+under its top-level `mcp_credentials`. The environment variable name and value
+may differ between workloads. Supply the value through the workload's existing
+secret/environment mechanism, never through the browser, SQL connection record
+or agent tuning. No reference is needed for unauthenticated MCP. Available
+references in the administrator form report the Control Plane workload only.
+A new reference requires normal workload configuration reload/restart; changing
+a connection among already provisioned references is effective next admission.
+
+Supported transport is Streamable HTTP using the maintained Rust `rmcp` SDK for
+discovery and the existing FastMCP/LangChain runtime adapter for execution.
+Authentication is none, bearer, or an `x-*` API-key header (`x-fred-*` is reserved).
+Destinations reject embedded credentials, query strings and fragments; plaintext
+HTTP needs explicit opt-in. Redirects are refused. No Fred JWT, delegation grant,
+workspace, document or session context is inferred for these external tools.
+
+Configuration edits use `expected_revision`. Discovery claims a unique token
+and publishes only if both token and revision still match; it holds no SQL
+transaction over network I/O. Publication also pins the reviewed `checked_at`.
+Failed discovery preserves the last inventory but makes new execution unavailable.
+A destination/authentication change requires another test and publication.
+Metadata/activation edits carry the unchanged technical contract forward.
+Disabling retains the offer, selections and affected-agent diagnosis; no delete
+endpoint is exposed, and the offer's FK prevents deleting its connection.
+
+Admission resolves current policy and technical bindings in its SQL snapshot.
+Each admitted turn owns its immutable binding/revision and independent clients;
+no process-wide registry or tool cache is updated. Runtime verifies the published
+tool contracts before exposing them: remote additions remain hidden, removals or
+contract changes fail closed until reviewed and republished. Tool names include
+the connection UUID. Agent marketplace packages carry only the managed selection and an empty config;
+installation rechecks the destination space and template, and admission resolves
+the current connection. The legacy native/KF catalogue remains for lot 2.
+
+Bounds: 64 configured connections; 16 inventory pages, 256 tools and 1 MiB of
+serialized inventory; discovery negotiation 15 s, listing 20 s, close 3 s;
+runtime initialization 5 s, listing 20 s and individual calls 30 s. The Rust SDK
+also bounds transport responses. There is no periodic health probe, OAuth flow,
+per-tool business permission or per-organization technical identity in this lot.
+Activation affects new admissions; an admitted turn keeps its context, but an
+external server outage or credential revocation can still interrupt a call.
+
+### Targeted checks to run separately
+
+These commands have **not** been run for this change. The integration target
+creates a disposable PostgreSQL container; do not point it at a development DB.
+From the repository root:
+
+```bash
+~/.cargo/bin/cargo test -p control-plane --lib mcp_connections
+~/.cargo/bin/cargo test -p control-plane --test openapi
+make -C apps/control-plane test-integration CARGO_TEST_OPTS=managed_mcp
+(cd libs/fred-runtime && .venv/bin/pytest tests/test_managed_mcp.py tests/test_mcp_v2_client.py tests/test_agent_app.py tests/test_delegated_admission.py)
+(cd apps/frontend && npx --no-install vitest run src/rework/components/pages/admin/McpConnectionsPage/McpConnectionsPage.test.tsx src/rework/components/pages/admin/FeaturesPage/OrganizationCapabilities.test.tsx src/rework/components/pages/TeamSettingsPage/SpaceOffers.test.tsx src/rework/components/pages/TeamAgentsPage/AgentFormModal/AgentFormModal.capabilities.test.tsx src/rework/components/pages/TeamAgentsPage/AgentFormModal/SimpleCapabilitiesView/SimpleCapabilitiesView.test.tsx)
+```
+
+Frontend commands require the repository's Node version. Run the repository's
+usual lint/type checks yourself after these behavioral tests; they were not run
+as part of implementation. Existing native-capability integration tests were
+adapted to the renamed SQL tables and remain relevant for regression testing.
+
+### Manual reception: two pods and a team restriction
+
+1. On a disposable environment, apply the migration through normal deployment.
+   Register two Python pods using this runtime, with distinct runtime IDs and
+   flexible templates. For authenticated peers, provision the same reference/URL
+   in CP and both pods. The unauthenticated local fixture below needs none.
+2. As platform administrator, create one connection to a controlled MCP server,
+   test it, inspect/publish its inventory and enable it. Verify no business tool
+   was called during discovery, and no permission appeared automatically.
+3. As organization owner, authorize its single central offer. Create one agent
+   from each pod's template and select that offer in the existing form. Invoke a
+   harmless fixture tool from both agents; observe the same connection/revision.
+4. Restrict the team's central offers to an empty set. Both agents must be
+   refused on their next admission. A previously admitted turn retains its
+   binding. Remove the restriction; new admissions work without pod restart.
+5. Check another organization has no inherited authorization. Check a native
+   capability with the same display/logical name remains independently selected.
+6. Add a remote tool: it remains hidden until test/review/publication. Remove or
+   change a published schema: execution refuses it. Change destination with an
+   in-flight discovery: its stale result must not overwrite the new revision.
+7. Disable the connection and inspect the aggregate affected-agent count with a
+   platform-only account: no agent/space names or IDs may be returned. Verify next-admission
+   refusal on both pods, plus fixed-template incompatibility, missing workload
+   secret and redirect refusal. Inspect API responses/logs for secret absence.
+
+This is a reception procedure to execute, not an end-to-end acceptance record.
+
+
+### Same local HTTP peer: real Rust discovery through Python execution
+
+The existing stdio wire fixture cannot serve the Control Plane's HTTP discovery.
+The small [HTTP fixture](../../libs/fred-runtime/tests/fixtures/managed_mcp_http.py)
+uses the runtime's installed FastMCP dependency, with no additional test framework.
+This scenario has **not been executed**.
+
+1. In the disposable environment above, start this peer yourself from the repo root:
+
+   ```bash
+   libs/fred-runtime/.venv/bin/python libs/fred-runtime/tests/fixtures/managed_mcp_http.py --port 8333
+   ```
+
+   The endpoint is `http://127.0.0.1:8333/mcp` when all workloads run on the host.
+   For containers, use `--host 0.0.0.0` and choose **one exact URL reachable from
+   both Control Plane and Python pods** on your local network. Use that URL for
+   every step; do not substitute another mock endpoint in the runtime. Select no
+   authentication and explicitly allow insecure HTTP for this local reception.
+2. As platform admin, create the connection, then **test through the Control Plane**.
+   Its Rust MCP client must negotiate and list `add(a, b)` and `multiply(a, b)`,
+   both without descriptions. Check the observed schemas in the UI. The peer's
+   terminal must contain no `MCP call:` lines yet. Publish that observation and
+   enable the connection. Keep its connection ID and publication revision.
+3. As organization owner, authorize the single central offer. As an editor,
+   select it explicitly in an agent on each compatible Python pod. In each chat,
+   ask: “Call the MCP tools add and multiply with a=2 and b=3; report both results.”
+   Check actual tool events and the peer's `MCP call: add` / `MCP call: multiply`
+   lines, with results 5 and 6. A model answer alone does not prove execution.
+   Check that admission on both pods carries the same connection and revision;
+   the model's descriptions contain the original names despite the opaque aliases.
+4. Stop only this peer and restart it at the **same address and port** with:
+
+   ```bash
+   libs/fred-runtime/.venv/bin/python libs/fred-runtime/tests/fixtures/managed_mcp_http.py --port 8333 --changed-contract
+   ```
+
+   Retain `--host` if used before. `add` now has an extra `offset` argument. Before
+   retesting/publishing, start a **new turn** on the existing agent: the Python
+   runtime must refuse the changed published contract (`mcp_published_tool_changed`)
+   before any business call. Previously admitted work is not a new-admission test.
+5. Test again through Rust, inspect the new input schema, publish the reviewed
+   observation, and start another new turn. Ask to call `add(2, 3, offset=10)`;
+   verify the real peer invocation and result 15. No pod restart or registry
+   update is needed. Recheck local restriction and technical disablement from
+   the preceding procedure; both must block new admissions.
+6. Separately, on an authenticated test connection, remove its provisioned
+   reference and reload the CP configuration through the normal local procedure.
+   With a fresh revision, disabling the stored configuration must succeed.
+   Re-enabling or changing to an unprovisioned destination/reference must fail;
+   stale revisions and non-platform actors must remain refused.
+
+These are expected reception results, not an assertion that interoperability,
+permissions, UI behavior or performance have been validated.

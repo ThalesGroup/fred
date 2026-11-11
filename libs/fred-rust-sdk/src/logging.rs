@@ -143,6 +143,9 @@ pub fn init(identity: LogIdentity, level: &str, format: LogFormat) -> anyhow::Re
 }
 
 fn enabled(m: &tracing::Metadata<'_>, level: Level, identity: LogIdentity) -> bool {
+    if m.target().starts_with("rmcp") {
+        return false; // MCP diagnostics are reduced to stable codes at the discovery boundary.
+    }
     if m.is_span() {
         return true;
     }

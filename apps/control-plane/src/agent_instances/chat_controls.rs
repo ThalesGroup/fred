@@ -113,7 +113,9 @@ fn request<'a>(
         .available_capabilities
         .iter()
         .filter_map(|entry| entry.get("id").and_then(Value::as_str))
-        .filter(|id| selected.iter().any(|selected| selected == id))
+        .filter(|id| {
+            !id.starts_with("managed-mcp:") && selected.iter().any(|selected| selected == id)
+        })
         .filter_map(|capability_id| {
             // Swift evaluates an absent/non-object slice against the pod defaults.
             let config_envelope = saved["capability_config"]
@@ -209,6 +211,7 @@ mod tests {
                 .map(|id| BTreeMap::from([("id".into(), json!(id))]))
                 .to_vec(),
             supports_capabilities: true,
+            supports_managed_mcp: false,
             supports_hitl: false,
             default_capability_ids: vec!["unselected".into()],
         }

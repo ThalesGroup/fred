@@ -277,8 +277,8 @@ impl Documents {
         );
         for statement in [
             "insert into runtime_catalog(runtime_id,reachable) values('fixture',true)",
-            "insert into runtime_capability(runtime_id,capability_id,version,descriptor,advertised) values('fixture','ppt_builder','1','{}',true)",
-            "insert into organization_capability(organization_id,runtime_id,capability_id,enabled_by) values($1,'fixture','ppt_builder','writer')",
+            "insert into capability_offer(source_id,capability_id,version,descriptor,advertised) values('fixture','ppt_builder','1','{}',true)",
+            "insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'fixture','ppt_builder','writer')",
         ] {
             let query = sqlx::query(statement);
             if statement.contains("$1") {

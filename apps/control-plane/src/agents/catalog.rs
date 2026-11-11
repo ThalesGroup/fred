@@ -41,11 +41,11 @@ pub struct CatalogObservation {
 
 #[derive(sqlx::FromRow)]
 pub struct StoredCapability {
-    pub runtime_id: String,
+    pub source_id: String,
     pub capability_id: String,
     pub version: String,
     pub descriptor: Json<Value>,
-    /// False means absent from the last successful inventory, not an access denial.
+    /// Technical offer availability, independent of business authorization.
     pub advertised: bool,
 }
 
@@ -67,7 +67,9 @@ impl CatalogSnapshot {
         let mut ids = HashSet::new();
         for offer in &self.capabilities {
             ensure!(
-                valid_key(&offer.capability_id) && valid_key(&offer.version),
+                valid_key(&offer.capability_id)
+                    && !offer.capability_id.starts_with("managed-mcp:")
+                    && valid_key(&offer.version),
                 "invalid capability identity or version"
             );
             ensure!(
@@ -133,15 +135,15 @@ pub async fn replace(
         .bind(runtime_id)
         .execute(&mut *conn)
         .await?;
-    sqlx::query("update runtime_capability set advertised = false where runtime_id = $1")
+    sqlx::query("update capability_offer set advertised = false where source_id = $1")
         .bind(runtime_id)
         .execute(&mut *conn)
         .await?;
     for offer in &snapshot.capabilities {
         sqlx::query(
-            "insert into runtime_capability (runtime_id, capability_id, version, descriptor, advertised)
+            "insert into capability_offer (source_id, capability_id, version, descriptor, advertised)
              values ($1, $2, $3, $4, true)
-             on conflict (runtime_id, capability_id) do update set
+             on conflict (source_id, capability_id) do update set
                  version = excluded.version, descriptor = excluded.descriptor, advertised = true",
         )
         .bind(runtime_id)
@@ -198,8 +200,8 @@ pub async fn capabilities<'e>(
     runtime_id: &str,
 ) -> sqlx::Result<Vec<StoredCapability>> {
     sqlx::query_as(
-        "select runtime_id, capability_id, version, descriptor, advertised
-         from runtime_capability where runtime_id = $1 order by capability_id",
+        "select source_id, capability_id, version, descriptor, advertised
+         from capability_offer where source_id = $1 order by capability_id",
     )
     .bind(runtime_id)
     .fetch_all(ex)

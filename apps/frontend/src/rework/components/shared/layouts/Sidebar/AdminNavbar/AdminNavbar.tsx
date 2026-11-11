@@ -110,6 +110,12 @@ function PlatformAdminNavbar() {
         },
         {
           type: "link",
+          label: t("rework.mcp.title"),
+          icon: { category: "outlined", type: "hub", filled: false },
+          linkProps: { to: "/admin/mcp-connections" },
+        },
+        {
+          type: "link",
           label: t("rework.monitor.title"),
           icon: { category: "outlined", type: "monitoring", filled: false },
           linkProps: { to: "/admin/monitor" },

@@ -254,6 +254,7 @@ async fn prepare_execution(
     // Discovery supplies current template support/input policy, never destinations.
     // It runs outside SQL and has the existing timeout and no-redirect policy.
     let template = agents::editable_template(
+        &s.pool,
         &s.agent_catalog,
         space.organization,
         &initial.source_runtime_id,
@@ -395,6 +396,7 @@ mod tests {
                 entry("search", None),
             ],
             supports_capabilities: true,
+            supports_managed_mcp: false,
             supports_hitl: false,
             default_capability_ids: vec![],
         };
@@ -431,6 +433,7 @@ mod tests {
                 json!("search"),
             )])],
             supports_capabilities: true,
+            supports_managed_mcp: false,
             supports_hitl: false,
             default_capability_ids: vec!["other".into()],
         };

@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Organization authorization of pod capability offers: deny by default.
+//! Organization authorization of capability offers: deny by default.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -14,10 +14,10 @@ use crate::{
     error::{AppError, AppResult},
 };
 
-/// One organization's authorization of pod offers, read in one query.
+/// One organization's authorization of offers, read in one query.
 #[derive(Clone)]
 pub struct Policy {
-    /// Capability ids enabled for every space, by runtime_id.
+    /// Capability ids enabled for every space, by source_id.
     enabled: HashMap<String, HashSet<String>>,
     local: HashMap<Uuid, HashMap<String, HashSet<String>>>,
 }
@@ -51,12 +51,12 @@ impl Policy {
         path: Option<&[Uuid]>,
     ) -> sqlx::Result<Self> {
         let rows: Vec<(String, Option<String>, Option<Uuid>)> = sqlx::query_as(
-            "select runtime_id, capability_id, null::uuid as space_id
+            "select source_id, capability_id, null::uuid as space_id
              from organization_capability where organization_id = $1
              union all
-             select p.runtime_id, a.capability_id, p.space_id
+             select p.source_id, a.capability_id, p.space_id
              from space_capability_policy p join space s on s.id=p.space_id
-             left join space_capability_permission a using (space_id, runtime_id)
+             left join space_capability_permission a using (space_id, source_id)
              where s.organization_id=$1 and p.restricted and ($2::uuid[] is null or p.space_id=any($2))",
         )
         .bind(organization_id)
@@ -78,16 +78,16 @@ impl Policy {
     }
 
     /// The organization's "enabled for all" decision, as stored.
-    pub fn default_on(&self, runtime_id: &str, capability_id: &str) -> bool {
+    pub fn default_on(&self, source_id: &str, capability_id: &str) -> bool {
         self.enabled
-            .get(runtime_id)
+            .get(source_id)
             .is_some_and(|ids| ids.contains(capability_id))
     }
 
     /// This policy with one offer disabled, to preview its revocation.
-    pub fn without(&self, runtime_id: &str, capability_id: &str) -> Self {
+    pub fn without(&self, source_id: &str, capability_id: &str) -> Self {
         let mut policy = self.clone();
-        if let Some(ids) = policy.enabled.get_mut(runtime_id) {
+        if let Some(ids) = policy.enabled.get_mut(source_id) {
             ids.remove(capability_id);
         }
         policy
@@ -96,13 +96,13 @@ impl Policy {
 
 /// The single rule deciding whether `space` may use an offer. Team exceptions
 /// and the personal-space class belong here and in `Policy`, nowhere else.
-pub fn usable(policy: &Policy, space: &Space, runtime_id: &str, capability_id: &str) -> bool {
-    policy.default_on(runtime_id, capability_id)
+pub fn usable(policy: &Policy, space: &Space, source_id: &str, capability_id: &str) -> bool {
+    policy.default_on(source_id, capability_id)
         && space.path.iter().all(|id| {
             policy
                 .local
                 .get(id)
-                .and_then(|runtimes| runtimes.get(runtime_id))
+                .and_then(|runtimes| runtimes.get(source_id))
                 .is_none_or(|allowed| allowed.contains(capability_id))
         })
 }
@@ -111,22 +111,22 @@ pub fn usable(policy: &Policy, space: &Space, runtime_id: &str, capability_id: &
 pub fn first_unusable<'a>(
     policy: &Policy,
     space: &Space,
-    runtime_id: &str,
+    source_id: &str,
     selected: &'a [String],
 ) -> Option<&'a str> {
     selected
         .iter()
         .map(String::as_str)
-        .find(|id| !usable(policy, space, runtime_id, id))
+        .find(|id| !usable(policy, space, selection_source(source_id, id), id))
 }
 
 pub fn require_usable(
     policy: &Policy,
     space: &Space,
-    runtime_id: &str,
+    source_id: &str,
     selected: &[String],
 ) -> AppResult<()> {
-    first_unusable(policy, space, runtime_id, selected).map_or(Ok(()), |id| Err(not_enabled(id)))
+    first_unusable(policy, space, source_id, selected).map_or(Ok(()), |id| Err(not_enabled(id)))
 }
 
 pub fn not_enabled(capability_id: &str) -> AppError {
@@ -137,19 +137,17 @@ pub fn not_enabled(capability_id: &str) -> AppError {
     )
 }
 
-/// Offers of `runtime_id` that `space` may select.
+/// Offers of `source_id` that `space` may select.
 pub async fn usable_capability_ids<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space: &Space,
-    runtime_id: &str,
+    source_id: &str,
 ) -> AppResult<BTreeSet<String>> {
     let policy = Policy::load(ex, space.organization).await?;
-    Ok(policy
-        .enabled
-        .get(runtime_id)
+    Ok([source_id, crate::mcp_connections::SOURCE_ID]
         .into_iter()
-        .flatten()
-        .filter(|id| usable(&policy, space, runtime_id, id))
+        .flat_map(|source| policy.enabled.get(source).into_iter().flatten())
+        .filter(|id| usable(&policy, space, selection_source(source_id, id), id))
         .cloned()
         .collect())
 }
@@ -158,17 +156,17 @@ pub async fn usable_capability_ids<'e>(
 pub(super) async fn set_default_on(
     conn: &mut PgConnection,
     organization_id: Uuid,
-    runtime_id: &str,
+    source_id: &str,
     capability_id: &str,
     default_on: bool,
     actor: &str,
 ) -> AppResult<bool> {
     // Shared row lock: a concurrent refresh cannot withdraw the offer before we write.
     let advertised: bool = sqlx::query_scalar(
-        "select advertised from runtime_capability
-         where runtime_id = $1 and capability_id = $2 for share",
+        "select advertised from capability_offer
+         where source_id = $1 and capability_id = $2 for share",
     )
-    .bind(runtime_id)
+    .bind(source_id)
     .bind(capability_id)
     .fetch_optional(&mut *conn)
     .await?
@@ -176,15 +174,15 @@ pub(super) async fn set_default_on(
     let result = if default_on {
         if !advertised {
             return Err(AppError::Conflict(
-                "The pod no longer advertises this capability; it cannot be enabled.".into(),
+                "This offer is unavailable; it cannot be enabled.".into(),
             ));
         }
         sqlx::query(
-            "insert into organization_capability (organization_id, runtime_id, capability_id, enabled_by)
+            "insert into organization_capability (organization_id, source_id, capability_id, enabled_by)
              values ($1, $2, $3, $4) on conflict do nothing",
         )
         .bind(organization_id)
-        .bind(runtime_id)
+        .bind(source_id)
         .bind(capability_id)
         .bind(actor)
         .execute(&mut *conn)
@@ -192,13 +190,22 @@ pub(super) async fn set_default_on(
     } else {
         sqlx::query(
             "delete from organization_capability
-             where organization_id = $1 and runtime_id = $2 and capability_id = $3",
+             where organization_id = $1 and source_id = $2 and capability_id = $3",
         )
         .bind(organization_id)
-        .bind(runtime_id)
+        .bind(source_id)
         .bind(capability_id)
         .execute(&mut *conn)
         .await?
     };
     Ok(result.rows_affected() == 1)
+}
+
+/// Selection provenance is independent of the executing pod. Native IDs retain their pod.
+pub fn selection_source<'a>(runtime: &'a str, id: &str) -> &'a str {
+    if id.starts_with("managed-mcp:") {
+        crate::mcp_connections::SOURCE_ID
+    } else {
+        runtime
+    }
 }

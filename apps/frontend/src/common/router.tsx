@@ -58,6 +58,7 @@ import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.ts
 import { getConfig } from "./config";
 
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import McpConnectionsPage from "@components/pages/admin/McpConnectionsPage/McpConnectionsPage";
 import MonitorPage from "@components/pages/admin/MonitorPage/MonitorPage";
 import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
@@ -265,6 +266,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "admin/organizations",
         element: <OrganizationsPage />,
+      },
+      {
+        path: "admin/mcp-connections",
+        element: <McpConnectionsPage />,
       },
       {
         path: "admin/monitor",

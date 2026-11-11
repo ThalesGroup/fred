@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
@@ -33,6 +34,7 @@ interface SimpleCapabilitiesViewProps {
    *  packs to pick, the agent's included capabilities are listed instead. */
   supportsCapabilities: boolean;
   /** Capabilities included with an agent that offers no free selection. */
+  managedCapabilities?: readonly CapabilityCatalogEntry[];
   includedCapabilities?: readonly CapabilityCatalogEntry[];
   /** Config UI shown inside one included capability's card. */
   renderIncludedOptions?: (capability: CapabilityCatalogEntry) => ReactNode;
@@ -58,6 +60,7 @@ export function SimpleCapabilitiesView({
   availableIds,
   supportsCapabilities,
   includedCapabilities = [],
+  managedCapabilities = [],
   renderIncludedOptions,
   selection,
   disabled,
@@ -98,6 +101,31 @@ export function SimpleCapabilitiesView({
           </section>
         );
       })}
+      {supportsCapabilities && managedCapabilities.length > 0 && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionHeader}>{t("rework.mcp.title")}</h3>
+          <ul className={styles.packList}>
+            {managedCapabilities.map((capability) => (
+              <CapabilityCard
+                key={capability.id}
+                name={capability.name}
+                description={capability.description}
+                badge={<StatusBadge label={t("rework.mcp.origin")} tone="neutral" />}
+                checked={activeIds.has(capability.id)}
+                disabled={disabled}
+                onToggle={() =>
+                  onSelectionChange({
+                    ...selection,
+                    selectedCapabilityIds: activeIds.has(capability.id)
+                      ? selection.selectedCapabilityIds.filter((id) => id !== capability.id)
+                      : [...selection.selectedCapabilityIds, capability.id],
+                  })
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      )}
       {!supportsCapabilities &&
         (includedCapabilities.length > 0 ? (
           <section className={styles.section}>

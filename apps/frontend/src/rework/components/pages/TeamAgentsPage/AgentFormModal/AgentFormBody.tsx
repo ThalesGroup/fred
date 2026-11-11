@@ -34,6 +34,7 @@ import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
@@ -204,7 +205,15 @@ export function AgentFormBody({
   // session exists, so the base URLs come straight from the template catalog.
   useEffect(() => {
     if (capabilities.length === 0) return;
-    dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
+    dispatch(
+      setCapabilityBaseUrls(
+        Object.fromEntries(
+          capabilities
+            .filter((entry) => !entry.id.startsWith("managed-mcp:"))
+            .map((entry) => [entry.id, entry.route_base_url]),
+        ),
+      ),
+    );
   }, [dispatch, capabilities]);
 
   const visibleFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
@@ -493,6 +502,7 @@ export function AgentFormBody({
                     availableIds={availableCapabilityIds}
                     supportsCapabilities={supportsCapabilities}
                     includedCapabilities={capabilities}
+                    managedCapabilities={capabilities.filter((c) => c.id.startsWith("managed-mcp:"))}
                     renderIncludedOptions={renderIncludedOptions}
                     selection={{ selectedCapabilityIds, capabilityConfigValues }}
                     disabled={isSubmitting}
@@ -530,7 +540,13 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           onToggle={toggle}
-                          badge={BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />}
+                          badge={
+                            capability.id.startsWith("managed-mcp:") ? (
+                              <StatusBadge label={t("rework.mcp.origin")} tone="neutral" />
+                            ) : (
+                              BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />
+                            )
+                          }
                           subForm={checked && renderConfigForm(capability)}
                         />
                       );

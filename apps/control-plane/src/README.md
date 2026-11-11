@@ -59,3 +59,9 @@ and the [runtime reference](../../../docs/architecture/A1-manager-runtime.md).
 The local application profile is in [deploy/k3d](../../../deploy/k3d/README.md).
 Infrastructure belongs to the deployment factory. Do not infer an application
 contract from an infrastructure resource name.
+
+Managed MCP implementation (reception pending): [mcp_connections](mcp_connections/mod.rs),
+shared offer governance in [agents](agents.rs), and `admin/McpConnectionsPage` in the frontend.
+Targeted fixtures are `src/mcp_connections/tests.rs`, `tests/support/managed_mcp.rs`
+and `libs/fred-runtime/tests/test_managed_mcp.py`. See the
+[operating procedure](../README.md#managed-mcp-connections-reception-pending) before reception.

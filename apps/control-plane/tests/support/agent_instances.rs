@@ -176,9 +176,9 @@ async fn enable(e: &Env, org: Uuid, key: &str, on: bool) -> Uuid {
 async fn enable_capability(e: &Env, org: Uuid, capability_id: &str) {
     for statement in [
         "insert into runtime_catalog (runtime_id, reachable) values ('fixture', true) on conflict do nothing",
-        "insert into runtime_capability (runtime_id, capability_id, version, descriptor, advertised)
+        "insert into capability_offer (source_id, capability_id, version, descriptor, advertised)
          values ('fixture', $2, '1', '{}', true)",
-        "insert into organization_capability (organization_id, runtime_id, capability_id, enabled_by)
+        "insert into organization_capability (organization_id, source_id, capability_id, enabled_by)
          values ($1, 'fixture', $2, 'fixture')",
     ] {
         sqlx::query(statement)
@@ -1328,10 +1328,14 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
         .execute(&e.pool)
         .await
         .unwrap();
-    sqlx::query("insert into runtime_capability (runtime_id, capability_id, version, descriptor, advertised)
-        values ('fixture', 'tool', '1', '{}', true)")
-        .execute(&e.pool).await.unwrap();
-    sqlx::query("insert into organization_capability (organization_id, runtime_id, capability_id, enabled_by)
+    sqlx::query(
+        "insert into capability_offer (source_id, capability_id, version, descriptor, advertised)
+        values ('fixture', 'tool', '1', '{}', true)",
+    )
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    sqlx::query("insert into organization_capability (organization_id, source_id, capability_id, enabled_by)
         values ($1, 'fixture', 'tool', 'alice')")
         .bind(org.id).execute(&e.pool).await.unwrap();
     let instance = create(&app, &identity, team.id, creation(template, "Controls")).await;
@@ -2354,7 +2358,7 @@ async fn marketplace_agents_install_frozen_configuration_with_current_offers() {
         404
     );
     enable(&e, org.id, "custom", true).await;
-    sqlx::query("delete from organization_capability where organization_id=$1 and runtime_id='fixture' and capability_id='tool'").bind(org.id).execute(&e.pool).await.unwrap();
+    sqlx::query("delete from organization_capability where organization_id=$1 and source_id='fixture' and capability_id='tool'").bind(org.id).execute(&e.pool).await.unwrap();
     assert_eq!(
         support::request_with_headers(
             &app,
@@ -2369,7 +2373,7 @@ async fn marketplace_agents_install_frozen_configuration_with_current_offers() {
         .0,
         422
     );
-    sqlx::query("insert into organization_capability (organization_id,runtime_id,capability_id,enabled_by) values ($1,'fixture','tool','fixture')").bind(org.id).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into organization_capability (organization_id,source_id,capability_id,enabled_by) values ($1,'fixture','tool','fixture')").bind(org.id).execute(&e.pool).await.unwrap();
     // Policy revocation during external preflight is rechecked in the final transaction.
     let gate = Arc::new(support::Gate::default());
     catalog.state.lock().await.gate = Some(gate.clone());
@@ -2509,3 +2513,6 @@ async fn marketplace_agents_install_frozen_configuration_with_current_offers() {
     );
     e.pool.close().await;
 }
+
+#[path = "managed_mcp.rs"]
+mod managed_mcp;

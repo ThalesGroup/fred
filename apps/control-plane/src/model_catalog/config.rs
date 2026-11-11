@@ -114,7 +114,7 @@ pub(crate) fn valid_source_id(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
 }
 
-fn approved_url(value: &str, allow_http: bool) -> bool {
+pub(crate) fn approved_url(value: &str, allow_http: bool) -> bool {
     bounded_text(value, 2048)
         && reqwest::Url::parse(value).is_ok_and(|url| {
             (url.scheme() == "https" || (allow_http && url.scheme() == "http"))

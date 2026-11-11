@@ -112,7 +112,7 @@ async fn upload(
         {
             return Err(AppError::NotFound);
         }
-        crate::agents::enrollable_template(&s.agent_catalog, owner.organization, template)
+        crate::agents::enrollable_template(&s.pool, &s.agent_catalog, owner.organization, template)
             .await?
             .0
             .source_runtime_id

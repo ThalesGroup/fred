@@ -253,6 +253,8 @@ from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.turn import TurnAuthority, current_turn
+from fred_sdk.contracts.managed_mcp import McpBinding
+from fred_runtime.common.managed_mcp import validate_admission, ManagedMcpError
 from fred_runtime.react.react_runtime import ReActRuntime
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
@@ -560,6 +562,7 @@ class _PodAgentSettings:
     # a `Protocol` attribute is invariant, so a narrower `tuple[...]` here
     # fails structural typing against the `Sequence[MCPServerRef]` contract.
     active_mcp_servers: Sequence[MCPServerRef] = ()
+    managed_mcp_bindings: tuple[McpBinding, ...] = ()
 
 
 class _MediaClientAgentAdapter:
@@ -980,6 +983,11 @@ def _build_runtime_services(
     )
     document_access_config = None
     effective_tuning = tuning if tuning is not None else settings.tuning
+    if effective_tuning and any(
+        key.startswith("managed-mcp:")
+        for key in (effective_tuning.selected_capability_ids or ())
+    ):
+        settings.managed_mcp_bindings = current_turn().binding.mcp_bindings
     if capability_registry is not None and "document_access" in capability_registry:
         stored = (
             effective_tuning.capability_config.get("document_access")
@@ -1366,6 +1374,7 @@ class _AgentTemplateSummary(BaseModel):
     # grants). False means available_capabilities lists capabilities included
     # with the agent: always active, configurable, never selectable.
     supports_capabilities: bool = True
+    supports_managed_mcp: bool = False
     # Managed resume needs the native interrupt protocol and durable single-use claims.
     supports_hitl: bool
     # This template's declared default capability ids (RFC §2), verbatim from
@@ -1499,6 +1508,8 @@ def _active_mcp_server_refs(
     mcp_config = get_runtime_context().config.mcp_configuration
     refs: list[MCPServerRef] = []
     for cap_id in selected_capability_ids:
+        if cap_id.startswith("managed-mcp:"):
+            continue
         existing = default_refs.get(cap_id)
         if existing is not None:
             refs.append(existing.model_copy(deep=True))
@@ -1773,6 +1784,16 @@ async def _resolve_agent_instance(
         raise HTTPException(
             status_code=503, detail="Invalid resolved agent configuration"
         ) from None
+    try:
+        validate_admission(
+            tuning.selected_capability_ids or (),
+            resolution.mcp_bindings,
+            compatible=definition.supports_capabilities
+            and isinstance(definition, (ReActAgentDefinition, GraphAgentDefinition)),
+            credentials=runtime.mcp_credentials,
+        )
+    except ManagedMcpError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     if ctx.get("chat_profile_id") is not None:
         raise HTTPException(
             status_code=422,
@@ -4041,6 +4062,7 @@ def _effective_capability_ids(
         selected = None
     if selected is None:
         selected = [ref.id for ref in definition.default_mcp_servers]
+    selected = [key for key in selected if not key.startswith("managed-mcp:")]
     if capability_registry is None:
         return list(selected)
     mcp_config = get_runtime_context().config.mcp_configuration
@@ -5384,6 +5406,10 @@ def _build_agent_router(
                     definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
+                supports_managed_mcp=definition.supports_capabilities
+                and isinstance(
+                    definition, (ReActAgentDefinition, GraphAgentDefinition)
+                ),
                 supports_hitl=isinstance(
                     definition, (ReActAgentDefinition, GraphAgentDefinition)
                 )
@@ -6953,6 +6979,7 @@ def create_agent_app(
                             config.storage.conversation_filesystem
                         ),
                         mcp_configuration=config.get_mcp_configuration(),
+                        mcp_credentials=config.mcp_credentials,
                         default_platform_prompt=_platform_prompt_file_field(
                             config, "platform_prompt"
                         ),

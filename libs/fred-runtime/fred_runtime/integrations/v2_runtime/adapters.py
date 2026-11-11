@@ -2091,7 +2091,10 @@ class FredMcpToolProvider(ToolProviderPort):
     def _has_configured_servers(self) -> bool:
         # #1978: the active MCP servers are on the settings, not the tuning
         # payload — the MCP tuning trio was retired.
-        return bool(getattr(self._settings, "active_mcp_servers", ()))
+        return bool(
+            getattr(self._settings, "active_mcp_servers", ())
+            or getattr(self._settings, "managed_mcp_bindings", ())
+        )
 
 
 class FredWorkspaceFs(WorkspaceFsPort):

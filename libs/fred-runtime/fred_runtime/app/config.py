@@ -82,6 +82,7 @@ from fred_core.security.structure import SecurityConfiguration
 from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.weaver import InferenceCredentialBinding
+from fred_sdk.contracts.managed_mcp import McpCredentialBinding
 from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
@@ -451,6 +452,7 @@ class AgentPodConfig(BaseModel):
     # an omitted `app:` block would leave the pod unable to name itself.
     app: PodAppConfig
     inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
+    mcp_credentials: tuple[McpCredentialBinding, ...] = ()
     security: SecurityConfiguration
     ai: PodAIConfig = Field(default_factory=PodAIConfig)
     observability: PodObservabilityConfig = Field(

@@ -166,3 +166,26 @@ it("edits the saved selection and resubmits it for validation", async () => {
   await act(async () => button("rework.save").click());
   expect(updateAgentRequest(submitted.mock.calls[0][0], saved)).toMatchObject({ capability_ids: [] });
 });
+
+it("keeps central selection across Simple and Advanced and submits its distinct identity", async () => {
+  const id = "managed-mcp:8cfd2a56-2d35-4d18-b67c-5e42b0a9c122";
+  createForm({
+    ...template,
+    available_capabilities: [
+      ...template.available_capabilities,
+      {
+        id,
+        name: "Central search",
+        description: "External tools",
+        version: "1",
+        icon: "extension",
+        config_fields: [],
+      },
+    ],
+  });
+  const toggle = container.querySelector<HTMLInputElement>('[aria-label="Central search"]')!;
+  click(toggle);
+  advanced();
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Central search"]')!.checked).toBe(true);
+  expect(await submit()).toMatchObject({ capability_ids: [id] });
+});

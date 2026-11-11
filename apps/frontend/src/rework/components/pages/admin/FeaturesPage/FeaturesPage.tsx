@@ -69,7 +69,7 @@ const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledg
 // A pod offer shares the default-on switch; (pod, capability) is its identity.
 type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
 const isOffer = (row: DefaultOnRow): row is CapabilityInventoryOffer => "descriptor" in row;
-const defaultOnKey = (row: DefaultOnRow) => (isOffer(row) ? `${row.runtime_id}/${row.capability_id}` : row.id);
+const defaultOnKey = (row: DefaultOnRow) => (isOffer(row) ? `${row.source_id}/${row.capability_id}` : row.id);
 
 export default function FeaturesPage({ organizationId }: { organizationId: string }) {
   const [kindFilter, setKindFilter] = useState<CapabilityKind>("agent");
@@ -169,7 +169,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     isOffer(row)
       ? setOfferDefault({
           organizationId,
-          runtimeId: row.runtime_id,
+          sourceId: row.source_id,
           capabilityId: row.capability_id,
           setDefaultOnRequest: { default_on },
         }).unwrap()
@@ -213,7 +213,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       if (isOffer(capability)) {
         void fetchOfferRevokeImpact({
           organizationId,
-          runtimeId: capability.runtime_id,
+          sourceId: capability.source_id,
           capabilityId: capability.capability_id,
         });
       }
@@ -432,7 +432,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
           name={offerName(offer)}
           icon={toIconType(offer.descriptor.icon, "tune")}
           sourceId={offer.capability_id}
-          runtimeId={offer.runtime_id}
+          runtimeId={offer.runtime_id ?? undefined}
           version={offer.descriptor.public_version}
           dimmed={!offer.advertised}
         />
@@ -481,7 +481,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     <div className={styles.page}>
       <CapabilityPlatformDrawer
         organizationId={organizationId}
-        runtimeId={platformOffer?.runtime_id}
+        runtimeId={platformOffer?.runtime_id ?? undefined}
         capability={
           platformOffer
             ? {

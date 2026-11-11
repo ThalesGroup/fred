@@ -186,12 +186,14 @@ pub enum CatalogObservationState {
 
 #[derive(Serialize, ToSchema)]
 pub struct CapabilityInventoryOffer {
+    pub source_id: String,
+    pub origin: OfferOrigin,
     /// Browser route derived from the platform-approved pod ingress.
     pub route_base_url: Option<String>,
-    pub runtime_id: String,
+    pub runtime_id: Option<String>,
     pub capability_id: String,
     pub version: String,
-    /// Present in the last successful snapshot; independent of observation state.
+    /// Native offer present in its snapshot, or managed connection ready for execution.
     pub advertised: bool,
     /// Enabled for every space of this organization.
     pub default_on: bool,
@@ -211,6 +213,13 @@ pub struct AffectedAgentInstance {
     /// Display name of a personal space's owner; null for other spaces.
     #[schema(required = true)]
     pub owner_name: Option<String>,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OfferOrigin {
+    Pod,
+    ManagedMcp,
 }
 
 impl From<&SelectingInstance> for AffectedAgentInstance {
@@ -265,8 +274,10 @@ async fn name_owners<'a>(
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct PodCapabilityInventory {
-    pub runtime_id: String,
+pub struct CapabilityInventory {
+    pub source_id: String,
+    pub origin: OfferOrigin,
+    pub runtime_id: Option<String>,
     pub enabled: bool,
     pub observation: CatalogObservationState,
     pub checked_at: Option<DateTime<Utc>>,
@@ -288,7 +299,7 @@ async fn read_snapshot(s: &AppState) -> AppResult<Transaction<'static, Postgres>
 pub(super) async fn read_inventory(
     s: &AppState,
     organization_id: Uuid,
-) -> AppResult<Vec<PodCapabilityInventory>> {
+) -> AppResult<Vec<CapabilityInventory>> {
     let mut tx = read_snapshot(s).await?;
     let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
     let instances = agent_instances::selecting_in_organization(&mut *tx, organization_id).await?;
@@ -297,8 +308,10 @@ pub(super) async fn read_inventory(
         let observation = catalog::observation(&mut *tx, &source.runtime_id).await?;
         let offers = catalog::capabilities(&mut *tx, &source.runtime_id).await?;
         let links = catalog::template_capabilities(&mut *tx, &source.runtime_id).await?;
-        items.push(PodCapabilityInventory {
-            runtime_id: source.runtime_id.clone(),
+        items.push(CapabilityInventory {
+            source_id: source.runtime_id.clone(),
+            origin: OfferOrigin::Pod,
+            runtime_id: Some(source.runtime_id.clone()),
             enabled: source.enabled,
             observation: match &observation {
                 None => CatalogObservationState::NotObserved,
@@ -311,6 +324,8 @@ pub(super) async fn read_inventory(
                 .into_iter()
                 .map(|offer| {
                     Ok(CapabilityInventoryOffer {
+                        source_id: offer.source_id.clone(),
+                        origin: OfferOrigin::Pod,
                         route_base_url: source
                             .public_base_url
                             .as_ref()
@@ -322,22 +337,22 @@ pub(super) async fn read_inventory(
                                     offer.capability_id
                                 )
                             }),
-                        default_on: policy.default_on(&offer.runtime_id, &offer.capability_id),
+                        default_on: policy.default_on(&offer.source_id, &offer.capability_id),
                         unusable_instances: instances
                             .iter()
                             .filter(|instance| {
-                                instance.source_runtime_id == offer.runtime_id
+                                instance.source_runtime_id == offer.source_id
                                     && instance.selected.contains(&offer.capability_id)
                                     && !enablement::usable(
                                         &policy,
                                         &instance.space,
-                                        &offer.runtime_id,
+                                        &offer.source_id,
                                         &offer.capability_id,
                                     )
                             })
                             .map(AffectedAgentInstance::from)
                             .collect(),
-                        runtime_id: offer.runtime_id,
+                        runtime_id: Some(offer.source_id),
                         capability_id: offer.capability_id,
                         version: offer.version,
                         advertised: offer.advertised,
@@ -356,6 +371,46 @@ pub(super) async fn read_inventory(
                 .collect(),
         });
     }
+    let mut central = CapabilityInventory {
+        source_id: crate::mcp_connections::SOURCE_ID.into(),
+        origin: OfferOrigin::ManagedMcp,
+        runtime_id: None,
+        enabled: true,
+        observation: CatalogObservationState::Observed,
+        checked_at: None,
+        observed_at: None,
+        capabilities: Vec::new(),
+        template_capabilities: Vec::new(),
+    };
+    for offer in catalog::capabilities(&mut *tx, crate::mcp_connections::SOURCE_ID).await? {
+        central.capabilities.push(CapabilityInventoryOffer {
+            source_id: offer.source_id.clone(),
+            origin: OfferOrigin::ManagedMcp,
+            runtime_id: None,
+            route_base_url: None,
+            default_on: policy.default_on(&offer.source_id, &offer.capability_id),
+            unusable_instances: instances
+                .iter()
+                .filter(|instance| {
+                    instance.selected.contains(&offer.capability_id)
+                        && (!offer.advertised
+                            || !enablement::usable(
+                                &policy,
+                                &instance.space,
+                                &offer.source_id,
+                                &offer.capability_id,
+                            ))
+                })
+                .map(AffectedAgentInstance::from)
+                .collect(),
+            capability_id: offer.capability_id,
+            version: offer.version,
+            advertised: offer.advertised,
+            descriptor: serde_json::from_value(offer.descriptor.0)
+                .context("invalid stored offer description")?,
+        });
+    }
+    items.push(central);
     tx.commit().await?;
     let unusable = items
         .iter_mut()
@@ -366,6 +421,9 @@ pub(super) async fn read_inventory(
 }
 
 pub(super) fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
+    if runtime_id == crate::mcp_connections::SOURCE_ID {
+        return Ok(());
+    }
     if s.agent_catalog
         .runtime_catalog_sources
         .iter()
@@ -390,7 +448,7 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     get, path = "/organizations/{organization_id}/capabilities",
     params(("organization_id" = Uuid, Path)),
     responses(
-        (status = 200, body = [PodCapabilityInventory]),
+        (status = 200, body = [CapabilityInventory]),
         (status = 401, body = crate::error::ErrorBody),
         (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody),
@@ -403,7 +461,7 @@ async fn organization_capabilities(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(organization_id): ApiPath<Uuid>,
-) -> AppResult<Json<Vec<PodCapabilityInventory>>> {
+) -> AppResult<Json<Vec<CapabilityInventory>>> {
     authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
         .await?;
     let inventory = read_inventory(&s, organization_id).await?;
@@ -464,8 +522,8 @@ async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnaps
 }
 
 #[utoipa::path(
-    post, path = "/organizations/{organization_id}/capabilities/{runtime_id}/refresh",
-    params(("organization_id" = Uuid, Path), ("runtime_id" = String, Path)),
+    post, path = "/organizations/{organization_id}/capabilities/{source_id}/refresh",
+    params(("organization_id" = Uuid, Path), ("source_id" = String, Path)),
     responses(
         (status = 204, description = "Complete pod inventory persisted; read the catalog for observation and offers"),
         (status = 401, body = crate::error::ErrorBody),
@@ -512,10 +570,10 @@ async fn refresh_organization_capabilities(
 }
 
 #[utoipa::path(
-    put, path = "/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/default-on",
+    put, path = "/organizations/{organization_id}/capabilities/{source_id}/{capability_id}/default-on",
     params(
         ("organization_id" = Uuid, Path),
-        ("runtime_id" = String, Path),
+        ("source_id" = String, Path),
         ("capability_id" = String, Path)
     ),
     request_body = SetDefaultOnRequest,
@@ -563,10 +621,10 @@ async fn set_organization_capability_default(
 }
 
 #[utoipa::path(
-    get, path = "/organizations/{organization_id}/capabilities/{runtime_id}/{capability_id}/revoke-impact",
+    get, path = "/organizations/{organization_id}/capabilities/{source_id}/{capability_id}/revoke-impact",
     params(
         ("organization_id" = Uuid, Path),
-        ("runtime_id" = String, Path),
+        ("source_id" = String, Path),
         ("capability_id" = String, Path)
     ),
     responses(

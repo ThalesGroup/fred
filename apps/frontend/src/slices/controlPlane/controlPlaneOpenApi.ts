@@ -401,7 +401,7 @@ const injectedRtkApi = api.injectEndpoints({
       RefreshOrganizationCapabilitiesApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/refresh`,
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.sourceId}/refresh`,
         method: "POST",
       }),
     }),
@@ -410,7 +410,7 @@ const injectedRtkApi = api.injectEndpoints({
       SetOrganizationCapabilityDefaultApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/${queryArg.capabilityId}/default-on`,
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.sourceId}/${queryArg.capabilityId}/default-on`,
         method: "PUT",
         body: queryArg.setDefaultOnRequest,
       }),
@@ -420,7 +420,7 @@ const injectedRtkApi = api.injectEndpoints({
       OrganizationCapabilityRevokeImpactApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.runtimeId}/${queryArg.capabilityId}/revoke-impact`,
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.sourceId}/${queryArg.capabilityId}/revoke-impact`,
       }),
     }),
     organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
@@ -457,6 +457,40 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
+    }),
+    mcpConnections: build.query<McpConnectionsApiResponse, McpConnectionsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/mcp-connections` }),
+    }),
+    createMcpConnection: build.mutation<CreateMcpConnectionApiResponse, CreateMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/mcp-connections`,
+        method: "POST",
+        body: queryArg.createMcpConnection,
+      }),
+    }),
+    updateMcpConnection: build.mutation<UpdateMcpConnectionApiResponse, UpdateMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}`,
+        method: "PUT",
+        body: queryArg.updateMcpConnection,
+      }),
+    }),
+    publishMcpConnection: build.mutation<PublishMcpConnectionApiResponse, PublishMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}/publish`,
+        method: "POST",
+        body: queryArg.mcpPublication,
+      }),
+    }),
+    testMcpConnection: build.mutation<TestMcpConnectionApiResponse, TestMcpConnectionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/mcp-connections/${queryArg.id}/test`,
+        method: "POST",
+        body: queryArg.mcpRevision,
+      }),
+    }),
+    mcpCredentials: build.query<McpCredentialsApiResponse, McpCredentialsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/mcp-credentials` }),
     }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
@@ -688,7 +722,7 @@ const injectedRtkApi = api.injectEndpoints({
       ReplaceSpaceCapabilityPolicyApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.runtimeId}`,
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.sourceId}`,
         method: "PUT",
         body: queryArg.replaceSpaceCapabilityPolicy,
       }),
@@ -1490,19 +1524,19 @@ export type SetOrganizationAgentDefaultApiArg = {
   agentId: string;
   setDefaultOnRequest: SetDefaultOnRequest;
 };
-export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ PodCapabilityInventory[];
+export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ CapabilityInventory[];
 export type OrganizationCapabilitiesApiArg = {
   organizationId: string;
 };
 export type RefreshOrganizationCapabilitiesApiResponse = unknown;
 export type RefreshOrganizationCapabilitiesApiArg = {
   organizationId: string;
-  runtimeId: string;
+  sourceId: string;
 };
 export type SetOrganizationCapabilityDefaultApiResponse = unknown;
 export type SetOrganizationCapabilityDefaultApiArg = {
   organizationId: string;
-  runtimeId: string;
+  sourceId: string;
   capabilityId: string;
   setDefaultOnRequest: SetDefaultOnRequest;
 };
@@ -1510,7 +1544,7 @@ export type OrganizationCapabilityRevokeImpactApiResponse =
   /** status 200 Instances usable now that disabling this offer would stop */ AffectedAgentInstance[];
 export type OrganizationCapabilityRevokeImpactApiArg = {
   organizationId: string;
-  runtimeId: string;
+  sourceId: string;
   capabilityId: string;
 };
 export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
@@ -1542,6 +1576,29 @@ export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
 };
+export type McpConnectionsApiResponse = /** status 200 undefined */ McpConnectionView[];
+export type McpConnectionsApiArg = void;
+export type CreateMcpConnectionApiResponse = /** status 201 undefined */ McpConnectionView;
+export type CreateMcpConnectionApiArg = {
+  createMcpConnection: CreateMcpConnection;
+};
+export type UpdateMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type UpdateMcpConnectionApiArg = {
+  id: string;
+  updateMcpConnection: UpdateMcpConnection;
+};
+export type PublishMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type PublishMcpConnectionApiArg = {
+  id: string;
+  mcpPublication: McpPublication;
+};
+export type TestMcpConnectionApiResponse = /** status 200 undefined */ McpConnectionView;
+export type TestMcpConnectionApiArg = {
+  id: string;
+  mcpRevision: McpRevision;
+};
+export type McpCredentialsApiResponse = /** status 200 undefined */ McpCredentialReference[];
+export type McpCredentialsApiArg = void;
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
@@ -1747,7 +1804,7 @@ export type SpaceCapabilityPoliciesApiArg = {
 export type ReplaceSpaceCapabilityPolicyApiResponse = unknown;
 export type ReplaceSpaceCapabilityPolicyApiArg = {
   spaceId: string;
-  runtimeId: string;
+  sourceId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
 };
 export type MarketplaceInstallationApiResponse = /** status 200 undefined */ InstallationReceipt;
@@ -2940,6 +2997,7 @@ export type PodCapabilityDescriptor = {
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
 };
+export type OfferOrigin = "pod" | "managed_mcp";
 export type AffectedAgentInstance = {
   agent_instance_id: string;
   display_name: string;
@@ -2950,15 +3008,17 @@ export type AffectedAgentInstance = {
   space_name: string;
 };
 export type CapabilityInventoryOffer = {
-  /** Present in the last successful snapshot; independent of observation state. */
+  /** Native offer present in its snapshot, or managed connection ready for execution. */
   advertised: boolean;
   capability_id: string;
   /** Enabled for every space of this organization. */
   default_on: boolean;
   descriptor: PodCapabilityDescriptor;
+  origin: OfferOrigin;
   /** Browser route derived from the platform-approved pod ingress. */
   route_base_url?: string | null;
-  runtime_id: string;
+  runtime_id?: string | null;
+  source_id: string;
   /** Instances that select this offer and may no longer use it. */
   unusable_instances: AffectedAgentInstance[];
   version: string;
@@ -2969,13 +3029,15 @@ export type PodTemplateCapability = {
   default_selected: boolean;
   source_agent_id: string;
 };
-export type PodCapabilityInventory = {
+export type CapabilityInventory = {
   capabilities: CapabilityInventoryOffer[];
   checked_at?: string | null;
   enabled: boolean;
   observation: CatalogObservationState;
   observed_at?: string | null;
-  runtime_id: string;
+  origin: OfferOrigin;
+  runtime_id?: string | null;
+  source_id: string;
   /** Links from the last successful snapshot, all scoped to this runtime. */
   template_capabilities: PodTemplateCapability[];
 };
@@ -3125,6 +3187,76 @@ export type TeamSupervisionDetail = {
   collection_started_at: string;
   organization_id: string;
   team: TeamSupervision;
+};
+export type McpAuthentication =
+  | {
+      kind: "none";
+    }
+  | {
+      credential_binding: string;
+      kind: "bearer";
+    }
+  | {
+      credential_binding: string;
+      header: string;
+      kind: "api_key";
+    };
+export type McpConfiguration = {
+  allow_insecure_http?: boolean;
+  authentication: McpAuthentication;
+  url: string;
+};
+export type McpTool = {
+  annotations?: any;
+  description?: string | null;
+  input_schema: any;
+  name: string;
+  output_schema?: any;
+};
+export type McpConnectionView = {
+  /** Aggregate technical impact only; platform authority grants no business visibility. */
+  affected_instance_count: number;
+  available: boolean;
+  checked_at?: string | null;
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  enabled: boolean;
+  error_code?: string | null;
+  id: string;
+  last_success_at?: string | null;
+  logical_name: string;
+  observation_revision?: number | null;
+  observation_state: string;
+  observed_tools: McpTool[];
+  published_revision?: number | null;
+  published_tools: McpTool[];
+  revision: number;
+};
+export type CreateMcpConnection = {
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  logical_name: string;
+};
+export type UpdateMcpConnection = {
+  configuration: McpConfiguration;
+  description: string;
+  display_name: string;
+  enabled: boolean;
+  expected_revision: number;
+};
+export type McpPublication = {
+  expected_checked_at: string;
+  expected_revision: number;
+};
+export type McpRevision = {
+  expected_revision: number;
+};
+export type McpCredentialReference = {
+  available: boolean;
+  credential_binding: string;
+  url: string;
 };
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
@@ -3591,6 +3723,14 @@ export type RuntimeAttachment = {
   mime: string;
   name: string;
 };
+export type McpBinding = {
+  capability_id: string;
+  configuration: McpConfiguration;
+  connection_id: string;
+  display_name: string;
+  revision: number;
+  tools: McpTool[];
+};
 export type RuntimeModelOffer = {
   /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
   candidate: boolean;
@@ -3629,6 +3769,7 @@ export type RuntimeBinding = {
   attachments: RuntimeAttachment[];
   conversation_id: string | null;
   inference?: InferenceAdmission | null;
+  mcp_bindings: McpBinding[];
   models: RuntimeModels;
   run_id: string | null;
   skill_files?:
@@ -3645,7 +3786,7 @@ export type RuntimeBinding = {
 };
 export type AgentTemplateStatus = "available";
 export type AgentTemplateSummary = {
-  /** Pod-owned descriptors, including config fields, schemas and routing metadata. */
+  /** Native and compatible managed offers, including configuration descriptors. */
   available_capabilities: {
     [key: string]: any;
   }[];
@@ -3674,6 +3815,7 @@ export type AgentTemplateSummary = {
   supports_capabilities: boolean;
   /** Owning pod advertises durable, single-use human-interrupt resume support. */
   supports_hitl: boolean;
+  supports_managed_mcp: boolean;
   tags: string[];
   team_instantiable: boolean;
   template_id: string;
@@ -3687,12 +3829,14 @@ export type LocalOffer = {
 };
 export type SpaceCapabilityPolicy = {
   offers: LocalOffer[];
+  origin: OfferOrigin;
   permitted_ids: string[];
   reachable: boolean;
   restricted: boolean;
   revision: number;
-  runtime_id: string;
+  runtime_id?: string | null;
   source_enabled: boolean;
+  source_id: string;
 };
 export type ReplaceSpaceCapabilityPolicy = {
   expected_revision: number;
@@ -4121,6 +4265,14 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
+  useMcpConnectionsQuery,
+  useLazyMcpConnectionsQuery,
+  useCreateMcpConnectionMutation,
+  useUpdateMcpConnectionMutation,
+  usePublishMcpConnectionMutation,
+  useTestMcpConnectionMutation,
+  useMcpCredentialsQuery,
+  useLazyMcpCredentialsQuery,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useDefaultSkillsQuery,

@@ -110,16 +110,17 @@ class MCPRuntime:
         self.agent_instance = agent
         self._agent_id = agent.agent_settings.id
         self._confined_logs = delegation_enabled()
+        self.managed_bindings = getattr(
+            agent.agent_settings, "managed_mcp_bindings", ()
+        )
         self.available_servers: List[MCPServerConfiguration] = []
         mcp_config = get_runtime_context().get_mcp_configuration()
         if mcp_config is None:
             if self._confined_logs:
-                logger.warning(
-                    "event=runtime_init outcome=skipped reason=missing_configuration"
-                )
+                logger.warning("event=native_mcp_configuration outcome=missing")
             else:
                 logger.warning(
-                    "[%s] Global MCP configuration not available; no MCP "
+                    "[%s] Native MCP configuration not available; no native MCP "
                     "tools will be loaded.",
                     self._agent_id,
                 )
@@ -169,7 +170,7 @@ class MCPRuntime:
 
         NOTE: This should only be called once during the agent's async_init.
         """
-        if not self.available_servers:
+        if not self.available_servers and not self.managed_bindings:
             if self._confined_logs:
                 logger.info("event=runtime_init outcome=skipped reason=no_servers")
             else:
@@ -277,6 +278,17 @@ class MCPRuntime:
                 refresh_owner=self.agent_instance,
             )
             self.mcp_client = new_client
+            if self.managed_bindings:
+                from fred_runtime.common.managed_mcp import ManagedMcpError, connect
+
+                managed_tools = await connect(
+                    self.managed_bindings, get_runtime_context().config.mcp_credentials
+                )
+                if {tool.name for tool in tools} & {
+                    tool.name for tool in managed_tools
+                }:
+                    raise ManagedMcpError("mcp_tool_name_collision")
+                tools.extend(managed_tools)
             # `tools` were already fetched (per server) while connecting/validating
             # above — reuse them instead of paying for a second get_tools() round
             # trip against every server on every single turn.

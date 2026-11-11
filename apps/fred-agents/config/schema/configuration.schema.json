@@ -391,6 +391,34 @@
       "title": "M2MSecurity",
       "type": "object"
     },
+    "McpCredentialBinding": {
+      "additionalProperties": false,
+      "description": "Provisioned locally in each workload. Never received through admission.",
+      "properties": {
+        "credential_binding": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Credential Binding",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "secret_env": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Secret Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "credential_binding",
+        "url",
+        "secret_env"
+      ],
+      "title": "McpCredentialBinding",
+      "type": "object"
+    },
     "MinioRuntimeFilesystemConfig": {
       "description": "MinIO or S3-compatible object storage for Fred Runtime files.",
       "properties": {
@@ -1401,6 +1429,14 @@
         "$ref": "#/$defs/InferenceCredentialBinding"
       },
       "title": "Inference Credentials",
+      "type": "array"
+    },
+    "mcp_credentials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/McpCredentialBinding"
+      },
+      "title": "Mcp Credentials",
       "type": "array"
     },
     "security": {

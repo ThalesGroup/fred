@@ -284,8 +284,13 @@ pub(crate) async fn prepare_create(
     }
     tuning::validate_request(body)?;
     // Discovery and pod validation never retain a SQL connection or transaction.
-    let (template, default_tuning) =
-        agents::enrollable_template(&s.agent_catalog, space.organization, body.template_id).await?;
+    let (template, default_tuning) = agents::enrollable_template(
+        &s.pool,
+        &s.agent_catalog,
+        space.organization,
+        body.template_id,
+    )
+    .await?;
     let usable = usable_capability_ids(&s.pool, &space, &template.source_runtime_id).await?;
     let tuning = tuning::enroll(
         &s.agent_catalog,
@@ -507,6 +512,7 @@ async fn update_agent_instance(
     // Discovery and pod validation run before the lock, without retaining a SQL connection.
     let template = if body.tuning_field_values.is_some() || changes_capabilities {
         match agents::editable_template(
+            &s.pool,
             &s.agent_catalog,
             space.organization,
             &record.source_runtime_id,

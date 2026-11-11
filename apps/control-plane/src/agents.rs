@@ -50,6 +50,8 @@ pub struct PlatformConfig {
     #[serde(default)]
     pub inference_credentials: Vec<fred_rust_sdk::inference::InferenceCredentialBinding>,
     #[serde(default)]
+    pub mcp_credentials: Vec<crate::mcp_connections::McpCredentialBinding>,
+    #[serde(default)]
     #[schema(max_items = 64)]
     pub organization_models: Vec<crate::model_catalog::initialization::OrganizationModels>,
     #[serde(default)]
@@ -74,6 +76,7 @@ impl PlatformConfig {
         if let Some(url) = &self.knowledge_flow_url {
             crate::embedded_agent::kf_search::endpoint(url)?;
         }
+        crate::mcp_connections::validate_credentials(&self.mcp_credentials)?;
         crate::model_catalog::config::validate_sources(&self.model_sources)?;
         crate::model_catalog::initialization::validate(&self.organization_models)?;
         let mut bindings = std::collections::HashSet::new();
@@ -92,8 +95,8 @@ impl PlatformConfig {
                 "runtime_id {id:?} must be nonblank, without surrounding spaces"
             );
             ensure!(
-                id != NATIVE_RUNTIME_ID,
-                "runtime_id {id} is reserved for the embedded agent; external sources cannot use it"
+                id != NATIVE_RUNTIME_ID && id != crate::mcp_connections::SOURCE_ID,
+                "runtime_id {id} is reserved; external sources cannot use it"
             );
             ensure!(ids.insert(id), "runtime_id {id} is duplicated");
             if let Some(base) = &source.public_base_url {
@@ -289,9 +292,10 @@ pub struct AgentTemplateSummary {
     pub default_tuning_fields: Vec<BTreeMap<String, serde_json::Value>>,
     /// Current pod input limit, absent when not advertised.
     pub max_chat_input_chars: Option<u64>,
-    /// Pod-owned descriptors, including config fields, schemas and routing metadata.
+    /// Native and compatible managed offers, including configuration descriptors.
     pub available_capabilities: Vec<BTreeMap<String, serde_json::Value>>,
     pub supports_capabilities: bool,
+    pub supports_managed_mcp: bool,
     /// Owning pod advertises durable, single-use human-interrupt resume support.
     pub supports_hitl: bool,
     pub default_capability_ids: Vec<String>,
@@ -324,6 +328,8 @@ struct TemplateFormMetadata {
     #[serde(default)]
     supports_hitl: bool,
     #[serde(default)]
+    supports_managed_mcp: bool,
+    #[serde(default)]
     default_capability_ids: Vec<String>,
     #[serde(default = "crate::config::yes")]
     public: bool,
@@ -342,6 +348,13 @@ fn template_summary(
     if !metadata.public || !metadata.team_instantiable {
         return Ok(None);
     }
+    ensure!(
+        metadata
+            .default_capability_ids
+            .iter()
+            .all(|id| !id.starts_with("managed-mcp:")),
+        "a pod cannot preselect centrally managed MCP offers"
+    );
     // Preserve Swift's product-application quarantine without capability ReBAC.
     let mut quarantined = std::collections::BTreeSet::new();
     for entry in &metadata.available_capabilities {
@@ -349,6 +362,10 @@ fn template_summary(
             .get("id")
             .and_then(serde_json::Value::as_str)
             .context("runtime capability descriptor has no string id")?;
+        anyhow::ensure!(
+            !id.starts_with("managed-mcp:"),
+            "reserved managed MCP offer identity in pod template"
+        );
         if id.starts_with("app__")
             || entry.get("kind").and_then(serde_json::Value::as_str) == Some("app")
         {
@@ -381,6 +398,9 @@ fn template_summary(
         max_chat_input_chars: metadata.max_chat_input_chars.filter(|limit| *limit > 0),
         available_capabilities: metadata.available_capabilities,
         supports_capabilities: metadata.supports_capabilities,
+        supports_managed_mcp: metadata.supports_managed_mcp
+            && metadata.supports_capabilities
+            && matches!(template.kind.as_str(), "react" | "deep" | "graph"),
         supports_hitl: metadata.supports_hitl,
         default_capability_ids: metadata.default_capability_ids,
     }))
@@ -388,6 +408,7 @@ fn template_summary(
 
 /// Resolve only configured, catalog-visible templates; keep the complete pod tuning.
 pub(crate) async fn enrollable_template(
+    pool: &sqlx::PgPool,
     config: &PlatformConfig,
     organization: Uuid,
     requested_id: Uuid,
@@ -412,6 +433,12 @@ pub(crate) async fn enrollable_template(
                     .get("default_tuning")
                     .context("runtime template has no default_tuning")?
                     .clone();
+                if summary.supports_managed_mcp {
+                    crate::mcp_connections::extend_template(
+                        &mut summary,
+                        &crate::mcp_connections::available_offers(pool).await?,
+                    );
+                }
                 return Ok((summary, tuning));
             }
         }
@@ -516,6 +543,8 @@ async fn space_agent_templates(
         let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
         usable.insert(catalog.runtime_id.clone(), ids);
     }
+    let managed_offers = crate::mcp_connections::available_offers(&s.pool).await?;
+    let managed_offers = &managed_offers;
     let authorization_pool = &s.pool;
     let space = &space;
     let usable = &usable;
@@ -537,6 +566,7 @@ async fn space_agent_templates(
             let Some(mut summary) = template_summary(id, runtime, &template)? else {
                 return Ok(None);
             };
+            crate::mcp_connections::extend_template(&mut summary, managed_offers);
             // Offers the space may not use are neither proposed nor preselected.
             summary.available_capabilities.retain(|entry| {
                 entry
@@ -700,6 +730,7 @@ pub async fn discover(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
 /// Refresh only the saved source, reusing discovery and its visibility rules.
 /// Missing/unavailable catalogs can fall back for tuning edits, never for capabilities.
 pub(crate) async fn editable_template(
+    pool: &sqlx::PgPool,
     config: &PlatformConfig,
     organization: Uuid,
     runtime_id: &str,
@@ -744,6 +775,21 @@ pub(crate) async fn editable_template(
     if let Some(defaults) = template.metadata.get("default_capability_ids") {
         summary.default_capability_ids = serde_json::from_value(defaults.clone())
             .context("invalid template capability defaults")?;
+        if summary
+            .default_capability_ids
+            .iter()
+            .any(|id| id.starts_with("managed-mcp:"))
+        {
+            return Err(
+                anyhow::anyhow!("a pod cannot preselect centrally managed MCP offers").into(),
+            );
+        }
+    }
+    if summary.supports_managed_mcp {
+        crate::mcp_connections::extend_template(
+            &mut summary,
+            &crate::mcp_connections::available_offers(pool).await?,
+        );
     }
     Ok(Some(summary))
 }

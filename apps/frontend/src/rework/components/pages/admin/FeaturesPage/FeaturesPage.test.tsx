@@ -103,6 +103,8 @@ vi.mock("./OrganizationCapabilities", () => ({
               <div key={id} data-offer={id}>
                 {c.cellRenderer?.({
                   capability_id: id,
+                  source_id: "pod-b",
+                  origin: "pod",
                   runtime_id: "pod-b",
                   advertised: true,
                   route_base_url: "/pod-b/ppt_builder",

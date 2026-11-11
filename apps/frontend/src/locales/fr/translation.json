@@ -1764,7 +1764,7 @@
         },
         "organizationCapabilities": {
           "col": {
-            "pod": "Pod d'agents",
+            "pod": "Source des offres",
             "observation": "Inventaire",
             "checkedAt": "Dernier relevé",
             "capabilities": "Capacités"
@@ -1776,8 +1776,8 @@
           },
           "disabledHint": "Ce pod est désactivé dans la configuration du control plane.",
           "refreshError": "Impossible de rafraîchir l'inventaire de {{runtimeId}}.",
-          "noPods": "Aucun pod d'agents n'est configuré dans le control plane.",
-          "backToPods": "Retour aux pods",
+          "noPods": "Aucune source d’offres n’est configurée.",
+          "backToPods": "Retour aux sources",
           "unavailableHint": "Le pod n'a pas répondu au dernier relevé. Inventaire affiché : celui reçu le {{date}}.",
           "neverAnsweredHint": "Le pod n'a jamais répondu."
         },
@@ -5188,6 +5188,57 @@
       "loadFailed": "Impossible de charger ce contenu. Actualisez pour réessayer.",
       "updateEntry": "Mettre à jour « {{name}} » · {{origin}}",
       "diagnostics": "Détails techniques"
+    },
+    "mcp": {
+      "title": "Connexions MCP",
+      "scope": "Déclarez ici les connexions techniques. Les Responsables d’organisation autorisent les offres d’outils ; les éditeurs les sélectionnent pour les agents compatibles.",
+      "centralSource": "Offres MCP de la plateforme",
+      "add": "Ajouter une connexion",
+      "edit": "Modifier la connexion",
+      "save": "Enregistrer",
+      "logicalName": "Nom logique",
+      "name": "Nom affiché",
+      "description": "Description",
+      "url": "Endpoint Streamable HTTP",
+      "allowHttp": "Approuver un endpoint HTTP interne (sans TLS)",
+      "authentication": "Authentification fournisseur",
+      "auth": {
+        "none": "Sans credential (endpoint public)",
+        "bearer": "Credential technique Bearer",
+        "api_key": "En-tête de clé API technique"
+      },
+      "credential": "Référence de credential provisionnée",
+      "credentialReady": "Disponible dans Control Plane",
+      "credentialMissing": "Absent de Control Plane",
+      "header": "En-tête de clé API",
+      "provisioning": "Aucun secret n’est stocké dans ce formulaire ni dans les agents. Provisionnez la référence choisie pour cette destination exacte dans Control Plane et chaque Agent Pod. Un nouveau credential peut nécessiter un redéploiement du workload ; une modification utilisant un binding existant s’applique à la prochaine admission.",
+      "error": "L’opération a échoué. Actualisez puis réessayez.",
+      "activation": "Activation technique",
+      "enabled": "Activée",
+      "disabled": "Désactivée",
+      "observation": "Observation Control Plane",
+      "state": {
+        "available": "Découverte réussie",
+        "unavailable": "Découverte indisponible",
+        "not_observed": "Configurée, non testée"
+      },
+      "execution": "Disponibilité technique",
+      "available": "Publiée et disponible",
+      "unavailable": "Indisponible",
+      "revision": "Révision de configuration {{revision}}",
+      "discoveryScope": "Un test réussi prouve uniquement la découverte depuis Control Plane. Il n’accorde aucun droit d’organisation et ne prouve pas la connectivité depuis chaque pod.",
+      "diagnostic": "Diagnostic de découverte : {{code}}",
+      "test": "Tester la connexion",
+      "publish": "Publier les outils observés",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "publicationHint": "La publication remplace l’inventaire examiné pour les prochaines admissions. Les nouveaux outils distants restent masqués jusqu’à publication. Un outil publié retiré ou modifié bloque l’exécution jusqu’à examen et republication. Un échec de test conserve le dernier inventaire.",
+      "tool": "Outil",
+      "publication": "Publication",
+      "published": "Déjà publié",
+      "unpublished": "Non publié",
+      "contracts": "Comparer les contrats observés et publiés",
+      "impact": "Impact technique : {{count}} agent(s) sélectionnent cette connexion."
     }
   },
   "runtime": {

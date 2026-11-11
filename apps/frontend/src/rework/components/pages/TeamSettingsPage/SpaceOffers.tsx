@@ -31,7 +31,7 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
     try {
       await replace({
         spaceId,
-        runtimeId: policy.runtime_id,
+        sourceId: policy.source_id,
         replaceSpaceCapabilityPolicy: {
           expected_revision: policy.revision,
           restricted,
@@ -61,8 +61,8 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
         <p role="status">{t("rework.admin.capabilities.organizationCapabilities.noPods")}</p>
       ) : (
         query.currentData.map((policy) => (
-          <section key={policy.runtime_id} className={styles.offerSource}>
-            <h2>{policy.runtime_id}</h2>
+          <section key={policy.source_id} className={styles.offerSource}>
+            <h2>{policy.origin === "managed_mcp" ? t("rework.mcp.centralSource") : policy.source_id}</h2>
             {(!policy.source_enabled || !policy.reachable) && (
               <p role="status">
                 {t(`rework.toolGovernance.source.${!policy.source_enabled ? "disabled" : "unavailable"}`)}

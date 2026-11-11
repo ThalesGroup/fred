@@ -1764,7 +1764,7 @@
         },
         "organizationCapabilities": {
           "col": {
-            "pod": "Agent pod",
+            "pod": "Offer source",
             "observation": "Inventory",
             "checkedAt": "Last check",
             "capabilities": "Capabilities"
@@ -1776,8 +1776,8 @@
           },
           "disabledHint": "This pod is disabled in the control plane configuration.",
           "refreshError": "Could not refresh the inventory of {{runtimeId}}.",
-          "noPods": "No agent pod is configured in the control plane.",
-          "backToPods": "Back to pods",
+          "noPods": "No offer source is configured.",
+          "backToPods": "Back to sources",
           "unavailableHint": "The pod did not answer the last check. Showing the inventory received on {{date}}.",
           "neverAnsweredHint": "The pod has never answered."
         },
@@ -5188,6 +5188,57 @@
       "loadFailed": "Unable to load this content. Refresh to try again.",
       "updateEntry": "Update “{{name}}” · {{origin}}",
       "diagnostics": "Technical details"
+    },
+    "mcp": {
+      "title": "MCP connections",
+      "scope": "Declare technical connections here. Organization Owners authorize the tool offers; editors select them for compatible agents.",
+      "centralSource": "Platform MCP offers",
+      "add": "Add connection",
+      "edit": "Edit connection",
+      "save": "Save",
+      "logicalName": "Logical name",
+      "name": "Display name",
+      "description": "Description",
+      "url": "Streamable HTTP endpoint",
+      "allowHttp": "Approve an internal HTTP endpoint (without TLS)",
+      "authentication": "Provider authentication",
+      "auth": {
+        "none": "No credential (public endpoint)",
+        "bearer": "Technical Bearer credential",
+        "api_key": "Technical API key header"
+      },
+      "credential": "Provisioned credential reference",
+      "credentialReady": "Available in Control Plane",
+      "credentialMissing": "Missing in Control Plane",
+      "header": "API key header",
+      "provisioning": "No secret is stored in this form or in agents. Provision the selected reference for this exact destination in Control Plane and each Agent Pod. A new credential may require a workload rollout; changes using an existing binding apply on the next admission.",
+      "error": "The operation failed. Refresh and try again.",
+      "activation": "Technical activation",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "observation": "Control Plane observation",
+      "state": {
+        "available": "Discovery succeeded",
+        "unavailable": "Discovery unavailable",
+        "not_observed": "Configured, not tested"
+      },
+      "execution": "Technical readiness",
+      "available": "Published and available",
+      "unavailable": "Unavailable",
+      "revision": "Configuration revision {{revision}}",
+      "discoveryScope": "A successful test proves discovery from Control Plane only. It grants no organization permission and does not prove connectivity from every pod.",
+      "diagnostic": "Discovery diagnostic: {{code}}",
+      "test": "Test connection",
+      "publish": "Publish observed tools",
+      "enable": "Enable",
+      "disable": "Disable",
+      "publicationHint": "Publishing replaces the reviewed tool inventory for future admissions. New remote tools stay hidden until published. A removed or changed published tool blocks execution until reviewed and republished. A failed test retains the last inventory.",
+      "tool": "Tool",
+      "publication": "Publication",
+      "published": "Previously published",
+      "unpublished": "Not published",
+      "contracts": "Compare observed and published contracts",
+      "impact": "Technical impact: {{count}} agent(s) select this connection."
     }
   },
   "runtime": {

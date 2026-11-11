@@ -313,6 +313,14 @@ pub(crate) async fn validate_capability_config(
     id: &str,
     config: Value,
 ) -> AppResult<Value> {
+    if id.starts_with("managed-mcp:") {
+        if config != json!({}) {
+            return Err(AppError::Unprocessable(
+                "Managed MCP connections have no agent-owned configuration.".into(),
+            ));
+        }
+        return Ok(json!({"schema_version": "1", "config": {}}));
+    }
     let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
     // Weaver sends neither assets nor a team_id alias: the pod validates config alone.
     let request = capability_request(
@@ -672,6 +680,7 @@ mod tests {
             max_chat_input_chars: None,
             available_capabilities: vec![],
             supports_capabilities: true,
+            supports_managed_mcp: false,
             supports_hitl: false,
             default_capability_ids: vec![],
         };

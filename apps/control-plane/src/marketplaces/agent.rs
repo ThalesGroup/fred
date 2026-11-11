@@ -193,6 +193,21 @@ pub(super) async fn export(
                     .get("capability_config")
                     .and_then(|v| v.get(&id))
                     .ok_or_else(|| incompatible("Selected capability configuration is missing"))?;
+                if id.starts_with("managed-mcp:") {
+                    if config != &json!({"schema_version":"1","config":{}}) {
+                        return Err(incompatible(
+                            "Managed MCP has no portable agent-owned configuration",
+                        ));
+                    }
+                    return Ok((
+                        id,
+                        ExportedCapability {
+                            schema_version: "1".into(),
+                            config: BTreeMap::new(),
+                            files: BTreeMap::new(),
+                        },
+                    ));
+                }
                 let files = if id == "ppt_builder" {
                     file_bytes
                         .as_ref()
@@ -374,7 +389,8 @@ pub(super) async fn prepare_install(
         return Err(AppError::NotFound);
     }
     let (template, _) =
-        agents::enrollable_template(&s.agent_catalog, space.organization, template_id).await?;
+        agents::enrollable_template(&s.pool, &s.agent_catalog, space.organization, template_id)
+            .await?;
     let selected: Vec<_> = package.capabilities.keys().cloned().collect();
     tuning::require_inventory(&template, &selected)?;
     let usable =
@@ -398,6 +414,13 @@ pub(super) async fn prepare_install(
     let draft = Uuid::new_v5(&key, user.uid.as_bytes());
     let configurations = futures::future::try_join_all(
         package.capabilities.iter().map(|(id, capability)| async move {
+            if id.starts_with("managed-mcp:") {
+                if capability.schema_version != "1" || !capability.config.is_empty() || !capability.files.is_empty() {
+                    return Err(incompatible("Managed MCP has no portable agent-owned configuration"));
+                }
+                // The selection is portable; connection facts are resolved again at admission.
+                return Ok((id.clone(), BTreeMap::new()));
+            }
             let encoded = percent_encoding::utf8_percent_encode(id, POD_SEGMENT);
             let request = tuning::capability_request(
                 &s.agent_catalog, &package.runtime_id, authorization,

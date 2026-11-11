@@ -47,6 +47,8 @@ beforeEach(() => {
   h.query.mockClear();
   h.policies = [
     {
+      source_id: "pod",
+      origin: "pod",
       runtime_id: "pod",
       revision: 4,
       restricted: false,
@@ -102,7 +104,7 @@ it("starts a local restriction from the effective parent ceiling and current rev
   expect(h.calls).toEqual([
     {
       spaceId: "project",
-      runtimeId: "pod",
+      sourceId: "pod",
       replaceSpaceCapabilityPolicy: { expected_revision: 4, restricted: true, permitted_ids: ["tool"] },
     },
   ]);

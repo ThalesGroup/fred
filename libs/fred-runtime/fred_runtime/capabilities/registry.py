@@ -115,6 +115,10 @@ class CapabilityRegistry:
             getattr(capability, "__name__", str(capability)), capability
         )
         cap_id = instance.manifest.id
+        if cap_id.startswith("managed-mcp:"):
+            raise CapabilityRegistrationError(
+                "managed-mcp: is reserved for admitted Control Plane offers"
+            )
         existing = self._capabilities.get(cap_id)
         if existing is not None:
             raise DuplicateCapabilityIdError(

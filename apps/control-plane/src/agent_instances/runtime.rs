@@ -94,6 +94,7 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    pub mcp_bindings: Vec<crate::mcp_connections::McpBinding>,
     pub skills: Option<crate::skills::SkillCatalog>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skill_files: Option<std::collections::BTreeMap<String, String>>,
@@ -296,6 +297,21 @@ async fn resolve_runtime_binding(
     if !authorization::can_use_agent(&state.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
+    let mcp_template = if super::tuning::saved_selection(&initial.tuning.0)?
+        .iter()
+        .any(|id| id.starts_with("managed-mcp:"))
+    {
+        agents::editable_template(
+            &state.pool,
+            &state.agent_catalog,
+            space.organization,
+            &initial.source_runtime_id,
+            &initial.source_agent_id,
+        )
+        .await?
+    } else {
+        None
+    };
     let mut tx = state.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
@@ -328,6 +344,15 @@ async fn resolve_runtime_binding(
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
+    let selected = super::tuning::saved_selection(&record.tuning.0)?;
+    if selected.iter().any(|id| id.starts_with("managed-mcp:")) {
+        let template = mcp_template
+            .as_ref()
+            .filter(|t| t.supports_managed_mcp && t.supports_capabilities)
+            .ok_or_else(|| enablement::not_enabled("managed_mcp"))?;
+        super::tuning::require_inventory(template, &selected)?;
+    }
+    let mcp_bindings = crate::mcp_connections::bindings(&mut tx, &selected).await?;
     let snapshot = crate::skills::resolve(&mut tx, subject, &space, private).await?;
     let skills = Some(snapshot.catalog);
     let skill_files = private.then_some(snapshot.files);
@@ -436,6 +461,7 @@ async fn resolve_runtime_binding(
         None
     };
     Ok(RuntimeBinding {
+        mcp_bindings,
         skills,
         skill_files,
         title,

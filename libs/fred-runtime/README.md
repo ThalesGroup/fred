@@ -444,3 +444,14 @@ before starting the pod: Alembic owns PostgreSQL history, pending chat updates a
 initializes its standalone checkpoint tables separately. No data conversion
 from team ancestry is provided. The unused history-to-owner backfill helper has
 been removed; invocation writes supply retention metadata directly.
+
+## Control Plane managed MCP
+
+Managed selections are admitted as `WeaverRuntimeResolution.mcp_bindings` and
+use per-turn FastMCP clients. They never enter the process capability registry or
+fall back to a local MCP catalogue. Native/KF MCP remains independently supported.
+The local top-level `mcp_credentials` configuration binds a credential reference
+to one exact destination and an environment variable name; it grants no business
+permission. External tools do not inherit Fred document/session/workspace context.
+See the [Control Plane operating and reception procedure](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending)
+for provisioning, limits and targeted checks that remain to be executed.

@@ -18,7 +18,7 @@ import {
 import type {
   CapabilityInventoryOffer,
   CatalogObservationState,
-  PodCapabilityInventory,
+  CapabilityInventory,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
 import styles from "./FeaturesPage.module.css";
@@ -55,7 +55,7 @@ export function OrganizationCapabilities({
     async (runtimeId: string) => {
       setRefreshing((ids) => [...ids, runtimeId]);
       try {
-        await refreshInventory({ organizationId, runtimeId }).unwrap();
+        await refreshInventory({ organizationId, sourceId: runtimeId }).unwrap();
       } catch (error) {
         showError({
           summary: t(`${prefix}.refreshError`, { runtimeId }),
@@ -72,23 +72,32 @@ export function OrganizationCapabilities({
     // A fresh installation has no inventory yet; later refreshes stay manual.
     initialRefreshStarted.current = true;
     pods
-      .filter((pod) => pod.enabled && pod.observation === "not_observed")
-      .forEach((pod) => void refresh(pod.runtime_id));
+      .filter((pod) => pod.origin === "pod" && pod.enabled && pod.observation === "not_observed")
+      .forEach((pod) => void refresh(pod.source_id));
   }, [pods, isFetching, isError, refresh]);
 
   // Resolved on every render so the selected pod follows the refetched inventory.
-  const selectedPod = pods?.find((pod) => pod.runtime_id === selectedRuntimeId) ?? null;
-  const podColumns: DataTableColumn<PodCapabilityInventory>[] = [
+  const selectedPod = pods?.find((pod) => pod.source_id === selectedRuntimeId) ?? null;
+  const podColumns: DataTableColumn<CapabilityInventory>[] = [
     {
       label: t(`${prefix}.col.pod`),
       size: "2fr",
-      cellRenderer: (pod) => <EntityIdentity name={pod.runtime_id} icon="hub" dimmed={!pod.enabled} />,
+      cellRenderer: (pod) => (
+        <EntityIdentity
+          name={pod.origin === "managed_mcp" ? t("rework.mcp.centralSource") : pod.source_id}
+          icon="hub"
+          dimmed={!pod.enabled}
+        />
+      ),
     },
     {
       label: t(`${prefix}.col.observation`),
       size: "1fr",
       cellRenderer: (pod) => (
-        <StatusBadge label={t(`${prefix}.observation.${pod.observation}`)} tone={OBSERVATION_TONE[pod.observation]} />
+        <StatusBadge
+          label={pod.origin === "managed_mcp" ? t("rework.mcp.origin") : t(`${prefix}.observation.${pod.observation}`)}
+          tone={pod.origin === "managed_mcp" ? "neutral" : OBSERVATION_TONE[pod.observation]}
+        />
       ),
     },
     {
@@ -105,14 +114,15 @@ export function OrganizationCapabilities({
       label: t("rework.admin.capabilities.col.actions"),
       size: "1fr",
       cellRenderer: (pod) => {
+        if (pod.origin === "managed_mcp") return null;
         const button = (
           <Button
             color="on-surface"
             variant="outlined"
             size="small"
             icon={{ category: "outlined", type: "refresh" }}
-            disabled={!pod.enabled || refreshing.includes(pod.runtime_id)}
-            onClick={() => void refresh(pod.runtime_id)}
+            disabled={!pod.enabled || refreshing.includes(pod.source_id)}
+            onClick={() => void refresh(pod.source_id)}
           >
             {t("rework.admin.capabilities.discovery.refresh")}
           </Button>
@@ -151,7 +161,9 @@ export function OrganizationCapabilities({
           >
             {t(`${prefix}.backToPods`)}
           </Button>
-          <span className={styles.capName}>{selectedPod.runtime_id}</span>
+          <span className={styles.capName}>
+            {selectedPod.origin === "managed_mcp" ? t("rework.mcp.centralSource") : selectedPod.source_id}
+          </span>
         </div>
         {selectedPod.observation === "unavailable" && (
           <p className={styles.statusWarning} role="status">
@@ -177,8 +189,8 @@ export function OrganizationCapabilities({
     <DataTable
       columns={podColumns}
       data={pods}
-      rowKey={(pod) => pod.runtime_id}
-      onRowClick={(pod) => setSelectedRuntimeId(pod.runtime_id)}
+      rowKey={(pod) => pod.source_id}
+      onRowClick={(pod) => setSelectedRuntimeId(pod.source_id)}
       size="medium"
     />
   ) : (

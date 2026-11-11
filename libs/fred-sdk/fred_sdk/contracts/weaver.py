@@ -17,6 +17,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .skills import SkillCatalog
+from .managed_mcp import McpBinding
 
 
 class ResolverFact(BaseModel):
@@ -371,6 +372,7 @@ class WeaverRuntimeResolution(ResolverFact):
     space: RuntimeSpace
     agent: RuntimeAgent
     models: RuntimeModels
+    mcp_bindings: tuple[McpBinding, ...] = ()
     skills: SkillCatalog | None = None
     skill_files: dict[str, str] | None = None
     title: TitleAdmission | None = None
