@@ -4,7 +4,7 @@ import pytest
 from fred_core.common import PostgresStoreConfig
 
 
-@pytest.mark.parametrize("schema", ["runtime", "knowledge"])
+@pytest.mark.parametrize("schema", ["runtime", "knowledge", "evaluation"])
 def test_schema_wins_over_driver_settings_without_discarding_other_settings(schema):
     config = PostgresStoreConfig(
         schema=schema,

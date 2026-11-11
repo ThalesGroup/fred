@@ -171,8 +171,11 @@ class PostgresStoreConfig(BaseModel):
     )
 
     def postgres_connect_args(self, *, asynchronous: bool) -> dict[str, Any]:
-        """One explicit schema boundary for application pools and Alembic."""
-        if self.schema_name not in {"knowledge", "runtime", "control_plane"}:
+        """One explicit schema boundary for application pools and Alembic.
+
+        Any owning schema is accepted, so applications outside Fred declare their own.
+        """
+        if self.schema_name in {None, "public"}:
             raise ValueError("An explicit owning PostgreSQL schema is required")
         args = dict(self.connect_args or {})
         if asynchronous:
