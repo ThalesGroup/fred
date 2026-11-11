@@ -464,7 +464,6 @@ export function toThreadMessages(
               parts: [
                 { type: "tool_result", call_id: call.tool_call_id, failure: { code: "not_approved" }, content: "" },
               ],
-              metadata: { extras: { cancelled_by_user: true } },
             });
             resolvedCallIds.add(call.tool_call_id);
           }

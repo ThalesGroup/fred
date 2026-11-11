@@ -484,13 +484,12 @@ describe("statusForEntry", () => {
 });
 
 describe("isCancelledByUser", () => {
-  it("flags a combo whose result is marked cancelled_by_user", () => {
+  it("flags a combo whose result reports not_approved, without any metadata flag", () => {
     const call = toolCallMsg("c1", "extract_from_document");
     const result = msg({
       channel: "tool_result",
       role: "tool",
       parts: [{ type: "tool_result", call_id: "c1", failure: { code: "not_approved" }, content: "", latency_ms: null }],
-      metadata: { extras: { cancelled_by_user: true } },
     });
     const entry = { kind: "combo", call, result } as const;
     expect(isCancelledByUser(entry)).toBe(true);

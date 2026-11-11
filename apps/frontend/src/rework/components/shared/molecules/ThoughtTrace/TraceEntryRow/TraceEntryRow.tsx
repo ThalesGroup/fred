@@ -152,9 +152,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
       {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
-      {failureText && (
-        <div className={`${styles.failureText} ${failure?.declined ? styles.declinedText : ""}`}>{failureText}</div>
-      )}
+      {failureText && <div className={styles.failureText}>{failureText}</div>}
       {hitlAnswerSummary && (
         <div className={styles.answerWrap}>
           <HitlAnswerSummary summary={hitlAnswerSummary} inTrace />

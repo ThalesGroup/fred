@@ -18,7 +18,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ToolFailure } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ThoughtTrace } from "./ThoughtTrace";
 
 vi.mock("react-i18next", () => ({
@@ -201,6 +201,36 @@ describe("ThoughtTrace", () => {
     expect(html.indexOf(">1<")).toBeLessThan(html.indexOf(">chatbot.skills.loaded<"));
     expect(html.indexOf(">chatbot.skills.loaded<")).toBeLessThan(html.indexOf(">2<"));
     expect(html).toContain(`chatbot.skills.origin${origin === "user" ? "User" : child ? "Child" : "Agent"}`);
+  });
+
+  describe("a declined call", () => {
+    const call = msg({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "c3", name: "summarize_document", args: {} }],
+    });
+    const result = (failure: ToolFailure, extras?: Record<string, unknown>) =>
+      msg({
+        channel: "tool_result",
+        role: "tool",
+        parts: [{ type: "tool_result", call_id: "c3", failure, content: "Tool execution was not approved." }],
+        ...(extras ? { metadata: { extras } } : {}),
+      });
+    // The runtime's refusal carries only the code; the browser's optimistic one also the flag.
+    const runtimeRefusal = result({ code: "not_approved" });
+    const browserCancel = result({ code: "not_approved" }, { cancelled_by_user: true });
+
+    it("is not counted as a failure, so a finished trace stays collapsed", () => {
+      expect(render([call, runtimeRefusal], true)).not.toContain("summarize_document");
+      // A genuine failure keeps its call visible in the collapsed trace.
+      expect(render([call, result({ code: "unexpected" })], true)).toContain("summarize_document");
+    });
+
+    it("shows the runtime refusal exactly like a browser cancellation", () => {
+      const html = render([call, runtimeRefusal], false);
+      expect(html).toContain("rework.chatTrace.cancelledByUser");
+      expect(html).not.toContain("rework.chatTrace.failure.not_approved");
+      expect(html).toBe(render([call, browserCancel], false));
+    });
   });
 
   it("collapses to the summary line alone once the turn is done", () => {

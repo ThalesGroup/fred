@@ -29,8 +29,9 @@ export const isOptimisticUserMessage = (m: ChatMessage) =>
   m.channel === "final" &&
   (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
 
-// The optimistic tool_result useChatSse injects when a HITL prompt is cancelled,
-// before the backend has resolved the gated calls.
+// `cancelled_by_user` marks only the optimistic tool_result useChatSse injects
+// when a HITL prompt is cancelled, so the server's result replaces it. The
+// refusal itself is read from `failure.code === "not_approved"`.
 export const isOptimisticCancelledToolResult = (m: ChatMessage) =>
   m.channel === "tool_result" &&
   (m.metadata?.extras as { cancelled_by_user?: unknown } | undefined)?.cancelled_by_user === true;
