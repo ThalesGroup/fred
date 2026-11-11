@@ -39,6 +39,14 @@ selection are separate facts. The UI calls publication **Validate tools** or
 governed capability offer, not one permission per discovered tool. Admission uses
 the reviewed inventory and checks the selected connection in the trusted context.
 
+The organization drawer derives its guided steps from these server facts:
+check, review tools, then activate and authorize. The final action activates first
+and grants usage only after success. These are separate requests, not an atomic
+operation: if authorization fails, the connection remains active and the drawer
+offers authorization again. Suspension and permission withdrawal remain separate
+management actions. This UI composition does not change admission or publication
+checks; deployed reception remains separate from component verification.
+
 The [connection contract](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending)
 owns credential provisioning and runtime checks. A successful Control Plane
 discovery or a UI check with simulated APIs is not proof of a tool call from a

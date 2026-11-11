@@ -5199,7 +5199,7 @@
     },
     "mcp": {
       "title": "MCP connections",
-      "scope": "Configure connections, validate their tools and allow their use in this organization.",
+      "scope": "Connect a server, review its tools and authorize their usage in the organization.",
       "centralSource": "Organization MCP offers",
       "add": "Add connection",
       "edit": "Edit connection",
@@ -5249,7 +5249,7 @@
       "permission": "Permission to use",
       "allowNamed": "Allow use of {{name}} in this organization",
       "permissionUnknown": "Permission unavailable",
-      "permissionHint": "Allows spaces in this organization to use the connection. Their local restrictions still apply. Each agent must select the connection.",
+      "permissionHint": "Each agent must select this connection. Local space restrictions still apply.",
       "activationHint": "Technical activation makes the connection available once its tools are validated and verification succeeds. It grants no permission to use it.",
       "revoke": "Revoke permission",
       "revokeTitle": "Revoke permission for {{name}}?",
@@ -5273,7 +5273,24 @@
       "noTools": "No tools to display.",
       "inventory": "Tool inventory",
       "validationRequired": "Tools are unchanged. Validate them for the current connection configuration.",
-      "permissionRequiresReady": "Check the connection, validate its tools and activate it before allowing its use."
+      "permissionRequiresReady": "Check the connection, validate its tools and activate it before allowing its use.",
+      "setupSteps": "Connection setup",
+      "connectionStep": "Connection",
+      "toolsStep": "Tools",
+      "activationStep": "Enable usage",
+      "discoveryHint": "Discover the tools offered by this server.",
+      "technicalDetails": "Technical details",
+      "reviewTools": "Review tools",
+      "reviewHint": "Approve the tools agents may use. Expand a tool to read its description.",
+      "activationTitle": "Make available to the organization",
+      "activateAndAuthorize": "Activate and authorize",
+      "authorize": "Authorize usage",
+      "authorizationPending": "The connection is active. Its usage still needs to be authorized in the organization.",
+      "ready": "Connection ready",
+      "authorized": "Authorized in the organization",
+      "readyHint": "Select this connection in the configuration of agents that need its tools.",
+      "continue": "Continue",
+      "manage": "Manage connection"
     }
   },
   "runtime": {

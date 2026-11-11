@@ -5199,7 +5199,7 @@
     },
     "mcp": {
       "title": "Connexions MCP",
-      "scope": "Configurez les connexions, validez leurs outils et autorisez leur usage dans cette organisation.",
+      "scope": "Connectez un serveur, validez ses outils et autorisez leur usage dans l'organisation.",
       "centralSource": "Offres MCP de l'organisation",
       "add": "Ajouter une connexion",
       "edit": "Modifier la connexion",
@@ -5249,7 +5249,7 @@
       "permission": "Autorisation d'usage",
       "allowNamed": "Autoriser l'usage de {{name}} dans l'organisation",
       "permissionUnknown": "Autorisation indisponible",
-      "permissionHint": "Autorise les espaces de cette organisation à utiliser cette connexion. Leurs restrictions locales continuent de s'appliquer. Chaque agent doit sélectionner la connexion.",
+      "permissionHint": "Chaque agent devra sélectionner cette connexion. Les restrictions des espaces restent applicables.",
       "activationHint": "L'activation technique rend la connexion disponible lorsque ses outils sont validés et sa vérification réussie. Elle n'accorde aucun droit d'usage.",
       "revoke": "Retirer l'autorisation",
       "revokeTitle": "Retirer l'autorisation de {{name}} ?",
@@ -5273,7 +5273,24 @@
       "noTools": "Aucun outil à afficher.",
       "inventory": "Inventaire des outils",
       "validationRequired": "Les outils sont inchangés. Validez-les pour la configuration actuelle de la connexion.",
-      "permissionRequiresReady": "Vérifiez la connexion, validez ses outils et activez-la avant d'en autoriser l'usage."
+      "permissionRequiresReady": "Vérifiez la connexion, validez ses outils et activez-la avant d'en autoriser l'usage.",
+      "setupSteps": "Mise en service de la connexion",
+      "connectionStep": "Connexion",
+      "toolsStep": "Outils",
+      "activationStep": "Mise en service",
+      "discoveryHint": "Découvrez les outils proposés par ce serveur.",
+      "technicalDetails": "Détails techniques",
+      "reviewTools": "Examiner les outils",
+      "reviewHint": "Validez les outils que les agents pourront utiliser. Dépliez un outil pour lire sa description.",
+      "activationTitle": "Rendre disponible dans l'organisation",
+      "activateAndAuthorize": "Activer et autoriser",
+      "authorize": "Autoriser l'usage",
+      "authorizationPending": "La connexion est activée. Il reste à autoriser son usage dans l'organisation.",
+      "ready": "Connexion prête",
+      "authorized": "Autorisée dans l'organisation",
+      "readyHint": "Sélectionnez cette connexion dans la configuration des agents qui doivent utiliser ses outils.",
+      "continue": "Continuer",
+      "manage": "Gérer la connexion"
     }
   },
   "runtime": {

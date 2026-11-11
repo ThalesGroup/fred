@@ -38,11 +38,15 @@ const key = "rework.mcp";
 function ConnectionForm({
   spaceId,
   connection,
+  canSave,
   onClose,
+  onSaved,
 }: {
   spaceId: string;
   connection: McpConnectionView | null;
+  canSave: boolean;
   onClose: () => void;
+  onSaved: (connection: McpConnectionView) => void;
 }) {
   const { t } = useTranslation();
   const [logicalName, setLogicalName] = useState(connection?.logical_name ?? "");
@@ -64,6 +68,7 @@ function ConnectionForm({
   const [update, updating] = useUpdateMcpConnectionMutation();
   const busy = creating.isLoading || updating.isLoading;
   const ready =
+    canSave &&
     name.trim() &&
     (auth === "knowledge_flow_tabular" || url.trim()) &&
     (connection || /^[a-z0-9_-]{1,64}$/.test(logicalName)) &&
@@ -88,24 +93,23 @@ function ConnectionForm({
             : { kind: "api_key", credential_binding: credential, header },
     };
     try {
-      if (connection)
-        await update({
-          spaceId,
-          id: connection.id,
-          updateMcpConnection: {
-            expected_revision: connection.revision,
-            display_name: name,
-            description,
-            configuration,
-            enabled: connection.enabled,
-          },
-        }).unwrap();
-      else
-        await create({
-          spaceId,
-          createMcpConnection: { logical_name: logicalName, display_name: name, description, configuration },
-        }).unwrap();
-      onClose();
+      const saved = connection
+        ? await update({
+            spaceId,
+            id: connection.id,
+            updateMcpConnection: {
+              expected_revision: connection.revision,
+              display_name: name,
+              description,
+              configuration,
+              enabled: connection.enabled,
+            },
+          }).unwrap()
+        : await create({
+            spaceId,
+            createMcpConnection: { logical_name: logicalName, display_name: name, description, configuration },
+          }).unwrap();
+      onSaved(saved);
     } catch (e) {
       setError(t(`${key}.${normalizeApiError(e).status === 409 ? "conflict" : "error"}`));
     }
@@ -225,6 +229,7 @@ function Connections({ spaceId }: { spaceId: string }) {
   const [setPermission] = useSetOrganizationCapabilityDefaultMutation();
   const [editing, setEditing] = useState<McpConnectionView | null | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewStep, setViewStep] = useState<number>();
   const [pending, setPending] = useState<{ row: McpConnectionView; action: "revoke" | "disable" } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -232,7 +237,7 @@ function Connections({ spaceId }: { spaceId: string }) {
   const [test] = useTestMcpConnectionMutation();
   const [publish] = usePublishMcpConnectionMutation();
   const [update] = useUpdateMcpConnectionMutation();
-  const rows = access.allowed && !query.isError ? (query.currentData ?? []) : [];
+  const rows = access.offered && !query.isError ? (query.currentData ?? []) : [];
   const selected = rows.find((row) => row.id === selectedId);
   const changes = selected?.tool_changes;
   const hasChanges = changes && !!(changes.added.length + changes.modified.length + changes.removed.length);
@@ -241,13 +246,31 @@ function Connections({ spaceId }: { spaceId: string }) {
       ? [...selected.observed_tools, ...selected.published_tools.filter((tool) => changes.removed.includes(tool.name))]
       : selected.published_tools
     : [];
+  const offer =
+    !inventory.isError && source?.capabilities.find((item) => item.capability_id === selected?.capability_id);
+  const checked =
+    selected?.observation_state === "available" &&
+    selected.observation_revision === selected.revision &&
+    !!selected.checked_at;
+  const validated =
+    checked &&
+    !!changes &&
+    !hasChanges &&
+    selected.published_revision === selected.revision &&
+    selected.published_tools.length > 0;
+  const ready = selected?.available && !!offer && offer.default_on;
+  // Server facts determine progress; the only local choice is viewing an earlier step.
+  const nextStep = !checked ? 0 : !validated ? 1 : ready ? 3 : 2;
+  const step = Math.min(viewStep ?? nextStep, nextStep);
+  const blocked = busy || !access.allowed || query.isFetching || query.isError;
   const run = async (action: () => Promise<unknown>) => {
-    if (inFlight.current) return;
+    if (inFlight.current || blocked) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
     try {
       await action();
+      setViewStep(undefined);
     } catch (e) {
       setError(t(`${key}.${normalizeApiError(e).status === 409 ? "conflict" : "error"}`));
     } finally {
@@ -255,31 +278,49 @@ function Connections({ spaceId }: { spaceId: string }) {
       setBusy(false);
     }
   };
-  const permit = (row: McpConnectionView, default_on: boolean) => {
-    if (!source || inventory.isError) return;
-    return run(() =>
-      setPermission({
-        organizationId: spaceId,
-        sourceId: source.source_id,
-        capabilityId: row.capability_id,
-        setDefaultOnRequest: { default_on },
-      }).unwrap(),
-    );
+  const permit = async (row: McpConnectionView, default_on: boolean) => {
+    if (!source || inventory.isError) throw new Error("MCP authorization unavailable");
+    return setPermission({
+      organizationId: spaceId,
+      sourceId: source.source_id,
+      capabilityId: row.capability_id,
+      setDefaultOnRequest: { default_on },
+    }).unwrap();
   };
   const activate = (row: McpConnectionView, enabled: boolean) =>
-    run(() =>
-      update({
-        spaceId,
-        id: row.id,
-        updateMcpConnection: {
-          expected_revision: row.revision,
-          display_name: row.display_name,
-          description: row.description,
-          configuration: row.configuration,
-          enabled,
-        },
-      }).unwrap(),
-    );
+    update({
+      spaceId,
+      id: row.id,
+      updateMcpConnection: {
+        expected_revision: row.revision,
+        display_name: row.display_name,
+        description: row.description,
+        configuration: row.configuration,
+        enabled,
+      },
+    }).unwrap();
+  const advance = () => {
+    if (!selected || blocked) return;
+    if (step === 1 && (!checked || !changes || !selected.observed_tools.length)) return;
+    if (step === 2 && (!validated || !offer || inventory.isFetching || inventory.isError)) return;
+    void run(async () => {
+      if (step === 0) {
+        await test({ spaceId, id: selected.id, mcpRevision: { expected_revision: selected.revision } }).unwrap();
+      } else if (step === 1 && !validated) {
+        await publish({
+          spaceId,
+          id: selected.id,
+          mcpPublication: { expected_revision: selected.revision, expected_checked_at: selected.checked_at! },
+        }).unwrap();
+      } else if (step === 2 && offer) {
+        const active = selected.enabled ? selected : await activate(selected, true);
+        if (!active.available) throw new Error("MCP connection unavailable");
+        // Do not grant usage if activation failed. A permission failure leaves the
+        // server's activation intact; the refreshed step retries only authorization.
+        if (!offer.default_on) await permit(active, true);
+      }
+    });
+  };
   const permissionControl = (row: McpConnectionView) => {
     const offer = !inventory.isError && source?.capabilities.find((item) => item.capability_id === row.capability_id);
     if (!offer) return <span>{t(`${key}.permissionUnknown`)}</span>;
@@ -288,9 +329,9 @@ function Connections({ spaceId }: { spaceId: string }) {
       <Switch
         size="small"
         checked={offer.default_on}
-        disabled={busy || query.isFetching || inventory.isFetching || blocked}
+        disabled={!access.allowed || busy || query.isFetching || inventory.isFetching || blocked}
         aria-label={t(`${key}.allowNamed`, { name: row.display_name })}
-        onChange={() => (offer.default_on ? setPending({ row, action: "revoke" }) : void permit(row, true))}
+        onChange={() => (offer.default_on ? setPending({ row, action: "revoke" }) : void run(() => permit(row, true)))}
       />
     );
     return blocked ? (
@@ -322,7 +363,7 @@ function Connections({ spaceId }: { spaceId: string }) {
       {access.allowed && !query.isError && !query.isFetching && !rows.length && (
         <PageEmptyState icon="extension" message={t(`${key}.empty`)} />
       )}
-      {access.allowed && rows.length > 0 && (
+      {access.offered && rows.length > 0 && (
         <DataTable
           data={rows}
           rowKey={(row) => row.id}
@@ -363,7 +404,12 @@ function Connections({ spaceId }: { spaceId: string }) {
                   color="on-surface"
                   variant="outlined"
                   size="small"
-                  onClick={() => setSelectedId(row.id)}
+                  disabled={busy}
+                  onClick={() => {
+                    setSelectedId(row.id);
+                    setViewStep(undefined);
+                    setError("");
+                  }}
                   aria-label={t(`${key}.detailsNamed`, { name: row.display_name })}
                 >
                   {t(`${key}.details`)}
@@ -373,167 +419,209 @@ function Connections({ spaceId }: { spaceId: string }) {
           ]}
         />
       )}
-      {access.allowed && selectedId && (
+      {access.offered && selectedId && (
         <InlineDrawer
           open
-          width="var(--content-prose-max-width)"
+          width="960px"
           onClose={() => {
-            if (editing === undefined && !pending) setSelectedId(null);
+            if (!busy && editing === undefined && !pending) setSelectedId(null);
           }}
           title={selected?.display_name ?? t(`${key}.connectionUnavailable`)}
           closeLabel={t("common.close")}
         >
           {selected ? (
             <div className={styles.detail}>
-              <p>{selected.logical_name}</p>
-              <p>{selected.description}</p>
+              <ol className={styles.steps} aria-label={t(`${key}.setupSteps`)}>
+                {["connectionStep", "toolsStep", "activationStep"].map((label, index) => (
+                  <li key={label} aria-current={step === index ? "step" : undefined} data-complete={index < nextStep}>
+                    {index + 1}. {t(`${key}.${label}`)}
+                  </li>
+                ))}
+              </ol>
               {error && <p role="alert">{error}</p>}
-              <div className={styles.actions}>
-                <Button
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                  disabled={busy}
-                  onClick={() => setEditing(selected)}
-                >
-                  {t(`${key}.edit`)}
-                </Button>
-                <Button
-                  color="primary"
-                  variant="outlined"
-                  size="small"
-                  disabled={busy || query.isFetching}
-                  onClick={() =>
-                    void run(() =>
-                      test({
-                        spaceId,
-                        id: selected.id,
-                        mcpRevision: { expected_revision: selected.revision },
-                      }).unwrap(),
-                    )
-                  }
-                >
-                  {t(`${key}.test`)}
-                </Button>
+              <div className={styles.detail} aria-busy={busy}>
+                <h3 aria-live="polite">{t(`${key}.${["test", "reviewTools", "activationTitle", "ready"][step]}`)}</h3>
+                {step === 0 && (
+                  <>
+                    <p>{t(`${key}.discoveryHint`)}</p>
+                    <StatusBadge
+                      label={t(`${key}.state.${selected.observation_state}`)}
+                      tone={selected.observation_state === "unavailable" ? "error" : "neutral"}
+                    />
+                    {selected.observation_state === "unavailable" && <p role="alert">{t(`${key}.discoveryFailed`)}</p>}
+                    <details>
+                      <summary>{t(`${key}.technicalDetails`)}</summary>
+                      <p>{selected.logical_name}</p>
+                      <p>{selected.description}</p>
+                      <p>{t(`${key}.checkedAt`, { date: formatDateTime(selected.checked_at) })}</p>
+                      <p>{t(`${key}.discoveryScope`)}</p>
+                    </details>
+                  </>
+                )}
+                {step === 1 && (
+                  <>
+                    <p>{t(`${key}.reviewHint`)}</p>
+                    <p role="status">
+                      {validated
+                        ? t(`${key}.upToDate`)
+                        : hasChanges
+                          ? t(`${key}.changes`, {
+                              added: changes!.added.length,
+                              modified: changes!.modified.length,
+                              removed: changes!.removed.length,
+                            })
+                          : t(`${key}.validationRequired`)}
+                    </p>
+                    <div>
+                      {toolRows.map((tool) => {
+                        const change = changes?.removed.includes(tool.name)
+                          ? "removed"
+                          : changes?.modified.includes(tool.name)
+                            ? "modified"
+                            : changes?.added.includes(tool.name)
+                              ? "added"
+                              : null;
+                        return (
+                          <details key={tool.name} className={styles.tool}>
+                            <summary>
+                              <span className={styles.toolDescription}>{tool.name}</span>
+                              {change && (
+                                <StatusBadge
+                                  label={t(`${key}.${change}`)}
+                                  tone={change === "removed" ? "warning" : "info"}
+                                />
+                              )}
+                            </summary>
+                            {tool.description && <p>{tool.description}</p>}
+                          </details>
+                        );
+                      })}
+                    </div>
+                    {!toolRows.length && <p role="status">{t(`${key}.noTools`)}</p>}
+                    <details>
+                      <summary>{t(`${key}.contracts`)}</summary>
+                      <pre className={styles.contracts}>
+                        {JSON.stringify(
+                          { observed: selected.observed_tools, published: selected.published_tools },
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    </details>
+                  </>
+                )}
+                {step === 2 && (
+                  <>
+                    <StatusBadge label={t(`${key}.upToDate`)} tone="success" />
+                    <p>{t(`${key}.permissionHint`)}</p>
+                    {!offer && <p role="alert">{t(`${key}.permissionUnknown`)}</p>}
+                    {selected.enabled && offer && !offer.default_on && (
+                      <p role="status">{t(`${key}.authorizationPending`)}</p>
+                    )}
+                  </>
+                )}
+                {step === 3 && (
+                  <>
+                    <StatusBadge label={t(`${key}.authorized`)} tone="success" />
+                    <p>{t(`${key}.readyHint`)}</p>
+                    <p>{t(`${key}.impact`, { count: selected.affected_instance_count })}</p>
+                    <Button
+                      color="on-surface"
+                      variant="text"
+                      size="small"
+                      onClick={() => setViewStep(1)}
+                      disabled={blocked}
+                    >
+                      {t(`${key}.inventory`)}
+                    </Button>
+                  </>
+                )}
+                {step < 3 && (
+                  <div className={styles.footer}>
+                    {step > 0 && (
+                      <Button
+                        color="on-surface"
+                        variant="text"
+                        size="medium"
+                        disabled={blocked}
+                        onClick={() => setViewStep(step - 1)}
+                      >
+                        {t("rework.back")}
+                      </Button>
+                    )}
+                    <Button
+                      color="primary"
+                      variant="filled"
+                      size="medium"
+                      onClick={advance}
+                      disabled={
+                        blocked ||
+                        (step === 1 && (!changes || !selected.observed_tools.length)) ||
+                        (step === 2 && (!offer || inventory.isFetching || inventory.isError))
+                      }
+                    >
+                      {busy
+                        ? t("common.loading")
+                        : t(
+                            `${key}.${step === 0 ? "test" : step === 1 ? (validated ? "continue" : selected.published_revision === null ? "publish" : "applyChanges") : offer && offer.default_on ? "enable" : selected.enabled ? "authorize" : "activateAndAuthorize"}`,
+                          )}
+                    </Button>
+                  </div>
+                )}
               </div>
-              <h3>{t(`${key}.observation`)}</h3>
-              <div className={styles.actions}>
-                <StatusBadge
-                  label={t(`${key}.state.${selected.observation_state}`)}
-                  tone={selected.observation_state === "unavailable" ? "error" : "neutral"}
-                />
-              </div>
-              <p>{t(`${key}.checkedAt`, { date: formatDateTime(selected.checked_at) })}</p>
-              <p>{t(`${key}.discoveryScope`)}</p>
-              {selected.observation_state === "unavailable" && <p role="alert">{t(`${key}.discoveryFailed`)}</p>}
-              <h3>{t(`${key}.inventory`)}</h3>
-              {!changes ? (
-                <p role="status">{t(`${key}.previousInventory`)}</p>
-              ) : selected.published_revision !== null && !hasChanges ? (
-                <p role="status">
-                  {t(`${key}.${selected.published_revision === selected.revision ? "upToDate" : "validationRequired"}`)}
-                </p>
-              ) : (
-                <p role="status">
-                  {t(`${key}.changes`, {
-                    added: changes.added.length,
-                    modified: changes.modified.length,
-                    removed: changes.removed.length,
-                  })}
-                </p>
-              )}
-              <DataTable
-                data={toolRows}
-                rowKey={(tool) => tool.name}
-                size="small"
-                columns={[
-                  { label: t(`${key}.tool`), size: "1.5fr", cellRenderer: (tool) => tool.name },
-                  {
-                    label: t(`${key}.description`),
-                    size: "3fr",
-                    cellRenderer: (tool) => <span className={styles.toolDescription}>{tool.description}</span>,
-                  },
-                  ...(hasChanges
-                    ? [
-                        {
-                          label: t(`${key}.change`),
-                          size: "1.3fr",
-                          cellRenderer: (tool: McpConnectionView["observed_tools"][number]) => {
-                            const change = changes.removed.includes(tool.name)
-                              ? "removed"
-                              : changes.modified.includes(tool.name)
-                                ? "modified"
-                                : changes.added.includes(tool.name)
-                                  ? "added"
-                                  : null;
-                            return change ? (
-                              <StatusBadge
-                                label={t(`${key}.${change}`)}
-                                tone={change === "removed" ? "warning" : "info"}
-                              />
-                            ) : null;
-                          },
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-              {!toolRows.length && <p>{t(`${key}.noTools`)}</p>}
-              <details>
-                <summary>{t(`${key}.contracts`)}</summary>
-                <pre className={styles.contracts}>
-                  {JSON.stringify({ observed: selected.observed_tools, published: selected.published_tools }, null, 2)}
-                </pre>
+              <details className={styles.management}>
+                <summary>{t(`${key}.manage`)}</summary>
+                <div className={styles.detail}>
+                  <p>{t(`${key}.impact`, { count: selected.affected_instance_count })}</p>
+                  <div className={styles.actions}>
+                    <Button
+                      color="on-surface"
+                      variant="outlined"
+                      size="small"
+                      disabled={blocked}
+                      onClick={() => setEditing(selected)}
+                    >
+                      {t(`${key}.edit`)}
+                    </Button>
+                    {step !== 0 && (
+                      <Button
+                        color="on-surface"
+                        variant="outlined"
+                        size="small"
+                        disabled={blocked}
+                        onClick={() => setViewStep(0)}
+                      >
+                        {t(`${key}.test`)}
+                      </Button>
+                    )}
+                    {selected.enabled && (
+                      <Button
+                        color="on-surface"
+                        variant="outlined"
+                        size="small"
+                        disabled={blocked}
+                        onClick={() => setPending({ row: selected, action: "disable" })}
+                      >
+                        {t(`${key}.disable`)}
+                      </Button>
+                    )}
+                    {offer && offer.default_on && (
+                      <Button
+                        color="on-surface"
+                        variant="outlined"
+                        size="small"
+                        disabled={blocked || inventory.isFetching}
+                        onClick={() => setPending({ row: selected, action: "revoke" })}
+                      >
+                        {t(`${key}.revoke`)}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </details>
-              <p>{t(`${key}.publicationHint`)}</p>
-              <Button
-                color="primary"
-                variant="filled"
-                size="small"
-                disabled={
-                  busy ||
-                  query.isFetching ||
-                  !changes ||
-                  !selected.observed_tools.length ||
-                  !selected.checked_at ||
-                  (!hasChanges && selected.published_revision === selected.revision)
-                }
-                onClick={() =>
-                  void run(() =>
-                    publish({
-                      spaceId,
-                      id: selected.id,
-                      mcpPublication: {
-                        expected_revision: selected.revision,
-                        expected_checked_at: selected.checked_at!,
-                      },
-                    }).unwrap(),
-                  )
-                }
-              >
-                {t(`${key}.${selected.published_revision === null ? "publish" : "applyChanges"}`)}
-              </Button>
-              <h3>{t(`${key}.permission`)}</h3>
-              {permissionControl(selected)}
-              <p>{t(`${key}.permissionHint`)}</p>
-              <h3>{t(`${key}.activation`)}</h3>
-              <p>{t(`${key}.${selected.enabled ? "enabled" : "disabled"}`)}</p>
-              <p>{t(`${key}.activationHint`)}</p>
-              <Button
-                color="on-surface"
-                variant="outlined"
-                size="small"
-                disabled={busy || query.isFetching}
-                onClick={() =>
-                  selected.enabled ? setPending({ row: selected, action: "disable" }) : void activate(selected, true)
-                }
-              >
-                {t(`${key}.${selected.enabled ? "disable" : "enable"}`)}
-              </Button>
-              <p>{t(`${key}.impact`, { count: selected.affected_instance_count })}</p>
             </div>
           ) : (
-            <p role="status">{t(`${key}.connectionUnavailable`)}</p>
+            <p role="status">{query.isFetching ? t("common.loading") : t(`${key}.connectionUnavailable`)}</p>
           )}
         </InlineDrawer>
       )}
@@ -545,15 +633,26 @@ function Connections({ spaceId }: { spaceId: string }) {
         criticalAction
         confirmLabel={t(`${key}.${pending?.action ?? "revoke"}`)}
         cancelLabel={t("common.cancel")}
-        confirmDisabled={busy}
+        confirmDisabled={blocked || inventory.isFetching}
         onCancel={() => setPending(null)}
         onConfirm={() => {
-          if (pending) void (pending.action === "revoke" ? permit(pending.row, false) : activate(pending.row, false));
+          if (pending)
+            void run(() => (pending.action === "revoke" ? permit(pending.row, false) : activate(pending.row, false)));
           setPending(null);
         }}
       />
-      {access.allowed && editing !== undefined && (
-        <ConnectionForm spaceId={spaceId} connection={editing} onClose={() => setEditing(undefined)} />
+      {access.offered && editing !== undefined && (
+        <ConnectionForm
+          spaceId={spaceId}
+          connection={editing}
+          canSave={access.allowed}
+          onClose={() => setEditing(undefined)}
+          onSaved={(connection) => {
+            setSelectedId(connection.id);
+            setViewStep(undefined);
+            setEditing(undefined);
+          }}
+        />
       )}
     </div>
   );
