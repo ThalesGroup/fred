@@ -119,6 +119,10 @@ impl Catalog {
             let config:Value=serde_json::from_str(&form["config"]).unwrap();
             Json(json!({"schema_version":"1","config":config}))
         }));
+        let app = app.route("/agents/capabilities/mcp-knowledge-flow-mcp-tabular/validate-config", post(|axum::Form(form): axum::Form<std::collections::BTreeMap<String,String>>| async move {
+            let config: Value = serde_json::from_str(&form["config"]).unwrap();
+            Json(json!({"schema_version":"1","config":config}))
+        }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

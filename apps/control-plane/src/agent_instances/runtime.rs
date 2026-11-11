@@ -348,11 +348,16 @@ async fn resolve_runtime_binding(
     if selected.iter().any(|id| id.starts_with("managed-mcp:")) {
         let template = mcp_template
             .as_ref()
-            .filter(|t| t.supports_managed_mcp && t.supports_capabilities)
+            .filter(|t| t.supports_managed_mcp)
             .ok_or_else(|| enablement::not_enabled("managed_mcp"))?;
         super::tuning::require_inventory(template, &selected)?;
     }
-    let mcp_bindings = crate::mcp_connections::bindings(&mut tx, &selected).await?;
+    let mcp_bindings = crate::mcp_connections::bindings(
+        &mut tx,
+        &selected,
+        state.agent_catalog.knowledge_flow_url.as_deref(),
+    )
+    .await?;
     let snapshot = crate::skills::resolve(&mut tx, subject, &space, private).await?;
     let skills = Some(snapshot.catalog);
     let skill_files = private.then_some(snapshot.files);

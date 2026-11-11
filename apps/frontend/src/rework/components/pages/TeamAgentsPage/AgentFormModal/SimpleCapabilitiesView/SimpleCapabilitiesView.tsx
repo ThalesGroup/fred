@@ -15,7 +15,7 @@
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { CapabilityCatalogEntry } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CapabilityCard } from "../CapabilityCard/CapabilityCard.tsx";
 import { ToolPackCard } from "../ToolPackCard/ToolPackCard.tsx";
 import {
@@ -24,7 +24,7 @@ import {
   isPackSelectable,
   type CapabilitySelectionState,
 } from "../toolPackLogic.ts";
-import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
+import { resolveToolPackSections, type ToolPack } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
 interface SimpleCapabilitiesViewProps {
@@ -69,10 +69,12 @@ export function SimpleCapabilitiesView({
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
   const activeIds = new Set(selection.selectedCapabilityIds);
+  const sections = resolveToolPackSections(managedCapabilities);
+  const documentPacks = sections.flatMap((section) => section.packs).filter((pack) => pack.documentSource);
 
   return (
     <div className={styles.view}>
-      {TOOL_PACK_SECTIONS.map((section) => {
+      {sections.map((section) => {
         if (section.packs.length > 0 && !supportsCapabilities) return null;
         // A pack the admin has opened nothing for is a dead switch; drop it,
         // and drop a section left with none rather than print a bare heading.
@@ -93,7 +95,9 @@ export function SimpleCapabilitiesView({
                   disabled={disabled}
                   availableIds={availableIds}
                   activeIds={activeIds}
-                  onToggle={(nextOn) => onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds))}
+                  onToggle={(nextOn) =>
+                    onSelectionChange(applyPackToggle(pack, nextOn, selection, availableIds, documentPacks))
+                  }
                   options={renderPackOptions?.(pack)}
                 />
               ))}

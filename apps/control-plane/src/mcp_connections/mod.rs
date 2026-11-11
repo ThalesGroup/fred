@@ -8,13 +8,19 @@ mod http;
 mod store;
 
 pub(crate) use http::routes;
-pub(crate) use store::{available_offers, bindings, extend_template};
+pub(crate) use store::{available_offers, bindings, capability_owner, extend_template};
 
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpService {
+    KnowledgeFlowTabular,
+}
 
 pub const SOURCE_ID: &str = "$mcp";
 pub const MAX_TOOLS: usize = 256;
@@ -24,6 +30,8 @@ pub const MAX_BYTES: usize = 1024 * 1024;
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum McpAuthentication {
     None,
+    /// Trusted service identity; its destination comes from platform configuration.
+    KnowledgeFlowTabular,
     Bearer {
         credential_binding: String,
     },
@@ -52,6 +60,20 @@ pub struct McpCredentialBinding {
 }
 
 impl McpConfiguration {
+    pub fn is_tabular(&self) -> bool {
+        matches!(self.authentication, McpAuthentication::KnowledgeFlowTabular)
+    }
+
+    pub fn trusted_destination(&self, base: Option<&str>) -> Result<()> {
+        if self.is_tabular() {
+            ensure!(
+                self.url == tabular_endpoint(base)?,
+                "MCP service destination mismatch"
+            );
+        }
+        Ok(())
+    }
+
     pub fn validate(&self, bindings: &[McpCredentialBinding]) -> Result<()> {
         ensure!(
             crate::model_catalog::config::approved_url(&self.url, self.allow_insecure_http),
@@ -82,13 +104,22 @@ impl McpConfiguration {
 
     pub fn credential_reference(&self) -> Option<&str> {
         match &self.authentication {
-            McpAuthentication::None => None,
+            McpAuthentication::None | McpAuthentication::KnowledgeFlowTabular => None,
             McpAuthentication::Bearer { credential_binding }
             | McpAuthentication::ApiKey {
                 credential_binding, ..
             } => Some(credential_binding),
         }
     }
+}
+
+pub fn tabular_endpoint(base: Option<&str>) -> Result<String> {
+    let base = base.ok_or_else(|| anyhow::anyhow!("Knowledge Flow is not configured"))?;
+    ensure!(
+        crate::model_catalog::config::approved_url(base, true),
+        "invalid Knowledge Flow destination"
+    );
+    Ok(format!("{}/mcp/tabular", base.trim_end_matches('/')))
 }
 
 pub fn validate_credentials(bindings: &[McpCredentialBinding]) -> Result<()> {
@@ -179,7 +210,7 @@ impl Connection {
 
     pub fn descriptor(&self) -> Value {
         json!({"id": self.capability_id(), "source_id": self.logical_name,
-            "runtime_id": null, "version": "1", "public_version": null,
+            "runtime_id": null, "mcp_service": if self.configuration.is_tabular() { Some("knowledge_flow_tabular") } else { None }, "version": "1", "public_version": null,
             "name": self.display_name, "description": self.description,
             "icon": "extension", "kind": "tool", "origin": "managed_mcp",
             "config_fields": [], "team_settings_fields": [], "execution_models": ["react", "graph"]})

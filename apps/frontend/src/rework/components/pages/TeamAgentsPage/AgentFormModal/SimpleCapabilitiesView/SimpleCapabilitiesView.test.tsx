@@ -173,3 +173,12 @@ it("shows a central offer in the default view only for a flexible template", () 
   expect(show(true)).toContain("rework.mcp.origin");
   expect(show(false)).not.toContain("Central search");
 });
+
+it("shows a resolved central dependency as included with configuration and no selector", () => {
+  const capability = { ...DOCUMENT_ACCESS, id: "managed-mcp:tabular", name: "Included Tabular" };
+  const html = renderIncluded([capability]);
+  expect(html).toContain("Included Tabular");
+  expect(html).toContain(INCLUDED_BADGE_KEY);
+  expect(html).toContain("options:managed-mcp:tabular");
+  expect(html).not.toContain('type="checkbox"');
+});

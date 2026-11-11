@@ -38,9 +38,12 @@ not evidence of functional validation. Regenerate with
 `mount_fastapi_tools` in `mcp_mount.py` uses FastMCP to project the four REST
 operations tagged `Tabular` at `<app.base_url>/mcp/tabular`. Their explicit
 operationIds are the MCP tool names. No separate tabular business service is
-introduced by this projection. The catalog keeps capability ID
-`mcp-knowledge-flow-mcp-tabular` and resolves its relative `mcp/tabular` path
-against the configured Knowledge Flow URL.
+introduced by this projection. Control Plane owns the single trusted Tabular
+connection, rooted in its configured Knowledge Flow API URL. The capability
+package retains the stable author dependency and instructions, without a
+technical YAML offer. Authenticated workload discovery can negotiate and list
+tools without a person grant; `tools/call` requires the verified delegated grant
+and existing document authority. See the Control Plane README for pending reception.
 
 These declarations describe the mounted code contract, not end-to-end Weaver
 validation. The document drive and ingestion admission belong to Control Plane.

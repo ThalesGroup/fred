@@ -173,14 +173,20 @@ async def test_tabular_probe_uses_bound_scope_and_fixed_query(nested, wrong_scop
         )
         tools.append(
             StructuredTool(
-                name=name,
+                name=f"mcp_fixture_{len(tools)}",
                 description="Bound diagnostic tool",
+                metadata={
+                    "mcp_trusted_service": "knowledge_flow_tabular",
+                    "mcp_tool_name": name,
+                },
                 args_schema={"type": "object", "properties": properties},
                 func=lambda: None,
             )
         )
 
-    async def invoke(name, args):
+    async def invoke(wire_name, args):
+        tool = next(tool for tool in tools if tool.name == wire_name)
+        name = tool.metadata["mcp_tool_name"]
         calls.append((name, args))
         payload = {
             "list_tabular_documents": {
@@ -200,7 +206,7 @@ async def test_tabular_probe_uses_bound_scope_and_fixed_query(nested, wrong_scop
             },
         }[name]
         return ToolInvocationResult(
-            tool_ref=name,
+            tool_ref=wire_name,
             blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
         ).model_dump(mode="json")
 

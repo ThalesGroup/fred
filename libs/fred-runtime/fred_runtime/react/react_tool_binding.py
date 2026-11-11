@@ -38,7 +38,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.capability.mcp import McpPromptGroup
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
@@ -80,6 +79,7 @@ class BoundTool:
     # `build_runtime_tool_prompt_suffix` group the tool listing by server
     # (#2455).
     mcp_server_id: str | None = None
+    mcp_trusted_service: str | None = None
 
 
 def tabular_tools_bound(bound_tools: Sequence[BoundTool]) -> bool:
@@ -97,7 +97,7 @@ def tabular_tools_bound(bound_tools: Sequence[BoundTool]) -> bool:
     """
 
     return any(
-        bound_tool.mcp_server_id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+        bound_tool.mcp_trusted_service == "knowledge_flow_tabular"
         for bound_tool in bound_tools
     )
 
@@ -348,4 +348,5 @@ class ReActToolBinder:
                 metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
             ),
             mcp_server_id=spec.mcp_server_id,
+            mcp_trusted_service=spec.mcp_trusted_service,
         )

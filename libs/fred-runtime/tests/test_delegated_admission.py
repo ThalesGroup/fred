@@ -902,6 +902,246 @@ def test_a_grant_admission_audit_names_neither_the_person_nor_the_caller(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kind,selectable,case",
+    [
+        ("graph", False, "allowed"),
+        ("react", False, "allowed"),
+        ("graph", True, "allowed"),
+        ("react", True, "allowed"),
+        ("graph", False, "missing"),
+        ("graph", False, "extra"),
+        ("graph", False, "undeclared"),
+    ],
+)
+async def test_included_mcp_metadata_admission_and_business_assembly(
+    monkeypatch, kind, selectable, case
+):
+    from uuid import UUID
+
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+    from fred_sdk.contracts.capability import CapabilityManifest, EmptyModel
+    from fred_sdk.contracts.capability.mcp import (
+        McpCapability,
+        McpPromptGroup,
+        McpServerConfig,
+    )
+    from fred_sdk.contracts.managed_mcp import McpBinding
+    from fred_sdk.contracts.models import (
+        GraphAgentDefinition,
+        GraphDefinition,
+        GraphNodeDefinition,
+        StoredCapabilityConfig,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    owner = MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+
+    class IncludedGraph(GraphAgentDefinition):
+        agent_id: str = "test.included_tabular_graph"
+        role: str = "Included SQL"
+        description: str = "Fixed workflow"
+
+        def build_graph(self):
+            return GraphDefinition(
+                state_model_name="EmptyModel",
+                entry_node="query",
+                nodes=(GraphNodeDefinition(node_id="query", title="Query"),),
+            )
+
+        def input_model(self):
+            return EmptyModel
+
+        def state_model(self):
+            return EmptyModel
+
+        def output_model(self):
+            return EmptyModel
+
+        def build_initial_state(self, input_model, binding):
+            return EmptyModel()
+
+        def node_handlers(self):
+            return {}
+
+        def build_output(self, state):
+            return EmptyModel()
+
+    class BusinessContribution(McpCapability):
+        manifest = CapabilityManifest(
+            id=owner,
+            version="1",
+            name="Tabular",
+            description="Tabular",
+            icon="table",
+            mcp_service="knowledge_flow_tabular",
+        )
+
+        def prompt_group(self):
+            return McpPromptGroup(
+                server_id=owner,
+                title="Tabular",
+                agent_instructions="Inspect the schema before querying.",
+            )
+
+    definition = (IncludedGraph() if kind == "graph" else _Definition()).model_copy(
+        update={
+            "supports_capabilities": selectable,
+            "default_mcp_servers": ()
+            if case == "undeclared"
+            else (MCPServerRef(id=owner),),
+        }
+    )
+    definitions = {definition.agent_id: definition}
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: FredRuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="https://kf.invalid", service_name="test-pod"
+            )
+        ),
+    )
+    capabilities = CapabilityRegistry()
+    capabilities.register(BusinessContribution())
+    app = FastAPI()
+    app.state.capability_registry = capabilities
+    app.include_router(agent_app_module._build_agent_router(definitions, False, 5000))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://pod"
+    ) as client:
+        metadata = (await client.get("/agents/templates")).json()[0]
+    assert metadata["supports_managed_mcp"] is True
+    assert metadata["supports_capabilities"] is selectable
+    assert metadata["default_capability_ids"] == (
+        [] if case == "undeclared" else [owner]
+    )
+    assert [entry["id"] for entry in metadata["available_capabilities"]] == (
+        [] if case == "undeclared" else [owner]
+    )
+
+    connection = str(UUID(int=905))
+    offer = f"managed-mcp:{connection}"
+    admitted = McpBinding.model_validate(
+        dict(
+            connection_id=connection,
+            capability_id=offer,
+            revision=1,
+            display_name="Central Tabular",
+            configuration=dict(
+                url="https://kf.invalid/mcp/tabular",
+                authentication={"kind": "knowledge_flow_tabular"},
+            ),
+            tools=[
+                dict(
+                    name="query",
+                    description=None,
+                    input_schema={"type": "object"},
+                    output_schema=None,
+                    annotations=None,
+                )
+            ],
+        )
+    )
+    bindings = [] if case == "missing" else [admitted]
+    if case == "extra":
+        external = admitted.model_dump(mode="json")
+        external.update(
+            connection_id=str(UUID(int=906)),
+            capability_id=f"managed-mcp:{UUID(int=906)}",
+            configuration=dict(
+                url="https://external.invalid/mcp", authentication={"kind": "none"}
+            ),
+        )
+        bindings.append(McpBinding.model_validate(external))
+    configuration = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        selected_capability_ids=[value.capability_id for value in bindings],
+        capability_config={
+            offer: StoredCapabilityConfig(
+                schema_version="1",
+                config={"chat_options.attach_files": True},
+            )
+        },
+    )
+    facts = turn_binding(
+        definition.agent_id, run="run-9", tuning=configuration.model_dump(mode="json")
+    ).model_copy(update={"mcp_bindings": tuple(bindings)})
+    provider = delegated_provider(
+        install_delegation(),
+        RunRecord(run_id="run-9", person_id="alice", agent_id=INSTANCE_ID),
+    )
+    request = agent_app_module._AgentExecuteRequest(
+        agent_instance_id=INSTANCE_ID,
+        message="hello",
+        context={"user_id": "alice", "space_id": SPACE_ID},
+        turn_options={offer: {}},
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json=facts.model_dump(mode="json"))
+        )
+    ) as client:
+
+        async def resolve():
+            return await agent_app_module._resolve_agent_instance(
+                request=request,
+                registry=definitions,
+                access_token=None,
+                control_plane_url="http://control-plane.invalid",
+                http_client=client,
+                credentials=provider,
+            )
+
+        if case != "allowed":
+            with pytest.raises(HTTPException) as error:
+                await resolve()
+            assert error.value.status_code == 409
+            assert error.value.detail == "mcp_included_dependency_mismatch"
+            return
+        target = await resolve()
+    assert [ref.id for ref in target.definition.default_mcp_servers] == [owner]
+    assert request._turn_authority is not None
+    assert request._turn_authority.binding.mcp_bindings == tuple(bindings)
+    assert request.turn_options == {owner: {}}
+    assert target.tuning is not None
+    assert target.tuning.capability_config[owner].config == {
+        "chat_options.attach_files": True
+    }
+    assert agent_app_module._effective_capability_ids(
+        target.tuning, target.definition, capabilities
+    ) == [owner]
+    block = agent_app_module._build_capability_block(
+        capabilities,
+        target.tuning,
+        definition=target.definition,
+        services=RuntimeServices(),
+        user_id="alice",
+        session_id=None,
+        space_id=SPACE_ID,
+        team_id=None,
+        agent_instance_id=INSTANCE_ID,
+    )
+    assert block is not None
+    assert (
+        block.mcp_prompt_groups[0].agent_instructions
+        == "Inspect the schema before querying."
+    )
+    assert (
+        capabilities.capability(owner)
+        .chat_controls(
+            McpServerConfig.model_validate(
+                target.tuning.capability_config[owner].config
+            )
+        )[0]
+        .widget
+        == "attach_files"
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_post(
     monkeypatch,
 ):

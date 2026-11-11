@@ -148,7 +148,11 @@ async def test_v2_mount_is_stateless_and_uses_only_verified_grant(monkeypatch) -
 @pytest.mark.asyncio
 async def test_v2_mount_redacts_receiver_refusal(monkeypatch) -> None:
     async def authenticate(request: Request, token: str):
-        yield None
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     app = _app()
@@ -224,7 +228,11 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch,
     mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Protected test", description="Protected test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
-        yield None
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
@@ -258,7 +266,11 @@ async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name
     mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Query test", description="Query test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
-        yield None
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
@@ -301,7 +313,11 @@ async def test_v2_mount_carries_only_a_valid_classified_failure(monkeypatch, bod
     mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Read test", description="Read test", tags={"Selected"})
 
     async def authenticate(request: Request, token: str):
-        yield None
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
 
     monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
     async with app.router.lifespan_context(app):
@@ -311,3 +327,51 @@ async def test_v2_mount_carries_only_a_valid_classified_failure(monkeypatch, bod
     assert text.startswith("Error calling read_markdown. Status code: 502. Response: ")
     assert text.endswith(expected)
     assert "private" not in text and "neutral" not in text
+
+
+@pytest.mark.asyncio
+async def test_authenticated_technical_discovery_cannot_call_documents_even_with_forged_grant(monkeypatch):
+    reached = []
+    app = FastAPI()
+
+    @app.get("/documents", tags=["Selected"], operation_id="read_documents")
+    async def read_documents():
+        reached.append(True)
+        return {"private": "must not be returned"}
+
+    async def workload(request: Request, token: str):
+        if token != "test":
+            raise HTTPException(status_code=401)
+        reset = mcp_delegation._verified_grant.set(None)
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
+
+    monkeypatch.setattr(mcp_mount, "mcp_mount_auth", workload)
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Test", description="Test", tags={"Selected"})
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            discovered = await _request(client, "server/discover")
+            assert discovered.status_code == 200
+            assert "tools" in discovered.json()["result"]["capabilities"]
+            listing = await _request(client, "tools/list", {"_meta": _META})
+            assert [tool["name"] for tool in listing.json()["result"]["tools"]] == ["read_documents"]
+            called = await _request(
+                client,
+                "tools/call",
+                {
+                    "_meta": _META,
+                    "name": "read_documents",
+                    "arguments": {
+                        "person": "forged",
+                        "run": "forged",
+                        "agent": "forged",
+                        "x-fred-document-context": '{"space_id":"other"}',
+                    },
+                },
+            )
+            assert called.json()["result"]["isError"] is True
+            assert reached == []
+            anonymous = await client.post("/mcp-test", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+            assert anonymous.status_code == 401

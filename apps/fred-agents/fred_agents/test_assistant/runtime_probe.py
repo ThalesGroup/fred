@@ -55,7 +55,14 @@ async def _tabular_call(
     provider = context.services.tool_provider
     tools = provider.get_tools() if provider else ()
     tool = next(
-        (tool for tool in tools if isinstance(tool, BaseTool) and tool.name == name),
+        (
+            tool
+            for tool in tools
+            if isinstance(tool, BaseTool)
+            and (tool.metadata or {}).get("mcp_trusted_service")
+            == "knowledge_flow_tabular"
+            and (tool.metadata or {}).get("mcp_tool_name") == name
+        ),
         None,
     )
     if tool is None:
@@ -66,7 +73,9 @@ async def _tabular_call(
         if len(properties) != 1:
             raise RuntimeError("unsupported tabular tool contract")
         arguments = {next(iter(properties)): values}
-    return _tabular_payload(await context.invoke_runtime_tool(name, arguments), name)
+    return _tabular_payload(
+        await context.invoke_runtime_tool(tool.name, arguments), tool.name
+    )
 
 
 class _ProbeToolsUnavailable(RuntimeError):

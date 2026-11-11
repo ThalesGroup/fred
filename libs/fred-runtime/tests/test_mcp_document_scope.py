@@ -3,7 +3,6 @@
 """The native Agent Pod sends its server-bound scope outside MCP arguments."""
 
 from collections.abc import Sequence
-from types import SimpleNamespace
 from uuid import UUID
 
 import httpx2
@@ -107,58 +106,6 @@ async def test_refresh_and_rebind_do_not_widen_server_agent_scope():
             with pytest.raises(DelegationUnavailableError):
                 await client.post("https://kf.invalid/mcp")
             assert len(seen) == 4
-
-
-@pytest.mark.asyncio
-async def test_document_pack_mcp_activation_carries_scope_before_any_tool_call(
-    monkeypatch,
-):
-    from fred_runtime.common import mcp_utils
-    from fred_sdk.contracts.models import MCPServerConfiguration
-
-    provider = admitted_provider(StaticWorkloadTokens())
-    payload = DocumentAccessContext(
-        space_id=UUID(SPACE_ID), document_scope=DocumentScope.from_ids([A])
-    ).model_dump_json()
-    seen = []
-
-    class Adapter:
-        def __init__(self, client):
-            self.client = client
-
-        async def list_tools(self):
-            transport = self.client.transport
-
-            async def receive(request):
-                seen.append(request.headers.get(DOCUMENT_CONTEXT_HEADER))
-                return httpx2.Response(200)
-
-            async with httpx2.AsyncClient(
-                transport=httpx2.MockTransport(receive), auth=transport.auth
-            ) as client:
-                await client.post(transport.url, json={"method": "tools/list"})
-            return []
-
-    monkeypatch.setattr(mcp_utils, "MCPAdapter", Adapter)
-    server = MCPServerConfiguration.model_validate(
-        {
-            "id": "mcp-knowledge-flow-mcp-tabular",
-            "name": "tabular",
-            "transport": "streamable_http",
-            "url": "https://kf.invalid/mcp/tabular",
-            "auth_mode": "delegated",
-            "enabled": True,
-        }
-    )
-    await mcp_utils.get_connected_mcp_client_for_agent(
-        "agent-a",
-        [server],
-        RuntimeContext(),
-        credentials=provider,
-        refresh_owner=SimpleNamespace(document_context=lambda: payload),
-    )
-    assert seen == [payload]
-    assert mcp_utils._catalog_cache_config(server, await provider.credentials()) is None
 
 
 @pytest.mark.asyncio

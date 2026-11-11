@@ -108,8 +108,10 @@ export function applyPackToggle(
   nextOn: boolean,
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
+  documentPacks: readonly ToolPack[] = DOCUMENT_PACKS,
 ): CapabilitySelectionState {
-  if (pack.documentSource) return applyDocumentPackToggle(pack, pack.documentSource, nextOn, state, availableIds);
+  if (pack.documentSource)
+    return applyDocumentPackToggle(pack, pack.documentSource, nextOn, state, availableIds, documentPacks);
 
   const ids = new Set(state.selectedCapabilityIds);
   for (const id of pack.enablesCapabilityIds) {
@@ -134,6 +136,7 @@ function applyDocumentPackToggle(
   nextOn: boolean,
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
+  documentPacks: readonly ToolPack[] = DOCUMENT_PACKS,
 ): CapabilitySelectionState {
   const config = state.capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {};
   const selected = state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS);
@@ -151,15 +154,15 @@ function applyDocumentPackToggle(
     return withConfig({ ...config, ...sources, [source]: true });
   }
 
-  const others = DOCUMENT_PACKS.filter(
-    (other) => other !== pack && selected && other.documentSource && sourceOn(config, other.documentSource),
+  const others = documentPacks.filter(
+    (other) => other.id !== pack.id && selected && other.documentSource && sourceOn(config, other.documentSource),
   );
   if (others.length > 0) {
     const kept = new Set(others.flatMap((other) => other.enablesCapabilityIds));
     for (const id of pack.enablesCapabilityIds) if (!kept.has(id)) ids.delete(id);
     return withConfig({ ...config, [source]: false });
   }
-  for (const id of DOCUMENT_PACKS.flatMap((documentPack) => documentPack.enablesCapabilityIds)) ids.delete(id);
+  for (const id of documentPacks.flatMap((documentPack) => documentPack.enablesCapabilityIds)) ids.delete(id);
   return withConfig({ ...config, [DOC_ACCESS_ATTACHMENTS]: true, [DOC_ACCESS_TEAM_DOCUMENTS]: true });
 }
 

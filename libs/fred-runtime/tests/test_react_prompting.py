@@ -416,7 +416,15 @@ def test_block_tags_are_the_reserved_tags_in_prompt_order() -> None:
 
 def test_tabular_tools_bound_is_true_when_the_tabular_mcp_server_is_bound() -> None:
     assert tabular_tools_bound(
-        [_grouped_tool("query_tabular_documents", MCP_SERVER_KNOWLEDGE_FLOW_TABULAR)]
+        [
+            BoundTool(
+                runtime_name="opaque",
+                description="SQL",
+                tool=cast(BaseTool, SimpleNamespace()),
+                mcp_server_id="managed-mcp:deployment-id",
+                mcp_trusted_service="knowledge_flow_tabular",
+            )
+        ]
     )
 
 
@@ -425,6 +433,9 @@ def test_tabular_tools_bound_is_false_without_the_tabular_mcp_server() -> None:
     # agent instance can have other tools bound (or none at all) while never
     # having tabular/SQL tools — this is exactly the gap the attachment
     # suffix must detect rather than assume.
+    assert not tabular_tools_bound(
+        [_grouped_tool("query_tabular_documents", MCP_SERVER_KNOWLEDGE_FLOW_TABULAR)]
+    )
     assert not tabular_tools_bound([])
     assert not tabular_tools_bound([_grouped_tool("search_documents", "mcp-text")])
 

@@ -189,6 +189,10 @@ def _curate_tool(route: Any, tool: Any) -> None:
 
 class _ToolErrorPolicy(Middleware):
     async def on_call_tool(self, context: MiddlewareContext, call_next: Any) -> ToolResult:
+        # Protocol/session discovery is authenticated by the mount. A workload
+        # alone never reaches an inner document operation, even with forged args.
+        if verified_grant() is None:
+            return ToolResult(content="Tool access was refused.", is_error=True)
         try:
             return await call_next(context)
         except Exception as exc:

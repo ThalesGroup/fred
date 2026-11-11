@@ -343,9 +343,12 @@ class ContextAwareTool(BaseTool):
         Keep injection conservative + schema-aware. For now we only add "tags" if the
         tool supports it and caller didn't pass it.
         """
-        # Only native, Fred-owned MCP receives inferred workspace/document context.
+        # Managed service authority travels exclusively through the trusted transport.
+        # External managed tools receive no inferred Fred context.
         origin = (self.base_tool.metadata or {}).get(MCP_SERVER_ID_METADATA_KEY)
-        if isinstance(origin, str) and origin.startswith("managed-mcp:"):
+        if (self.base_tool.metadata or {}).get("mcp_connection_id") or (
+            isinstance(origin, str) and origin.startswith("managed-mcp:")
+        ):
             return kwargs
         context = self.context_provider()
         if not context:
@@ -534,8 +537,9 @@ class ContextAwareTool(BaseTool):
         kwargs: dict[str, Any],
     ) -> Any:
         """The tool result of one caught failure, in this tool's response format."""
+        remote_name = (self.base_tool.metadata or {}).get("mcp_tool_name", self.name)
         artifact = _build_tool_error_artifact(
-            self.name,
+            remote_name,
             kwargs,
             exc,
             inner,
@@ -547,7 +551,7 @@ class ContextAwareTool(BaseTool):
         msg = (
             f"Error: {explanation}"
             if explanation
-            else _build_tool_error_message(exc, inner, tool_name=self.name)
+            else _build_tool_error_message(exc, inner, tool_name=remote_name)
         )
         if getattr(self, "response_format", None) == "content_and_artifact":
             return msg, artifact

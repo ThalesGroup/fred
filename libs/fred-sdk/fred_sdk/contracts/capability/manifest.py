@@ -263,6 +263,9 @@ class CapabilityManifest(BaseModel):
         ),
     )
 
+    # A business contribution resolved to one centrally governed connection.
+    # It owns no destination or credential and is not a second selectable offer.
+    mcp_service: Literal["knowledge_flow_tabular"] | None = None
     config_fields: list[FieldSpec] = Field(default_factory=list)
     # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Mirrors
     # `config_fields`: the metadata-driven declaration of the admin
@@ -368,6 +371,9 @@ class CapabilityCatalogEntry(BaseModel):
         min_length=1,
         description="Material Symbols name; see CapabilityManifest.icon",
     )
+    # A business contribution resolved to one centrally governed connection.
+    # It owns no destination or credential and is not a second selectable offer.
+    mcp_service: Literal["knowledge_flow_tabular"] | None = None
     config_fields: list[FieldSpec] = Field(default_factory=list)
     # Per-team enablement settings form (CAPAB-01 / #1980, RFC §8.2). Advertised
     # so control-plane can render + validate the admin enable-with-settings form
@@ -467,6 +473,7 @@ class CapabilityCatalogEntry(BaseModel):
 
         return cls(
             id=manifest.id,
+            mcp_service=manifest.mcp_service,
             # A manifest's own id is already the author's identifier — no pod
             # prefix is folded into it, unlike the agent and model projections.
             source_id=manifest.id,

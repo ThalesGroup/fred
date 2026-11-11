@@ -35,12 +35,6 @@ from fred_sdk.contracts.models import FieldSpec
 
 _REPO = Path(__file__).resolve().parents[3]
 _MCP_CATALOGS = [
-    _REPO
-    / "libs"
-    / "capabilities"
-    / "fred-capability-mcp"
-    / "fred_capability_mcp"
-    / "mcp_catalog.yaml",
     _REPO / "deploy" / "charts" / "fred" / "values.yaml",
 ]
 

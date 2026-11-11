@@ -305,6 +305,7 @@ pub struct AgentTemplateSummary {
 #[serde(rename_all = "snake_case")]
 pub enum AgentTemplateStatus {
     Available,
+    DependencyUnavailable,
 }
 
 #[derive(Default, Deserialize)]
@@ -399,7 +400,6 @@ fn template_summary(
         available_capabilities: metadata.available_capabilities,
         supports_capabilities: metadata.supports_capabilities,
         supports_managed_mcp: metadata.supports_managed_mcp
-            && metadata.supports_capabilities
             && matches!(template.kind.as_str(), "react" | "deep" | "graph"),
         supports_hitl: metadata.supports_hitl,
         default_capability_ids: metadata.default_capability_ids,
@@ -438,6 +438,8 @@ pub(crate) async fn enrollable_template(
                         &mut summary,
                         &crate::mcp_connections::available_offers(pool).await?,
                     );
+                } else {
+                    crate::mcp_connections::extend_template(&mut summary, &[]);
                 }
                 return Ok((summary, tuning));
             }
@@ -465,17 +467,28 @@ pub fn template_id(organization: Uuid, runtime: &str, template: &str) -> Uuid {
     Uuid::new_v5(&runtime_id, template.as_bytes())
 }
 
-fn project(organization: Uuid, catalogs: Vec<RuntimeCatalog>) -> AppResult<Vec<AgentEnablement>> {
+fn project(
+    organization: Uuid,
+    catalogs: Vec<RuntimeCatalog>,
+    offers: &[BTreeMap<String, serde_json::Value>],
+) -> AppResult<Vec<AgentEnablement>> {
     let mut items = Vec::new();
     for catalog in catalogs {
         for template in catalog.templates {
-            let dependencies = template
-                .metadata
-                .get("default_capability_ids")
-                .map(|value| serde_json::from_value::<Vec<String>>(value.clone()))
-                .transpose()
-                .context("invalid template dependencies")?
-                .unwrap_or_default();
+            let dependencies = if let Some(mut summary) = template_summary(
+                template_id(
+                    organization,
+                    &catalog.runtime_id,
+                    &template.template_agent_id,
+                ),
+                catalog.runtime_id.clone(),
+                &template,
+            )? {
+                crate::mcp_connections::extend_template(&mut summary, offers);
+                summary.default_capability_ids
+            } else {
+                Vec::new()
+            };
             items.push(AgentEnablement {
                 id: template_id(
                     organization,
@@ -566,6 +579,22 @@ async fn space_agent_templates(
             let Some(mut summary) = template_summary(id, runtime, &template)? else {
                 return Ok(None);
             };
+            let service_dependencies: std::collections::BTreeSet<String> = summary
+                .available_capabilities
+                .iter()
+                .chain(managed_offers.iter())
+                .filter(|entry| {
+                    entry
+                        .get("mcp_service")
+                        .is_some_and(|value| !value.is_null())
+                })
+                .filter_map(|entry| {
+                    entry
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .collect();
             crate::mcp_connections::extend_template(&mut summary, managed_offers);
             // Offers the space may not use are neither proposed nor preselected.
             summary.available_capabilities.retain(|entry| {
@@ -574,7 +603,16 @@ async fn space_agent_templates(
                     .and_then(serde_json::Value::as_str)
                     .is_some_and(allowed)
             });
-            summary.default_capability_ids.retain(|id| allowed(id));
+            if summary
+                .default_capability_ids
+                .iter()
+                .any(|id| service_dependencies.contains(id) && !allowed(id))
+            {
+                summary.status = AgentTemplateStatus::DependencyUnavailable;
+            }
+            summary
+                .default_capability_ids
+                .retain(|id| allowed(id) || service_dependencies.contains(id));
             Ok::<_, anyhow::Error>(Some(summary))
         })
         .buffered(READ_CONCURRENCY)
@@ -602,7 +640,11 @@ async fn organization_agents(
 ) -> crate::error::AppResult<axum::Json<Vec<AgentEnablement>>> {
     authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
         .await?;
-    let mut items = project(organization_id, discover(&s.agent_catalog).await?)?;
+    let mut items = project(
+        organization_id,
+        discover(&s.agent_catalog).await?,
+        &crate::mcp_connections::available_offers(&s.pool).await?,
+    )?;
     for item in &mut items {
         item.default_on =
             authorization::agent_default_on(&s.pool, organization_id, item.id).await?;
@@ -633,7 +675,11 @@ async fn set_organization_agent_default(
     authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
         .await?;
     // Runtime discovery never holds a SQL connection or transaction.
-    let items = project(organization_id, discover(&s.agent_catalog).await?)?;
+    let items = project(
+        organization_id,
+        discover(&s.agent_catalog).await?,
+        &crate::mcp_connections::available_offers(&s.pool).await?,
+    )?;
     let item = items
         .iter()
         .find(|item| item.id == agent_id)
@@ -651,7 +697,7 @@ async fn set_organization_agent_default(
         if let Some(missing) = item
             .default_capability_ids
             .iter()
-            .find(|id| !policy.default_on(&item.runtime_id, id))
+            .find(|id| !policy.default_on(enablement::selection_source(&item.runtime_id, id), id))
         {
             return Err(AppError::problem(
                 axum::http::StatusCode::CONFLICT,
@@ -790,6 +836,8 @@ pub(crate) async fn editable_template(
             &mut summary,
             &crate::mcp_connections::available_offers(pool).await?,
         );
+    } else {
+        crate::mcp_connections::extend_template(&mut summary, &[]);
     }
     Ok(Some(summary))
 }

@@ -106,7 +106,7 @@ class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel
     def chat_controls(self, config: McpServerConfig) -> list[ChatControlSpec]:
         """Compute stock composer controls from stored values and catalog defaults."""
 
-        defaults = {field.key: field.default for field in self._server.config_fields}
+        defaults = {field.key: field.default for field in self.manifest.config_fields}
         stored = config.model_dump()
 
         def value(key: str) -> Any:

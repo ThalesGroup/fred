@@ -37,16 +37,15 @@ from pathlib import Path
 
 import pytest
 from fred_capability_document_access import DocumentAccessCapability
-from fred_capability_mcp import load_catalog
+from fred_capability_mcp import TabularCapability
 from fred_capability_ppt_filler.capability import PptFillerCapability
 from fred_runtime.app._catalogs import apply_external_catalog_overrides
 from fred_runtime.app.config import AgentPodConfig
-from fred_runtime.app.service_endpoints import ConfiguredServiceEndpoints
 from fred_runtime.capabilities.registry import (
     CapabilityRegistry,
     boot_capability_registry,
 )
-from fred_sdk.contracts.capability.mcp import McpCapability
+from fred_sdk.contracts.capability.mcp import McpServerConfig
 
 _PPT_PREVIEW_PART_KIND = "ppt_preview"
 
@@ -123,6 +122,7 @@ def test_discover_finds_installed_ppt_filler() -> None:
 # of silently shrinking an agent's tools.
 _SHIPPED_CAPABILITY_IDS = frozenset(
     {
+        "mcp-knowledge-flow-mcp-tabular",
         "document_access",
         "document_summarize",
         "document_verbatim",
@@ -174,27 +174,21 @@ def test_default_mcp_catalog_loads_packaged_instructions(
         )
     )
     catalog = config.get_mcp_configuration()
-    assert catalog is not None
-    assert catalog.servers == load_catalog(ConfiguredServiceEndpoints(config)).servers
-    registry = boot_capability_registry(mcp_servers=catalog.servers, env={})
-
-    enabled = {server.id for server in catalog.servers if server.enabled}
-    assert set(registry.ids()) == _SHIPPED_CAPABILITY_IDS | enabled
-    for server_id in enabled:
-        assert isinstance(registry.capability(server_id), McpCapability)
-    by_id = {server.id: server for server in catalog.servers}
-    assert "mcp-knowledge-flow-mcp-text" not in by_id
-    assert "mcp-web-github-readonly" not in by_id
-    assert "mcp-knowledge-flow-fs" not in by_id
-    assert "mcp-knowledge-flow-corpus" not in by_id
-    assert "## Tabular data access" in (
-        by_id["mcp-knowledge-flow-mcp-tabular"].agent_instructions or ""
+    assert catalog is None
+    registry = boot_capability_registry(env={})
+    assert set(registry.ids()) == _SHIPPED_CAPABILITY_IDS
+    tabular = registry.capability("mcp-knowledge-flow-mcp-tabular")
+    assert isinstance(tabular, TabularCapability)
+    assert tabular.manifest.mcp_service == "knowledge_flow_tabular"
+    assert "## Tabular data access" in (tabular.prompt_group().agent_instructions or "")
+    assert (
+        tabular.chat_controls(
+            McpServerConfig.model_validate(
+                {
+                    "chat_options.attach_files": True,
+                    "chat_options.documents_selection": True,
+                }
+            )
+        )[0].widget
+        == "attach_files"
     )
-
-    expected_paths = {
-        "mcp-knowledge-flow-mcp-tabular": "mcp/tabular",
-        "mcp-knowledge-flow-prometheus-ops": "mcp-prometheus-ops",
-    }
-    assert set(by_id) == set(expected_paths)
-    for server_id, path in expected_paths.items():
-        assert by_id[server_id].url == f"https://kf.example:9443/custom/v2/{path}"

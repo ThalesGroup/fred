@@ -18,6 +18,8 @@ use super::{preparation::ChatControlDescriptor, tuning};
 #[derive(Serialize)]
 struct RequestItem<'a> {
     capability_id: &'a str,
+    #[serde(skip)]
+    selected_id: &'a str,
     config_envelope: Option<&'a Value>,
 }
 
@@ -95,7 +97,7 @@ pub(super) async fn resolve(
                 .controls
                 .into_iter()
                 .map(|control| ChatControlDescriptor {
-                    capability_id: item.capability_id.to_owned(),
+                    capability_id: item.selected_id.to_owned(),
                     widget: control.widget,
                     params: control.params,
                 }),
@@ -114,7 +116,9 @@ fn request<'a>(
         .iter()
         .filter_map(|entry| entry.get("id").and_then(Value::as_str))
         .filter(|id| {
-            !id.starts_with("managed-mcp:") && selected.iter().any(|selected| selected == id)
+            (!id.starts_with("managed-mcp:")
+                || crate::mcp_connections::capability_owner(template, id) != *id)
+                && selected.iter().any(|selected| selected == id)
         })
         .filter_map(|capability_id| {
             // Swift evaluates an absent/non-object slice against the pod defaults.
@@ -136,7 +140,8 @@ fn request<'a>(
                 return None;
             }
             Some(RequestItem {
-                capability_id,
+                selected_id: capability_id,
+                capability_id: crate::mcp_connections::capability_owner(template, capability_id),
                 config_envelope,
             })
         })
@@ -215,6 +220,31 @@ mod tests {
             supports_hitl: false,
             default_capability_ids: vec!["unselected".into()],
         }
+    }
+
+    #[tokio::test]
+    async fn central_tabular_controls_use_business_owner_and_keep_selected_identity() {
+        let id = "managed-mcp:central";
+        let owner = "mcp-knowledge-flow-mcp-tabular";
+        let mut template = template();
+        template.supports_capabilities = false;
+        template.default_capability_ids = vec![id.into()];
+        template.available_capabilities = vec![BTreeMap::from([
+            ("id".into(), json!(id)),
+            ("capability_owner".into(), json!(owner)),
+        ])];
+        let app = Router::new().route("/agents/capabilities/chat-controls", post(move |Json(body): Json<Value>| async move {
+            assert_eq!(body["items"][0]["capability_id"], owner);
+            assert_eq!(body["items"][0]["config_envelope"]["config"]["chat_options.attach_files"], true);
+            Json(json!({"results":[{"capability_id":owner,"controls":[{"widget":"attach_files","params":{}}]}]}))
+        }));
+        let (platform, server) = serve(app).await;
+        let saved = json!({"capability_config":{id:{"schema_version":"1","config":{"chat_options.attach_files":true}}}});
+        let controls = resolve(&platform, &template, &saved, &[id.into()], None).await;
+        assert_eq!(controls.len(), 1);
+        assert_eq!(controls[0].capability_id, id);
+        assert_eq!(controls[0].widget, "attach_files");
+        server.abort();
     }
 
     async fn serve(app: Router) -> (PlatformConfig, tokio::task::JoinHandle<()>) {

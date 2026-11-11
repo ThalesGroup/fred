@@ -89,6 +89,7 @@ pub struct CapabilityFieldDescription {
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct PodCapabilityDescriptor {
+    pub mcp_service: Option<crate::mcp_connections::McpService>,
     pub id: String,
     pub source_id: Option<String>,
     pub runtime_id: Option<String>,
@@ -149,10 +150,18 @@ impl PodInventory {
                 }
             }
         }
+        // Embedded contributions describe business behavior, not another offer.
+        let contributions: std::collections::HashSet<_> = self
+            .capabilities
+            .iter()
+            .filter(|entry| entry.mcp_service.is_some())
+            .map(|entry| entry.id.clone())
+            .collect();
         let snapshot = catalog::CatalogSnapshot {
             capabilities: self
                 .capabilities
                 .into_iter()
+                .filter(|entry| !contributions.contains(&entry.id))
                 .map(|entry| {
                     Ok(catalog::CapabilityOffer {
                         capability_id: entry.id.clone(),
@@ -164,6 +173,7 @@ impl PodInventory {
             template_capabilities: self
                 .template_capabilities
                 .into_iter()
+                .filter(|link| !contributions.contains(&link.capability_id))
                 .map(|link| catalog::TemplateCapability {
                     source_agent_id: link.source_agent_id,
                     capability_id: link.capability_id,

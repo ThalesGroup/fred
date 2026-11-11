@@ -12,53 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Platform policy guard (CAPAB-01, 2026-07-17 CVSSI review): this deployment
-never uses `team_scope: DEFAULT_ON`. Every team's access to every tool is an
-explicit, auditable admin grant — see `docs/swift/rfc/AGENT-CAPABILITY-RFC.md`
-§8.3. `team_scope` defaults to `ADMIN_GATED`
-(`fred_sdk.contracts.models.TeamScopePolicy`); this test asserts nothing in
-this pod's static MCP catalog opts a server into `DEFAULT_ON` without an
-explicit, reviewed waiver.
+"""Installing a business contribution does not authorize its central connection."""
 
-This is a SCAN-based guard because `team_scope` is an author-declared field
-on a static manifest here. It does NOT cover `kind="agent"` capabilities
-(agent templates projected into the control-plane capability catalog,
-CAPAB-01 RFC §8.6) — `AgentDefinition` has no `team_scope` field at all, so
-there is nothing to scan; that guard is a narrow unit test directly on the
-projection function instead (control-plane-backend
-`tests/test_capability_selection_1974.py::test_agent_projection_always_hardcodes_admin_gated`).
-"""
-
-from __future__ import annotations
-
-from fred_capability_mcp import load_catalog
+from fred_capability_mcp import TabularCapability
 from fred_sdk.contracts.models import TeamScopePolicy
-from fred_sdk.contracts.services import FredService
-
-# Explicit waiver list — empty today. Adding an id here is a security-reviewed
-# decision (this platform's policy, 2026-07-17), not a manifest edit someone
-# makes in passing; that is the entire point of this guard existing as a test
-# instead of a comment.
-_DEFAULT_ON_WAIVERS: set[str] = set()
 
 
-def test_no_mcp_server_declares_default_on_without_explicit_waiver() -> None:
-    class Services:
-        def get_base_url(self, service: FredService) -> str:
-            return "http://localhost:8111/knowledge-flow/v2"
-
-    catalog = load_catalog(Services())
-    offenders = [
-        entry.id
-        for entry in catalog.servers
-        if entry.team_scope is TeamScopePolicy.DEFAULT_ON
-        and entry.id not in _DEFAULT_ON_WAIVERS
-    ]
-    assert offenders == [], (
-        f"{offenders} declare team_scope: default_on without an explicit "
-        "waiver in _DEFAULT_ON_WAIVERS. This platform's policy (2026-07-17, "
-        "CVSSI review) is that every capability requires an explicit "
-        "per-team admin grant — adding a waiver here needs a documented "
-        "security review, not a manifest default."
-    )
+def test_tabular_does_not_declare_implicit_authorization():
+    assert TabularCapability.manifest.team_scope is TeamScopePolicy.ADMIN_GATED

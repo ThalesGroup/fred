@@ -3,7 +3,7 @@
 """Execute admitted MCP bindings using the existing FastMCP/LangChain adapter.
 
 Every client belongs to one turn. There is no registry mutation, local catalogue
-fallback, shared cache, Fred credential forwarding or business authorization here.
+fallback or shared cache. Fred credentials are restricted to the configured trusted service.
 """
 
 from __future__ import annotations
@@ -12,16 +12,31 @@ import asyncio
 import hashlib
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from urllib.parse import urlsplit
 
 import httpx2
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
+from fred_sdk.contracts.runtime import unwrap_run_stop_error
+from fred_sdk.contracts.services import FredService
 from langchain.mcp import as_langchain_tool
 from langchain_core.tools import BaseTool, StructuredTool
 
-from .mcp_utils import MCP_SERVER_ID_METADATA_KEY, _mcp_http_client_factory
+from .mcp_http_auth import MCPHTTPAuth
+from .mcp_utils import (
+    MCP_DELEGATED_METADATA_KEY,
+    MCP_SERVER_ID_METADATA_KEY,
+    MCP_SERVICE_METADATA_KEY,
+    _mcp_http_client_factory,
+)
+from .outbound_credentials import (
+    DelegatedCredentialProvider,
+    OutboundCredentialProvider,
+    grant_query_url,
+)
 
 
 class ManagedMcpError(ValueError):
@@ -32,7 +47,7 @@ def credential_headers(
     binding: McpBinding, credentials: Sequence[McpCredentialBinding]
 ) -> dict[str, str]:
     auth = binding.configuration.authentication
-    if auth.kind == "none":
+    if auth.kind == "none" or auth.kind == "knowledge_flow_tabular":
         return {}
     matches = [
         c for c in credentials if c.credential_binding == auth.credential_binding
@@ -57,6 +72,8 @@ def validate_admission(
     *,
     compatible: bool,
     credentials: Sequence[McpCredentialBinding],
+    knowledge_flow_url: str | None = None,
+    included: Sequence[str] | None = None,
 ) -> None:
     expected = {key for key in selected if key.startswith("managed-mcp:")}
     actual = {binding.capability_id for binding in bindings}
@@ -66,8 +83,46 @@ def validate_admission(
         or (actual and not compatible)
     ):
         raise ManagedMcpError("mcp_binding_mismatch")
+    if MCP_SERVER_KNOWLEDGE_FLOW_TABULAR in selected and not any(
+        binding.configuration.authentication.kind == "knowledge_flow_tabular"
+        for binding in bindings
+    ):
+        raise ManagedMcpError("mcp_service_dependency_unavailable")
+    if included is not None:
+        # Fixed agents execute only author-declared dependencies. Compare with
+        # the stable business owner, not a deployment-specific connection UUID.
+        owners = {
+            binding.capability_id: MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+            if binding.configuration.authentication.kind == "knowledge_flow_tabular"
+            else binding.capability_id
+            for binding in bindings
+        }
+        if len(selected) != len(included) or {
+            owners.get(key, key) for key in selected
+        } != set(included):
+            raise ManagedMcpError("mcp_included_dependency_mismatch")
     for binding in bindings:
+        trusted_destination(binding, knowledge_flow_url)
         credential_headers(binding, credentials)
+
+
+def trusted_destination(binding: McpBinding, base: str | None) -> bool:
+    if binding.configuration.authentication.kind != "knowledge_flow_tabular":
+        return False
+    expected = f"{base.rstrip('/')}/mcp/tabular" if base else None
+    parsed = urlsplit(base or "")
+    if (
+        not expected
+        or binding.configuration.url != expected
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ManagedMcpError("mcp_service_destination_mismatch")
+    return True
 
 
 def _contract(tool) -> McpTool:
@@ -82,7 +137,7 @@ def _contract(tool) -> McpTool:
     )
 
 
-def _guard_call(call, secrets=()):
+def _guard_call(call, secrets=(), *, trusted_tool: str | None = None):
     async def guarded(**arguments):
         try:
             result = await call(**arguments)
@@ -91,7 +146,22 @@ def _guard_call(call, secrets=()):
                 secret in serialized or json.dumps(secret)[1:-1] in serialized
                 for secret in secrets
             )
-        except Exception:
+        except Exception as exc:
+            if trusted_tool is not None:
+                from fred_runtime.runtime_support.authority import AuthorityLostError
+
+                from .context_aware_tool import _parse_fastapi_mcp_http_error
+
+                stop = unwrap_run_stop_error(exc)
+                if stop is not None:
+                    raise stop from None
+                if str(exc) == "Tool access was refused.":
+                    raise AuthorityLostError() from None
+                if (
+                    _parse_fastapi_mcp_http_error(exc, tool_name=trusted_tool)
+                    is not None
+                ):
+                    raise
             result = None
             safe_to_return = False
         if safe_to_return:
@@ -121,14 +191,33 @@ def _client_factory(credential_headers: dict[str, str]):
 
 
 async def connect(
-    bindings: Sequence[McpBinding], credentials: Sequence[McpCredentialBinding]
+    bindings: Sequence[McpBinding],
+    credentials: Sequence[McpCredentialBinding],
+    *,
+    knowledge_flow_url: str | None = None,
+    provider: OutboundCredentialProvider | None = None,
+    document_context: Callable[[], str] | None = None,
 ) -> list[BaseTool]:
     tools: list[BaseTool] = []
     for binding in bindings:
+        trusted = trusted_destination(binding, knowledge_flow_url)
         headers = credential_headers(binding, credentials)
+        url = binding.configuration.url
+        auth = None
+        if trusted:
+            if (
+                not isinstance(provider, DelegatedCredentialProvider)
+                or document_context is None
+            ):
+                raise ManagedMcpError("mcp_delegated_context_required")
+            grant = await provider.credentials()
+            url = grant_query_url(url, grant.parameters)
+            auth = MCPHTTPAuth(
+                provider, document_context=document_context, destination=url
+            )
         client = Client(
             StreamableHttpTransport(
-                binding.configuration.url, httpx_client_factory=_client_factory(headers)
+                url, auth=auth, httpx_client_factory=_client_factory(headers)
             ),
             init_timeout=5,
             timeout=30,
@@ -185,10 +274,22 @@ async def connect(
                                     value.removeprefix("Bearer ")
                                     for value in headers.values()
                                 ),
+                                trusted_tool=published.name if trusted else None,
                             ),
                             "metadata": {
                                 **(tool.metadata or {}),
-                                MCP_SERVER_ID_METADATA_KEY: binding.capability_id,
+                                MCP_SERVER_ID_METADATA_KEY: MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+                                if trusted
+                                else binding.capability_id,
+                                MCP_SERVICE_METADATA_KEY: FredService.KNOWLEDGE_FLOW
+                                if trusted
+                                else None,
+                                MCP_DELEGATED_METADATA_KEY: trusted,
+                                "mcp_trusted_service": "knowledge_flow_tabular"
+                                if trusted
+                                else None,
+                                "mcp_tool_name": published.name,
+                                "mcp_connection_id": str(binding.connection_id),
                             },
                         }
                     )
@@ -196,6 +297,9 @@ async def connect(
             # Adapter tools reopen/close their client per invocation, as native MCP does.
         except ManagedMcpError:
             raise
-        except Exception:
+        except Exception as exc:
+            stop = unwrap_run_stop_error(exc)
+            if stop is not None:
+                raise stop from None
             raise ManagedMcpError("mcp_connection_unavailable") from None
     return tools

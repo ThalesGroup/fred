@@ -1531,9 +1531,9 @@ def _apply_runtime_tuning(
       old agentic-backend definition factory
 
     MCP handling (#1978): the active MCP server set is derived from the agent's
-    selected MCP-server capabilities and narrows `default_mcp_servers` for the
-    live tool provider. The catalog `agent_instructions` are NO LONGER appended
-    here — they are delivered by each `McpCapability`'s prompt-fragment
+    selected MCP-server capabilities for selectable agents; fixed agents retain
+    their author-declared `default_mcp_servers`. The catalog `agent_instructions`
+    are NO LONGER appended here — they are delivered by each `McpCapability`'s prompt-fragment
     middleware (see `_build_capability_block`).
 
     How to use it:
@@ -1549,7 +1549,10 @@ def _apply_runtime_tuning(
         "tags": tuple(tuning.tags),
         "fields": tuple(field.model_copy(deep=True) for field in tuning.fields),
         "default_mcp_servers": _active_mcp_server_refs(
-            definition, tuning.selected_capability_ids
+            definition,
+            tuning.selected_capability_ids
+            if definition.supports_capabilities
+            else None,
         ),
         # Forward all values for all agent types so every execution surface can
         # read admin-set tuning (graph steps via context.tuning_values, ReAct
@@ -1788,9 +1791,14 @@ async def _resolve_agent_instance(
         validate_admission(
             tuning.selected_capability_ids or (),
             resolution.mcp_bindings,
-            compatible=definition.supports_capabilities
-            and isinstance(definition, (ReActAgentDefinition, GraphAgentDefinition)),
+            compatible=isinstance(
+                definition, (ReActAgentDefinition, GraphAgentDefinition)
+            ),
+            included=None
+            if definition.supports_capabilities
+            else [ref.id for ref in definition.default_mcp_servers],
             credentials=runtime.mcp_credentials,
+            knowledge_flow_url=runtime.knowledge_flow_url,
         )
     except ManagedMcpError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
@@ -1823,6 +1831,23 @@ async def _resolve_agent_instance(
                 status_code=403,
                 detail="Conversation binding mismatch or missing provenance",
             )
+    from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+
+    for binding in resolution.mcp_bindings:
+        if binding.configuration.authentication.kind == "knowledge_flow_tabular":
+            owner = MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+            tuning.selected_capability_ids = [
+                *(tuning.selected_capability_ids or ()),
+                owner,
+            ]
+            if binding.capability_id in tuning.capability_config:
+                tuning.capability_config[owner] = tuning.capability_config[
+                    binding.capability_id
+                ]
+            if request.turn_options and binding.capability_id in request.turn_options:
+                request.turn_options[owner] = request.turn_options.pop(
+                    binding.capability_id
+                )
     request._turn_authority = TurnAuthority(resolution, choice)
     request.context = {
         **ctx,
@@ -5406,8 +5431,7 @@ def _build_agent_router(
                     definition, all_capability_entries
                 ),
                 supports_capabilities=definition.supports_capabilities,
-                supports_managed_mcp=definition.supports_capabilities
-                and isinstance(
+                supports_managed_mcp=isinstance(
                     definition, (ReActAgentDefinition, GraphAgentDefinition)
                 ),
                 supports_hitl=isinstance(
@@ -6876,6 +6900,15 @@ def create_agent_app(
     # a named CapabilityRegistrationError and still aborts pod startup —
     # `create_agent_app` runs during startup, just earlier and louder.
     _boot_mcp_config = config.get_mcp_configuration()
+    if _boot_mcp_config is not None and any(
+        server.id
+        in {"mcp-knowledge-flow-mcp-tabular", "mcp-knowledge-flow-prometheus-ops"}
+        or server.service == "knowledge_flow"
+        for server in _boot_mcp_config.servers
+    ):
+        raise ValueError(
+            "Knowledge Flow MCP must use a centrally managed connection; remove its pod catalog entries"
+        )
     capability_registry = boot_capability_registry(
         mcp_servers=_boot_mcp_config.servers if _boot_mcp_config is not None else None
     )

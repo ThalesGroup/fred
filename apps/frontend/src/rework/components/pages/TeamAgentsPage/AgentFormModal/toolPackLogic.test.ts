@@ -33,6 +33,7 @@ import {
   CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
   TOOL_PACK_SECTIONS,
+  resolveToolPackSections,
   type ToolPack,
 } from "./toolPacks";
 
@@ -331,5 +332,35 @@ describe("combined document restriction", () => {
       library_tag_ids: [],
       document_uids: [],
     });
+  });
+});
+
+describe("trusted Tabular pack dependency", () => {
+  it("selects only the central offer and preserves it while another document source is active", () => {
+    const id = "managed-mcp:tabular-deployment";
+    const packs = resolveToolPackSections([
+      {
+        id,
+        name: "SQL",
+        description: "SQL",
+        icon: "table",
+        version: "1",
+        route_base_url: "",
+        mcp_service: "knowledge_flow_tabular",
+      },
+    ])
+      .flatMap((section) => section.packs)
+      .filter((pack) => pack.documentSource);
+    const attachments = packs.find((pack) => pack.id === "attachments")!;
+    const team = packs.find((pack) => pack.id === "team_documents")!;
+    const available = new Set([CAP_DOCUMENT_ACCESS, id]);
+    let selected = applyPackToggle(attachments, true, empty(), available, packs);
+    expect(selected.selectedCapabilityIds).toEqual([CAP_DOCUMENT_ACCESS, id]);
+    selected = applyPackToggle(team, true, selected, available, packs);
+    selected = applyPackToggle(attachments, false, selected, available, packs);
+    expect(selected.selectedCapabilityIds).toContain(id);
+    selected = applyPackToggle(team, false, selected, available, packs);
+    expect(selected.selectedCapabilityIds).not.toContain(id);
+    expect(selected.selectedCapabilityIds).not.toContain(CAP_TABULAR);
   });
 });

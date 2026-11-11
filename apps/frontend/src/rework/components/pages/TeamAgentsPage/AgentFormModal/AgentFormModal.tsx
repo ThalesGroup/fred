@@ -315,6 +315,7 @@ export default function AgentFormModal({
   const recommendedChatProfileId = form.recommendedChatProfileId;
   const isFormValid =
     !!form.templateId &&
+    selectedTemplate?.status !== "dependency_unavailable" &&
     !!form.displayName.trim() &&
     !!form.usageStatement.trim() &&
     !missingRequired &&

@@ -132,3 +132,27 @@ it("shows aggregate impact and can withdraw an unavailable credential reference"
     },
   });
 });
+
+it("edits a trusted service without a URL or static credential and keeps publication separate", async () => {
+  h.rows[0].configuration = {
+    url: "https://kf.invalid/knowledge-flow/v2/mcp/tabular",
+    authentication: { kind: "knowledge_flow_tabular" },
+  };
+  render();
+  select();
+  await act(async () => button("edit").click());
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("rework.mcp.trustedService");
+  expect(dialog.querySelector('input[value="https://kf.invalid/knowledge-flow/v2/mcp/tabular"]')).toBeNull();
+  const save = [...dialog.querySelectorAll("button")].find((item) => item.textContent === "rework.mcp.save")!;
+  await act(async () => save.click());
+  expect(h.update).toHaveBeenCalledWith({
+    id: "one",
+    updateMcpConnection: expect.objectContaining({
+      expected_revision: 7,
+      configuration: expect.objectContaining({ url: "", authentication: { kind: "knowledge_flow_tabular" } }),
+    }),
+  });
+  expect(h.test).not.toHaveBeenCalled();
+  expect(h.publish).not.toHaveBeenCalled();
+});

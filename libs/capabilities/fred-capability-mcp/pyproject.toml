@@ -1,7 +1,7 @@
 [project]
 name = "fred-capability-mcp"
 version = "5.0.0"
-description = "Catalog and packaged agent instructions for Fred's existing MCP capabilities."
+description = "Business instructions and controls for managed Knowledge Flow Tabular."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
@@ -21,10 +21,10 @@ build-backend = "setuptools.build_meta"
 include = ["fred_capability_mcp*"]
 
 [tool.setuptools.package-data]
-fred_capability_mcp = ["mcp_catalog.yaml", "prompts/*.md"]
+fred_capability_mcp = ["prompts/*.md"]
 
-[project.entry-points."fred.mcp_catalogs"]
-mcp = "fred_capability_mcp:load_catalog"
+[project.entry-points."fred.capabilities"]
+tabular = "fred_capability_mcp:TabularCapability"
 
 [tool.uv.sources]
 # Local path overrides for mono-repo development only. Ignored when the package

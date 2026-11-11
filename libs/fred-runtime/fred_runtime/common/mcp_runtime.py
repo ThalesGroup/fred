@@ -128,6 +128,20 @@ class MCPRuntime:
             for s in active_servers:
                 server_configuration = mcp_config.get_server(s.id)
                 if not server_configuration:
+                    from fred_sdk.authoring.knowledge_flow_mcp import (
+                        MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+                    )
+
+                    if s.id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR:
+                        if not any(
+                            b.configuration.authentication.kind
+                            == "knowledge_flow_tabular"
+                            for b in self.managed_bindings
+                        ):
+                            from .managed_mcp import ManagedMcpError
+
+                            raise ManagedMcpError("mcp_service_dependency_unavailable")
+                        continue
                     if self._confined_logs:
                         logger.warning(
                             "event=server_activation outcome=skipped reason=unavailable"
@@ -282,7 +296,13 @@ class MCPRuntime:
                 from fred_runtime.common.managed_mcp import ManagedMcpError, connect
 
                 managed_tools = await connect(
-                    self.managed_bindings, get_runtime_context().config.mcp_credentials
+                    self.managed_bindings,
+                    get_runtime_context().config.mcp_credentials,
+                    knowledge_flow_url=get_runtime_context().get_knowledge_flow_base_url(),
+                    provider=provider,
+                    document_context=getattr(
+                        self.agent_instance, "document_context", None
+                    ),
                 )
                 if {tool.name for tool in tools} & {
                     tool.name for tool in managed_tools

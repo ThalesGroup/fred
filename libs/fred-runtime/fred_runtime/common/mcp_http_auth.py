@@ -33,8 +33,10 @@ class MCPHTTPAuth(httpx2.Auth):
         refresh: TokenRefreshCallback | None = None,
         refresh_owner: object | None = None,
         document_context: Callable[[], str] | None = None,
+        destination: str | None = None,
     ) -> None:
         self._provider = provider
+        self._destination = httpx2.URL(destination) if destination else None
         self._document_context = document_context
         self._refresh = refresh
         self._refresh_owner = refresh_owner or self
@@ -42,6 +44,9 @@ class MCPHTTPAuth(httpx2.Auth):
     async def async_auth_flow(
         self, request: httpx2.Request
     ) -> AsyncGenerator[httpx2.Request, httpx2.Response]:
+        # Check every request, including session operations, before obtaining credentials.
+        if self._destination is not None and request.url != self._destination:
+            raise AuthorityLostError() from None
         await request.aread()
         request.headers.pop(CONTEXT_HEADER, None)
         request.headers.pop(DOCUMENT_CONTEXT_HEADER, None)

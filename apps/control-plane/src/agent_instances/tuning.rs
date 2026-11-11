@@ -230,7 +230,17 @@ async fn select_capabilities(
     requested: Option<&[String]>,
     config_for: impl Fn(&str) -> Value,
 ) -> AppResult<(Vec<String>, serde_json::Map<String, Value>)> {
-    // A fixed template ignores the submitted selection; its defaults are validated alike.
+    // Fixed templates retain their included defaults. A managed offer cannot be
+    // added through a submitted selection, even when it is otherwise authorized.
+    if !template.supports_capabilities
+        && requested.is_some_and(|ids| {
+            ids.iter().any(|id| {
+                id.starts_with("managed-mcp:") && !template.default_capability_ids.contains(id)
+            })
+        })
+    {
+        return Err(enablement::not_enabled("managed_mcp"));
+    }
     let selected = match requested {
         Some(ids) if template.supports_capabilities => ids,
         _ => &template.default_capability_ids,
@@ -273,6 +283,19 @@ pub(crate) fn require_inventory(
     template: &AgentTemplateSummary,
     selected: &[String],
 ) -> AppResult<()> {
+    if !template.supports_capabilities
+        && (selected.len() != template.default_capability_ids.len()
+            || template
+                .default_capability_ids
+                .iter()
+                .any(|id| !selected.contains(id)))
+    {
+        return Err(AppError::problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "agent_capability_unavailable",
+            "The agent's included capabilities must match its template dependencies.",
+        ));
+    }
     for id in selected {
         if !template
             .available_capabilities
@@ -300,7 +323,7 @@ async fn validate_capability(
         platform,
         &template.source_runtime_id,
         authorization,
-        id,
+        crate::mcp_connections::capability_owner(template, id),
         config,
     )
     .await

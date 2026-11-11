@@ -1,59 +1,16 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
+"""Stable author reference for Tabular's embedded business contribution.
 
+Use MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR) in template/profile
+requirements. Control Plane resolves its declared service dependency to the
+centrally published and authorized connection. This is not an endpoint catalog.
 """
-Official Knowledge Flow MCP server references for v2 agent authors.
-
-Why this file exists:
-- built-in Fred tools already use named constants such as `TOOL_REF_KNOWLEDGE_SEARCH`
-- agent authors should not repeat raw MCP server ids inside profiles
-- this file exposes the official non-demo Knowledge Flow MCP server ids that
-  Fred intentionally supports for agent authors
-
-How to use:
-- import `MCPServerRef` and the named constants from
-  `fred_sdk.authoring`
-- build profile `mcp_servers` or agent `default_mcp_servers` with those
-  constants
-- add a new constant here only when Fred core intentionally supports another
-  official Knowledge Flow MCP server for authors
-- do not treat this file as the full global MCP catalog; it only covers the
-  official Knowledge Flow author-facing constants
-
-Example:
-- `mcp_servers=(MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),)`
-
-Current official Knowledge Flow MCP servers:
-- `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`: tabular analysis operations
-"""
-
-from __future__ import annotations
 
 from typing import Final
 
 from ..contracts.models import MCPServerRef
 
 MCP_SERVER_KNOWLEDGE_FLOW_TABULAR: Final[str] = "mcp-knowledge-flow-mcp-tabular"
-"""Tabular analysis MCP server id used by Tabular-style agents."""
 
-MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS: Final[str] = (
-    "mcp-knowledge-flow-prometheus-ops"
-)
-"""Prometheus monitoring MCP server id — metrics query and alerting operations."""
-
-__all__ = [
-    "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
-]
+__all__ = ["MCPServerRef", "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR"]

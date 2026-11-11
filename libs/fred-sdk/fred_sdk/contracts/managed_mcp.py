@@ -36,10 +36,19 @@ class McpApiKeyAuthentication(McpFact):
         return self
 
 
+class McpKnowledgeFlowTabularAuthentication(McpFact):
+    """Trusted Fred service, never a user-entered bearer credential."""
+
+    kind: Literal["knowledge_flow_tabular"] = "knowledge_flow_tabular"
+
+
 class McpConfiguration(McpFact):
     url: str = Field(min_length=1, max_length=2048)
     authentication: Annotated[
-        McpNoAuthentication | McpBearerAuthentication | McpApiKeyAuthentication,
+        McpNoAuthentication
+        | McpBearerAuthentication
+        | McpApiKeyAuthentication
+        | McpKnowledgeFlowTabularAuthentication,
         Field(discriminator="kind"),
     ]
     allow_insecure_http: bool = False

@@ -18,7 +18,7 @@ dependencies = [
   "fred-capability-team-wiki>=5.0.0,<6",
   "fred-capability-documents>=5.0.0,<6",
   "fred-capability-document-access>=5.0.0,<6",
-  # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
+  # Tabular business instructions and controls, discovered through fred.capabilities.
   "fred-capability-mcp>=5.0.0,<6",
   "fred-capability-web-research>=5.0.0,<6",
   "uvicorn>=0.35",

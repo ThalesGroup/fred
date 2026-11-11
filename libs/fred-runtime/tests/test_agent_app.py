@@ -5237,6 +5237,27 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
 
 
 @pytest.mark.usefixtures("empty_runtime_context")
+def test_fixed_runtime_tuning_keeps_declared_dependencies_even_with_empty_selection():
+    from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+    from fred_sdk.contracts.models import AgentTuning, MCPServerRef
+
+    definition = _EchoAgent().model_copy(
+        update={
+            "supports_capabilities": False,
+            "default_mcp_servers": (
+                MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
+            ),
+        }
+    )
+    applied = agent_app_module._apply_runtime_tuning(
+        definition,
+        AgentTuning(role="Fixed", description="Fixed", selected_capability_ids=[]),
+    )
+    assert applied.default_mcp_servers == definition.default_mcp_servers
+    assert applied.supports_capabilities is False
+
+
+@pytest.mark.usefixtures("empty_runtime_context")
 def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
     """
     Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection

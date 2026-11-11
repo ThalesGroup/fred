@@ -13,6 +13,7 @@ from fred_core.security import oidc
 from fred_core.security.delegation import (
     AssertedUser,
     DelegationGrant,
+    require_workload_caller,
 )
 from fred_core.security.oidc import oauth2_scheme
 from fred_core.security.structure import KeycloakUser
@@ -54,6 +55,9 @@ async def mcp_mount_auth(
     subject = await oidc.resolve_request_principal(
         request, oidc.decode_jwt(token), query_only=True
     )
+    if not isinstance(subject, AssertedUser):
+        # Discovery uses a real trusted workload, without manufacturing a grant.
+        require_workload_caller(subject)
     grant = (
         DelegationGrant(person=subject.uid, run=subject.run_id, agent=subject.agent_id)
         if isinstance(subject, AssertedUser)

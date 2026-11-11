@@ -57,6 +57,7 @@ async def test_a_grant_reaches_the_mount_from_the_endpoint_alone(
     it partly controls, so only the endpoint is read.
     """
     seen: dict[str, Any] = {}
+    monkeypatch.setattr(mcp_delegation, "require_workload_caller", lambda caller: None)
 
     async def fake_resolve(request: Any, caller: Any, **kwargs: Any) -> Any:
         seen.update(kwargs)
@@ -180,3 +181,22 @@ def test_a_route_declares_the_grant_parameters_once() -> None:
     }
     assert {"person", "run", "agent"} <= declared_params
     assert not ({"person", "run", "agent"} & undeclared_params)
+
+
+@pytest.mark.asyncio
+async def test_non_delegated_discovery_requires_workload_authority(monkeypatch):
+    from fred_core.security.structure import KeycloakUser
+
+    caller = KeycloakUser(uid="person", username="person", roles=[])
+    monkeypatch.setattr(oidc, "decode_jwt", lambda token: caller)
+
+    async def principal(*args, **kwargs):
+        return caller
+
+    monkeypatch.setattr(oidc, "resolve_request_principal", principal)
+    with pytest.raises(HTTPException) as error:
+        await _drain(
+            mcp_delegation.mcp_mount_auth(request=_a_request(), token="personal-token")  # nosec B106 # synthetic fixture
+        )
+    assert error.value.status_code == 403
+    assert mcp_delegation.verified_grant() is None

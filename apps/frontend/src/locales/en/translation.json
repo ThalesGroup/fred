@@ -2431,6 +2431,8 @@
           "readSkillFile": "Reading instructions"
         },
         "mcp": {
+          "trustedService": "The destination comes from the configured Knowledge Flow service. Discovery uses the platform workload; document calls use the admitted turn. No static Fred token is required.",
+          "dependencyUnavailable": "A required service is unavailable or not authorized in this space.",
           "tabular": {
             "readQuery": "Reading data",
             "documents": "Listing data files",
@@ -5203,6 +5205,7 @@
       "allowHttp": "Approve an internal HTTP endpoint (without TLS)",
       "authentication": "Provider authentication",
       "auth": {
+        "knowledge_flow_tabular": "Knowledge Flow Tabular (Fred delegation)",
         "none": "No credential (public endpoint)",
         "bearer": "Technical Bearer credential",
         "api_key": "Technical API key header"

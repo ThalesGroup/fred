@@ -558,6 +558,7 @@ export type CapabilityCatalogEntry = {
   icon: string;
   id: string;
   kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
+  mcp_service?: "knowledge_flow_tabular" | null;
   model_capabilities?: string[];
   model_chat_capability_verified?: boolean;
   model_chat_profile_ids?: string[];

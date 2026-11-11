@@ -85,34 +85,24 @@ The existing OpenAI direct-template and creation-assistant execution surfaces
 explicitly refuse execution until they carry that context. See decision 5e and
 F25 for the unvalidated integration boundary.
 
-Fred's internal MCP catalog and its instructions are loaded from the installed package
-[`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md).
-The package contains one `mcp_catalog.yaml` with the Fred / Knowledge Flow servers.
-The app's `config/mcp_catalog_external.yaml` adds deployment-owned servers;
-its default `servers: []` leaves the packaged set unchanged. Set
-`applications.fred-agents.mcp_catalog_external.servers` in Helm values to add
-servers to a deployed Fred pod.
-Internal HTTP entries use `service: knowledge_flow` and a relative `path`; the
-runtime resolves their URL from `ai.knowledge_flow_url`, including its port and
-API prefix. External entries can still provide a concrete `url`.
-At startup, `FRED_MCP_CATALOG_FILE` takes precedence over an existing
-`config/mcp_catalog.yaml`; either replaces the entire packaged server list.
-Otherwise the pod discovers the installed package through its `fred.mcp_catalogs`
-entry point and adds the servers from `FRED_MCP_EXTERNAL_CATALOG_FILE` (default:
-`config/mcp_catalog_external.yaml`). Duplicate IDs fail startup.
-The packaged catalog references its tabular Markdown prompt with
-`prompt_file: pkg://fred_capability_mcp/prompts/tabular.md`.
-The Fred chart leaves the packaged catalog active by default while adding the
-external file's entries.
-The pod reads them at startup; the package is installed locally and in the image,
-so these references need no additional mount and work with a relocated catalog.
+Tabular business instructions and composer controls come from the installed
+[`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md)
+capability package. The connection is declared, discovered and published once
+in Control Plane. Compatible pods share its central offer and permission; the
+package's `mcp_service` is a dependency, not another native offer. Both pods and
+Control Plane must configure the same Knowledge Flow API base URL.
 
-Instructions can also stay inline in `agent_instructions`, or use a UTF-8 file
-path relative to the catalog directory (absolute paths also work). Declare only
-one source; missing files fail startup. Mount any custom filesystem sources and
-remove the file-reference key when supplying inline text. Existing MCP capability
-IDs, composer controls and prompt rendering are unchanged. `McpCapability` and
-the catalog loaders now live in `fred-sdk`; the package does not depend on the runtime.
+No Tabular or Prometheus technical catalog is packaged. Old KF pod catalog
+entries fail startup with an explicit diagnostic. Sync editable dependencies
+(`make dev`) after the entry-point change. Author defaults may retain the stable
+Tabular dependency ID; Control Plane resolves it to the deployment's offer.
+
+Independent/non-migrated pod MCP catalogs retain the SDK loader and explicit
+`FRED_MCP_CATALOG_FILE` / `FRED_MCP_EXTERNAL_CATALOG_FILE` configuration. Their
+instruction files and custom capability behavior remain supported. New managed
+external servers, including Streamable HTTP gateways, use the central MCP page;
+none receive Fred identity or document context. `document_access` remains native
+SDK/REST. See [the unexecuted two-pod reception](../control-plane/README.md#real-knowledge-flow-reception-two-pods).
 
 Minimal run example:
 

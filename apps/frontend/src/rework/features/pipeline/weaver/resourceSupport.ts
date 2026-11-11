@@ -162,13 +162,18 @@ export async function requireCapabilities(checks: WeaverChecks, runtimeId: strin
   const policies = await checks
     .dispatch(cp.spaceCapabilityPolicies.initiate({ spaceId: checks.spaceId }, FRESH))
     .unwrap();
-  const policy = policies.find((item) => item.runtime_id === runtimeId);
-  const missing = capabilityIds.filter(
-    (id) =>
+  const missing = capabilityIds.filter((id) => {
+    const policy = policies.find((item) =>
+      id.startsWith("managed-mcp:")
+        ? item.origin === "managed_mcp"
+        : item.source_id === runtimeId || item.runtime_id === runtimeId,
+    );
+    return (
       !policy?.reachable ||
       !policy.source_enabled ||
-      !policy.offers.some((offer) => offer.capability_id === id && offer.permitted && offer.advertised),
-  );
+      !policy.offers.some((offer) => offer.capability_id === id && offer.permitted && offer.advertised)
+    );
+  });
   if (missing.length) {
     const label = missing.includes("mcp-knowledge-flow-mcp-tabular")
       ? "tabular SQL"
@@ -198,6 +203,15 @@ export async function provisionDisposableAgent(
     ? available.find((item) => item.source_agent_id === templateKey)
     : (available.find((item) => item.source_agent_id === "fred.github.test_assistant") ?? available[0]);
   if (!template) throw new SkipStep("No available, instantiable agent template is authorized in this space.");
+  capabilityIds = capabilityIds?.map((id) => {
+    if (id !== "mcp-knowledge-flow-mcp-tabular") return id;
+    const entry = template.available_capabilities?.find(
+      (item) => item.id?.startsWith("managed-mcp:") && item.mcp_service === "knowledge_flow_tabular",
+    );
+    if (!entry || typeof entry.id !== "string")
+      throw new SkipStep("The required tabular SQL capability is not advertised and permitted in this space.");
+    return entry.id;
+  });
   if (capabilityIds?.length) await requireCapabilities(checks, template.source_runtime_id, capabilityIds);
   signal.throwIfAborted();
   return checks

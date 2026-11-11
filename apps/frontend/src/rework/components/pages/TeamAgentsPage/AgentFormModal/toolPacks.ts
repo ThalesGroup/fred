@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { CapabilityCatalogEntry } from "../../../../../slices/runtime/runtimeOpenApi";
+
 /** Simple-view packs map user-facing switches to the agent's capability selection.
  * The two document packs each turn on one `document_access` source.
  */
@@ -50,7 +52,7 @@ export interface ToolPackSection {
 }
 
 // --- Backend capability ids these packs map onto (verified against the runtime
-//     manifests + mcp_catalog.yaml). Named constants so a rename surfaces here
+//     manifests). Named constants so a rename surfaces here
 //     rather than in scattered string literals; also consumed by toolPackLogic. ---
 export const CAP_DOCUMENT_ACCESS = "document_access";
 export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
@@ -58,7 +60,7 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 // corpus targets and never the conversation's attachments, so only the Team
 // documents pack grants it.
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
-// CSV and Excel attachments expose SQL datasets through tabular tools.
+// Author dependency, resolved to the offered central ID before a pack is selected.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
@@ -169,3 +171,19 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
     ],
   },
 ];
+
+/** Resolve the business dependency using the trusted service descriptor, never its display name. */
+export function resolveToolPackSections(capabilities: readonly CapabilityCatalogEntry[]): ToolPackSection[] {
+  const tabular = capabilities.find(
+    (item) => item.id.startsWith("managed-mcp:") && item.mcp_service === "knowledge_flow_tabular",
+  );
+  const resolve = (id: string) => (id === CAP_TABULAR && tabular ? tabular.id : id);
+  return TOOL_PACK_SECTIONS.map((section) => ({
+    ...section,
+    packs: section.packs.map((pack) => ({
+      ...pack,
+      enablesCapabilityIds: pack.enablesCapabilityIds.map(resolve),
+      includes: pack.includes.map((item) => ({ ...item, capabilityId: resolve(item.capabilityId) })),
+    })),
+  }));
+}

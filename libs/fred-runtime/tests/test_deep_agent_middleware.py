@@ -385,6 +385,7 @@ class _PartialFilesystemBinder:
                 description=f"Filesystem operation {name}",
                 tool=SimpleNamespace(name=name),
                 mcp_server_id=None,
+                mcp_trusted_service=None,
             )
             for name in deep_mod._FILESYSTEM_TOOL_NAMES
             if name != "execute"

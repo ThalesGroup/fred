@@ -177,6 +177,13 @@ impl Directory {
         Ok(value)
     }
 
+    pub(crate) async fn refresh_rejected(&self, rejected: &str) {
+        let mut cached = self.token.lock().await;
+        if cached.as_ref().is_some_and(|t| t.value == rejected) {
+            *cached = None;
+        }
+    }
+
     pub(crate) async fn request(
         &self,
         method: Method,
@@ -199,10 +206,7 @@ impl Directory {
             if response.status() != StatusCode::UNAUTHORIZED || attempt == 1 {
                 return Ok(response);
             }
-            let mut cached = self.token.lock().await;
-            if cached.as_ref().is_some_and(|t| t.value == token) {
-                *cached = None;
-            }
+            self.refresh_rejected(&token).await;
         }
         unreachable!("two attempts always return")
     }

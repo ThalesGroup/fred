@@ -8,6 +8,7 @@ from uuid import UUID
 
 import httpx2
 import pytest
+from conftest import StaticWorkloadTokens
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_runtime.common import managed_mcp
 from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
@@ -400,3 +401,247 @@ async def test_listing_timeout_is_bounded_and_closes_client(monkeypatch):
     with pytest.raises(managed_mcp.ManagedMcpError, match="connection_unavailable"):
         await managed_mcp.connect([binding()], [])
     assert FakeClient.instances[0].closed == 1
+
+
+def delegated_provider(person="alice", run="run-a", agent="agent-a"):
+    from fred_core.security.backend_to_backend_auth import TokenLease
+    from fred_core.security.delegation import DelegationConfig
+    from fred_runtime.common.outbound_credentials import DelegationRuntime, RunRecord
+
+    class Tokens(StaticWorkloadTokens):
+        calls = 0
+        refreshes = 0
+
+        async def get_token_lease(self):
+            self.calls += 1
+            return TokenLease(
+                token="workload-new" if self.refreshes else "workload-old",
+                generation=self.refreshes,
+            )
+
+        async def refresh_rejected(self, lease):
+            self.refreshes += 1
+            return await self.get_token_lease()
+
+    tokens = Tokens()
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True), token_provider=tokens
+    )
+    runtime.records.admit(RunRecord(run_id=run, person_id=person, agent_id=agent))
+    return runtime.provider_for(run_id=run, agent_id=agent), tokens
+
+
+def test_trusted_service_requires_exact_locally_configured_destination():
+    trusted = binding(
+        auth={"kind": "knowledge_flow_tabular"},
+        url="https://kf.invalid/api/mcp/tabular",
+    )
+    for base in (
+        None,
+        "https://attacker.invalid/api",
+        "https://kf.invalid/other",
+        "https://kf.invalid/api?grant=forged",
+    ):
+        with pytest.raises(managed_mcp.ManagedMcpError, match="destination_mismatch"):
+            managed_mcp.validate_admission(
+                [trusted.capability_id],
+                [trusted],
+                compatible=True,
+                credentials=[],
+                knowledge_flow_url=base,
+            )
+    managed_mcp.validate_admission(
+        [trusted.capability_id],
+        [trusted],
+        compatible=True,
+        credentials=[],
+        knowledge_flow_url="https://kf.invalid/api/",
+    )
+    external = trusted.model_copy(
+        update={"configuration": binding(url=trusted.configuration.url).configuration}
+    )
+    assert managed_mcp.trusted_destination(external, "https://kf.invalid/api") is False
+    assert managed_mcp.credential_headers(external, []) == {}
+
+
+@pytest.mark.asyncio
+async def test_one_service_clients_keep_two_pod_turns_isolated_and_external_has_no_fred_context(
+    monkeypatch,
+):
+    from langchain_core.tools import StructuredTool
+
+    async def convert(tool, client):
+        async def call(**kwargs):
+            return "ok"
+
+        return StructuredTool(
+            name=tool.name,
+            description="Knowledge Flow Tabular",
+            args_schema={},
+            coroutine=call,
+            metadata={
+                "mcp_trusted_service": "knowledge_flow_tabular",
+                "mcp_service": "knowledge_flow",
+                "mcp_delegated": True,
+            },
+        )
+
+    monkeypatch.setattr(managed_mcp, "as_langchain_tool", convert)
+    admitted = binding(
+        auth={"kind": "knowledge_flow_tabular"},
+        url="https://kf.invalid/api/mcp/tabular",
+    )
+    providers = [
+        delegated_provider("alice", "run-a", "agent-pod-a"),
+        delegated_provider("bob", "run-b", "agent-pod-b"),
+    ]
+    result = await asyncio.gather(
+        *[
+            managed_mcp.connect(
+                [admitted],
+                [],
+                knowledge_flow_url="https://kf.invalid/api",
+                provider=provider,
+                document_context=lambda person=person: (
+                    '{"space_id":"' + person + '","attachment_ids":[]}'
+                ),
+            )
+            for (provider, _), person in zip(
+                providers, ("space-a", "space-b"), strict=True
+            )
+        ]
+    )
+    assert result[0][0] is not result[1][0]
+    seen = []
+
+    async def receive(request):
+        seen.append((str(request.url), dict(request.headers)))
+        return httpx2.Response(200)
+
+    for client in FakeClient.instances:
+        async with httpx2.AsyncClient(
+            auth=client.transport.auth, transport=httpx2.MockTransport(receive)
+        ) as http:
+            await http.post(client.transport.url, json={"method": "tools/call"})
+    assert "person=alice" in seen[0][0] and "agent=agent-pod-a" in seen[0][0]
+    assert "person=bob" in seen[1][0] and "agent=agent-pod-b" in seen[1][0]
+    assert "space-a" in seen[0][1]["x-fred-document-context"]
+    assert "space-b" in seen[1][1]["x-fred-document-context"]
+    trusted_metadata = result[0][0].metadata
+    assert trusted_metadata is not None
+    assert trusted_metadata["mcp_trusted_service"] == "knowledge_flow_tabular"
+
+    # A matching URL, display name or server annotation is never service identity.
+    external = binding(url=admitted.configuration.url).model_copy(
+        update={"display_name": "Knowledge Flow Tabular"}
+    )
+    external_tools = await managed_mcp.connect(
+        [external],
+        [],
+        knowledge_flow_url="https://kf.invalid/api",
+        provider=providers[0][0],
+        document_context=lambda: "private",
+    )
+    client = FakeClient.instances[-1]
+    assert client.transport.auth is None
+    assert "person=" not in str(client.transport.url)
+    external_metadata = external_tools[0].metadata
+    assert external_metadata is not None
+    assert external_metadata["mcp_trusted_service"] is None
+    assert external_metadata["mcp_service"] is None
+    assert external_metadata["mcp_delegated"] is False
+    assert all(tokens.calls == 1 for _, tokens in providers)  # per-request lease only
+
+
+@pytest.mark.asyncio
+async def test_trusted_auth_renews_without_readmission_and_refuses_destination_changes():
+    from fred_runtime.common.mcp_http_auth import MCPHTTPAuth
+    from fred_runtime.common.mcp_utils import _mcp_http_client_factory
+    from fred_runtime.runtime_support.authority import AuthorityLostError
+    from mcp.shared._httpx_utils import request_within_origin
+
+    provider, tokens = delegated_provider()
+    seen = []
+    endpoint = "https://kf.invalid/api/mcp/tabular?person=alice&run=run-a&agent=agent-a"
+    auth = MCPHTTPAuth(
+        provider, document_context=lambda: '{"attachment_ids":[]}', destination=endpoint
+    )
+
+    async def receive(request):
+        seen.append((str(request.url), request.headers.get("authorization")))
+        if len(seen) == 1:
+            return httpx2.Response(401)
+        return httpx2.Response(
+            307, headers={"Location": "https://external.invalid/mcp"}
+        )
+
+    client = _mcp_http_client_factory(auth=auth)
+    client._transport = httpx2.MockTransport(receive)
+    async with client:
+        with pytest.raises(httpx2.TooManyRedirects, match="redirect refused"):
+            await request_within_origin(
+                client, "POST", endpoint, json={"method": "tools/call"}
+            )
+        with pytest.raises(AuthorityLostError):
+            await client.post("https://external.invalid/mcp", json={})
+    assert seen == [
+        (endpoint, "Bearer workload-old"),
+        (endpoint, "Bearer workload-new"),
+    ]
+    assert tokens.refreshes == 1
+
+
+@pytest.mark.asyncio
+async def test_trusted_service_without_admitted_context_fails_before_connecting():
+    admitted = binding(
+        auth={"kind": "knowledge_flow_tabular"},
+        url="https://kf.invalid/api/mcp/tabular",
+    )
+    with pytest.raises(managed_mcp.ManagedMcpError, match="delegated_context_required"):
+        await managed_mcp.connect(
+            [admitted], [], knowledge_flow_url="https://kf.invalid/api"
+        )
+    assert FakeClient.instances == []
+
+
+@pytest.mark.asyncio
+async def test_trusted_calls_preserve_authority_stops_and_curated_sql_failures():
+    from fred_runtime.common.context_aware_tool import _build_tool_error_message
+    from fred_runtime.runtime_support.authority import AuthorityLostError
+
+    async def refused(**_):
+        raise RuntimeError("Tool access was refused.")
+
+    with pytest.raises(AuthorityLostError):
+        await managed_mcp._guard_call(refused, trusted_tool="query_tabular_documents")()
+
+    failure = RuntimeError(
+        'Error calling query_tabular_documents. Status code: 400. Response: {"detail":"Unknown column. Inspect the table schema."}'
+    )
+
+    async def invalid_query(**_):
+        raise failure
+
+    with pytest.raises(RuntimeError) as error:
+        await managed_mcp._guard_call(
+            invalid_query, trusted_tool="query_tabular_documents"
+        )()
+    assert error.value is failure
+    assert (
+        _build_tool_error_message(
+            error.value, None, tool_name="query_tabular_documents"
+        )
+        == "Error: Unknown column. Inspect the table schema."
+    )
+
+    async def transport_failure(**_):
+        raise RuntimeError(
+            "transport failed at https://kf.invalid/?person=private&run=private"
+        )
+
+    with pytest.raises(managed_mcp.ManagedMcpError) as error:
+        await managed_mcp._guard_call(
+            transport_failure, trusted_tool="query_tabular_documents"
+        )()
+    assert str(error.value) == "mcp_tool_unavailable"
+    assert error.value.__context__ is None

@@ -2983,6 +2983,7 @@ export type CapabilityFieldDescription = {
 };
 export type CapabilityExecutionModel = "react" | "graph";
 export type PodCapabilityKind = "tool";
+export type McpService = "knowledge_flow_tabular";
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
@@ -2990,6 +2991,7 @@ export type PodCapabilityDescriptor = {
   icon: string;
   id: string;
   kind?: PodCapabilityKind;
+  mcp_service?: McpService | null;
   name: string;
   public_version?: string | null;
   runtime_id?: string | null;
@@ -3191,6 +3193,9 @@ export type TeamSupervisionDetail = {
 export type McpAuthentication =
   | {
       kind: "none";
+    }
+  | {
+      kind: "knowledge_flow_tabular";
     }
   | {
       credential_binding: string;
@@ -3784,7 +3789,7 @@ export type RuntimeBinding = {
   subject_id: string;
   title?: TitleAdmission | null;
 };
-export type AgentTemplateStatus = "available";
+export type AgentTemplateStatus = "available" | "dependency_unavailable";
 export type AgentTemplateSummary = {
   /** Native and compatible managed offers, including configuration descriptors. */
   available_capabilities: {

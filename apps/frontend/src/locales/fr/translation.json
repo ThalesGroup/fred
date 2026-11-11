@@ -2431,6 +2431,8 @@
           "readSkillFile": "Consultation des consignes"
         },
         "mcp": {
+          "trustedService": "La destination provient du service Knowledge Flow configuré. La découverte utilise l’identité technique ; les appels documentaires utilisent le tour admis. Aucun jeton Fred statique n’est requis.",
+          "dependencyUnavailable": "Un service requis est indisponible ou non autorisé dans cet espace.",
           "tabular": {
             "readQuery": "Consultation des données",
             "documents": "Liste des fichiers de données",
@@ -5203,6 +5205,7 @@
       "allowHttp": "Approuver un endpoint HTTP interne (sans TLS)",
       "authentication": "Authentification fournisseur",
       "auth": {
+        "knowledge_flow_tabular": "Knowledge Flow Tabular (délégation Fred)",
         "none": "Sans credential (endpoint public)",
         "bearer": "Credential technique Bearer",
         "api_key": "En-tête de clé API technique"

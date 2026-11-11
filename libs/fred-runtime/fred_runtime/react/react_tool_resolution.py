@@ -133,6 +133,7 @@ class FredRuntimeToolSpec:
     # tools (never MCP-sourced). Lets the ReAct prompt group its tool listing
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
     mcp_server_id: str | None = None
+    mcp_trusted_service: str | None = None
 
 
 class ReActRuntimeToolResolver:
@@ -557,6 +558,9 @@ class ReActRuntimeToolResolver:
             invoke=_invoke,
             trace_span_name=RUNTIME_TOOL_SPAN_NAME,
             mcp_server_id=mcp_server_id,
+            mcp_trusted_service=metadata.get("mcp_trusted_service")
+            if isinstance(metadata, dict)
+            else None,
         )
 
     def _claim_runtime_name(

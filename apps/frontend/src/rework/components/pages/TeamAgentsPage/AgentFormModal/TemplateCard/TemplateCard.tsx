@@ -23,13 +23,22 @@ type TemplateCardProps = {
 };
 
 export function TemplateCard({ template, selected, onSelect }: TemplateCardProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const unavailable = template.status === "dependency_unavailable";
   const lang = i18n.language.split("-")[0];
   const description = template.description_by_lang?.[lang] ?? template.description;
   return (
-    <button type="button" className={styles.card} data-selected={selected} onClick={onSelect}>
+    <button
+      type="button"
+      className={styles.card}
+      data-selected={selected}
+      data-unavailable={unavailable}
+      disabled={unavailable}
+      onClick={onSelect}
+    >
       <span className={styles.name}>{template.display_name}</span>
       {description && <span className={styles.description}>{description}</span>}
+      {unavailable && <span>{t("rework.mcp.dependencyUnavailable")}</span>}
       <div className={styles.cardFooter}>
         {template.category && <span className={styles.category}>{template.category}</span>}
         <span className={styles.podLabel}>{template.source_runtime_id}</span>
