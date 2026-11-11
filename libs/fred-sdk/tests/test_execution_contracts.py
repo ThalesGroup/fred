@@ -435,6 +435,46 @@ def test_restart_still_needs_input() -> None:
         RuntimeExecuteRequest(agent_id="my-agent", interrupted_action="restart")
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"resume_payload": {"choice_id": "ok"}},
+        {"interrupted_action": "restart"},
+    ],
+)
+def test_pending_message_only_opens_an_ordinary_text_turn(extra: dict) -> None:
+    with pytest.raises(
+        ValidationError, match="pending_message_id requires an ordinary text turn"
+    ):
+        RuntimeExecuteRequest(
+            agent_instance_id="a",
+            session_id="s",
+            input="first update",
+            runtime_context=RuntimeContext(team_id="t"),
+            pending_message_id="m1",
+            **extra,
+        )
+    with pytest.raises(
+        ValidationError, match="pending_message_id requires an ordinary text turn"
+    ):
+        RuntimeExecuteRequest(
+            agent_instance_id="a",
+            input="first update",
+            runtime_context=RuntimeContext(team_id="t"),
+            pending_message_id="m1",
+        )
+    with pytest.raises(
+        ValidationError, match="pending_message_id requires an ordinary text turn"
+    ):
+        RuntimeExecuteRequest(
+            agent_id="test.graph",
+            session_id="s",
+            input="first update",
+            runtime_context=RuntimeContext(team_id="t"),
+            pending_message_id="m1",
+        )
+
+
 def test_execution_interrupted_event_round_trips() -> None:
     event = ExecutionInterruptedRuntimeEvent(
         request=HumanInputRequest(stage="execution_interrupted", title="Publish"),

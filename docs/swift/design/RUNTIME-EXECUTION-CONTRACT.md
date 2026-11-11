@@ -7222,23 +7222,37 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### Managed chat stream lifetime (2026-11-02)
+### Managed chat stream lifetime and in-thread updates (2026-11-06)
 
-Ordinary pending messages live per conversation in browser-tab memory and survive
-in-app navigation alongside a background generation. They resume ordinary FIFO
-sends only when that conversation is reopened and its generation and human-input
-holds are resolved. Stop, deletion, reload or a genuine stream interruption clears
-the matching list; there is no queue recovery API or delivery acknowledgement tied
-to history persistence. The existing SQL
-mailbox only coordinates temporary steering across replicas. Injected user
-messages are prefixed in model context as updated user instructions that may add
+Plain-text updates submitted during an active managed ReAct or Deep turn are
+stored directly in `session_history`, with a stable message ID and a fixed
+negative provisional rank. The browser shows them at the end of the thread with
+a clock until delivery; an HTTP acknowledgement does not change their displayed
+rank.
+The first managed turn's opening user message is persisted during admission, so
+the session has an agent instance identity before an update can be submitted.
+The submission and delivery paths require that same instance identity.
+At the next model boundary, after dispatched tool results, the runtime
+injects the updates and promotes each one to a canonical rank before the normal
+model call proceeds. The continuing agent may reason and use tools; it answers
+outstanding questions in its ordinary final response. Managed ReAct and Deep
+turns use synchronous checkpoint durability: the injected update is committed
+before its history row is promoted, so a failed promotion remains
+pending and a delivered update is already in the checkpoint. A competing exchange cannot
+claim a delivery already owned by another exchange. An update that misses the
+boundary remains pending for the next ordinary turn. Graph has no shared
+in-turn model boundary;
+its update starts the next ordinary turn and is promoted at a final answer or
+human-input pause. A Graph interruption can be continued or restarted while an
+update is pending; the update waits for the next ordinary turn.
+
+Injected updates are prefixed in model context as instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
 acknowledge and finish without further tool calls; the SSE delivery keeps the
 original text. This is model guidance; the Stop button cancels the stream.
-Cancellation completes generator teardown and stops lease renewal; expired steering rows are
-reclaimed every minute in bounded batches. The
+Cancellation completes generator teardown and stops lease renewal. The
 [managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
-defines the lifecycle and normal HITL behavior.
+defines the full lifecycle and normal HITL behavior.
 
 ### 8.119 Generated conversation title (2026-10-29)
 
@@ -7268,8 +7282,9 @@ The pod injects it on the validate-config save path. It resolves the model the s
 agent routes to by default (agent override, team default, catalogue default), keyed by
 the template agent id as on its turns. A known chat profile named by `profile_id`
 replaces it only when the team may use it. The port fails closed with
-`CapabilityModelUnavailableError` when no model is usable, or when `require_vision` is
-set and the resolved profile lacks `supports_vision`. The port holds no user token, so
+`CapabilityModelUnavailableError` when no model is usable, or when the legacy
+`require_vision` parameter is set. PPT template vision now runs in Knowledge Flow
+through preparation. The port holds no user token, so
 a background job started from the save may keep it.
 
 Routing on the save path: validate-config reads optional query parameters
@@ -7281,8 +7296,8 @@ re-reads them at most every 30 s, so a background job holding the port stops usi
 revoked model. A platform binding is never accepted on this user-reachable request, so the
 save path routes to catalogue profiles only.
 
-`ModelProfile.supports_vision` (default false) declares image input in
-`models_catalog.yaml`.
+The legacy `supports_vision` catalog property is tolerated during rollout but
+is not exposed by the runtime model catalog.
 
 Capability routers can depend on `fred_sdk.contracts.runtime.capability_team_authorizer`.
 The pod binds it before every capability route. `require_agent_editor(team_id)` returns
@@ -7318,9 +7333,8 @@ raising hook reports `pending` without detail, since an omitted capability reads
 ready. Control-plane maps the answers to the `capability_pending` suspension
 (`CONTROL-PLANE-PRODUCT-CONTRACT.md` §70).
 
-`GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of
-`profile_ids` declaring `supports_vision`, mirrored on
-`CapabilityCatalogEntry.model_vision_profile_ids`.
+`GET /agents/models-catalog` no longer exposes `vision_profile_ids` or the
+derived `CapabilityCatalogEntry.model_vision_profile_ids`.
 
 ### 8.122 Capability manager check and teamless model port on capability routes (2026-10-22)
 
@@ -7338,13 +7352,9 @@ returns 503. Without a team no usable-models restriction applies, so only routes
 `require_capability_manager()` should use it. `profile_id=None` resolves to the pod's
 default chat profile. A platform chat binding is not applied, as on the save path.
 
-`CapabilityModelPort.require_vision_profile(profile_id)` is a non-abstract method that
-raises `CapabilityModelUnavailableError` unless the profile is a vision chat profile
-the port may use; the SDK default refuses. With a team it follows the team's usable
-models; without one the model must hold the org `default_on` marker (open without
-ReBAC). This is the pod-side half of control-plane's team-free model list
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §71), minus pod coverage, which only
-control-plane sees. ppt_builder's `/platform*` writes return 422 on a refusal.
+`CapabilityModelPort.require_vision_profile` was removed. PPT platform
+preparation uses the configured Knowledge Flow vision service. The old
+`/platform*` pod routes are retained only for the migration rollback window.
 
 Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.
 

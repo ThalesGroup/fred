@@ -78,15 +78,18 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
 
 
-def _binding() -> BoundRuntimeContext:
+def _binding(
+    *, steering_enabled: bool = True, language: str | None = None
+) -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(),
+        runtime_context=RuntimeContext(language=language, user_id="user-1"),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
             actor="user-1",
             tenant="team-1",
             environment=PortableEnvironment.DEV,
+            baggage={"steering_enabled": "true"} if steering_enabled else {},
         ),
     )
 
@@ -127,6 +130,18 @@ def test_middleware_keeps_recovery_outside_model_observability() -> None:
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
     ]
+
+
+def test_steering_receives_user_identity() -> None:
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(language="fr"),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    assert isinstance(middleware[1], TurnSteeringMiddleware)
+    assert middleware[1]._user_id == "user-1"
 
 
 def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
@@ -172,6 +187,17 @@ def test_deep_parent_and_child_get_write_todos(child: bool) -> None:
     assert sum(isinstance(item, TurnSteeringMiddleware) for item in middleware) == (
         0 if child else 1
     )
+
+
+def test_deep_without_ranked_event_consumer_skips_steering() -> None:
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(steering_enabled=False),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    assert not any(isinstance(item, TurnSteeringMiddleware) for item in middleware)
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:

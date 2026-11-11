@@ -71,6 +71,14 @@ def test_local_content_store_delete_object_removes_the_file(tmp_path: Path) -> N
     assert not (tmp_path / "objects" / "users" / "u1" / "avatar.png").exists()
 
 
+def test_local_content_store_read_object_is_bounded(tmp_path: Path) -> None:
+    store = LocalContentStore(root_path=tmp_path)
+    store.put_object("a.bin", BytesIO(b"abcd"), content_type="application/octet-stream")
+    assert store.read_object("a.bin", max_bytes=4) == b"abcd"
+    with pytest.raises(ValueError, match="allowed size"):
+        store.read_object("a.bin", max_bytes=3)
+
+
 def test_local_content_store_delete_object_ignores_a_missing_file(
     tmp_path: Path,
 ) -> None:

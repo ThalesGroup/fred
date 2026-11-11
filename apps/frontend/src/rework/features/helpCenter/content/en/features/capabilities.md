@@ -148,11 +148,10 @@ the administrator** and the file name, see
 without one, the built-in Fred template. Uploading a template on the agent
 always takes over.
 
-**Use a vision model** — when a model that can read images is available, it
-looks at each template slide to name it and understand what it is for. You
-can choose which model does this, or keep the agent's own. Without such a
-model, the switch is locked and slides are named by rules, which works but
-names them less precisely.
+**Use a vision model** — Knowledge Flow's configured vision model looks at
+each template slide to name it and understand what it is for. When that model
+is unavailable, the switch is locked and slides are named by rules, which
+works but names them less precisely.
 
 **Enforce variety** — limits how many times the same slide comes back in a
 presentation. **By slide name** (the default): each template slide is used at

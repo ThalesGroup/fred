@@ -26,7 +26,6 @@ from fred_sdk.contracts.runtime import (
     CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
-    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     RuntimeServices,
     capability_platform_model,
@@ -56,9 +55,9 @@ def _request() -> Request:
     return Request({"type": "http", "method": "GET", "path": "/", "headers": []})
 
 
-def test_capability_model_is_optional_and_appended_last() -> None:
+def test_capability_model_is_optional_in_runtime_services() -> None:
     fields = [field.name for field in dataclasses.fields(RuntimeServices)]
-    assert fields[-1] == "capability_model"
+    assert "capability_model" in fields
     assert RuntimeServices().capability_model is None
 
 
@@ -70,11 +69,6 @@ def test_port_is_keyword_only_after_messages() -> None:
         port.ainvoke([HumanMessage(content="hi")], profile_id="p", require_vision=True)
     )
     assert reply.content == "1:p:True"
-
-
-def test_vision_profile_check_refuses_unless_overridden() -> None:
-    with pytest.raises(CapabilityModelUnavailableError):
-        asyncio.run(_EchoPort().require_vision_profile("chat.vision"))
 
 
 def test_team_authorizer_dependency_fails_closed_when_unbound() -> None:

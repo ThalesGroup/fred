@@ -376,6 +376,7 @@ chat_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
+vision_worker_client_id: agentic
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity

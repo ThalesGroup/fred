@@ -21,6 +21,7 @@ import httpx
 from fastapi import Request
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.sql import make_session_factory
+from fred_core.store.base_content_store import ContentStore
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
 
@@ -135,6 +136,7 @@ class ProductServiceDependencies:
     get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
         None
     )
+    get_content_store: Callable[[], ContentStore] | None = None
 
 
 def build_product_service_dependencies(
@@ -193,6 +195,7 @@ def build_product_service_dependencies(
         get_sql_session_factory=lambda: make_session_factory(
             container.get_pg_async_engine()
         ),
+        get_content_store=container.get_content_store,
     )
 
 

@@ -276,13 +276,14 @@ class AgentInstanceStore:
                 s.add(row)
                 # Flushed here so a caller-owned session still gets the typed error.
                 await s.flush()
+                created = _row_to_record(row)
         except IntegrityError as exc:
             if is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(
                     record.team_id, record.display_name
                 ) from exc
             raise
-        return await self.get(record.agent_instance_id)  # type: ignore[return-value]
+        return created
 
     async def count_all(self, session: AsyncSession | None = None) -> int:
         async with use_session(self._sessions, session) as s:
@@ -446,12 +447,13 @@ class AgentInstanceStore:
                     else []
                 )
                 await s.flush()
+                updated = _row_to_record(row)
         except IntegrityError as exc:
             if display_name is not None and is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(team_id, display_name) from exc
             raise
         emit_unpublished(removed, actor_uid=updated_by)
-        return await self.get(agent_instance_id)
+        return updated
 
     async def set_suspension(
         self,

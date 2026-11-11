@@ -215,8 +215,8 @@ model did not read.
 
 Upload the changed file and save the agent: the template is read again in
 full, and the agent stays unavailable meanwhile. Uploading the same file again
-keeps the previous reading. Switching the vision model on or off, or changing
-it, also reads the template again. Corrections made in **Review slides** are
+keeps the previous reading. Switching vision on or off also reads the template
+again. Corrections made in **Review slides** are
 kept only for slides still present; notes and shape names travel with the
 file.
 

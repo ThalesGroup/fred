@@ -27,7 +27,6 @@ export async function uploadPlatformTemplate(
   const form = new FormData();
   form.append("file", file);
   form.append("use_vision", String(vision.use_vision ?? true));
-  if (vision.vision_profile_id) form.append("vision_profile_id", vision.vision_profile_id);
 
   const response = await fetch(`${baseUrl}/platform/template`, {
     method: "PUT",

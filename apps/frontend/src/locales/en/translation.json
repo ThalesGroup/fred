@@ -400,14 +400,9 @@
         },
         "use_vision": {
           "title": "Use a vision model",
-          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
-          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
-        },
-        "labelling_model": {
-          "title": "Model that reads the slides",
-          "description": "Leave the agent's model to use the one it answers with.",
-          "agentDefault": "The agent's model",
-          "rereadOnSave": "Changing the model reads the template again when you save the agent."
+          "description": "Knowledge Flow's vision model reads each slide to name it and understand its purpose.",
+          "availability_error": "Vision availability could not be checked. Your saved choice is unchanged.",
+          "unavailable": "Knowledge Flow's vision model is unavailable; slides are labelled by rules."
         },
         "variety_check": {
           "title": "Enforce variety",
@@ -444,13 +439,16 @@
         "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
       },
       "analysis": {
-        "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
-        "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
+        "staged": "The template will be read once you save your {{agentsNicknameSingular}}. Your {{agentsNicknameSingular}} becomes available when that is done.",
+        "inProgress": "Reading the template… Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
-        "failed": "The template could not be read. The agent stays unavailable until it is; save the agent to read it again.",
-        "interrupted": "Reading the template was interrupted. The agent stays unavailable until you save it to read the template again.",
-        "outdated": "This template was read with an older version. The agent keeps using it; save the agent to read it again and benefit from the latest improvements.",
-        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done."
+        "failed": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until it is; save your {{agentsNicknameSingular}} to read it again.",
+        "failedRetry": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until the analysis succeeds.",
+        "retry": "Run the analysis again",
+        "retryError": "The analysis could not be started again.",
+        "interrupted": "Reading the template was interrupted. Your {{agentsNicknameSingular}} stays unavailable until you save it to read the template again.",
+        "outdated": "This template was read with an older version. Your {{agentsNicknameSingular}} keeps using it; save your {{agentsNicknameSingular}} to read it again and benefit from the latest improvements.",
+        "refreshing": "Reading the template again… Your {{agentsNicknameSingular}} keeps using the previous reading until it is done."
       },
       "review": {
         "title": "Template slides",
@@ -567,12 +565,12 @@
         }
       },
       "platform": {
-        "intro": "Agents without a template of their own build their presentations on this one.",
+        "intro": "This template is used by {{agentsNicknamePlural}} without a template of their own.",
         "loading": "Loading the platform template…",
         "loadError": "The platform template could not be loaded.",
         "unavailable": "Presentation settings are not available right now: the service that builds presentations cannot be reached.",
         "current": "Platform template: {{name}}",
-        "fredTemplate": "Fred template (built-in)",
+        "builtinTemplate": "{{siteDisplayName}} template (built-in)",
         "upload": "Upload a .pptx template",
         "replace": "Replace the template",
         "uploadAria": "Platform PowerPoint template file",
@@ -580,26 +578,24 @@
         "uploadError": "The template was not accepted.",
         "uploadFailed": "Something went wrong while sending the file. Try again in a moment.",
         "analysing": {
-          "keepCurrent": "Analysing {{name}}… Agents keep the current template until it ends.",
-          "keepFred": "Analysing {{name}}… Agents keep the Fred template until it ends."
+          "keepCurrent": "Analysing {{name}}… The current template stays in use by {{agentsNicknamePlural}} until this finishes.",
+          "keepBuiltin": "Analysing {{name}}… The {{siteDisplayName}} template stays in use by {{agentsNicknamePlural}} until this finishes."
         },
         "failed": {
-          "keepCurrent": "{{name}} could not be read. Agents keep the current template; run the analysis again or upload another file.",
-          "keepFred": "{{name}} could not be read. Agents keep the Fred template; run the analysis again or upload another file."
+          "keepCurrent": "{{name}} could not be read. The current template stays in use by {{agentsNicknamePlural}}; run the analysis again or upload another file.",
+          "keepBuiltin": "{{name}} could not be read. The {{siteDisplayName}} template stays in use by {{agentsNicknamePlural}}; run the analysis again or upload another file."
         },
-        "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
-        "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
-        "defaultModel": "The platform's default AI model",
-        "visionRereads": "A new model is used the next time the template is read.",
+        "refreshing": "Reading the template again… The previous reading stays in use by {{agentsNicknamePlural}} until this finishes.",
+        "outdated": "This template was read by an older version. It remains in use by {{agentsNicknamePlural}}; run the analysis again to get the latest improvements.",
         "rerun": "Run the analysis again",
         "rerunStarted": "Analysis started again.",
         "rerunError": "The analysis could not be started again.",
-        "reset": "Reset to the Fred template",
-        "resetDone": "The Fred template is in use again.",
+        "reset": "Reset to the {{siteDisplayName}} template",
+        "resetDone": "The {{siteDisplayName}} template is in use again.",
         "resetError": "The template could not be reset.",
         "resetConfirm": {
-          "title": "Go back to the Fred template?",
-          "message": "The platform template and all your slide edits, including those of the Fred template, will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "title": "Go back to the {{siteDisplayName}} template?",
+          "message": "The platform template and all your slide edits, including those of the {{siteDisplayName}} template, will be deleted. After the reset, {{agentsNicknamePlural}} without a template of their own will use the {{siteDisplayName}} template.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },
@@ -644,17 +640,12 @@
       "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
-    "pendingMessages": {
-      "label": "Queued",
-      "send": "Send",
-      "actions": "Message actions",
-      "edit": "Edit",
-      "remove": "Remove",
-      "offered": "Sending...",
-      "retry": "Send again",
-      "retryWarning": "Check the conversation first. This may send a duplicate message.",
-      "textOnly": "Only plain text can wait during an active turn",
-      "forceUnavailable": "Could not send into the active turn. The message is still pending."
+    "steering": {
+      "pending": "Waiting for the agent",
+      "retry": "Retry pending message",
+      "textOnly": "Only plain text can be sent during an active turn",
+      "unavailable": "Could not send this message. Please try again.",
+      "waiting": "Your previous message is starting its turn. Please wait."
     },
     "newConversation": "New conversation with this agent",
     "hideNavPanel": "Hide navigation panel",

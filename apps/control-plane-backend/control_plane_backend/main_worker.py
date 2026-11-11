@@ -20,6 +20,7 @@ import logging
 from fred_core import build_log_store, log_setup
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.scheduler import SchedulerBackend
+from fred_core.sql import make_session_factory
 
 from control_plane_backend.app.container import (
     build_application_container,
@@ -84,6 +85,7 @@ async def main() -> None:
         await run_worker(
             configuration.scheduler.temporal,
             build_lifecycle_action_dependencies(container),
+            make_session_factory(container.get_pg_async_engine()),
         )
     finally:
         await gc_diagnostics.stop()

@@ -381,6 +381,27 @@ def test_write_turn_history_stores_the_turn_attachments_next_to_skills() -> None
     ]
 
 
+def test_write_turn_history_does_not_duplicate_a_pending_steered_user_row() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=4)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="Follow-up",
+            pending_message_id="m1",
+            attachments=[{"attachment_id": "a-1", "name": "brief.pdf"}],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert all(message.role != Role.user for message in messages)
+
+
 def test_write_turn_history_skips_save_when_no_content() -> None:
     """
     _write_turn_history must not call save() when there is no request message
@@ -770,7 +791,7 @@ def test_write_turn_history_persists_reasoning_blocks() -> None:
     assert thought.rank < tool_call_rank
 
 
-def test_write_turn_history_places_steering_after_tool_results() -> None:
+def test_write_turn_history_reserves_directly_persisted_steering_rows() -> None:
     from fred_core.history.history_schema import Role
 
     store = AsyncMock()
@@ -804,11 +825,9 @@ def test_write_turn_history_places_steering_after_tool_results() -> None:
         Role.user,
         Role.assistant,
         Role.tool,
-        Role.user,
         Role.assistant,
     ]
-    assert [message.rank for message in messages] == [0, 1, 2, 3, 4]
-    assert messages[3].parts[0].text == "new direction"
+    assert [message.rank for message in messages] == [0, 1, 2, 4]
 
 
 def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:

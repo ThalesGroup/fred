@@ -41,10 +41,13 @@
   flex-direction: column;
   /* No gap: the rows read as one list. Each tile keeps its own padding and
    * min-height, so they stay distinct without space between them — and their
-   * hover and selected backgrounds only ever land on one row at a time. */
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
+   * hover and selected backgrounds only ever land on one row at a time.
+   * No right padding: the reserved scrollbar gutter (thin = 8px) takes its
+   * place, so the scrollbar sits there instead of narrowing the rows. */
+  padding: 0 0 var(--spacing-xs) var(--spacing-xs);
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .agentGroup {

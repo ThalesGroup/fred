@@ -14,7 +14,7 @@
 
 // Admin drawer for the platform default template. A replacement is analysed while
 // the current one stays in use; only capability managers see the write actions.
-// Without a platform template, the manager reviews and corrects the Fred template.
+// Without a platform template, the manager reviews and corrects the built-in template.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 import { normalizeApiError } from "../../../core/errors/normalizeApiError";
@@ -42,11 +43,11 @@ import {
 } from "./api/pptBuilderCapabilityOpenApi";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
-import { effectiveInventory, LABELLING_MODEL_KEY, summarize, upsertOverride, USE_VISION_KEY } from "./types";
+import { effectiveInventory, summarize, upsertOverride, USE_VISION_KEY } from "./types";
 import type { PatternOverride } from "./types";
 import { TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { uploadPlatformTemplate } from "./uploadPlatformTemplate";
-import { usePlatformVisionProfiles } from "./useVisionAvailability";
+import { useVisionAvailability } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
 
 const POLL_MS = 3000;
@@ -57,6 +58,7 @@ const inProgress = (analysis: AnalysisStatusResponse | null | undefined) =>
 
 export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelProps) {
   const { t } = useTranslation();
+  const { siteDisplayName, agentsNicknamePlural } = useFrontendProperties();
   const { showSuccess, showError } = useToast();
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
@@ -86,18 +88,16 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const [visionDraft, setVisionDraft] = useState<Record<string, unknown> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const visionProfiles = usePlatformVisionProfiles(!canManage);
+  const vision = useVisionAvailability(!canManage);
   const visionValues = visionDraft ?? {
     [USE_VISION_KEY]: platform?.use_vision ?? true,
-    [LABELLING_MODEL_KEY]: platform?.vision_profile_id ?? null,
   };
   const visionChoice = {
-    use_vision: visionValues[USE_VISION_KEY] !== false,
-    vision_profile_id: (visionValues[LABELLING_MODEL_KEY] as string | null) ?? null,
+    use_vision: vision.available !== false && visionValues[USE_VISION_KEY] !== false,
   };
 
   const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];
-  // The overrides edit the template in effect: the platform one, else the Fred template.
+  // The overrides edit the template in effect: the platform one, else the built-in template.
   const inventory = current ? (current.inventory ?? null) : (builtin?.inventory ?? null);
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, draft ?? savedOverrides) : null),
@@ -139,7 +139,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
     setConfirmReset(false);
     try {
       await resetTemplate().unwrap();
-      showSuccess({ summary: t(`${K}.resetDone`) });
+      showSuccess({ summary: t(`${K}.resetDone`, { siteDisplayName }) });
       setVisionDraft(null);
       void query.refetch();
     } catch (error) {
@@ -187,12 +187,16 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 
   return (
     <div className={styles.root}>
-      <p className={styles.hint}>{t(`${K}.intro`)}</p>
+      <p className={styles.hint}>{t(`${K}.intro`, { agentsNicknamePlural })}</p>
 
       <div className={`${styles.settingCard} ${styles.stacked}`}>
         <div className={styles.uploadRow}>
           <Chip
-            label={current ? t(`${K}.current`, { name: platform.template_filename ?? "" }) : t(`${K}.fredTemplate`)}
+            label={
+              current
+                ? t(`${K}.current`, { name: platform.template_filename ?? "" })
+                : t(`${K}.builtinTemplate`, { siteDisplayName })
+            }
             leading={<Icon category="outlined" type={current ? "slideshow" : "palette"} />}
           />
           {canManage && (
@@ -223,7 +227,12 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
           )}
         </div>
 
-        <PlatformStatus platform={platform} uploading={uploading} />
+        <PlatformStatus
+          platform={platform}
+          uploading={uploading}
+          siteDisplayName={siteDisplayName}
+          agentsNicknamePlural={agentsNicknamePlural}
+        />
 
         {summary && (
           <div className={styles.summaryRow}>
@@ -263,9 +272,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
             disabled={busy}
             configValues={visionValues}
             onConfigChange={(key, value) => setVisionDraft({ ...visionValues, [key]: value })}
-            vision={{ available: true, visionProfiles }}
-            defaultModelLabel={t(`${K}.defaultModel`)}
-            changeHint={t(`${K}.visionRereads`)}
+            vision={vision}
           />
           {(hasTemplate || savedOverrides.length > 0) && (
             <div className={styles.uploadRow}>
@@ -288,7 +295,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
                 disabled={busy}
                 onClick={() => setConfirmReset(true)}
               >
-                {t(`${K}.reset`)}
+                {t(`${K}.reset`, { siteDisplayName })}
               </Button>
             </div>
           )}
@@ -308,8 +315,8 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 
       <ConfirmationDialog
         open={confirmReset}
-        title={t(`${K}.resetConfirm.title`)}
-        message={t(`${K}.resetConfirm.message`)}
+        title={t(`${K}.resetConfirm.title`, { siteDisplayName })}
+        message={t(`${K}.resetConfirm.message`, { siteDisplayName, agentsNicknamePlural })}
         confirmLabel={t(`${K}.resetConfirm.confirm`)}
         cancelLabel={t(`${K}.resetConfirm.cancel`)}
         criticalAction
@@ -321,24 +328,34 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 }
 
 /** What happens to the platform template next; a replacement never stops the current one. */
-export function PlatformStatus({ platform, uploading }: { platform: PlatformTemplateResponse; uploading: boolean }) {
+export function PlatformStatus({
+  platform,
+  uploading,
+  siteDisplayName,
+  agentsNicknamePlural,
+}: {
+  platform: PlatformTemplateResponse;
+  uploading: boolean;
+  siteDisplayName: string;
+  agentsNicknamePlural: string;
+}) {
   const { t } = useTranslation();
   const current = platform.analysis ?? null;
   const replacement = platform.replacement ?? null;
-  const keeps = current ? "keepCurrent" : "keepFred";
+  const keeps = current ? "keepCurrent" : "keepBuiltin";
   const name = platform.replacement_filename ?? "";
 
   if (uploading || inProgress(replacement)) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name })}
+        <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name, siteDisplayName, agentsNicknamePlural })}
       </p>
     );
   }
   if (replacement) {
     return (
       <div className={styles.failure} role="alert">
-        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name })}</p>
+        <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name, siteDisplayName, agentsNicknamePlural })}</p>
         {replacement.error && <p className={styles.error}>{replacement.error}</p>}
       </div>
     );
@@ -346,10 +363,11 @@ export function PlatformStatus({ platform, uploading }: { platform: PlatformTemp
   if (current?.refreshing) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.refreshing`)}
+        <Spinner size={16} /> {t(`${K}.refreshing`, { agentsNicknamePlural })}
       </p>
     );
   }
-  if (current && !current.current) return <p className={styles.status}>{t(`${K}.outdated`)}</p>;
+  if (current && !current.current)
+    return <p className={styles.status}>{t(`${K}.outdated`, { agentsNicknamePlural })}</p>;
   return null;
 }

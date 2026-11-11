@@ -60,6 +60,9 @@ from control_plane_backend.bootstrap.api import (
 )
 from control_plane_backend.bootstrap.api import router as bootstrap_router
 from control_plane_backend.capabilities.api import router as capabilities_router
+from control_plane_backend.capability_preparations.api import (
+    router as capability_preparations_router,
+)
 from control_plane_backend.config.loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -454,6 +457,7 @@ def create_app() -> FastAPI:
     router.include_router(teams_router)
     router.include_router(applications_router)
     router.include_router(product_router)
+    router.include_router(capability_preparations_router)
     router.include_router(bootstrap_router)
     router.include_router(capabilities_router)
     router.include_router(model_discovery_router)

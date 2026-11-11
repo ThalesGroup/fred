@@ -80,6 +80,7 @@ from control_plane_backend.product import service as product_service
 from control_plane_backend.product.agent_copy import (
     CopySource,
     TeamAccess,
+    _source_preparation_assets,
     copy_agent_instance,
     copy_targets,
     destination_team_ids,
@@ -326,6 +327,36 @@ async def _build_snapshot(
     selected = await effective_capability_ids(record, template, deps)
     entries = {entry.id: entry for entry in template.available_capabilities}
     base_url = runtime_base_url(record, deps)
+    runtime_source = next(
+        (
+            item
+            for item in deps.configuration.platform.runtime_catalog_sources
+            if item.runtime_id == record.source_runtime_id and item.enabled
+        ),
+        None,
+    )
+    preparation_ids = (
+        [
+            cap_id
+            for cap_id in selected
+            if entries.get(cap_id) is not None
+            and entries[cap_id].preparation is not None
+        ]
+        if runtime_source and runtime_source.preparation_enabled
+        else []
+    )
+    try:
+        preparation_assets = (
+            await _source_preparation_assets(record, preparation_ids, deps)
+            if preparation_ids
+            else {}
+        )
+    except EnrollmentError as exc:
+        raise MarketplaceError(
+            "Capability preparation assets are unavailable for publication.",
+            http_status=503,
+            code="marketplace_capability_not_exportable",
+        ) from exc
 
     async def export(capability_id: str) -> CapabilityConfigExportResult:
         envelope = record.tuning.capability_config.get(capability_id) or {}
@@ -337,6 +368,7 @@ async def _build_snapshot(
                 },
                 "team_id": str(record.team_id),
                 "agent_instance_id": record.agent_instance_id,
+                "preparation_assets": preparation_assets.get(capability_id),
             }
         )
         return await _export_capability(

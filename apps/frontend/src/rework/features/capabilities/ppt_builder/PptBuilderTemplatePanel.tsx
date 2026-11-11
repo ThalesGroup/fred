@@ -24,6 +24,7 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { helpLangFor } from "@rework/features/helpCenter/manifest";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { AdvancedSettingsSection } from "../AdvancedSettingsSection";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderPlanSettings } from "./PptBuilderPlanSettings";
@@ -178,7 +179,6 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           configValues={configValues}
           onConfigChange={onConfigChange}
           vision={vision}
-          changeHint={t("capability.ppt_builder.fields.labelling_model.rereadOnSave")}
         />
         <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
       </AdvancedSettingsSection>
@@ -215,9 +215,11 @@ export function TemplateGuideLink() {
 /** The line under the upload row: what happens to the template next. */
 export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { phase } = analysis;
 
-  if (phase === "staged") return <p className={styles.status}>{t("capability.ppt_builder.analysis.staged")}</p>;
+  if (phase === "staged")
+    return <p className={styles.status}>{t("capability.ppt_builder.analysis.staged", { agentsNicknameSingular })}</p>;
   if (isInProgress(phase) || (phase === "unknown" && analysis.statusLoading) || analysis.refreshing) {
     return (
       <p className={styles.status} role="status">
@@ -226,6 +228,7 @@ export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
           analysis.refreshing
             ? "capability.ppt_builder.analysis.refreshing"
             : "capability.ppt_builder.analysis.inProgress",
+          { agentsNicknameSingular },
         )}
       </p>
     );
@@ -236,14 +239,29 @@ export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
 
   const message =
     phase === "failed"
-      ? t("capability.ppt_builder.analysis.failed")
+      ? t(analysis.retry ? "capability.ppt_builder.analysis.failedRetry" : "capability.ppt_builder.analysis.failed", {
+          agentsNicknameSingular,
+        })
       : phase === "interrupted"
-        ? t("capability.ppt_builder.analysis.interrupted")
-        : t("capability.ppt_builder.analysis.outdated");
+        ? t("capability.ppt_builder.analysis.interrupted", { agentsNicknameSingular })
+        : t("capability.ppt_builder.analysis.outdated", { agentsNicknameSingular });
   return (
     <div className={styles.failure} role={phase === "succeeded" ? undefined : "alert"}>
       <p className={phase === "succeeded" ? styles.status : styles.error}>{message}</p>
       {analysis.error && <p className={styles.error}>{analysis.error}</p>}
+      {analysis.retry && (
+        <Button
+          type="button"
+          color="primary"
+          variant="outlined"
+          size="small"
+          disabled={analysis.retrying}
+          onClick={analysis.retry}
+        >
+          {t("capability.ppt_builder.analysis.retry")}
+        </Button>
+      )}
+      {analysis.retryFailed && <p className={styles.error}>{t("capability.ppt_builder.analysis.retryError")}</p>}
     </div>
   );
 }

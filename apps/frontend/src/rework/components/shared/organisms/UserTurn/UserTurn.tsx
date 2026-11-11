@@ -20,12 +20,15 @@ import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
 import type { CommandDescriptor, SkillInvocation, TurnAttachment } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
   text: string;
+  steeringState?: "pending";
+  onRetryPending?: () => void;
   /** Anchor for the outline rail: its marks scroll to this node, and the
    *  scroll-spy reads its position to say which turn is being read. */
   turnId?: string;
@@ -51,6 +54,8 @@ interface UserTurnProps {
 // Memoized alongside AssistantTurn — see #2221.
 export const UserTurn = memo(function UserTurn({
   text,
+  steeringState,
+  onRetryPending,
   turnId,
   onEdit,
   command,
@@ -123,6 +128,21 @@ export const UserTurn = memo(function UserTurn({
         onOpenCommand={command && onOpenCommand ? openCommand : undefined}
         attachments={attachments}
       />
+      {steeringState === "pending" && onRetryPending ? (
+        <button
+          type="button"
+          className={styles.delivery}
+          onClick={onRetryPending}
+          aria-label={t("chatbot.steering.retry")}
+          title={t("chatbot.steering.retry")}
+        >
+          <Icon category="outlined" type="schedule" />
+        </button>
+      ) : steeringState === "pending" ? (
+        <span className={styles.delivery} role="status" aria-label={t("chatbot.steering.pending")}>
+          <Icon category="outlined" type="schedule" />
+        </span>
+      ) : null}
     </div>
   );
 });

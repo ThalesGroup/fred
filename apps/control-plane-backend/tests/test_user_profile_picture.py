@@ -80,6 +80,12 @@ class _FakeContentStore:
     def put_object(self, key: str, stream, *, content_type: str) -> None:
         self.objects[key] = stream.read()
 
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        value = self.objects[key]
+        if len(value) > max_bytes:
+            raise ValueError("Object exceeds the requested size")
+        return value
+
     def delete_object(self, key: str) -> None:
         if self.fail_delete:
             raise PermissionError("AccessDenied")
