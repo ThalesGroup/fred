@@ -142,7 +142,7 @@ fn conflict() -> AppError {
     AppError::Conflict("MCP connection changed; refresh before continuing.".into())
 }
 
-#[utoipa::path(get, path="/platform/mcp-connections", responses((status=200, body=[McpConnectionView]), (status=403, body=crate::error::ErrorBody)))]
+#[utoipa::path(get, path="/platform/mcp-connections", responses((status=200, body=[McpConnectionView]), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody)))]
 async fn mcp_connections(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -160,7 +160,7 @@ pub struct McpCredentialReference {
     pub url: String,
     pub available: bool,
 }
-#[utoipa::path(get, path="/platform/mcp-credentials", responses((status=200, body=[McpCredentialReference]), (status=403, body=crate::error::ErrorBody)))]
+#[utoipa::path(get, path="/platform/mcp-credentials", responses((status=200, body=[McpCredentialReference]), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody)))]
 async fn mcp_credentials(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -179,7 +179,7 @@ async fn mcp_credentials(
     ))
 }
 
-#[utoipa::path(post, path="/platform/mcp-connections", request_body=CreateMcpConnection, responses((status=201, body=McpConnectionView), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(post, path="/platform/mcp-connections", request_body=CreateMcpConnection, responses((status=201, body=McpConnectionView), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn create_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -224,7 +224,7 @@ async fn create_mcp_connection(
     Ok((StatusCode::CREATED, Json(view(&s, c).await?)))
 }
 
-#[utoipa::path(put, path="/platform/mcp-connections/{id}", params(("id"=Uuid,Path)), request_body=UpdateMcpConnection, responses((status=200, body=McpConnectionView), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(put, path="/platform/mcp-connections/{id}", params(("id"=Uuid,Path)), request_body=UpdateMcpConnection, responses((status=200, body=McpConnectionView), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn update_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -276,7 +276,7 @@ async fn update_mcp_connection(
     Ok(Json(view(&s, c).await?))
 }
 
-#[utoipa::path(post, path="/platform/mcp-connections/{id}/test", params(("id"=Uuid,Path)), request_body=McpRevision, responses((status=200, body=McpConnectionView), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody)))]
+#[utoipa::path(post, path="/platform/mcp-connections/{id}/test", params(("id"=Uuid,Path)), request_body=McpRevision, responses((status=200, body=McpConnectionView), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody)))]
 async fn test_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -328,7 +328,7 @@ async fn test_mcp_connection(
     Ok(Json(view(&s, c).await?))
 }
 
-#[utoipa::path(post, path="/platform/mcp-connections/{id}/publish", params(("id"=Uuid,Path)), request_body=McpPublication, responses((status=200, body=McpConnectionView), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody)))]
+#[utoipa::path(post, path="/platform/mcp-connections/{id}/publish", params(("id"=Uuid,Path)), request_body=McpPublication, responses((status=200, body=McpConnectionView), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody)))]
 async fn publish_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
