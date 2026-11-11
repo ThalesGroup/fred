@@ -30,11 +30,16 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
+from fred_sdk.contracts.services import FredService
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
-from fred_runtime.common.mcp_utils import MCP_DELEGATED_METADATA_KEY
+from fred_runtime.common.kf_base_client import reported_failure
+from fred_runtime.common.mcp_utils import (
+    MCP_DELEGATED_METADATA_KEY,
+    MCP_SERVICE_METADATA_KEY,
+)
 from fred_runtime.common.structures import AgentSettingsLike
 from fred_runtime.common.token_expiry import (
     is_expired_httpx_status_error,
@@ -70,7 +75,8 @@ def _build_tool_error_message(
     if inner is None:
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
         if parsed is not None and tool_name == _QUERY_TABULAR_DOCUMENTS_TOOL_NAME:
-            status_code, detail = parsed
+            status_code, body = parsed
+            detail = _envelope_detail(body)
             if status_code == 400 and detail:
                 return scrub_grant_text(f"Error: {detail}")
         return scrub_grant_text(f"Error: {exc}")
@@ -108,11 +114,12 @@ def _http_error_detail(inner: httpx.HTTPStatusError | httpx2.HTTPStatusError) ->
 
 def _parse_fastapi_mcp_http_error(
     exc: BaseException, *, tool_name: str | None
-) -> tuple[int, str | None] | None:
+) -> tuple[int, dict[str, Any]] | None:
     """Read the known tool-specific FastApiMCP and FastMCP HTTP envelopes.
 
-    Only the status is used for generic failures. Dynamic detail remains
-    restricted to Knowledge Flow's already redacted SQL 400 contract.
+    Only the status, and Knowledge Flow's classified failure, are used for
+    generic failures. Dynamic detail remains restricted to Knowledge Flow's
+    already redacted SQL 400 contract.
     """
     if not tool_name:
         return None
@@ -145,8 +152,37 @@ def _parse_fastapi_mcp_http_error(
         return None
     if not isinstance(body, dict):
         return None
+    return status_code, body
+
+
+def _envelope_detail(body: dict[str, Any]) -> str | None:
     detail = body.get("detail")
-    return status_code, detail if isinstance(detail, str) and detail else None
+    return detail if isinstance(detail, str) and detail else None
+
+
+def _tool_failure(
+    exc: BaseException,
+    inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
+    *,
+    tool_name: str,
+    service: object,
+) -> ToolFailure:
+    """The failure of one MCP call, from its HTTP answer or its error envelope."""
+    status: int | None = None
+    body: object = None
+    if inner is not None and inner.response is not None:
+        status = inner.response.status_code
+        try:
+            body = inner.response.json()
+        except (ValueError, httpx.ResponseNotRead, httpx2.ResponseNotRead):
+            body = None
+    else:
+        parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
+        if parsed is not None:
+            status, body = parsed
+    return reported_failure(
+        service if isinstance(service, FredService) else None, status, body
+    )
 
 
 def _build_tool_error_artifact(
@@ -154,6 +190,8 @@ def _build_tool_error_artifact(
     kwargs: dict[str, Any],
     exc: BaseException,
     inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
+    *,
+    service: object = None,
 ) -> ToolInvocationResult:
     """Return Fred's trusted failure signal for one caught MCP exception.
 
@@ -180,7 +218,7 @@ def _build_tool_error_artifact(
     elif is_query_tabular_documents:
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
         if parsed is not None and parsed[0] == 400:
-            detail = parsed[1]
+            detail = _envelope_detail(parsed[1])
 
     if detail:
         return ToolInvocationResult(
@@ -194,10 +232,7 @@ def _build_tool_error_artifact(
             ),
         )
 
-    status = inner.response.status_code if inner is not None else None
-    if status is None:
-        parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
-        status = parsed[0] if parsed is not None else None
+    failure = _tool_failure(exc, inner, tool_name=tool_name, service=service)
     explanations = {
         400: "INVALID_ARGUMENTS: The tool rejected its arguments. Check the tool schema before correcting the request.",
         401: "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
@@ -210,10 +245,12 @@ def _build_tool_error_artifact(
         500: "SERVICE_ERROR: The service could not complete this operation (HTTP 500). No further safe diagnostic is available.",
     }
     # Only Fred-owned text crosses this boundary outside the curated SQL case.
-    explanation = explanations.get(status) if status is not None else None
+    explanation = failure.platform_explanation() or (
+        explanations.get(failure.status) if failure.status is not None else None
+    )
     return ToolInvocationResult(
         tool_ref=tool_name,
-        failure=ToolFailure.from_http_status(status),
+        failure=failure,
         blocks=(
             ToolContentBlock(
                 kind=ToolContentKind.TEXT,
@@ -485,6 +522,32 @@ class ContextAwareTool(BaseTool):
             )
         return result
 
+    def _tool_error(
+        self,
+        exc: BaseException,
+        inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        """The tool result of one caught failure, in this tool's response format."""
+        artifact = _build_tool_error_artifact(
+            self.name,
+            kwargs,
+            exc,
+            inner,
+            service=(self.base_tool.metadata or {}).get(MCP_SERVICE_METADATA_KEY),
+        )
+        explanation = (
+            artifact.failure.platform_explanation() if artifact.failure else None
+        )
+        msg = (
+            f"Error: {explanation}"
+            if explanation
+            else _build_tool_error_message(exc, inner, tool_name=self.name)
+        )
+        if getattr(self, "response_format", None) == "content_and_artifact":
+            return msg, artifact
+        return msg
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing.
 
@@ -520,10 +583,7 @@ class ContextAwareTool(BaseTool):
 
             # CRITICAL: Return error as text to preserve chat history integrity.
             # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
-            msg = _build_tool_error_message(e, inner, tool_name=self.name)
-            if getattr(self, "response_format", None) == "content_and_artifact":
-                return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
-            return msg
+            return self._tool_error(e, inner, kwargs)
         else:
             return self._normalize_result(result)
 
@@ -560,9 +620,6 @@ class ContextAwareTool(BaseTool):
                 logger.exception("[%s] Tool execution failed (captured)", self.name)
 
             # CRITICAL: Return error as text to preserve chat history integrity.
-            msg = _build_tool_error_message(e, inner, tool_name=self.name)
-            if getattr(self, "response_format", None) == "content_and_artifact":
-                return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
-            return msg
+            return self._tool_error(e, inner, kwargs)
         else:
             return self._normalize_result(result)

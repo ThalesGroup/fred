@@ -134,6 +134,10 @@ class ToolExecution:
                             "outcome": outcome,
                             "failure_code": failure.code.value,
                             "failure_status": failure.status,
+                            "failure_origin": failure.origin.value
+                            if failure.origin
+                            else None,
+                            "failure_setting": failure.setting,
                             "duration_ms": duration_ms,
                         },
                     )

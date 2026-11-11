@@ -27,11 +27,14 @@ const clipboard = vi.hoisted(() => vi.fn());
 vi.mock("../../../../../utils/clipboardUtils", () => ({ writeRichClipboard: clipboard }));
 vi.mock("../traceDrawerContext", () => ({ useTraceDrawer: () => ({ openTrace: () => undefined }) }));
 
-// Real English catalogue: every assertion reads the shipped sentence.
+// Real catalogues: every assertion reads the shipped sentence, English unless a test switches.
+const locale = vi.hoisted(() => ({ catalogue: null as unknown }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
-      const value = key.split(".").reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], en);
+      const value = key
+        .split(".")
+        .reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], locale.catalogue);
       if (typeof value !== "string") return key;
       return value.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? ""));
     },
@@ -48,6 +51,7 @@ const EXPECTED: Record<ToolFailureCode, string> = {
   resource_unavailable: failures.resource_unavailable,
   scope_refused: failures.scope_refused,
   rate_limited: failures.rate_limited,
+  misconfigured: failures.misconfigured,
   service_busy: failures.service_busy,
   timeout: failures.timeout,
   service_error: failures.service_error,
@@ -92,6 +96,7 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
+  locale.catalogue = en;
   clipboard.mockReset().mockResolvedValue(true);
 });
 
@@ -130,6 +135,55 @@ describe("tool failure message", () => {
     expect(host.textContent).toContain("Call declined by the user.");
     expect(host.textContent).not.toContain("Reference:");
     expect(host.querySelector('[class*="errorBox"]')).toBeNull();
+  });
+});
+
+describe("platform failure reported by Knowledge Flow", () => {
+  // The 2026-11-11 scenario: a wrong KF_ARTIFACT_ACCESS_KEY.
+  const refusedKey: ToolFailure = {
+    code: "misconfigured",
+    status: 502,
+    origin: "object_storage",
+    setting: "KF_ARTIFACT_ACCESS_KEY",
+  };
+
+  it.each([
+    [
+      "en",
+      en,
+      "The document storage refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
+      "Setting to check: KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)",
+      "HTTP status 502",
+    ],
+    [
+      "fr",
+      fr,
+      "Le stockage de documents a refusé les identifiants de Knowledge Flow. C'est un problème de configuration de la plateforme, pas de votre demande : un administrateur doit corriger la configuration de Knowledge Flow.",
+      "Réglage à vérifier : KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)",
+      "Statut HTTP 502",
+    ],
+  ])("says the component, the nature and the setting in %s", async (_lang, catalogue, sentence, setting, status) => {
+    locale.catalogue = catalogue;
+    await openDrawer(entry("read_document", "model-facing text that is never shown", refusedKey));
+    const text = host.textContent?.replace(/\s+/g, " ") ?? "";
+    expect(text).toContain(sentence);
+    expect(text).toContain(setting);
+    expect(text).toContain(status);
+    expect(text.indexOf(sentence)).toBeLessThan(text.indexOf(setting));
+    expect(text.indexOf(setting)).toBeLessThan(text.indexOf(status));
+    expect(text.indexOf(status)).toBeLessThan(text.indexOf("exchange-7f3a"));
+    const settingCode = [...host.querySelectorAll("code")].find(
+      (node) => node.textContent === "KF_ARTIFACT_ACCESS_KEY",
+    );
+    expect(settingCode?.className).toContain("failureSetting");
+  });
+
+  it("names an unreachable dependency without blaming the request", async () => {
+    await openDrawer(entry("read_document", "", { code: "service_busy", status: 503, origin: "search_index" }));
+    expect(host.textContent).toContain(
+      "The search index is unreachable. This is a platform availability problem, not a problem with your request",
+    );
+    expect(host.textContent).not.toContain("Setting to check");
   });
 });
 

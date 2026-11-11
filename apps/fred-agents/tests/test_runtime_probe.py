@@ -11,7 +11,11 @@ from fred_agents.test_assistant.graph_agent import TestAssistantGraphAgent
 from fred_agents.test_assistant.graph_state import TestState
 from fred_agents.test_assistant.runtime_probe import ProbeInput, runtime_probe_step
 from fred_sdk import GraphNodeContext
-from fred_sdk.contracts.context import ToolInvocationResult
+from fred_sdk.contracts.context import (
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from pydantic import ValidationError
 
 
@@ -277,7 +281,8 @@ async def test_refused_search_never_reports_retrieval_success():
     context = SimpleNamespace(
         invoke_runtime_tool=AsyncMock(
             return_value=ToolInvocationResult(
-                tool_ref="search_documents", is_error=True
+                tool_ref="search_documents",
+                failure=ToolFailure(code=ToolFailureCode.scope_refused),
             ).model_dump(mode="json")
         ),
         emit_status=Mock(),
@@ -298,7 +303,7 @@ async def test_web_probe_uses_approved_tool_and_preserves_refusal_code():
 
     result = ToolInvocationResult(
         tool_ref="web_research.fetch_url",
-        is_error=True,
+        failure=ToolFailure(code=ToolFailureCode.resource_unavailable),
         blocks=(
             ToolContentBlock(
                 kind=ToolContentKind.TEXT, text='{"error_code":"unsafe_destination"}'

@@ -109,6 +109,7 @@ from fred_sdk.contracts.runtime import (
     WorkspaceFsPort,
     unwrap_run_stop_error,
 )
+from fred_sdk.contracts.services import FredService
 from fred_sdk.support.builtins import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
@@ -119,6 +120,7 @@ from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
+from fred_runtime.common.kf_base_client import reported_failure
 from fred_runtime.common.kf_document_client import KfDocumentClient
 from fred_runtime.common.kf_tag_client import KfTagClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
@@ -1744,8 +1746,22 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
         raise run_stop from None
 
     timed_out = isinstance(exc, httpx.TimeoutException)
-    status_code = (
-        exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    status_code = None
+    body: object = None
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        try:
+            body = exc.response.json()
+        except (ValueError, httpx.ResponseNotRead):
+            body = None
+    # Every document port calls Knowledge Flow through `KfBaseClient`, whose
+    # address is the configured Knowledge Flow service.
+    failure = reported_failure(
+        FredService.KNOWLEDGE_FLOW,
+        status_code,
+        body,
+        timed_out=timed_out,
+        unreachable=isinstance(exc, httpx.ConnectError),
     )
     # `str(exc)` on an httpx error embeds the full request URL — for
     # HTTPStatusError, "Client error '401 Unauthorized' for url
@@ -1755,7 +1771,9 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
     # context and the trace of every user who triggers a downstream failure.
     # Status and exception type carry the diagnosis without the topology.
     detail = _redact_urls(str(exc).strip()) or type(exc).__name__
-    return DocumentPortCallError(detail, timed_out=timed_out, status_code=status_code)
+    return DocumentPortCallError(
+        detail, timed_out=timed_out, status_code=status_code, failure=failure
+    )
 
 
 class DocumentTreeAdapter(DocumentTreePort):

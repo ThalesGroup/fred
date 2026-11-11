@@ -50,6 +50,9 @@ _ACCOUNT_STATUS_UNAVAILABLE_DETAIL = (
     "Account status could not be checked. Try again shortly."
 )
 ACCOUNT_STATUS_UNAVAILABLE_CAUSE = "account_status_unavailable"
+# Neutral on purpose: `failure` says which dependency; no host, bucket or value.
+_PLATFORM_MISCONFIGURED_DETAIL = "A dependency refused this service's configuration."
+_PLATFORM_UNAVAILABLE_DETAIL = "A dependency of this service is unavailable."
 DENIAL_CAUSE_HEADER = "X-Fred-Denial-Cause"
 
 
@@ -96,6 +99,9 @@ def _authorization_detail_for_client(exc: AuthorizationError) -> str:
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register authorization and generic exception handlers for FastAPI application."""
+    # Imported here: the failure vocabulary lives in history, which reaches back
+    # into this package, so a module-level import closes a cycle at startup.
+    from fred_core.common.platform_failure import MISCONFIGURED_STATUS, PlatformFailure
 
     @app.exception_handler(AuthorizationError)
     async def authorization_error_handler(
@@ -118,6 +124,33 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=503 if cause == ACCOUNT_STATUS_UNAVAILABLE_CAUSE else 403,
             content={"detail": _authorization_detail_for_client(exc)},
             headers={DENIAL_CAUSE_HEADER: cause},
+        )
+
+    @app.exception_handler(PlatformFailure)
+    async def platform_failure_handler(
+        request: Request, exc: PlatformFailure
+    ) -> JSONResponse:
+        """Say which dependency failed and why; the log keeps its own text."""
+        failure = exc.failure
+        logger.error(
+            "Platform dependency failure",
+            exc_info=exc,
+            extra={
+                "failure_code": failure.code.value,
+                "failure_origin": failure.origin.value if failure.origin else None,
+                "failure_setting": failure.setting,
+            },
+        )
+        return JSONResponse(
+            status_code=exc.status,
+            content={
+                "detail": _PLATFORM_MISCONFIGURED_DETAIL
+                if exc.status == MISCONFIGURED_STATUS
+                else _PLATFORM_UNAVAILABLE_DETAIL,
+                "failure": failure.model_dump(
+                    mode="json", include={"code", "origin", "setting"}
+                ),
+            },
         )
 
     @app.exception_handler(Exception)

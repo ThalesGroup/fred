@@ -23,9 +23,11 @@ from fastmcp.tools import ToolResult
 from fastmcp.utilities.lifespan import combine_lifespans
 from fred_core.common.fastapi_handlers import ACCOUNT_STATUS_UNAVAILABLE_CAUSE, DENIAL_CAUSE_HEADER
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER
+from fred_core.history.history_schema import ToolFailure
 from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.delegation import GRANT_PARAM_NAMES
 from fred_core.security.mcp_delegation import mcp_mount_auth, verified_grant
+from pydantic import ValidationError
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -199,16 +201,25 @@ class _ToolErrorPolicy(Middleware):
             status = response.status_code
             if status in (401, 403) or (status == 503 and response.headers.get(DENIAL_CAUSE_HEADER) == ACCOUNT_STATUS_UNAVAILABLE_CAUSE):
                 return ToolResult(content="Tool access was refused.", is_error=True)
-            body: dict[str, str] = {}
-            if status == 400 and context.message.name == "query_tabular_documents":
-                try:
-                    detail = response.json().get("detail")
-                except (ValueError, AttributeError):
-                    detail = None
-                if isinstance(detail, str) and detail:
-                    body = {"detail": detail}
+            try:
+                inner = response.json()
+            except ValueError:
+                inner = None
+            inner = inner if isinstance(inner, dict) else {}
+            body: dict[str, object] = {}
+            detail = inner.get("detail")
+            if status == 400 and context.message.name == "query_tabular_documents" and isinstance(detail, str) and detail:
+                body["detail"] = detail
+            try:
+                # Only this service's own classified failure, re-validated field by field.
+                failure = ToolFailure.model_validate(inner["failure"])
+            except (KeyError, ValidationError):
+                failure = None
+            if failure is not None:
+                body["failure"] = failure.model_dump(mode="json", include={"code", "origin", "setting"})
             # The agent runtime reads the status from this envelope to classify the
-            # failure. Only the curated SQL detail above travels with it, never a body.
+            # failure. Only the curated SQL detail and the classified failure above
+            # travel with it, never a body.
             return ToolResult(
                 content=f"Error calling {context.message.name}. Status code: {status}. Response: " + json.dumps(body, ensure_ascii=False),
                 is_error=True,

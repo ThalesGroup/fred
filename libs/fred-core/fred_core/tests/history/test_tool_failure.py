@@ -69,5 +69,7 @@ def test_a_tool_result_part_carries_its_failure_and_none_on_success() -> None:
     assert failed.model_dump(mode="json")["failure"] == {
         "code": "service_error",
         "status": 500,
+        "origin": None,
+        "setting": None,
     }
     assert ToolResultPart(call_id="c2", content="ok").failure is None

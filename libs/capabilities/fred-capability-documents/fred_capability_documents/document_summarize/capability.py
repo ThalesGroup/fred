@@ -72,6 +72,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
+    DocumentPortCallError,
     DocumentScopeRefusedError,
     DocumentSummaryResult,
     unwrap_run_stop_error,
@@ -152,11 +153,20 @@ def _document_tool_failure(
         cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
 
     target = f" (document_uid={document_uid})" if document_uid else ""
-    detail = f": {raw}" if raw else ""
-    message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
+    failure = (
+        exc.failure
+        if isinstance(exc, DocumentPortCallError)
+        else ToolFailure.from_http_status(status_code, timed_out=timed_out)
+    )
+    platform = failure.platform_explanation()
+    if platform:
+        message = f"Could not {action}{target}: {platform}"
+    else:
+        detail = f": {raw}" if raw else ""
+        message = f"Could not {action}{target}: {cause} [{err_type}{detail}]."
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
+        failure=failure,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 

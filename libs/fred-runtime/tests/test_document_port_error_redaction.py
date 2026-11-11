@@ -152,3 +152,67 @@ def test_empty_message_degrades_to_the_exception_type() -> None:
     detail = str(err)
 
     assert detail == "ConnectError"
+
+
+def _status_error_with_body(code: int, body: object) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", KF_URL)
+    response = httpx.Response(code, request=request, json=body)
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        response.raise_for_status()
+    return excinfo.value
+
+
+def test_knowledge_flow_reported_failure_is_kept_with_its_status() -> None:
+    from fred_core.history.history_schema import (
+        FailureOrigin,
+        ToolFailure,
+        ToolFailureCode,
+    )
+
+    body = {
+        "detail": "A dependency refused this service's configuration.",
+        "failure": {
+            "code": "misconfigured",
+            "origin": "object_storage",
+            "setting": "KF_ARTIFACT_ACCESS_KEY",
+        },
+    }
+    err = _wrap_document_port_error(_status_error_with_body(502, body))
+    assert err.failure == ToolFailure(
+        code=ToolFailureCode.misconfigured,
+        status=502,
+        origin=FailureOrigin.object_storage,
+        setting="KF_ARTIFACT_ACCESS_KEY",
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        {"code": "misconfigured", "setting": "lower-case value"},
+        {"code": "SERVICE_ERROR: x"},
+        "text",
+    ],
+)
+def test_an_invalid_report_falls_back_to_the_status(failure: object) -> None:
+    from fred_core.history.history_schema import ToolFailure, ToolFailureCode
+
+    err = _wrap_document_port_error(_status_error_with_body(502, {"failure": failure}))
+    assert err.failure == ToolFailure(code=ToolFailureCode.service_error, status=502)
+
+
+def test_an_unreachable_knowledge_flow_is_named() -> None:
+    from fred_core.history.history_schema import (
+        FailureOrigin,
+        ToolFailure,
+        ToolFailureCode,
+    )
+
+    err = _wrap_document_port_error(
+        httpx.ConnectError(
+            "All connection attempts failed", request=httpx.Request("GET", KF_URL)
+        )
+    )
+    assert err.failure == ToolFailure(
+        code=ToolFailureCode.service_busy, origin=FailureOrigin.knowledge_flow
+    )

@@ -59,6 +59,9 @@ AUTH_MODE_DELEGATED: Final[str] = "delegated"
 GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http",)
 MCP_SERVER_ID_METADATA_KEY: Final[str] = "mcp_server_id"
 MCP_DELEGATED_METADATA_KEY: Final[str] = "mcp_delegated"
+# The server's configured Fred service: the only identity a failure report is
+# believed from, never its URL.
+MCP_SERVICE_METADATA_KEY: Final[str] = "mcp_service"
 CONNECT_TIMEOUT_SECS = 5.0
 SSE_READ_TIMEOUT_SECS = 30.0
 _tool_catalog_cache = InMemoryResponseCacheStore(max_entries=1024)
@@ -284,6 +287,7 @@ async def get_connected_mcp_client_for_agent(
                         "metadata": {
                             **(tool.metadata or {}),
                             MCP_SERVER_ID_METADATA_KEY: server.id,
+                            MCP_SERVICE_METADATA_KEY: server.service,
                             MCP_DELEGATED_METADATA_KEY: bool(
                                 call_credentials.delegated
                                 and _normalize_auth_mode(server.auth_mode)

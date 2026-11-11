@@ -50,6 +50,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import (
     DocumentMarkdownResult,
+    DocumentPortCallError,
     DocumentScopeRefusedError,
     unwrap_run_stop_error,
 )
@@ -136,7 +137,16 @@ def document_tool_failure(
     else:
         cause = f"the {_KF_SERVICE} service call failed after {elapsed_s:.0f}s"
 
-    if status_code in (403, 404):
+    failure = (
+        exc.failure
+        if isinstance(exc, DocumentPortCallError)
+        else ToolFailure.from_http_status(status_code, timed_out=timed_out)
+    )
+    platform = failure.platform_explanation()
+
+    if platform:
+        message = f"Could not {action} (document_uid={document_uid}): {platform}"
+    elif status_code in (403, 404):
         message = (
             f"Could not {action}: the document is unavailable with the supplied "
             f"identifier (HTTP {status_code}). Use the exact opaque uid from "
@@ -155,7 +165,7 @@ def document_tool_failure(
         )
     return message, ToolInvocationResult(
         tool_ref=tool_ref,
-        failure=ToolFailure.from_http_status(status_code, timed_out=timed_out),
+        failure=failure,
         blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
     )
 

@@ -53,7 +53,7 @@ from datetime import datetime, timezone
 from enum import Enum, StrEnum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from fred_core.store import VectorSearchHit
 
@@ -170,10 +170,39 @@ class ToolFailureCode(StrEnum):
     resource_unavailable = "resource_unavailable"
     scope_refused = "scope_refused"
     rate_limited = "rate_limited"
+    # A dependency refused the credentials or a setting of the component.
+    misconfigured = "misconfigured"
     service_busy = "service_busy"
     timeout = "timeout"
     service_error = "service_error"
     unexpected = "unexpected"
+
+
+class FailureOrigin(StrEnum):
+    """
+    Where a failure reported by Knowledge Flow comes from: Knowledge Flow itself
+    or one of the dependencies it calls for a tool.
+
+    Why this exists:
+    - the code says what went wrong; the origin says which component to look at,
+      so nobody has to read a log to find it
+    """
+
+    knowledge_flow = "knowledge_flow"
+    object_storage = "object_storage"
+    search_index = "search_index"
+    database = "database"
+
+
+# The name of an environment variable; never its value.
+SETTING_NAME_PATTERN = r"^[A-Z][A-Z0-9_]{0,63}$"
+
+_ORIGIN_LABELS: Dict[FailureOrigin, str] = {
+    FailureOrigin.knowledge_flow: "Knowledge Flow",
+    FailureOrigin.object_storage: "The document storage used by Knowledge Flow",
+    FailureOrigin.search_index: "The search index used by Knowledge Flow",
+    FailureOrigin.database: "The database used by Knowledge Flow",
+}
 
 
 _HTTP_FAILURE_CODES: Dict[int, ToolFailureCode] = {
@@ -195,12 +224,49 @@ class ToolFailure(BaseModel):
     - ``ToolFailure.from_http_status(exc.status_code)`` for a downstream HTTP failure
     - ``ToolFailure(code=ToolFailureCode.invalid_arguments)`` when the tool itself
       refuses the call
+    - ``origin`` and ``setting`` come only from Knowledge Flow's own report; the
+      runtime believes no other server
     """
 
     model_config = ConfigDict(frozen=True)
 
     code: ToolFailureCode
     status: Optional[int] = None
+    origin: Optional[FailureOrigin] = None
+    # The setting to correct, only for ``misconfigured``.
+    setting: Optional[str] = Field(default=None, pattern=SETTING_NAME_PATTERN)
+
+    @model_validator(mode="after")
+    def _setting_only_when_misconfigured(self) -> "ToolFailure":
+        if self.setting is not None and self.code is not ToolFailureCode.misconfigured:
+            raise ValueError("a setting names what to correct in a misconfiguration")
+        return self
+
+    def platform_explanation(self) -> Optional[str]:
+        """Fred's sentence for the model when the platform, not the request, failed.
+
+        None when the failure names no origin or is not a platform problem; the
+        caller keeps its own sentence then. Never a dependency's own text.
+        """
+        if self.origin is None:
+            return None
+        label = _ORIGIN_LABELS[self.origin]
+        if self.code is ToolFailureCode.misconfigured:
+            setting = f" (setting to check: {self.setting})" if self.setting else ""
+            return (
+                f"PLATFORM_MISCONFIGURED: {label} refused the credentials of "
+                "Knowledge Flow. This is a platform configuration problem, not a "
+                "problem with the user's request. Tell the user that an administrator "
+                f"must correct the Knowledge Flow configuration{setting}. Do not retry."
+            )
+        if self.code is ToolFailureCode.service_busy:
+            return (
+                f"PLATFORM_UNAVAILABLE: {label} is unreachable. This is a platform "
+                "availability problem, not a problem with the user's request. Tell "
+                "the user to try again later and, if it persists, to ask an "
+                "administrator to check this service."
+            )
+        return None
 
     @classmethod
     def from_http_status(

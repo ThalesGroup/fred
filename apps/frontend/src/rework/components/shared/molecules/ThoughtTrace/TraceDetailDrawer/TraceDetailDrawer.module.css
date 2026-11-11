@@ -181,6 +181,12 @@
   min-width: 0;
 }
 
+.failureSetting {
+  color: var(--on-surface);
+  font-family: var(--font-family-mono);
+  overflow-wrap: anywhere;
+}
+
 .failureReferenceValue {
   min-width: 0;
   color: var(--on-surface);

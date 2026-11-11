@@ -79,11 +79,17 @@ class ModelConfiguration(BaseModel):
     )
 
 
+# The environment variables that carry the two store passwords. Named once so a
+# failure can say which one to correct, never its value.
+OPENSEARCH_PASSWORD_ENV = "OPENSEARCH_PASSWORD"  # nosec B105 # pragma: allowlist secret
+POSTGRES_PASSWORD_ENV = "FRED_POSTGRES_PASSWORD"  # nosec B105 # pragma: allowlist secret
+
+
 class OpenSearchStoreConfig(BaseModel):
     host: str = Field(..., description="OpenSearch host URL")
     username: str = Field(..., description="Username from env")
     password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENSEARCH_PASSWORD"),
+        default_factory=lambda: os.getenv(OPENSEARCH_PASSWORD_ENV),
         description="Password from env",
     )
     secure: bool = Field(default=False, description="Use TLS (https)")
@@ -102,7 +108,7 @@ class OpenSearchStoreConfig(BaseModel):
             raise ValueError(
                 f"OpenSearch is configured (host={self.host!r}, username="
                 f"{self.username!r}) but no password was provided. "
-                "Set the OPENSEARCH_PASSWORD environment variable (in your .env) "
+                f"Set the {OPENSEARCH_PASSWORD_ENV} environment variable (in your .env) "
                 "to the OpenSearch password for this user, or remove the "
                 "storage.opensearch block if OpenSearch is not used."
             )
@@ -138,7 +144,7 @@ class PostgresStoreConfig(BaseModel):
         description="Owning PostgreSQL schema; required for PostgreSQL connections.",
     )
     password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("FRED_POSTGRES_PASSWORD")
+        default_factory=lambda: os.getenv(POSTGRES_PASSWORD_ENV)
     )
     echo: bool = Field(default=False, description="SQLAlchemy echo flag.")
     pool_size: Optional[int] = Field(

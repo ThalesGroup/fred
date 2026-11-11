@@ -15,7 +15,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fred_sdk.contracts.models import MCPServerConfiguration
-from fred_sdk.contracts.services import FredService, ServiceEndpointsPort
+from fred_sdk.contracts.services import ServiceEndpointsPort
 from fred_sdk.resources.packaged import load_packaged_resource
 from fred_sdk.resources.prompts import load_packaged_markdown
 
@@ -54,7 +54,6 @@ class _McpCatalogServer(MCPServerConfiguration):
     prompt_file: str | None = Field(
         default=None, min_length=1, pattern=r"\S", exclude=True
     )
-    service: FredService | None = Field(default=None, exclude=True)
     path: str | None = Field(default=None, min_length=1, exclude=True)
 
     @model_validator(mode="after")

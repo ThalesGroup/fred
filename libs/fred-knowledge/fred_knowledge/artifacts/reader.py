@@ -7,6 +7,7 @@ from typing import BinaryIO
 from urllib.parse import urlsplit
 
 import urllib3
+from fred_core.common.platform_failure import object_storage_failure
 from minio import Minio
 
 from fred_knowledge.artifacts.contracts import Artifact
@@ -22,6 +23,8 @@ class ArtifactReader:
     def __init__(self, config: ArtifactStorageConfig):
         endpoint = urlsplit(config.endpoint)
         self.bucket = config.bucket
+        self._access_key_setting = config.access_key_env
+        self._secret_key_setting = config.secret_key_env
         self.client = Minio(
             endpoint.netloc,
             access_key=os.environ[config.access_key_env],
@@ -34,22 +37,29 @@ class ArtifactReader:
     def read_verified(self, prefix: str, artifact: Artifact, output: BinaryIO | None = None) -> None:
         if not safe_path(artifact.path):
             raise ManagerError("integrity_failure", permanent=True)
-        response = self.client.get_object(self.bucket, prefix + artifact.path)
         try:
-            total = 0
-            digest = hashlib.sha256()
-            for chunk in response.stream(64 * 1024):
-                total += len(chunk)
-                if total > artifact.size:
+            response = self.client.get_object(self.bucket, prefix + artifact.path)
+            try:
+                total = 0
+                digest = hashlib.sha256()
+                for chunk in response.stream(64 * 1024):
+                    total += len(chunk)
+                    if total > artifact.size:
+                        raise ManagerError("integrity_failure", permanent=True)
+                    digest.update(chunk)
+                    if output:
+                        output.write(chunk)
+                if total != artifact.size or digest.hexdigest() != artifact.sha256:
                     raise ManagerError("integrity_failure", permanent=True)
-                digest.update(chunk)
-                if output:
-                    output.write(chunk)
-            if total != artifact.size or digest.hexdigest() != artifact.sha256:
-                raise ManagerError("integrity_failure", permanent=True)
-        finally:
-            response.close()
-            response.release_conn()
+            finally:
+                response.close()
+                response.release_conn()
+        except Exception as error:
+            # This client read the keys, so it alone knows which setting supplied them.
+            failure = object_storage_failure(error, access_key_setting=self._access_key_setting, secret_key_setting=self._secret_key_setting)
+            if failure is None:
+                raise
+            raise failure from error
 
     def read_bytes(self, prefix: str, artifact: Artifact) -> bytes:
         with BytesIO() as output:

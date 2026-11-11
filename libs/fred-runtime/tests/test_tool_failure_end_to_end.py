@@ -29,10 +29,13 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
-from fred_core.history.history_schema import ChatMessage, ToolResultPart
+from fred_core.history.history_schema import ChatMessage, FailureOrigin, ToolResultPart
 from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_runtime.common.mcp_utils import MCP_DELEGATED_METADATA_KEY
+from fred_runtime.common.mcp_utils import (
+    MCP_DELEGATED_METADATA_KEY,
+    MCP_SERVICE_METADATA_KEY,
+)
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.context import (
     ToolContentBlock,
@@ -47,6 +50,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     ToolResultRuntimeEvent,
 )
+from fred_sdk.contracts.services import FredService
 from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as lc_tool
@@ -78,7 +82,9 @@ async def _capability_tool() -> BaseTool:
     return read_document
 
 
-async def _knowledge_flow_mcp_tool(envelope: str) -> BaseTool:
+async def _knowledge_flow_mcp_tool(
+    envelope: str, service: FredService | None = FredService.KNOWLEDGE_FLOW
+) -> BaseTool:
     server = FastMCP("Knowledge Flow")
 
     @server.tool(name="read_document")
@@ -87,7 +93,11 @@ async def _knowledge_flow_mcp_tool(envelope: str) -> BaseTool:
         return ToolResult(content=envelope, is_error=True)
 
     provider = (await MCPAdapter(Client(server)).list_tools())[0]
-    provider.metadata = {**(provider.metadata or {}), MCP_DELEGATED_METADATA_KEY: True}
+    provider.metadata = {
+        **(provider.metadata or {}),
+        MCP_DELEGATED_METADATA_KEY: True,
+        MCP_SERVICE_METADATA_KEY: service,
+    }
     return ContextAwareTool(
         base_tool=provider,
         context_provider=lambda: None,
@@ -167,3 +177,36 @@ async def test_a_lost_authority_is_still_read_from_the_refusal_text() -> None:
     tool = await _knowledge_flow_mcp_tool("Tool access was refused.")
     with pytest.raises(AuthorityLostError):
         await tool.ainvoke({"document_uid": _DOCUMENT_UID})
+
+
+_REFUSED_KEY_ENVELOPE = (
+    "Error calling read_document. Status code: 502. Response: "
+    '{"failure": {"code": "misconfigured", "origin": "object_storage", '
+    '"setting": "KF_ARTIFACT_ACCESS_KEY"}}'
+)
+
+
+@pytest.mark.asyncio
+async def test_knowledge_flow_reported_failure_is_kept_and_told_to_the_model() -> None:
+    tool = await _knowledge_flow_mcp_tool(_REFUSED_KEY_ENVELOPE)
+    events = await _run(tool)
+
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
+    assert event.failure == ToolFailure(
+        code=ToolFailureCode.misconfigured,
+        status=502,
+        origin=FailureOrigin.object_storage,
+        setting="KF_ARTIFACT_ACCESS_KEY",
+    )
+    content, _ = await tool._arun(document_uid=_DOCUMENT_UID)
+    assert "PLATFORM_MISCONFIGURED" in content
+    assert "document storage" in content
+    assert "KF_ARTIFACT_ACCESS_KEY" in content
+
+
+@pytest.mark.asyncio
+async def test_another_servers_failure_report_is_ignored() -> None:
+    events = await _run(await _knowledge_flow_mcp_tool(_REFUSED_KEY_ENVELOPE, None))
+
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
+    assert event.failure == ToolFailure(code=ToolFailureCode.service_error, status=502)

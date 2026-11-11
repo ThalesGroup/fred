@@ -20,14 +20,15 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
+from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Type, TypeVar, Union
 
+from fred_core.common.platform_failure import PlatformFailure, search_index_failure
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import MappingValidationError, validate_index_mapping
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection
+from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection, Transport, TransportError
 
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
@@ -296,6 +297,28 @@ class ObservedRequestsHttpConnection(RequestsHttpConnection):
         raise rejected
 
 
+class ClassifiedTransport(Transport):
+    """Report a refused password or an unreachable cluster once the client's own retries are spent."""
+
+    def perform_request(
+        self,
+        method: str,
+        url: str,
+        params: Optional[Mapping[str, Any]] = None,
+        body: Any = None,
+        timeout: Optional[Union[int, float]] = None,
+        ignore: Collection[int] = (),
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> Any:
+        try:
+            return super().perform_request(method, url, params=params, body=body, timeout=timeout, ignore=ignore, headers=headers)
+        except TransportError as error:
+            failure = search_index_failure(error)
+            if failure is None:
+                raise
+            raise failure from error
+
+
 class OpenSearchVectorStoreAdapter(BaseVectorStore):
     """
     Fred — OpenSearch-backed Vector Store (LangChain for ANN + OS client for lexical/phrase).
@@ -349,6 +372,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             use_ssl=secure,
             verify_certs=verify_certs,
             connection_class=ObservedRequestsHttpConnection,
+            transport_class=ClassifiedTransport,
             ssl_show_warn=False,
         )
 
@@ -1493,6 +1517,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 res = self._client.search(index=self._index, body=bool_knn_body)
             hits_data = res.get("hits", {}).get("hits", [])
             logger.debug("search returned %d hits", len(hits_data))
+        except PlatformFailure:
+            raise
         except Exception as e:
             logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
@@ -1559,6 +1585,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             response = self._client.search(index=self._index, body=search_body, params={"search_pipeline": HYBRID_SEARCH_PIPELINE_NAME})
             hits_data = response.get("hits", {}).get("hits", [])
             logger.debug("search returned %d hits", len(hits_data))
+        except PlatformFailure:
+            raise
         except Exception as e:
             logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
@@ -1596,6 +1624,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             response = self._client.search(index=self._index, body=search_body)
             hits_data = response.get("hits", {}).get("hits", [])
             logger.debug("search returned %d hits", len(hits_data))
+        except PlatformFailure:
+            raise
         except Exception as e:
             logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e

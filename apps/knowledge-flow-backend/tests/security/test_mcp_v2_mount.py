@@ -277,3 +277,37 @@ async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name
         assert text.endswith("Response: {}")
     else:
         assert expected_detail in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            '{"detail":"neutral","failure":{"code":"misconfigured","origin":"object_storage","setting":"KF_ARTIFACT_ACCESS_KEY"},"private":"x"}',
+            'Response: {"failure": {"code": "misconfigured", "origin": "object_storage", "setting": "KF_ARTIFACT_ACCESS_KEY"}}',
+        ),
+        ('{"failure":{"code":"misconfigured","setting":"lower-case value"}}', "Response: {}"),
+        ('{"failure":"private"}', "Response: {}"),
+    ],
+)
+async def test_v2_mount_carries_only_a_valid_classified_failure(monkeypatch, body: str, expected: str) -> None:
+    app = FastAPI()
+
+    @app.get("/read", tags=["Selected"], operation_id="read_markdown")
+    async def read() -> Response:
+        return Response(body, status_code=502, media_type="application/json")
+
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Read test", description="Read test", tags={"Selected"})
+
+    async def authenticate(request: Request, token: str):
+        yield None
+
+    monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            response = await _request(client, "tools/call", {"name": "read_markdown", "arguments": {}})
+    text = response.json()["result"]["content"][0]["text"]
+    assert text.startswith("Error calling read_markdown. Status code: 502. Response: ")
+    assert text.endswith(expected)
+    assert "private" not in text and "neutral" not in text

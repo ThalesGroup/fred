@@ -1236,6 +1236,8 @@ class DocumentPortCallError(Exception):
     runtime's ToolNode) — but the capability must not import the adapter's
     HTTP stack to introspect the failure. Adapters map their transport errors
     (timeout, HTTP status) onto this exception; capabilities render it.
+    `failure` is the adapter's classification, which may carry what the
+    server reported; without one, the status alone classifies it.
     """
 
     def __init__(
@@ -1244,10 +1246,14 @@ class DocumentPortCallError(Exception):
         *,
         timed_out: bool = False,
         status_code: int | None = None,
+        failure: ToolFailure | None = None,
     ) -> None:
         super().__init__(message)
         self.timed_out = timed_out
         self.status_code = status_code
+        self.failure = failure or ToolFailure.from_http_status(
+            status_code, timed_out=timed_out
+        )
 
 
 class DocumentScopeRefusedError(Exception):

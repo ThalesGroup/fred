@@ -13,13 +13,14 @@ from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
-from fred_core.sql import create_async_engine_from_config
+from fred_core.sql import classify_connection_failures, create_async_engine_from_config
 from fred_knowledge.artifacts.reader import ArtifactReader
 from fred_knowledge.models import DocumentModels
 from fred_knowledge.text.base_text_splitter import BaseTextSplitter
 from fred_knowledge.text.semantic_splitter import SemanticSplitter
 from fred_knowledge.vector.base_vector_store import BaseVectorStore
 from fred_knowledge.vector.factory import build_vector_store
+from fred_pod.common.structures import OPENSEARCH_PASSWORD_ENV, POSTGRES_PASSWORD_ENV
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_sdk.contracts.weaver import InferenceAdmission
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -119,21 +120,21 @@ class ApplicationContext:
                 if not s:
                     logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
                     raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
-                _require_env("OPENSEARCH_PASSWORD")
+                _require_env(OPENSEARCH_PASSWORD_ENV)
                 logger.info(f"     ↳ Host: {s.host}")
                 logger.info(f"     ↳ Vector Index: {store.index}")
                 logger.info(f"     ↳ Secure (TLS): {s.secure}")
                 logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
                 logger.info(f"     ↳ Username: {s.username}")
-                self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
+                self._log_sensitive(OPENSEARCH_PASSWORD_ENV, os.getenv(OPENSEARCH_PASSWORD_ENV))
             elif isinstance(store, PgVectorStorageConfig):
                 pg = self.configuration.storage.postgres
-                _require_env("FRED_POSTGRES_PASSWORD")
+                _require_env(POSTGRES_PASSWORD_ENV)
                 logger.info("     ↳ Backend: pgvector")
                 logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
-                self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
+                self._log_sensitive(POSTGRES_PASSWORD_ENV, os.getenv(POSTGRES_PASSWORD_ENV))
         except Exception:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
@@ -200,6 +201,7 @@ class ApplicationContext:
     def _init_pg_async_engine(self):
         pg_cfg = self.configuration.storage.postgres
         pg_async_engine = create_async_engine_from_config(pg_cfg)
+        classify_connection_failures(pg_async_engine)
 
         logger.info("Shared Postgres async initialized.")
         return pg_async_engine

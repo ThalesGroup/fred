@@ -1161,3 +1161,24 @@ def test_manager_purge_refuses_partial_visibility_and_failed_counts(failure):
         with pytest.raises(RuntimeError):
             store.delete_vectors_for_document(document_uid="document")
         assert "count" not in events
+
+
+def test_a_refused_password_reaches_the_caller_classified_after_the_client_retries(monkeypatch) -> None:
+    from fred_core.common.platform_failure import PlatformFailure
+    from fred_core.history.history_schema import FailureOrigin, ToolFailureCode
+    from opensearchpy import Transport
+    from opensearchpy.exceptions import AuthenticationException
+
+    def refuse(self, *args, **kwargs):
+        raise AuthenticationException(401, "security_exception", {})
+
+    monkeypatch.setattr(Transport, "perform_request", refuse)
+    transport = ovs.ClassifiedTransport([{"host": "localhost", "port": 9200}])
+    with pytest.raises(PlatformFailure) as raised:
+        transport.perform_request("GET", "/index/_search")
+    failure = raised.value.failure
+    assert (failure.origin, failure.code, failure.setting) == (
+        FailureOrigin.search_index,
+        ToolFailureCode.misconfigured,
+        "OPENSEARCH_PASSWORD",
+    )

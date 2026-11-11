@@ -2546,10 +2546,23 @@
         "resource_unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès. Choisissez une ressource disponible dans votre périmètre d'accès actuel.",
         "scope_refused": "Cet appel visait des documents hors de la sélection de cette conversation : rien n'a été lu.",
         "rate_limited": "La limite de requêtes du service a été atteinte. Attendez la réinitialisation de la limite avant de réessayer.",
+        "misconfigured": "Une dépendance a refusé la configuration de la plateforme. C'est un problème de configuration, pas de votre demande : un administrateur doit le corriger.",
         "service_busy": "Le service est temporairement indisponible ou à capacité. Réessayez plus tard.",
         "timeout": "L'opération a dépassé son délai maximal. Réduisez la demande avant de réessayer.",
         "service_error": "Le service n'a pas pu terminer cette opération. Réessayez plus tard ; contactez le support si le problème persiste.",
         "unexpected": "Cette étape a échoué de façon inattendue. Réessayez ; contactez le support si le problème persiste.",
+        "platform": {
+          "misconfigured": "{{origin}} a refusé les identifiants de Knowledge Flow. C'est un problème de configuration de la plateforme, pas de votre demande : un administrateur doit corriger la configuration de Knowledge Flow.",
+          "service_busy": "{{origin}} est injoignable. C'est un problème de disponibilité de la plateforme, pas de votre demande : réessayez plus tard ; si le problème persiste, un administrateur doit vérifier ce service."
+        },
+        "origin": {
+          "knowledge_flow": "Knowledge Flow",
+          "object_storage": "Le stockage de documents",
+          "search_index": "L'index de recherche",
+          "database": "La base de données"
+        },
+        "setting": "Réglage à vérifier :",
+        "settingOwner": "(Knowledge Flow)",
         "httpStatus": "Statut HTTP {{status}}",
         "reference": "Référence :",
         "copyReference": "Copier la référence",

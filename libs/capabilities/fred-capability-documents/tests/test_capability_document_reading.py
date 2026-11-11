@@ -623,3 +623,35 @@ def test_extract_confirmation_can_be_disabled_per_instance() -> None:
 
 def test_extract_config_defaults_confirmation_on() -> None:
     assert DocumentExtractConfig().require_confirmation is True
+
+
+@pytest.mark.asyncio
+async def test_a_platform_failure_tells_the_model_which_setting_and_not_the_request() -> (
+    None
+):
+    from fred_core.history.history_schema import FailureOrigin
+
+    failure = ToolFailure(
+        code=ToolFailureCode.misconfigured,
+        status=502,
+        origin=FailureOrigin.object_storage,
+        setting="KF_ARTIFACT_ACCESS_KEY",
+    )
+    port = _FakeMarkdownPort(
+        error=DocumentPortCallError(
+            "A dependency refused this service's configuration.",
+            status_code=502,
+            failure=failure,
+        )
+    )
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "doc-1"})
+
+    assert msg.artifact.failure == failure
+    assert "document storage" in msg.content
+    assert "not a problem with the user's request" in msg.content
+    assert "KF_ARTIFACT_ACCESS_KEY" in msg.content
+    assert msg.artifact.blocks[0].text == msg.content

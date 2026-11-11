@@ -79,9 +79,15 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const sqlFailure = query ? asFailedSqlQueryResult(entry) : null;
   // A refusal by the person is a decision, not an incident to report.
   const declined = failure.code === "not_approved";
+  // Knowledge Flow named the component at fault: the message says which, and
+  // that the request is not the cause.
+  const origin =
+    failure.origin && (failure.code === "misconfigured" || failure.code === "service_busy") ? failure.origin : null;
   return {
     arguments: displayed,
-    errorKey: `rework.chatTrace.failure.${failure.code}`,
+    errorKey: origin ? `rework.chatTrace.failure.platform.${failure.code}` : `rework.chatTrace.failure.${failure.code}`,
+    originKey: origin ? `rework.chatTrace.failure.origin.${origin}` : null,
+    setting: failure.setting ?? null,
     status: failure.status ?? null,
     declined,
     // Only the runtime's exchange_id is in the logs; a browser-made one is not.

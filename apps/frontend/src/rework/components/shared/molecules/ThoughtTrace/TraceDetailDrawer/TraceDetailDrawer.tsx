@@ -194,8 +194,14 @@ function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
       <div className={styles.toolSection}>
         <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.error")}</p>
         <div className={detail.declined ? styles.declinedBox : styles.errorBox}>
-          {detail.error ?? t(detail.errorKey)}
+          {detail.error ?? t(detail.errorKey, detail.originKey ? { origin: t(detail.originKey) } : undefined)}
         </div>
+        {detail.setting && (
+          <p className={styles.failureMeta}>
+            {t("rework.chatTrace.failure.setting")} <code className={styles.failureSetting}>{detail.setting}</code>{" "}
+            {t("rework.chatTrace.failure.settingOwner")}
+          </p>
+        )}
         {detail.status !== null && (
           <p className={styles.failureMeta}>{t("rework.chatTrace.failure.httpStatus", { status: detail.status })}</p>
         )}

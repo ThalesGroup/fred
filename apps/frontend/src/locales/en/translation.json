@@ -2546,10 +2546,23 @@
         "resource_unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
         "scope_refused": "This call targeted documents outside the selection of this conversation, so nothing was read.",
         "rate_limited": "The service request limit was reached. Wait for the limit to reset before retrying.",
+        "misconfigured": "A dependency refused the platform configuration. This is a configuration problem, not a problem with your request: an administrator must correct it.",
         "service_busy": "The service is temporarily unavailable or at capacity. Try again later.",
         "timeout": "The operation exceeded its time budget. Narrow the request before retrying.",
         "service_error": "The service could not complete this operation. Try again later; contact support if the problem persists.",
         "unexpected": "This step failed unexpectedly. Try again; contact support if the problem persists.",
+        "platform": {
+          "misconfigured": "{{origin}} refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
+          "service_busy": "{{origin}} is unreachable. This is a platform availability problem, not a problem with your request: try again later; if it persists, an administrator must check this service."
+        },
+        "origin": {
+          "knowledge_flow": "Knowledge Flow",
+          "object_storage": "The document storage",
+          "search_index": "The search index",
+          "database": "The database"
+        },
+        "setting": "Setting to check:",
+        "settingOwner": "(Knowledge Flow)",
         "httpStatus": "HTTP status {{status}}",
         "reference": "Reference:",
         "copyReference": "Copy the reference",

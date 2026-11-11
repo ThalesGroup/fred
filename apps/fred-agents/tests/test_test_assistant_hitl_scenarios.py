@@ -107,7 +107,7 @@ async def test_test_assistant_questions_use_real_tool_and_resume(
     assert len(results) == 1
     assert results[0].call_id == calls[0].call_id
     assert results[0].tool_name == "ask_user"
-    assert results[0].is_error is False
+    assert results[0].failure is None
     final = next(event for event in resumed if isinstance(event, FinalRuntimeEvent))
     assert expected_text in final.content
 

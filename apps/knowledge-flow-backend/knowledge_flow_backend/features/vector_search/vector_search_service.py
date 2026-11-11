@@ -24,6 +24,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fred_core import KeycloakUser
+from fred_core.common.platform_failure import PlatformFailure
 from fred_core.documents.access import Candidate, SearchScope, resolve_scope, verify_candidates
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import BaseKPIWriter, KPIActor
@@ -124,6 +125,8 @@ class VectorSearchService:
                 return None
             if isinstance(store, OpenSearchVectorStoreAdapter):
                 await asyncio.to_thread(store.ensure_ready)
+        except PlatformFailure:
+            raise
         except Exception:
             logger.warning("corpus is not ready", exc_info=True)
             raise HTTPException(status_code=503, detail="corpus_not_ready") from None

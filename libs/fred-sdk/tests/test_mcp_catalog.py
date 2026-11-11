@@ -41,7 +41,8 @@ def test_service_reference_preserves_configured_address(
     ).servers[0]
 
     assert server.url == f"{base_url.rstrip('/')}/mcp/tabular"
-    assert "service" not in server.model_dump()
+    # The service stays: it is the identity a failure report is believed from.
+    assert server.service is FredService.KNOWLEDGE_FLOW
     assert "path" not in server.model_dump()
 
 

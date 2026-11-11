@@ -1151,12 +1151,16 @@ export type ToolFailureCode =
   | "resource_unavailable"
   | "scope_refused"
   | "rate_limited"
+  | "misconfigured"
   | "service_busy"
   | "timeout"
   | "service_error"
   | "unexpected";
+export type FailureOrigin = "knowledge_flow" | "object_storage" | "search_index" | "database";
 export type ToolFailure = {
   code: ToolFailureCode;
+  origin?: FailureOrigin | null;
+  setting?: string | null;
   status?: number | null;
 };
 export type ToolResultRuntimeEvent = {
@@ -1367,6 +1371,7 @@ export type ChatMessage = {
   timestamp: string;
 };
 export type ClientAuthMode = "user_token" | "no_token" | "delegated";
+export type FredService = "knowledge_flow" | "control_plane";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
   agent_instructions?: string | null;
@@ -1391,6 +1396,8 @@ export type McpServerConfiguration = {
   name: string;
   /** Short, plain-English phrase completing 'Tools for {title}:' in the ReAct system prompt's grouped tool list (e.g. 'tabular action', 'document search'). Unlike `name`/`description`, this is NOT an i18n key — it is rendered directly into the model-facing system prompt, never through the frontend. Falls back to the raw catalog `id` when unset. */
   prompt_group_title?: string | null;
+  /** Fred backend serving this MCP server. Set only by a catalog entry, whose URL is then that service's configured address; it is the identity the runtime trusts, never the URL. */
+  service?: FredService | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
   sse_read_timeout?: number | null;
   /** Team scoping of the capability this server becomes (#1988): admin_gated (default) requires a platform admin to enable the server per team; default_on makes it usable by every team. */

@@ -22,10 +22,17 @@ from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
+from fred_core.history.history_schema import (
+    FailureOrigin,
+    ToolFailure,
+    ToolFailureCode,
+)
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
+from fred_sdk.contracts.services import FredService
+from pydantic import ValidationError
 
 from fred_runtime.common.kf_http_client import get_shared_kf_async_client
 from fred_runtime.common.outbound_credentials import (
@@ -42,6 +49,36 @@ from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.authority import AuthorityLostError
 
 logger = logging.getLogger(__name__)
+
+
+def reported_failure(
+    service: FredService | None,
+    status: int | None,
+    body: object = None,
+    *,
+    timed_out: bool = False,
+    unreachable: bool = False,
+) -> ToolFailure:
+    """Classify one failed call to a server, believing only Knowledge Flow's report.
+
+    `service` is the configured identity of the server called, never derived
+    from its URL or its answer. Knowledge Flow's `failure` is kept as reported
+    when it validates, and a Knowledge Flow that cannot be reached is named as
+    such. Any other server, or an invalid report, is classified by its status.
+    """
+    if service is FredService.KNOWLEDGE_FLOW:
+        if unreachable:
+            return ToolFailure(
+                code=ToolFailureCode.service_busy, origin=FailureOrigin.knowledge_flow
+            )
+        if isinstance(body, dict) and "failure" in body:
+            try:
+                reported = ToolFailure.model_validate(body["failure"])
+            except ValidationError:
+                logger.warning("Knowledge Flow reported an invalid failure")
+            else:
+                return reported.model_copy(update={"status": status})
+    return ToolFailure.from_http_status(status, timed_out=timed_out)
 
 
 class KnowledgeFlowAgentContext(Protocol):

@@ -59,6 +59,8 @@ from typing import (
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
+from .services import FredService
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -244,6 +246,14 @@ class MCPServerConfiguration(BaseModel):
         description="MCP server transport: sse, stdio, websocket or streamable_http.",
     )
     url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
+    service: Optional[FredService] = Field(
+        None,
+        description=(
+            "Fred backend serving this MCP server. Set only by a catalog entry, "
+            "whose URL is then that service's configured address; it is the "
+            "identity the runtime trusts, never the URL."
+        ),
+    )
     sse_read_timeout: Optional[int] = Field(
         60 * 5,
         description="How long (in seconds) the client will wait for a new event before disconnecting",

@@ -100,7 +100,12 @@ async def test_invalid_write_history_survives_without_mutating_live_arguments(
     assert metadata["note"] == "invalid[U+0000]metadata"
     result = messages[1].parts[0].model_dump()
     assert result["call_id"] == "write-1"
-    assert result["failure"] == {"code": "invalid_arguments", "status": None}
+    assert result["failure"] == {
+        "code": "invalid_arguments",
+        "status": None,
+        "origin": None,
+        "setting": None,
+    }
     assert [m.rank for m in messages] == [0, 1, 2]
     assert call.model_dump(mode="json") == before
 

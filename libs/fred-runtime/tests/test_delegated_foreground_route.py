@@ -36,6 +36,7 @@ from fred_runtime.runtime_context import get_runtime_context, set_runtime_contex
 from fred_runtime.runtime_support.run_scope import register_run_child
 from fred_sdk.contracts.react_contract import ReActInput, ReActOutput
 from fred_sdk.contracts.runtime import (
+    EXCHANGE_ID_HEADER,
     AgentRuntime,
     AwaitingHumanRuntimeEvent,
     Executor,
@@ -736,9 +737,11 @@ async def test_the_stream_route_has_no_reconnect_surface(monkeypatch, tmp_path) 
     assert len(run_ids) == 1  # the streamed turn's; the reconnect body admitted none
     assert streamed.status_code == 200
     assert streamed.headers["access-control-allow-origin"] == "http://ui.test"
+    # The exchange_id is the turn's log reference, not a run handle.
     assert set(streamed.headers["access-control-expose-headers"].split(", ")) == {
         "X-Request-ID",
         "X-Correlation-ID",
+        EXCHANGE_ID_HEADER,
     }
     assert "x-fred-run-id" not in streamed.headers
     schema = app.openapi()
