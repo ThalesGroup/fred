@@ -22,9 +22,9 @@ import asyncio
 import json
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, Literal
 
 from fastapi import HTTPException, Query
 from fred_core.security.platform_access.access_control import (
@@ -50,10 +50,6 @@ MAX_PARAM_LENGTH = 2000
 # OpenSearch refuses a terms query above `index.max_terms_count` (65 536).
 MAX_MATCHED_USERS = 50_000
 SCAN_BUDGET_SECONDS = 5.0
-CACHE_TTL_SECONDS = 60
-CACHE_SIZE = 32
-
-T = TypeVar("T")
 
 
 # Annotated, so a direct call of a route function defaults to None.
@@ -183,12 +179,6 @@ def stored_fields(
     )
 
 
-# (kind, filter, settings revision) -> (expiry, value). A per-pod performance
-# cache only: every pod computes the same answer from the database.
-_cache: dict[tuple[str, str, int], tuple[float, Any]] = {}
-_lock = asyncio.Lock()
-
-
 def _access() -> PlatformAccess:
     try:
         return get_platform_access()
@@ -216,45 +206,20 @@ async def _rows(
     return access.policy(state), [(str(uid), attributes) for uid, attributes in rows]
 
 
-async def _cached(
-    kind: str, key: str, compute: Callable[[PlatformAccess], Awaitable[T]]
-) -> T:
-    access = _access()
-    async with _lock:
-        revision = (await access.state()).revision
-        entry = _cache.get((kind, key, revision))
-        if entry is not None and entry[0] > time.monotonic():
-            return entry[1]
-        value = await compute(access)
-        if len(_cache) >= CACHE_SIZE:
-            _cache.clear()
-        _cache[(kind, key, revision)] = (time.monotonic() + CACHE_TTL_SECONDS, value)
-        return value
-
-
 async def resolve_user_filter(user_filter: AnalyticsUserFilter) -> UserFilterMatch:
-    async def compute(access: PlatformAccess) -> UserFilterMatch:
-        _, rows = await _rows(access)
-        return await asyncio.to_thread(match_users, user_filter, rows)
-
-    return await _cached("match", user_filter.canonical(), compute)
-
-
-async def user_filter_fields() -> tuple[list[UserFilterField], int]:
-    async def compute(access: PlatformAccess) -> tuple[list[UserFilterField], int]:
-        policy, rows = await _rows(access)
-        return await asyncio.to_thread(stored_fields, rows, policy), len(rows)
-
-    return await _cached("fields", "", compute)
+    _, rows = await _rows(_access())
+    return await asyncio.to_thread(match_users, user_filter, rows)
 
 
 async def user_filter_summary(
     user_filter: AnalyticsUserFilter | None,
 ) -> UserFilterSummary:
-    fields, known_users = await user_filter_fields()
+    policy, rows = await _rows(_access())
+    fields = await asyncio.to_thread(stored_fields, rows, policy)
+    known_users = len(rows)
     if user_filter is None:
         return UserFilterSummary(fields=fields, known_users=known_users)
-    match = await resolve_user_filter(user_filter)
+    match = await asyncio.to_thread(match_users, user_filter, rows)
     return UserFilterSummary(
         fields=fields,
         known_users=match.known_users,

@@ -28,11 +28,11 @@ kubectl exec deploy/<control-plane> -- fred-control-plane-kpi-backfill --dry-run
 kubectl exec deploy/<control-plane> -- fred-control-plane-kpi-backfill
 ```
 
-`--since <ISO date>` limits the range; `--step reindex|teams|all` (default `all`). Safe to rerun.
+`--since <ISO date>` limits the range; `--step reindex|teams|all` (default `all`). The team step is safe to rerun and skips events that already have a team. The reindex step rewrites every selected turn event on each run, so use `--step teams` when retrying team attribution alone.
 
 ## Validation
 
-The backfill logs `updated N turn event(s)` and `updated N event(s) for M user(s)`; a second run reports 0.
+The backfill logs `updated N turn event(s)` and `updated N event(s) for M user(s)`. A second `--step teams` run reports 0 events. A second reindex run reports the selected turn events again.
 
 ## Rollback
 

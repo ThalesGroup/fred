@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """User filter of the platform analytics: parsing, matching on stored access
-attributes, coverage counts, authorization, cache, and the clause every
+attributes, coverage counts, authorization, and the clause every
 user-filterable preset must add to each of its searches."""
 
 from __future__ import annotations
@@ -158,21 +158,19 @@ def test_stored_fields_list_rule_paths_first_with_their_coverage() -> None:
     ]
 
 
-# --- resolution cache ---------------------------------------------------------
+# --- current stored attributes ------------------------------------------------
 
 
 @pytest.fixture
 def stored(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    env: dict[str, Any] = {"revision": 1, "scans": 0}
-    uf._cache.clear()
+    env: dict[str, Any] = {"rows": list(ROWS), "scans": 0}
 
     class _Access:
-        async def state(self) -> Any:
-            return SimpleNamespace(revision=env["revision"])
+        pass
 
     async def _rows(access: Any) -> tuple[None, list[tuple[str, Any]]]:
         env["scans"] += 1
-        return None, ROWS
+        return None, env["rows"]
 
     monkeypatch.setattr(uf, "_access", lambda: _Access())
     monkeypatch.setattr(uf, "_rows", _rows)
@@ -180,30 +178,21 @@ def stored(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_resolution_is_cached_per_filter_and_revision(
-    stored: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+async def test_resolution_reads_current_stored_attributes(
+    stored: dict[str, Any],
 ) -> None:
     acme = _filter(_org("equals", "acme"))
     assert (await uf.resolve_user_filter(acme)).user_ids == ("u1", "u2")
-    await uf.resolve_user_filter(_filter(_org("equals", "acme")))
-    assert stored["scans"] == 1
-    await uf.resolve_user_filter(_filter(_org("equals", "other")))
+    stored["rows"] = [("u1", {ORG: "other"}), *ROWS[1:]]
+    assert (await uf.resolve_user_filter(acme)).user_ids == ("u2",)
     assert stored["scans"] == 2
-    stored["revision"] = 2
-    await uf.resolve_user_filter(acme)
-    assert stored["scans"] == 3
-    now = [1e9]
-    monkeypatch.setattr(uf.time, "monotonic", lambda: now[0])
-    await uf.resolve_user_filter(acme)
-    now[0] += uf.CACHE_TTL_SECONDS + 1
-    await uf.resolve_user_filter(acme)
-    assert stored["scans"] == 5
 
 
 @pytest.mark.asyncio
 async def test_summary_counts_without_returning_ids(stored: dict[str, Any]) -> None:
     summary = await uf.user_filter_summary(_filter(_org("equals", "acme")))
     assert (summary.known_users, summary.matched, summary.no_data) == (5, 2, 2)
+    assert stored["scans"] == 1
     assert "u1" not in summary.model_dump_json()
     bare = await uf.user_filter_summary(None)
     assert bare.matched is None and [f.claim for f in bare.fields][0] == [

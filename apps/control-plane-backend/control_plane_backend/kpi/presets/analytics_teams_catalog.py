@@ -34,6 +34,8 @@ from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.kpi.presets.base import PresetDef
 from control_plane_backend.teams.service import team_member_counts
 
+TEAM_COUNT_BATCH_SIZE = 16
+
 
 class AnalyticsTeamRow(BaseModel):
     team_id: str
@@ -58,9 +60,14 @@ async def team_catalog(
     ]
     selected = set(team_ids)
     listed = [team for team in teams if not selected or team.id in selected]
-    counts = await team_member_counts(
-        container.get_rebac_engine(), [team.id for team in listed]
-    )
+    counts: dict[TeamId, int] = {}
+    for start in range(0, len(listed), TEAM_COUNT_BATCH_SIZE):
+        batch = listed[start : start + TEAM_COUNT_BATCH_SIZE]
+        counts.update(
+            await team_member_counts(
+                container.get_rebac_engine(), [team.id for team in batch]
+            )
+        )
     rows = [
         AnalyticsTeamRow(
             team_id=str(team.id), name=team.name, member_count=counts.get(team.id, 0)

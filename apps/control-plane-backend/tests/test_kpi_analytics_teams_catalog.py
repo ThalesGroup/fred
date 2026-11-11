@@ -106,5 +106,32 @@ def test_catalog_is_a_scoped_preset() -> None:
     assert ANALYTICS_TEAMS_CATALOG_PRESET.self_scoped is False
 
 
+@pytest.mark.asyncio
+async def test_catalog_bounds_concurrent_team_member_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teams = [_team(f"t-{i}", f"Team {i}") for i in range(34)]
+    store = SimpleNamespace(list_all=lambda: _async(teams))
+    monkeypatch.setattr(
+        catalog,
+        "get_application_container",
+        lambda request: SimpleNamespace(
+            get_team_metadata_store=lambda: store,
+            get_rebac_engine=lambda: object(),
+        ),
+    )
+    batches: list[list[TeamId]] = []
+
+    async def counts(rebac: Any, team_ids: list[TeamId]) -> dict[TeamId, int]:
+        batches.append(team_ids)
+        return {team_id: 1 for team_id in team_ids}
+
+    monkeypatch.setattr(catalog, "team_member_counts", counts)
+    rows = await catalog.team_catalog(cast(Any, None))
+
+    assert len(rows) == len(teams)
+    assert [len(batch) for batch in batches] == [16, 16, 2]
+
+
 async def _async(value: Any) -> Any:
     return value
