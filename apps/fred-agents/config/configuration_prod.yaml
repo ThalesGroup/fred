@@ -61,7 +61,8 @@ security:
     # The factory's Keycloak post-install grants the agentic service account
     # delegation_caller, as on k3d.
     act_for_people: true
-    accept_delegated_calls: false
+    accept_delegated_calls: true
+    service_accounts_only: true
 
 ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v2"
