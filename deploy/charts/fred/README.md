@@ -77,6 +77,34 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
   own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
 
+For an internal HTTPS object store with a private CA, create a Secret containing
+`ca-bundle.pem` and mount it in the Knowledge Flow API pod. Set the DuckDB options
+in the same deployment values file:
+
+```yaml
+applications:
+  knowledge-flow-backend:
+    configuration:
+      storage:
+        tabular_store:
+          query:
+            duckdb_ca_cert_file: /etc/fred/tls/ca-bundle.pem
+            duckdb_enable_server_cert_verification: true
+    extraVolumes:
+      - name: duckdb-ca
+        secret:
+          secretName: fred-ca-bundle
+    extraVolumeMounts:
+      - name: duckdb-ca
+        mountPath: /etc/fred/tls/ca-bundle.pem
+        subPath: ca-bundle.pem
+        readOnly: true
+```
+
+The CA Secret must exist before deploying the chart. If a Knowledge Flow worker
+also reads tabular Parquet artifacts, repeat the configuration and mount under
+`applications.knowledge-flow-worker` because YAML anchors do not carry overrides.
+
 A complete, working example is the values of the local k3d instance,
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
 in fred-deployment-factory: every address, credential and choice a deployment has to make,
