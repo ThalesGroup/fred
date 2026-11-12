@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [kpi-analytics-dims]
 title: "Admin analytics redesign: team-scoped KPI presets, euro costs and Excel export"
 impact: minor
 configuration: none
@@ -7,7 +8,7 @@ configuration_reason: "No chart value or backend configuration key changes; the 
 ---
 ## Applicability
 
-Every deployment. Deployments that pin an OpenFGA `authorization_model_id` with schema sync off must act (see Upgrade).
+Every deployment. All deployments with `sync_schema_on_init: false` must publish the new model (see Upgrade), whether or not they pin an `authorization_model_id`.
 
 ## Prerequisites
 
@@ -15,11 +16,12 @@ No additional prerequisites beyond the normal deployment procedure.
 
 ## Configuration
 
-No configuration changes are required.
+No new configuration key is introduced. If a service pins the OpenFGA model ID,
+update that value after publishing the new model as described below.
 
 ## Upgrade
 
-Deploy Fred normally. The OpenFGA model gains `team#can_read_analytics` (team admins) and is written at startup by default; with `sync_schema_on_init: false` and a pinned model id, publish `libs/fred-core/fred_core/security/rebac/schema.fga` first, or team admins are refused. No Alembic migration.
+Deploy Fred normally. The OpenFGA model gains `team#can_read_analytics` (team admins) and is written at startup by default; with `sync_schema_on_init: false`, publish `libs/fred-core/fred_core/security/rebac/schema.fga` first. If any service pins `authorization_model_id`, update it to the returned model ID. Restart affected services and verify analytics access; without the new model, team admins are refused. No Alembic migration.
 
 Behaviour changes for API consumers: KPI presets take repeated `team_ids` instead of `team_id`; team-scoped reads need `can_read_analytics`; several presets are removed and costs are reported in euros (`cost_eur`, `estimated_cost_eur`). Full list: `CONTROL-PLANE-PRODUCT-CONTRACT.md` §74. Organization observers now also see storage by team and web research.
 

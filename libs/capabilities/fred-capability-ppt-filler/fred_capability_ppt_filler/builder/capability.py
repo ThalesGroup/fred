@@ -1166,7 +1166,7 @@ class PptBuilderCapability(
 
     manifest = CapabilityManifest(
         id=PPT_BUILDER_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.ppt_builder.name",
         description="capability.ppt_builder.description",
         icon="co_present",
