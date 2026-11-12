@@ -167,6 +167,24 @@ or expected.
 
 ---
 
+### Recovering a failed Docker publication
+
+If a tagged Docker publication fails because of workflow code, merge the reviewed
+CI correction on `swift`, then dispatch the corrected workflow for the existing
+tag. Do not move the paired tags or rebuild newer application sources under the
+same release version. Check which images were already published before retrying.
+
+```bash
+gh workflow run Build-and-push-docker.yml --ref swift -f release_tag=code/vX.Y.Z
+```
+
+Recovery requires a tag reachable from `swift`, a valid committed guide and both
+release tags on the same commit. The workflow pins image builds and the release
+guide to that validated commit. OCI exports retain provenance and provide the
+local input for Trivy's CycloneDX reports with CVEs. Recovery does not republish
+Helm charts or Python packages. Wait for all image builds, SBOM uploads and the
+code release with its `migration.md` attachment before declaring success.
+
 ## Publishing the Python libraries
 
 Release tags build the images and the chart only. The shared libraries and

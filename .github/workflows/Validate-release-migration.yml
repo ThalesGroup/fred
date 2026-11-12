@@ -2,6 +2,15 @@ name: Validate release migration
 
 on:
   workflow_call:
+    inputs:
+      release_tag:
+        description: "Existing code/v tag to recover from the swift workflow."
+        type: string
+        default: ""
+    outputs:
+      source_sha:
+        description: "Commit whose guide and paired tags passed validation."
+        value: ${{ jobs.validate.outputs.source_sha }}
 
 permissions:
   contents: read
@@ -9,11 +18,25 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Validate recovery source
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/swift
+          [[ "$RELEASE_TAG" =~ ^code/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor HEAD origin/swift
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -22,7 +45,10 @@ jobs:
           version: "0.13.5"
       - name: Verify guide, version and paired tags before publication
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify \
             --version "${RELEASE_TAG#*/v}" --require-tags --tag-attempts 7
+      - name: Record validated source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"

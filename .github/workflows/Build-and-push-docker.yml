@@ -1,9 +1,19 @@
 name: Build and Push Docker Images
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing code/v tag whose failed Docker publication should be recovered"
+        type: string
+        required: true
   push:
     branches: ["swift"]
     tags: ["code/v*"]
+
+concurrency:
+  group: docker-publication-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -11,33 +21,38 @@ env:
 
 jobs:
   migration-guide:
-    if: startsWith(github.ref, 'refs/tags/code/v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/code/v')
     permissions:
       contents: read
     uses: ./.github/workflows/Validate-release-migration.yml
+    with:
+      release_tag: ${{ inputs.release_tag || '' }}
 
   # The image list, contexts and build args live in .github/docker-images.json
   # and are built by the reusable workflow — the same one every pull request
   # runs with publish: false.
   build-and-push:
     needs: migration-guide
-    if: ${{ !cancelled() && (needs.migration-guide.result == 'success' || github.ref_type != 'tag') }}
+    if: ${{ !cancelled() && (needs.migration-guide.result == 'success' || (github.event_name == 'push' && github.ref == 'refs/heads/swift')) }}
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/Docker-images.yml
     with:
       publish: true
+      release_tag: ${{ inputs.release_tag || '' }}
+      source_ref: ${{ needs.migration-guide.outputs.source_sha }}
 
   create-release:
-    needs: build-and-push
+    needs: [migration-guide, build-and-push]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/code/v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/code/v')
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ needs.migration-guide.outputs.source_sha }}
           persist-credentials: false
       - name: Extract metadata
         id: meta
@@ -45,12 +60,12 @@ jobs:
         with:
           images: dummy # we do not care about the image, we only want to extract the version
           tags: |
-            type=match,pattern=code/(v.*),group=1
+            type=match,pattern=code/(v.*),group=1,value=${{ inputs.release_tag || github.ref_name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
           name: Release ${{ steps.meta.outputs.version }}
           body: |
             # images:
