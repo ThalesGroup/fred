@@ -30,6 +30,7 @@ from .mcp_utils import (
     MCP_DELEGATED_METADATA_KEY,
     MCP_SERVER_ID_METADATA_KEY,
     MCP_SERVICE_METADATA_KEY,
+    MCP_TOOL_DISPLAY_NAME_METADATA_KEY,
     _mcp_http_client_factory,
 )
 from .outbound_credentials import (
@@ -289,6 +290,11 @@ async def connect(
                                 if trusted
                                 else None,
                                 "mcp_tool_name": published.name,
+                                MCP_TOOL_DISPLAY_NAME_METADATA_KEY: (
+                                    f"{binding.display_name} · {published.name}"
+                                    if binding.display_name.strip()
+                                    else published.name
+                                ),
                                 "mcp_connection_id": str(binding.connection_id),
                             },
                         }

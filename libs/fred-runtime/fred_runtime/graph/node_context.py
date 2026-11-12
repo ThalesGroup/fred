@@ -71,6 +71,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.common.mcp_utils import MCP_TOOL_DISPLAY_NAME_METADATA_KEY
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -545,10 +546,12 @@ class NodeContext:
         if tool is None:
             raise RuntimeError(f"Runtime tool '{tool_name}' is not available.")
 
+        display_name = (tool.metadata or {}).get(MCP_TOOL_DISPLAY_NAME_METADATA_KEY)
         self.sink(
             ToolCallRuntimeEvent(
                 sequence=0,
                 tool_name=tool_name,
+                display_name=display_name if isinstance(display_name, str) else None,
                 call_id=call_id,
                 arguments=arguments,
             )

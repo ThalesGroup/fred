@@ -29,7 +29,7 @@ both the middleware-list builder in isolation (mirrors
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -395,6 +395,39 @@ class _PartialFilesystemBinder:
 class _FakeExecutor:
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
+
+
+@pytest.mark.asyncio
+async def test_deep_passes_resolved_display_names_to_the_trace_executor(
+    monkeypatch,
+) -> None:
+    from langchain_core.tools import StructuredTool
+
+    name = "mcp_b1322accb3dd44acbaf1dbdc2114db4f_cb162d4eff0f3b93"
+    label = "Parc Eolien · production_par_eolienne"
+    runtime_tool = StructuredTool(
+        name=name,
+        description="MCP tool: production_par_eolienne.",
+        args_schema={},
+        metadata={"mcp_display_name": label},
+    )
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(
+        deep_mod, "_create_compiled_deep_agent", lambda **kwargs: object()
+    )
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(
+            tool_provider=cast(Any, SimpleNamespace(get_tools=lambda: [runtime_tool]))
+        ),
+        conversation_filesystem=_fake_conversation_filesystem(),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    executor = cast(_FakeExecutor, await runtime.build_executor(_binding()))
+
+    assert executor.kwargs["tool_display_names"] == {name: label}
+    assert name in cast(Collection[str], executor.kwargs["available_tool_names"])
 
 
 def _fake_definition() -> ReActAgentDefinition:

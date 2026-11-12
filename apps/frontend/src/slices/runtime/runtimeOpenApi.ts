@@ -1160,6 +1160,8 @@ export type ToolCallRuntimeEvent = {
     [key: string]: any;
   };
   call_id: string;
+  /** Presentation only; tool_name remains the execution identity. */
+  display_name?: string | null;
   kind?: "tool_call";
   rank?: number | null;
   sequence?: number;
@@ -1348,6 +1350,7 @@ export type ToolCallPart = {
     [key: string]: any;
   };
   call_id: string;
+  display_name?: string | null;
   name: string;
   type?: "tool_call";
 };

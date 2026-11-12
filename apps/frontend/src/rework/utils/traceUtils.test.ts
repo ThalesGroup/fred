@@ -352,6 +352,37 @@ describe("entryLabel localization", () => {
   });
 });
 
+describe("managed MCP display names", () => {
+  const name = "mcp_b1322accb3dd44acbaf1dbdc2114db4f_cb162d4eff0f3b93";
+  const label = "Parc Eolien · production_par_eolienne";
+  const entry = (displayName?: string | null, toolName = name) => ({
+    kind: "combo" as const,
+    call: msg({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "c1", name: toolName, args: {}, display_name: displayName }],
+    }),
+    result: toolResultMsg("c1", "result"),
+  });
+
+  it.each([label, "production_par_eolienne"])("uses %s for the row and detail action", (displayName) => {
+    expect(entryLabel(entry(displayName))).toBe(displayName);
+    expect(genericToolPayload(entry(displayName)).action).toBe(displayName);
+    expect(entry(displayName).call.parts[0]).toMatchObject({ name });
+  });
+
+  it.each([undefined, null, "", "   "])("keeps the legacy fallback for %s", (displayName) => {
+    expect(entryLabel(entry(displayName))).toBe(humanizeToolName(name));
+  });
+
+  it.each(["query_tabular_documents", "search_documents", "web_search", "ask_user"])(
+    "preserves the existing translated label for %s",
+    (toolName) => {
+      const translate = (key: string) => key;
+      expect(entryLabel(entry(label, toolName), translate)).toBe(entryLabel(entry(undefined, toolName), translate));
+    },
+  );
+});
+
 describe("categorized tool labels", () => {
   const enLabels = en.rework.chatTrace.toolLabels;
   const frLabels = fr.rework.chatTrace.toolLabels;

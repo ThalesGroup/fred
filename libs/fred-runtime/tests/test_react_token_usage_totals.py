@@ -117,6 +117,7 @@ async def _run_stream(
     *,
     model_name: str = "mistral-medium-latest",
     available_tool_names: set[str] | None = None,
+    tool_display_names: dict[str, str] | None = None,
 ) -> list[object]:
     executor = _TransportBackedReActExecutor(
         compiled_agent=_FakeCompiledAgent(events),  # type: ignore[arg-type]
@@ -124,6 +125,7 @@ async def _run_stream(
         services=_FakeServices(),  # type: ignore[arg-type]
         runtime_class_name="ReActRuntime",
         available_tool_names=available_tool_names or {"ls"},
+        tool_display_names=tool_display_names,
         model_name=model_name,
     )
     input_model = ReActInput(
@@ -133,6 +135,34 @@ async def _run_stream(
     async for event in executor.stream(input_model, ExecutionConfig()):
         collected.append(event)
     return collected
+
+
+@pytest.mark.asyncio
+async def test_tool_call_keeps_execution_name_and_emits_only_its_registered_label() -> (
+    None
+):
+    name = "mcp_b1322accb3dd44acbaf1dbdc2114db4f_cb162d4eff0f3b93"
+    label = "Parc Eolien · production_par_eolienne"
+    message = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": "managed", "name": name, "args": {}},
+            {"id": "plain", "name": "ls", "args": {}},
+        ],
+    )
+    events = await _run_stream(
+        [("updates", {"agent": {"messages": [message]}})],
+        available_tool_names={name, "ls"},
+        tool_display_names={name: label},
+    )
+    calls = [e for e in events if isinstance(e, ToolCallRuntimeEvent)]
+    assert [(e.call_id, e.tool_name, e.display_name) for e in calls] == [
+        ("managed", name, label),
+        ("plain", "ls", None),
+    ]
+    assert (
+        ToolCallRuntimeEvent.model_validate_json(calls[0].model_dump_json()) == calls[0]
+    )
 
 
 @pytest.mark.asyncio

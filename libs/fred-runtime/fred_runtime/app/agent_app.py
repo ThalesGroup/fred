@@ -3364,6 +3364,7 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
+                    display_name=payload.get("display_name"),
                 )
             )
 

@@ -347,6 +347,11 @@ class DeepAgentRuntime(ReActRuntime):
             services=services,
             runtime_class_name=type(self).__name__,
             available_tool_names=available_tool_names,
+            tool_display_names={
+                tool.runtime_name: tool.display_name
+                for tool in runtime_tools
+                if tool.display_name
+            },
             model_name=extract_model_name_from_object(self._model),
             preload_selected_skill=False,
         )

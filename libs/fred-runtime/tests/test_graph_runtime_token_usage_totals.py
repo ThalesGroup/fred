@@ -145,7 +145,10 @@ async def test_run_keeps_known_usage_across_nodes_after_authority_closes() -> No
     }
 
 
-def test_graph_tool_call_event_carries_no_token_figure() -> None:
+@pytest.mark.parametrize(
+    "display_name", [None, "Parc Eolien · production_par_eolienne"]
+)
+def test_graph_tool_call_event_carries_no_token_figure(display_name) -> None:
     """
     A graph node's tool row must not resurrect the old per-step display
     (#2403). The node's model calls still feed the turn's billed total —
@@ -153,7 +156,10 @@ def test_graph_tool_call_event_carries_no_token_figure() -> None:
     """
 
     events: list[RuntimeEvent] = []
-    ctx = _node_context({"noop_probe": _noop_probe}, events=events)
+    runtime_tool = _noop_probe.model_copy(
+        update={"metadata": {"mcp_display_name": display_name}}
+    )
+    ctx = _node_context({"noop_probe": runtime_tool}, events=events)
 
     ctx.record_model_metadata(
         model_name="gpt-4o",
@@ -165,6 +171,8 @@ def test_graph_tool_call_event_carries_no_token_figure() -> None:
 
     (event,) = [e for e in events if isinstance(e, ToolCallRuntimeEvent)]
     assert not hasattr(event, "token_usage")
+    assert event.tool_name == "noop_probe"
+    assert event.display_name == display_name
     # The node still contributes its usage to the turn total.
     assert ctx.last_model_metadata[1] == {
         "input_tokens": 100,

@@ -290,6 +290,10 @@ class ThoughtEndEvent(RuntimeEventBase):
 class ToolCallRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.TOOL_CALL] = RuntimeEventKind.TOOL_CALL
     tool_name: str = Field(..., min_length=1)
+    display_name: str | None = Field(
+        default=None,
+        description="Presentation only; tool_name remains the execution identity.",
+    )
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
     # NOTE (#2403): this event carries no token usage on purpose. It used to

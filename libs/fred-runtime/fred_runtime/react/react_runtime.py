@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator, Collection, Sequence
+from collections.abc import AsyncIterator, Collection, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import replace
 from typing import Literal, TypedDict, cast
@@ -378,12 +378,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         services: RuntimeServices,
         runtime_class_name: str,
         available_tool_names: Collection[str] = (),
+        tool_display_names: Mapping[str, str] | None = None,
         model_name: str | None = None,
         preload_selected_skill: bool = True,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
         self._services = services
+        self._tool_display_names = dict(tool_display_names or {})
         self._available_tool_names = frozenset(
             name
             for name in available_tool_names
@@ -1095,6 +1097,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             yield ToolCallRuntimeEvent(
                                 sequence=sequence,
                                 tool_name=name,
+                                display_name=self._tool_display_names.get(name),
                                 call_id=call_id,
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
@@ -1418,6 +1421,11 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             services=self.services,
             runtime_class_name=type(self).__name__,
             available_tool_names=available_tool_names,
+            tool_display_names={
+                tool.runtime_name: tool.display_name
+                for tool in runtime_tools
+                if tool.display_name
+            },
             model_name=_extract_model_name_from_object(self._model),
         )
 

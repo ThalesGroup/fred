@@ -654,6 +654,8 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.mcp.tabular.${tabularKind}`);
       const knownKey = knownToolLabelKey(toolName(entry.call));
       if (knownKey && translate) return translate(knownKey);
+      const displayName = toolCallPart(entry.call)?.display_name;
+      if (typeof displayName === "string" && displayName.trim()) return displayName;
       return humanizeToolName(toolName(entry.call)) || "Tool";
     }
     case "tool_result":
