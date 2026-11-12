@@ -28,6 +28,7 @@ The extra manual recovery dispatch and its parameters are removed.
 
 Release images retain maximum provenance and Trivy reads their OCI export.
 The original paired-tag and migration-guide validation remains in place.
+The release description lists the published Knowledge Flow PyMuPDF image.
 
 ## Rollback
 

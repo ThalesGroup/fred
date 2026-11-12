@@ -57,6 +57,7 @@ jobs:
             ```
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/fred-agents:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/knowledge-flow-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/knowledge-flow-backend-pymupdf:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/control-plane-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/frontend:${{ steps.meta.outputs.version }}
             ```

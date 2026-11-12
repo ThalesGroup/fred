@@ -27,6 +27,7 @@ Deploy Fred normally; no operator action is required.
 
 Verify all images publish with provenance, each image has a non-empty CycloneDX
 report, and the code release contains the committed migration guide.
+The image list includes the Knowledge Flow PyMuPDF variant.
 
 ## Rollback
 
