@@ -3,6 +3,7 @@
 import importlib.util
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -501,6 +502,58 @@ class WorkflowTests(unittest.TestCase):
             )
             self.assertTrue(upload["with"]["fail_on_unmatched_files"])
             self.assertTrue(upload["with"]["files"].endswith("/migration.md"))
+
+    def test_recovery_requires_a_release_tag_merged_on_swift(self):
+        workflow = m.yaml.safe_load(
+            (SCRIPT.parents[1] / ".github/workflows/Validate-release-migration.yml").read_text()
+        )
+        guard = next(
+            step["run"] for step in workflow["jobs"]["validate"]["steps"]
+            if step.get("name") == "Validate recovery source"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.check_output(
+                    ["git", *args], cwd=directory, text=True, stderr=subprocess.DEVNULL
+                ).strip()
+
+            git("init", "-b", "swift")
+            git("config", "user.email", "test@example.invalid")
+            git("config", "user.name", "Recovery Tests")
+            git("config", "tag.gpgsign", "false")
+            git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "release")
+            source = git("rev-parse", "HEAD")
+            git("tag", "-a", "code/v1.2.3", "-m", "release")
+            git("tag", "code/v1.2.4-rc.1")
+            git("update-ref", "refs/remotes/origin/swift", source)
+            cases = [
+                ("workflow_dispatch", "refs/heads/swift", "code/v1.2.3", True),
+                ("workflow_dispatch", "refs/heads/swift", "code/v1.2.4-rc.1", True),
+                ("push", "refs/heads/swift", "code/v1.2.3", False),
+                ("workflow_dispatch", "refs/heads/topic", "code/v1.2.3", False),
+                ("workflow_dispatch", "refs/heads/swift", "swift", False),
+                ("workflow_dispatch", "refs/heads/swift", "chart/v1.2.3", False),
+                ("workflow_dispatch", "refs/heads/swift", "code/v9.9.9", False),
+                ("workflow_dispatch", "refs/heads/swift", "code/v1.2.3;exit 0", False),
+            ]
+            for event, ref, tag, accepted in cases:
+                with self.subTest(event=event, ref=ref, tag=tag):
+                    result = subprocess.run(
+                        ["bash", "-c", guard], cwd=directory, capture_output=True,
+                        env={**os.environ, "GITHUB_EVENT_NAME": event,
+                             "GITHUB_REF": ref, "RELEASE_TAG": tag},
+                    )
+                    self.assertEqual(result.returncode == 0, accepted, result.stderr)
+            git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "unmerged")
+            git("tag", "code/v1.2.4")
+            for tag in ("code/v1.2.3", "code/v1.2.4"):
+                with self.subTest(rejected_checkout=tag):
+                    result = subprocess.run(
+                        ["bash", "-c", guard], cwd=directory, capture_output=True,
+                        env={**os.environ, "GITHUB_EVENT_NAME": "workflow_dispatch",
+                             "GITHUB_REF": "refs/heads/swift", "RELEASE_TAG": tag},
+                    )
+                    self.assertNotEqual(result.returncode, 0)
 
     def test_pr_check_runs_without_path_filters_or_secrets(self):
         root = SCRIPT.parents[1]

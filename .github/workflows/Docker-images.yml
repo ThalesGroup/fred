@@ -12,6 +12,14 @@ on:
         description: "Push to the registry. Build-only (no login, no credentials) when false."
         type: boolean
         default: false
+      release_tag:
+        description: "Existing code/v tag to recover after migration validation."
+        type: string
+        default: ""
+      source_ref:
+        description: "Validated immutable release commit for recovery."
+        type: string
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -32,6 +40,7 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.source_ref }}
           fetch-depth: ${{ inputs.publish && 1 || 0 }}
 
       # A Dockerfile nobody listed is a Dockerfile nobody builds — that is how a
@@ -100,16 +109,18 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
 
       - name: Read frontend Node version
         if: matrix.name == 'frontend'
         id: node
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
-      # PRs and release tags export an image tar for scanning. Release tags
-      # also push, so their builder must support multiple outputs.
+      # Releases export an OCI layout with provenance for scanning and also push.
+      # PR smoke tests still load a Docker tar into the local daemon.
       - name: Set up Docker Buildx
-        if: ${{ !inputs.publish || startsWith(github.ref, 'refs/tags/code/v') }}
+        if: ${{ !inputs.publish || (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }}
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Github Container Registry
@@ -130,8 +141,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.name }}
           tags: |
-            type=match,enable=${{ startsWith(github.ref, 'refs/tags/code/v') }},pattern=code/(v.*),group=1
-            type=raw,enable=${{ github.ref == 'refs/heads/swift' }},value=swift-dev
+            type=match,enable=${{ (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }},pattern=code/(v.*),group=1,value=${{ inputs.release_tag || github.ref_name }}
+            type=raw,enable=${{ inputs.release_tag == '' && github.ref == 'refs/heads/swift' }},value=swift-dev
+          labels: |
+            org.opencontainers.image.revision=${{ inputs.source_ref || github.sha }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/tree/${{ inputs.source_ref || github.sha }}
 
       # Pre-merge builds read and write the Actions cache to stay affordable.
       # The publish path stays uncached so a released image never reuses layers
@@ -145,9 +159,9 @@ jobs:
             ${{ matrix.build_args }}
             ${{ matrix.name == 'frontend' && format('NODE_VERSION={0}', steps.node.outputs.version) || '' }}
           push: ${{ inputs.publish }}
-          outputs: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'type=docker,dest=/tmp/tag-image.tar' || (github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '') }}
-          # A Docker tar output disables the action's default provenance.
-          provenance: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'mode=max' || '' }}
+          outputs: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) && 'type=oci,tar=false,dest=/tmp/tag-image' || (github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '') }}
+          # OCI supports the image index carrying provenance attestations.
+          provenance: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) && 'mode=max' || '' }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
@@ -161,15 +175,15 @@ jobs:
 
       # Trivy's vuln scanner matches make sbom CVES=true for the pushed tag.
       - name: Install Trivy for release SBOM
-        if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
+        if: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }}
         uses: ./.github/actions/setup-trivy
 
       - name: Generate CycloneDX with CVEs for published image
-        if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
+        if: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           skip-setup-trivy: true
-          input: /tmp/tag-image.tar
+          input: /tmp/tag-image
           scanners: vuln
           vuln-type: os,library
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
@@ -179,11 +193,11 @@ jobs:
           exit-code: "0"
 
       - name: Verify CycloneDX report
-        if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
+        if: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }}
         run: jq -e '.bomFormat == "CycloneDX" and ((.components // []) | length > 0)' image-sbom.cdx.json > /dev/null
 
       - name: Upload CycloneDX report
-        if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
+        if: ${{ inputs.publish && (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/code/v')) }}
         uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ matrix.name }}
