@@ -2642,13 +2642,6 @@
       "show": "Show the agent's reasoning and tool calls",
       "sqlPreview": "Long query preview. Copy to get the complete original SQL.",
       "copyFullResponse": "The response copy button copies the complete recorded response.",
-      "tokenEstimates": {
-        "input": "Input ~{{value}} tokens",
-        "output": "Output ~{{value}} tokens",
-        "inputUnavailable": "Input unavailable",
-        "outputUnavailable": "Output unavailable",
-        "help": "Estimated size of the recorded arguments and response, not billed model usage."
-      },
       "sqlQuery": "Query:",
       "sqlResponse": "Response:",
       "sources_one": "{{count}} source",

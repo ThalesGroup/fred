@@ -42,7 +42,6 @@ import {
   stripDocumentUids,
   textOf,
   toolDiscriminator,
-  tabularToolTokenEstimates,
   totalLatencyMs,
   traceRows,
   traceSummary,
@@ -1679,45 +1678,3 @@ it.each(["/skills/meeting-minutes/references//model.md", "skills/meeting-minutes
     });
   },
 );
-
-describe("tabular tool payload estimates", () => {
-  const names = [
-    "read_query",
-    "list_tabular_documents",
-    "get_tabular_document_markdown",
-    "get_tabular_documents_schemas",
-    "describe_tabular_documents",
-    "search_tabular_values",
-  ];
-  it.each(
-    names.flatMap((name) => [name, `mcp__knowledge_flow__${name}`, `mcp__knowledge_flow__${name}_2`, `${name}_3`]),
-  )("counts recorded arguments and the entire result for %s", (name) => {
-    const args = { sql: "SELECT amount FROM d_table" };
-    const call = toolCallMsg("call", name, args);
-    call.metadata = { token_usage: { input_tokens: 999999, output_tokens: 999999 } };
-    const content = "x".repeat(12345);
-    expect(tabularToolTokenEstimates(call, toolResultMsg("call", content))).toEqual({
-      input: Math.ceil(JSON.stringify(args).length / 4),
-      output: Math.ceil(content.length / 4),
-    });
-  });
-  it("distinguishes pending or missing output from a completed empty output", () => {
-    const call = toolCallMsg("call", "read_query");
-    expect(tabularToolTokenEstimates(call)?.output).toBeNull();
-    expect(tabularToolTokenEstimates(call, msg({ channel: "tool_result" }))?.output).toBeNull();
-    expect(tabularToolTokenEstimates(call, toolResultMsg("call", ""))?.output).toBe(0);
-  });
-  it("counts failed results and remains identical after serializing history", () => {
-    const call = toolCallMsg("call", "describe_tabular_documents", { document_uids: ["doc"] });
-    const result = toolResultMsg("call", "Invalid arguments", false);
-    const restored = JSON.parse(JSON.stringify({ call, result }));
-    expect(tabularToolTokenEstimates(call, result)).toEqual(tabularToolTokenEstimates(restored.call, restored.result));
-    expect(tabularToolTokenEstimates(call, result)?.output).toBe(5);
-  });
-  it.each(["read_document", "custom_read_query", "mcp__other__read_query", "mcp__other__describe_tabular_documents"])(
-    "does not add estimates for %s",
-    (name) => {
-      expect(tabularToolTokenEstimates(toolCallMsg("call", name), toolResultMsg("call", "result"))).toBeNull();
-    },
-  );
-});

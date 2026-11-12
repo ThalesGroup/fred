@@ -101,6 +101,21 @@ async function copyBlock(index: number) {
   await act(async () => buttons[index].click());
 }
 
+it("retains the previous JSON syntax colors in the response preview", () => {
+  act(() =>
+    root.render(<TraceDetailDrawer entry={queryEntry([{ label: "Project Alpha", amount: 123 }])} onClose={() => {}} />),
+  );
+  const response = container.querySelectorAll("pre code")[1];
+  const tokens = [...(response?.querySelectorAll<HTMLElement>("span[style]") ?? [])];
+  const property = tokens.find((token) => token.textContent === '"label"');
+  const value = tokens.find((token) => token.textContent === '"Project Alpha"');
+  expect(property?.textContent).toContain("label");
+  expect(value?.textContent).toContain("Project Alpha");
+  expect(property?.style.color).toBeTruthy();
+  expect(value?.style.color).toBeTruthy();
+  expect(property?.style.color).not.toBe(value?.style.color);
+});
+
 it("bounds long cells and nested values while copying the entire recorded response", async () => {
   const entry = queryEntry([
     { description: "long-cell-".repeat(2000), nested: { payload: "nested-".repeat(2000) }, amount: 0, missing: null },
@@ -145,34 +160,23 @@ it("preserves the selected query through streaming updates, switching and reopen
   expect(container.textContent).not.toContain("second_table");
 });
 
-it.each(["en", "fr"])("labels payload estimates in %s and preserves them after reload", async (language) => {
+it.each(["en", "fr"])("does not invent token counts from the payload in %s", async (language) => {
   await i18next.changeLanguage(language);
-  const entry = queryEntry(Array.from({ length: 20 }, () => ({ amount: 123 })));
-  const render = (item: TraceEntry) => act(() => root.render(<TraceDetailDrawer entry={item} onClose={() => {}} />));
-  render(entry);
-  const inputLabel = i18next.t("rework.chatTrace.tokenEstimates.input", {
-    value: Math.ceil(JSON.stringify({ sql: "SELECT * FROM d_table" }).length / 4).toLocaleString(language),
-  });
-  const outputLabel = i18next.t("rework.chatTrace.tokenEstimates.output", {
-    value: Math.ceil(toolResultContent(entry.result).length / 4).toLocaleString(language),
-  });
-  expect(container.textContent).toContain(inputLabel);
-  expect(container.textContent).toContain(outputLabel);
-  expect(container.querySelectorAll("[tabindex='0']").length).toBeGreaterThanOrEqual(2);
-  const before = container.textContent;
-  render(JSON.parse(JSON.stringify(entry)));
-  expect(container.textContent).toBe(before);
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry([{ amount: 123 }])} onClose={() => {}} />));
+  const header = container.querySelector("aside")?.firstElementChild?.firstElementChild;
+  expect(header?.textContent).not.toMatch(/tokens|~|indisponible|unavailable/i);
+  expect(header?.textContent).toContain("390ms");
 });
 
-it("updates a pending output to an explicit empty output and keeps failure status", () => {
+it("keeps running and failure status without guessing token usage", () => {
   const entry = queryEntry([]);
   act(() => root.render(<TraceDetailDrawer entry={{ ...entry, result: undefined }} onClose={() => {}} />));
-  expect(container.textContent).toContain("Output unavailable");
+  expect(container.querySelector("[data-status='running']")).not.toBeNull();
   const result = {
     ...entry.result,
     parts: [{ type: "tool_result" as const, call_id: "SELECT * FROM d_table", content: "", ok: false, latency_ms: 1 }],
   };
   act(() => root.render(<TraceDetailDrawer entry={{ ...entry, result }} onClose={() => {}} />));
-  expect(container.textContent).toContain("Output ~0 tokens");
+  expect(container.textContent).not.toContain("~0 tokens");
   expect(container.querySelector("[data-status='failure']")).not.toBeNull();
 });

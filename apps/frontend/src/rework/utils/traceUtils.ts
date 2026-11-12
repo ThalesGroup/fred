@@ -22,7 +22,7 @@ import type {
 } from "../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
-import { isTabularQueryTool, parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
+import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "./webResearchTrace";
 
 export function skillLoadOf(
@@ -323,18 +323,6 @@ export function toolResultLatencyMs(result: ChatMessage): number | null {
 
 export function toolResultContent(result: ChatMessage): string {
   return toolResultPart(result)?.content ?? "";
-}
-
-/** Payload-size heuristics, never the deciding model call's billed usage. */
-export function tabularToolTokenEstimates(call: ChatMessage, result?: ChatMessage) {
-  const name = toolName(call);
-  if (!tabularToolKind(name) && !isTabularQueryTool(name)) return null;
-  const args = toolCallPart(call)?.args;
-  const content = result ? toolResultPart(result)?.content : undefined;
-  return {
-    input: args == null ? null : Math.ceil(JSON.stringify(args).length / 4),
-    output: typeof content === "string" ? Math.ceil(content.length / 4) : null,
-  };
 }
 
 /** Preview the authorized text this call returned, never a fresh file read. */

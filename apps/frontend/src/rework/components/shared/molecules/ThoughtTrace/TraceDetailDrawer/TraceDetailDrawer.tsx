@@ -14,7 +14,6 @@
 
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
@@ -47,7 +46,6 @@ import {
   toolResultContent,
   toolResultLatencyMs,
   toolResultOk,
-  tabularToolTokenEstimates,
 } from "../../../../../utils/traceUtils";
 import {
   parseTabularTraceResult,
@@ -152,7 +150,7 @@ const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: Sql
         ) : (
           <>
             {data.rows.length === 0 && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
-            <CodeBlock code={code} copyText={content} language="json" highlight={false} />
+            <CodeBlock code={code} copyText={content} language="json" />
             {data.rows.length > ROW_PREVIEW_COUNT && (
               <p className={styles.metaInfo}>
                 {t("rework.chatTrace.tabular.rowsPreview", { count: ROW_PREVIEW_COUNT })}
@@ -306,10 +304,7 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
 }
 
 export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
-  const { t, i18n } = useTranslation();
-  const call = entry?.kind === "combo" ? entry.call : null;
-  const result = entry?.kind === "combo" ? entry.result : undefined;
-  const estimates = useMemo(() => (call ? tabularToolTokenEstimates(call, result) : null), [call, result]);
+  const { t } = useTranslation();
   const label = entry ? entryLabel(entry, (key) => t(key)) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
@@ -325,7 +320,7 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
       title={label}
       titleAccessory={
         toolStatus ? (
-          <div className={styles.meta}>
+          <>
             <span className={styles.statusBadge} data-status={toolStatus}>
               {t(`rework.chatTrace.toolStatus.${toolStatus}`)}
             </span>
@@ -337,25 +332,7 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
                 {toolLatency}
               </span>
             )}
-            {estimates &&
-              (["input", "output"] as const).map((direction) => {
-                const value = estimates[direction];
-                const label =
-                  value == null
-                    ? t(`rework.chatTrace.tokenEstimates.${direction}Unavailable`)
-                    : t(`rework.chatTrace.tokenEstimates.${direction}`, {
-                        value: value.toLocaleString(i18n?.resolvedLanguage ?? "en"),
-                      });
-                const help = t("rework.chatTrace.tokenEstimates.help");
-                return (
-                  <Tooltip key={direction} text={help}>
-                    <span className={styles.latencyBadge} tabIndex={0} aria-label={`${label}. ${help}`}>
-                      {label}
-                    </span>
-                  </Tooltip>
-                );
-              })}
-          </div>
+          </>
         ) : undefined
       }
       layout="overlay"
