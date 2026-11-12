@@ -67,6 +67,10 @@ The two configuration blocks that matter are:
   - Tunes artifact layout and query limits for the dataset-centric runtime.
   - `query.internal_presigned_ttl_seconds` controls the lifetime of backend-internal object-storage URLs used by
     DuckDB.
+  - For an internal HTTPS object store with a private CA, set `query.duckdb_ca_cert_file` to a readable CA bundle
+    inside the Knowledge Flow container and `query.duckdb_enable_server_cert_verification: true`. These options
+    affect DuckDB `httpfs` reads only; they do not change the browser-facing URL or the Python S3 client.
+  - Omitting either TLS option leaves the installed DuckDB default for that option unchanged.
 
 Example:
 
@@ -95,6 +99,12 @@ Behavior by storage backend:
 - `content_storage.type = minio`
   - Knowledge Flow generates short-lived internal presigned URLs and DuckDB reads them through `httpfs`.
   - The runtime image should ship DuckDB `httpfs` for offline/containerized deployments.
+  - Example TLS settings under `storage.tabular_store.query`:
+
+    ```yaml
+    duckdb_ca_cert_file: "/etc/fred/tls/ca-bundle.pem"
+    duckdb_enable_server_cert_verification: true
+    ```
 
 Compatibility note:
 
