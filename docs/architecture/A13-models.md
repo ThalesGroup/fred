@@ -12,7 +12,7 @@ facts and implementation entry points, not another policy definition.
 
 Companion to [the administration journey](02.3-agent-administration.md#models-and-mcp)
 and [runtime responsibilities](01-system-overview.md#mcp-connection-to-agent-tools).
-Model sources remain deployment-configured; MCP connections are space-owned SQL
+Model sources remain deployment-configured; external MCP connections are space-owned SQL
 resources, currently managed only for organization spaces. Shared governance does
 not imply identical provisioning, defaults or transport.
 
@@ -23,6 +23,15 @@ not imply identical provisioning, defaults or transport.
 | Permission | [Existing offer governance](../../apps/control-plane/src/agents/enablement.rs) and [role matrix](A7-action-role-matrix.md#model-administration-and-the-first-managed-chat) |
 | Execution | [Managed MCP runtime](../../libs/fred-runtime/fred_runtime/common/managed_mcp.py) and [tool integration](../../libs/fred-runtime/fred_runtime/common/mcp_runtime.py) |
 
+Internal Tabular uses the native capability policy and stable selection ID. The
+[MCP binding contract](../../apps/control-plane/src/mcp_connections/mod.rs) distinguishes
+an external connection with a reviewed inventory from an internal Knowledge Flow URL.
+[Admission](../../apps/control-plane/src/mcp_connections/store.rs) constructs the latter
+without discovery or a connection row; the runtime checks its destination and uses
+turn delegation. The [capability README](../../libs/capabilities/fred-capability-mcp/README.md)
+explains configuration and the [fresh-install constraint](../../apps/control-plane/migrations/0024_native_tabular.sql)
+excludes internal authentication from administrable connections.
+
 The following fragments are generated from existing responsibility anchors; they
 identify the catalogue/admission bridge without copying its implementation.
 
@@ -30,7 +39,7 @@ identify the catalogue/admission bridge without copying its implementation.
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
 | [`store.rs::available_offers`](../../apps/control-plane/src/mcp_connections/store.rs#L50) | Read the offer projection maintained in the same transaction as each connection mutation. Template pickers never need observed/published tool contracts. |
-| [`store.rs::bindings`](../../apps/control-plane/src/mcp_connections/store.rs#L135) | Resolve in the admission snapshot. Caller has checked the same selection's organization/local policy. Network discovery never occurs in this transaction. |
+| [`store.rs::bindings`](../../apps/control-plane/src/mcp_connections/store.rs#L73) | Resolve in the admission snapshot. Caller has checked the same selection's organization/local policy. Network discovery never occurs in this transaction. |
 <!-- end generated -->
 
 Observation, reviewed publication, technical activation, permission and agent

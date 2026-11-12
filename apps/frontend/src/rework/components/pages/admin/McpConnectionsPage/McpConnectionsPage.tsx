@@ -55,9 +55,7 @@ function ConnectionForm({
   const [url, setUrl] = useState(connection?.configuration.url ?? "");
   const [allowHttp, setAllowHttp] = useState(connection?.configuration.allow_insecure_http ?? false);
   const initialAuth = connection?.configuration.authentication;
-  const [auth, setAuth] = useState<"none" | "bearer" | "api_key" | "knowledge_flow_tabular">(
-    initialAuth?.kind ?? "none",
-  );
+  const [auth, setAuth] = useState<"none" | "bearer" | "api_key">(initialAuth?.kind ?? "none");
   const [credential, setCredential] = useState(
     initialAuth && "credential_binding" in initialAuth ? initialAuth.credential_binding : "",
   );
@@ -70,23 +68,17 @@ function ConnectionForm({
   const ready =
     canSave &&
     name.trim() &&
-    (auth === "knowledge_flow_tabular" || url.trim()) &&
+    url.trim() &&
     (connection || /^[a-z0-9_-]{1,64}$/.test(logicalName)) &&
     (auth === "none" ||
-      auth === "knowledge_flow_tabular" ||
       credentials.currentData?.some((c) => c.available && c.url === url && c.credential_binding === credential));
   const save = async () => {
     if (!ready || busy) return;
     const configuration: McpConfiguration = {
-      url: auth === "knowledge_flow_tabular" ? "" : url,
-      allow_insecure_http:
-        auth === "knowledge_flow_tabular"
-          ? initialAuth?.kind === "knowledge_flow_tabular"
-            ? connection!.configuration.allow_insecure_http
-            : false
-          : allowHttp,
+      url,
+      allow_insecure_http: allowHttp,
       authentication:
-        auth === "none" || auth === "knowledge_flow_tabular"
+        auth === "none"
           ? { kind: auth }
           : auth === "bearer"
             ? { kind: "bearer", credential_binding: credential }
@@ -151,31 +143,28 @@ function ConnectionForm({
           onChange={(e) => setDescription(e.target.value)}
           maxLength={2000}
         />
-        {auth !== "knowledge_flow_tabular" && (
-          <>
-            <TextInput
-              size="small"
-              label={t(`${key}.url`)}
-              value={url}
-              onChange={(e) => {
-                setUrl(e.target.value);
-                setCredential("");
-              }}
-              required
-            />
-            <label className={styles.checkbox}>
-              <Checkbox checked={allowHttp} onChange={(e) => setAllowHttp(e.target.checked)} />
-              {t(`${key}.allowHttp`)}
-            </label>
-          </>
-        )}
-        {auth === "knowledge_flow_tabular" && <p>{t(`${key}.trustedService`)}</p>}
+        <>
+          <TextInput
+            size="small"
+            label={t(`${key}.url`)}
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setCredential("");
+            }}
+            required
+          />
+          <label className={styles.checkbox}>
+            <Checkbox checked={allowHttp} onChange={(e) => setAllowHttp(e.target.checked)} />
+            {t(`${key}.allowHttp`)}
+          </label>
+        </>
         <Select
           size="small"
           label={t(`${key}.authentication`)}
           value={auth}
           onChange={setAuth}
-          options={(["none", "bearer", "api_key", "knowledge_flow_tabular"] as const).map((kind) => ({
+          options={(["none", "bearer", "api_key"] as const).map((kind) => ({
             key: kind,
             value: kind,
             label: t(`${key}.auth.${kind}`),

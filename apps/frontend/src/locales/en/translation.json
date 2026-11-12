@@ -2444,7 +2444,6 @@
           "readSkillFile": "Reading instructions"
         },
         "mcp": {
-          "trustedService": "The destination comes from the configured Knowledge Flow service. Discovery uses the platform workload; document calls use the admitted turn. No static Fred token is required.",
           "dependencyUnavailable": "A required service is unavailable or not authorized in this space.",
           "tabular": {
             "readQuery": "Reading data",
@@ -3791,6 +3790,7 @@
         "changedWhileEditing": "Another change was saved while you were editing. Your draft is still here, but cannot be saved. Copy any changes you want to keep before closing and reopening the agent.",
         "advancedSettings": "Advanced settings",
         "capabilities": {
+          "unavailableName": "Unavailable capability",
           "header": "Turn on capabilities for your agent",
           "learnMore": "Learn more",
           "viewToggle": {
@@ -3803,7 +3803,7 @@
             "missing": "Missing capabilities",
             "activeTooltip": "Active on this agent.",
             "inactiveTooltip": "Available, but not active on this agent.",
-            "unavailableTooltip": "Not enabled by the platform administrator for your team."
+            "unavailableTooltip": "Capability not permitted or not offered in this space."
           },
           "sections": {
             "dataKnowledge": "Data and knowledge",
@@ -5223,7 +5223,6 @@
       "allowHttp": "Allow unencrypted HTTP for this internal server",
       "authentication": "Server authentication",
       "auth": {
-        "knowledge_flow_tabular": "Knowledge Flow Tabular (Fred delegation)",
         "none": "No authentication",
         "bearer": "Bearer token",
         "api_key": "API key"

@@ -185,9 +185,7 @@ export function AgentFormBody({
   // False: `capabilities` are included with the agent, always on, only configured.
   const availableCapabilityIds = new Set(capabilities.map((item) => item.id));
   const supportsCapabilities = selectedTemplate?.supports_capabilities ?? true;
-  const unavailableConnections = selectedCapabilityIds.filter(
-    (id) => id.startsWith("managed-mcp:") && !availableCapabilityIds.has(id),
-  );
+  const unavailableCapabilities = selectedCapabilityIds.filter((id) => !availableCapabilityIds.has(id));
 
   // Config widgets may call their capability's own pod routes before any
   // session exists, so the base URLs come straight from the template catalog.
@@ -485,16 +483,22 @@ export function AgentFormBody({
                     />
                   </label>
                 </div>
-                {unavailableConnections.length > 0 && (
+                {unavailableCapabilities.length > 0 && (
                   <ul className={styles.toolsList}>
-                    {unavailableConnections.map((id) => {
-                      const name =
-                        editInstance?.selected_capability_names?.[id] ?? t("rework.mcp.connectionUnavailable");
+                    {unavailableCapabilities.map((id) => {
+                      const external = id.startsWith("managed-mcp:");
+                      const storedName = editInstance?.selected_capability_names?.[id];
+                      const name = external
+                        ? (storedName ?? t("rework.mcp.connectionUnavailable"))
+                        : storedName
+                          ? t(storedName, { defaultValue: storedName })
+                          : t("rework.teams.formAgent.capabilities.unavailableName");
+                      const unavailable = t("rework.teams.formAgent.capabilities.included.unavailableTooltip");
                       return supportsCapabilities ? (
                         <CapabilityCard
                           key={id}
                           name={name}
-                          description={t("rework.mcp.unavailableSelection")}
+                          description={external ? t("rework.mcp.unavailableSelection") : unavailable}
                           checked
                           disabled={isSubmitting}
                           onToggle={() =>
@@ -505,7 +509,7 @@ export function AgentFormBody({
                         <CapabilityCard
                           key={id}
                           name={name}
-                          description={t("rework.mcp.dependencyUnavailable")}
+                          description={external ? t("rework.mcp.dependencyUnavailable") : unavailable}
                           included
                         />
                       );

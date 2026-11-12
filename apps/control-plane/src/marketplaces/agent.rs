@@ -182,25 +182,10 @@ pub(super) async fn export(
             "An agent snapshot supports at most 32 capabilities",
         ));
     }
-    let capability_template = if selected.iter().any(|id| id.starts_with("managed-mcp:")) {
-        Some(
-            agents::enrollable_template(
-                &s.pool,
-                &s.agent_catalog,
-                space.organization,
-                record.template_id,
-            )
-            .await?
-            .0,
-        )
-    } else {
-        None
-    };
     let export_capabilities = futures::stream::iter(selected)
         .map(|id: String| {
             let record = &record;
             let file_bytes = &file_bytes;
-            let capability_template = &capability_template;
             async move {
                 let config = record
                     .tuning
@@ -208,11 +193,7 @@ pub(super) async fn export(
                     .get("capability_config")
                     .and_then(|v| v.get(&id))
                     .ok_or_else(|| incompatible("Selected capability configuration is missing"))?;
-                let owner = capability_template
-                    .as_ref()
-                    .map(|template| crate::mcp_connections::capability_owner(template, &id))
-                    .unwrap_or(&id);
-                if id.starts_with("managed-mcp:") && owner == id {
+                if id.starts_with("managed-mcp:") {
                     if config != &json!({"schema_version":"1","config":{}}) {
                         return Err(incompatible(
                             "Managed MCP has no portable agent-owned configuration",
@@ -235,7 +216,7 @@ pub(super) async fn export(
                 } else {
                     json!({})
                 };
-                let encoded = percent_encoding::utf8_percent_encode(owner, POD_SEGMENT);
+                let encoded = percent_encoding::utf8_percent_encode(&id, POD_SEGMENT);
                 let request = tuning::capability_request(
                     &s.agent_catalog,
                     &record.source_runtime_id,
@@ -431,18 +412,16 @@ pub(super) async fn prepare_install(
         ));
     }
     let draft = Uuid::new_v5(&key, user.uid.as_bytes());
-    let capability_template = &template;
     let configurations = futures::future::try_join_all(
         package.capabilities.iter().map(|(id, capability)| async move {
-            let owner = crate::mcp_connections::capability_owner(capability_template, id);
-            if id.starts_with("managed-mcp:") && owner == id {
+            if id.starts_with("managed-mcp:") {
                 if capability.schema_version != "1" || !capability.config.is_empty() || !capability.files.is_empty() {
                     return Err(incompatible("Managed MCP has no portable agent-owned configuration"));
                 }
                 // The selection is portable; connection facts are resolved again at admission.
                 return Ok((id.clone(), BTreeMap::new()));
             }
-            let encoded = percent_encoding::utf8_percent_encode(owner, POD_SEGMENT);
+            let encoded = percent_encoding::utf8_percent_encode(id, POD_SEGMENT);
             let request = tuning::capability_request(
                 &s.agent_catalog, &package.runtime_id, authorization,
                 &format!("{encoded}/copy-config"),

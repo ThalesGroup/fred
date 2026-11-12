@@ -580,22 +580,6 @@ async fn space_agent_templates(
             let Some(mut summary) = template_summary(id, runtime, &template)? else {
                 return Ok(None);
             };
-            let service_dependencies: std::collections::BTreeSet<String> = summary
-                .available_capabilities
-                .iter()
-                .chain(managed_offers.iter())
-                .filter(|entry| {
-                    entry
-                        .get("mcp_service")
-                        .is_some_and(|value| !value.is_null())
-                })
-                .filter_map(|entry| {
-                    entry
-                        .get("id")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                })
-                .collect();
             crate::mcp_connections::extend_template(&mut summary, managed_offers);
             // Offers the space may not use are neither proposed nor preselected.
             summary.available_capabilities.retain(|entry| {
@@ -604,16 +588,14 @@ async fn space_agent_templates(
                     .and_then(serde_json::Value::as_str)
                     .is_some_and(allowed)
             });
-            if summary
-                .default_capability_ids
-                .iter()
-                .any(|id| service_dependencies.contains(id) && !allowed(id))
+            if !summary.supports_capabilities
+                && summary.default_capability_ids.iter().any(|id| !allowed(id))
             {
                 summary.status = AgentTemplateStatus::DependencyUnavailable;
             }
             summary
                 .default_capability_ids
-                .retain(|id| allowed(id) || service_dependencies.contains(id));
+                .retain(|id| allowed(id) || !summary.supports_capabilities);
             Ok::<_, anyhow::Error>(Some(summary))
         })
         .buffered(READ_CONCURRENCY)
@@ -837,8 +819,6 @@ pub(crate) async fn editable_template(
             &mut summary,
             &crate::mcp_connections::available_offers(pool, organization).await?,
         );
-    } else {
-        crate::mcp_connections::extend_template(&mut summary, &[]);
     }
     Ok(Some(summary))
 }

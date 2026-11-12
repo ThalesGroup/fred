@@ -11,14 +11,19 @@ import pytest
 from conftest import StaticWorkloadTokens
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_runtime.common import managed_mcp
-from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
+from fred_sdk.contracts.managed_mcp import (
+    McpConnectionBinding,
+    McpCredentialBinding,
+    McpTabularBinding,
+    McpTool,
+)
 from mcp.types import TextContent, Tool
 
 ID = UUID("8cfd2a56-2d35-4d18-b67c-5e42b0a9c122")
 
 
 def binding(*, revision=1, auth=None, url="https://tools.invalid/mcp"):
-    return McpBinding.model_validate(
+    return McpConnectionBinding.model_validate(
         dict(
             connection_id=ID,
             capability_id=f"managed-mcp:{ID}",
@@ -379,7 +384,18 @@ def test_native_mcp_catalog_cannot_claim_central_identity():
         )
 
 
-def test_managed_tools_never_infer_document_workspace_or_session_context():
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"mcp_server_id": binding().capability_id},
+        {
+            "mcp_server_id": "mcp-knowledge-flow-mcp-tabular",
+            "mcp_trusted_service": "knowledge_flow_tabular",
+            "mcp_connection_id": None,
+        },
+    ],
+)
+def test_managed_tools_never_infer_document_workspace_or_session_context(metadata):
     from fred_runtime.common.context_aware_tool import ContextAwareTool
     from langchain_core.tools import StructuredTool
 
@@ -401,7 +417,7 @@ def test_managed_tools_never_infer_document_workspace_or_session_context():
             },
         },
         coroutine=call,
-        metadata={"mcp_server_id": binding().capability_id},
+        metadata=metadata,
     )
     wrapped = ContextAwareTool(tool, forbidden_context, forbidden_context)
     assert wrapped._inject_context_if_needed({}) == {}
@@ -446,8 +462,7 @@ def delegated_provider(person="alice", run="run-a", agent="agent-a"):
 
 
 def test_trusted_service_requires_exact_locally_configured_destination():
-    trusted = binding(
-        auth={"kind": "knowledge_flow_tabular"},
+    trusted = McpTabularBinding(
         url="https://kf.invalid/api/mcp/tabular",
     )
     for base in (
@@ -471,9 +486,7 @@ def test_trusted_service_requires_exact_locally_configured_destination():
         credentials=[],
         knowledge_flow_url="https://kf.invalid/api/",
     )
-    external = trusted.model_copy(
-        update={"configuration": binding(url=trusted.configuration.url).configuration}
-    )
+    external = binding(url=trusted.url)
     assert managed_mcp.trusted_destination(external, "https://kf.invalid/api") is False
     assert managed_mcp.credential_headers(external, []) == {}
 
@@ -484,8 +497,11 @@ async def test_one_service_clients_keep_two_pod_turns_isolated_and_external_has_
 ):
     from langchain_core.tools import StructuredTool
 
+    FakeClient.pages = [page([remote("list_tabular_documents"), remote()])]
+
     async def convert(tool, client):
         async def call(**kwargs):
+            client.calls.append((tool.name, kwargs))
             return "ok"
 
         return StructuredTool(
@@ -501,8 +517,7 @@ async def test_one_service_clients_keep_two_pod_turns_isolated_and_external_has_
         )
 
     monkeypatch.setattr(managed_mcp, "as_langchain_tool", convert)
-    admitted = binding(
-        auth={"kind": "knowledge_flow_tabular"},
+    admitted = McpTabularBinding(
         url="https://kf.invalid/api/mcp/tabular",
     )
     providers = [
@@ -526,6 +541,10 @@ async def test_one_service_clients_keep_two_pod_turns_isolated_and_external_has_
         ]
     )
     assert result[0][0] is not result[1][0]
+    for index, tools in enumerate(result):
+        assert tools[0].name == "list_tabular_documents"
+        assert await tools[0].ainvoke({}) == "ok"
+        assert FakeClient.instances[index].calls == [("list_tabular_documents", {})]
     seen = []
 
     async def receive(request):
@@ -546,7 +565,7 @@ async def test_one_service_clients_keep_two_pod_turns_isolated_and_external_has_
     assert trusted_metadata["mcp_trusted_service"] == "knowledge_flow_tabular"
 
     # A matching URL, display name or server annotation is never service identity.
-    external = binding(url=admitted.configuration.url).model_copy(
+    external = binding(url=admitted.url).model_copy(
         update={"display_name": "Knowledge Flow Tabular"}
     )
     external_tools = await managed_mcp.connect(
@@ -607,8 +626,7 @@ async def test_trusted_auth_renews_without_readmission_and_refuses_destination_c
 
 @pytest.mark.asyncio
 async def test_trusted_service_without_admitted_context_fails_before_connecting():
-    admitted = binding(
-        auth={"kind": "knowledge_flow_tabular"},
+    admitted = McpTabularBinding(
         url="https://kf.invalid/api/mcp/tabular",
     )
     with pytest.raises(managed_mcp.ManagedMcpError, match="delegated_context_required"):

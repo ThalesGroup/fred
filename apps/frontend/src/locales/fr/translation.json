@@ -2444,7 +2444,6 @@
           "readSkillFile": "Consultation des consignes"
         },
         "mcp": {
-          "trustedService": "La destination provient du service Knowledge Flow configuré. La découverte utilise l’identité technique ; les appels documentaires utilisent le tour admis. Aucun jeton Fred statique n’est requis.",
           "dependencyUnavailable": "Un service requis est indisponible ou non autorisé dans cet espace.",
           "tabular": {
             "readQuery": "Consultation des données",
@@ -3791,6 +3790,7 @@
         "changedWhileEditing": "Une autre modification a été enregistrée pendant votre édition. Votre brouillon est conservé ici, mais ne peut pas être enregistré. Copiez les modifications à garder avant de fermer et de rouvrir l'agent.",
         "advancedSettings": "Paramètres avancés",
         "capabilities": {
+          "unavailableName": "Capacité indisponible",
           "header": "Activer des capacités pour votre agent",
           "learnMore": "En savoir plus",
           "viewToggle": {
@@ -3803,7 +3803,7 @@
             "missing": "Capacités manquantes",
             "activeTooltip": "Activée pour cet agent.",
             "inactiveTooltip": "Disponible, mais non activée pour cet agent.",
-            "unavailableTooltip": "Non activée par l'administrateur de la plateforme pour votre équipe."
+            "unavailableTooltip": "Capacité non autorisée ou non proposée pour cet espace."
           },
           "sections": {
             "dataKnowledge": "Données et connaissances",
@@ -5223,7 +5223,6 @@
       "allowHttp": "Autoriser HTTP sans chiffrement pour ce serveur interne",
       "authentication": "Authentification du serveur",
       "auth": {
-        "knowledge_flow_tabular": "Knowledge Flow Tabular (délégation Fred)",
         "none": "Sans authentification",
         "bearer": "Jeton Bearer",
         "api_key": "Clé API"

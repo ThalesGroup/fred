@@ -203,15 +203,6 @@ export async function provisionDisposableAgent(
     ? available.find((item) => item.source_agent_id === templateKey)
     : (available.find((item) => item.source_agent_id === "fred.github.test_assistant") ?? available[0]);
   if (!template) throw new SkipStep("No available, instantiable agent template is authorized in this space.");
-  capabilityIds = capabilityIds?.map((id) => {
-    if (id !== "mcp-knowledge-flow-mcp-tabular") return id;
-    const entry = template.available_capabilities?.find(
-      (item) => item.id?.startsWith("managed-mcp:") && item.mcp_service === "knowledge_flow_tabular",
-    );
-    if (!entry || typeof entry.id !== "string")
-      throw new SkipStep("The required tabular SQL capability is not advertised and permitted in this space.");
-    return entry.id;
-  });
   if (capabilityIds?.length) await requireCapabilities(checks, template.source_runtime_id, capabilityIds);
   signal.throwIfAborted();
   return checks

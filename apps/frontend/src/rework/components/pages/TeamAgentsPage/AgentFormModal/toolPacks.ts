@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { CapabilityCatalogEntry } from "../../../../../slices/runtime/runtimeOpenApi";
-
 /** Simple-view packs map user-facing switches to the agent's capability selection.
  * The two document packs each turn on one `document_access` source.
  */
@@ -60,7 +58,7 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 // corpus targets and never the conversation's attachments, so only the Team
 // documents pack grants it.
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
-// Author dependency, resolved to the offered central ID before a pack is selected.
+// Native capability: selection and configuration use this stable ID.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
@@ -83,7 +81,6 @@ const PACK_TEAM_WIKI = "team_wiki";
 
 const SHARED_DOCUMENT_INCLUDES: ToolPackIncludedCapability[] = [
   { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
-  { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
   { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
 ];
 const READING_INCLUDES: ToolPackIncludedCapability[] = [
@@ -119,6 +116,14 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         includes: TEAM_DOCUMENTS_INCLUDES,
         enablesCapabilityIds: TEAM_DOCUMENTS_INCLUDES.map((entry) => entry.capabilityId),
         documentSource: DOC_ACCESS_TEAM_DOCUMENTS,
+      },
+      {
+        id: CAP_TABULAR,
+        icon: "table_chart",
+        titleKey: "mcp.servers.tabular.name",
+        descriptionKey: "mcp.servers.tabular.description",
+        includes: [{ capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" }],
+        enablesCapabilityIds: [CAP_TABULAR],
       },
       {
         // Same icon as the wiki's own entry in the team navigation panel, so the
@@ -171,19 +176,3 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
     ],
   },
 ];
-
-/** Resolve the business dependency using the trusted service descriptor, never its display name. */
-export function resolveToolPackSections(capabilities: readonly CapabilityCatalogEntry[]): ToolPackSection[] {
-  const tabular = capabilities.find(
-    (item) => item.id.startsWith("managed-mcp:") && item.mcp_service === "knowledge_flow_tabular",
-  );
-  const resolve = (id: string) => (id === CAP_TABULAR && tabular ? tabular.id : id);
-  return TOOL_PACK_SECTIONS.map((section) => ({
-    ...section,
-    packs: section.packs.map((pack) => ({
-      ...pack,
-      enablesCapabilityIds: pack.enablesCapabilityIds.map(resolve),
-      includes: pack.includes.map((item) => ({ ...item, capabilityId: resolve(item.capabilityId) })),
-    })),
-  }));
-}

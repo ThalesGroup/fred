@@ -1,10 +1,10 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Stable author reference for Tabular's embedded business contribution.
+"""Stable native Tabular capability reference.
 
 Use MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR) in template/profile
-requirements. Control Plane resolves its declared service dependency to the
-centrally published and authorized connection. This is not an endpoint catalog.
+requirements. Control Plane admits the internal Knowledge Flow destination under
+the ordinary capability policy. This is not an endpoint catalogue.
 """
 
 from typing import Final

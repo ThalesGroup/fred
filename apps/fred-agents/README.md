@@ -85,24 +85,23 @@ The existing OpenAI direct-template and creation-assistant execution surfaces
 explicitly refuse execution until they carry that context. See decision 5e and
 F25 for the unvalidated integration boundary.
 
-Tabular business instructions and composer controls come from the installed
+Tabular instructions and composer controls come from the native
 [`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md)
-capability package. The connection is declared, discovered and published once
-in Control Plane. Compatible pods share its central offer and permission; the
-package's `mcp_service` is a dependency, not another native offer. Both pods and
-Control Plane must configure the same Knowledge Flow API base URL.
+capability. Enable it through the ordinary capability policy; no MCP connection
+or technical activation is required. Control Plane and each Agent Pod must
+configure the same Knowledge Flow API base URL. Admission supplies its trusted
+Tabular endpoint, and execution uses the user's delegated document scope.
 
-No Tabular or Prometheus technical catalog is packaged. Old KF pod catalog
-entries fail startup with an explicit diagnostic. Sync editable dependencies
-(`make dev`) after the entry-point change. Author defaults may retain the stable
-Tabular dependency ID; Control Plane resolves it to the deployment's offer.
+No Tabular or Prometheus technical catalogue is packaged. Knowledge Flow pod
+catalogue entries fail startup explicitly. Author defaults and agent selections
+use the stable native Tabular capability ID directly.
 
 Independent/non-migrated pod MCP catalogs retain the SDK loader and explicit
 `FRED_MCP_CATALOG_FILE` / `FRED_MCP_EXTERNAL_CATALOG_FILE` configuration. Their
 instruction files and custom capability behavior remain supported. New managed
 external servers, including Streamable HTTP gateways, use the central MCP page;
 none receive Fred identity or document context. `document_access` remains native
-SDK/REST. See [the unexecuted two-pod reception](../control-plane/README.md#real-knowledge-flow-reception-two-pods).
+SDK/REST. See [the Knowledge Flow reception procedure](../control-plane/README.md#real-knowledge-flow-reception-two-pods).
 
 Minimal run example:
 

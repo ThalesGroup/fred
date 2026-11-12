@@ -1847,23 +1847,6 @@ async def _resolve_agent_instance(
                 status_code=403,
                 detail="Conversation binding mismatch or missing provenance",
             )
-    from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
-
-    for binding in resolution.mcp_bindings:
-        if binding.configuration.authentication.kind == "knowledge_flow_tabular":
-            owner = MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
-            tuning.selected_capability_ids = [
-                *(tuning.selected_capability_ids or ()),
-                owner,
-            ]
-            if binding.capability_id in tuning.capability_config:
-                tuning.capability_config[owner] = tuning.capability_config[
-                    binding.capability_id
-                ]
-            if request.turn_options and binding.capability_id in request.turn_options:
-                request.turn_options[owner] = request.turn_options.pop(
-                    binding.capability_id
-                )
     request._turn_authority = TurnAuthority(resolution, choice)
     request.context = {
         **ctx,
@@ -7000,7 +6983,7 @@ def create_agent_app(
         for server in _boot_mcp_config.servers
     ):
         raise ValueError(
-            "Knowledge Flow MCP must use a centrally managed connection; remove its pod catalog entries"
+            "Knowledge Flow Tabular is an internal capability; remove its pod catalog entries"
         )
     capability_registry = boot_capability_registry(
         mcp_servers=_boot_mcp_config.servers if _boot_mcp_config is not None else None

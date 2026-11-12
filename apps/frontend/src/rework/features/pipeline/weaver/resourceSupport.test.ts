@@ -382,17 +382,17 @@ describe("tabular diagnostic fixture", () => {
             source_runtime_id: "runtime",
             status: "available",
             team_instantiable: true,
-            available_capabilities: [{ id: "managed-mcp:central-tabular", mcp_service: "knowledge_flow_tabular" }],
+            available_capabilities: [{ id: "mcp-knowledge-flow-mcp-tabular" }],
           },
         ];
       if (name === "spaceCapabilityPolicies")
         return [
           {
-            source_id: "$mcp",
-            origin: "managed_mcp",
+            source_id: "runtime",
+            origin: "pod",
             source_enabled: true,
             reachable: true,
-            offers: [{ capability_id: "managed-mcp:central-tabular", advertised: true, permitted: true }],
+            offers: [{ capability_id: "mcp-knowledge-flow-mcp-tabular", advertised: true, permitted: true }],
           },
         ];
       if (name === "createAgentInstance") return args;
@@ -405,7 +405,7 @@ describe("tabular diagnostic fixture", () => {
       "fred.github.test_assistant",
       ["mcp-knowledge-flow-mcp-tabular"],
     );
-    expect(value).toMatchObject({ createAgentInstanceRequest: { capability_ids: ["managed-mcp:central-tabular"] } });
+    expect(value).toMatchObject({ createAgentInstanceRequest: { capability_ids: ["mcp-knowledge-flow-mcp-tabular"] } });
   });
 });
 
