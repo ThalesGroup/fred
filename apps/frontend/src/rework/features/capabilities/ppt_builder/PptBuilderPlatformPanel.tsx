@@ -39,10 +39,10 @@ import {
   useGetPptBuilderPlatformQuery,
   usePutPptBuilderPlatformOverridesMutation,
   useRerunPptBuilderPlatformAnalysisMutation,
-  pptBuilderCapabilityApi,
   type AnalysisStatusResponse,
   type PlatformTemplateResponse,
 } from "./api/pptBuilderCapabilityOpenApi";
+import { updatePlatformCache } from "./updatePlatformCache";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { effectiveInventory, summarize, upsertOverride, USE_VISION_KEY } from "./types";
@@ -109,9 +109,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const summary = effective ? summarize(effective) : null;
   const busy = uploading || rerunning || resetting;
   const hasTemplate = current !== null || replacement !== null;
-  const updatePlatform = (next: PlatformTemplateResponse) => {
-    void dispatch(pptBuilderCapabilityApi.util.upsertQueryData("getPptBuilderPlatform", undefined, next));
-  };
+  const updatePlatform = (next: PlatformTemplateResponse) => updatePlatformCache(dispatch, next);
 
   const handlePick = async (file: File) => {
     if (!baseUrl) return;

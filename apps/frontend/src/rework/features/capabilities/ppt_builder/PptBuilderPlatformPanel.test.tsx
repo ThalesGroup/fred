@@ -31,6 +31,7 @@ const h = vi.hoisted(() => ({
   builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
   refetch: vi.fn(),
   dispatch: vi.fn(),
+  getRunningQueryThunk: vi.fn(),
   upsertQueryData: vi.fn(),
   rerun: vi.fn(),
   reset: vi.fn(),
@@ -69,7 +70,9 @@ vi.mock("react-redux", () => ({
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
-  pptBuilderCapabilityApi: { util: { upsertQueryData: h.upsertQueryData } },
+  pptBuilderCapabilityApi: {
+    util: { getRunningQueryThunk: h.getRunningQueryThunk, upsertQueryData: h.upsertQueryData },
+  },
   useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
   useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => ({
     data: options.skip ? undefined : h.builtin,
@@ -155,6 +158,7 @@ beforeEach(() => {
   for (const fn of [
     h.refetch,
     h.dispatch,
+    h.getRunningQueryThunk,
     h.upsertQueryData,
     h.rerun,
     h.reset,
