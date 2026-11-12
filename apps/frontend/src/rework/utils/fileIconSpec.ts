@@ -24,16 +24,11 @@ export const FOLDER_ICON: RowIconSpec = { type: "folder", color: "var(--folder)"
 
 // Mirrors fred-core's FileTypeBucket grouping (PDF / Texte / PPT / Excel /
 // Autres), including the legacy/OpenDocument extensions that bucket covers
-// (doc/odt alongside docx; odp alongside ppt/pptx; xls/ods alongside xlsx) —
-// Corpus documents' `file.file_type` is normalized to fred-core's `FileType`
-// enum and never produces those, but the raw `/fs` tabs (Espace
-// d'équipe/Agents) pass a real file extension straight from the file name,
-// where they do occur. PPT uses --warning (mustard/orange) since that's the
-// closest existing semantic token to PowerPoint's own brand color and no
-// other bucket claims it yet — pdf=error, word/texte=tertiary, excel/csv=success.
-// Shared across every Resources tab so a given file extension reads the same
-// way everywhere.
-const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
+// (doc/odt alongside docx; odp alongside ppt/pptx; xls/ods alongside xlsx).
+// PPT uses --warning (mustard/orange) since that's the closest existing
+// semantic token to PowerPoint's own brand color and no other bucket claims
+// it yet — pdf=error, word/texte=tertiary, excel/csv=success.
+const ICON_BY_EXTENSION: Record<string, RowIconSpec> = {
   pdf: { type: "picture_as_pdf", color: "var(--error)" },
   docx: { type: "article", color: "var(--tertiary)" },
   doc: { type: "article", color: "var(--tertiary)" },
@@ -49,11 +44,17 @@ const FILE_TYPE_ICON: Record<string, RowIconSpec> = {
   pptx: { type: "slideshow", color: "var(--warning)" },
   odp: { type: "slideshow", color: "var(--warning)" },
 };
+const IMAGE_FILE_ICON: RowIconSpec = { type: "image", color: "var(--on-surface-muted)" };
 const OTHER_FILE_ICON: RowIconSpec = { type: "draft", color: "var(--on-surface-muted)" };
 
-export function fileIconSpec(fileType: string | null | undefined): RowIconSpec {
-  return FILE_TYPE_ICON[fileType ?? ""] ?? OTHER_FILE_ICON;
+/** How a file is pictured wherever it is listed: resources, library pickers,
+ *  chat attachments.
+ *
+ *  The file name is the one fact every source carries. The media type is
+ *  supplied by the uploading browser — often empty or `application/octet-stream`
+ *  for Markdown or CSV — so it only tells an image apart. */
+export function fileIconSpec(name: string, mime?: string | null): RowIconSpec {
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  return ICON_BY_EXTENSION[extension] ?? (mime?.startsWith("image/") ? IMAGE_FILE_ICON : OTHER_FILE_ICON);
 }
-
-export const attachmentIcon = (name: string, mime: string): IconType =>
-  mime.startsWith("image/") ? "image" : fileIconSpec(name.split(".").pop()?.toLowerCase()).type;

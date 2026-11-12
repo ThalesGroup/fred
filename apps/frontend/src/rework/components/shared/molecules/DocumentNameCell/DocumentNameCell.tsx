@@ -32,7 +32,7 @@ export interface DocumentNameCellProps {
  */
 export default function DocumentNameCell({ doc }: DocumentNameCellProps) {
   const { t } = useTranslation();
-  const spec = fileIconSpec(doc.file?.file_type);
+  const spec = fileIconSpec(doc.identity.document_name, doc.file?.mime_type);
   const title = embeddedTitle(doc);
 
   return (

@@ -18,7 +18,7 @@ import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { attachmentIcon } from "../../../../utils/fileIconSpec";
+import { fileIconSpec } from "../../../../utils/fileIconSpec";
 import styles from "./AttachmentChips.module.css";
 
 interface AttachmentChipsProps {
@@ -85,7 +85,7 @@ export function AttachmentChips({ attachments, onRemove, onRetry, onOpen, stacke
           tone={attachment.status === "error" ? "error" : attachment.status === "ready" ? "success" : "tertiary"}
           leading={
             <span className={styles.fileIcon}>
-              <Icon category="outlined" type={attachmentIcon(attachment.name, attachment.mime)} />
+              <Icon category="outlined" type={fileIconSpec(attachment.name, attachment.mime).type} />
             </span>
           }
           label={attachment.name}

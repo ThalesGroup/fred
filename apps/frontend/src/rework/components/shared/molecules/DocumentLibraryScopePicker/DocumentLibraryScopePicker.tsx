@@ -400,7 +400,7 @@ function SpacePicker({
           }
           if (foldersOnly) return null;
           const covered = value.folderIds.includes(parentId);
-          const spec = fileIconSpec(name.split(".").pop()?.toLowerCase());
+          const spec = fileIconSpec(name);
           return (
             <li key={id} className={styles.documentItem}>
               {showDocuments && (
