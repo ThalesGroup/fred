@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -27,6 +27,7 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
+import type { store } from "../../../../common/store";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 import { normalizeApiError } from "../../../core/errors/normalizeApiError";
 import type { CapabilityPlatformPanelProps } from "../types";
@@ -38,6 +39,7 @@ import {
   useGetPptBuilderPlatformQuery,
   usePutPptBuilderPlatformOverridesMutation,
   useRerunPptBuilderPlatformAnalysisMutation,
+  pptBuilderCapabilityApi,
   type AnalysisStatusResponse,
   type PlatformTemplateResponse,
 } from "./api/pptBuilderCapabilityOpenApi";
@@ -60,6 +62,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const { t } = useTranslation();
   const { siteDisplayName, agentsNicknamePlural } = useFrontendProperties();
   const { showSuccess, showError } = useToast();
+  const dispatch = useDispatch<typeof store.dispatch>();
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
     selectCapabilityBaseUrl(state, CAPABILITY_ID),
@@ -106,15 +109,18 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const summary = effective ? summarize(effective) : null;
   const busy = uploading || rerunning || resetting;
   const hasTemplate = current !== null || replacement !== null;
+  const updatePlatform = (next: PlatformTemplateResponse) => {
+    void dispatch(pptBuilderCapabilityApi.util.upsertQueryData("getPptBuilderPlatform", undefined, next));
+  };
 
   const handlePick = async (file: File) => {
     if (!baseUrl) return;
     setUploading(true);
     try {
-      await uploadPlatformTemplate(baseUrl, file, visionChoice);
+      const next = await uploadPlatformTemplate(baseUrl, file, visionChoice);
       showSuccess({ summary: t(`${K}.uploaded`) });
       setVisionDraft(null);
-      void query.refetch();
+      updatePlatform(next);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       showError({ summary: t(`${K}.uploadError`), detail: detail || t(`${K}.uploadFailed`) });
@@ -126,10 +132,10 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
 
   const handleRerun = async () => {
     try {
-      await rerun({ platformAnalysisRequest: visionChoice }).unwrap();
+      const next = await rerun({ platformAnalysisRequest: visionChoice }).unwrap();
       showSuccess({ summary: t(`${K}.rerunStarted`) });
       setVisionDraft(null);
-      void query.refetch();
+      updatePlatform(next);
     } catch (error) {
       showError({ summary: t(`${K}.rerunError`), detail: normalizeApiError(error).detail });
     }
@@ -138,10 +144,10 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const handleReset = async () => {
     setConfirmReset(false);
     try {
-      await resetTemplate().unwrap();
+      const next = await resetTemplate().unwrap();
       showSuccess({ summary: t(`${K}.resetDone`, { siteDisplayName }) });
       setVisionDraft(null);
-      void query.refetch();
+      updatePlatform(next);
     } catch (error) {
       showError({ summary: t(`${K}.resetError`), detail: normalizeApiError(error).detail });
     }
@@ -155,9 +161,9 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
       return;
     }
     try {
-      await saveOverrides({ platformOverridesRequest: { overrides: draft } }).unwrap();
+      const next = await saveOverrides({ platformOverridesRequest: { overrides: draft } }).unwrap();
       showSuccess({ summary: t(`${K}.overridesSaved`) });
-      void query.refetch();
+      updatePlatform(next);
     } catch (error) {
       showError({ summary: t(`${K}.overridesError`), detail: normalizeApiError(error).detail });
     } finally {
