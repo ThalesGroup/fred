@@ -342,19 +342,17 @@ describe("TeamContentNavbar — knowledge bases and beta badges", () => {
     h.wikiEnabled = true;
   });
 
-  it("shows enabled definitions even before any instance is created, with beta after each label", () => {
+  it("shows enabled definitions even before any instance is created, with beta only on the wiki", () => {
     h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["member"] }];
     h.knowledgeBases.currentData = [{ definition_id: "source", name: "Source", description: "" }];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
-    for (const [route, label] of [
-      ["knowledge-bases", "knowledgeBases"],
-      ["wiki", "wiki"],
-    ]) {
-      const entry = html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
-      expect(entry).toBeDefined();
-      expect(entry).toContain("aria-label=");
-      expect(entry!.indexOf("aria-label=")).toBeGreaterThan(entry!.indexOf(`rework.sidebar.team.menu.${label}`));
-    }
+    const entry = (route: string) => html.split(`href="/team/team-1/${route}"`)[1]?.split("</a>")[0];
+    const knowledgeBases = entry("knowledge-bases");
+    expect(knowledgeBases).toContain("rework.sidebar.team.menu.knowledgeBases");
+    expect(knowledgeBases).not.toContain("aria-label=");
+    const wiki = entry("wiki");
+    expect(wiki).toBeDefined();
+    expect(wiki!.indexOf("aria-label=")).toBeGreaterThan(wiki!.indexOf("rework.sidebar.team.menu.wiki"));
   });
 
   it.each([

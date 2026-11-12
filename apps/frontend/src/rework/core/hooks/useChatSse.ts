@@ -687,6 +687,7 @@ export function useChatSse(
                 type: "tool_call",
                 call_id: event.call_id,
                 name: event.tool_name,
+                display_name: event.display_name,
                 args: event.arguments ?? {},
               },
             ],

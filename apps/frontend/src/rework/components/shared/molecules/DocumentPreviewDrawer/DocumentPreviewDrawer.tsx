@@ -19,8 +19,9 @@ export interface DocumentPreviewTarget {
   documentUid: string;
   sessionId?: string;
   fileName?: string;
-  /** Authenticated PDF source for a conversation-created file. */
+  /** Authenticated source for a conversation-created file (PDF by default). */
   sourceUrl?: string;
+  sourceFormat?: "text";
 }
 import {
   DocumentViewer,
@@ -80,6 +81,7 @@ export default function DocumentPreviewDrawer({ target, onClose, onError, onLoad
         <DocumentViewer
           key={`${target.documentUid}:${attempt}`}
           sourceUrl={target.sourceUrl}
+          sourceFormat={target.sourceFormat}
           onError={(error) => {
             setFailed(true);
             onError?.(error);

@@ -16,7 +16,7 @@ import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
-import { attachmentIcon } from "@rework/utils/fileIconSpec";
+import { fileIconSpec } from "@rework/utils/fileIconSpec";
 import type { SessionAttachment } from "@rework/types/attachments";
 import {
   findSkillInvocations,
@@ -106,7 +106,7 @@ export function UserMessage({
               <Chip
                 appearance="tonal"
                 label={attachment.name}
-                leading={<Icon category="outlined" type={attachmentIcon(attachment.name, attachment.mime ?? "")} />}
+                leading={<Icon category="outlined" type={fileIconSpec(attachment.name, attachment.mime).type} />}
               />
             </li>
           ))}

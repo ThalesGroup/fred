@@ -523,6 +523,27 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     },
   );
 
+  it("preserves a managed MCP display name separately from its execution name", async () => {
+    const name = "mcp_b1322accb3dd44acbaf1dbdc2114db4f_cb162d4eff0f3b93";
+    const displayName = "Parc Eolien · production_par_eolienne";
+    const events = [
+      { kind: "tool_call", call_id: "windfarm", tool_name: name, display_name: displayName, arguments: {} },
+      { kind: "tool_result", call_id: "windfarm", content: "done" },
+      { kind: "final", content: "Done.", finish_reason: "stop" },
+    ];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")));
+    mount();
+    await act(async () => {
+      await latest.send("production", "session-1");
+    });
+    expect(latest.messages.find((message) => message.channel === "tool_call")?.parts).toEqual([
+      { type: "tool_call", call_id: "windfarm", name, display_name: displayName, args: {} },
+    ]);
+    fetchSpy.mockRestore();
+  });
+
   describe("support reference of a live tool failure", () => {
     const failedSearch = [
       { kind: "tool_call", call_id: "search", tool_name: "search_documents", arguments: { query: "q" } },

@@ -157,7 +157,9 @@ async def test_pagination_ignores_additions_and_clients_are_owned_per_turn(monke
     registry = CapabilityRegistry()
     before = tuple(registry.ids())
     first = await managed_mcp.connect([binding()], [])
-    second = await managed_mcp.connect([binding(revision=2)], [])
+    second = await managed_mcp.connect(
+        [binding(revision=2).model_copy(update={"display_name": "Renamed"})], []
+    )
     assert len(first) == len(second) == 1
     assert first[0] is not second[0]
     assert tuple(registry.ids()) == before
@@ -171,6 +173,10 @@ async def test_pagination_ignores_additions_and_clients_are_owned_per_turn(monke
     assert FakeClient.instances[0].opened == FakeClient.instances[0].closed == 2
     assert first[0].name == second[0].name
     assert first[0].description == "MCP tool: search.\nFind"
+    assert first[0].metadata is not None
+    assert first[0].metadata["mcp_display_name"] == "Search · search"
+    assert second[0].metadata is not None
+    assert second[0].metadata["mcp_display_name"] == "Renamed · search"
 
 
 @pytest.mark.asyncio
@@ -190,13 +196,16 @@ async def test_original_names_without_descriptions_and_across_connections(monkey
         )
         for name in ("add", "multiply")
     )
-    first = binding().model_copy(update={"tools": published})
+    first = binding().model_copy(
+        update={"tools": published, "display_name": "Parc Eolien"}
+    )
     other_id = UUID("affd2a56-2d35-4d18-b67c-5e42b0a9c122")
     second = first.model_copy(
         update={
             "connection_id": other_id,
             "capability_id": f"managed-mcp:{other_id}",
             "tools": published[:1],
+            "display_name": "Autre parc",
         }
     )
     before = [value.model_dump() for value in (first, second)]
@@ -221,6 +230,11 @@ async def test_original_names_without_descriptions_and_across_connections(monkey
     tools = await managed_mcp.connect([first, second], [])
     assert len({tool.name for tool in tools}) == 3
     assert all(len(tool.name) <= 64 for tool in tools)
+    assert [(tool.metadata or {})["mcp_display_name"] for tool in tools] == [
+        "Parc Eolien · add",
+        "Parc Eolien · multiply",
+        "Autre parc · add",
+    ]
     assert [tool.description for tool in tools] == [
         "MCP tool: add.",
         "MCP tool: multiply.",

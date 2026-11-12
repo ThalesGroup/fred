@@ -1480,6 +1480,11 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   return {
     sessionId,
+    // The embedded Rust agent has no Python runtime workspace.
+    workspaceFilesUrl:
+      sessionData?.runtime_id !== "control-plane"
+        ? sessionData?.messages_url?.replace(/\/messages$/, "/workspace/files")
+        : undefined,
     sessionTitle: sameSession && !sessionUnavailable ? sessionTitle : null,
     agentDisplayName,
     isReadOnly,

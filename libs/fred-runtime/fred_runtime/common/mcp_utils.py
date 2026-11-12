@@ -58,6 +58,7 @@ AUTH_MODE_USER_TOKEN: Final[str] = "user_token"
 AUTH_MODE_DELEGATED: Final[str] = "delegated"
 GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http",)
 MCP_SERVER_ID_METADATA_KEY: Final[str] = "mcp_server_id"
+MCP_TOOL_DISPLAY_NAME_METADATA_KEY: Final[str] = "mcp_display_name"
 MCP_DELEGATED_METADATA_KEY: Final[str] = "mcp_delegated"
 # The server's configured Fred service: the only identity a failure report is
 # believed from, never its URL.

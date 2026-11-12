@@ -46,6 +46,12 @@
   height: 100%;
 }
 
+.textBody {
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .previewImage {
   display: inline-block;
   min-width: 1em;

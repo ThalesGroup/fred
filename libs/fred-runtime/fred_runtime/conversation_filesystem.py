@@ -23,6 +23,7 @@ import threading
 import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
@@ -120,6 +121,7 @@ class ConversationTextFileMetadata:
 
     path: str
     size: int
+    modified: datetime | None = None
 
 
 class ConversationTextNamespacePort(Protocol):
@@ -403,6 +405,7 @@ class _ConversationTextNamespace:
                     ConversationTextFileMetadata(
                         path=entry.path.removeprefix(self._prefix),
                         size=entry.size,
+                        modified=entry.modified,
                     )
                 )
         except Exception as exc:

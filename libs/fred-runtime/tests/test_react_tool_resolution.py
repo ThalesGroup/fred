@@ -78,6 +78,29 @@ def _resolver() -> ReActRuntimeToolResolver:
     )
 
 
+@pytest.mark.parametrize(
+    "display_name", [None, 42, "Parc Eolien · production_par_eolienne"]
+)
+def test_provider_display_name_is_separate_from_execution_identity(
+    display_name,
+) -> None:
+    runtime_tool = StructuredTool(
+        name="mcp_b1322accb3dd44acbaf1dbdc2114db4f_cb162d4eff0f3b93",
+        description="MCP tool: production_par_eolienne.",
+        args_schema={},
+        metadata={"mcp_display_name": display_name},
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=runtime_tool,
+        tool_name=runtime_tool.name,
+        description=runtime_tool.description,
+    )
+    assert spec.display_name == (
+        display_name if isinstance(display_name, str) else None
+    )
+    assert spec.runtime_name == spec.tool_ref == runtime_tool.name
+
+
 def _provider_error_artifact() -> ToolInvocationResult:
     # Synthetic bait, not a credential: this test exists to prove the classifier
     # never lets such a string reach a user-visible artifact.

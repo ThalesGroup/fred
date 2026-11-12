@@ -252,11 +252,11 @@ function ManagedChatContent({
   const isAdmin =
     space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
   const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
-  const conversationFiles = useConversationFiles();
+  const conversationFiles = useConversationFiles(chat.workspaceFilesUrl);
   const { refetch: refreshFiles, isUninitialized: filesUninitialized } = conversationFiles;
   useEffect(() => {
     if (!chat.waitResponse && !filesUninitialized) void refreshFiles();
-  }, [chat.waitResponse, filesUninitialized, refreshFiles]);
+  }, [chat.waitResponse, attachmentsDrawerOpen, filesUninitialized, refreshFiles]);
   const skillPreview = usePreviewSkillQuery(
     {
       spaceId: space.id,
@@ -467,7 +467,7 @@ function ManagedChatContent({
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
               icon: "folder" as const,
-              badgeCount: attachmentsCount + conversationFiles.files.length,
+              badgeCount: attachmentsCount + conversationFiles.files.length + conversationFiles.workspaceFiles.length,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
@@ -490,6 +490,7 @@ function ManagedChatContent({
       chat.executionDisabled,
       chat.sessionId,
       conversationFiles.files.length,
+      conversationFiles.workspaceFiles.length,
       allowChatAttachments,
       attachmentsCount,
       attachmentsDrawerOpen,
@@ -1212,6 +1213,10 @@ function ManagedChatContent({
             readOnly={chat.executionDisabled}
             attachments={chat.persistedAttachments}
             files={conversationFiles.files}
+            workspaceFiles={conversationFiles.workspaceFiles}
+            workspaceFilesUrl={chat.workspaceFilesUrl}
+            workspaceError={conversationFiles.workspaceError}
+            workspaceLoading={conversationFiles.workspaceLoading}
             spaceId={space.id}
             sessionId={chat.sessionId ?? ""}
             filesError={conversationFiles.error}

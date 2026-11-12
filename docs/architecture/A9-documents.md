@@ -286,10 +286,20 @@ Implementation references for [conversation documents](05-documents.md#55-docume
 | Conversation storage | Implementation entry |
 | --- | --- |
 | Deep workspace and explicit publication tools | [`ConversationFilesystemService`](../../libs/fred-runtime/fred_runtime/conversation_filesystem.py) and [`ConversationFilesMiddleware`](../../libs/fred-runtime/fred_runtime/deep/conversation_files.py) |
+| Direct working-file reads | Workspace routes in [`agent_app.py`](../../libs/fred-runtime/fred_runtime/app/agent_app.py) reuse [`authorize_history_read`](../../libs/fred-runtime/fred_runtime/app/history_access.py) before listing or reading the `scratchpad` namespace; `.deep` is inaccessible. Object metadata supplies size and last modification, without a new SQL catalogue. |
+| Conversation file panel and text preview | [`conversationFiles.ts`](../../apps/frontend/src/rework/features/conversationFiles.ts) routes the generated runtime contract to the pod selected by Control Plane's session metadata; [`SessionAttachmentsDrawer`](../../apps/frontend/src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx) and the shared [`DocumentViewer`](../../apps/frontend/src/rework/components/shared/organisms/DocumentViewer/DocumentViewer.tsx) show workspace files alongside catalogue deliverables and attachments. |
 | Runtime adapter to the Control Plane catalogue | [`FredWorkspaceFs`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py) |
 | Catalogue, upload receipts and conversation-bound reads | [`documents/conversation.rs`](../../apps/control-plane/src/documents/conversation.rs); [storage contract](../../apps/control-plane/README.md#conversation-file-catalogue) |
 | Object erasure before final metadata removal | [`lifecycle/cleanup.rs`](../../apps/control-plane/src/lifecycle/cleanup.rs), [`documents/cleanup.rs`](../../apps/control-plane/src/documents/cleanup.rs) and runtime [`session_fence.py`](../../libs/fred-runtime/fred_runtime/runtime_support/session_fence.py) |
 | Space-owned Wiki and conversation provenance | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql) |
+
+Workspace previews render text literally and limit the displayed beginning to
+256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and
+after a turn ends. These are current working files, not immutable revisions.
+The scoped runtime tests in [`test_weaver_history_access.py`](../../libs/fred-runtime/tests/test_weaver_history_access.py)
+cover Deep writes, direct reads, foreign-user refusal, revocation and path
+isolation. Frontend tests cover routing, refresh, preview and attachment
+coexistence; these checks do not constitute deployed journey acceptance.
 
 <!-- generated: source-map apps/control-plane/src/wiki/lifecycle.rs::purge -->
 | Implementation anchor | Responsibility declared in source |

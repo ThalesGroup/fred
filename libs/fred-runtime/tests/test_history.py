@@ -44,6 +44,7 @@ from fred_core.history.history_schema import (
     ChatMessage,
     Role,
     TextPart,
+    ToolCallPart,
 )
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
@@ -151,7 +152,10 @@ def _make_app(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
+@pytest.mark.parametrize(
+    "display_name", [None, "Parc Eolien · production_par_eolienne"]
+)
+def test_write_turn_history_maps_react_turn_to_chat_messages(display_name) -> None:
     """
     _write_turn_history must produce four ChatMessage rows for a single ReAct
     turn that contains a user request, one tool call, one tool result, and a
@@ -194,6 +198,8 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
         },
     ]
 
+    if display_name is not None:
+        payloads[0]["display_name"] = display_name
     asyncio.run(
         _write_turn_history(
             session_id="s1",
@@ -219,6 +225,15 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     assert messages[1].role == Role.assistant
     assert messages[1].channel == Channel.tool_call
     assert messages[1].parts[0].name == "demo.echo"
+    restored = ChatMessage.model_validate_json(messages[1].model_dump_json())
+    assert isinstance(restored.parts[0], ToolCallPart)
+    assert restored.parts[0].display_name == display_name
+    assert restored.parts[0].name == "demo.echo"
+    legacy = messages[1].model_dump()
+    legacy["parts"][0].pop("display_name")
+    legacy_part = ChatMessage.model_validate(legacy).parts[0]
+    assert isinstance(legacy_part, ToolCallPart)
+    assert legacy_part.display_name is None
     assert messages[1].rank == 1
     # #2403: a tool-call row carries no token figure at all. The former
     # `token_usage` here was the deciding model call's whole prompt, which the

@@ -344,6 +344,7 @@ class ToolCallPart(BaseModel):
     type: Literal["tool_call"] = "tool_call"
     call_id: str
     name: str
+    display_name: str | None = None
     args: Dict[str, Any]
 
     @field_validator("args", mode="before")
@@ -709,6 +710,7 @@ def make_tool_call(
     call_id: str,
     name: str,
     args: Dict[str, Any],
+    display_name: str | None = None,
 ) -> ChatMessage:
     """
     Build a tool-call record message.
@@ -726,7 +728,11 @@ def make_tool_call(
         timestamp=datetime.now(timezone.utc),
         role=Role.assistant,
         channel=Channel.tool_call,
-        parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
+        parts=[
+            ToolCallPart(
+                call_id=call_id, name=name, args=args, display_name=display_name
+            )
+        ],
         metadata=ChatMetadata(),
     )
 

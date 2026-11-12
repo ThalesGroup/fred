@@ -21,7 +21,8 @@ import { formatBytes } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
 import DocumentPreviewDrawer, { type DocumentPreviewTarget } from "../DocumentPreviewDrawer/DocumentPreviewDrawer";
 import type { ConversationFile } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { conversationFileUrl } from "../../../../features/conversationFiles";
+import type { WorkspaceFile } from "../../../../../slices/runtime/runtimeOpenApi";
+import { conversationFileUrl, workspaceFileUrl } from "../../../../features/conversationFiles";
 import { downloadAuthed } from "../../../../../utils/downloadUtils";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
@@ -30,6 +31,10 @@ interface SessionAttachmentsDrawerProps {
   onClose: () => void;
   attachments: SessionAttachment[];
   files?: ConversationFile[];
+  workspaceFiles?: WorkspaceFile[];
+  workspaceFilesUrl?: string | null;
+  workspaceError?: unknown;
+  workspaceLoading?: boolean;
   spaceId?: string;
   sessionId?: string;
   filesError?: unknown;
@@ -56,6 +61,10 @@ export function SessionAttachmentsDrawer({
   onClose,
   attachments,
   files = [],
+  workspaceFiles = [],
+  workspaceFilesUrl = "",
+  workspaceError,
+  workspaceLoading = false,
   spaceId = "",
   sessionId = "",
   filesError,
@@ -95,6 +104,30 @@ export function SessionAttachmentsDrawer({
   };
   const sections = [
     {
+      key: "workspace",
+      error: workspaceError,
+      loading: workspaceLoading,
+      retry: onRetryFiles,
+      errorKey: "workspaceError",
+      items: workspaceFiles.map((file) => ({
+        id: file.path,
+        name: file.path,
+        size: file.size,
+        modified: file.modified,
+        mime: "text/plain",
+        status: "ready" as const,
+        canRemove: false,
+        error: undefined,
+        downloadUrl: workspaceFileUrl(workspaceFilesUrl ?? "", file.path),
+        preview: {
+          documentUid: `workspace:${sessionId}:${file.path}`,
+          fileName: file.name,
+          sourceUrl: workspaceFileUrl(workspaceFilesUrl ?? "", file.path),
+          sourceFormat: "text" as const,
+        },
+      })),
+    },
+    {
       key: "deliverables",
       error: filesError,
       loading: filesLoading,
@@ -104,6 +137,7 @@ export function SessionAttachmentsDrawer({
         id: file.document_id,
         name: file.name,
         size: file.size,
+        modified: undefined,
         mime: file.mime,
         status: "ready" as const,
         canRemove: false,
@@ -129,6 +163,7 @@ export function SessionAttachmentsDrawer({
         id: attachment.attachmentId,
         name: attachment.name,
         size: attachment.sizeBytes,
+        modified: undefined,
         mime: attachment.mime ?? "",
         status: attachment.status,
         error: attachment.error,
@@ -193,6 +228,11 @@ export function SessionAttachmentsDrawer({
                     ]}
                     onRemove={(id) => void remove(id)}
                   />
+                  {file.modified && (
+                    <time className={styles.empty} dateTime={file.modified}>
+                      {new Date(file.modified).toLocaleString()}
+                    </time>
+                  )}
                   {file.status === "error" && (
                     <p className={styles.error} role="alert">
                       {t("chatbot.sessionAttachments.preparationError")}

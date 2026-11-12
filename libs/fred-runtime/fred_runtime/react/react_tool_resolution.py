@@ -57,7 +57,10 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
+from fred_runtime.common.mcp_utils import (
+    MCP_SERVER_ID_METADATA_KEY,
+    MCP_TOOL_DISPLAY_NAME_METADATA_KEY,
+)
 from fred_runtime.runtime_support.ask_user import (
     ASK_USER_DESCRIPTION,
     AskUserArgs,
@@ -134,6 +137,7 @@ class FredRuntimeToolSpec:
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
     mcp_server_id: str | None = None
     mcp_trusted_service: str | None = None
+    display_name: str | None = None
 
 
 class ReActRuntimeToolResolver:
@@ -491,6 +495,11 @@ class ReActRuntimeToolResolver:
         """
 
         metadata = getattr(runtime_tool, "metadata", None)
+        display_name = (
+            metadata.get(MCP_TOOL_DISPLAY_NAME_METADATA_KEY)
+            if isinstance(metadata, dict)
+            else None
+        )
         mcp_server_id = (
             metadata.get(MCP_SERVER_ID_METADATA_KEY)
             if isinstance(metadata, dict)
@@ -558,6 +567,7 @@ class ReActRuntimeToolResolver:
             invoke=_invoke,
             trace_span_name=RUNTIME_TOOL_SPAN_NAME,
             mcp_server_id=mcp_server_id,
+            display_name=display_name if isinstance(display_name, str) else None,
             mcp_trusted_service=metadata.get("mcp_trusted_service")
             if isinstance(metadata, dict)
             else None,
