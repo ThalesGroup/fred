@@ -250,7 +250,6 @@ export default function TeamContentNavbar() {
     navigationItems.push({
       type: "link",
       label: t("rework.sidebar.team.menu.knowledgeBases"),
-      trailingBadge: <BetaBadge label={t("rework.weaver.pending")} />,
       icon: { category: "outlined", type: "database", filled: true },
       linkProps: { to: `/team/${teamId}/knowledge-bases` },
     });
