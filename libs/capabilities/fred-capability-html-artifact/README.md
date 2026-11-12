@@ -8,6 +8,9 @@ the "artifact" experience, scoped to static markup (no JavaScript) for v1.
 
 - **Tool** `render_html_artifact(title, html, css, artifact_id?)` — HTML and CSS
   kept separate (for the viewer's tabs). Combined size is capped at 256 KB.
+  Its success message tells the model not to invent an artifact URL and points
+  to the preview in the right panel, the card below the response to open or
+  reopen it, and the panel's close button. No hosted or shareable URL is created.
 - **Chat part** `HtmlArtifactPart` (`type="html_artifact"`) carrying the markup
   **inline** — no owned table, no router, no migration (v1 is read-only; chat
   `ui_parts` persist across reload).

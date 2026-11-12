@@ -189,8 +189,13 @@ async fn writer(
     agent: Option<Uuid>,
 ) -> AppResult<(Transaction<'static, Postgres>, Space)> {
     upload::token_current(user)?;
-    let (mut tx, space) =
-        spaces::authorized_mutation(pool, &user.uid, space, Permission::Write).await?;
+    let (mut tx, space) = spaces::authorized_mutation(
+        pool,
+        &user.uid,
+        space,
+        agent.map_or(Permission::Manage, |_| Permission::Write),
+    )
+    .await?;
     if let Some(agent) = agent {
         sqlx::query("select agent_instance_id from agent_instance where agent_instance_id=$1 and space_id=$2 for update")
             .bind(agent).bind(space.id).execute(&mut *tx).await?;
@@ -245,8 +250,8 @@ impl Storage {
                 "All transfer slots are busy",
             )
         })?;
-        let space =
-            authorization::authorize(&self.pool, &user.uid, space_id, Permission::Write).await?;
+        let permission = agent.map_or(Permission::Manage, |_| Permission::Write);
+        let space = authorization::authorize(&self.pool, &user.uid, space_id, permission).await?;
         if !draft {
             target(&self.pool, &space, agent).await?;
         }
@@ -263,8 +268,7 @@ impl Storage {
         let mut replayed = false;
         let row = loop {
             let (mut tx, space) =
-                spaces::authorized_mutation(&self.pool, &user.uid, space_id, Permission::Write)
-                    .await?;
+                spaces::authorized_mutation(&self.pool, &user.uid, space_id, permission).await?;
             let result: AppResult<FileRow> = async {
                 if draft {
                     let exists: bool = sqlx::query_scalar(
@@ -407,7 +411,13 @@ impl Storage {
         sqlx::query("set transaction isolation level repeatable read, read only")
             .execute(&mut *tx)
             .await?;
-        let space = authorization::authorize(&mut *tx, actor, space_id, Permission::Read).await?;
+        let space = authorization::authorize(
+            &mut *tx,
+            actor,
+            space_id,
+            agent.map_or(Permission::Manage, |_| Permission::Read),
+        )
+        .await?;
         target(&mut *tx, &space, agent).await?;
         if let Some(id) = agent {
             let instance = crate::agent_instances::get_for_space(&mut *tx, space_id, id)

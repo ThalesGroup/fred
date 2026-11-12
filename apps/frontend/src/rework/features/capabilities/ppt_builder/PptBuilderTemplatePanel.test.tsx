@@ -13,10 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The analysis status line for each state, and the vision toggle: locked off
-// with its explanation when no vision-capable model exists, selector listing
-// only vision-capable profiles while on; the template guide link; the panel's
-// default view (template and plan approval) and its advanced section.
+// Analysis states, the structural-analysis explanation and template controls.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,24 +25,11 @@ const i18nState = vi.hoisted(() => ({ language: "fr" }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: i18nState }),
 }));
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({
-  default: ({ options, label }: { options: { value: string; label: string }[]; label: string }) => (
-    <select aria-label={label}>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
-
 vi.mock("./PatternReviewDialog", () => ({ PatternReviewDialog: () => null }));
 
 import { AnalysisStatus, PptBuilderTemplatePanel, TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { analysisPhase, canRerun, type AnalysisPhase, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
-import { useVisionAvailability, usePlatformVisionProfiles, type VisionAvailability } from "./useVisionAvailability";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -97,6 +81,9 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     hasPersistedTemplate: true,
     error: null,
     canRerun: false,
+    retry: null,
+    retrying: false,
+    retryFailed: false,
     refreshing: false,
     effective: null,
     summary: null,
@@ -148,14 +135,28 @@ describe("AnalysisStatus", () => {
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("shows the error and no action of its own: a save re-runs the analysis", () => {
+  it("shows the analysis error without offering a retry when CP has not authorized one", () => {
     render(<AnalysisStatus analysis={analysis("failed", { error: "The file has no slide.", canRerun: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.failed");
     expect(container.textContent).toContain("The file has no slide.");
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("tells the author a save refreshes an outdated analysis", () => {
+  it("offers a retry with an explanation that the draft is not submitted", () => {
+    const retry = vi.fn(async () => {});
+    render(<AnalysisStatus analysis={analysis("failed", { retry, retryFailed: true })} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.retrySavedTemplate");
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.retryFailed");
+    act(() => container.querySelector("button")?.click());
+    expect(retry).toHaveBeenCalledOnce();
+    render(<AnalysisStatus analysis={analysis("failed", { retry, retrying: true })} />);
+    expect(container.querySelector("button")?.disabled).toBe(true);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.retrying");
+    render(<AnalysisStatus disabled analysis={analysis("failed", { retry })} />);
+    expect(container.querySelector("button")?.disabled).toBe(true);
+  });
+
+  it("keeps an outdated analysis visible without promising a retry", () => {
     render(<AnalysisStatus analysis={analysis("succeeded", { canRerun: true })} />);
     expect(container.textContent).toContain("capability.ppt_builder.analysis.outdated");
     expect(container.querySelector("button")).toBeNull();
@@ -174,59 +175,14 @@ describe("AnalysisStatus", () => {
   });
 });
 
-describe("Weaver template inference", () => {
-  it("offers structural analysis without querying the retired profile catalog", () => {
-    expect(useVisionAvailability("space", "agent")).toEqual({ available: false, visionProfiles: [] });
-    expect(usePlatformVisionProfiles(false)).toEqual([]);
-  });
-});
-
 describe("PptBuilderVisionSettings", () => {
-  function renderSettings(vision: VisionAvailability, configValues: Record<string, unknown> = {}) {
-    const onConfigChange = vi.fn();
-    render(
-      <PptBuilderVisionSettings
-        disabled={false}
-        configValues={configValues}
-        onConfigChange={onConfigChange}
-        vision={vision}
-        changeHint="Reads again"
-      />,
-    );
-    return onConfigChange;
-  }
-
-  it("locks the toggle off with the explanation when no vision model is available", () => {
-    renderSettings({ available: false, visionProfiles: [] }, { use_vision: true });
+  it("keeps vision locked off with the structural-analysis explanation and no model picker", () => {
+    render(<PptBuilderVisionSettings />);
     const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(toggle.checked).toBe(false);
     expect(toggle.disabled).toBe(true);
     expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.unavailable");
     expect(container.querySelector("select")).toBeNull();
-  });
-
-  it("is on by default and lists only vision-capable profiles", () => {
-    const visionProfile = { profile_id: "chat.vision", capability_id: "c", name: "Vision", supports_vision: true };
-    renderSettings({ available: true, visionProfiles: [visionProfile] });
-    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
-    expect(toggle.disabled).toBe(false);
-    const options = [...container.querySelectorAll("option")].map((o) => o.value);
-    expect(options).toEqual(["", "chat.vision"]);
-  });
-
-  it("names the model picker and says when a change takes effect", () => {
-    renderSettings({ available: true, visionProfiles: [] });
-    expect(container.textContent).toContain("capability.ppt_builder.fields.labelling_model.title");
-    expect(container.textContent).toContain("Reads again");
-  });
-
-  it("hides the selector and writes the toggle when turned off", () => {
-    const onConfigChange = renderSettings({ available: true, visionProfiles: [] }, { use_vision: false });
-    expect(container.querySelector("select")).toBeNull();
-    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    act(() => toggle.click());
-    expect(onConfigChange).toHaveBeenCalledWith("use_vision", true);
   });
 });
 
@@ -259,7 +215,6 @@ describe("PptBuilderTemplatePanel", () => {
         <PptBuilderTemplatePanel
           disabled={false}
           analysis={panelAnalysis}
-          vision={{ available: true, visionProfiles: [] }}
           configValues={{}}
           onConfigChange={() => {}}
         />

@@ -105,7 +105,8 @@ function SpaceAgents({ space }: { space: MySpace }) {
       refetchOnMountOrArgChange: true,
     },
   );
-  const editing = !detail.isError && !detail.isFetching ? detail.currentData : undefined;
+  // Background refreshes (including preparation retries) must keep the draft mounted.
+  const editing = detail.currentData;
   const [uploadTemplate, uploadingTemplate] = useUploadPowerpointTemplateMutation();
   const [savingTemplate, setSavingTemplate] = useState(false);
   const templateFile = useResolvePowerpointTemplateQuery(
@@ -334,12 +335,13 @@ function SpaceAgents({ space }: { space: MySpace }) {
         />
       )}
       {editingId && offersManagement && detail.isFetching && <Spinner size={20} />}
-      {editingId && offersManagement && detail.isError && <AgentNotice error={detail.error} />}
+      {editingId && offersManagement && detail.isError && !editing && <AgentNotice error={detail.error} />}
       {(isEnrollOpen || editing) && (
         <AgentFormModal
           key={editing?.agent_instance_id ?? "create"}
           isOpen
-          isSubmitting={busy || !offersManagement}
+          isSubmitting={busy || !offersManagement || (Boolean(editingId) && detail.isError)}
+          loadErrorMessage={editingId && detail.isError ? agentErrorText(detail.error, t) : undefined}
           mode={editing ? "edit" : "create"}
           teamName={space.name}
           teamId={spaceId}

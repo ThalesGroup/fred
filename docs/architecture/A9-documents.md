@@ -337,6 +337,13 @@ writes; the worker confirms cleanup only after they have finished and the
 preparation's object prefix has been erased. SQL retirement receipts remain to
 prevent later attempts from recreating the files.
 
+Structural preparation depends on the immutable original. Descriptive edits and
+runtime presentation settings retain that preparation while advancing the agent's
+admission revision; Control Plane keeps its result applicability checks aligned.
+A different original starts new preparation. An unchanged agent PATCH retries a
+failed preparation, retaining pending or ready work; it does not force a successful
+analysis to run again. The UI retry sends no unsaved form fields.
+
 Implementation entries:
 
 - [Original storage and resolution](../../apps/control-plane/src/documents/powerpoint.rs),

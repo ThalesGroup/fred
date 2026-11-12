@@ -84,6 +84,8 @@ let emptyContext: boolean;
 let failure: { target: "list" | "catalog" | "write" | "authorize" | "get"; status: number | "network" } | undefined;
 let blockedSpace: string | undefined;
 let releaseList: (() => void) | undefined;
+let blockedAgent: string | undefined;
+let releaseDetail: (() => void) | undefined;
 let calls: { method: string; path: string; body: Record<string, unknown> | undefined }[];
 const makeStore = () =>
   configureStore({
@@ -103,6 +105,8 @@ beforeEach(() => {
   calls = [];
   blockedSpace = undefined;
   releaseList = undefined;
+  blockedAgent = undefined;
+  releaseDetail = undefined;
   vi.clearAllMocks();
   vi.stubGlobal(
     "Request",
@@ -155,6 +159,10 @@ beforeEach(() => {
         await new Promise<void>((resolve) => {
           releaseList = resolve;
         });
+      if (request.method === "GET" && id && id === blockedAgent)
+        await new Promise<void>((resolve) => {
+          releaseDetail = resolve;
+        });
       if (request.method === "GET")
         return json(
           id
@@ -190,6 +198,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   releaseList?.();
+  releaseDetail?.();
   act(() => root.unmount());
   router?.dispose();
   store.dispatch(api.util.resetApiState());
@@ -334,6 +343,87 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(rows[0].selected_capability_ids).toBeNull();
     expect(rows[0].capability_config).toEqual(INSTANCE.capability_config);
   });
+  it("keeps the mounted draft through a preparation retry and its detail refetch", async () => {
+    await mount();
+    blockedAgent = INSTANCE.agent_instance_id;
+    await menu("rework.agentCard.edit");
+    expect(host.querySelector("[data-form]")).toBeNull();
+    blockedAgent = undefined;
+    await act(async () => releaseDetail?.());
+    await settle();
+    await input("rework.teams.formAgent.fields.name.label", "Unsaved name");
+    const form = host.querySelector("[data-form]");
+    blockedAgent = INSTANCE.agent_instance_id;
+    await act(async () => {
+      await store.dispatch(
+        api.endpoints.updateAgentInstance.initiate({
+          spaceId: SPACE_A,
+          agentInstanceId: INSTANCE.agent_instance_id,
+          updateAgentInstanceRequest: {},
+        }),
+      );
+    });
+    await settle();
+    expect(host.querySelector("[data-form]")).toBe(form);
+    expect([...host.querySelectorAll("input")].some((input) => input.value === "Unsaved name")).toBe(true);
+    rows[0] = { ...rows[0], preparation_state: "pending" };
+    blockedAgent = undefined;
+    await act(async () => releaseDetail?.());
+    await settle();
+    expect(host.querySelector("[data-form]")).toBe(form);
+    await click("rework.save");
+    expect(writes()[writes().length - 1]?.body).toMatchObject({ display_name: "Unsaved name" });
+    expect(host.querySelector("[data-form]")).toBeNull();
+  });
+
+  it("blocks Save when a different configuration revision arrives, retaining the draft", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "Unsaved name");
+    rows[0] = {
+      ...rows[0],
+      configuration_revision: rows[0].configuration_revision + 1,
+      display_name: "Concurrent name",
+    };
+    await act(async () =>
+      store.dispatch(
+        api.util.invalidateTags([{ type: "AgentInstances", id: `${SPACE_A}:${INSTANCE.agent_instance_id}` }]),
+      ),
+    );
+    await settle();
+    expect(host.textContent).toContain("rework.teams.formAgent.changedWhileEditing");
+    expect([...host.querySelectorAll("input")].some((input) => input.value === "Unsaved name")).toBe(true);
+    expect(button("rework.save").disabled).toBe(true);
+    await click("rework.save");
+    expect(writes()).toHaveLength(0);
+    await click("rework.cancel");
+    await menu("rework.agentCard.edit");
+    expect([...host.querySelectorAll("input")].some((input) => input.value === "Concurrent name")).toBe(true);
+    expect(button("rework.save").disabled).toBe(false);
+    expect(host.textContent).not.toContain("rework.teams.formAgent.changedWhileEditing");
+  });
+
+  it("keeps unsaved fields visible on a refused detail refetch and allows reopening", async () => {
+    await mount();
+    await menu("rework.agentCard.edit");
+    await input("rework.teams.formAgent.fields.name.label", "Unsaved name");
+    failure = { target: "get", status: 403 };
+    await act(async () =>
+      store.dispatch(
+        api.util.invalidateTags([{ type: "AgentInstances", id: `${SPACE_A}:${INSTANCE.agent_instance_id}` }]),
+      ),
+    );
+    await settle();
+    expect(host.querySelector("[data-form]")?.textContent).toContain("rework.weaverAgents.errors.forbidden");
+    expect([...host.querySelectorAll("input")].some((input) => input.value === "Unsaved name")).toBe(true);
+    expect(button("rework.save").disabled).toBe(true);
+    await click("rework.cancel");
+    failure = undefined;
+    await menu("rework.agentCard.edit");
+    expect([...host.querySelectorAll("input")].some((input) => input.value === "Saved Agent")).toBe(true);
+    expect(button("rework.save").disabled).toBe(false);
+  });
+
   it("passes the canonical space to the picker on create and edit", async () => {
     await mount();
     await click("rework.teams.agents.create");

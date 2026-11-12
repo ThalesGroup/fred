@@ -14,8 +14,11 @@
 
 // CP owns the accepted file and preparation state; the capability owns previews.
 
-import { useEffect, useMemo, useState } from "react";
-import { useResolvePowerpointTemplateQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useResolvePowerpointTemplateQuery,
+  useUpdateAgentInstanceMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
@@ -67,7 +70,7 @@ export function isInProgress(phase: AnalysisPhase): boolean {
   return phase === "pending" || phase === "running";
 }
 
-/** Failed, interrupted, or produced by older analysis rules: worth a save that re-runs it. */
+/** Analyses requiring attention; an explicit retry also needs a failed CP preparation. */
 export function canRerun(phase: AnalysisPhase, status: AnalysisStatusResponse | undefined): boolean {
   return phase === "failed" || phase === "interrupted" || (phase === "succeeded" && status?.current === false);
 }
@@ -91,6 +94,10 @@ export interface PptBuilderAnalysis {
   /** The analysis error, or the interruption notice, as the backend words it. */
   error: string | null;
   canRerun: boolean;
+  /** Re-reads the saved agent template without submitting the form's draft. */
+  retry: (() => Promise<void>) | null;
+  retrying: boolean;
+  retryFailed: boolean;
   /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
   refreshing: boolean;
   /** The inventory with the overrides applied (what the agent will see). */
@@ -120,6 +127,8 @@ export function usePptBuilderAnalysis({
     { spaceId: teamId ?? "", agentInstanceId: agentInstanceId ?? "" },
     { skip: !teamId || !agentInstanceId, pollingInterval: POLL_MS, refetchOnMountOrArgChange: true },
   );
+  const [updateAgent, retryState] = useUpdateAgentInstanceMutation();
+  const retryInFlight = useRef(false);
   const removed = configValues.remove_template === true;
   const templateSha = removed ? null : (saved.currentData?.file?.sha256 ?? readTemplateSha(configValues));
   const analysisId = saved.currentData?.analysis_reference;
@@ -130,9 +139,9 @@ export function usePptBuilderAnalysis({
     { instanceId: analysisId ?? "", spaceId: teamId, agentInstanceId },
     { skip: !routed || !analysisId || !templateSha, pollingInterval },
   );
-  // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
+  // A failed poll keeps the last answer for this identity (`currentData`): one network blip must
   // neither hide the analysis nor stop the polling of one in progress.
-  const status = statusQuery.data;
+  const status = statusQuery.currentData;
   const phase: AnalysisPhase = stagedFile
     ? "staged"
     : !removed && saved.currentData?.preparation_state === "pending"
@@ -172,6 +181,30 @@ export function usePptBuilderAnalysis({
       ? { kind: "analysis", instanceId: analysisId, spaceId: teamId, agentInstanceId }
       : null;
 
+  const canRetry =
+    Boolean(teamId && agentInstanceId) &&
+    !stagedFile &&
+    !removed &&
+    saved.currentData?.source === "agent" &&
+    saved.currentData.preparation_state === "failed";
+  const retry = async () => {
+    if (!canRetry || retryInFlight.current) return;
+    retryInFlight.current = true;
+    try {
+      // An empty patch retries only a failed preparation. Never send unsaved fields.
+      await updateAgent({
+        spaceId: teamId!,
+        agentInstanceId: agentInstanceId!,
+        updateAgentInstanceRequest: {},
+      }).unwrap();
+      await saved.refetch();
+    } catch {
+      // The mutation error is rendered below; canonical state keeps polling.
+    } finally {
+      retryInFlight.current = false;
+    }
+  };
+
   return {
     templateSource: removed ? "builtin" : saved.currentData?.source,
     phase,
@@ -183,6 +216,12 @@ export function usePptBuilderAnalysis({
         ? (saved.currentData?.preparation_error ?? status?.error ?? null)
         : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
+    retry: canRetry ? retry : null,
+    retrying: retryState.isLoading,
+    retryFailed:
+      Boolean(retryState.error) &&
+      retryState.originalArgs?.spaceId === teamId &&
+      retryState.originalArgs?.agentInstanceId === agentInstanceId,
     refreshing,
     effective,
     summary: effective ? summarize(effective) : null,

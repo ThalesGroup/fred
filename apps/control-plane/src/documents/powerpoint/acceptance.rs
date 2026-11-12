@@ -137,6 +137,7 @@ pub(crate) async fn saved_agent(
     user: &CurrentUser,
     record: &crate::agent_instances::AgentInstance,
     change: Option<&FileChange>,
+    retry_failed: bool,
 ) -> AppResult<()> {
     let selected = record
         .tuning
@@ -173,9 +174,13 @@ pub(crate) async fn saved_agent(
         return Ok(());
     }
     let row = row.ok_or(AppError::NotFound)?;
-    let reusable:bool=sqlx::query_scalar("select exists(select 1 from capability_preparation where agent_instance_id=$1 and configuration_revision=$2 and file_id=$3 and state in ('pending','ready'))")
-        .bind(record.agent_instance_id).bind(record.configuration_revision).bind(row.file.id).fetch_one(&mut **tx).await?;
-    if reusable {
+    // Supported structural analysis depends only on the immutable uploaded file.
+    // Presentation settings and overrides apply at runtime; vision is refused by the pod.
+    // Rebind the current preparation to the new admission revision under the save lock,
+    // preserving both in-flight work and the confirmation/result revision fences.
+    let reused = sqlx::query("update capability_preparation p set configuration_revision=$2 from agent_instance a where a.agent_instance_id=$1 and a.preparation_id=p.id and p.agent_instance_id=a.agent_instance_id and p.file_id=$3 and (p.state in ('pending','ready') or (p.state='failed' and not $4))")
+        .bind(record.agent_instance_id).bind(record.configuration_revision).bind(row.file.id).bind(retry_failed).execute(&mut **tx).await?.rows_affected() > 0;
+    if reused {
         return Ok(());
     }
     sqlx::query("update capability_preparation set state='obsolete' where agent_instance_id=$1 and state<>'obsolete'").bind(record.agent_instance_id).execute(&mut **tx).await?;

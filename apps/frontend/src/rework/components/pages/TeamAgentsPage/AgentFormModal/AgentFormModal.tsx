@@ -14,7 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type {
@@ -24,6 +24,7 @@ import type {
 import type { FieldSpec as ManagedAgentFieldSpec } from "../../../../../slices/runtime/runtimeOpenApi";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { applyDocumentAccessConfigChange } from "./toolPackLogic.ts";
@@ -64,6 +65,7 @@ export type AgentFormPayload = {
 type AgentFormModalProps = {
   isOpen: boolean;
   isSubmitting: boolean;
+  loadErrorMessage?: string;
   mode: "create" | "edit";
   teamName?: string;
   teamId?: string;
@@ -157,6 +159,7 @@ const NO_NAMES: ReadonlySet<string> = new Set();
 export default function AgentFormModal({
   isOpen,
   isSubmitting,
+  loadErrorMessage,
   mode,
   teamName,
   teamId,
@@ -192,7 +195,13 @@ export default function AgentFormModal({
   // for names outside this catalog and concurrent creation/rename.
   const [displayNameChecked, setDisplayNameChecked] = useState(false);
 
+  const initializedDraft = useRef<string | null>(null);
+  const [draftRevision, setDraftRevision] = useState<number | null>(null);
   useEffect(() => {
+    const draftIdentity = `${teamId ?? ""}/${mode}/${editInstance?.agent_instance_id ?? ""}`;
+    if (isOpen && initializedDraft.current === draftIdentity) return;
+    initializedDraft.current = isOpen ? draftIdentity : null;
+    setDraftRevision(isOpen && mode === "edit" ? (editInstance?.configuration_revision ?? null) : null);
     setDisplayNameChecked(isOpen);
     if (!isOpen) {
       setSubmitAttempted(false);
@@ -232,7 +241,7 @@ export default function AgentFormModal({
       });
       setStep(1);
     }
-  }, [isOpen, mode, editInstance]);
+  }, [isOpen, mode, editInstance, teamId]);
 
   const handleTemplateSelect = (id: string) => {
     const tpl = templates.find((t) => t.template_id === id);
@@ -321,7 +330,12 @@ export default function AgentFormModal({
     !missingRequired &&
     reservedTagFields.length === 0 &&
     !nameTaken;
-  const canSave = isFormValid && !isSubmitting;
+  const revisionChanged =
+    mode === "edit" &&
+    draftRevision !== null &&
+    editInstance !== undefined &&
+    draftRevision !== editInstance.configuration_revision;
+  const canSave = isFormValid && !isSubmitting && !revisionChanged;
 
   // Every section holding a blocking problem, computed once: the tab badges
   // (after a submit attempt) and the tab the failed submit jumps to read it.
@@ -396,7 +410,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
-              disabled={showNameTaken || isSubmitting}
+              disabled={showNameTaken || isSubmitting || revisionChanged}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -412,6 +426,8 @@ export default function AgentFormModal({
         ) : undefined
       }
     >
+      {loadErrorMessage && <ServiceNotice icon="info" title={loadErrorMessage} />}
+      {revisionChanged && <ServiceNotice icon="info" title={t("rework.teams.formAgent.changedWhileEditing")} />}
       {step === 1 ? (
         <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
       ) : (

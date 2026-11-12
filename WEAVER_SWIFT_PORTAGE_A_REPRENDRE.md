@@ -12,6 +12,9 @@ côté à la demande de l'utilisateur, sans validation fournisseur. Les récepti
 k3d/plateforme et les raccords arc42 correspondants restent à effectuer.
 
 La [méthode de merge](docs/SWIFT_WEAVER_MERGES.md) décrit la procédure réutilisable.
+**Pilotage du 12 novembre :** priorité au merge interactif de la tranche `222bc60ac`
+en [section 18](#18-audit-swift-et-reprise-kpi---12-novembre-2026). Aucun merge
+effectué à ce stade ; la borne intégrée ci-dessus reste inchangée.
 Ce dossier conserve les sources Swift, les décisions et les preuves de la tranche
 initiale ; ce n'est pas une liste de missions à relancer intégralement.
 
@@ -1910,3 +1913,501 @@ longue et export Word/Markdown avec titre Unicode. Le navigateur conserve sa
 règle existante de nettoyage du nom téléchargé ; le correctif porte sur l'en-tête
 HTTP qui empêchait certains exports. Aucun service démarré, base applicative
 modifiée, push ou déploiement.
+
+## 18. Audit Swift et reprise KPI - 12 novembre 2026
+
+Pilote : session Codex intégration Swift/Weaver de Dimi. Mission actuelle :
+conseiller, attribuer les lots et maintenir le suivi ; premier lot HTML/CI confié
+au sous-assistant `port_html_ci` après le choix explicite de Dimi. Aucun merge
+global, commit ou push effectué ; le pilote ne réalise pas les edits applicatifs.
+
+### Priorité et organisation confirmées avec Dimi
+
+Dimi demande de traiter d'abord le merge, sujet par sujet, avec des échanges
+courts sur les choix de portage. La reprise KPI reste un travail ultérieur : son
+inventaire ci-dessous préserve les besoins mais ne doit pas élargir le merge.
+Le chantier est isolé sur `codex/merge-swift-2026-11-12`, créée depuis la base
+Weaver figée ci-dessous dans un worktree dédié attaché au chat du pilote. Le
+checkout Weaver courant est libéré des seules modifications de suivi du pilote ;
+aucun service ni environnement de démo n'a été touché. L'AGENDA central donne le
+chemin local actif pour les autres assistants.
+
+Pour chaque sujet : exposer l'apport Swift et le comportement Weaver actuel,
+recommander reprise/adaptation/report, consigner le choix de Dimi, puis confier
+une mission bornée à un exécutant identifié. Le pilote vérifie le résultat et
+la réception restante avant de passer au sujet suivant. Un seul propriétaire de
+l'index pendant le merge ; ne pas lancer plusieurs résolveurs dans ce worktree.
+
+Ordre de discussion proposé, ajustable par Dimi :
+
+1. Corrections HTML et CI, reprises directes pressenties.
+2. Préparation PowerPoint et contrats SDK/runtime, risque principal de divergence.
+3. Pièces jointes non envoyées et brouillons du chat.
+4. Suggestions d'agents de l'accueil sans OpenSearch.
+5. Analytics : sélectionner les apports compatibles et documenter les reports,
+   sans réactiver les dashboards pendant le merge.
+6. Documentation, notes opérateur, contrats générés et vérification d'ensemble
+   par rapport aux deux parents avant intégration finale dans Weaver.
+
+Le chantier peut être interrompu entre ces décisions. Un simple index en conflit
+n'est pas un jalon validé : chaque interruption doit laisser les choix, chemins
+traités, conflits restants et prochaine action explicites. Si Weaver avance en
+parallèle, réexaminer son nouveau delta avant la livraison finale ; ne pas déplacer
+silencieusement les SHA de cette tranche. Aucun merge lancé à ce point de préparation.
+
+### Références figées et avis de merge
+
+- Base Weaver : `f6e5af8e3239c56cf4b3b86847347abd237c2a80`.
+- Borne Swift intégrée : `49aaea6820556c63ff4e688dbfc7f8f702cad9e9`, vérifiée comme
+  second parent de `629b5f886d702003cc8ca48362746822244954e7` et merge-base actuelle.
+- Cible Swift : `222bc60acda8b806c2186bd241dfbf3db180fac2`, confirmée par fetch ;
+  branches locale `swift` et `origin/swift` alignées au moment de l'audit.
+- Sept commits entrants, 413 fichiers modifiés dans le delta Swift.
+
+Avis : intégrer cette ascendance dans un lot dédié, avec décision par comportement.
+Conserver les suppressions du CP Python et d'OpenFGA, préserver les contrats Rust
+et enregistrer les besoins analytics différés. La réactivation des dashboards
+est un lot distinct. Pas de résolution globale ours/theirs ni de restauration
+d'un backend historique pour satisfaire un import UI.
+
+Si un nouvel écran Swift exige des endpoints absents, différer son raccord comme
+un ensemble cohérent et conserver sa référence source ; ne pas ajouter de hooks
+fictifs dans le client généré. Les composants visuels compatibles peuvent être
+repris après vérification de leurs consommateurs. Les scripts de backfill Swift
+ne sont pas requis pour les installations neuves Weaver.
+
+La simulation `git merge-tree --write-tree --name-only --messages <base> <cible>`
+n'a modifié ni index ni checkout : 183 chemins en conflit, dont 76 modify/delete,
+68 content, 29 file location, huit rename/delete et deux add/add. Ces nombres
+dépendent de la détection de renommages de Git, pas du nombre de décisions produit.
+Attention : Git propose à tort des fichiers analytics dans
+`apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/email_processor/`,
+et un modèle de préparation dans `fast_text_processor/`. Rejeter ces placements
+et examiner aussi les nouveaux fichiers ajoutés sans conflit dans des arbres retirés.
+Les notes opérateur proposées sous `deploy/release-notes/changes/` demandent,
+elles, une adaptation au comportement réellement intégré.
+
+| Commit entrant | Apport et décision recommandée, non encore exécutée |
+| --- | --- |
+| `43a0d105e` (#3513) | Reprendre la consigne empêchant les liens HTML inventés ; conserver le contrat d'artefact Weaver. |
+| `70fcc9a7b` (#3519) | Reprendre le déclenchement des contrôles CI uniquement quand la PR est prête. |
+| `0579222db` (#3495) | Réconcilier la préparation réutilisable des capabilities avec le mécanisme CP/Temporal/pod déjà porté. Le delta Swift compte 154 fichiers : revue sémantique nécessaire sur SDK, runtime, PowerPoint, UI et Helm ; ni duplication ni recul des décisions organisation + pod et readiness. |
+| `2de825a21` | Exclusion du lot confirmée par Dimi après comparaison : conserver catalogue/cycle de vie Weaver ; tâche différée pour définir attribution exacte aux messages et éventuelle exclusion avant envoi. Aucune reprise applicative ; voir comparaison ci-dessous. |
+| `332a5a6a3` (#3520) | Conserver les besoins UX et les améliorations compatibles des composants/émetteurs ; différer explicitement les lecteurs analytics du CP Python. Adapter les droits et les clients avant tout branchement UI. |
+| `2b377b522` (#3501) | Archivage documentaire Swift : ne pas recréer le corpus OpenSpec retiré de Weaver ; garder la traçabilité Git. |
+| `222bc60ac` (#3511), dernier commit | Cinq suggestions d'agents via SQL, indépendantes d'OpenSearch : besoin à porter vers Rust, pas un KPI. Ne pas importer `useHomeAgentsQuery` sans endpoint Weaver ; adapter espaces, accès, activité et état de préparation avant limite. |
+
+Le dernier commit sépare activité de conversation et modification du titre/contexte,
+complète les agents récents par des suggestions accessibles et prévoit un repli
+explicite lorsque l'historique est indisponible. Préserver ce besoin sans importer
+ses migrations Alembic CP ni ses équipes par défaut comme modèle métier Weaver.
+
+### Socle Weaver vérifié dans le code
+
+| Contrat | Sources et consommateurs | Conclusion de l'audit |
+| --- | --- | --- |
+| Consommation modèles | `apps/control-plane/migrations/0001_schema.sql`, table `model_usage` ; `src/sessions/usage.rs` et `src/sessions/usage/read.rs` dans ce composant ; `libs/fred-runtime/fred_runtime/app/usage.py` et ses appels dans `agent_app.py` | Journal SQL, attribution serveur, rapports atomiques et idempotents ; lectures personnelles et d'espace déjà implémentées. Les tokens et le cache existent : ne pas créer une deuxième autorité dans OpenSearch. |
+| API et génération | `GET /me/usage`, `GET /spaces/{space_id}/usage` ; `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`, hooks `useMyUsageQuery` et `useSpaceUsageQuery` | Contrat déjà généré ; les contrôles du pipeline Weaver le consomment. Les dashboards historiques utilisent encore `legacyControlPlaneApiEnhancements`. |
+| Droits de consommation | `apps/control-plane/src/authorization.rs`, `SpacePermission::ReadUsage` ; `docs/architecture/A7-action-role-matrix.md`, Consumption reads | Usage personnel pour la personne authentifiée ; collectif pour Owner/Analyst directs, pas Editor. Equipe : agrégation de ses projets, même retirés/purgés ; organisation non supportée par cette route. |
+| Stockage et supervision | `apps/control-plane/migrations/0014_conversation_files.sql` ; `apps/control-plane/src/supervision/mod.rs` et ses modèles/store | Réutiliser les comptes de stockage et la supervision d'organisation ; ne pas sommer comptes locaux et total organisation qui se recouvrent. Ne pas confondre quota logique, réservations et octets physiques à purger. |
+| Evénements outils et modèles | `libs/fred-runtime/fred_runtime/runtime_support/tool_execution.py` ; `libs/fred-core/fred_core/kpi/` | Emetteurs et stockage KPI Python conservés. Le delta Swift ajoute notamment `capability_id`, `cache_read_tokens` et `tool_count` au mapping ; cela ne prouve pas un suivi complet des connexions MCP gérées dans Weaver. |
+| Dashboards | `apps/frontend/src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx` et `admin/AnalyticsPage/AnalyticsPage.tsx` ; `apps/frontend/src/common/router.tsx` | Ecrans et routes présents, lectures analytics historiques non raccordées au Rust. Présence des écrans et tests historiques ne vaut pas réception fonctionnelle. |
+
+Limite à traiter selon l'usage voulu : `report_run_usage` effectue au plus deux
+tentatives HTTP sous délai, puis peut journaliser `outcome=lost`. Le journal SQL
+déduplique les rapports reçus mais ne garantit pas une livraison durable des
+consommations. Avant facturation ou quota bloquant de tokens, décider et éprouver
+la garantie de collecte ; ne pas annoncer une comptabilité exhaustive sur cette base.
+
+### Fonctionnalités analytics à retrouver
+
+Phare produit demandé : rester fidèle aux dashboards Swift et les compléter sur
+les ressources Weaver. La référence du nouveau tableau est
+`332a5a6a3:apps/frontend/src/rework/components/pages/admin/AnalyticsPage/AnalyticsView.tsx` ;
+les définitions détaillées restent consultables dans les presets et tests de ce
+commit, sans recopier le CP Python dans Weaver.
+
+| Famille | Valeur à conserver ou compléter | Base et adaptation attendue |
+| --- | --- | --- |
+| Usage personnel | Tokens entrée/sortie/cache, séries, ventilation agent/modèle et estimations d'impact | Brancher les lecteurs Rust existants. Distinguer zéro, absence de données et service indisponible. |
+| Vue d'ensemble et adoption | Visiteurs, utilisateurs actifs/nouveaux, entonnoir, rétention/cohortes, comparaison à la période précédente | Définir précisément événement et dénominateur ; un appel HTTP, un tour avec consommation et un tour terminé ne désignent pas la même activité. |
+| Usage et espaces | Conversations, tours, intensité d'usage, comparaison des équipes/projets ; vues adaptées aux rôles | Reprendre espaces et droits Weaver ; ne jamais convertir un scope vide/interdit en scope global. |
+| Agents et ressources | Agents disponibles/utilisés, popularité, capabilities équipées/utilisées, appels et échecs, skills | Joindre les identités stables et catalogues CP ; distinguer configuration disponible et usage observé. Prompts/marketplace : définir l'événement d'utilisation avant de promettre un indicateur. |
+| Qualité, coûts et impact | Echecs, tokens/cache, coûts estimés en euros, ventilations modèle/agent, estimations environnementales | Réutiliser les faits de consommation ; expliciter tarifs, change, date et limites des estimations. Ne pas assimiler erreurs techniques à qualité des réponses. |
+| Supervision technique | Stockage/quotas, réservations, état des traitements et recherche web si activée | Etendre les propriétaires actuels ; agrégats administratifs sans contenu ni identités individuelles. |
+| Filtres et tendances | Périodes glissantes/calendaires/personnalisées, fuseau, jours comptés/exclus, période précédente, détails et courbes | Même sémantique dans API, UI et export. Les filtres d'attributs d'utilisateurs Swift demandent un contrat Weaver autorisé et borné. |
+| Export Excel | Valeurs typées, explications, période/périmètre/filtres courants, FR/EN, cohérence avec les onglets autorisés | Reprendre la valeur produit de l'export Swift, pas son moteur CP Python par défaut ; aucune identité individuelle ni contenu de conversation dans l'export collectif. |
+| MCP, extension Weaver | Appels par connexion et outil, succès/échecs/durée, espace/agent/pod ; répartition des usages | Réutiliser la frontière commune d'exécution et les UUID des connexions gérées. `capability_id` seul ne distingue pas forcément plusieurs connexions ; vérifier les voies ReAct/Graph et éviter le double comptage. Aucun secret, argument ou résultat d'outil dans les dimensions. |
+
+**Orientation confirmée par Dimi le 12 novembre : rester fidèle aux droits Swift,
+en réfléchissant à leur adaptation aux Owner organisation, équipe et projet.**
+Cela remplace l'hypothèse initiale d'ouvrir les analytics collectifs aux éditeurs.
+La dernière Swift réserve ces analytics à son rôle team-admin et aux observateurs
+plateforme (`kpi/scope.py` et `TeamUsagePage.tsx` au commit KPI), tandis que Weaver
+autorise actuellement Owner et Analyst pour la consommation d'espace.
+
+Proposition à instruire dans K0, pas encore un nouveau contrat d'autorisation :
+
+| Acteur Weaver | Transposition recommandée |
+| --- | --- |
+| Membre, Editor, Analyst sans rôle Owner | Usage personnel ; aucun nouveau droit collectif accordé par le raccord des dashboards. Le droit de consommation déjà détenu par Analyst demande une décision explicite, distincte du merge. |
+| Owner projet | Analytics collectifs du projet dont il est directement responsable. |
+| Owner équipe | Analytics de l'équipe et agrégats de ses projets, cohérents avec le lecteur de consommation actuel ; cela ne donne pas accès aux contenus de ces projets. |
+| Owner organisation | Pilotage agrégé de l'organisation, à définir sans héritage implicite de rôles métier sur les équipes/projets ni accès aux contenus personnels. |
+| Admin organisation/plateforme | Supervision technique agrégée dans son périmètre autorisé ; ne pas convertir le team-admin Swift en Admin technique Weaver ni lui ouvrir les contenus métier. |
+
+Arbitrages restants : maintien d'un `ReadUsage` limité pour Analyst ou alignement
+sur Owner seul ; profondeur et détail des agrégats de l'Owner organisation ;
+frontière avec la supervision Admin. Aucune permission modifiée. Le raccord
+personnel peut avancer indépendamment ; le collectif doit suivre le contrat
+tranché, côté backend comme côté UI et export.
+
+### Lots à distribuer et ordre recommandé
+
+Les missions ci-dessous sont préparées, pas attribuées ni exécutées. Le pilote
+maintient ce suivi et l'AGENDA ; chaque exécutant rapporte sources, décisions,
+chemins possédés, contrôles réellement exécutés et réception restante.
+
+| Lot | Périmètre et résultat attendu | Dépendances et critère de sortie |
+| --- | --- | --- |
+| M1 - Intégration Swift | Un intégrateur possède le merge et l'index ; traite les sept commits, garde la borne et les exclusions exactes. Réconciliation PowerPoint/SDK/runtime identifiée comme sous-lot, sans reconstruire un second mécanisme. | Lecture de cette section ; résultat comparé aux deux parents, zéro conflit, pas de faux déplacement ni backend retiré réintroduit, clients régénérés depuis les sources réunies, qualité des composants touchés. Merge/commit à exécuter seulement dans la mission explicitement autorisée. |
+| K0 - Contrat produit KPI | Matrice acteur/périmètre/indicateur/source/unité, définition des absences et périodes ; transposition Swift vers les trois niveaux Owner, frontière Admin, droit Analyst existant et conservation après suppression. Pas de nouvel audit général du data model. | Peut se préparer pendant M1 en lecture seule ; chaque indicateur relié à un fait existant ou à une collecte manquante nommée. L'UI Swift sert de référence de réception. |
+| K1 - Consommation visible | Raccorder usage personnel, puis équipe/projet, aux deux endpoints et hooks Rust existants ; reprendre cartes, courbes, sélecteurs et ventilations Swift. Retirer les dépendances legacy remplacées. | Après stabilisation du merge ; vérifier données API -> écran, rechargement, bornes temporelles, refus de scope et isolation des comptes. Personnel indépendant ; collectif après arbitrage K0, sans extension implicite des droits. |
+| K2 - Supervision Admin | Compléter la vue d'organisation avec les faits de consommation et les compteurs/quota existants ; conserver séparation Admin/Owner et détail non nominatif. | Contrat K0 ; agrégats et export futurs respectent le périmètre, sans double comptage des budgets. Ne pas réutiliser la route équipe comme autorisation d'organisation. |
+| K3 - Collecte MCP/capabilities/skills | Etendre les émetteurs partagés et leur attribution de manière bornée ; prouver événements réels pour un appel réussi, échoué, annulé et repris. | Contrat K0 et runtime stabilisé par M1 ; définition appels/tentatives, source et déduplication explicites. Peut avancer hors des fichiers UI de K1/K2. |
+| K4 - Analytics étendus et Excel | Raccorder progressivement adoption, agents, qualité/coût et tendances, puis export des mêmes agrégats autorisés ; intégrer MCP après K3. | Un onglet et ses sources par incrément, pas un gros portage de presets. Affichage et export alignés, FR/EN, indisponibilité explicite ; réception par rôle avant arc42. |
+
+Un seul propriétaire pour `controlPlaneOpenApi.ts`, les traductions partagées et
+les composants de graphiques à un instant donné. Pendant M1, les autres assistants
+préparent leurs analyses en lecture seule ; ne pas faire écrire plusieurs agents
+dans un index en merge. Ensuite distribuer les lots selon leurs chemins réels.
+Objectif de convergence : étendre lecteurs, supervision, émetteurs et composants
+existants, supprimer les raccords legacy remplacés ; justifier tout ajout net
+nécessaire à une donnée absente, plutôt que créer un service analytics concurrent.
+
+### Preuves et limites de l'audit initial
+
+Fetch, statut Git initial propre, inventaire/historique/parents, simulation de
+merge, lecture ciblée des diffs et des contrats effectués. Pas de compilation,
+test, service lancé ni réception navigateur : audit et documentation uniquement.
+Le découpage des conflits est établi ; la correction de chaque branche du runtime,
+des chemins PowerPoint et de chaque preset n'a pas été certifiée. Le prochain
+exécutant doit compléter les preuves du lot effectivement réalisé, puis seulement
+mettre à jour la borne Swift si un merge est réellement créé.
+
+### Premier lot HTML/CI - reprise locale terminée le 12 novembre
+
+Dimi a choisi ce premier sujet. Exécutant : `port_html_ci` ; relecture du diff
+et des consommateurs par le pilote. Aucun stage, commit, merge ou push : la
+borne Swift intégrée reste `49aaea682`. Les décisions du tableau des sept commits
+ci-dessus sont désormais exécutées localement pour ces deux corrections seulement.
+
+- `43a0d105e` : reprise de l'interdiction de liens inventés dans le résultat de
+  `render_html_artifact`, avec renvoi vers la carte et le panneau. Adaptation
+  Weaver : "preview is available" remplace la promesse d'ouverture automatique,
+  conditionnelle dans `HtmlArtifactCardRenderer.tsx` (heuristique après cinq
+  secondes, pas à la reprise de l'historique). Aucun changement du payload ou de
+  l'UI ; README et note `html-artifact-link-guidance.md` alignés.
+- `70fcc9a7b` : ajout des événements `ready_for_review` et `converted_to_draft`,
+  et garde anti-brouillon sur `detect-changes`. Les dix autres jobs en dépendent
+  directement, sans `always()`. Note `defer-pr-checks-until-ready.md` ajoutée.
+
+Contrôles exécutés par l'assistant : `uv sync --locked --extra dev`, puis
+`UV_NO_SYNC=1 make -o dev code-quality UV=/home/dimi/.local/bin/uv` dans
+`libs/capabilities/fred-capability-html-artifact` : Ruff, imports, format, Bandit,
+secrets et Basedpyright réussis, zéro erreur/avertissement. Environnement Python
+local au worktree, sans modification du lockfile ni des autres checkouts.
+
+Depuis la racine, avec le Python de cette capability :
+`scripts/migration_guides.py check-pr --base f6e5af8e3239c56cf4b3b86847347abd237c2a80 --worktree`
+valide les deux notes opérateur. Parsing YAML et dépendances des jobs contrôlés ;
+`git diff --check` réussi, également revérifié par le pilote. Production :
++10/-1 lignes ; CI : +3/-1 ; documentation du lot : +87/-0, hors présent suivi.
+Aucune génération de contrat nécessaire, aucun test ajouté ou lancé.
+
+Réception navigateur et GitHub Actions restante. La consigne HTML réduit le
+risque de réponse inventée sans garantir le comportement du modèle. Prochain
+sujet avec Dimi : comparer la préparation PowerPoint Swift aux contrats durables
+CP/Temporal/pod Weaver avant de décider la reprise des différences.
+
+### Comparaison PowerPoint - avis avant modifications
+
+Audit du pilote et des assistants `ppt_ui_compare` et `ppt_runtime_compare`, en
+lecture seule, au 12 novembre. Weaver : `f6e5af8e3` ; apport Swift :
+`0579222dbd26e5feeb5c8b646969a6a44b2e0ec3`. Aucun edit PowerPoint, test ou service
+lancé ; seules la coordination et cette trace ont été actualisées.
+
+**Conclusion proposée : conserver le socle Weaver, ne pas importer le framework
+Swift en bloc.** Le document Swift
+`openspec/changes/reusable-capability-preparation/design.md` au SHA ci-dessus cite
+explicitement le worker Temporal et le dispatch Weaver comme référence. Il veut
+dépasser le couplage PowerPoint et le slot unique de préparation par agent ; cela
+ne démontre pas un manque pour le parcours PowerPoint actuel. Le commit touche
+154 fichiers et ne fournit pas de nouveau moteur de composition/rendu des slides.
+
+| Sujet | Constat comparé et preuve | Avis pour le merge, à confirmer avec Dimi |
+| --- | --- | --- |
+| Préparation durable | Weaver possède CP + Temporal + worker de pod, persistance avant confirmation et réutilisation du résultat après ack perdu (`libs/fred-runtime/fred_runtime/app/preparation_worker.py:129-173`, `builder/preparation.py:79-129` dans la capability PPT). Swift introduit un nouveau worker et un autre workflow pour son CP Python. | Conserver worker, workflow et contrats Weaver ; pas de second chemin. |
+| Originaux, résultats et nettoyage | Weaver sépare original CP et résultats capability, protège les tentatives par leases/job ID et conserve les reçus de retrait (`builder/preparation.py:36-70`, `builder/analysis_job.py:499-524`). | Préserver ces garanties ; aucune justification identifiée pour remplacer stockage, nettoyage ou migrations. |
+| Modèle commun | Weaver : organisation + pod logique, candidat séparé, ancien actif jusqu'au succès (`apps/control-plane/src/documents/powerpoint/acceptance.rs:123`, `capability_preparation/mod.rs:171-188`). Swift conserve son défaut global plateforme. | Conserver l'isolation organisation/pod et les règles de remplacement Weaver. |
+| Copie, export, import | Weaver fige le modèle effectif propre ou commun, ses corrections et l'original, puis réimporte et prépare dans le nouveau périmètre (`apps/control-plane/src/marketplaces/agent.rs:116-174,230-250,471-514`, `documents/powerpoint.rs:208-220`). | Pas de manque constaté justifiant l'enveloppe générique `preparation_assets` Swift. |
+| Upload, aperçu, revue, reset | Parcours existants dans `PptBuilderPlatformPanel.tsx:56-175` ; contrôle d'attente `expected_file_id`, résolution et erreurs déjà présents. | Garder les composants Weaver ; adaptations de libellés seulement si utiles. |
+| Relance du modèle propre à l'agent | Swift ajoute une mutation retry et son bouton (`usePptBuilderAnalysis.ts:142,215` au SHA Swift). Weaver affiche échec/interruption sans bouton dédié (`PptBuilderTemplatePanel.tsx:210-242`) ; la relance du modèle commun existe déjà. | Petit lot utile : bouton explicite branché sur une relance CP Weaver, sans copier l'API/client Swift ni lancer l'analyse dans le navigateur. |
+| Recalcul après édition | Weaver incrémente la révision générale sur nom/description/activation/tuning (`agent_instances.rs:196-197`) ; `saved_agent` exige cette même révision pour réutiliser une préparation (`documents/powerpoint/acceptance.rs:176-187`). Swift compare seulement règles, assets et config pertinente (`capability_preparations/admission.py:224-240`). | Reprendre le comportement utile : pas de nouvelle analyse pour un renommage ou une correction sans incidence sur l'analyse ; conserver le mécanisme existant. |
+| Plusieurs capabilities préparées | Swift ajoute `PreparationSpec`, plusieurs fichiers, état par capability et readiness agrégée. Weaver ne couvre ici qu'une préparation PowerPoint par agent ; aucun second consommateur réel identifié dans ce périmètre. | Différer la généralisation jusqu'à un besoin concret, sans importer tables/états/interfaces préventivement. |
+| Vision | Swift appelle le modèle configuré Knowledge Flow par port dédié ; Weaver refuse explicitement la vision hors tour (`builder/capability.py:699-703`, `useVisionAvailability.ts:19-20`). | Conserver l'analyse structurelle pendant ce merge ; vision reste un lot métier séparé avec autorité, modèles et consommation à définir. |
+| Sélecteur vision inutilisé | Weaver construit encore options et sélecteur `labelling_model` dans `PptBuilderVisionSettings.tsx:47-103`, alors que ses consommateurs déclarent la vision indisponible. Swift retire ce sélecteur. | Simplification locale possible : enlever cette branche inatteignable et ses props/helpers propres, en conservant l'explication de l'analyse structurelle ; pas de suppression générale des contrats de modèles. |
+
+Les chemins `builder/*` ci-dessus sont sous
+`libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/` ; les
+composants PowerPoint sous `apps/frontend/src/rework/features/capabilities/ppt_builder/`.
+Les chemins de CP Swift désignent le contenu historique
+`apps/control-plane-backend/control_plane_backend/` au SHA figé, pas des fichiers à restaurer.
+
+**Limites de la généralisation Swift.** Le nouveau chemin coexiste avec
+`preparation_mode=legacy/shared`. Il est désactivé par défaut dans les types de
+configuration (`PodPreparationConfig.enabled_capabilities=()` et
+`RuntimeCatalogSourceConfig.preparation_enabled=False`) ; les exemples prod
+l'activent explicitement, pas toutes les valeurs Helm. La présence d'un worker
+ne prouve donc pas une activation universelle. Ces flags, backfills et lecteurs
+de transition ne répondent pas au contrat Weaver d'installation neuve.
+
+Swift ajoute aussi un UUID secret propre à la préparation, envoyé dans les
+arguments Temporal puis `X-Preparation-Token`, en plus du workload autorisé
+(`dispatcher.py:172`, `api.py:373-409` au SHA Swift). Ce n'est ni un JWT ni un
+secret OAuth ; aucune fuite observée n'est affirmée. Conserver l'authentification
+workload Weaver et son historique Temporal limité à l'identifiant évite ce
+mécanisme supplémentaire sans besoin démontré.
+
+**Défaut Weaver distinct du portage : droits du modèle commun.** Le CP exige
+`Permission::Write` dans `documents/powerpoint.rs:185-204` et les réglages communs.
+Le tiroir utilise également `useSpaceAccess(organizationId, "write")`
+(`apps/frontend/src/rework/components/pages/admin/FeaturesPage/CapabilityPlatformDrawer.tsx:37,69`).
+Or `authorization.rs:19-20` attribue Write à Editor et Manage à Owner. Un Owner
+seul ne peut donc pas gérer ce modèle commun, contrairement à la responsabilité
+métier prévue pour l'organisation. Recommandation : correction ciblée du parcours
+commun vers l'autorité Owner, en préservant les droits d'édition du modèle propre
+à l'agent ; ne pas modifier la matrice générale Write ni donner ce droit à l'Admin
+technique par transposition de Swift. Recommandation de l'audit initial ; la mise
+en œuvre acceptée est suivie ci-dessous.
+
+**Lots proposés à l'issue de l'audit initial :**
+
+1. Préserver les implémentations Weaver lors du merge des conflits de ce commit ;
+   éliminer de la reprise les nouveaux chemins Swift concurrents et les imports
+   qui les rendraient nécessaires. Ne pas appliquer ours globalement à la tranche.
+2. Si accepté, traiter relance explicite et réutilisation de l'analyse comme deux
+   petits changements du cycle de vie existant. Conserver la révision d'admission
+   de l'agent et les contrôles contre les résultats tardifs ; ne pas simplement
+   supprimer le filtre de révision. La faisabilité sans nouveau framework est
+   établie, pas le patch exact ni sa preuve de concurrence.
+3. Si accepté, corriger les droits du modèle commun dans un lot séparé et retirer
+   le sélecteur vision inutilisé dans un petit nettoyage UI. Ces sujets ne doivent
+   pas entraîner une refonte des rôles ou du catalogue de modèles.
+
+Validation à prévoir pour les lots autorisés : changement de nom pendant/après
+préparation sans recalcul ; vrai changement de fichier relançant une analyse ;
+résultat tardif refusé ; retry après échec sans réupload ni double job ; maintien
+de l'ancien commun pendant remplacement ; Owner seul autorisé sur son commun,
+Editor seul et autre organisation refusés sur ce parcours, droits agent préservés.
+Préserver les tests existants de reprise/retrait/copie ; aucun exécuté par cet audit.
+
+Bilan de cette comparaison : zéro ligne applicative modifiée. Aucun gain net de
+code n'est encore mesuré pour les futurs lots. Les 154 fichiers Swift ne sont pas
+un objectif de portage ; la suppression de branches UI inutilisées serait une
+réduction réelle, l'ajout d'un autre framework ne l'est pas. Réception PowerPoint
+actuelle non rejouée : conclusions sur le code et les contrats, pas une nouvelle
+attestation de fonctionnement déployé.
+
+### Mise en œuvre PowerPoint acceptée
+
+Dimi a autorisé les petits correctifs proposés, dans le worktree isolé existant.
+`ppt_runtime_compare` a réalisé backend et vérifications ciblées ; `ppt_ui_compare`
+a réalisé UI et nettoyage vision ; Codex pilote a relu les diffs et consolidé ce
+suivi, arc42 et la note opérateur. Lot prêt localement, aucun merge, commit ou push
+exécuté : la reprise utile de `0579222db` est préparée, son ascendance Git n'est
+pas encore intégrée.
+
+- Backend : préparation du même fichier immuable réassociée à la nouvelle
+  révision d'admission ; contrôles de résultat tardif conservés.
+  Un PATCH agent sans changement effectif, notamment `{}`, relance un état failed ;
+  pending/ready restent inchangés. Une édition descriptive réelle conserve failed.
+- Bouton UI : mutation existante sans envoyer le brouillon ; relance proposée
+  seulement pour l'échec canonique CP du modèle propre à l'agent.
+  Une interruption rapportée par le pod seul ne prouve pas la fin du travail CP.
+- Risque identifié : l'invalidation du détail agent démontait/réinitialisait le
+  formulaire. Correction limitée incluse pour conserver les modifications non
+  enregistrées pendant le rafraîchissement, avec changement d'identité et réouverture.
+  Une révision de configuration différente observée bloque Save avec une notice,
+  sans effacer le brouillon ; les erreurs de lecture apparaissent dans la modale.
+- Commun d'organisation : Manage pour le modèle commun,
+  y compris lecture/téléchargement et accès runtime aux aperçus ; Read/Write des
+  modèles propres aux agents inchangés. Pas de modification de la matrice globale.
+- Nettoyage UI : sélecteur vision inatteignable et ses seuls helpers retirés,
+  état indisponible et analyse structurelle conservés. Vision et généralisation
+  multi-capabilities restent différées.
+
+**Validation finale locale :**
+
+- CP : `CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 make code-quality` réussi
+  (Clippy, fmt, fred-rust-agent). Puis `CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0
+  CARGO_PROFILE_TEST_DEBUG=0 RUST_TEST_THREADS=1 make test-integration
+  CARGO_TEST_OPTS=powerpoint_` depuis `apps/control-plane` : 8 tests réussis,
+  197 filtrés. Couvre réutilisation pending/ready/failed, résultat injecté après
+  changement de révision, callbacks périmés, retries concurrents, droits Owner,
+  ancien commun pendant remplacement, isolation et nettoyage. Fixtures
+  PostgreSQL/SeaweedFS jetables supprimées.
+- Runtime : `make code-quality` réussi depuis `libs/fred-runtime`, puis
+  `.venv/bin/uv run pytest tests/test_capability_platform_ports.py
+  -k test_prepared_preview_uses_current_cp_resolution_and_server_pod -q` :
+  24 cas réussis, 7 désélectionnés ; référence courante, droits agent/commun,
+  refus CP et référence étrangère contrôlés.
+- Frontend : six fichiers ciblés, 74 tests réussis ; après dernière correction
+  de visibilité de l'erreur dans la modale, deux fichiers concernés rejoués,
+  38 tests réussis. `make -C apps/frontend code-quality` final réussi
+  (TypeScript, Prettier, ESLint), Node 24.22.2/npm 11.19.1 locaux au worktree.
+  Fichiers : `usePptBuilderAnalysis`, `PptBuilderTemplatePanel`,
+  `AgentFormModal.pptBuilder`, `TeamAgentsPage.marketplace`,
+  `CapabilityPlatformDrawer` et `PptBuilderPlatformPanel` (suffixes `.test.tsx`).
+- `git diff --check` réussi. `scripts/migration_guides.py check-pr --base
+  f6e5af8e3239c56cf4b3b86847347abd237c2a80 --worktree` valide les trois notes
+  nouvelles, dont [celle de PowerPoint](deploy/release-notes/changes/weaver-powerpoint-preparation-reuse.md).
+
+Code applicatif PowerPoint, traductions comprises : backend/runtime +44/-18,
+frontend +118/-150, total +162/-168 (net -6). Tests +470/-93 dans sept fichiers ;
+documentation et notes comptées séparément. Aucun endpoint, champ API, généré,
+service, table ou migration ajouté. Les mécanismes génériques Swift, flags
+legacy/shared, backfills et secret de préparation additionnel ne sont pas repris.
+
+Limites : pas de réception navigateur ni de pod/worker Temporal réellement
+déployé. La relance forcée d'une analyse réussie après changement des règles
+reste hors lot ; sa promesse erronée dans l'UI a été retirée. La garde du formulaire
+protège les changements de révision observés, sans nouveau protocole de concurrence
+optimiste serveur. Ces limites ne sont pas des fonctionnalités Swift déclarées
+intégrées. Prochain sujet à examiner avec Dimi : pièces jointes non envoyées
+(`2de825a21`), puis autres sujets restant dans le tableau de cette tranche.
+
+Incident de périmètre UI : l'assistant a lancé une commande `make test` à la racine
+au lieu du composant, puis l'a arrêtée et a repris les seuls fichiers frontend
+ciblés. Elle a exécuté des tests de scripts et préparé des environnements locaux
+dans ce worktree ; aucun service Fred ni changement de fichier suivi constaté.
+Ces exécutions hors périmètre ne constituent pas une preuve du lot PowerPoint.
+Aucun parcours déployé n'est attesté par ce travail local.
+
+### Pièces jointes non envoyées - comparaison et choix proposé
+
+Audit demandé par Dimi avant toute modification : priorité à un modèle robuste et
+simple, plutôt qu'à une reprise mécanique frontend/backend. Source Swift figée :
+`2de825a21df59376c0118e6486a30addd75892a3` (#3502), comparée au socle Weaver
+`f6e5af8e3239c56cf4b3b86847347abd237c2a80` dans ce worktree. Les changements locaux
+HTML/CI/PowerPoint ne touchent pas le mécanisme de pièces jointes étudié.
+Audits backend et UI délégués, relus par le pilote ; aucun code modifié, test,
+service, fetch ou merge exécuté pour ce sujet. Seuls AGENDA et ce suivi sont mis à jour.
+
+**Décision confirmée par Dimi : conserver Weaver et ne pas reprendre ce lot.** Son
+apport UX est réel, mais il dépend d'une association fichier/message exclue
+explicitement lors du précédent portage (section « Pièces jointes : décisions
+et réception », lignes 1634 et suivantes au moment de cet audit). Ne pas rétablir
+`TurnAttachment`, les listes déclarées par le navigateur ou leur copie en historique
+sans rouvrir cette décision. Le merge Git reste à réaliser, aucune exclusion n'a
+encore été exécutée dans un index de fusion.
+
+| Sujet | Swift entrant | Weaver actuel / choix recommandé |
+| --- | --- | --- |
+| Retrouver les fichiers après navigation | Isole les entrées locales par conversation et reconstruit les non-envoyés depuis catalogue + historique. | Déjà couvert pour les fichiers acceptés par le catalogue CP, `currentData` et le journal d'upload acteur/espace/session. Les bytes d'un fichier local interrompu ne sont pas sauvegardés dans le navigateur. |
+| Déterminer « envoyé » | Déduit des identifiants présents dans les messages ; ancien historique traité par dates. Le runtime conserve désormais aussi `attachments: []`. | Pas de liste par message : classement visuel par dates, limites déjà acceptées. Copier Swift réintroduirait un contrat absent, pas seulement une meilleure puce. |
+| Tiroir et contexte envoyé | Masque les non-envoyés dans le tiroir et le texte de contexte, préserve les nouveaux fichiers lors d'un restart. | Les fichiers appartiennent à la conversation ; le tiroir présente le catalogue. Pas de garantie actuelle d'association immuable à un message. |
+| Disponibilité pour l'agent | Le design Swift reconnaît l'indexation dès dépôt et la découverte possible par un tour actif. Le statut draft UI n'est pas une barrière serveur. | Le CP fournit les fichiers prêts de la conversation ; le runtime fige leur ensemble à l'admission du tour et de ses descendants. Un ajout ultérieur ne l'élargit pas ; un prochain tour peut utiliser le fichier même sans message qui le référence. |
+| Stockage, quotas, abandon | Aucun nouveau modèle ni rétention propre aux brouillons. | Réutiliser uploads idempotents, réservations, traitement et nettoyage CP. Un fichier publié mais jamais envoyé demeure un fichier de conversation et consomme ses ressources. |
+
+**Sources déterminantes.** Les chemins Swift ci-dessous sont à lire au SHA figé,
+pas comme des fichiers à réintroduire :
+
+- Swift `openspec/changes/keep-unsent-attachments-as-composer-drafts/design.md`,
+  décisions et Known gaps ; `useChatAttachments.ts:141-181`,
+  `useManagedChat.ts:653-678,959-989` dans ManagedChatPage ;
+  `libs/fred-runtime/fred_runtime/app/agent_app.py:3818`.
+- Weaver : `apps/control-plane/migrations/0001_schema.sql:87,123,552`
+  (placement conversation/espace), `src/sessions.rs:134-155` (propriété et verrou),
+  `src/documents/upload.rs:332-466` (rejeu, limites et réservation),
+  `src/sessions/attachments.rs:71-110` (upload et traitement atomiques).
+  Ces chemins `src/` sont sous `apps/control-plane/`.
+- Disponibilité : `apps/control-plane/src/agent_instances/runtime.rs:322`,
+  `libs/fred-runtime/fred_runtime/model_routing/turn.py:60-86` ; aucun renouvellement
+  de droits par outil à ajouter. Historique Weaver : `agent_app.py:3092`.
+- UI Weaver : `useManagedChat.ts:673-695,764-808`,
+  `useChatAttachments.ts:46-85,131-184`, `toThreadMessages.ts:41-66`,
+  `attachmentUploads.ts:30-59,99-123`, tous sous
+  `apps/frontend/src/rework/components/pages/ManagedChatPage/`.
+
+Le port brut risquerait aussi de rétablir fast-ingest Knowledge Flow et les routes
+`/teams/` remplacées par le protocole CP, ou de mapper tous les fichiers rechargés
+en `ready` comme Swift alors que Weaver distingue encore traitement et échec.
+Swift n'ajoute pas de service satellite ; la complexité ici serait la coordination
+d'un classement UI, d'un historique runtime et d'un catalogue CP sans fait métier
+unique d'envoi.
+
+**Tâche proposée, non lancée : définir dépôt, envoi et attribution des fichiers.**
+
+1. Séparer deux besoins : rattacher exactement les fichiers au message qui les
+   accompagne ; éventuellement garantir leur exclusion avant envoi. Ne pas supposer
+   que la première exigence implique la seconde. Le contrat actuel « fichiers de
+   conversation disponibles au prochain tour » peut rester le choix le plus simple.
+2. Si l'association exacte est retenue, définir son propriétaire et sa preuve durable
+   avec les identités existantes de conversation/message/échange ; validation serveur,
+   envoi idempotent, échec/retry et suppression cohérents. Ne pas construire un second
+   catalogue, une autorité localStorage ou un service de brouillons générique.
+3. Si l'exclusion avant envoi est retenue, définir la transition métier et son effet
+   sur le filtre d'admission existant avant de modifier API/UI. Réutiliser fichiers,
+   quotas et nettoyage CP ; décider la durée de conservation des abandons seulement
+   si un cycle de brouillon distinct est nécessaire. Aucun schéma exact prescrit ici.
+4. Critères futurs ciblés : navigation/rechargement, deux onglets, ajout pendant un
+   tour, HITL/restart, réponse d'envoi perdue et retry, suppression concurrente,
+   absence de fuite entre conversations. Installations neuves : pas de fallback
+   historique Swift ni backfill à importer par défaut.
+
+**Petits sujets séparés, sans correctif dans cet audit.** Swift ferme drop/paste
+pendant HITL ; cette cohérence UI peut se reprendre indépendamment du modèle de
+brouillon. Deux limites Weaver préexistantes sont identifiées par lecture, à
+reproduire avant intervention : le warning initial conserve les fichiers sans leur
+conversation et confirme via le handler courant (`ManagedChatPage.tsx:586-595,1264-1268`),
+donc une navigation de session du même agent peut changer la destination ; le
+journal d'upload localStorage n'est pas synchronisé entre onglets et peut perdre des
+indices de reprise locaux, sans effacer les fichiers acceptés du catalogue CP.
+Ne pas transformer ce constat en refonte ou campagne non demandée.
+
+Tests existants seulement lus : Weaver couvre notamment confirmation de session,
+réponses tardives, reçus ambigus, retry et suppression refusée ; Swift couvre son
+classement et plusieurs reprises avec hooks simulés. Aucun test exécuté ni parcours
+réel multi-onglets ou d'exclusion avant envoi attesté par cet audit. Dimi a ensuite
+confirmé l'exclusion du lot et demandé de terminer le merge ; la portée métier de
+la tâche future reste à choisir avant toute implémentation.
+
+### Finalisation du merge local - en cours
+
+Dimi demande de terminer le merge après exclusion explicite des brouillons Swift.
+Le travail reste sur `codex/merge-swift-2026-11-12` ; les commits préparatoires et
+le merge local nécessaires à cette finalisation sont autorisés. Aucun push ni
+déplacement de la branche `weaver` du checkout principal dans cette opération.
+La cible reste `222bc60acda8b806c2186bd241dfbf3db180fac2`, sans ajout silencieux
+d'une nouvelle arrivée Swift.
+
+- HTML/CI : adaptations directes déjà validées ; PowerPoint : adaptations minimales
+  déjà validées, architecture Weaver conservée.
+- Pièces jointes `2de825a21` : exclusion acceptée, tâche métier tracée ci-dessus.
+- Analytics `332a5a6a3` : différés, besoins et écarts de collecte/lecture conservés
+  dans ce document ; ne pas réintroduire des contrats Python ou laisser entrer
+  une moitié de refonte UI dépendant de ces contrats.
+- Archives `2b377b522` : historique conservé dans Git ; aucun corpus OpenSpec retiré
+  à restaurer dans Weaver.
+- Accueil `222bc60ac` : différé recommandé pour clore ce merge sans nouveau chantier.
+  Le gain Swift est réel (sélection SQL de cinq agents et états vide/erreur), mais
+  la route Rust manque ; l'accueil Weaver actuel repose encore sur un consommateur
+  legacy. Ne pas présenter le maintien de cet écran comme un raccord fonctionnel
+  ou une équivalence avec Swift. Choix demandé à Dimi pendant la préparation.
+
+Un seul assistant, `ppt_runtime_compare`, possède les mutations Git. Les autres
+audits préparent les familles de résolution, y compris les ajouts sans conflit.
+Le pilote tient ce suivi et l'AGENDA. Inventaire explicite des fichiers du lot avant
+commit, résolution motivée par sujet, puis comparaison aux deux parents et qualité
+des composants affectés ; aucune résolution globale par stratégie ours/theirs.

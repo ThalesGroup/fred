@@ -33,7 +33,8 @@ class WeaverCapabilityAuthorizer(CapabilityTeamAuthorizer):
     async def require_preparation_access(
         self, reference: str, space_id: str, agent_instance_id: str | None
     ) -> None:
-        await self.require_agent_editor(space_id)
+        if agent_instance_id is not None:
+            await self.require_agent_editor(space_id)
         runtime = get_runtime_context().config
         if (
             not runtime.control_plane_url
@@ -47,6 +48,7 @@ class WeaverCapabilityAuthorizer(CapabilityTeamAuthorizer):
         token = (self._authorization or "").partition(" ")[2].strip()
         credentials = await static_person_provider(token).credentials()
         try:
+            # CP settings authorizes the organization Owner; agent usage keeps Write.
             # The CP resolves the current own or common template on this logical pod.
             response = await runtime.control_plane_http_client.get(
                 f"{runtime.control_plane_url.rstrip('/')}/spaces/{UUID(space_id)}/powerpoint-template"

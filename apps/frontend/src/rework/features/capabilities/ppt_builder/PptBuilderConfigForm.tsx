@@ -18,7 +18,6 @@
 import type { CapabilityConfigWidgetProps } from "../types";
 import { PptBuilderTemplatePanel } from "./PptBuilderTemplatePanel";
 import { usePptBuilderAnalysis } from "./usePptBuilderAnalysis";
-import { useVisionAvailability } from "./useVisionAvailability";
 
 export type PptBuilderConfigFormProps = Pick<
   CapabilityConfigWidgetProps,
@@ -42,12 +41,10 @@ export function PptBuilderConfigForm({
     assetFiles,
     onAssetFileChange,
   });
-  const vision = useVisionAvailability(teamId, agentInstanceId);
   return (
     <PptBuilderTemplatePanel
       disabled={disabled}
       analysis={analysis}
-      vision={vision}
       configValues={configValues}
       onConfigChange={onConfigChange}
     />

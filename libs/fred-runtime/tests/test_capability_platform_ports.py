@@ -122,8 +122,9 @@ def test_mounted_capability_router_receives_the_weaver_authorizer(monkeypatch):
 @pytest.mark.parametrize("organization", [False, True])
 @pytest.mark.parametrize("reference", ["current", "foreign-or-obsolete"])
 @pytest.mark.parametrize("authorization", ["Bearer person", "bearer person"])
+@pytest.mark.parametrize("status", [200, 403, 503])
 async def test_prepared_preview_uses_current_cp_resolution_and_server_pod(
-    monkeypatch, runtime_context, reference, authorization, organization
+    monkeypatch, runtime_context, reference, authorization, organization, status
 ):
     space, agent = str(uuid4()), None if organization else str(uuid4())
     check = AsyncMock()
@@ -141,7 +142,7 @@ async def test_prepared_preview_uses_current_cp_resolution_and_server_pod(
         assert request.headers["authorization"] == "Bearer person"
         payload = {"analysis_reference": "current"}
         return httpx.Response(
-            200,
+            status,
             json={
                 "current": payload,
                 "replacement": {"analysis_reference": "candidate"},
@@ -162,10 +163,14 @@ async def test_prepared_preview_uses_current_cp_resolution_and_server_pod(
             platform_ports, "get_runtime_context", lambda: RuntimeContext(configured)
         )
         authorizer = platform_ports.WeaverCapabilityAuthorizer(authorization)
-        if reference == "current":
+        if reference == "current" and status == 200:
             await authorizer.require_preparation_access(reference, space, agent)
         else:
             with pytest.raises(HTTPException) as error:
                 await authorizer.require_preparation_access(reference, space, agent)
             assert error.value.status_code == 403
-        check.assert_awaited_once_with(authorization, "write", space_id=space)
+            assert error.value.detail == "preparation_access_denied"
+        if organization:
+            check.assert_not_awaited()  # CP settings owns the Owner decision.
+        else:
+            check.assert_awaited_once_with(authorization, "write", space_id=space)

@@ -31,23 +31,20 @@ import { PptBuilderVarietySettings } from "./PptBuilderVarietySettings";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { hasAnalysisExclusions } from "./types";
 import { isInProgress, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
-import type { VisionAvailability } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
 
 interface Props {
   disabled: boolean;
   analysis: PptBuilderAnalysis;
-  vision: VisionAvailability;
   configValues: Record<string, unknown>;
   onConfigChange: (key: string, value: unknown) => void;
 }
 
-export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValues, onConfigChange }: Props) {
+export function PptBuilderTemplatePanel({ disabled, analysis, configValues, onConfigChange }: Props) {
   const { t } = useTranslation();
   useEffect(() => {
-    if (!disabled && vision.available === false && configValues.use_vision === true)
-      onConfigChange("use_vision", false);
-  }, [disabled, vision.available, configValues, onConfigChange]);
+    if (!disabled && configValues.use_vision === true) onConfigChange("use_vision", false);
+  }, [disabled, configValues, onConfigChange]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const { phase, stagedFile, hasPersistedTemplate, effective, summary } = analysis;
@@ -151,7 +148,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           )}
         </div>
 
-        <AnalysisStatus analysis={analysis} />
+        <AnalysisStatus analysis={analysis} disabled={disabled} />
 
         {analysis.droppedOverrides.length > 0 && (
           <p className={styles.summary}>
@@ -168,13 +165,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
 
       <AdvancedSettingsSection>
         {reviewRow && !needsReview && <div className={styles.settingCard}>{reviewRow}</div>}
-        <PptBuilderVisionSettings
-          disabled={disabled}
-          configValues={configValues}
-          onConfigChange={onConfigChange}
-          vision={vision}
-          changeHint={t("capability.ppt_builder.fields.labelling_model.rereadOnSave")}
-        />
+        <PptBuilderVisionSettings />
         <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
       </AdvancedSettingsSection>
 
@@ -208,7 +199,7 @@ export function TemplateGuideLink() {
 }
 
 /** The line under the upload row: what happens to the template next. */
-export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
+export function AnalysisStatus({ analysis, disabled = false }: { analysis: PptBuilderAnalysis; disabled?: boolean }) {
   const { t } = useTranslation();
   const { phase } = analysis;
 
@@ -239,6 +230,24 @@ export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
     <div className={styles.failure} role={phase === "succeeded" ? undefined : "alert"}>
       <p className={phase === "succeeded" ? styles.status : styles.error}>{message}</p>
       {analysis.error && <p className={styles.error}>{analysis.error}</p>}
+      {analysis.retry && (
+        <>
+          <Button
+            color="on-surface"
+            variant="outlined"
+            size="small"
+            disabled={disabled || analysis.retrying}
+            icon={{ category: "outlined", type: "refresh" }}
+            onClick={() => void analysis.retry?.()}
+          >
+            {t(
+              analysis.retrying ? "capability.ppt_builder.analysis.retrying" : "capability.ppt_builder.analysis.retry",
+            )}
+          </Button>
+          <p className={styles.hint}>{t("capability.ppt_builder.analysis.retrySavedTemplate")}</p>
+        </>
+      )}
+      {analysis.retryFailed && <p className={styles.error}>{t("capability.ppt_builder.analysis.retryFailed")}</p>}
     </div>
   );
 }

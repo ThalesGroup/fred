@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The drawer of a capability's platform-wide settings: it mounts the panel the
-// capability's UI plugin declares, routes its calls to the capability pod, and
-// tells it whether the viewer may write (platform admin or feature manager).
+// Organization owners manage the common template for a logical pod.
 
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useEffect } from "react";
@@ -34,7 +32,7 @@ interface Props {
 export function CapabilityPlatformDrawer({ capability, organizationId, runtimeId, onClose }: Props) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const access = useSpaceAccess(organizationId, "write");
+  const access = useSpaceAccess(organizationId, "manage");
   const Panel = capability ? platformPanelFor(capability.id) : undefined;
 
   useEffect(() => {

@@ -108,14 +108,15 @@ it("discards a pending template reset on close and submits it only after Save", 
   const root = createRoot(container);
   const onClose = vi.fn();
   const onSubmit = vi.fn(async (_payload: AgentFormPayload) => undefined);
-  const render = (isOpen: boolean) => {
+  const render = (isOpen: boolean, editInstance = instance) => {
     act(() =>
       root.render(
         <AgentFormModal
           isOpen={isOpen}
           isSubmitting={false}
           mode="edit"
-          editInstance={instance}
+          teamId={editInstance.space_id}
+          editInstance={editInstance}
           templates={[template]}
           onClose={onClose}
           onSubmit={onSubmit}
@@ -143,6 +144,8 @@ it("discards a pending template reset on close and submits it only after Save", 
     expect(container.querySelector('[data-testid="template-sha"]')?.textContent).toBe("saved");
     click("Stage");
     click("Use platform template");
+    render(true, { ...instance, preparation_state: "pending" });
+    expect(container.querySelector('[data-testid="template-sha"]')?.textContent).toBe("null");
     await act(async () => click("rework.save"));
     expect(onSubmit).toHaveBeenCalledOnce();
     expect(onSubmit.mock.calls[0][0].capabilityConfigValues.ppt_builder).toEqual({
@@ -151,6 +154,12 @@ it("discards a pending template reset on close and submits it only after Save", 
       overrides: [],
     });
     expect(onSubmit.mock.calls[0][0].capabilityAssetFiles).toEqual({});
+
+    render(true, { ...instance, agent_instance_id: "other-agent" });
+    expect(container.querySelector('[data-testid="template-sha"]')?.textContent).toBe("saved");
+    click("Use platform template");
+    render(true, { ...instance, agent_instance_id: "other-agent", space_id: "other-space" });
+    expect(container.querySelector('[data-testid="template-sha"]')?.textContent).toBe("saved");
   } finally {
     act(() => root.unmount());
     container.remove();

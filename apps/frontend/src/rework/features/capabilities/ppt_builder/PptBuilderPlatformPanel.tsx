@@ -286,14 +286,7 @@ export function PptBuilderPlatformPanel({
 
       {canManage && (
         <>
-          <PptBuilderVisionSettings
-            disabled={busy}
-            configValues={{ use_vision: false }}
-            onConfigChange={() => {}}
-            vision={{ available: false, visionProfiles: [] }}
-            defaultModelLabel={t(`${K}.defaultModel`)}
-            changeHint={t(`${K}.visionRereads`)}
-          />
+          <PptBuilderVisionSettings />
           {(hasTemplate || savedOverrides.length > 0) && (
             <div className={styles.uploadRow}>
               {hasTemplate && (

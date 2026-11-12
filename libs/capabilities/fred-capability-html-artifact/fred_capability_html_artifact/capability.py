@@ -199,7 +199,16 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
                 tool_ref=_TOOL_REF,
                 ui_parts=(cast(UiPart, part),),
             )
-            return f"Artifact '{title}' rendered (id={aid}).", artifact
+            return (
+                f"Artifact '{title}' rendered (id={aid}). "
+                "The HTML preview is available in the panel on the right. "
+                "The artifact card below your response lets the user open or "
+                "reopen the preview; the panel's close button closes it. "
+                "No hosted or shareable URL is created or returned. "
+                "Do not invent or construct a link or URL to this artifact. "
+                "Refer the user to the preview and its artifact card instead.",
+                artifact,
+            )
 
         self.tools: Sequence[BaseTool] = [render_html_artifact]
 

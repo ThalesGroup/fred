@@ -13,9 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The hook polls the analysis while it runs, keeps the last answer through a
-// failed poll, re-checks the agent once per finished analysis, and refetches
-// after a re-run (also polling an outdated one while it is refreshed).
+// Canonical preparation polling and retries must preserve the unsaved form.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,6 +27,16 @@ interface QueryState {
 }
 const analysis = vi.hoisted(() => ({
   state: {} as QueryState,
+  source: "agent" as "agent" | "organization" | "builtin",
+  teamId: "team",
+  staleData: undefined as AnalysisStatusResponse | undefined,
+  retry: vi.fn(),
+  savedRefetch: vi.fn(),
+  retryState: {
+    isLoading: false,
+    error: undefined as unknown,
+    originalArgs: undefined as { spaceId: string; agentInstanceId: string } | undefined,
+  },
   cpState: "ready" as "ready" | "pending" | "failed",
   options: [] as { skip?: boolean; pollingInterval?: number }[],
   refetch: vi.fn(),
@@ -45,7 +53,12 @@ const analysis = vi.hoisted(() => ({
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
   useGetPptBuilderAnalysisQuery: (_arg: unknown, options: { skip?: boolean; pollingInterval?: number }) => {
     analysis.options.push(options);
-    return { ...analysis.state, refetch: analysis.refetch };
+    return {
+      ...analysis.state,
+      currentData: analysis.state.data,
+      data: analysis.staleData ?? analysis.state.data,
+      refetch: analysis.refetch,
+    };
   },
   useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => {
     analysis.builtinOptions.push(options);
@@ -55,8 +68,11 @@ vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useUpdateAgentInstanceMutation: () => [analysis.retry, analysis.retryState],
   useResolvePowerpointTemplateQuery: () => ({
+    refetch: analysis.savedRefetch,
     currentData: {
+      source: analysis.source,
       file: analysis.configValues.template_sha256 ? { sha256: analysis.configValues.template_sha256 } : null,
       analysis_reference: "prep:reference",
       preparation_state: analysis.cpState,
@@ -99,7 +115,7 @@ let result: PptBuilderAnalysis;
 
 function Harness() {
   result = usePptBuilderAnalysis({
-    teamId: "team",
+    teamId: analysis.teamId,
     agentInstanceId: analysis.agentInstanceId,
     configValues: analysis.configValues,
     onConfigChange: analysis.configChange,
@@ -118,6 +134,12 @@ const polling = () => analysis.options[analysis.options.length - 1].pollingInter
 
 beforeEach(() => {
   analysis.cpState = "ready";
+  analysis.source = "agent";
+  analysis.teamId = "team";
+  analysis.staleData = undefined;
+  analysis.retryState = { isLoading: false, error: undefined, originalArgs: undefined };
+  analysis.retry.mockReset().mockReturnValue({ unwrap: () => Promise.resolve() });
+  analysis.savedRefetch.mockReset().mockResolvedValue({});
   analysis.options = [];
   analysis.builtinOptions = [];
   analysis.builtin = undefined;
@@ -253,5 +275,107 @@ describe("usePptBuilderAnalysis", () => {
     expect(result.previewSource).toEqual({ kind: "builtin" });
     expect(result.effective?.patterns?.[0].label).toBe(PATTERN.label);
     expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(false);
+  });
+});
+
+describe("retrying the saved agent template", () => {
+  it("sends one empty patch to the saved identity and preserves unsaved config", async () => {
+    analysis.cpState = "failed";
+    analysis.configValues = {
+      template_sha256: SHA,
+      validate_plan: false,
+      overrides: [{ pattern_id: "slide:1", label: "Draft" }],
+    };
+    let complete!: () => void;
+    analysis.retry.mockReturnValue({
+      unwrap: () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    });
+    show({});
+    let request!: Promise<void>;
+    act(() => {
+      request = result.retry!();
+      void result.retry!();
+    });
+    expect(analysis.retry).toHaveBeenCalledExactlyOnceWith({
+      spaceId: "team",
+      agentInstanceId: "agent",
+      updateAgentInstanceRequest: {},
+    });
+    expect(analysis.configChange).not.toHaveBeenCalled();
+    expect(analysis.assetChange).not.toHaveBeenCalled();
+    await act(async () => {
+      complete();
+      await request;
+    });
+    expect(analysis.savedRefetch).toHaveBeenCalledOnce();
+    analysis.cpState = "pending";
+    show({});
+    expect(result.phase).toBe("pending");
+    expect(result.retry).toBeNull();
+    expect(analysis.configValues.overrides).toEqual([{ pattern_id: "slide:1", label: "Draft" }]);
+  });
+
+  it("never retries a common template, staged replacement, removal or unfailed CP state", () => {
+    analysis.cpState = "failed";
+    analysis.source = "organization";
+    show({});
+    expect(result.retry).toBeNull();
+    analysis.source = "agent";
+    analysis.assetFiles = { template: new File(["deck"], "draft.pptx") };
+    show({});
+    expect(result.retry).toBeNull();
+    analysis.assetFiles = {};
+    analysis.configValues.remove_template = true;
+    show({});
+    expect(result.retry).toBeNull();
+    analysis.configValues.remove_template = false;
+    analysis.cpState = "ready";
+    show({ data: status({ status: "interrupted" }) });
+    expect(result.retry).toBeNull();
+    analysis.cpState = "failed";
+    analysis.agentInstanceId = "";
+    show({});
+    expect(result.retry).toBeNull();
+    expect(analysis.retry).not.toHaveBeenCalled();
+  });
+
+  it("keeps a refused retry visible without changing the draft or using another agent's error", async () => {
+    analysis.cpState = "failed";
+    analysis.retry.mockReturnValue({ unwrap: () => Promise.reject({ status: 403 }) });
+    show({});
+    await act(async () => {
+      await result.retry!();
+    });
+    analysis.retryState.error = { status: 403 };
+    analysis.retryState.originalArgs = { spaceId: "team", agentInstanceId: "agent" };
+    show({});
+    expect(result.retryFailed).toBe(true);
+    expect(result.retry).not.toBeNull();
+    expect(analysis.configChange).not.toHaveBeenCalled();
+    analysis.agentInstanceId = "other-agent";
+    show({});
+    expect(result.retryFailed).toBe(false);
+    await act(async () => {
+      await result.retry!();
+    });
+    expect(analysis.retry).toHaveBeenLastCalledWith({
+      spaceId: "team",
+      agentInstanceId: "other-agent",
+      updateAgentInstanceRequest: {},
+    });
+  });
+
+  it("does not reuse a previous agent's pod analysis while the new query loads", () => {
+    analysis.staleData = status({
+      status: "succeeded",
+      inventory: { slide_width: 1, slide_height: 1, patterns: [PATTERN] },
+    });
+    show({ isLoading: true });
+    expect(result.phase).toBe("unknown");
+    expect(result.effective).toBeNull();
+    expect(result.previewSource).toBeNull();
   });
 });

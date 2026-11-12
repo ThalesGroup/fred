@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // The platform drawer mounts the capability's panel, routes it to the pod, and
-// gives write actions only to capability managers (from the bootstrap roles).
+// delegates common-template management to the organization Manage permission.
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,13 +23,17 @@ import { describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   dispatch: vi.fn(),
   allowed: false,
+  access: vi.fn(),
   panelProps: undefined as undefined | { canManage: boolean },
 }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-redux", () => ({ useDispatch: () => h.dispatch }));
 vi.mock("../../../../core/hooks/useSpaceAccess", () => ({
-  useSpaceAccess: () => ({ allowed: h.allowed }),
+  useSpaceAccess: (spaceId: string, permission: string) => {
+    h.access(spaceId, permission);
+    return { allowed: h.allowed };
+  },
 }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
   InlineDrawer: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? children : null),
@@ -77,6 +81,7 @@ function mount(manager: boolean) {
 describe("CapabilityPlatformDrawer", () => {
   it("routes the panel to the capability pod and gates its writes on the organization permission", () => {
     mount(true);
+    expect(h.access).toHaveBeenCalledWith("org-a", "manage");
     expect(h.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ payload: { "org-a/pod-a/ppt_builder": "/pod/capabilities/ppt_builder" } }),
     );

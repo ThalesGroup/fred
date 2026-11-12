@@ -434,10 +434,14 @@
         "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
         "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
-        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
-        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
-        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
+        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant que sa lecture n'a pas abouti.",
+        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible tant que la lecture n'est pas terminée.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue d'utiliser cette lecture.",
+        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin.",
+        "retry": "Relancer",
+        "retrying": "Relance en cours…",
+        "retrySavedTemplate": "Relance le template enregistré. Vos modifications non enregistrées restent dans ce formulaire.",
+        "retryFailed": "Impossible de relancer la lecture. Vérifiez vos droits d'accès et votre connexion, puis réessayez."
       },
       "review": {
         "title": "Slides du template",
@@ -3781,6 +3785,7 @@
         "sortLabel": "Trier"
       },
       "formAgent": {
+        "changedWhileEditing": "Une autre modification a été enregistrée pendant votre édition. Votre brouillon est conservé ici, mais ne peut pas être enregistré. Copiez les modifications à garder avant de fermer et de rouvrir l'agent.",
         "advancedSettings": "Paramètres avancés",
         "capabilities": {
           "header": "Activer des capacités pour votre agent",

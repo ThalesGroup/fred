@@ -4,6 +4,7 @@ use super::{PowerPointChange, PowerPointFile, PowerPointResolution};
 use crate::{
     api::AppState,
     documents::{Storage, unavailable},
+    domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery, idempotency_key},
     onboarding::AdmittedUser,
@@ -103,7 +104,9 @@ async fn upload(
         &s.pool,
         &user.uid,
         space,
-        crate::domain::Permission::Write,
+        change
+            .agent_instance_id
+            .map_or(Permission::Manage, |_| Permission::Write),
     )
     .await?;
     let runtime = if let Some(template) = change.template_id {

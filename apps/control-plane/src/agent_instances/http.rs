@@ -413,8 +413,10 @@ pub(crate) async fn save_created(
     let record = super::create(&mut **tx, instance)
         .await
         .map_err(instance_write_error)?;
-    crate::documents::powerpoint::acceptance::saved_agent(&mut *tx, user, &record, powerpoint)
-        .await?;
+    crate::documents::powerpoint::acceptance::saved_agent(
+        &mut *tx, user, &record, powerpoint, false,
+    )
+    .await?;
     let record = super::get_for_space(&mut **tx, space_id, record.agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -569,6 +571,9 @@ async fn update_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<UpdateAgentInstanceRequest>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
+    // An effective edit preserves a failed analysis when its input file is unchanged.
+    // A no-op PATCH (in particular {}) explicitly retries failure without changing
+    // saved configuration; pending/ready preparations are retained, including on replay.
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     let record = super::get_for_space(&s.pool, space_id, agent_instance_id)
@@ -688,6 +693,7 @@ async fn update_agent_instance(
         &user,
         &record,
         body.powerpoint.as_ref(),
+        record.configuration_revision == current.configuration_revision,
     )
     .await?;
     let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)

@@ -43,13 +43,13 @@ async fn get(
     ApiQuery(q): ApiQuery<Target>,
 ) -> AppResult<Json<PowerPointSettings>> {
     http::runtime(&s, space, None, Some(&q.runtime_id)).await?;
-    // One snapshot for file, preparation and edits; the organization write right
-    // matches the existing template administration and capability preview checks.
+    // One snapshot for file, preparation and edits; only the organization Owner
+    // administers common templates, including capability previews.
     let mut tx = s.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
-    let owner = authorization::authorize(&mut *tx, &user.uid, space, Permission::Write).await?;
+    let owner = authorization::authorize(&mut *tx, &user.uid, space, Permission::Manage).await?;
     target(&mut *tx, &owner, None).await?;
     let effective: Option<PowerPointFile> = sqlx::query_as("select * from powerpoint_file where space_id=$1 and runtime_id=$2 and agent_instance_id is null and status='stored' and effective")
         .bind(space).bind(&q.runtime_id).fetch_optional(&mut *tx).await?;
@@ -82,7 +82,7 @@ async fn put(
     ApiJson(input): ApiJson<PowerPointSettingsChange>,
 ) -> AppResult<StatusCode> {
     let runtime = http::runtime(&s, space, None, Some(&q.runtime_id)).await?;
-    let owner = authorization::authorize(&s.pool, &user.uid, space, Permission::Write).await?;
+    let owner = authorization::authorize(&s.pool, &user.uid, space, Permission::Manage).await?;
     target(&s.pool, &owner, None).await?;
     let stored = crate::agent_instances::tuning::validate_capability_config(
         &s.agent_catalog,

@@ -1472,7 +1472,7 @@ async fn powerpoint_ownership_fallback_replacement_and_cleanup() {
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
-    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    crate::grant(&d.e, org, Role::Owner, "org-owner").await;
     let agent = d.ppt_agent().await;
     let other_agent = d.ppt_agent().await;
     let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
@@ -1484,7 +1484,7 @@ async fn powerpoint_ownership_fallback_replacement_and_cleanup() {
     );
     assert_eq!(
         d.ppt(
-            "writer",
+            "owner",
             &format!("/spaces/{space}/powerpoint-template?runtime_id=fixture"),
             b"a",
             Uuid::new_v4()
@@ -1494,7 +1494,7 @@ async fn powerpoint_ownership_fallback_replacement_and_cleanup() {
         404
     );
     let (status, organization) = d
-        .ppt("org-writer", &org_path, b"organization", Uuid::new_v4())
+        .ppt("org-owner", &org_path, b"organization", Uuid::new_v4())
         .await;
     assert_eq!(status, 200, "{organization}");
     // A direct role on the usage space suffices; the file does not grant an org read role.
@@ -1718,10 +1718,10 @@ async fn powerpoint_space_deletion_waits_for_original_and_derived_cleanup() {
         .await
         .unwrap()
         .organization;
-    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    crate::grant(&d.e, org, Role::Owner, "org-owner").await;
     assert_eq!(
         d.ppt(
-            "org-writer",
+            "org-owner",
             &format!("/spaces/{org}/powerpoint-template?runtime_id=fixture"),
             b"org",
             Uuid::new_v4()
@@ -1993,6 +1993,7 @@ async fn powerpoint_durable_preparation_acceptance_and_fencing() {
     let d = Documents::start(100_000).await;
     let agent = d.ppt_agent().await;
     let space = d.folder.space_id;
+    let agent_path = format!("/spaces/{space}/agent-instances/{agent}");
     let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
     let (_, file) = d.stage_ppt("writer", &path, b"model", Uuid::new_v4()).await;
     assert_eq!(
@@ -2004,6 +2005,21 @@ async fn powerpoint_durable_preparation_acceptance_and_fencing() {
     assert_eq!(saved.0, 200, "{saved:?}");
     assert_eq!(saved.1["preparation_state"], "pending");
     let prep = d.preparation(&file).await;
+    let renamed = d
+        .json(
+            "writer",
+            "PATCH",
+            &agent_path,
+            json!({"display_name":"Renamed while pending"}),
+        )
+        .await;
+    assert_eq!(renamed.0, 200, "{renamed:?}");
+    assert_eq!(renamed.1["preparation_state"], "pending");
+    assert!(
+        renamed.1["configuration_revision"].as_i64().unwrap()
+            > saved.1["configuration_revision"].as_i64().unwrap()
+    );
+    assert_eq!(d.preparation(&file).await, prep);
     let admission = d
         .json(
             "reader",
@@ -2033,6 +2049,33 @@ async fn powerpoint_durable_preparation_acceptance_and_fencing() {
     );
     assert_eq!(d.confirm_ppt(prep, None).await.0, 204);
     assert_eq!(d.confirm_ppt(prep, None).await.0, 204);
+    let edited = d
+        .json("writer", "PATCH", &agent_path, json!({"display_name":"Renamed while ready", "description":"A useful presentation agent", "role":"Presentation specialist"}))
+        .await;
+    assert_eq!(edited.0, 200, "{edited:?}");
+    assert_eq!(edited.1["preparation_state"], "ready");
+    assert!(
+        edited.1["configuration_revision"].as_i64().unwrap()
+            > renamed.1["configuration_revision"].as_i64().unwrap()
+    );
+    assert_eq!(d.preparation(&file).await, prep);
+    let unchanged = d.json("writer", "PATCH", &agent_path, json!({})).await;
+    assert_eq!(unchanged.0, 200, "{unchanged:?}");
+    assert_eq!(unchanged.1["preparation_state"], "ready");
+    assert_eq!(
+        unchanged.1["configuration_revision"],
+        edited.1["configuration_revision"]
+    );
+    assert_eq!(d.preparation(&file).await, prep);
+    // The accepted result remains injectable after the admission revision changes.
+    let admitted = d
+        .json("reader", "GET", &format!("{agent_path}/runtime"), json!({}))
+        .await;
+    assert_eq!(admitted.0, 200, "{admitted:?}");
+    assert_eq!(
+        admitted.1["agent"]["configuration"]["capability_config"]["ppt_builder"]["config"]["analysis_id"],
+        format!("prep:{prep}")
+    );
     assert_eq!(
         d.json("reader", "GET", &path, json!({})).await.1["activation_ready"],
         true
@@ -2067,6 +2110,7 @@ async fn powerpoint_durable_preparation_acceptance_and_fencing() {
         200
     );
     let second = d.preparation(&next).await;
+    assert_ne!(second, prep);
     assert_eq!(d.confirm_ppt(prep, None).await.0, 204); // obsolete acknowledgement cannot validate the replacement
     assert_eq!(
         d.json("reader", "GET", &path, json!({})).await.1["preparation_state"],
@@ -2080,17 +2124,46 @@ async fn powerpoint_durable_preparation_acceptance_and_fencing() {
         d.json("reader", "GET", &path, json!({})).await.1["preparation_state"],
         "failed"
     );
-    let retried = d
+    let failed_edit = d
         .json(
             "writer",
             "PATCH",
-            &format!("/spaces/{space}/agent-instances/{agent}"),
-            json!({}),
+            &agent_path,
+            json!({"description":"A clearer description"}),
         )
         .await;
+    assert_eq!(failed_edit.0, 200, "{failed_edit:?}");
+    assert_eq!(failed_edit.1["preparation_state"], "failed");
+    assert_eq!(failed_edit.1["preparation_error"], "No usable layouts");
+    assert_eq!(d.preparation(&next).await, second);
+    // Concurrent explicit retries serialize on the agent and keep a single job.
+    let (retried, duplicate) = tokio::join!(
+        d.json("writer", "PATCH", &agent_path, json!({})),
+        d.json("writer", "PATCH", &agent_path, json!({}))
+    );
+    assert_eq!(retried.0, 200, "{retried:?}");
+    assert_eq!(duplicate.0, 200, "{duplicate:?}");
     assert_eq!(retried.1["preparation_state"], "pending", "{retried:?}");
+    assert_eq!(duplicate.1["preparation_state"], "pending", "{duplicate:?}");
+    assert_eq!(
+        retried.1["configuration_revision"],
+        failed_edit.1["configuration_revision"]
+    );
     let third = d.preparation(&next).await;
     assert_ne!(third, second);
+    let jobs: i64 = sqlx::query_scalar(
+        "select count(*) from capability_preparation where agent_instance_id=$1",
+    )
+    .bind(agent)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(jobs, 3);
+    assert_eq!(d.confirm_ppt(second, None).await.0, 204);
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["preparation_state"],
+        "pending"
+    );
     assert_eq!(
         d.json(
             "writer",
@@ -2133,12 +2206,74 @@ async fn powerpoint_organization_candidate_and_pod_isolation() {
         .await
         .unwrap()
         .organization;
-    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    crate::grant(&d.e, org, Role::Owner, "org-owner").await;
+    crate::grant(&d.e, org, Role::Editor, "org-editor").await;
+    let foreign_org = crate::support::member_organization(&d.e.pool, "Foreign", "alice")
+        .await
+        .unwrap();
+    crate::grant(&d.e, foreign_org.id, Role::Owner, "foreign-owner").await;
     let path = format!("/spaces/{org}/powerpoint-template?runtime_id=fixture");
     let own = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
-    let (_, first) = d
-        .stage_ppt("org-writer", &path, b"first", Uuid::new_v4())
+    let settings = format!("/spaces/{org}/powerpoint-template/settings?runtime_id=fixture");
+    let prepare = format!("/spaces/{org}/powerpoint-template/prepare?runtime_id=fixture");
+    for (denied, status) in [("org-editor", 403), ("foreign-owner", 404)] {
+        for (method, endpoint, body) in [
+            ("GET", path.as_str(), json!({})),
+            ("GET", settings.as_str(), json!({})),
+            ("PUT", settings.as_str(), json!({"config":{}})),
+            ("POST", prepare.as_str(), json!({})),
+            ("DELETE", path.as_str(), json!({})),
+        ] {
+            assert_eq!(
+                d.json(denied, method, endpoint, body).await.0,
+                status,
+                "{denied}: {method} {endpoint}"
+            );
+        }
+        assert_eq!(
+            d.stage_ppt(denied, &path, b"denied", Uuid::new_v4())
+                .await
+                .0,
+            status
+        );
+    }
+    let project = control_plane::spaces::create_space(
+        &d.e.pool,
+        "owner",
+        control_plane::domain::SpaceKind::Project,
+        space,
+        "PowerPoint project".into(),
+        "writer",
+    )
+    .await
+    .unwrap();
+    for (owner, non_organization) in [("owner", space), ("writer", project.id)] {
+        let target = format!("/spaces/{non_organization}/powerpoint-template?runtime_id=fixture");
+        assert_eq!(d.json(owner, "GET", &target, json!({})).await.0, 404);
+        assert_eq!(
+            d.stage_ppt(owner, &target, b"not common", Uuid::new_v4())
+                .await
+                .0,
+            404
+        );
+        assert_eq!(
+            d.json(
+                owner,
+                "GET",
+                &format!(
+                    "/spaces/{non_organization}/powerpoint-template/settings?runtime_id=fixture"
+                ),
+                json!({})
+            )
+            .await
+            .0,
+            404
+        );
+    }
+    let (status, first) = d
+        .stage_ppt("org-owner", &path, b"first", Uuid::new_v4())
         .await;
+    assert_eq!(status, 200, "{first:?}");
     assert_eq!(
         d.json("reader", "GET", &own, json!({})).await.1["source"],
         "builtin"
@@ -2148,9 +2283,52 @@ async fn powerpoint_organization_candidate_and_pod_isolation() {
         204
     );
     let first_id = first["id"].as_str().unwrap();
+    assert_eq!(d.json("org-owner", "GET", &path, json!({})).await.0, 200);
+    assert_eq!(
+        d.json("org-owner", "GET", &settings, json!({})).await.0,
+        200
+    );
+    assert_eq!(
+        d.json(
+            "org-owner",
+            "PUT",
+            &settings,
+            json!({"expected_file_id":first_id,"config":{}})
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        d.json(
+            "org-owner",
+            "POST",
+            &prepare,
+            json!({"expected_file_id":first_id})
+        )
+        .await
+        .0,
+        202
+    );
+    let content =
+        format!("/spaces/{org}/powerpoint-template/{first_id}/content?runtime_id=fixture");
+    assert_eq!(
+        d.request("org-owner", "GET", &content, Body::empty(), "", None)
+            .await
+            .status(),
+        200
+    );
+    for (denied, status) in [("org-editor", 403), ("foreign-owner", 404)] {
+        assert_eq!(
+            d.request(denied, "GET", &content, Body::empty(), "", None)
+                .await
+                .status(),
+            status
+        );
+    }
     let replace = format!("{path}&expected_file_id={first_id}");
     let (_, second) = d
-        .stage_ppt("org-writer", &replace, b"second", Uuid::new_v4())
+        .stage_ppt("org-owner", &replace, b"second", Uuid::new_v4())
         .await;
     assert_eq!(
         d.json("reader", "GET", &own, json!({})).await.1["file"]["id"],
@@ -2168,7 +2346,7 @@ async fn powerpoint_organization_candidate_and_pod_isolation() {
     );
     let (_, third) = d
         .stage_ppt(
-            "org-writer",
+            "org-owner",
             &format!("{path}&expected_file_id={}", second["id"].as_str().unwrap()),
             b"third",
             Uuid::new_v4(),
@@ -2206,6 +2384,17 @@ async fn powerpoint_organization_candidate_and_pod_isolation() {
         .await
         .1["source"],
         "builtin"
+    );
+    assert_eq!(
+        d.json(
+            "org-owner",
+            "DELETE",
+            &format!("{path}&expected_file_id={}", third["id"].as_str().unwrap()),
+            json!({})
+        )
+        .await
+        .0,
+        202
     );
 }
 
