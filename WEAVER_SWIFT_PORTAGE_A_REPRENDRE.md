@@ -1987,15 +1987,15 @@ et examiner aussi les nouveaux fichiers ajoutés sans conflit dans des arbres re
 Les notes opérateur proposées sous `deploy/release-notes/changes/` demandent,
 elles, une adaptation au comportement réellement intégré.
 
-| Commit entrant | Apport et décision recommandée, non encore exécutée |
+| Commit entrant | Décision finale de portage pour cette tranche |
 | --- | --- |
-| `43a0d105e` (#3513) | Reprendre la consigne empêchant les liens HTML inventés ; conserver le contrat d'artefact Weaver. |
-| `70fcc9a7b` (#3519) | Reprendre le déclenchement des contrôles CI uniquement quand la PR est prête. |
-| `0579222db` (#3495) | Réconcilier la préparation réutilisable des capabilities avec le mécanisme CP/Temporal/pod déjà porté. Le delta Swift compte 154 fichiers : revue sémantique nécessaire sur SDK, runtime, PowerPoint, UI et Helm ; ni duplication ni recul des décisions organisation + pod et readiness. |
+| `43a0d105e` (#3513) | Repris avec adaptation de la consigne HTML au contrat d'artefact Weaver ; pas de promesse d'ouverture automatique de l'aperçu. |
+| `70fcc9a7b` (#3519) | Repris : contrôles CI déclenchés seulement quand la PR est prête. |
+| `0579222db` (#3495) | Adapté : réutilisation de l'analyse, relance explicite, Owner du commun et nettoyage vision. CP Rust/Temporal/pod existants conservés ; préparation générique, vision KF, flags/backfills et contrats Swift concurrents exclus. |
 | `2de825a21` | Exclusion du lot confirmée par Dimi après comparaison : conserver catalogue/cycle de vie Weaver ; tâche différée pour définir attribution exacte aux messages et éventuelle exclusion avant envoi. Aucune reprise applicative ; voir comparaison ci-dessous. |
-| `332a5a6a3` (#3520) | Conserver les besoins UX et les améliorations compatibles des composants/émetteurs ; différer explicitement les lecteurs analytics du CP Python. Adapter les droits et les clients avant tout branchement UI. |
+| `332a5a6a3` (#3520) | Différé comme ensemble cohérent : refonte UI, lecteurs Python, nouvelles dimensions/mappings et outillage. Besoins UX, rôles et collecte à retrouver détaillés ci-dessous ; aucun demi-raccord aux endpoints absents. |
 | `2b377b522` (#3501) | Archivage documentaire Swift : ne pas recréer le corpus OpenSpec retiré de Weaver ; garder la traçabilité Git. |
-| `222bc60ac` (#3511), dernier commit | Cinq suggestions d'agents via SQL, indépendantes d'OpenSearch : besoin à porter vers Rust, pas un KPI. Ne pas importer `useHomeAgentsQuery` sans endpoint Weaver ; adapter espaces, accès, activité et état de préparation avant limite. |
+| `222bc60ac` (#3511), dernier commit | Différé : cinq suggestions SQL à porter vers Rust dans un lot dédié, avec espaces/accès/activité/préparation. Accueil courant conservé avec sa limite de raccordement legacy ; pas d'import de `useHomeAgentsQuery` sans endpoint Weaver. |
 
 Le dernier commit sépare activité de conversation et modification du titre/contexte,
 complète les agents récents par des suggestions accessibles et prévoit un repli
@@ -2383,7 +2383,7 @@ réel multi-onglets ou d'exclusion avant envoi attesté par cet audit. Dimi a en
 confirmé l'exclusion du lot et demandé de terminer le merge ; la portée métier de
 la tâche future reste à choisir avant toute implémentation.
 
-### Finalisation du merge local - en cours
+### Finalisation du merge local
 
 Dimi demande de terminer le merge après exclusion explicite des brouillons Swift.
 Le travail reste sur `codex/merge-swift-2026-11-12` ; les commits préparatoires et
@@ -2400,14 +2400,61 @@ d'une nouvelle arrivée Swift.
   une moitié de refonte UI dépendant de ces contrats.
 - Archives `2b377b522` : historique conservé dans Git ; aucun corpus OpenSpec retiré
   à restaurer dans Weaver.
-- Accueil `222bc60ac` : différé recommandé pour clore ce merge sans nouveau chantier.
+- Accueil `222bc60ac` : différé retenu pour clore ce merge sans nouveau chantier.
   Le gain Swift est réel (sélection SQL de cinq agents et états vide/erreur), mais
   la route Rust manque ; l'accueil Weaver actuel repose encore sur un consommateur
   legacy. Ne pas présenter le maintien de cet écran comme un raccord fonctionnel
-  ou une équivalence avec Swift. Choix demandé à Dimi pendant la préparation.
+  ou une équivalence avec Swift. Le pilote a annoncé ce périmètre conservateur
+  pendant la préparation, après avoir proposé le choix à Dimi.
 
-Un seul assistant, `ppt_runtime_compare`, possède les mutations Git. Les autres
-audits préparent les familles de résolution, y compris les ajouts sans conflit.
-Le pilote tient ce suivi et l'AGENDA. Inventaire explicite des fichiers du lot avant
-commit, résolution motivée par sujet, puis comparaison aux deux parents et qualité
-des composants affectés ; aucune résolution globale par stratégie ours/theirs.
+Un seul assistant, `ppt_runtime_compare`, a réalisé les mutations Git. Les autres
+assistants ont audité les familles de résolution, y compris les ajouts sans conflit,
+puis relu le résultat frontend/HTML/CI/exclusions. Le pilote a consolidé les décisions,
+vérifié l'arbre et tenu ce suivi et l'AGENDA.
+
+**Traçabilité Git.** Le commit préparatoire
+`c2359321e48a8b168851b7f586f99e30f105c5a4` contient les 34 chemins des adaptations et
+de leur documentation validée. Cette section appartient au commit de fusion dont
+le premier parent est ce commit préparatoire et le second
+`222bc60acda8b806c2186bd241dfbf3db180fac2`. La nouvelle borne Swift intégrée est donc
+ce second parent ; les fonctionnalités exclues/différées ne seront pas réappliquées
+par un prochain merge et doivent rester des lots explicites.
+
+Le merge normal `--no-commit --no-ff` a présenté 188 chemins non fusionnés, contre
+183 dans la simulation antérieure aux adaptations. Les 413 entrées du delta source
+ont toutes une provenance parmi les sept commits ; 30 chemins synthétiques ont
+aussi été examinés, dont les faux déplacements vers `email_processor`,
+`fast_text_processor` et `libs/fred-knowledge/uv.lock`. Les 390 chemins effectivement
+touchés par la résolution se répartissent en 159 contenus Weaver préservés et
+231 entrées Swift exclues. Les suppressions propres de `PieChart` ont également été
+annulées car les dashboards Weaver le consomment encore. Aucune stratégie globale
+ours/theirs ni édition manuelle de client généré.
+
+**Preuve du résultat.** Après résolution, zéro entrée non fusionnée ; l'index et
+l'arbre applicatif étaient identiques au commit préparatoire. Le merge ajoute
+seulement ce bilan et sa note opérateur : tous les apports applicatifs choisis ont
+été adaptés avant la fusion. La comparaison avec Weaver initial montre les seuls
+lots HTML/CI/PowerPoint acceptés ; celle avec Swift s'explique par les décisions
+du tableau. Aucun CP Python, OpenFGA, corpus OpenSpec ou `docs/swift` restauré.
+Cinquante fichiers de migrations, workers, activités et préparation ont été
+contrôlés par identité de contenu ; aucune migration ou inscription de worker
+nouvelle dans cette résolution.
+
+**Contrôles après résolution :** `make code-quality` réussi dans Control Plane,
+fred-runtime et frontend ; qualité HTML réussie avec l'environnement local et
+la cible sans resynchronisation déjà décrite. YAML CI vérifié : garde draft et
+dix jobs dépendants conservés. `git diff --check` et contrôle des quatre notes
+opérateur réussis. Les tests ciblés PowerPoint listés plus haut n'ont pas été
+relancés : leur arbre applicatif est strictement identique, ce n'est pas une
+nouvelle réception fonctionnelle.
+
+La note [d'intégration](deploy/release-notes/changes/weaver-swift-integration-2026-11-12.md)
+distingue l'ascendance Git des fonctionnalités réellement activées. Les preuves
+temporaires détaillées sont dans `/tmp/weaver-swift-merge-*` sur la machine du
+pilote ; les décisions durables sont ce tableau, les deux parents et le diff du
+commit préparatoire, sans dépendance à ces fichiers temporaires.
+
+Le checkout principal `~/Work/weaver/fred` est resté propre au SHA initial pendant
+la clôture. Aucun push ni déploiement ; réception navigateur/worker réel encore à
+effectuer. La promotion de cette branche isolée vers la branche de travail commune
+reste une opération distincte des résolutions déjà effectuées.
