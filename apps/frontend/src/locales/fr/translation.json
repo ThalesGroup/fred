@@ -2640,6 +2640,15 @@
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "sqlPreview": "Aperçu d'une requête longue. Copiez pour obtenir le SQL original complet.",
+      "copyFullResponse": "Le bouton de copie de la réponse copie la réponse enregistrée complète.",
+      "tokenEstimates": {
+        "input": "Entrée ~{{value}} tokens",
+        "output": "Sortie ~{{value}} tokens",
+        "inputUnavailable": "Entrée indisponible",
+        "outputUnavailable": "Sortie indisponible",
+        "help": "Taille estimée des arguments et de la réponse enregistrés, pas la consommation facturée du modèle."
+      },
       "sqlQuery": "Requête :",
       "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",

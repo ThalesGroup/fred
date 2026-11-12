@@ -21,7 +21,7 @@ import {
   toolSlug,
   type TraceEntry,
 } from "./traceUtils";
-import { tabularToolKind } from "./tabularTrace";
+import { isTabularQueryTool, tabularToolKind } from "./tabularTrace";
 
 // These exact Fred-owned messages are the versioned text boundary used by history.
 const ERROR_MESSAGES: Record<string, string> = {
@@ -78,7 +78,7 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   if (!entry.result || toolResultOk(entry.result)) return null;
   const name = toolName(entry.call);
   const slug = toolSlug(name);
-  const query = /^(?:mcp__knowledge_flow__)?read_query(?:_\d+)?$/.test(name);
+  const query = isTabularQueryTool(name);
   const tabular = query || tabularToolKind(name) !== null;
   const content = toolResultContent(entry.result).trim();
   const errorKey = Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, content) ? ERROR_MESSAGES[content] : undefined;

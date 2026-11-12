@@ -62,7 +62,42 @@ export type TabularTraceResult =
   | { kind: "descriptions"; documents: TabularDescriptionDocument[] }
   | { kind: "search"; keyword: string; matches: TabularMatch[]; tablesTruncated: boolean };
 
+export const ROW_PREVIEW_COUNT = 5;
+export const COLUMN_PREVIEW_COUNT = 8;
+export const COLUMN_NAME_PREVIEW_CHARS = 80;
+const CELL_PREVIEW_CHARS = 160;
+
+export function clippedTabularText(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+export function previewTabularRows(rows: Record<string, unknown>[]) {
+  let fieldsTruncated = false;
+  const preview = rows.slice(0, ROW_PREVIEW_COUNT).map((row) => {
+    const fields: [string, unknown][] = [];
+    for (const name in row) {
+      if (!Object.prototype.hasOwnProperty.call(row, name)) continue;
+      if (fields.length === COLUMN_PREVIEW_COUNT) {
+        fieldsTruncated = true;
+        break;
+      }
+      const value = row[name];
+      let display = value;
+      if (typeof value === "string") display = clippedTabularText(value, CELL_PREVIEW_CHARS);
+      else if (value !== null && typeof value === "object") display = "[...]";
+      if (display !== value || name.length > COLUMN_NAME_PREVIEW_CHARS) fieldsTruncated = true;
+      fields.push([clippedTabularText(name, COLUMN_NAME_PREVIEW_CHARS), display]);
+    }
+    return Object.fromEntries(fields);
+  });
+  return { rows: preview, fieldsTruncated };
+}
+
 const MCP_PREFIX = "mcp__knowledge_flow__";
+
+export function isTabularQueryTool(rawName: string): boolean {
+  return /^(?:mcp__knowledge_flow__)?read_query(?:_\d+)?$/.test(rawName);
+}
 
 /** Accept current and historical tabular tool names and their MCP forms. */
 export function tabularToolKind(rawName: string): TabularToolKind | null {

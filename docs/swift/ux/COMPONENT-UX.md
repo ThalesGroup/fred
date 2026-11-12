@@ -873,6 +873,16 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
+- **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
+  a plain-text response preview limited to five rows, eight columns and shortened
+  cells. Notices identify omitted data; copy actions retain the complete recorded
+  SQL and response. Oversized SQL uses a bounded plain-text preview. The drawer
+  header shows separate approximate input/output payload token sizes for supported
+  tabular tools beside status and duration, with localized accessible explanations.
+  These estimates use recorded arguments and the complete result, work after reload,
+  distinguish missing output from an empty response, and do not change model billing
+  or conversation context totals. Unrelated streaming updates reuse the query preview.
+
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same
   payload validation and hiding of internal document IDs and SQL aliases apply.

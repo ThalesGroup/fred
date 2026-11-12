@@ -1,13 +1,13 @@
 ## 1. Responsive query inspection
 
-- [ ] 1.1 Add a synthetic wide-query regression at the actual `TraceDetailDrawer` seam; verify it reproduces excessive rendering with the current code without committing private conversation data.
-- [ ] 1.2 Bound response/oversized-SQL previews, remove result JSON highlighting and retain complete-original copy actions; verify visible SQL, bounded DOM/highlighter work, truncation notices and copied contents in drawer/code-block tests.
-- [ ] 1.3 Keep preview derivation stable when unrelated messages stream and when steps switch/reopen; verify selected-call contents and repeat rendering with integration tests and the private replay harness.
+- [x] 1.1 Add a synthetic wide-query regression at the actual `TraceDetailDrawer` seam; verify it reproduces excessive rendering with the current code without committing private conversation data.
+- [x] 1.2 Bound response/oversized-SQL previews, remove result JSON highlighting and retain complete-original copy actions; verify visible SQL, bounded DOM/highlighter work, truncation notices and copied contents in drawer/code-block tests.
+- [x] 1.3 Keep preview derivation stable when unrelated messages stream and when steps switch/reopen; verify selected-call contents and repeat rendering with integration tests and the private replay harness.
 
 ## 2. Tabular payload estimates
 
-- [ ] 2.1 Add a supported-tool helper deriving approximate argument/result token sizes from recorded parts; verify supported historical/MCP aliases, complete-result counting, pending/missing versus empty output and rejection of unsupported tools with unit tests.
-- [ ] 2.2 Display localized approximate input/output sizes beside status/duration in the drawer; verify French/English labels, accessible explanations, failed-call compatibility and live/history equivalence in drawer tests.
+- [x] 2.1 Add a supported-tool helper deriving approximate argument/result token sizes from recorded parts; verify supported historical/MCP aliases, complete-result counting, pending/missing versus empty output and rejection of unsupported tools with unit tests.
+- [x] 2.2 Display localized approximate input/output sizes beside status/duration in the drawer; verify French/English labels, accessible explanations, failed-call compatibility and live/history equivalence in drawer tests.
 
 ## 3. Verification and close-out
 
