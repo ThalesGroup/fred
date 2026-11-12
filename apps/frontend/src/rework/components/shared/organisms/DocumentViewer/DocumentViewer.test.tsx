@@ -51,6 +51,8 @@ function deferred<T>() {
 }
 
 const pending = new Map<string, ReturnType<typeof deferred<string>>>();
+const fetchBlob = vi.hoisted(() => vi.fn());
+vi.mock("../../../../../utils/downloadUtils", () => ({ fetchAuthedBlob: fetchBlob }));
 const fetchPreview = vi.fn((arg: { id: string; artifact: string }) => {
   let entry = pending.get(arg.id);
   if (!entry) {
@@ -94,6 +96,67 @@ afterEach(() => {
   container.remove();
   pending.clear();
   fetchPreview.mockClear();
+  fetchBlob.mockReset();
+});
+
+describe("workspace text previews", () => {
+  it.each(["notes.txt", "response.md", "matrix.csv"])(
+    "renders %s as literal text without requesting a CP preview",
+    async (fileName) => {
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+      const text = "# Résultat\na,b\n<img src=x onerror=alert(1)>";
+      fetchBlob.mockResolvedValue(new Blob([text]));
+      const loaded = vi.fn();
+      await act(async () =>
+        root.render(
+          <DocumentViewer
+            documentUid="workspace-file"
+            fileName={fileName}
+            sourceUrl="/pod/workspace/content?path=file"
+            sourceFormat="text"
+            onLoaded={loaded}
+          />,
+        ),
+      );
+      expect(container.querySelector("pre")?.textContent).toBe(text);
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.querySelector('[data-testid="pdf"]')).toBeNull();
+      expect(fetchPreview).not.toHaveBeenCalled();
+      expect(loaded).toHaveBeenCalledOnce();
+    },
+  );
+  it("bounds the preview and tells the user when the content is truncated", async () => {
+    container = document.createElement("div");
+    root = createRoot(container);
+    fetchBlob.mockResolvedValue(new Blob(["a".repeat(300_000)]));
+    await act(async () => root.render(<DocumentViewer documentUid="large" sourceUrl="/large" sourceFormat="text" />));
+    expect(container.querySelector("pre")?.textContent).toHaveLength(256 * 1024);
+    expect(container.textContent).toContain("previewTruncated");
+  });
+  it("reports an unauthorized read without showing its response body", async () => {
+    container = document.createElement("div");
+    root = createRoot(container);
+    const error = new Error("Download failed (404)");
+    fetchBlob.mockRejectedValue(error);
+    const onError = vi.fn();
+    await act(async () =>
+      root.render(<DocumentViewer documentUid="refused" sourceUrl="/refused" sourceFormat="text" onError={onError} />),
+    );
+    expect(container.querySelector("pre")).toBeNull();
+    expect(onError).toHaveBeenCalledWith(error);
+  });
+  it("discards an old file's late response after switching the preview", async () => {
+    container = document.createElement("div");
+    root = createRoot(container);
+    const old = deferred<Blob>();
+    fetchBlob.mockReturnValueOnce(old.promise).mockResolvedValueOnce(new Blob(["new"]));
+    await act(async () => root.render(<DocumentViewer documentUid="old" sourceUrl="/old" sourceFormat="text" />));
+    await act(async () => root.render(<DocumentViewer documentUid="new" sourceUrl="/new" sourceFormat="text" />));
+    await act(async () => old.resolve(new Blob(["old"])));
+    expect(container.querySelector("pre")?.textContent).toBe("new");
+  });
 });
 
 describe("DocumentViewer — stale fetch race (out-of-order resolution)", () => {

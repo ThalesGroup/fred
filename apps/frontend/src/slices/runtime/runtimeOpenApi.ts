@@ -197,6 +197,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    readSessionWorkspaceFile: build.query<ReadSessionWorkspaceFileApiResponse, ReadSessionWorkspaceFileApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/workspace/content`,
+        params: {
+          path: queryArg.path,
+        },
+      }),
+    }),
+    listSessionWorkspaceFiles: build.query<ListSessionWorkspaceFilesApiResponse, ListSessionWorkspaceFilesApiArg>({
+      query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/workspace/files` }),
+    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -399,6 +410,15 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   sessionId: string;
   messageId: string;
   runtimeExecuteRequest: RuntimeExecuteRequest;
+};
+export type ReadSessionWorkspaceFileApiResponse = /** status 200 Successful Response */ string;
+export type ReadSessionWorkspaceFileApiArg = {
+  sessionId: string;
+  path: string;
+};
+export type ListSessionWorkspaceFilesApiResponse = /** status 200 Successful Response */ WorkspaceFile[];
+export type ListSessionWorkspaceFilesApiArg = {
+  sessionId: string;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
@@ -1371,6 +1391,12 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type WorkspaceFile = {
+  modified: string | null;
+  name: string;
+  path: string;
+  size: number;
+};
 export type ClientAuthMode = "user_token" | "no_token" | "delegated";
 export type FredService = "knowledge_flow" | "control_plane";
 export type McpServerConfiguration = {
@@ -1534,6 +1560,10 @@ export const {
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
+  useReadSessionWorkspaceFileQuery,
+  useLazyReadSessionWorkspaceFileQuery,
+  useListSessionWorkspaceFilesQuery,
+  useLazyListSessionWorkspaceFilesQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useExportAgentTuningPodV1AgentsTemplatesAgentIdExportTuningPostMutation,

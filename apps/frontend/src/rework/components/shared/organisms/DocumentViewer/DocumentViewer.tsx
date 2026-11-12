@@ -28,6 +28,7 @@ import { useLazyPreviewQuery } from "../../../../../slices/controlPlane/controlP
 import type { MetadataPreview } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./DocumentViewer.module.css";
 import { ManagerPreviewImage } from "./ManagerPreviewImage";
+import { fetchAuthedBlob } from "../../../../../utils/downloadUtils";
 
 export type ViewMode = "file" | "raw" | "metadata";
 
@@ -35,6 +36,7 @@ interface DocumentViewerProps {
   documentUid: string;
   sessionId?: string;
   sourceUrl?: string;
+  sourceFormat?: "text";
   onError?: (error: unknown) => void;
   onLoaded?: () => void;
   /** Real file name incl. extension — decides the render strategy (§2.1, FRONT-13). Falls
@@ -72,9 +74,13 @@ export function DocumentViewer({
   onMarkdownLoaded,
   view,
   sourceUrl,
+  sourceFormat,
   onError,
   onLoaded,
 }: DocumentViewerProps) {
+  if (sourceUrl && sourceFormat === "text") {
+    return <TextDocumentBody key={sourceUrl} sourceUrl={sourceUrl} onError={onError} onLoaded={onLoaded} />;
+  }
   if (!sourceUrl && !hasNativePreview(fileName)) {
     return (
       <MarkdownDocumentBody
@@ -118,6 +124,48 @@ export function DocumentViewer({
           onReady={onLoaded}
         />
       )}
+    </div>
+  );
+}
+
+function TextDocumentBody({
+  sourceUrl,
+  onError,
+  onLoaded,
+}: Pick<DocumentViewerProps, "onError" | "onLoaded"> & { sourceUrl: string }) {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const blob = await fetchAuthedBlob(sourceUrl);
+        const limit = 256 * 1024;
+        const text = await blob.slice(0, limit).text();
+        if (cancelled) return;
+        setContent(text);
+        setTruncated(blob.size > limit);
+        onLoaded?.();
+      } catch (error) {
+        if (cancelled) return;
+        setFailed(true);
+        onError?.(error);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+    // The owning drawer supplies render callbacks; only the source starts a fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceUrl]);
+  return (
+    <div className={styles.markdownBody}>
+      {content === null && !failed && <p role="status">{t("chatbot.sessionAttachments.loading")}</p>}
+      {truncated && <p role="status">{t("chatbot.sessionAttachments.previewTruncated")}</p>}
+      {content !== null && <pre className={styles.textBody}>{content}</pre>}
     </div>
   );
 }

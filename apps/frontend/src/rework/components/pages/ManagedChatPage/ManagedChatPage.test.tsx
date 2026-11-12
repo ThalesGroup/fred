@@ -65,6 +65,7 @@ const threadProps = vi.hoisted(() => ({
     | ((turn: { text: string; command: { command: string }; promptIndex?: number }) => void),
 }));
 const showError = vi.hoisted(() => vi.fn());
+const fileRead = vi.hoisted(() => ({ query: vi.fn(), refetch: vi.fn(), isUninitialized: true }));
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // A fresh object per read, like a real selector over changing store state: the
@@ -83,7 +84,10 @@ vi.mock("react-i18next", () => ({
 let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("../../../features/conversationFiles", () => ({
-  useConversationFiles: () => ({ files: [], isUninitialized: true }),
+  useConversationFiles: (url: string | undefined) => {
+    fileRead.query(url);
+    return { files: [], workspaceFiles: [], isUninitialized: fileRead.isUninitialized, refetch: fileRead.refetch };
+  },
 }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/molecules/RichInputField/RichInputField")>()),
@@ -1798,4 +1802,32 @@ describe("ManagedChatPage personal prompt insertion", () => {
     expect(chatValue.setInput).not.toHaveBeenCalled();
     expect(showError).not.toHaveBeenCalled();
   });
+});
+
+it("refreshes conversation files after a Deep turn finishes and when the file panel opens", () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  fileRead.isUninitialized = false;
+  fileRead.refetch.mockClear();
+  const url = "/native/v1/agents/sessions/session-1/workspace/files";
+  chatValue = { ...baseChatValue([]), waitResponse: true, workspaceFilesUrl: url };
+  try {
+    act(() => root.render(<ManagedChatPage />));
+    expect(fileRead.query).toHaveBeenLastCalledWith(url);
+    expect(fileRead.refetch).not.toHaveBeenCalled();
+    chatValue = { ...chatValue, waitResponse: false };
+    act(() => root.render(<ManagedChatPage />));
+    expect(fileRead.refetch).toHaveBeenCalledOnce();
+    const filesLauncher = [...rail.launchers, ...rail.footerLaunchers].find(
+      (launcher) => launcher.key === "attachments",
+    );
+    expect(filesLauncher).toBeDefined();
+    act(() => filesLauncher!.onOpen());
+    expect(fileRead.refetch).toHaveBeenCalledTimes(2);
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    fileRead.isUninitialized = true;
+  }
 });

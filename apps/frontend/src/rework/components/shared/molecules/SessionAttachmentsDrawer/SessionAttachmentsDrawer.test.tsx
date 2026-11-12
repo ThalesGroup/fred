@@ -104,6 +104,40 @@ afterEach(() => {
 });
 
 describe("conversation files drawer", () => {
+  it("lists three workspace files with dates alongside CP attachments, and reads the current bytes", async () => {
+    const filesUrl = "/native/v1/agents/sessions/session/workspace/files";
+    renderDrawer({
+      files: [file],
+      workspaceFilesUrl: filesUrl,
+      workspaceFiles: [
+        { path: "compliance-matrix.csv", name: "compliance-matrix.csv", size: 1024, modified: "2026-11-12T08:00:00Z" },
+        { path: "bid-recommendation.md", name: "bid-recommendation.md", size: 12, modified: "2026-11-12T08:01:00Z" },
+        { path: "plans/response plan.md", name: "response plan.md", size: 23, modified: "2026-11-12T08:02:00Z" },
+      ],
+    });
+    expect(container.querySelectorAll("section")).toHaveLength(3);
+    expect(container.querySelectorAll("time")).toHaveLength(3);
+    expect(container.querySelector("time")?.dateTime).toBe("2026-11-12T08:00:00Z");
+    for (const name of [
+      "compliance-matrix.csv",
+      "bid-recommendation.md",
+      "plans/response plan.md",
+      "Slides.pptx",
+      "notes.md",
+    ])
+      expect(text()).toContain(name);
+    expect(text()).toContain("1 kB");
+    await click(previewButton());
+    expect(viewer.props?.target).toMatchObject({
+      sourceFormat: "text",
+      sourceUrl: filesUrl.replace("/files", "/content?path=compliance-matrix.csv"),
+    });
+    await click(downloadButton());
+    expect(download).toHaveBeenCalledWith(
+      filesUrl.replace("/files", "/content?path=compliance-matrix.csv"),
+      "compliance-matrix.csv",
+    );
+  });
   it("shows a single simple empty state", () => {
     renderDrawer({ attachments: [] });
     expect(text()).toContain("chatbot.sessionAttachments.empty");
@@ -153,7 +187,7 @@ describe("conversation files drawer", () => {
     expect(previewButton()).toBeUndefined();
     expect(text()).toContain("chatbot.attachmentChip.processing");
   });
-  it.each(["filesError", "attachmentsError"] as const)(
+  it.each(["filesError", "attachmentsError", "workspaceError"] as const)(
     "never presents %s as an empty conversation",
     async (errorProp) => {
       const retry = vi.fn();

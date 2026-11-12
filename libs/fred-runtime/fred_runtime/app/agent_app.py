@@ -56,7 +56,9 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 from typing import Any, Literal, cast
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import httpx
@@ -160,6 +162,7 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
+    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
     ExecutionConfig,
@@ -245,7 +248,10 @@ from fred_runtime.common.outbound_credentials import (
     get_delegation_runtime,
     set_delegation_runtime,
 )
-from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.conversation_filesystem import (
+    ConversationFilesystemService,
+    ConversationTextNamespacePort,
+)
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,
@@ -481,6 +487,15 @@ class _CheckpointStorageStats(BaseModel):
     pending_write_count: int
     checkpoint_bytes_approx: int
     blob_bytes_approx: int
+
+
+class WorkspaceFile(BaseModel):
+    """Current object metadata, not a published Control Plane document."""
+
+    path: str
+    name: str
+    size: int
+    modified: datetime | None
 
 
 class _ConversationFilesystemPurgeResponse(BaseModel):
@@ -5851,6 +5866,78 @@ def _build_agent_router(
         response.headers["Cache-Control"] = "no-store"
         messages = await history_store.get(session_id=session_id, user_id=person.uid)
         return await _annotate_hitl_availability(messages)
+
+    async def readable_workspace(
+        session_id: str,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> ConversationTextNamespacePort:
+        # Independent reads use current CP authority, never a turn's admission.
+        await authorize_history_read(
+            session_id, caller, http_request.headers.get("Authorization")
+        )
+        storage = get_runtime_context().config.filesystem
+        if storage is None:
+            raise HTTPException(503, "Conversation filesystem unavailable")
+        return ConversationFilesystemService(storage, session_id).scratchpad()
+
+    @router.get(
+        "/sessions/{session_id}/workspace/files",
+        operation_id="list_session_workspace_files",
+        response_model=list[WorkspaceFile],
+    )
+    async def list_session_workspace_files(
+        response: Response,
+        workspace: ConversationTextNamespacePort = Depends(readable_workspace),
+    ) -> list[WorkspaceFile]:
+        """List the current root workspace, excluding runtime-internal mounts."""
+        try:
+            entries = await workspace.list_metadata()
+        except ConversationScratchpadStorageError:
+            raise HTTPException(503, "Conversation filesystem unavailable") from None
+        response.headers["Cache-Control"] = "no-store"
+        return [
+            WorkspaceFile(
+                path=entry.path,
+                name=PurePosixPath(entry.path).name,
+                size=entry.size,
+                modified=entry.modified,
+            )
+            for entry in entries
+            if entry.path.split("/", 1)[0] != ".deep"
+        ]
+
+    @router.get(
+        "/sessions/{session_id}/workspace/content",
+        operation_id="read_session_workspace_file",
+        response_class=Response,
+        responses={200: {"content": {"text/plain": {"schema": {"type": "string"}}}}},
+    )
+    async def read_session_workspace_file(
+        path: str = Query(min_length=1, max_length=4096),
+        workspace: ConversationTextNamespacePort = Depends(readable_workspace),
+    ) -> Response:
+        """Download current bytes; never execute or render agent-authored HTML."""
+        if path.split("/", 1)[0] == ".deep":
+            raise HTTPException(404, "Workspace file unavailable")
+        try:
+            content = await workspace.read_bytes(path)
+        except (
+            ConversationScratchpadInvalidPathError,
+            ConversationScratchpadFileNotFoundError,
+        ):
+            raise HTTPException(404, "Workspace file unavailable") from None
+        except ConversationScratchpadStorageError:
+            raise HTTPException(503, "Conversation filesystem unavailable") from None
+        return Response(
+            content,
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(PurePosixPath(path).name, safe='')}",
+            },
+        )
 
     @router.delete(
         "/sessions/{session_id}",

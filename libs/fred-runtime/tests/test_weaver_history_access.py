@@ -9,6 +9,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.security.delegation import AssertedUser
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app, history_access
@@ -38,12 +39,14 @@ class _Case:
     calls: list[httpx.Request]
     metadata: dict
     app: FastAPI
+    filesystem: LocalFilesystem
     status: int = 200
     unavailable: bool = False
 
 
 @pytest_asyncio.fixture
-async def case(monkeypatch):
+async def case(monkeypatch, tmp_path):
+    filesystem = LocalFilesystem(root=str(tmp_path))
     store = AsyncMock()
     store.get.return_value = []
     store.list_sessions.return_value = [SESSION]
@@ -78,6 +81,7 @@ async def case(monkeypatch):
                 control_plane_http_client=authority,
                 history_store=store,
                 checkpointer=cp,
+                filesystem=filesystem,
             )
         )
         monkeypatch.setattr(agent_app, "get_runtime_context", lambda: context)
@@ -94,7 +98,7 @@ async def case(monkeypatch):
             base_url="https://pod.invalid",
             headers={"Authorization": "Bearer synthetic-person-token"},
         ) as client:
-            value = _Case(client, store, cp, calls, metadata, app)
+            value = _Case(client, store, cp, calls, metadata, app, filesystem)
             yield value
 
 
@@ -143,7 +147,13 @@ async def test_foreign_old_or_wrong_runtime_never_queries_authority(case, bindin
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "path", [f"/agents/sessions/{SESSION}/messages", f"/agents/checkpoints/{SESSION}"]
+    "path",
+    [
+        f"/agents/sessions/{SESSION}/messages",
+        f"/agents/checkpoints/{SESSION}",
+        f"/agents/sessions/{SESSION}/workspace/files",
+        f"/agents/sessions/{SESSION}/workspace/content?path=report.md",
+    ],
 )
 @pytest.mark.parametrize(
     "upstream, expected",
@@ -364,3 +374,116 @@ async def test_history_hitl_availability_follows_weaver_authorization(
         case.store.save.assert_not_called()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_deep_written_files_list_and_download_without_publication(case):
+    from fred_runtime.conversation_filesystem import ConversationFilesystemService
+    from fred_runtime.deep.deep_runtime import build_conversation_filesystem
+
+    service = ConversationFilesystemService(case.filesystem, SESSION)
+    backend, _ = build_conversation_filesystem(service)
+    contents = {
+        "compliance-matrix.csv": "critère,conforme\nprix,oui\n",
+        "bid-recommendation.md": "# Recommandation\nRépondre.",
+        "plans/response plan.md": "# Plan\n<img src=x onerror=alert(1)>",
+    }
+    for path, text in contents.items():
+        assert (await backend.awrite(f"/{path}", text)).error is None
+    await service.namespace(".deep", max_bytes=100, max_files=10).write_text(
+        "internal.md", "secret"
+    )
+    # A shadow of a reserved mount is never available through the public API.
+    await service.scratchpad().write_text(".deep/shadow.md", "secret")
+    await (
+        ConversationFilesystemService(case.filesystem, "other")
+        .scratchpad()
+        .write_text("private.md", "secret")
+    )
+
+    response = await case.client.get(f"/agents/sessions/{SESSION}/workspace/files")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    rows = response.json()
+    assert {row["path"] for row in rows} == set(contents)
+    for row in rows:
+        assert row["name"] == row["path"].rsplit("/", 1)[-1]
+        assert row["size"] == len(contents[row["path"]].encode())
+        assert row["modified"] is not None
+        download = await case.client.get(
+            f"/agents/sessions/{SESSION}/workspace/content",
+            params={"path": row["path"]},
+        )
+        assert download.status_code == 200
+        assert download.content == contents[row["path"]].encode()
+        assert download.headers["cache-control"] == "no-store"
+        assert download.headers["x-content-type-options"] == "nosniff"
+        assert download.headers["content-type"].startswith("text/plain")
+        assert download.headers["content-disposition"].startswith("attachment;")
+    assert len(case.calls) == 4  # Each request rechecks current CP rights.
+    assert all(call.method == "GET" for call in case.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resource", ["files", "content?path=report.md"])
+async def test_workspace_foreign_user_and_revocation_never_read_storage(
+    case, monkeypatch, resource
+):
+    read = AsyncMock(wraps=case.filesystem.read)
+    listing = AsyncMock(wraps=case.filesystem.list)
+    monkeypatch.setattr(case.filesystem, "read", read)
+    monkeypatch.setattr(case.filesystem, "list", listing)
+    case.app.dependency_overrides[current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+    assert (
+        await case.client.get(f"/agents/sessions/{SESSION}/workspace/{resource}")
+    ).status_code == 404
+    assert case.calls == []
+    case.app.dependency_overrides[current_user] = lambda: KeycloakUser(
+        uid="alice", username="alice", roles=[]
+    )
+    case.status = 403
+    assert (
+        await case.client.get(f"/agents/sessions/{SESSION}/workspace/{resource}")
+    ).status_code == 404
+    assert len(case.calls) == 1
+    read.assert_not_awaited()
+    listing.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".deep/internal.md",
+        ".deep/shadow.md",
+        "../.deep/internal.md",
+        "/report.md",
+        "a/../../other/scratchpad/private.md",
+        "a\\b",
+        "a//b",
+        "missing.md",
+    ],
+)
+async def test_workspace_cannot_escape_root_or_read_missing_files(case, path):
+    response = await case.client.get(
+        f"/agents/sessions/{SESSION}/workspace/content", params={"path": path}
+    )
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Workspace file unavailable"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource, operation", [("files", "list"), ("content?path=report.md", "read")]
+)
+async def test_workspace_storage_failure_is_not_an_empty_list(
+    case, monkeypatch, resource, operation
+):
+    monkeypatch.setattr(
+        case.filesystem, operation, AsyncMock(side_effect=OSError("secret storage URL"))
+    )
+    response = await case.client.get(f"/agents/sessions/{SESSION}/workspace/{resource}")
+    assert response.status_code == 503
+    assert "secret" not in response.text

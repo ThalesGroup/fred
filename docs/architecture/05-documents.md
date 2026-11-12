@@ -62,10 +62,17 @@ retry and cleanup contracts, and implementation references.
 
 ## 5.5. Documents authored in a conversation
 
-Fred gives agents a persistent filesystem scoped to their conversation. Deep
-publishes downloadable copies with stable identities; changing a working file
-does not update its published copy. These files stay private to the conversation
-owner, even in a shared team.
+Fred gives agents a persistent filesystem scoped to their conversation. The
+conversation's file panel lists Deep's working files with their size and last
+modification date, offers a plain-text preview and downloads the current bytes
+directly from the Agent Pod. Runtime-internal files are excluded. This read
+creates no copy in Control Plane or Knowledge Flow.
+
+Explicitly published deliverables keep their stable catalogue identities;
+changing a working file does not update its published copy. Both stay private
+to the conversation owner, even in a shared team. For each independent list or
+content read, the Agent Pod checks the conversation's current access through
+Control Plane, separately from an admitted turn's execution authority.
 
 **Legend:** ⬜ Concepts
 
