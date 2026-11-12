@@ -51,6 +51,14 @@
   font: var(--font-label-small);
 }
 
+.modelUsageScope {
+  margin: 0 0 var(--spacing-s);
+}
+
+.previewNotice {
+  margin: 0;
+}
+
 .statusBadge {
   border-radius: var(--radius-s);
   padding: var(--spacing-3xs) var(--spacing-xs);

@@ -804,6 +804,38 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("preserves API model counters on live tool calls without adding billing usage", async () => {
+    const usage = { input_tokens: 20672, output_tokens: 679, model_call_id: "response-1", tool_call_count: 2 };
+    const events = [
+      { kind: "tool_call", call_id: "c1", tool_name: "read_query", model_call_usage: usage },
+      { kind: "tool_result", call_id: "c1", content: "done" },
+      {
+        kind: "final",
+        content: "done",
+        model_call_usage: { input_tokens: 103991, output_tokens: 2956, tool_call_count: 0 },
+      },
+    ];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200 }),
+      );
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    const call = latest.messages.find((message) => message.channel === "tool_call");
+    expect(call?.metadata?.model_call_usage).toEqual(usage);
+    expect(call?.metadata?.token_usage).toBeUndefined();
+    const final = latest.messages.find((message) => message.role === "assistant" && message.channel === "final");
+    expect(final?.metadata?.model_call_usage).toEqual({
+      input_tokens: 103991,
+      output_tokens: 2956,
+      tool_call_count: 0,
+    });
+    fetchSpy.mockRestore();
+  });
+
   it("uses server trace ranks around a message sent during a tool call", async () => {
     const events = [
       { kind: "tool_call", call_id: "c1", tool_name: "lookup", arguments: {}, rank: 1 },

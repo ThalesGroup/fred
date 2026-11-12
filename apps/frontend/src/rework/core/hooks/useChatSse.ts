@@ -610,6 +610,7 @@ export function useChatSse(
             parts,
             metadata: {
               model: event.model_name ?? null,
+              model_call_usage: event.model_call_usage ?? null,
               finish_reason: event.finish_reason ?? null,
               sources: event.sources ?? [],
               token_usage: event.token_usage
@@ -644,8 +645,8 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            // No token figure here (#2403): a tool call costs nothing by
-            // itself, and the row deliberately shows latency only.
+            // Attribution of the requesting API response, separate from billing.
+            metadata: { model_call_usage: event.model_call_usage ?? null },
           });
           break;
         }

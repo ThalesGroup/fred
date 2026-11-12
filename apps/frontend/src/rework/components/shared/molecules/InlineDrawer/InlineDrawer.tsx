@@ -41,6 +41,8 @@ export interface InlineDrawerProps {
   closeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
+  /** Allow a title with several metadata badges to wrap at narrow widths. */
+  wrapTitle?: boolean;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
@@ -93,6 +95,7 @@ export function InlineDrawer({
   titleSize = "small",
   closeLabel = "Close panel",
   titleAccessory,
+  wrapTitle = false,
   headerActions,
   width = "480px",
   background,
@@ -200,7 +203,7 @@ export function InlineDrawer({
         <div className={styles.panel}>
           {!hideHeader && (
             <div className={styles.header}>
-              <div className={styles.titleGroup}>
+              <div className={`${styles.titleGroup}${wrapTitle ? ` ${styles.wrapTitle}` : ""}`}>
                 <span id={titleId} className={styles.title}>
                   {title}
                 </span>

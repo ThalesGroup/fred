@@ -1,10 +1,10 @@
 ## Why
 
-Issue #3527: tabular details must expose the actual API usage available for the model call that requested an action. Guessed payload counts were rejected. The preview notices must also fit into one compact sentence while preserving the original syntax-colored presentation. The developer explicitly requested this follow-up after the source and scope of the available counters were explained.
+Issue #3527: tabular details must expose the actual API usage available for the LLM exchange that follows a tool result. Guessed payload counts were rejected. The preview notices must also fit into one compact sentence while preserving the original syntax-colored presentation. The developer explicitly requested this follow-up after the source and scope of the available counters were explained.
 
 ## What Changes
 
-- Forward optional, explicitly scoped model-call input/output counters through runtime events, stored history and the tabular drawer, without changing turn billing totals.
+- Forward optional, explicitly scoped model-call input/output counters through runtime tool-call/final events, stored history and the tabular drawer, without changing turn billing totals.
 - Preserve missing values as unavailable and identify counts shared by multiple calls from one model response.
 - Combine preview limits and full-copy information into one localized sentence.
 - Recover the reported local conversation's counters only from recorded model observations matched by exact tool-call identifiers.

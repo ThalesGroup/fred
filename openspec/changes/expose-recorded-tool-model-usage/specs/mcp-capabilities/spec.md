@@ -2,10 +2,10 @@
 
 ### Requirement: Tabular tool details expose recorded API model usage with explicit scope
 
-Tabular tool details SHALL expose the exact input and output counters reported by the API for the model response that requested the tool, identifying their model-call scope rather than claiming isolated tool execution cost. Missing counters SHALL remain unavailable; explicit reported zero SHALL remain zero. The system MUST NOT derive these counters from character counts, tokenizers, neighboring requests or timing. Live events and stored history SHALL retain the same values and scope. Multiple tools requested by one response SHALL identify shared usage and MUST NOT multiply conversation billing totals. The existing status, duration and bounded syntax-colored result presentation SHALL remain available.
+Tabular tool details SHALL expose the exact input and output counters reported by the API for the first model exchange following the recorded tool result, visibly identifying its full-context model-call scope rather than claiming isolated tool-result or execution cost. Missing counters SHALL remain unavailable; explicit raw-provider zero SHALL remain zero. Normalized-only zeros without known raw presence SHALL remain unavailable. The system MUST NOT derive these counters from character counts, tokenizers, neighboring requests or timing. Live events and stored history SHALL retain the same values and scope. Multiple tools requested by one response SHALL identify shared usage and MUST NOT multiply conversation billing totals. The existing status, duration and bounded syntax-colored result presentation SHALL remain available.
 
 #### Scenario: Exact API counters survive reload
-- **WHEN** an API model response reports input and output counters and requests a tabular tool
+- **WHEN** an API model response reports input and output counters after receiving a tabular tool result
 - **THEN** its tool details show those exact counters in the live conversation and after reload with the API-model scope explained
 
 #### Scenario: Partial or absent usage
@@ -17,6 +17,13 @@ Tabular tool details SHALL expose the exact input and output counters reported b
 - **WHEN** one model response requests several tools
 - **THEN** each associated tabular detail identifies that the counters cover the shared model response
 - **AND** conversation billing counts that model response once
+
+#### Scenario: Correct exchange rather than requesting-call usage
+- **GIVEN** the requesting model response reports 20077 input and 644 output tokens
+- **AND** the next response after the SQL result reports 103991 input and 2956 output tokens
+- **WHEN** the user inspects that SQL step
+- **THEN** its badges display 103991 sent and 2956 received with visible full-context API scope
+- **AND** no usage from a different exchange, the requesting call or a billable turn sum is substituted
 
 ## MODIFIED Requirements
 

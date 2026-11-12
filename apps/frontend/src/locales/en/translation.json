@@ -2629,6 +2629,13 @@
       "details": "Details",
       "documents_one": "{{count}} document",
       "documents_other": "{{count}} documents",
+      "modelCallUsage": {
+        "input": "Tokens sent: {{value}}",
+        "output": "Tokens received: {{value}}",
+        "unavailable": "unavailable",
+        "scope": "API measurements for the LLM exchange following this tool's result, including full context; they do not measure the tool result alone.",
+        "shared": "This exchange follows a batch of {{count}} tools; its counters are shared."
+      },
       "executionTime": "Execution time: {{duration}}",
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",
@@ -2658,6 +2665,10 @@
         "catalogComplete": "Full summary: {{total}} lines.",
         "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
         "emptyCatalog": "This catalog is empty.",
+        "queryPreview_one": "Preview of {{count}} row out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreview_other": "Preview of {{count}} rows out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreviewShortened": ", with some columns or values shortened",
+        "queryPreviewCopy": "; Copy retrieves the complete recorded response",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
           "csv": "CSV",

@@ -172,6 +172,12 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "call_id": "c1",
             "tool_name": "demo.echo",
             "arguments": {"text": "hi"},
+            "model_call_usage": {
+                "input_tokens": 20672,
+                "output_tokens": 679,
+                "model_call_id": "response-1",
+                "tool_call_count": 2,
+            },
         },
         {
             "kind": "tool_result",
@@ -184,6 +190,11 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "content": "Done.",
             "model_name": "gpt-4o",
             "token_usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            "model_call_usage": {
+                "input_tokens": 103991,
+                "output_tokens": 2956,
+                "tool_call_count": 0,
+            },
             "context_tokens": 9,
             "finish_reason": "stop",
         },
@@ -219,7 +230,16 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     # `token_usage` here was the deciding model call's whole prompt, which the
     # trace rendered as if the tool had consumed it.
     assert messages[1].metadata.token_usage is None
+    restored = ChatMessage.model_validate_json(messages[1].model_dump_json())
+    assert restored.metadata.model_call_usage is not None
+    assert restored.metadata.model_call_usage.input_tokens == 20672
+    assert restored.metadata.model_call_usage.output_tokens == 679
+    assert restored.metadata.model_call_usage.model_call_id == "response-1"
+    assert restored.metadata.model_call_usage.tool_call_count == 2
 
+    assert messages[3].metadata.model_call_usage is not None
+    assert messages[3].metadata.model_call_usage.input_tokens == 103991
+    assert messages[3].metadata.model_call_usage.output_tokens == 2956
     # Row 2 — tool result record
     assert messages[2].role == Role.tool
     assert messages[2].channel == Channel.tool_result
@@ -1627,3 +1647,36 @@ def test_history_endpoint_reports_consumed_pause_without_repair(
         store.get.assert_awaited_once_with(session_id="session", user_id="alice")
     finally:
         asyncio.run(engine.dispose())
+
+
+def test_write_turn_history_preserves_usage_only_final_response() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    payloads = [
+        {
+            "kind": "final",
+            "content": "",
+            "model_call_usage": {
+                "input_tokens": 100,
+                "output_tokens": 7,
+                "tool_call_count": 0,
+            },
+        }
+    ]
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+    messages = store.save.call_args.kwargs["messages"]
+    final = next(
+        m for m in messages if m.role == Role.assistant and m.channel == Channel.final
+    )
+    assert final.parts == []
+    assert final.metadata.model_call_usage is not None
+    assert final.metadata.model_call_usage.input_tokens == 100
+    assert final.metadata.model_call_usage.output_tokens == 7

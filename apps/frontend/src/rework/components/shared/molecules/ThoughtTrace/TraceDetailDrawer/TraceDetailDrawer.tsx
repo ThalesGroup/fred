@@ -14,7 +14,7 @@
 
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ModelCallTokenUsage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -40,6 +40,7 @@ import {
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
+  followingModelCallUsage,
   toolArgs,
   toolCallId,
   toolName,
@@ -151,16 +152,15 @@ const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: Sql
           <>
             {data.rows.length === 0 && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
             <CodeBlock code={code} copyText={content} language="json" />
-            {data.rows.length > ROW_PREVIEW_COUNT && (
-              <p className={styles.metaInfo}>
-                {t("rework.chatTrace.tabular.rowsPreview", { count: ROW_PREVIEW_COUNT })}
+            {(data.rows.length > ROW_PREVIEW_COUNT || preview.fieldsTruncated) && (
+              <p className={`${styles.metaInfo} ${styles.previewNotice}`}>
+                {t("rework.chatTrace.tabular.queryPreview", {
+                  count: preview.rows.length,
+                  total: data.rows.length,
+                  shortened: preview.fieldsTruncated ? t("rework.chatTrace.tabular.queryPreviewShortened") : "",
+                  copy: content !== undefined ? t("rework.chatTrace.tabular.queryPreviewCopy") : "",
+                })}
               </p>
-            )}
-            {preview.fieldsTruncated && (
-              <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.fieldsPreview")}</p>
-            )}
-            {content !== undefined && (data.rows.length > ROW_PREVIEW_COUNT || preview.fieldsTruncated) && (
-              <p className={styles.metaInfo}>{t("rework.chatTrace.copyFullResponse")}</p>
             )}
           </>
         )}
@@ -303,8 +303,55 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
+function ModelCallUsageBadges({ call, usage }: { call: ChatMessage; usage: ModelCallTokenUsage | null }) {
+  const { t, i18n } = useTranslation();
+  if (!isTabularQueryTool(toolName(call)) && tabularToolKind(toolName(call)) === null) return null;
+  const sharedCount = call.metadata?.model_call_usage?.tool_call_count ?? 1;
+  const help = [
+    t("rework.chatTrace.modelCallUsage.scope"),
+    sharedCount > 1 ? t("rework.chatTrace.modelCallUsage.shared", { count: sharedCount }) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const count = (value: number | null | undefined) =>
+    value != null && Number.isSafeInteger(value) && value >= 0
+      ? value.toLocaleString(i18n.language)
+      : t("rework.chatTrace.modelCallUsage.unavailable");
+  return (
+    <>
+      <span
+        className={styles.latencyBadge}
+        title={help}
+        aria-label={`${t("rework.chatTrace.modelCallUsage.input", { value: count(usage?.input_tokens) })}. ${help}`}
+      >
+        {t("rework.chatTrace.modelCallUsage.input", { value: count(usage?.input_tokens) })}
+      </span>
+      <span
+        className={styles.latencyBadge}
+        title={help}
+        aria-label={`${t("rework.chatTrace.modelCallUsage.output", { value: count(usage?.output_tokens) })}. ${help}`}
+      >
+        {t("rework.chatTrace.modelCallUsage.output", { value: count(usage?.output_tokens) })}
+      </span>
+    </>
+  );
+}
+
+function ModelCallUsageScope({ call }: { call: ChatMessage }) {
+  const { t } = useTranslation();
+  if (!isTabularQueryTool(toolName(call)) && tabularToolKind(toolName(call)) === null) return null;
+  const sharedCount = call.metadata?.model_call_usage?.tool_call_count ?? 1;
+  return (
+    <p className={`${styles.metaInfo} ${styles.modelUsageScope}`}>
+      {t("rework.chatTrace.modelCallUsage.scope")}
+      {sharedCount > 1 && ` ${t("rework.chatTrace.modelCallUsage.shared", { count: sharedCount })}`}
+    </p>
+  );
+}
+
 export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
   const { t } = useTranslation();
+  const usage = useMemo(() => (entry ? followingModelCallUsage(entry, messages) : null), [entry, messages]);
   const label = entry ? entryLabel(entry, (key) => t(key)) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
@@ -318,6 +365,7 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
       open={entry !== null}
       onClose={onClose}
       title={label}
+      wrapTitle
       titleAccessory={
         toolStatus ? (
           <>
@@ -332,12 +380,14 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
                 {toolLatency}
               </span>
             )}
+            {entry?.kind === "combo" && <ModelCallUsageBadges call={entry.call} usage={usage} />}
           </>
         ) : undefined
       }
       layout="overlay"
       width="720px"
     >
+      {entry?.kind === "combo" && <ModelCallUsageScope call={entry.call} />}
       {entry &&
         (isError ? (
           <ErrorDetail entry={entry} />

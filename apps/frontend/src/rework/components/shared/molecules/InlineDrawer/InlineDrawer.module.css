@@ -243,6 +243,10 @@
   min-width: 0;
 }
 
+.wrapTitle {
+  flex-wrap: wrap;
+}
+
 .headerActions {
   display: flex;
   flex-shrink: 0;
