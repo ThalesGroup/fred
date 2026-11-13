@@ -110,6 +110,7 @@ export default function TeamContentNavbar() {
   const manage = useSpaceAccess(space?.id, "manage");
   const content = useSpaceAccess(space?.id, "read");
   const canOpenTeamSettings = manage.allowed;
+  const canReadConsumption = canReadSpaceUsage(space, organizationId);
   const canReadContent = content.allowed;
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
   const hasAgentWorkspace = space?.kind !== "organization";
@@ -135,7 +136,7 @@ export default function TeamContentNavbar() {
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
 
-  // Personal usage keeps its header shortcut; collective usage has a distinct menu entry.
+  // Consumption stays in settings navigation; personal usage keeps its header shortcut.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
@@ -274,18 +275,16 @@ export default function TeamContentNavbar() {
     });
   }
 
-  const usageItems: NavigationMenuItemProps[] = canReadSpaceUsage(space, organizationId)
+  const usageItems: NavigationMenuItemProps[] = canReadConsumption
     ? [
         {
           type: "link",
           label: t("rework.teamSettings.navigation.usage"),
-          icon: { category: "outlined", type: "monitoring" },
+          icon: { category: "outlined", type: "analytics", filled: false },
           linkProps: { to: usageBase },
         },
       ]
     : [];
-  // Consumption is independent of content Read and membership Manage.
-  navigationItems.push(...usageItems);
 
   // Membership management is the Weaver Manage surface, independent of Read.
   const settingsItems: NavigationMenuItemProps[] = [
@@ -354,13 +353,13 @@ export default function TeamContentNavbar() {
             </span>
           )}
         </div>
-        {!isPersonalTeam && canOpenTeamSettings && !inSettings && (
+        {!isPersonalTeam && (canOpenTeamSettings || canReadConsumption) && !inSettings && !inUsage && (
           <span className={styles.teamPanelSettingsButton}>
             <IconButton
               size={"small"}
               variant={"icon"}
               icon={{ category: "outlined", type: "settings", filled: true }}
-              onClick={() => navigate(settingsBase)}
+              onClick={() => navigate(canOpenTeamSettings ? settingsBase : usageBase)}
               title={t("rework.teamSettings.navigation.settings")}
             />
           </span>

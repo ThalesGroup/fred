@@ -2271,7 +2271,7 @@
       "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
     "teamUsage": {
-      "projectPageTitle": "Usage du projet",
+      "projectPageTitle": "Consommation du projet",
       "personalSkillsSectionTitle": "Mon utilisation des skills",
       "title": "Mon utilisation",
       "personalSectionTitle": "Ma consommation",

@@ -14,11 +14,14 @@
 // limitations under the License.
 
 import { type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   working: { organizationId: "org" as string | undefined, loading: false, error: undefined as unknown },
+  navigate: vi.fn(),
   membershipError: false,
   canManage: false,
   canRead: true,
@@ -89,7 +92,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: h.pathname }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => h.navigate,
   NavLink: ({ to, children }: { to: string; children: ReactNode | ((args: { isActive: boolean }) => ReactNode) }) => (
     <a href={to}>{typeof children === "function" ? children({ isActive: false }) : children}</a>
   ),
@@ -149,6 +152,7 @@ import TeamContentNavbar from "./TeamContentNavbar.tsx";
 
 beforeEach(() => {
   h.working = { organizationId: "org", loading: false, error: undefined };
+  h.navigate.mockClear();
   h.membershipError = false;
   h.relations = ["team_member"];
   h.canManage = false;
@@ -502,37 +506,55 @@ describe("TeamContentNavbar collective usage", () => {
   });
 
   it.each([
-    { kind: "team", role: "owner" },
-    { kind: "team", role: "analyst" },
-    { kind: "project", role: "owner" },
-    { kind: "project", role: "analyst" },
-  ])("links $kind usage for a direct $role independently of content or management", ({ kind, role }) => {
+    { kind: "team", role: "owner", manage: true },
+    { kind: "team", role: "owner", manage: false },
+    { kind: "team", role: "analyst", manage: false },
+    { kind: "project", role: "owner", manage: true },
+    { kind: "project", role: "analyst", manage: false },
+  ])("opens $kind consumption through settings for $role (Manage: $manage)", ({ kind, role, manage }) => {
     h.memberships[0] = { ...h.memberships[0], kind, roles: [role] };
+    h.canManage = manage;
     const container = document.createElement("div");
-    container.innerHTML = renderToStaticMarkup(<TeamContentNavbar />);
-    const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
-    expect(links).toHaveLength(1);
-    expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
-    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
-    expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<TeamContentNavbar />));
+      expect(container.querySelector('a[href="/team/team-1/usage"]')).toBeNull();
+      expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+      expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+      container.querySelector<HTMLButtonElement>('button[title="rework.teamSettings.navigation.settings"]')!.click();
+      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings" : "usage"}`);
+      h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";
+      flushSync(() => root.render(<TeamContentNavbar />));
+      const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
+      expect(links).toHaveLength(1);
+      expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
+      expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+      expect(!!container.querySelector('a[href="/team/team-1/settings/members"]')).toBe(manage);
+    } finally {
+      flushSync(() => root.unmount());
+    }
   });
 
   it.each(["member", "editor", "organization_admin"])("does not infer usage from %s or legacy roles", (role) => {
     h.memberships[0].roles = [role];
     h.canRead = h.canManage = true;
     h.relations = ["team_admin", "team_analyst"];
+    h.pathname = "/team/team-1/settings/members";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
   });
 
   it.each(["owner", "organization_admin"])("does not inherit the parent %s role", (role) => {
     h.memberships[0].roles = ["member"];
     h.memberships.push({ id: "org", kind: "organization", name: "Acme", organization_id: "org", roles: [role] });
+    h.pathname = "/team/team-1/usage";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
   });
 
   it.each(["loading", "error", "missing", "other-organization", "membership-error", "revoked"])(
     "hides the entry for %s context despite previously available roles",
     (state) => {
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('title="rework.teamSettings.navigation.settings"');
+      h.pathname = "/team/team-1/usage";
       expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/usage"');
       if (state === "loading") h.working.loading = true;
       if (state === "error") h.working.error = new Error("unavailable");
@@ -541,6 +563,10 @@ describe("TeamContentNavbar collective usage", () => {
       if (state === "membership-error") h.membershipError = true;
       if (state === "revoked") h.memberships[0].roles = ["member"];
       expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+      h.pathname = "/team/team-1/agents";
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain(
+        'title="rework.teamSettings.navigation.settings"',
+      );
     },
   );
 
