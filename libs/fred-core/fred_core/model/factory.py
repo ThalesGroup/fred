@@ -271,7 +271,11 @@ def get_model(
     from fred_core.model.tool_call_chunks import install_tool_fragment_guard
 
     install_tool_fragment_guard()
-    model = _create_model(cfg, openai_api_key=openai_api_key)
+    model = (
+        _create_model(cfg)
+        if openai_api_key is None
+        else _create_model(cfg, openai_api_key=openai_api_key)
+    )
     with suppress(Exception):
         log_model_settings(
             str(cfg.provider) if cfg else "unknown",
