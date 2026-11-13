@@ -874,7 +874,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 - **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
-  a JSON response preview with the existing syntax colors, limited to five rows
+  a JSON response preview with the existing syntax colors, initially limited to ten rows
   with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
   preview limits and complete-copy behavior; copy actions retain the complete
   recorded SQL and response. Oversized SQL uses a bounded plain-text preview. The drawer
@@ -882,7 +882,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   not displayed as individual tool consumption, and the former model-usage
   explanation paragraph is omitted. No token count is estimated or replaced by
   zero when the tool API reports none. Model billing and conversation context
-  totals are unchanged. Unrelated streaming updates reuse the query preview.
+  totals are unchanged. A small localized action below the JSON reveals the next ten
+  recorded rows (or the actual remainder) and disappears when exhausted. This does
+  not re-run SQL or fetch additional database rows. Expansion resets on changing
+  calls or reopening; unrelated streaming retains it and reuses the preview.
+  Dedicated model-call attribution extraction, transport and persistence for the
+  abandoned tool-token feature are removed; old history remains readable.
 
 - **Tool-owned SQL result notices (2026-11-13)** - SQL details preserve the tool's
   English result message after row data, including truncation that returns zero

@@ -2662,6 +2662,8 @@
         "queryPreview_other": "Preview of {{count}} rows out of {{total}}{{shortened}}{{copy}}.",
         "queryPreviewShortened": ", with some values shortened",
         "queryPreviewCopy": "; Copy retrieves the complete recorded response",
+        "showMoreRows_one": "Show {{count}} more row",
+        "showMoreRows_other": "Show {{count}} more rows",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
           "csv": "CSV",

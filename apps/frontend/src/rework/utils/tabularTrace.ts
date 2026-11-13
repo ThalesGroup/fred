@@ -71,9 +71,12 @@ export function clippedTabularText(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
 }
 
-export function previewTabularRows(rows: Record<string, unknown>[], { allColumns = false } = {}) {
+export function previewTabularRows(
+  rows: Record<string, unknown>[],
+  { allColumns = false, rowLimit = ROW_PREVIEW_COUNT } = {},
+) {
   let fieldsTruncated = false;
-  const preview = rows.slice(0, ROW_PREVIEW_COUNT).map((row) => {
+  const preview = rows.slice(0, rowLimit).map((row) => {
     const fields: [string, unknown][] = [];
     for (const name in row) {
       if (!Object.prototype.hasOwnProperty.call(row, name)) continue;

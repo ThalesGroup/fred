@@ -51,6 +51,7 @@ afterEach(() => {
 function queryEntry(
   rows: Record<string, unknown>[],
   sql = "SELECT * FROM d_table",
+  callId = sql,
 ): Extract<TraceEntry, { kind: "combo" }> {
   const base: ChatMessage = {
     session_id: "session",
@@ -63,7 +64,7 @@ function queryEntry(
   };
   return {
     kind: "combo",
-    call: { ...base, parts: [{ type: "tool_call", name: "read_query", call_id: sql, args: { sql } }] },
+    call: { ...base, parts: [{ type: "tool_call", name: "read_query", call_id: callId, args: { sql } }] },
     result: {
       ...base,
       role: "tool",
@@ -72,7 +73,7 @@ function queryEntry(
       parts: [
         {
           type: "tool_result",
-          call_id: sql,
+          call_id: callId,
           ok: true,
           content: JSON.stringify({ sql_query: sql, rows, error: null }),
           latency_ms: 390,
@@ -82,7 +83,7 @@ function queryEntry(
   };
 }
 
-it.each([20, 64])("shows every returned column across five preview rows with %i columns", (columnCount) => {
+it.each([20, 64])("shows every returned column across ten preview rows with %i columns", (columnCount) => {
   const rows = Array.from({ length: 200 }, (_, row) =>
     Object.fromEntries(
       Array.from({ length: columnCount }, (_, column) => [`column_${column}`, `value_${row}_${column}`]),
@@ -90,8 +91,8 @@ it.each([20, 64])("shows every returned column across five preview rows with %i 
   );
   act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
   const preview = JSON.parse(container.querySelectorAll("pre code")[1].textContent ?? "[]");
-  expect(preview).toEqual(rows.slice(0, 5));
-  expect(container.textContent).not.toContain("value_5_0");
+  expect(preview).toEqual(rows.slice(0, 10));
+  expect(container.textContent).not.toContain("value_10_0");
 });
 
 it("preserves distinct complete column names when their prefixes match", () => {
@@ -110,9 +111,9 @@ it("opens a wide query with visible SQL and bounded DOM work", () => {
   expect(container.textContent).toContain("SELECT");
   const previewNodeCount = container.querySelectorAll("pre")[1].querySelectorAll("*").length;
   expect(container.textContent).toContain("value_0_0");
-  expect(container.textContent).not.toContain("value_5_0");
+  expect(container.textContent).not.toContain("value_10_0");
   expect(container.textContent).toContain("value_0_63");
-  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows.slice(0, 5))} onClose={() => {}} />));
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows.slice(0, 10))} onClose={() => {}} />));
   expect(container.querySelectorAll("pre")[1].querySelectorAll("*").length).toBe(previewNodeCount);
 });
 
@@ -122,6 +123,101 @@ async function copyBlock(index: number) {
   );
   await act(async () => buttons[index].click());
 }
+
+function displayedRows() {
+  return JSON.parse(container.querySelectorAll("pre code")[1].textContent ?? "[]");
+}
+
+function revealRowsButton() {
+  return [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+    /^(Show \d+ more rows?|Afficher \d+ lignes? supplémentaires?)$/.test(button.textContent ?? ""),
+  );
+}
+
+it.each(["en", "fr"])("reveals ten rows at a time and keeps complete copying in %s", async (language) => {
+  await i18next.changeLanguage(language);
+  const rows = Array.from({ length: 25 }, (_, id) =>
+    Object.fromEntries(Array.from({ length: 20 }, (_, column) => [`column_${column}`, `row_${id}_${column}`])),
+  );
+  const entry = queryEntry(rows);
+  act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
+  expect(displayedRows()).toEqual(rows.slice(0, 10));
+  expect(revealRowsButton()?.textContent).toBe(
+    language === "fr" ? "Afficher 10 lignes supplémentaires" : "Show 10 more rows",
+  );
+  await copyBlock(1);
+  expect(writeRichClipboard).toHaveBeenLastCalledWith("", toolResultContent(entry.result));
+  act(() => revealRowsButton()!.click());
+  expect(displayedRows()).toEqual(rows.slice(0, 20));
+  expect(container.textContent).toContain(language === "fr" ? "20 lignes sur 25" : "20 rows out of 25");
+  expect(revealRowsButton()?.textContent).toBe(
+    language === "fr" ? "Afficher 5 lignes supplémentaires" : "Show 5 more rows",
+  );
+  act(() => revealRowsButton()!.click());
+  expect(displayedRows()).toEqual(rows);
+  expect(revealRowsButton()).toBeUndefined();
+  await copyBlock(1);
+  expect(writeRichClipboard).toHaveBeenLastCalledWith("", toolResultContent(entry.result));
+});
+
+it.each(["en", "fr"])("labels the last single row correctly in %s", async (language) => {
+  await i18next.changeLanguage(language);
+  const rows = Array.from({ length: 11 }, (_, id) => ({ id }));
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
+  expect(revealRowsButton()?.textContent).toBe(
+    language === "fr" ? "Afficher 1 ligne supplémentaire" : "Show 1 more row",
+  );
+  act(() => revealRowsButton()!.click());
+  expect(displayedRows()).toEqual(rows);
+  expect(revealRowsButton()).toBeUndefined();
+});
+
+it.each([0, 1, 10])("shows all %i recorded rows without a reveal action", (count) => {
+  const rows = Array.from({ length: count }, (_, id) => ({ id }));
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
+  expect(displayedRows()).toEqual(rows);
+  expect(revealRowsButton()).toBeUndefined();
+});
+
+it("preserves expansion while streaming but resets for another call with identical SQL and on reopening", () => {
+  const rows = Array.from({ length: 25 }, (_, id) => ({ id }));
+  const first = queryEntry(rows);
+  const second = queryEntry(rows, undefined, "other-call");
+  const render = (entry: TraceEntry | null, messages: ChatMessage[] = []) =>
+    act(() => root.render(<TraceDetailDrawer entry={entry} messages={messages} onClose={() => {}} />));
+  render(first);
+  act(() => revealRowsButton()!.click());
+  const response = container.querySelectorAll("pre")[1];
+  render(first, [{ ...first.call, channel: "thought", parts: [{ type: "text", text: "streaming" }] }]);
+  expect(displayedRows()).toHaveLength(20);
+  expect(container.querySelectorAll("pre")[1]).toBe(response);
+  render(second);
+  expect(displayedRows()).toHaveLength(10);
+  act(() => revealRowsButton()!.click());
+  render(null);
+  render(second);
+  expect(displayedRows()).toHaveLength(10);
+});
+
+it("retains the tool-owned truncation notice after revealing every recorded row", () => {
+  const rows = Array.from({ length: 11 }, (_, id) => ({ id }));
+  const entry = queryEntry(rows);
+  const notice = "Output was truncated because the character budget was reached.";
+  entry.result!.parts = [
+    {
+      type: "tool_result",
+      call_id: "SELECT * FROM d_table",
+      ok: true,
+      content: JSON.stringify({ sql_query: "SELECT * FROM d_table", rows, message: notice }),
+    },
+  ];
+  act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
+  expect(container.textContent).toContain(notice);
+  act(() => revealRowsButton()!.click());
+  expect(displayedRows()).toEqual(rows);
+  expect(revealRowsButton()).toBeUndefined();
+  expect(container.textContent).toContain(notice);
+});
 
 it("retains the previous JSON syntax colors in the response preview", () => {
   act(() =>
@@ -221,7 +317,7 @@ it.each(["en", "fr"])(
       p.textContent?.includes(language === "fr" ? "Aperçu de" : "Preview of"),
     );
     expect(notices).toHaveLength(1);
-    expect(notices[0].textContent).toContain(language === "fr" ? "5 lignes sur 200" : "5 rows out of 200");
+    expect(notices[0].textContent).toContain(language === "fr" ? "10 lignes sur 200" : "10 rows out of 200");
     expect(notices[0].textContent).toContain(
       language === "fr" ? "réponse enregistrée complète" : "complete recorded response",
     );

@@ -2662,6 +2662,8 @@
         "queryPreview_other": "Aperçu de {{count}} lignes sur {{total}}{{shortened}}{{copy}}.",
         "queryPreviewShortened": ", certaines valeurs sont abrégées",
         "queryPreviewCopy": " ; Copier récupère la réponse enregistrée complète",
+        "showMoreRows_one": "Afficher {{count}} ligne supplémentaire",
+        "showMoreRows_other": "Afficher {{count}} lignes supplémentaires",
         "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
         "kind": {
           "csv": "CSV",

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
@@ -51,7 +52,6 @@ import {
   parseTabularTraceResult,
   tabularToolKind,
   previewTabularRows,
-  ROW_PREVIEW_COUNT,
   isTabularQueryTool,
 } from "../../../../../utils/tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
@@ -63,6 +63,7 @@ import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
 import { WebResearchToolDetail } from "./WebResearchToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
+import tabularStyles from "./TabularToolDetail.module.css";
 
 interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
@@ -116,6 +117,7 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
 }
 
 const SQL_PREVIEW_CHARS = 4000;
+const SQL_ROW_PAGE_SIZE = 10;
 
 const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
   const { t } = useTranslation();
@@ -133,12 +135,16 @@ const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
 /** Curated view for the tabular/SQL tool: the executed query plus a bounded preview. */
 const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: SqlQueryResult; content?: string }) {
   const { t } = useTranslation();
+  const [visibleRows, setVisibleRows] = useState(SQL_ROW_PAGE_SIZE);
   const rowCount = t("rework.chatTrace.rows", { count: data.rows.length });
   const responseMessage =
     data.message === "Query executed successfully: 0 rows matched the conditions."
       ? t("rework.chatTrace.emptyQuerySuccess")
       : data.message;
-  const preview = useMemo(() => previewTabularRows(data.rows, { allColumns: true }), [data.rows]);
+  const preview = useMemo(
+    () => previewTabularRows(data.rows, { allColumns: true, rowLimit: visibleRows }),
+    [data.rows, visibleRows],
+  );
   const code = useMemo(() => JSON.stringify(preview.rows, null, 2), [preview]);
 
   return (
@@ -155,8 +161,22 @@ const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: Sql
           <>
             {data.rows.length === 0 && !responseMessage && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
             <CodeBlock code={code} copyText={content} language="json" />
+            {visibleRows < data.rows.length && (
+              <Button
+                className={tabularStyles.showMore}
+                color="primary"
+                variant="text"
+                size="2xs"
+                type="button"
+                onClick={() => setVisibleRows((count) => Math.min(count + SQL_ROW_PAGE_SIZE, data.rows.length))}
+              >
+                {t("rework.chatTrace.tabular.showMoreRows", {
+                  count: Math.min(SQL_ROW_PAGE_SIZE, data.rows.length - visibleRows),
+                })}
+              </Button>
+            )}
             {typeof responseMessage === "string" && responseMessage && <p>{responseMessage}</p>}
-            {(data.rows.length > ROW_PREVIEW_COUNT || preview.fieldsTruncated) && (
+            {(data.rows.length > preview.rows.length || preview.fieldsTruncated) && (
               <p className={`${styles.metaInfo} ${styles.previewNotice}`}>
                 {t("rework.chatTrace.tabular.queryPreview", {
                   count: preview.rows.length,
@@ -270,6 +290,7 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   if (sqlResult)
     return (
       <SqlToolDetail
+        key={JSON.stringify([entry.call.session_id, entry.call.exchange_id, toolCallId(entry.call)])}
         data={sqlResult}
         content={isTabularQueryTool(toolName(entry.call)) ? toolResultContent(entry.result) : undefined}
       />
