@@ -24,7 +24,7 @@
 
 - [x] 4.1 Run root `make code-quality`, the affected projects' offline test suites, and raw `basedpyright` wherever a touched package has a baseline; record the commands and results in the PR.
 - [x] 4.2 Review the full Swift diff against `origin/swift`, including all API consumers, authorization, bounded work and deployment docs; obtain an independent read-only review for the contract change and resolve findings before draft PR readiness.
-- [ ] 4.3 Reconcile this change's proposal, design, specs and tasks with the implemented behavior, sync the durable spec and validate the change; verify the draft PR targets `swift` and links issue #3536 and Weaver PR #3535.
+- [x] 4.3 Reconcile this change's proposal, design, specs and tasks with the implemented behavior, sync the durable spec and validate the change; verify the draft PR targets `swift` and links issue #3536 and Weaver PR #3535.
 
 ## Workflow follow-up
 
