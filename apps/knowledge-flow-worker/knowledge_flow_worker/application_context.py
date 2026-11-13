@@ -203,6 +203,7 @@ class ApplicationContext:
         ApplicationContext._instance = self
 
     async def shutdown(self) -> None:
+        await self._document_models.close()
         await http_clients.async_shutdown_shared_clients()
 
     def is_tabular_file(self, file_name: str) -> bool:

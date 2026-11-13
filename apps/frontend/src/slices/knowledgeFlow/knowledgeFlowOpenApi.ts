@@ -383,7 +383,7 @@ export type SearchRequest = {
   top_k?: number;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
-  /** Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the cross-encoder, keeping top_k. Retrieval scores are unchanged. */
+  /** Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the organization's selected reranker or the local cross-encoder, keeping top_k. Retrieval scores are unchanged. */
   rerank?: boolean;
   /** Keep hits whose original retrieval score (or 0.0 when absent) is at least this value, after optional reranking and its top_k limit. */
   min_score?: number | null;

@@ -549,16 +549,8 @@ async def test_tabular_processor_cleans_temporary_parquet_after_upload(
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_logs_parquet_artifact_write(tmp_path, caplog):
-    """
-    Ensure a successful Parquet upload leaves a durable, gathersable log line.
-
-    Why this exists:
-    - Before this fix, `_persist_parquet_artifact` uploaded the artifact to
-      content storage without logging anything on success, so operators had
-      no positive confirmation in stdout/OpenSearch that ingestion actually
-      produced a queryable dataset.
-    """
+async def test_tabular_processor_logs_one_document_outcome(tmp_path, caplog):
+    """A successful upload emits one document-level outcome without its object key."""
     csv_path = tmp_path / "sales.csv"
     csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
 
@@ -572,14 +564,14 @@ async def test_tabular_processor_logs_parquet_artifact_write(tmp_path, caplog):
     assert artifact is not None
 
     tabular_log_records = [
-        record.message for record in caplog.records if "document_uid=" in record.message
+        record.message
+        for record in caplog.records
+        if "tabular outcome" in record.message
     ]
-    assert any(
-        "document_uid=doc-log-check" in message
-        and f"object_key={artifact.object_key}" in message
-        and "rows=2" in message
-        for message in tabular_log_records
-    )
+    assert len(tabular_log_records) == 1
+    assert "document_uid=doc-log-check" in tabular_log_records[0]
+    assert "rows=2" in tabular_log_records[0]
+    assert artifact.object_key not in tabular_log_records[0]
 
 
 @pytest.mark.integration
@@ -1057,7 +1049,9 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(
         0
     ].tables
     assert len(tables) == 20
-    assert all(table.columns[0].categorical_values == ["Lyon", "Paris"] for table in tables)
+    assert all(
+        table.columns[0].categorical_values == ["Lyon", "Paris"] for table in tables
+    )
     assert [
         (table.columns[1].min_value, table.columns[1].max_value) for table in tables[:2]
     ] == [(10, 20), (15, 25)]

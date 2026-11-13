@@ -5,8 +5,8 @@
 import asyncio
 import json
 
-import pytest
 import httpx
+import pytest
 from fred_sdk.contracts.weaver import InferenceAdmission, InferenceCredentialBinding
 
 from fred_knowledge import models

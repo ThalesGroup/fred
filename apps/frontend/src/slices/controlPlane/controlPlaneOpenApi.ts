@@ -3154,9 +3154,9 @@ export type OrganizationModelPolicy = {
   permitted: ModelOfferKey[];
   /** Organization ceiling, independent of the user's per-question choice. */
   reasoning_enabled: ModelOfferKey[];
+  reranker?: ModelOfferKey | null;
   /** Zero means no saved policy: no permissions or implicit selections. */
   revision: number;
-  reranker?: ModelOfferKey | null;
   title?: ModelOfferKey | null;
   updated_at?: string | null;
   updated_by?: string | null;

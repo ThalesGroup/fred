@@ -46,6 +46,7 @@ def search(monkeypatch):
     ]
     conn.execute = AsyncMock(return_value=result)
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine))
+    monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=None))
     monkeypatch.setattr(module, "resolve_scope", AsyncMock(return_value=scope))
 
     def hit(ordinal, score=0.9, uid=DOC):

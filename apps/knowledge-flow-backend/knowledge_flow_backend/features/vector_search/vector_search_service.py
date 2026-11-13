@@ -30,8 +30,8 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
-from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
 from fred_knowledge.models import DocumentModelError
+from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
 from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from langchain_core.documents import Document
 
