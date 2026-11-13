@@ -173,3 +173,13 @@ def test_query_result_budget_defaults_and_overrides():
             TabularQueryConfig(max_output_chars=invalid)
     with pytest.raises(ValueError, match="query.max_rows is no longer supported"):
         TabularQueryConfig(max_rows=1000)
+
+
+def test_startup_summary_reports_character_budget(app_context, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="knowledge_flow_backend.application_context"):
+        app_context._log_config_summary()
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("default_max_rows=500  max_output_chars=50000" in message for message in messages)
+    assert not any("Failed to read tabular runtime section" in message for message in messages)

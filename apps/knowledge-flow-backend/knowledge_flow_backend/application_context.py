@@ -1222,11 +1222,11 @@ class ApplicationContext:
                 tabular_store.compression,
             )
             logger.info(
-                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  internal_presigned_ttl_seconds=%s",
+                "     engine=%s  access=%s  default_max_rows=%s  max_output_chars=%s  internal_presigned_ttl_seconds=%s",
                 tabular_store.query.engine,
                 tabular_store.query.access_mode,
                 tabular_store.query.default_max_rows,
-                tabular_store.query.max_rows,
+                tabular_store.query.max_output_chars,
                 tabular_store.query.internal_presigned_ttl_seconds,
             )
         except Exception:

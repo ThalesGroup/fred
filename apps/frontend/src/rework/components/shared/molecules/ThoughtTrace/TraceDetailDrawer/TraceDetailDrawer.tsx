@@ -134,6 +134,10 @@ const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
 const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: SqlQueryResult; content?: string }) {
   const { t } = useTranslation();
   const rowCount = t("rework.chatTrace.rows", { count: data.rows.length });
+  const responseMessage =
+    data.message === "Query executed successfully: 0 rows matched the conditions."
+      ? t("rework.chatTrace.emptyQuerySuccess")
+      : data.message;
   const preview = useMemo(() => previewTabularRows(data.rows, { allColumns: true }), [data.rows]);
   const code = useMemo(() => JSON.stringify(preview.rows, null, 2), [preview]);
 
@@ -149,9 +153,9 @@ const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: Sql
           <div className={styles.errorBox}>{data.error}</div>
         ) : (
           <>
-            {data.rows.length === 0 && !data.message && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
+            {data.rows.length === 0 && !responseMessage && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
             <CodeBlock code={code} copyText={content} language="json" />
-            {typeof data.message === "string" && data.message && <p>{data.message}</p>}
+            {typeof responseMessage === "string" && responseMessage && <p>{responseMessage}</p>}
             {(data.rows.length > ROW_PREVIEW_COUNT || preview.fieldsTruncated) && (
               <p className={`${styles.metaInfo} ${styles.previewNotice}`}>
                 {t("rework.chatTrace.tabular.queryPreview", {
