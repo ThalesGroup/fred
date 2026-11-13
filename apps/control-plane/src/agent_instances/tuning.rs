@@ -259,7 +259,13 @@ async fn select_capabilities(
     }
     let envelopes = futures::future::try_join_all(selected.iter().map(|id| {
         let config = config_for(id);
-        validate_capability(platform, template, authorization, id, config)
+        validate_capability_config(
+            platform,
+            &template.source_runtime_id,
+            authorization,
+            id,
+            config,
+        )
     }))
     .await?;
     Ok((
@@ -310,23 +316,6 @@ pub(crate) fn require_inventory(
         }
     }
     Ok(())
-}
-
-async fn validate_capability(
-    platform: &PlatformConfig,
-    template: &AgentTemplateSummary,
-    authorization: Option<&HeaderValue>,
-    id: &str,
-    config: Value,
-) -> AppResult<Value> {
-    validate_capability_config(
-        platform,
-        &template.source_runtime_id,
-        authorization,
-        crate::mcp_connections::capability_owner(template, id),
-        config,
-    )
-    .await
 }
 
 pub(crate) async fn validate_capability_config(
@@ -712,7 +701,15 @@ mod tests {
 
     async fn refusal(body: String) -> String {
         let (platform, template) = pod_refusing(body).await;
-        match validate_capability(&platform, &template, None, "document_access", json!({})).await {
+        match validate_capability_config(
+            &platform,
+            &template.source_runtime_id,
+            None,
+            "document_access",
+            json!({}),
+        )
+        .await
+        {
             Err(AppError::Problem {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "agent_capability_config_invalid",

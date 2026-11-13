@@ -63,71 +63,9 @@ pub(crate) fn extend_template(
     template: &mut AgentTemplateSummary,
     offers: &[BTreeMap<String, Value>],
 ) {
-    let contributions: Vec<_> = template
-        .available_capabilities
-        .iter()
-        .filter(|entry| entry.get("mcp_service").is_some_and(|v| !v.is_null()))
-        .cloned()
-        .collect();
-    template
-        .available_capabilities
-        .retain(|entry| !entry.get("mcp_service").is_some_and(|v| !v.is_null()));
-    if !template.supports_managed_mcp {
-        return;
+    if template.supports_managed_mcp && template.supports_capabilities {
+        template.available_capabilities.extend_from_slice(offers);
     }
-    for offer in offers {
-        let mut offer = offer.clone();
-        if let Some(service) = offer.get("mcp_service").filter(|v| !v.is_null()) {
-            let Some(owner) = contributions
-                .iter()
-                .find(|entry| entry.get("mcp_service") == Some(service))
-            else {
-                continue;
-            };
-            let Some(owner_id) = owner.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            let Some(id) = offer.get("id").and_then(Value::as_str).map(str::to_owned) else {
-                continue;
-            };
-            if !template.supports_capabilities
-                && !template
-                    .default_capability_ids
-                    .iter()
-                    .any(|id| id == owner_id)
-            {
-                continue;
-            }
-            for default in &mut template.default_capability_ids {
-                if default == owner_id {
-                    *default = id.clone();
-                }
-            }
-            offer.insert(
-                "capability_owner".into(),
-                Value::String(owner_id.to_owned()),
-            );
-            for key in ["config_fields", "version", "execution_models"] {
-                if let Some(value) = owner.get(key) {
-                    offer.insert(key.into(), value.clone());
-                }
-            }
-        }
-        if !template.supports_capabilities && !offer.contains_key("capability_owner") {
-            continue;
-        }
-        template.available_capabilities.push(offer);
-    }
-}
-
-pub(crate) fn capability_owner<'a>(template: &'a AgentTemplateSummary, id: &'a str) -> &'a str {
-    template
-        .available_capabilities
-        .iter()
-        .find(|entry| entry.get("id").and_then(Value::as_str) == Some(id))
-        .and_then(|entry| entry.get("capability_owner"))
-        .and_then(Value::as_str)
-        .unwrap_or(id)
 }
 
 /// Resolve in the admission snapshot. Caller has checked the same selection's
@@ -140,6 +78,13 @@ pub(crate) async fn bindings(
     knowledge_flow_url: Option<&str>,
 ) -> AppResult<Vec<McpBinding>> {
     let mut result = Vec::new();
+    if selected.iter().any(|id| id == super::TABULAR_CAPABILITY_ID) {
+        result.push(McpBinding::KnowledgeFlowTabular {
+            url: super::tabular_endpoint(knowledge_flow_url).map_err(|_| {
+                AppError::Unavailable("Knowledge Flow Tabular is not configured.".into())
+            })?,
+        });
+    }
     for id in selected.iter().filter(|id| id.starts_with("managed-mcp:")) {
         let key = id
             .strip_prefix("managed-mcp:")
@@ -151,14 +96,10 @@ pub(crate) async fn bindings(
                 .configuration
                 .validate(space_id, credentials)
                 .is_err()
-            || connection
-                .configuration
-                .trusted_destination(knowledge_flow_url)
-                .is_err()
         {
             return Err(crate::agents::enablement::not_enabled(id));
         }
-        result.push(McpBinding {
+        result.push(McpBinding::Connection {
             connection_id: key,
             capability_id: id.clone(),
             revision: connection.revision,

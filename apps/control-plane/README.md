@@ -1384,8 +1384,8 @@ offer. Team/project restrictions use the existing parent ceiling. Editors select
 it in the existing agent form, in Simple or Advanced mode. Compatible Python
 ReAct/Deep/Graph templates explicitly advertise `supports_managed_mcp`, independently
 of `supports_capabilities`. Selectable templates offer the permitted catalog;
-fixed templates resolve only author-declared `default_mcp_servers` dependencies
-and display them as included, with their business configuration. Creation and
+fixed templates retain their author-declared native capabilities and cannot add
+external connections. Creation and
 editing retain those defaults and reject additional managed selections. Import
 and admission require the included set to match the template and still enforce
 availability and organization/local policy. The embedded Rust agent does not
@@ -1400,7 +1400,7 @@ The same offer and business permission serve every compatible pod. There is no
 second permission store and no local YAML fallback for managed selections.
 
 Migration `0023_mcp_space_ownership.sql` adds mandatory space ownership and per-space
-logical-name/Tabular uniqueness. It requires an empty MCP table; existing unowned
+logical-name uniqueness. It requires an empty MCP table; existing unowned
 connections require a fresh installation, without backfill. Space purge cascades
 through connections, offers and permissions. `$mcp` is technical provenance only.
 
@@ -1454,9 +1454,8 @@ Each admitted turn owns its immutable binding/revision and independent clients;
 no process-wide registry or tool cache is updated. Runtime verifies the published
 tool contracts before exposing them: remote additions remain hidden, removals or
 contract changes fail closed until reviewed and republished. Tool names include
-the connection UUID. External MCP marketplace selections have empty configuration;
-trusted Tabular configuration uses the embedded capability's existing validation,
-copy and export handlers, under the central selection ID. Installation rechecks
+the connection UUID. External MCP marketplace selections have empty configuration.
+Installation rechecks
 the destination space and template, and admission resolves the current connection.
 No connection credential or document grant is exported.
 
@@ -1571,192 +1570,64 @@ permissions, UI behavior or performance have been validated.
 
 ### Trusted Knowledge Flow Tabular
 
-Implementation is present; functional reception below is **not executed**.
-Choose **Knowledge Flow Tabular** in the MCP administration form. The wire
-configuration is `authentication: {kind: knowledge_flow_tabular}`, with an empty
-`url` on creation: Control Plane resolves `platform.knowledge_flow_url` plus
-`/mcp/tabular`. It uses its existing `security.m2m` Directory token cache and
-single rejected-token refresh. There is no static credential field for this mode.
-An explicitly supplied URL must equal that configured destination. Migration
-`0023_mcp_space_ownership.sql` enforces one trusted Tabular connection per space, including
-when disabled; no permission, selection or connection is seeded.
+Tabular is a native capability, `mcp-knowledge-flow-mcp-tabular`, owned by
+`fred-capability-mcp`. Its ordinary pod offer, organization permission and local
+restrictions govern selection and admission. Configuration, marketplace copying
+and chat controls use the native ID without substitution. General, Deep and fixed
+templates retain their usual capability selection rules.
 
-Each Python pod uses its existing `ai.knowledge_flow_url` (including API prefix)
-to recheck the admitted endpoint before credentials are obtained. It then uses
-the turn's `DelegatedCredentialProvider`, run checks, token renewal and
-`KnowledgeFlowAgentContext` header. Each request is pinned to that destination,
-including its server-created grant query; redirects are disabled. Model arguments
-cannot replace the verified grant or document scope. Technical discovery permits
-protocol initialization/listing/session operations for an authenticated workload;
-without a verified delegated grant, `tools/call` is refused before an inner
-REST handler. Normal REST resource authorization remains required.
+No organization connection, technical activation, availability probe or published
+inventory is needed. The MCP administration API accepts only external authentication
+modes (`none`, `bearer`, `api_key`). Migration `0024_native_tabular.sql` removes the
+obsolete service index and enforces that boundary for fresh installations. It does
+not convert existing data or grant permissions.
 
-The installed Tabular capability declares `mcp_service: knowledge_flow_tabular`.
-It owns instructions, configuration and composer controls. Inventory reconciliation
-excludes this dependency from pod offers. Template projection joins it to the one
-central offer, routing validation and chat controls back to its owning package.
-Author defaults use the stable dependency ID; the deployment UUID is resolved by
-Control Plane. A missing default dependency makes that template unavailable, with
-a translated reason; unrelated templates remain available. The Simple document
-packs and the existing CSV/Excel diagnostic resolve the same central offer.
-Native `document_access` stays on its SDK/REST path. Non-migrated pod catalogs and
-the independent SDK loader remain supported, but migrated KF catalog entries
-fail pod startup explicitly. No compatibility conversion of historical data runs.
+When Tabular is selected, Control Plane emits an internal MCP binding containing
+only `kind: knowledge_flow_tabular` and the trusted `url`, derived from
+`platform.knowledge_flow_url` plus `/mcp/tabular`. No network call occurs during
+this resolution. The pod verifies the endpoint against `ai.knowledge_flow_url`
+before obtaining credentials. The existing transport uses the turn's
+`DelegatedCredentialProvider`, token renewal and `KnowledgeFlowAgentContext`.
+Redirects are disabled, and model arguments cannot replace the delegated grant or
+document scope. Missing configuration fails admission; service outages fail
+execution without changing stored permissions or selections.
 
-Tabular grounding instructions continue through the existing ReAct/Deep prompt
-assembly, and trusted provenance activates the Tabular guard despite opaque tool
-names. The pre-existing Graph limitation remains: Graph authors must include
-these business instructions in their system prompt; Graph does not consume the
-ReAct MCP prompt suffix. No new Graph prompt composition was introduced.
+The runtime discovers the trusted internal service's tools for the turn, with the
+same bounded transport as external MCP. Its contract is owned by the Fred deployment;
+there is no manual external-inventory review. External connections still execute
+only their published tools and never receive Fred credentials or document context.
+Tabular prompt assembly, provenance guards and resource authorization remain in
+their existing owners. Graph authors still supply their own business instructions.
 
 ### Real Knowledge Flow reception: two pods
 
-**Developer commands and UI steps only; none were executed for this change.**
-Use the normal prepared disposable Weaver environment: Keycloak identities and
-delegation policies, PostgreSQL, content storage, Temporal, projections and model
-credentials must already be configured. Do not weaken authentication to run this
-procedure. Normal `make run` targets can sync dependencies and apply migrations;
-the Knowledge Flow worker target also prepares its model dependencies. Review
-those effects before starting. The SQL diagram generator is not run here because
-it starts containers and applies migrations; the new migration adds only an index.
+Use a prepared development environment; this procedure does not authorize resetting
+an existing database. The implementation targets fresh installations, not historical
+connection or selection conversion. Automated tests and a real deployment receipt
+are separate evidence.
 
-From `/home/dimi/Work/weaver/fred`, prepare two pod configurations and the existing
-Control Plane source list (configuration only, not a second catalog or bootstrap):
+1. With **no MCP connection**, enable the native Tabular capability for the organization
+   and permit it in the test team. Open General and Deep agent forms: both offer
+   the same native selection, with no technical setup step.
+2. Save agents with Tabular and its document-selection controls. Reload them and
+   verify selection and configuration. A fixed template declaring Tabular keeps it
+   as an included capability.
+3. Ingest a CSV and an XLSX in that team. Wait for processing to publish them;
+   select each document in a conversation and request table listing, schema inspection
+   and a sum whose result is known. Verify actual tool calls, not only model text.
+4. Repeat under two users/pods. Check user delegation and canonical document context;
+   attempts to read another team's document or another conversation's attachment fail.
+5. Disable the capability for the team: new selections/admissions are refused and
+   the form explains the restriction. Restore it and retry. A Knowledge Flow outage
+   causes an execution failure, without hiding the capability or revoking its policy.
+6. Check an external MCP still requires discovery/publication and receives no Fred
+   identity, even if its display name or URL resembles Knowledge Flow.
 
-```bash
-make -C apps/fred-agents dev
-mkdir -p /tmp/fred-mcp-lot2
-apps/fred-agents/.venv/bin/python - <<'PY'
-from pathlib import Path
-import yaml
-root = Path('/home/dimi/Work/weaver/fred')
-out = Path('/tmp/fred-mcp-lot2')
-pod = yaml.safe_load((root / 'apps/fred-agents/config/configuration_prod.yaml').read_text())
-cp = yaml.safe_load((root / 'apps/control-plane/config/configuration_prod.yaml').read_text())
-sources = []
-for number, port in [(1, 8000), (2, 8001)]:
-    runtime_id = f'fred-agents-mcp-{number}'
-    pod['app'].update(runtime_id=runtime_id, port=port)
-    pod['ai']['knowledge_flow_url'] = 'http://localhost:8111/knowledge-flow/v2'
-    (out / f'pod-{number}.yaml').write_text(yaml.safe_dump(pod))
-    sources.append(dict(runtime_id=runtime_id, base_url=f'http://localhost:{port}/fred/agents/v2',
-                        public_base_url='/fred/agents/v2' if number == 1 else '/fred-pod-two/agents/v2', enabled=True))
-cp['platform']['runtime_catalog_sources'] = sources
-cp['platform']['knowledge_flow_url'] = 'http://localhost:8111/knowledge-flow/v2'
-(out / 'control-plane.yaml').write_text(yaml.safe_dump(cp))
-PY
-cat > /tmp/fred-mcp-lot2/vite.config.mts <<'JS'
-import original from '/home/dimi/Work/weaver/fred/apps/frontend/vite.config.ts';
-export default async (env) => {
-  const config = await original(env);
-  return {
-    ...config,
-    server: {
-      ...config.server,
-      proxy: {
-        '^/fred-pod-two/': {
-          target: 'http://localhost:8001', ws: true,
-          rewrite: path => path.replace(/^\/fred-pod-two/, '/fred'),
-        },
-        ...config.server?.proxy,
-      },
-    },
-  };
-};
-JS
-```
-
-The temporary Vite wrapper adds the second same-origin ingress path, using the
-existing application configuration and plugins. It is reception-only configuration;
-no browser cross-origin URL or new application bootstrap is introduced.
-
-In separate terminals, from that same repository root, use the usual prepared
-component `.env` files. These are two processes with distinct logical runtime IDs,
-not two replicas reporting the same ID. Ensure their ports are free first:
-
-```bash
-CONFIG_FILE=/tmp/fred-mcp-lot2/control-plane.yaml make -C apps/control-plane run
-CONFIG_FILE=/home/dimi/Work/weaver/fred/apps/knowledge-flow-backend/config/configuration_prod.yaml make -C apps/knowledge-flow-backend run PORT=8111
-CONFIG_FILE=/home/dimi/Work/weaver/fred/apps/knowledge-flow-worker/config/configuration_worker.yaml make -C apps/knowledge-flow-worker run
-CONFIG_FILE=/tmp/fred-mcp-lot2/pod-1.yaml make -C apps/fred-agents run PORT=8000
-CONFIG_FILE=/tmp/fred-mcp-lot2/pod-2.yaml make -C apps/fred-agents run PORT=8001
-(cd apps/frontend && npx --no-install vite --config /tmp/fred-mcp-lot2/vite.config.mts)
-```
-
-Select the repository's Node version and install its normal frontend dependencies
-before the frontend command. Both public pod paths go through Vite; do not use
-absolute cross-origin URLs for `public_base_url`. For
-container-based pods, substitute the same exact reachable KF service base in all
-three configurations, and provision the existing identity policy for those pods.
-
-Generate two small documents after the worker environment is prepared:
-
-```bash
-apps/knowledge-flow-worker/.venv/bin/python - <<'PY'
-from pathlib import Path
-from openpyxl import Workbook
-out = Path('/tmp/fred-mcp-lot2')
-(out / 'sales.csv').write_text('product,amount\nA,10\nB,20\n')
-book = Workbook()
-for row in [('product', 'amount'), ('A', 10), ('B', 20)]:
-    book.active.append(row)
-book.save(out / 'sales.xlsx')
-PY
-```
-
-1. As organization Owner in Features > MCP, create the trusted
-   Tabular connection. Discover through Rust, inspect the observed schemas, then
-   publish and enable explicitly. Verify the stored URL is
-   `http://localhost:8111/knowledge-flow/v2/mcp/tabular`, with no credential value.
-   Discovery alone must expose no documents and call no Tabular business tool.
-   A second trusted service connection must be refused. An external connection
-   with the same display name remains external.
-2. As organization owner, permit the single central offer. Check the other
-   organization has no permission. In a writable team/project, choose a flexible
-   template from each pod and select that same central offer. Select the native
-   `document_access` capability for attachment controls and the REST comparison.
-   Verify no native Tabular/Prometheus duplicate appears. Stored configuration
-   and composer options must remain under the central selection ID.
-3. Upload both files through the existing document drive and wait for **published**
-   processing, not just upload completion. In each agent's conversation, select
-   those documents (also repeat as conversation attachments). Ask to list the
-   available tables, inspect their schema, and calculate `SUM(amount)`: expect 30
-   for each dataset. Inspect actual tool events, document references and workload
-   logs; a model-only answer is not evidence. Both pods must use the same central
-   connection and publication revision, with their own admitted run/person.
-   The existing Knowledge SQL diagnostic can additionally create/query/clean up
-   its CSV/XLSX fixtures through the same central offer.
-4. In a second account/space, attempt the first account's document ID and forged
-   person/run/space arguments. Expect refusal or a document outside the accessible
-   scope to remain unavailable; no result from the first account may leak.
-   Narrow document selection, then use an empty selection: SQL must honor the
-   server intersection rather than model-supplied identifiers. Repeat concurrent
-   turns on the two pods. Inspect logs without recording credentials or grant URLs.
-5. Restrict the local central offer to an empty permitted set: both agents' next
-   admissions must refuse. Restore the parent-bounded permission and retry.
-   Disable the connection: next admissions must refuse again. Re-enable its
-   unchanged reviewed contract and retry without restarting pods. Also check
-   withdrawal works after removing the CP service/M2M prerequisite; restoring a
-   changed service address requires a new test/review/publication.
-6. Use the existing HTTP peer command above with no authentication and a misleading
-   KF display name. Its `NoFredContext` middleware refuses any authorization,
-   `x-fred-*` header or endpoint query. Calls to `add`/`multiply` from both pods
-   must still succeed. The automated tests below cover redirect refusal and a
-   KF-shaped external URL; never point a credentialed trusted connection at this
-   peer. Retest additions/removals/publication using `--changed-contract`.
-7. Ask a native `document_access` agent to search/read an authorized text document.
-   Observe its REST `/documents/search` path. Then withdraw only central Tabular:
-   native document access must remain available. Check Tabular instructions and
-   attachment/document-scope controls on ReAct/Deep, plus aggregate organization
-   impact, before recording reception as accepted.
-
-Additional targeted tests to run yourself (all **NON EXECUTED**):
+Targeted checks:
 
 ```bash
 make -C apps/control-plane test-integration CARGO_TEST_OPTS=managed_mcp
-(cd libs/fred-core && .venv/bin/pytest fred_core/tests/security/test_mcp_delegation.py)
-(cd libs/fred-runtime && .venv/bin/pytest tests/test_managed_mcp.py tests/test_mcp_document_scope.py tests/test_react_prompting.py)
-(cd apps/knowledge-flow-backend && .venv/bin/pytest tests/security/test_mcp_v2_mount.py)
-(cd apps/fred-agents && .venv/bin/pytest tests/test_capability_boot.py tests/test_capability_team_scope_policy.py tests/test_capability_scope_classification.py tests/test_runtime_probe.py tests/test_smoke.py)
-(cd apps/frontend && npx --no-install vitest run src/rework/components/pages/admin/McpConnectionsPage/McpConnectionsPage.test.tsx src/rework/components/pages/TeamAgentsPage/AgentFormModal/toolPackLogic.test.ts src/rework/features/pipeline/weaver/resourceSupport.test.ts)
+(cd libs/fred-sdk && .venv/bin/pytest tests/test_mcp_admission_contract.py)
+(cd libs/fred-runtime && .venv/bin/pytest tests/test_managed_mcp.py tests/test_delegated_admission.py tests/test_mcp_document_scope.py tests/test_react_prompting.py)
+(cd apps/frontend && npx --no-install vitest run src/rework/components/pages/admin/McpConnectionsPage src/rework/components/pages/TeamAgentsPage/AgentFormModal src/rework/features/pipeline/weaver/resourceSupport.test.ts)
 ```

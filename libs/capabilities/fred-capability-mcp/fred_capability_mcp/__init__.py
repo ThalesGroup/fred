@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Tabular business contribution. Connections and publication belong to Control Plane."""
+"""Native Tabular capability, using Knowledge Flow through trusted admission."""
 
 from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.capability import CapabilityManifest
@@ -16,7 +16,6 @@ class TabularCapability(McpCapability):
         name="mcp.servers.tabular.name",
         description="mcp.servers.tabular.description",
         icon="extension",
-        mcp_service="knowledge_flow_tabular",
     )
 
     def prompt_group(self) -> McpPromptGroup:

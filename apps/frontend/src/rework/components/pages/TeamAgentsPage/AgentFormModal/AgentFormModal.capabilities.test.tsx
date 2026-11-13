@@ -222,3 +222,40 @@ it("names a selected withdrawn connection from the canonical agent projection", 
   expect(container.textContent).not.toContain(id);
   expect(container.textContent).not.toContain("rework.mcp.connectionUnavailable");
 });
+
+it.each(["react", "deep"])(
+  "selects native Tabular alone in the %s form without a managed connection",
+  async (category) => {
+    const id = "mcp-knowledge-flow-mcp-tabular";
+    createForm({
+      ...template,
+      category,
+      available_capabilities: [
+        { id, version: "1", name: "mcp.servers.tabular.name", description: "mcp.servers.tabular.description" },
+      ],
+    });
+    const toggle = button("mcp.servers.tabular.name");
+    click(toggle);
+    const pack = toggle.closest("li")!;
+    click(pack.querySelector<HTMLButtonElement>("button[aria-expanded]")!);
+    expect(pack.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe(
+      "rework.teams.formAgent.capabilities.included.activeTooltip",
+    );
+    expect(container.textContent).not.toContain("rework.mcp.title");
+    expect(await submit()).toMatchObject({ capability_ids: [id] });
+  },
+);
+
+it("explains a withdrawn native Tabular selection and lets the editor remove it", () => {
+  const id = "mcp-knowledge-flow-mcp-tabular";
+  render(template, {
+    ...INSTANCE,
+    selected_capability_ids: [id],
+    selected_capability_names: { [id]: "mcp.servers.tabular.name" },
+  });
+  section("tools");
+  expect(container.textContent).toContain("mcp.servers.tabular.name");
+  expect(container.textContent).toContain("rework.teams.formAgent.capabilities.included.unavailableTooltip");
+  click(container.querySelector<HTMLInputElement>('[aria-label="mcp.servers.tabular.name"]')!);
+  expect(container.textContent).not.toContain("mcp.servers.tabular.name");
+});

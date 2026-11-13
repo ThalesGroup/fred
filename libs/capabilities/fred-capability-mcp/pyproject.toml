@@ -1,7 +1,7 @@
 [project]
 name = "fred-capability-mcp"
 version = "5.0.0"
-description = "Business instructions and controls for managed Knowledge Flow Tabular."
+description = "Native Knowledge Flow Tabular instructions and controls."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }

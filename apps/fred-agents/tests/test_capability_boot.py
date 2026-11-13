@@ -179,7 +179,7 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     assert set(registry.ids()) == _SHIPPED_CAPABILITY_IDS
     tabular = registry.capability("mcp-knowledge-flow-mcp-tabular")
     assert isinstance(tabular, TabularCapability)
-    assert tabular.manifest.mcp_service == "knowledge_flow_tabular"
+    assert tabular.manifest.id == "mcp-knowledge-flow-mcp-tabular"
     assert "## Tabular data access" in (tabular.prompt_group().agent_instructions or "")
     assert (
         tabular.chat_controls(

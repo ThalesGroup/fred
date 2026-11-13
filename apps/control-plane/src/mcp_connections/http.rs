@@ -113,17 +113,6 @@ pub struct McpPublication {
     pub expected_checked_at: chrono::DateTime<chrono::Utc>,
 }
 
-fn resolve_configuration(s: &AppState, config: &mut McpConfiguration) -> AppResult<()> {
-    if config.is_tabular() && config.url.is_empty() {
-        config.url = super::tabular_endpoint(s.agent_catalog.knowledge_flow_url.as_deref())
-            .map_err(|_| {
-                AppError::Unprocessable("Knowledge Flow service is not configured.".into())
-            })?;
-        config.allow_insecure_http = config.url.starts_with("http://");
-    }
-    Ok(())
-}
-
 fn validate(
     s: &AppState,
     space_id: Uuid,
@@ -135,10 +124,6 @@ fn validate(
     if config
         .validate(space_id, &s.agent_catalog.mcp_credentials)
         .is_err()
-        || config
-            .trusted_destination(s.agent_catalog.knowledge_flow_url.as_deref())
-            .is_err()
-        || (config.is_tabular() && s.directory.is_none())
     {
         return Err(AppError::Unprocessable(
             "Invalid MCP configuration or credential destination.".into(),
@@ -159,20 +144,6 @@ fn audit(actor: &str, c: &Connection, operation: &'static str) {
         space_id = %c.space_id, connection_id = %c.id, revision = c.revision, enabled = c.enabled,
         observation_state = %c.observation_state, "managed MCP connection");
 }
-async fn require_unique_service(
-    conn: &mut sqlx::PgConnection,
-    space_id: Uuid,
-    id: Uuid,
-    config: &McpConfiguration,
-) -> AppResult<()> {
-    if config.is_tabular() && sqlx::query_scalar::<_, bool>(
-        "select exists(select 1 from mcp_connection where id <> $1 and space_id=$2 and configuration #>> '{authentication,kind}' = 'knowledge_flow_tabular')"
-    ).bind(id).bind(space_id).fetch_one(conn).await? {
-        return Err(AppError::Conflict("Knowledge Flow Tabular already has a connection in this space.".into()));
-    }
-    Ok(())
-}
-
 fn conflict() -> AppError {
     AppError::Conflict("MCP connection changed; refresh before continuing.".into())
 }
@@ -222,10 +193,9 @@ async fn create_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
-    ApiJson(mut body): ApiJson<CreateMcpConnection>,
+    ApiJson(body): ApiJson<CreateMcpConnection>,
 ) -> AppResult<(StatusCode, Json<McpConnectionView>)> {
     authorization::authorize_organization(&s.pool, &user.uid, space_id, Permission::Manage).await?;
-    resolve_configuration(&s, &mut body.configuration)?;
     validate(
         &s,
         space_id,
@@ -251,7 +221,6 @@ async fn create_mcp_connection(
     if count >= 64 {
         return Err(AppError::Conflict("MCP connection limit reached.".into()));
     }
-    require_unique_service(&mut tx, space_id, id, &body.configuration).await?;
     let inserted=sqlx::query("insert into mcp_connection(id,logical_name,display_name,description,configuration,updated_by,space_id) values($1,$2,$3,$4,$5,$6,$7) on conflict(space_id,logical_name) do nothing")
         .bind(id).bind(body.logical_name).bind(body.display_name.trim()).bind(body.description)
         .bind(sqlx::types::Json(body.configuration)).bind(&user.uid).bind(space_id).execute(&mut *tx).await?;
@@ -272,7 +241,7 @@ async fn update_mcp_connection(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, id)): ApiPath<(Uuid, Uuid)>,
-    ApiJson(mut body): ApiJson<UpdateMcpConnection>,
+    ApiJson(body): ApiJson<UpdateMcpConnection>,
 ) -> AppResult<Json<McpConnectionView>> {
     let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
@@ -285,7 +254,6 @@ async fn update_mcp_connection(
     if current.revision != body.expected_revision {
         return Err(conflict());
     }
-    resolve_configuration(&s, &mut body.configuration)?;
     // Withdrawal must remain possible after provisioning changes. It cannot change
     // the technical configuration or bypass the normal checks for activation.
     if !body.enabled && body.configuration == current.configuration.0 {
@@ -299,7 +267,6 @@ async fn update_mcp_connection(
             &body.configuration,
         )?;
     }
-    require_unique_service(&mut tx, space_id, id, &body.configuration).await?;
     // A metadata/activation edit preserves a successful technical observation.
     // A destination/authentication edit requires testing and explicit publication again.
     let changed=sqlx::query("update mcp_connection set display_name=$3,description=$4,
@@ -348,14 +315,8 @@ async fn test_mcp_connection(
     .ok_or_else(conflict)?;
     claim.commit().await?;
     // No SQL transaction, connection or durable lock during MCP negotiation/listing.
-    let observation = discovery::discover(
-        space_id,
-        &c.configuration,
-        &s.agent_catalog.mcp_credentials,
-        s.agent_catalog.knowledge_flow_url.as_deref(),
-        s.directory.as_ref(),
-    )
-    .await;
+    let observation =
+        discovery::discover(space_id, &c.configuration, &s.agent_catalog.mcp_credentials).await;
     let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,

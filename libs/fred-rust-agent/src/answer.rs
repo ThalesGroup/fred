@@ -1079,10 +1079,29 @@ mod tests {
         assert_eq!(kinds(&events), ["status", "execution_error"]);
         assert_eq!(provider.calls.lock().unwrap().len(), 1);
         let mut in_flight = provider.turn();
-        in_flight.deadline = Instant::now() + Duration::from_millis(20);
-        let events: Vec<_> = without_memory(in_flight, "in flight".into(), no_search(), |_| {})
-            .collect()
-            .await;
+        in_flight.deadline = Instant::now() + Duration::from_secs(30);
+        let events =
+            without_memory(in_flight, "in flight".into(), no_search(), |_| {}).collect::<Vec<_>>();
+        tokio::pin!(events);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                _ = &mut events => panic!("the provider has not answered"),
+                _ = async {
+                    while provider.calls.lock().unwrap().len() < 2 {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                } => {}
+            }
+        })
+        .await
+        .unwrap();
+        // Let real socket I/O reach the provider before expiring the turn;
+        // a short wall-clock deadline can otherwise expire before the call starts.
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(30)).await;
+        let events = tokio::time::timeout(Duration::from_secs(1), events)
+            .await
+            .expect("the in-flight call must stop at the turn deadline");
         assert_eq!(kinds(&events), ["status", "execution_error"]);
         assert_eq!(provider.calls.lock().unwrap().len(), 2);
     }

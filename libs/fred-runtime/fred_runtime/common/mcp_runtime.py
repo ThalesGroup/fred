@@ -22,6 +22,7 @@ from functools import partial
 from typing import List, Optional, cast
 
 import anyio
+from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 from fred_sdk.contracts.models import (
     MCPServerConfiguration,
@@ -106,7 +107,11 @@ class MCPRuntime:
         # / `mcp_config_values`) was retired at Tier 1 (#1978). Agent assembly
         # derives `active_mcp_servers` from the agent's selected `mcp:<id>`
         # capabilities (see `fred_runtime.app.agent_app`).
-        active_servers = getattr(agent.agent_settings, "active_mcp_servers", ())
+        active_servers = tuple(
+            server
+            for server in getattr(agent.agent_settings, "active_mcp_servers", ())
+            if server.id != MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+        )
         self.agent_instance = agent
         self._agent_id = agent.agent_settings.id
         self._confined_logs = delegation_enabled()
@@ -115,7 +120,7 @@ class MCPRuntime:
         )
         self.available_servers: List[MCPServerConfiguration] = []
         mcp_config = get_runtime_context().get_mcp_configuration()
-        if mcp_config is None:
+        if mcp_config is None and active_servers:
             if self._confined_logs:
                 logger.warning("event=native_mcp_configuration outcome=missing")
             else:
@@ -124,24 +129,10 @@ class MCPRuntime:
                     "tools will be loaded.",
                     self._agent_id,
                 )
-        else:
+        elif mcp_config is not None:
             for s in active_servers:
                 server_configuration = mcp_config.get_server(s.id)
                 if not server_configuration:
-                    from fred_sdk.authoring.knowledge_flow_mcp import (
-                        MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-                    )
-
-                    if s.id == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR:
-                        if not any(
-                            b.configuration.authentication.kind
-                            == "knowledge_flow_tabular"
-                            for b in self.managed_bindings
-                        ):
-                            from .managed_mcp import ManagedMcpError
-
-                            raise ManagedMcpError("mcp_service_dependency_unavailable")
-                        continue
                     if self._confined_logs:
                         logger.warning(
                             "event=server_activation outcome=skipped reason=unavailable"

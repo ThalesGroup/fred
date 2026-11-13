@@ -2991,7 +2991,6 @@ export type CapabilityFieldDescription = {
 };
 export type CapabilityExecutionModel = "react" | "graph";
 export type PodCapabilityKind = "tool";
-export type McpService = "knowledge_flow_tabular";
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
@@ -2999,7 +2998,6 @@ export type PodCapabilityDescriptor = {
   icon: string;
   id: string;
   kind?: PodCapabilityKind;
-  mcp_service?: McpService | null;
   name: string;
   public_version?: string | null;
   runtime_id?: string | null;
@@ -3674,9 +3672,6 @@ export type McpAuthentication =
       kind: "none";
     }
   | {
-      kind: "knowledge_flow_tabular";
-    }
-  | {
       credential_binding: string;
       kind: "bearer";
     }
@@ -3697,14 +3692,20 @@ export type McpTool = {
   name: string;
   output_schema?: any;
 };
-export type McpBinding = {
-  capability_id: string;
-  configuration: McpConfiguration;
-  connection_id: string;
-  display_name: string;
-  revision: number;
-  tools: McpTool[];
-};
+export type McpBinding =
+  | {
+      capability_id: string;
+      configuration: McpConfiguration;
+      connection_id: string;
+      display_name: string;
+      kind: "connection";
+      revision: number;
+      tools: McpTool[];
+    }
+  | {
+      kind: "knowledge_flow_tabular";
+      url: string;
+    };
 export type RuntimeModelOffer = {
   /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
   candidate: boolean;

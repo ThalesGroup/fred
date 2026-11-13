@@ -92,16 +92,6 @@ async fn publish_configured_fixture(
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
 async fn one_central_offer_two_pods_native_collision_and_local_ceiling() {
-    central_offer_two_pods(false).await;
-}
-
-#[tokio::test]
-#[ignore = "needs disposable Postgres: make test-integration"]
-async fn knowledge_flow_one_offer_two_pods_and_local_ceiling() {
-    central_offer_two_pods(true).await;
-}
-
-async fn central_offer_two_pods(trusted: bool) {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     let space_id = org.id;
@@ -120,16 +110,8 @@ async fn central_offer_two_pods(trusted: bool) {
     for catalog in [&first, &second] {
         let mut state = catalog.state.lock().await;
         state.templates[0]["supports_managed_mcp"] = json!(true);
-        if trusted {
-            state.templates[0]["available_capabilities"].as_array_mut().unwrap().push(json!({
-                "id":"mcp-knowledge-flow-mcp-tabular", "mcp_service":"knowledge_flow_tabular", "version":"1", "config_fields":[]
-            }));
-        }
     }
     let mut config = first.config();
-    if trusted {
-        config.knowledge_flow_url = Some("https://kf.invalid/api".into());
-    }
     config.runtime_catalog_sources.push(RuntimeCatalogSource {
         runtime_id: "second".into(),
         base_url: second.base.clone(),
@@ -146,18 +128,7 @@ async fn central_offer_two_pods(trusted: bool) {
         onboarding: Default::default(),
         lifecycle: Default::default(),
     });
-    let connection = if trusted {
-        publish_configured_fixture(
-            &e,
-            &app,
-            &identity,
-            space_id,
-            json!({"url":"", "authentication":{"kind":"knowledge_flow_tabular"}}),
-        )
-        .await
-    } else {
-        publish_fixture(&e, &app, &identity, space_id).await
-    };
+    let connection = publish_fixture(&e, &app, &identity, space_id).await;
     let foreign = publish_configured_fixture(
         &e,
         &app,
@@ -167,27 +138,6 @@ async fn central_offer_two_pods(trusted: bool) {
     )
     .await;
     assert_ne!(connection["id"], foreign["id"]);
-    if trusted {
-        assert_eq!(
-            connection["configuration"]["url"],
-            "https://kf.invalid/api/mcp/tabular"
-        );
-        for (configuration, expected) in [
-            (
-                json!({"url":"", "authentication":{"kind":"knowledge_flow_tabular"}}),
-                409,
-            ),
-            (
-                json!({"url":"https://attacker.invalid/mcp", "authentication":{"kind":"knowledge_flow_tabular"}}),
-                422,
-            ),
-        ] {
-            let (status, _) = request(&app, &identity, Some("alice"), "POST", &format!("/spaces/{space_id}/mcp-connections"), json!({
-                "logical_name":"another", "display_name":"Another", "description":"Test", "configuration":configuration
-            })).await;
-            assert_eq!(status, expected);
-        }
-    }
     let id = connection["id"].as_str().unwrap();
     let capability = format!("managed-mcp:{id}");
     let policy_path = format!(
@@ -267,10 +217,6 @@ async fn central_offer_two_pods(trusted: bool) {
     for template in [first_id, second_id] {
         let mut body = creation(template, &template.to_string());
         body["capability_ids"] = json!([capability]);
-        if trusted {
-            body["capability_config_values"] =
-                json!({capability.clone(): {"chat_options.documents_selection":true}});
-        }
         let instance = create(&app, &identity, team.id, body).await;
         assert_eq!(
             instance["selected_capability_names"],
@@ -281,12 +227,6 @@ async fn central_offer_two_pods(trusted: bool) {
             request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null).await;
         assert_eq!(status, 200, "{admitted}");
         assert_eq!(admitted["mcp_bindings"][0]["connection_id"], id);
-        if trusted {
-            assert_eq!(
-                admitted["agent"]["configuration"]["capability_config"][&capability]["config"]["chat_options.documents_selection"],
-                true
-            );
-        }
         instances.push((runtime, admitted));
     }
     // A team role is sufficient for use; no direct organization role is required.
@@ -872,203 +812,75 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configuration() {
-    let e = env().await;
-    let (org, team) = org_and_team(&e).await;
-    let space_id = org.id;
-    grant(&e, team.id, Role::Editor, "alice").await;
-    let identity = support::IdentityServer::start().await;
-    let catalog = Catalog::start().await;
-    let owner = "mcp-knowledge-flow-mcp-tabular";
-    {
-        let mut state = catalog.state.lock().await;
-        state.templates[0]["kind"] = json!("graph");
-        state.templates[0]["supports_capabilities"] = json!(false);
-        state.templates[0]["supports_managed_mcp"] = json!(true);
-        state.templates[0]["default_capability_ids"] = json!([owner]);
-        state.templates[0]["available_capabilities"] = json!([{"id":owner,"mcp_service":"knowledge_flow_tabular","version":"1","config_fields":[]}]);
-    }
-    let mut config = catalog.config();
-    config.knowledge_flow_url = Some("https://kf.invalid/api".into());
-    let app = routes(AppState {
-        pool: e.pool.clone(),
-        agent_catalog: config,
-        auth: Arc::new(identity.auth().await),
-        directory: Some(identity.directory()),
-        content: None,
-        processing: None,
-        onboarding: Default::default(),
-        lifecycle: Default::default(),
-    });
-    let template = enable(&e, org.id, "custom", true).await;
-    let body = creation(template, "Included Tabular");
-    let templates_path = format!("/spaces/{}/agent-templates", team.id);
-    // No connection: declaration alone neither enrolls nor grants access.
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &collection(team.id),
-            body.clone()
-        )
-        .await
-        .0,
-        422
-    );
-    let (_, templates) = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &templates_path,
-        Value::Null,
-    )
-    .await;
-    let summary = templates
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["template_id"] == template.to_string())
-        .unwrap();
-    assert_eq!(summary["status"], "dependency_unavailable");
-    let connection = publish_configured_fixture(
-        &e,
-        &app,
-        &identity,
-        space_id,
-        json!({"url":"","authentication":{"kind":"knowledge_flow_tabular"}}),
-    )
-    .await;
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &collection(team.id),
-            body.clone()
-        )
-        .await
-        .0,
-        422
-    );
-    let id = connection["id"].as_str().unwrap();
-    let capability = format!("managed-mcp:{id}");
-    let policy = format!(
-        "/organizations/{}/capabilities/$mcp/{capability}/default-on",
-        org.id
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &policy,
-            json!({"default_on":true})
-        )
-        .await
-        .0,
-        204
-    );
-    let (_, templates) = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &templates_path,
-        Value::Null,
-    )
-    .await;
-    let summary = templates
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["template_id"] == template.to_string())
-        .unwrap();
-    assert_eq!(summary["status"], "available");
-    assert_eq!(summary["supports_capabilities"], false);
-    assert_eq!(summary["supports_managed_mcp"], true);
-    assert_eq!(summary["default_capability_ids"], json!([capability]));
-    assert_eq!(
-        summary["available_capabilities"].as_array().unwrap().len(),
-        1
-    );
-    let instance = create(&app, &identity, team.id, body.clone()).await;
-    let path = item(team.id, &instance);
-    // Configuration-only edits and an empty submitted selection cannot remove the default.
-    for patch in [
-        json!({"capability_config_values":{capability.clone():{"chat_options.attach_files":true}}}),
-        json!({"capability_ids":[]}),
-    ] {
-        let (status, edited) = request(&app, &identity, Some("alice"), "PATCH", &path, patch).await;
-        assert_eq!(status, 200, "{edited}");
-        assert_eq!(edited["selected_capability_ids"], json!([capability]));
-    }
-    let runtime_path = format!("{path}/runtime");
-    let (status, admitted) = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &runtime_path,
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, 200, "{admitted}");
-    assert_eq!(admitted["mcp_bindings"][0]["connection_id"], id);
-    assert_eq!(
-        admitted["agent"]["configuration"]["capability_config"][&capability]["config"]["chat_options.attach_files"],
-        true
-    );
-    let arbitrary = format!("managed-mcp:{}", Uuid::new_v4());
-    let mut invalid = body.clone();
-    invalid["capability_ids"] = json!([capability, arbitrary]);
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &collection(team.id),
-            invalid
-        )
-        .await
-        .0,
-        422
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PATCH",
-            &path,
-            json!({"capability_ids":[capability,arbitrary]})
-        )
-        .await
-        .0,
-        422
-    );
-    // Even the authorized connection is arbitrary on a fixed template that no longer declares it.
-    catalog.state.lock().await.templates[0]["default_capability_ids"] = json!([]);
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &runtime_path,
-            Value::Null
-        )
-        .await
-        .0,
-        422
-    );
-    catalog.state.lock().await.templates[0]["default_capability_ids"] = json!([owner]);
-    for allowed in [false, true] {
+async fn native_tabular_needs_only_capability_policy_for_react_deep_and_fixed_agents() {
+    for (kind, selectable) in [("react", true), ("deep", true), ("graph", false)] {
+        let e = env().await;
+        let (org, team) = org_and_team(&e).await;
+        grant(&e, team.id, Role::Editor, "alice").await;
+        let identity = support::IdentityServer::start().await;
+        let catalog = Catalog::start().await;
+        let capability = "mcp-knowledge-flow-mcp-tabular";
+        {
+            let mut state = catalog.state.lock().await;
+            state.templates[0]["kind"] = json!(kind);
+            state.templates[0]["supports_capabilities"] = json!(selectable);
+            state.templates[0]["supports_managed_mcp"] = json!(true);
+            state.templates[0]["default_capability_ids"] = json!([capability]);
+            state.templates[0]["available_capabilities"] =
+                json!([{"id":capability,"version":"1","config_fields":[]}]);
+            state.inventory = json!({"complete":true,
+                "capabilities":[{"id":capability,"version":"1","name":"Tabular","description":"Read tables","icon":"table_chart"}],
+                "template_capabilities":[{"source_agent_id":"custom","capability_id":capability,"default_selected":true}]
+            });
+        }
+        let mut config = catalog.config();
+        // No KF server exists at this destination: administration/admission never probes it.
+        config.knowledge_flow_url = Some("https://kf.invalid/api".into());
+        let app = routes(AppState {
+            pool: e.pool.clone(),
+            agent_catalog: config,
+            auth: Arc::new(identity.auth().await),
+            directory: None,
+            content: None,
+            processing: None,
+            onboarding: Default::default(),
+            lifecycle: Default::default(),
+        });
+        let template = enable(&e, org.id, "custom", true).await;
+        let mut body = creation(template, "Native Tabular");
+        body["capability_ids"] = json!([capability]);
+        body["capability_config_values"] = json!({capability:{"chat_options.attach_files":true}});
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "POST",
+                &collection(team.id),
+                body.clone()
+            )
+            .await
+            .0,
+            422
+        );
+        let refresh = format!("/organizations/{}/capabilities/fixture/refresh", org.id);
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "POST",
+                &refresh,
+                Value::Null
+            )
+            .await
+            .0,
+            204
+        );
+        let policy = format!(
+            "/organizations/{}/capabilities/fixture/{capability}/default-on",
+            org.id
+        );
         assert_eq!(
             request(
                 &app,
@@ -1076,98 +888,118 @@ async fn fixed_graph_tabular_requires_its_central_offer_and_preserves_configurat
                 Some("alice"),
                 "PUT",
                 &policy,
-                json!({"default_on":allowed})
+                json!({"default_on":true})
             )
             .await
             .0,
             204
         );
+        let templates_path = format!("/spaces/{}/agent-templates", team.id);
+        let (status, templates) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &templates_path,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{templates}");
+        let summary = templates
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["template_id"] == template.to_string())
+            .unwrap();
+        assert_eq!(summary["status"], "available");
+        assert_eq!(summary["available_capabilities"][0]["id"], capability);
+        let instance = create(&app, &identity, team.id, body).await;
+        assert_eq!(instance["selected_capability_ids"], json!([capability]));
+        let runtime = format!("{}/runtime", item(team.id, &instance));
+        let (status, admitted) =
+            request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null).await;
+        assert_eq!(status, 200, "{admitted}");
         assert_eq!(
-            request(
+            admitted["mcp_bindings"],
+            json!([{"kind":"knowledge_flow_tabular","url":"https://kf.invalid/api/mcp/tabular"}])
+        );
+        assert_eq!(
+            admitted["agent"]["configuration"]["capability_config"][capability]["config"]["chat_options.attach_files"],
+            true
+        );
+        let count: i64 = sqlx::query_scalar("select count(*) from mcp_connection")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        for (revision, restricted) in [(0, true), (1, false)] {
+            let local = format!("/spaces/{}/capability-policies/fixture", team.id);
+            assert_eq!(
+                request(
+                    &app,
+                    &identity,
+                    Some("alice"),
+                    "PUT",
+                    &local,
+                    json!({"expected_revision":revision,"restricted":restricted,"permitted_ids":[]})
+                )
+                .await
+                .0,
+                204
+            );
+            assert_eq!(
+                request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null)
+                    .await
+                    .0,
+                if restricted { 422 } else { 200 }
+            );
+            let (_, templates) = request(
                 &app,
                 &identity,
                 Some("alice"),
                 "GET",
-                &runtime_path,
-                Value::Null
+                &templates_path,
+                Value::Null,
             )
-            .await
-            .0,
-            if allowed { 200 } else { 422 }
+            .await;
+            let summary = templates
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["template_id"] == template.to_string())
+                .unwrap();
+            assert_eq!(
+                summary["available_capabilities"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty(),
+                restricted
+            );
+        }
+        let policy = format!(
+            "/organizations/{}/capabilities/fixture/{capability}/default-on",
+            org.id
         );
-    }
-    let local = format!("/spaces/{}/capability-policies/$mcp", team.id);
-    for (revision, restricted) in [(0, true), (1, false)] {
         assert_eq!(
             request(
                 &app,
                 &identity,
                 Some("alice"),
                 "PUT",
-                &local,
-                json!({"expected_revision":revision,"restricted":restricted,"permitted_ids":[]})
+                &policy,
+                json!({"default_on":false})
             )
             .await
             .0,
             204
         );
         assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "GET",
-                &runtime_path,
-                Value::Null
-            )
-            .await
-            .0,
-            if restricted { 422 } else { 200 }
+            request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null)
+                .await
+                .0,
+            422
         );
     }
-    assert_eq!(request(&app,&identity,Some("alice"),"PUT",&format!("/spaces/{space_id}/mcp-connections/{id}"),json!({"expected_revision":connection["revision"],"display_name":"Tabular","description":"Included","configuration":connection["configuration"],"enabled":false})).await.0,200);
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &runtime_path,
-            Value::Null
-        )
-        .await
-        .0,
-        422
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &collection(team.id),
-            body
-        )
-        .await
-        .0,
-        422
-    );
-    let (_, templates) = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &templates_path,
-        Value::Null,
-    )
-    .await;
-    let summary = templates
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["template_id"] == template.to_string())
-        .unwrap();
-    assert_eq!(summary["status"], "dependency_unavailable");
 }
 
 #[tokio::test]
@@ -1528,21 +1360,15 @@ async fn space_ownership_isolates_management_credentials_catalogs_and_purge() {
         .0,
         422
     );
-    // Each organization can own Tabular without colliding with the other.
+    // Internal delegation is not an administrable authentication mode.
     for space in [org.id, other.id] {
-        let body = json!({"logical_name":"tabular","display_name":"Tabular","description":"", "configuration":{"url":"","authentication":{"kind":"knowledge_flow_tabular"}}});
+        let body = json!({"logical_name":"tabular","display_name":"Tabular","description":"", "configuration":{"url":"https://kf.invalid/mcp/tabular","authentication":{"kind":"knowledge_flow_tabular"}}});
         let path = format!("/spaces/{space}/mcp-connections");
-        assert_eq!(
-            request(&app, &identity, Some("alice"), "POST", &path, body.clone())
-                .await
-                .0,
-            201
-        );
         assert_eq!(
             request(&app, &identity, Some("alice"), "POST", &path, body)
                 .await
                 .0,
-            409
+            422
         );
     }
     assert!(

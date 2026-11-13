@@ -150,8 +150,8 @@ Ralph and Knowledge Flow support.
 
 <a id="mcp-connection-to-agent-tools"></a>
 
-An MCP (Model Context Protocol) connection gives an assistant access to a tool
-server. It belongs to a space. Its current management scope is the
+An external MCP (Model Context Protocol) connection gives an assistant access to
+a tool server. It belongs to a space. Its current management scope is the
 organization, through **Features > MCP**. Control Plane retains the connection and
 reviewed inventory; it exposes an offer through the existing capability catalogue.
 A compatible Agent Pod executes the selected tools.
@@ -175,3 +175,10 @@ well as from Control Plane. A credential reference is not a secret value or an
 authorization. The [administration journey](02.3-agent-administration.md#models-and-mcp)
 separates discovery, validation and use; the
 [technical boundary](A13-models.md#mcp-connection-boundary) traces the runtime contract.
+
+Knowledge Flow Tabular is an internal Fred capability. Its ordinary organization
+and space authorization is sufficient; it has no administrable MCP connection.
+Control Plane supplies the trusted destination at admission, and the Agent Pod
+uses the shared MCP transport with the person's delegation and document scope.
+There is no separate availability check or activation: a service outage is an
+execution failure, not a change to the capability policy.

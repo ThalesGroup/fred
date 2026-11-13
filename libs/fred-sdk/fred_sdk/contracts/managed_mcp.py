@@ -36,19 +36,10 @@ class McpApiKeyAuthentication(McpFact):
         return self
 
 
-class McpKnowledgeFlowTabularAuthentication(McpFact):
-    """Trusted Fred service, never a user-entered bearer credential."""
-
-    kind: Literal["knowledge_flow_tabular"] = "knowledge_flow_tabular"
-
-
 class McpConfiguration(McpFact):
     url: str = Field(min_length=1, max_length=2048)
     authentication: Annotated[
-        McpNoAuthentication
-        | McpBearerAuthentication
-        | McpApiKeyAuthentication
-        | McpKnowledgeFlowTabularAuthentication,
+        McpNoAuthentication | McpBearerAuthentication | McpApiKeyAuthentication,
         Field(discriminator="kind"),
     ]
     allow_insecure_http: bool = False
@@ -87,7 +78,8 @@ class McpTool(McpFact):
     annotations: dict[str, Any] | None
 
 
-class McpBinding(McpFact):
+class McpConnectionBinding(McpFact):
+    kind: Literal["connection"] = "connection"
     connection_id: UUID
     capability_id: str
     revision: int = Field(gt=0, strict=True)
@@ -102,3 +94,23 @@ class McpBinding(McpFact):
         if len({tool.name for tool in self.tools}) != len(self.tools):
             raise ValueError("Duplicate published MCP tool")
         return self
+
+
+class McpTabularBinding(McpFact):
+    """Internal Fred destination admitted by Control Plane, without a connection."""
+
+    kind: Literal["knowledge_flow_tabular"] = "knowledge_flow_tabular"
+    url: str = Field(min_length=1, max_length=2048)
+
+    @property
+    def capability_id(self) -> str:
+        from fred_sdk.authoring.knowledge_flow_mcp import (
+            MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+        )
+
+        return MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+
+
+McpBinding = Annotated[
+    McpConnectionBinding | McpTabularBinding, Field(discriminator="kind")
+]

@@ -18,20 +18,10 @@ pub(super) async fn discover(
     space_id: uuid::Uuid,
     config: &McpConfiguration,
     bindings: &[McpCredentialBinding],
-    knowledge_flow_url: Option<&str>,
-    directory: Option<&crate::keycloak::Directory>,
 ) -> Result<Vec<McpTool>, &'static str> {
     config
         .validate(space_id, bindings)
         .map_err(|_| "destination_mismatch")?;
-    config
-        .trusted_destination(knowledge_flow_url)
-        .map_err(|_| "destination_mismatch")?;
-    let directory = if config.is_tabular() {
-        Some(directory.ok_or("credential_missing")?.clone())
-    } else {
-        None
-    };
     let secret = config
         .credential_reference()
         .map(|reference| {
@@ -52,7 +42,7 @@ pub(super) async fn discover(
         let (name, value) = match &config.authentication {
             McpAuthentication::Bearer { .. } => ("authorization", format!("Bearer {secret}")),
             McpAuthentication::ApiKey { header, .. } => (header.as_str(), secret.clone()),
-            McpAuthentication::None | McpAuthentication::KnowledgeFlowTabular => {
+            McpAuthentication::None => {
                 return Err("invalid_configuration");
             }
         };
@@ -77,16 +67,8 @@ pub(super) async fn discover(
         .max_concurrent_requests(1)
         .control_request_timeout(Duration::from_secs(3))
         .reinit_on_expired_session(false);
-    let tokens = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
-    let transport = StreamableHttpClientTransport::with_client(
-        DiscoveryClient {
-            client,
-            directory,
-            destination: config.url.clone(),
-            tokens: tokens.clone(),
-        },
-        transport_config,
-    );
+    let transport =
+        StreamableHttpClientTransport::with_client(DiscoveryClient { client }, transport_config);
     // `serve` performs the `initialize` handshake, so it must name a protocol version
     // that still has one: rmcp's default (LATEST, 2026-07-28) removed `initialize`, and
     // strict servers such as MCP Toolbox reject it with -32601.
@@ -129,12 +111,7 @@ pub(super) async fn discover(
                 });
             }
             let serialized = serde_json::to_string(&tools).map_err(|_| "invalid_inventory")?;
-            let live_tokens = tokens.lock().await;
-            if live_tokens.iter().any(|token| {
-                serialized.contains(token)
-                    || serde_json::to_string(token)
-                        .is_ok_and(|encoded| serialized.contains(&encoded[1..encoded.len() - 1]))
-            }) || serialized.len() > MAX_BYTES
+            if serialized.len() > MAX_BYTES
                 || secret.as_ref().is_some_and(|secret| {
                     serialized.contains(secret)
                         || serde_json::to_string(secret).is_ok_and(|encoded| {
@@ -172,59 +149,9 @@ use rmcp::transport::streamable_http_client::{
 use sse_stream::Sse;
 use std::{collections::HashMap, sync::Arc};
 
-type HttpError = StreamableHttpError<reqwest::Error>;
-
 #[derive(Clone)]
 struct DiscoveryClient {
     client: reqwest::Client,
-    directory: Option<crate::keycloak::Directory>,
-    destination: String,
-    tokens: Arc<tokio::sync::Mutex<Vec<String>>>,
-}
-
-impl DiscoveryClient {
-    async fn token(&self, uri: &str) -> Result<Option<String>, HttpError> {
-        if uri != self.destination {
-            return Err(HttpError::UnexpectedServerResponse(
-                "destination_mismatch".into(),
-            ));
-        }
-        let Some(directory) = &self.directory else {
-            return Ok(None);
-        };
-        let token = directory
-            .access_token()
-            .await
-            .map_err(|_| HttpError::UnexpectedServerResponse("credential_unavailable".into()))?;
-        let mut tokens = self.tokens.lock().await;
-        if !tokens.contains(&token) {
-            tokens.push(token.clone());
-        }
-        Ok(Some(token))
-    }
-
-    async fn rejected(&self, error: Option<&HttpError>, token: Option<&str>) -> bool {
-        let unauthorized = match error {
-            Some(HttpError::AuthRequired(_)) => true,
-            Some(HttpError::HttpStatus(error)) => {
-                error.status == reqwest::StatusCode::UNAUTHORIZED.as_u16()
-            }
-            // rmcp 3.9's POST adapter encodes a challenge-free 401 in this
-            // status prefix. Match the SDK prefix, never the response body.
-            Some(HttpError::UnexpectedServerResponse(message)) => {
-                message.starts_with("HTTP 401 Unauthorized:")
-            }
-            Some(HttpError::Client(error)) => {
-                error.status() == Some(reqwest::StatusCode::UNAUTHORIZED)
-            }
-            _ => false,
-        };
-        if unauthorized && let (Some(directory), Some(token)) = (&self.directory, token) {
-            directory.refresh_rejected(token).await;
-            return true;
-        }
-        false
-    }
 }
 
 impl StreamableHttpClient for DiscoveryClient {
@@ -234,97 +161,43 @@ impl StreamableHttpClient for DiscoveryClient {
         uri: Arc<str>,
         message: ClientJsonRpcMessage,
         session_id: Option<Arc<str>>,
-        _auth: Option<String>,
+        auth: Option<String>,
         headers: HashMap<HeaderName, HeaderValue>,
-    ) -> Result<StreamableHttpPostResponse, HttpError> {
-        let token = self.token(&uri).await?;
-        let result = self
-            .client
+    ) -> Result<StreamableHttpPostResponse, StreamableHttpError<Self::Error>> {
+        self.client
             .post_message_with_max_sse_event_size(
-                uri.clone(),
-                message.clone(),
-                session_id.clone(),
-                token.clone(),
-                headers.clone(),
-                MAX_BYTES,
+                uri, message, session_id, auth, headers, MAX_BYTES,
             )
-            .await;
-        if self.rejected(result.as_ref().err(), token.as_deref()).await {
-            let token = self.token(&uri).await?;
-            return self
-                .client
-                .post_message_with_max_sse_event_size(
-                    uri,
-                    message.clone(),
-                    session_id.clone(),
-                    token,
-                    headers,
-                    MAX_BYTES,
-                )
-                .await;
-        }
-        result
+            .await
     }
     async fn delete_session(
         &self,
         uri: Arc<str>,
         session_id: Arc<str>,
-        _auth: Option<String>,
+        auth: Option<String>,
         headers: HashMap<HeaderName, HeaderValue>,
-    ) -> Result<(), HttpError> {
-        let token = self.token(&uri).await?;
-        let result = self
-            .client
-            .delete_session(
-                uri.clone(),
-                session_id.clone(),
-                token.clone(),
-                headers.clone(),
-            )
-            .await;
-        if self.rejected(result.as_ref().err(), token.as_deref()).await {
-            let token = self.token(&uri).await?;
-            return self
-                .client
-                .delete_session(uri, session_id.clone(), token, headers)
-                .await;
-        }
-        result
+    ) -> Result<(), StreamableHttpError<Self::Error>> {
+        self.client
+            .delete_session(uri, session_id, auth, headers)
+            .await
     }
     async fn get_stream(
         &self,
         uri: Arc<str>,
         session_id: Option<Arc<str>>,
         last_event_id: Option<String>,
-        _auth: Option<String>,
+        auth: Option<String>,
         headers: HashMap<HeaderName, HeaderValue>,
-    ) -> Result<BoxStream<'static, Result<Sse, SseError>>, HttpError> {
-        let token = self.token(&uri).await?;
-        let result = self
-            .client
+    ) -> Result<BoxStream<'static, Result<Sse, SseError>>, StreamableHttpError<Self::Error>> {
+        self.client
             .get_stream_with_max_sse_event_size(
-                uri.clone(),
-                session_id.clone(),
-                last_event_id.clone(),
-                token.clone(),
-                headers.clone(),
+                uri,
+                session_id,
+                last_event_id,
+                auth,
+                headers,
                 MAX_BYTES,
             )
-            .await;
-        if self.rejected(result.as_ref().err(), token.as_deref()).await {
-            let token = self.token(&uri).await?;
-            return self
-                .client
-                .get_stream_with_max_sse_event_size(
-                    uri,
-                    session_id.clone(),
-                    last_event_id.clone(),
-                    token,
-                    headers,
-                    MAX_BYTES,
-                )
-                .await;
-        }
-        result
+            .await
     }
 }

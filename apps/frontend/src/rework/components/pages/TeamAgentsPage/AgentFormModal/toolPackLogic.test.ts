@@ -33,7 +33,6 @@ import {
   CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
   TOOL_PACK_SECTIONS,
-  resolveToolPackSections,
   type ToolPack,
 } from "./toolPacks";
 
@@ -47,16 +46,11 @@ const ATTACHMENTS = packById("attachments");
 const TEAM_DOCUMENTS = packById("team_documents");
 const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
-const SHARED_IDS = [
-  CAP_DOCUMENT_ACCESS,
-  CAP_TABULAR,
-  CAP_DOCUMENT_SUMMARIZE,
-  CAP_DOCUMENT_VERBATIM,
-  CAP_DOCUMENT_EXTRACT,
-];
+const SHARED_IDS = [CAP_DOCUMENT_ACCESS, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT];
 const TEAM_DOCUMENT_IDS = [...SHARED_IDS, CAP_DOCUMENT_SIMILARITY];
 const ALL_IDS: ReadonlySet<string> = new Set([
   ...TEAM_DOCUMENT_IDS,
+  CAP_TABULAR,
   CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
   CAP_PPT_FILLER,
@@ -79,7 +73,7 @@ describe("document pack registry", () => {
   it("offers Attachments and Team documents instead of one resource card", () => {
     const section = TOOL_PACK_SECTIONS.find((item) => item.id === "data_knowledge");
     const ids = section?.packs.map((pack) => pack.id);
-    expect(ids).toEqual(["attachments", "team_documents", "team_wiki"]);
+    expect(ids).toEqual(["attachments", "team_documents", CAP_TABULAR, "team_wiki"]);
     expect(ATTACHMENTS.documentSource).toBe("attachments");
     expect(TEAM_DOCUMENTS.documentSource).toBe("team_documents");
   });
@@ -335,32 +329,20 @@ describe("combined document restriction", () => {
   });
 });
 
-describe("trusted Tabular pack dependency", () => {
-  it("selects only the central offer and preserves it while another document source is active", () => {
-    const id = "managed-mcp:tabular-deployment";
-    const packs = resolveToolPackSections([
-      {
-        id,
-        name: "SQL",
-        description: "SQL",
-        icon: "table",
-        version: "1",
-        route_base_url: "",
-        mcp_service: "knowledge_flow_tabular",
-      },
-    ])
-      .flatMap((section) => section.packs)
-      .filter((pack) => pack.documentSource);
-    const attachments = packs.find((pack) => pack.id === "attachments")!;
-    const team = packs.find((pack) => pack.id === "team_documents")!;
-    const available = new Set([CAP_DOCUMENT_ACCESS, id]);
-    let selected = applyPackToggle(attachments, true, empty(), available, packs);
-    expect(selected.selectedCapabilityIds).toEqual([CAP_DOCUMENT_ACCESS, id]);
-    selected = applyPackToggle(team, true, selected, available, packs);
-    selected = applyPackToggle(attachments, false, selected, available, packs);
-    expect(selected.selectedCapabilityIds).toContain(id);
-    selected = applyPackToggle(team, false, selected, available, packs);
-    expect(selected.selectedCapabilityIds).not.toContain(id);
-    expect(selected.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+describe("native Tabular selection", () => {
+  it("selects independently and survives all document source toggles", () => {
+    const tabular = packById(CAP_TABULAR);
+    const onlyTabular = new Set([CAP_TABULAR]);
+    expect(isPackSelectable(tabular, onlyTabular)).toBe(true);
+    let selected = applyPackToggle(tabular, true, empty(), onlyTabular);
+    expect(derivePackChecked(tabular, selected, onlyTabular)).toBe(true);
+    expect(selected.selectedCapabilityIds).toEqual([CAP_TABULAR]);
+    selected = applyPackToggle(ATTACHMENTS, true, selected, ALL_IDS);
+    selected = applyPackToggle(TEAM_DOCUMENTS, true, selected, ALL_IDS);
+    selected = applyPackToggle(ATTACHMENTS, false, selected, ALL_IDS);
+    selected = applyPackToggle(TEAM_DOCUMENTS, false, selected, ALL_IDS);
+    expect(selected.selectedCapabilityIds).toEqual([CAP_TABULAR]);
+    selected = applyPackToggle(tabular, false, selected, onlyTabular);
+    expect(selected.selectedCapabilityIds).toEqual([]);
   });
 });

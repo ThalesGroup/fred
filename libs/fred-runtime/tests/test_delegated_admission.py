@@ -927,7 +927,11 @@ async def test_included_mcp_metadata_admission_and_business_assembly(
         McpPromptGroup,
         McpServerConfig,
     )
-    from fred_sdk.contracts.managed_mcp import McpBinding
+    from fred_sdk.contracts.managed_mcp import (
+        McpBinding,
+        McpConnectionBinding,
+        McpTabularBinding,
+    )
     from fred_sdk.contracts.models import (
         GraphAgentDefinition,
         GraphDefinition,
@@ -975,7 +979,6 @@ async def test_included_mcp_metadata_admission_and_business_assembly(
             name="Tabular",
             description="Tabular",
             icon="table",
-            mcp_service="knowledge_flow_tabular",
         )
 
         def prompt_group(self):
@@ -1021,40 +1024,33 @@ async def test_included_mcp_metadata_admission_and_business_assembly(
         [] if case == "undeclared" else [owner]
     )
 
-    connection = str(UUID(int=905))
-    offer = f"managed-mcp:{connection}"
-    admitted = McpBinding.model_validate(
-        dict(
-            connection_id=connection,
-            capability_id=offer,
-            revision=1,
-            display_name="Central Tabular",
-            configuration=dict(
-                url="https://kf.invalid/mcp/tabular",
-                authentication={"kind": "knowledge_flow_tabular"},
-            ),
-            tools=[
-                dict(
-                    name="query",
-                    description=None,
-                    input_schema={"type": "object"},
-                    output_schema=None,
-                    annotations=None,
-                )
-            ],
-        )
-    )
-    bindings = [] if case == "missing" else [admitted]
+    offer = owner
+    admitted = McpTabularBinding(url="https://kf.invalid/mcp/tabular")
+    bindings: list[McpBinding] = [] if case == "missing" else [admitted]
     if case == "extra":
-        external = admitted.model_dump(mode="json")
-        external.update(
-            connection_id=str(UUID(int=906)),
-            capability_id=f"managed-mcp:{UUID(int=906)}",
-            configuration=dict(
-                url="https://external.invalid/mcp", authentication={"kind": "none"}
-            ),
+        bindings.append(
+            McpConnectionBinding.model_validate(
+                dict(
+                    connection_id=str(UUID(int=906)),
+                    capability_id=f"managed-mcp:{UUID(int=906)}",
+                    revision=1,
+                    display_name="External",
+                    configuration=dict(
+                        url="https://external.invalid/mcp",
+                        authentication={"kind": "none"},
+                    ),
+                    tools=[
+                        dict(
+                            name="query",
+                            description=None,
+                            input_schema={"type": "object"},
+                            output_schema=None,
+                            annotations=None,
+                        )
+                    ],
+                )
+            )
         )
-        bindings.append(McpBinding.model_validate(external))
     configuration = AgentTuning(
         role=definition.role,
         description=definition.description,

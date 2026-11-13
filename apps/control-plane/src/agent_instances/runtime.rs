@@ -299,8 +299,9 @@ async fn resolve_runtime_binding(
     }
     let mcp_template = if super::tuning::saved_selection(&initial.tuning.0)?
         .iter()
-        .any(|id| id.starts_with("managed-mcp:"))
-    {
+        .any(|id| {
+            id.starts_with("managed-mcp:") || id == crate::mcp_connections::TABULAR_CAPABILITY_ID
+        }) {
         agents::editable_template(
             &state.pool,
             &state.agent_catalog,
@@ -345,7 +346,9 @@ async fn resolve_runtime_binding(
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
     let selected = super::tuning::saved_selection(&record.tuning.0)?;
-    if selected.iter().any(|id| id.starts_with("managed-mcp:")) {
+    if selected.iter().any(|id| {
+        id.starts_with("managed-mcp:") || id == crate::mcp_connections::TABULAR_CAPABILITY_ID
+    }) {
         let template = mcp_template
             .as_ref()
             .filter(|t| t.supports_managed_mcp)

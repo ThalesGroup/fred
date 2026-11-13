@@ -19,7 +19,13 @@ import httpx2
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from fred_sdk.authoring.knowledge_flow_mcp import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
-from fred_sdk.contracts.managed_mcp import McpBinding, McpCredentialBinding, McpTool
+from fred_sdk.contracts.managed_mcp import (
+    McpBinding,
+    McpConnectionBinding,
+    McpCredentialBinding,
+    McpTabularBinding,
+    McpTool,
+)
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from fred_sdk.contracts.services import FredService
 from langchain.mcp import as_langchain_tool
@@ -45,10 +51,10 @@ class ManagedMcpError(ValueError):
 
 
 def credential_headers(
-    binding: McpBinding, credentials: Sequence[McpCredentialBinding]
+    binding: McpConnectionBinding, credentials: Sequence[McpCredentialBinding]
 ) -> dict[str, str]:
     auth = binding.configuration.authentication
-    if auth.kind == "none" or auth.kind == "knowledge_flow_tabular":
+    if auth.kind == "none":
         return {}
     matches = [
         c for c in credentials if c.credential_binding == auth.credential_binding
@@ -76,7 +82,11 @@ def validate_admission(
     knowledge_flow_url: str | None = None,
     included: Sequence[str] | None = None,
 ) -> None:
-    expected = {key for key in selected if key.startswith("managed-mcp:")}
+    expected = {
+        key
+        for key in selected
+        if key.startswith("managed-mcp:") or key == MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+    }
     actual = {binding.capability_id for binding in bindings}
     if (
         expected != actual
@@ -84,37 +94,24 @@ def validate_admission(
         or (actual and not compatible)
     ):
         raise ManagedMcpError("mcp_binding_mismatch")
-    if MCP_SERVER_KNOWLEDGE_FLOW_TABULAR in selected and not any(
-        binding.configuration.authentication.kind == "knowledge_flow_tabular"
-        for binding in bindings
+    if included is not None and (
+        len(selected) != len(included) or set(selected) != set(included)
     ):
-        raise ManagedMcpError("mcp_service_dependency_unavailable")
-    if included is not None:
-        # Fixed agents execute only author-declared dependencies. Compare with
-        # the stable business owner, not a deployment-specific connection UUID.
-        owners = {
-            binding.capability_id: MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
-            if binding.configuration.authentication.kind == "knowledge_flow_tabular"
-            else binding.capability_id
-            for binding in bindings
-        }
-        if len(selected) != len(included) or {
-            owners.get(key, key) for key in selected
-        } != set(included):
-            raise ManagedMcpError("mcp_included_dependency_mismatch")
+        raise ManagedMcpError("mcp_included_dependency_mismatch")
     for binding in bindings:
         trusted_destination(binding, knowledge_flow_url)
-        credential_headers(binding, credentials)
+        if isinstance(binding, McpConnectionBinding):
+            credential_headers(binding, credentials)
 
 
 def trusted_destination(binding: McpBinding, base: str | None) -> bool:
-    if binding.configuration.authentication.kind != "knowledge_flow_tabular":
+    if not isinstance(binding, McpTabularBinding):
         return False
     expected = f"{base.rstrip('/')}/mcp/tabular" if base else None
     parsed = urlsplit(base or "")
     if (
         not expected
-        or binding.configuration.url != expected
+        or binding.url != expected
         or parsed.scheme not in {"http", "https"}
         or not parsed.hostname
         or parsed.username is not None
@@ -202,8 +199,16 @@ async def connect(
     tools: list[BaseTool] = []
     for binding in bindings:
         trusted = trusted_destination(binding, knowledge_flow_url)
-        headers = credential_headers(binding, credentials)
-        url = binding.configuration.url
+        headers = (
+            credential_headers(binding, credentials)
+            if isinstance(binding, McpConnectionBinding)
+            else {}
+        )
+        url = (
+            binding.configuration.url
+            if isinstance(binding, McpConnectionBinding)
+            else binding.url
+        )
         auth = None
         if trusted:
             if (
@@ -249,24 +254,34 @@ async def connect(
                     cursors.add(cursor)
                 else:
                     raise ManagedMcpError("mcp_inventory_limit")
-                # Additions are ignored; removals and contract changes fail closed.
-                for published in binding.tools:
-                    candidate = remote.get(published.name)
-                    if candidate is None or _contract(candidate) != published:
+                # External tools require their reviewed contracts. Internal tools
+                # belong to the trusted Fred service and need no publication.
+                contracts = (
+                    binding.tools
+                    if isinstance(binding, McpConnectionBinding)
+                    else tuple(_contract(tool) for tool in remote.values())
+                )
+                if not contracts:
+                    raise ManagedMcpError("mcp_inventory_empty")
+                for contract in contracts:
+                    candidate = remote.get(contract.name)
+                    if candidate is None or _contract(candidate) != contract:
                         raise ManagedMcpError("mcp_published_tool_changed")
                     tool = await as_langchain_tool(candidate, client)
                     if not isinstance(tool, StructuredTool):
                         raise ManagedMcpError("mcp_adapter_incompatible")
-                    suffix = hashlib.sha256(published.name.encode()).hexdigest()[:16]
+                    suffix = hashlib.sha256(contract.name.encode()).hexdigest()[:16]
                     tool = tool.model_copy(
                         update={
-                            "name": f"mcp_{binding.connection_id.hex}_{suffix}",
+                            "name": f"mcp_{binding.connection_id.hex}_{suffix}"
+                            if isinstance(binding, McpConnectionBinding)
+                            else contract.name,
                             # Preserve the exact business name even without a remote
                             # description; the opaque execution identity stays stable.
-                            "description": f"MCP tool: {published.name}."
+                            "description": f"MCP tool: {contract.name}."
                             + (
-                                f"\n{published.description}"
-                                if published.description
+                                f"\n{contract.description}"
+                                if contract.description
                                 else ""
                             ),
                             "coroutine": _guard_call(
@@ -275,7 +290,7 @@ async def connect(
                                     value.removeprefix("Bearer ")
                                     for value in headers.values()
                                 ),
-                                trusted_tool=published.name if trusted else None,
+                                trusted_tool=contract.name if trusted else None,
                             ),
                             "metadata": {
                                 **(tool.metadata or {}),
@@ -289,13 +304,16 @@ async def connect(
                                 "mcp_trusted_service": "knowledge_flow_tabular"
                                 if trusted
                                 else None,
-                                "mcp_tool_name": published.name,
+                                "mcp_tool_name": contract.name,
                                 MCP_TOOL_DISPLAY_NAME_METADATA_KEY: (
-                                    f"{binding.display_name} · {published.name}"
-                                    if binding.display_name.strip()
-                                    else published.name
+                                    f"{binding.display_name} · {contract.name}"
+                                    if isinstance(binding, McpConnectionBinding)
+                                    and binding.display_name.strip()
+                                    else contract.name
                                 ),
-                                "mcp_connection_id": str(binding.connection_id),
+                                "mcp_connection_id": str(binding.connection_id)
+                                if isinstance(binding, McpConnectionBinding)
+                                else None,
                             },
                         }
                     )

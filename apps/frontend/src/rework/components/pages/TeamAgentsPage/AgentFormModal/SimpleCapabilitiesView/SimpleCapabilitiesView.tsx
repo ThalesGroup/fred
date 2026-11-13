@@ -23,7 +23,7 @@ import {
   isPackSelectable,
   type CapabilitySelectionState,
 } from "../toolPackLogic.ts";
-import { resolveToolPackSections, type ToolPack } from "../toolPacks.ts";
+import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
 
 interface SimpleCapabilitiesViewProps {
@@ -68,7 +68,7 @@ export function SimpleCapabilitiesView({
 }: SimpleCapabilitiesViewProps) {
   const { t } = useTranslation();
   const activeIds = new Set(selection.selectedCapabilityIds);
-  const sections = resolveToolPackSections(managedCapabilities);
+  const sections = TOOL_PACK_SECTIONS;
   const documentPacks = sections.flatMap((section) => section.packs).filter((pack) => pack.documentSource);
 
   return (

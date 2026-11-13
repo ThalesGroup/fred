@@ -346,8 +346,11 @@ class ContextAwareTool(BaseTool):
         # Managed service authority travels exclusively through the trusted transport.
         # External managed tools receive no inferred Fred context.
         origin = (self.base_tool.metadata or {}).get(MCP_SERVER_ID_METADATA_KEY)
-        if (self.base_tool.metadata or {}).get("mcp_connection_id") or (
-            isinstance(origin, str) and origin.startswith("managed-mcp:")
+        if (
+            (self.base_tool.metadata or {}).get("mcp_trusted_service")
+            == "knowledge_flow_tabular"
+            or (self.base_tool.metadata or {}).get("mcp_connection_id")
+            or (isinstance(origin, str) and origin.startswith("managed-mcp:"))
         ):
             return kwargs
         context = self.context_provider()
