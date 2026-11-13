@@ -155,7 +155,7 @@
         },
         "rerank": {
           "title": "Réordonner les résultats",
-          "description": "Réordonne les passages visibles avec le modèle de Knowledge Flow avant leur lecture par l'agent. Activé par défaut."
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais ralentit légèrement la recherche. Activé par défaut."
         },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",
