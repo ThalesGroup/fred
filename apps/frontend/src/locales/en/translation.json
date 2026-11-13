@@ -153,6 +153,10 @@
           "title": "Default results",
           "description": "How many hits to retrieve when the model omits top_k."
         },
+        "rerank": {
+          "title": "Re-rank search results",
+          "description": "Re-order retrieved passages by relevance before the agent reads them. Enabled by default."
+        },
         "min_source_score_ratio": {
           "title": "Minimum source relevance ratio",
           "description": "A hit must score at least this fraction of the best hit in the same search to be shown as a cited source. Only affects the human-facing Sources panel, never what the model itself can read."
@@ -1754,7 +1758,7 @@
           "none": "None",
           "policyHint": "These choices apply to your organization. Choose from permitted models. The default model also serves the document tools (summary, extraction). Per-pod settings are unavailable in this catalog.",
           "revokeTitle": "Remove permission?",
-          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback, conversation title, embedding or vision model, that choice will also be cleared.",
+          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback, conversation title, embedding, vision or reranker model, that choice will also be cleared.",
           "withdrawn": "Withdrawn from source",
           "chat": "Chat confirmed",
           "notChat": "Not chat capable",
@@ -1767,11 +1771,14 @@
           "noModels": "No models in the catalog.",
           "embedding": "Embedding model",
           "vision": "Image description model",
+          "reranker": "Reranker model",
           "documents": "Documents",
           "embeddingHint": "Required to process documents. Every document of the organization is indexed with this model: the first indexing locks the choice.",
           "embeddingLockedHint": "Locked: the organization's documents are indexed with this model. Changing it requires reindexing every document.",
           "visionHint": "Optional. Describes the images of documents during processing, according to the processing profile. Without a choice, images are not described.",
-          "embeddingAptitude": "Embeddings"
+          "rerankerHint": "Optional. Reorders document search results. Without a choice, Knowledge Flow uses its local cross-encoder.",
+          "embeddingAptitude": "Embeddings",
+          "rerankAptitude": "Reranking"
         },
         "organizationCapabilities": {
           "col": {

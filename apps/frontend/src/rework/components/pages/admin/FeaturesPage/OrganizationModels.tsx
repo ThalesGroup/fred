@@ -33,24 +33,28 @@ import panelStyles from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel
 const sameOffer = (left: ModelOfferKey | null | undefined, right: ModelOfferKey) =>
   left?.source_id === right.source_id && left.upstream_model_id === right.upstream_model_id;
 
-type Choice = "default" | "fallback" | "title" | "embedding" | "vision";
+type Choice = "default" | "fallback" | "title" | "embedding" | "vision" | "reranker";
 
 /** The aptitude each choice needs; the Control Plane applies the same rule on save. */
 const fits = (choice: Choice, { metadata }: StoredModelOffer) =>
   choice === "embedding"
     ? metadata.embedding === true
-    : metadata.chat === true && (choice !== "vision" || metadata.vision !== false);
+    : choice === "reranker"
+      ? metadata.rerank === true
+      : metadata.chat === true && (choice !== "vision" || metadata.vision !== false);
 
 const aptitude = ({ advertised, metadata }: StoredModelOffer) =>
   !advertised
     ? "withdrawn"
     : metadata.embedding === true
       ? "embeddingAptitude"
-      : metadata.chat === true
-        ? "chat"
-        : metadata.chat === false
-          ? "notChat"
-          : "unknownChat";
+      : metadata.rerank === true
+        ? "rerankAptitude"
+        : metadata.chat === true
+          ? "chat"
+          : metadata.chat === false
+            ? "notChat"
+            : "unknownChat";
 
 export function OrganizationModels({
   organizationId,
@@ -94,6 +98,7 @@ export function OrganizationModels({
           title: policy.title ?? null,
           embedding: policy.embedding ?? null,
           vision: policy.vision ?? null,
+          reranker: policy.reranker ?? null,
           ...change,
         },
       }).unwrap();
@@ -115,6 +120,7 @@ export function OrganizationModels({
       title: sameOffer(policy.title, offer) ? null : (policy.title ?? null),
       embedding: sameOffer(policy.embedding, offer) ? null : (policy.embedding ?? null),
       vision: sameOffer(policy.vision, offer) ? null : (policy.vision ?? null),
+      reranker: sameOffer(policy.reranker, offer) ? null : (policy.reranker ?? null),
     });
   };
   // The indexed corpus keeps its embedding model, so it stays permitted.
@@ -215,6 +221,9 @@ export function OrganizationModels({
             )}
             {sameOffer(policy?.vision, offer) && (
               <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.organizationModels.vision")}</span>
+            )}
+            {sameOffer(policy?.reranker, offer) && (
+              <span className={styles.modelSpecChip}>{t("rework.admin.capabilities.organizationModels.reranker")}</span>
             )}
           </span>
         </div>
@@ -390,6 +399,8 @@ export function OrganizationModels({
           </p>
           {choiceSelect("vision")}
           <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.visionHint")}</p>
+          {choiceSelect("reranker")}
+          <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.rerankerHint")}</p>
         </div>
       </InlineDrawer>
       <ConfirmationDialog

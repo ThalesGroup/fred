@@ -38,6 +38,8 @@ pub struct OrganizationModels {
     /// Optional model describing document images, within its permitted chat offers.
     #[serde(default)]
     pub vision: Option<ModelOfferKey>,
+    #[serde(default)]
+    pub reranker: Option<ModelOfferKey>,
 }
 
 impl OrganizationModels {
@@ -51,6 +53,7 @@ impl OrganizationModels {
             fallback: self.fallback.clone(),
             embedding: self.embedding.clone(),
             vision: self.vision.clone(),
+            reranker: self.reranker.clone(),
         }
     }
 }

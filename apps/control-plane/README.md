@@ -285,6 +285,23 @@ platform:
         auth:
           kind: api_key
       visibility_scope: example-gateway-deployments
+    # A dedicated rerank source uses the same catalog and credential binding.
+    - source_id: example-reranker
+      revision: 1
+      enabled: false
+      inventory:
+        kind: declared
+        models:
+          - id: example-rerank-model
+      inference:
+        credential_binding: example-reranker-inference
+        api_root: https://rerank.example.invalid/v1
+        wire: rerank
+        route: standard
+        dialect: openai_compatible
+        auth:
+          kind: api_key
+      visibility_scope: example-rerank-deployments
 ```
 
 ### Initialize organization models once
@@ -308,6 +325,7 @@ platform:
         - {source_id: research-account, upstream_model_id: chat-v1}
       embedding: null   # optional: an attested embedding offer, also permitted
       vision: null      # optional: a permitted chat offer describing document images
+      reranker: null    # optional: a permitted rerank offer; null uses Knowledge Flow's local cross-encoder
     - organization: Example Support
       sources: [support-account]
       permitted: []

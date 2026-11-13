@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
 use fred_rust_sdk::inference::ModelConnection;
+use fred_rust_sdk::inference::ModelWire;
 pub(super) use fred_rust_sdk::inference::bounded_text;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -54,8 +55,8 @@ pub enum SourceInventory {
     },
 }
 
-/// Chat is guaranteed by this declaration, except for an offer the source attests in
-/// `embedding_models`; an absent fact stays unknown.
+/// Chat is guaranteed by this declaration, except for embedding offers or a
+/// source whose inference wire attests reranking.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DeclaredModel {
@@ -211,6 +212,15 @@ impl ModelSource {
             "model source requires separately approved HTTP(S) destinations without credentials, query or fragment"
         );
         self.inference.validate()?;
+        ensure!(
+            self.inference.wire != ModelWire::Rerank || self.embedding_models.is_empty(),
+            "a rerank source cannot attest embedding models"
+        );
+        ensure!(
+            self.inference.wire != ModelWire::Rerank
+                || matches!(&self.inventory, SourceInventory::Declared { .. }),
+            "a rerank source requires a declared model inventory"
+        );
         ensure!(
             bounded_text(&self.visibility_scope, 256),
             "invalid model source visibility"

@@ -1,6 +1,12 @@
 {
   "valid": [
     {
+      "name": "indexed-results reranker",
+      "connection": {"credential_binding": "reranker", "api_root": "https://api.cohere.com/v2", "wire": "rerank", "route": "standard", "dialect": "openai_compatible", "auth": {"kind": "api_key"}},
+      "model": "rerank-v4.0-pro",
+      "url": "https://api.cohere.com/v2/rerank"
+    },
+    {
       "name": "mistral",
       "connection": {"credential_binding": "mistral", "api_root": "https://api.mistral.ai/v1", "wire": "openai_chat", "route": "standard", "dialect": "mistral", "auth": {"kind": "api_key"}},
       "model": "mistral-small-latest",

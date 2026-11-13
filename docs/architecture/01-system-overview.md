@@ -103,14 +103,16 @@ Control Plane decides every remote model call Fred makes for an organization, fr
 one organization policy that the Owner administers in **Models**. For agents, it
 selects the chat model at admission of each turn, using the working space's
 organization policy, the assistant's recommendation and the user's choice. For the
-organization's documents, the policy names the embedding model, an optional
-image-description model, and the default chat model that document tools such as
+organization's documents, the policy names the embedding model, optional
+image-description and reranking models, and the default chat model that document tools such as
 summary and extraction use. Team and project execution do not introduce separate
 model policies, and no component chooses a remote model in its own configuration.
 
-Models packaged with a workload are a different boundary: the search reranker, OCR
-and audio transcription run inside Knowledge Flow, send no document to a provider,
-and are configured with the deployment, not by the organization policy.
+Models packaged with a workload are a different boundary: OCR and audio
+transcription run inside Knowledge Flow. Search reranking uses the organization
+policy's optional remote model, sending only visible candidate text to its
+approved endpoint. Without that choice, Knowledge Flow uses the cross-encoder
+packaged in its image.
 
 ```mermaid
 flowchart TB

@@ -2604,7 +2604,7 @@ export type ModelAuth = {
 };
 export type ModelDialect = "openai" | "openai_compatible" | "mistral";
 export type ModelRoute = "standard" | "azure_deployment";
-export type ModelWire = "openai_chat" | "openai_responses";
+export type ModelWire = "openai_chat" | "openai_responses" | "rerank";
 export type ModelConnection = {
   /** Separately approved canonical root; never derived from a discovery URL. */
   api_root: string;
@@ -3063,6 +3063,7 @@ export type OrganizationModelPolicy = {
   reasoning_enabled: ModelOfferKey[];
   /** Zero means no saved policy: no permissions or implicit selections. */
   revision: number;
+  reranker?: ModelOfferKey | null;
   title?: ModelOfferKey | null;
   updated_at?: string | null;
   updated_by?: string | null;
@@ -3076,6 +3077,7 @@ export type ReplaceModelPolicy = {
   permitted: ModelOfferKey[];
   /** Organization ceiling, independent of the user's per-question choice. */
   reasoning_enabled: ModelOfferKey[];
+  reranker: ModelOfferKey | null;
   title: ModelOfferKey | null;
   vision: ModelOfferKey | null;
 };
@@ -3102,6 +3104,7 @@ export type ModelMetadata = {
   max_output_tokens?: number | null;
   /** Source-reported aptitude; absent means unknown, not unsupported. */
   reasoning?: boolean | null;
+  rerank?: boolean | null;
   /** Source-reported image input; absent means unknown, not unsupported. */
   vision?: boolean | null;
 };

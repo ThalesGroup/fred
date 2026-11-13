@@ -717,10 +717,11 @@
       "type": "object"
     },
     "ModelWire": {
-      "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
+      "description": "Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`;\na rerank offer is called at `{api_root}/rerank`.",
       "enum": [
         "openai_chat",
-        "openai_responses"
+        "openai_responses",
+        "rerank"
       ],
       "type": "string"
     },
@@ -775,6 +776,16 @@
           },
           "maxItems": 4096,
           "type": "array"
+        },
+        "reranker": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "sources": {
           "items": {

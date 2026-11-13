@@ -36,6 +36,8 @@ pub struct OrganizationModelPolicy {
     pub embedding_locked: bool,
     /// Optional model describing document images, within its permitted chat offers.
     pub vision: Option<ModelOfferKey>,
+    /// Optional reranking model for document search. An absent choice uses the local cross-encoder.
+    pub reranker: Option<ModelOfferKey>,
     pub created_by: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_by: Option<String>,
@@ -71,6 +73,9 @@ pub struct ReplaceModelPolicy {
     #[serde(deserialize_with = "Option::deserialize")]
     #[schema(required = true)]
     pub vision: Option<ModelOfferKey>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    #[schema(required = true)]
+    pub reranker: Option<ModelOfferKey>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -87,6 +92,8 @@ struct PolicyRow {
     embedding_locked: bool,
     vision_source_id: Option<String>,
     vision_upstream_model_id: Option<String>,
+    reranker_source_id: Option<String>,
+    reranker_upstream_model_id: Option<String>,
     created_by: String,
     created_at: DateTime<Utc>,
     updated_by: String,
@@ -111,7 +118,8 @@ pub(super) async fn read(
         "select revision, default_source_id, default_upstream_model_id,
              fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id,
              embedding_source_id, embedding_upstream_model_id, embedding_locked_at is not null as embedding_locked,
-             vision_source_id, vision_upstream_model_id, created_by, created_at, updated_by, updated_at
+             vision_source_id, vision_upstream_model_id, reranker_source_id, reranker_upstream_model_id,
+             created_by, created_at, updated_by, updated_at
          from organization_model_policy where organization_id = $1",
     ).bind(organization_id).fetch_optional(&mut *conn).await?;
     let permissions: Vec<(String, String, bool)> = sqlx::query_as(
@@ -146,6 +154,7 @@ pub(super) async fn read(
             embedding: key(row.embedding_source_id, row.embedding_upstream_model_id),
             embedding_locked: row.embedding_locked,
             vision: key(row.vision_source_id, row.vision_upstream_model_id),
+            reranker: key(row.reranker_source_id, row.reranker_upstream_model_id),
             created_by: Some(row.created_by),
             created_at: Some(row.created_at),
             updated_by: Some(row.updated_by),
@@ -162,6 +171,7 @@ pub(super) async fn read(
             embedding: None,
             embedding_locked: false,
             vision: None,
+            reranker: None,
             created_by: None,
             created_at: None,
             updated_by: None,
@@ -208,19 +218,20 @@ impl ReplaceModelPolicy {
             .flat_map(|(_, choice)| choice)
             .any(|choice| !permitted.contains(choice))
         {
-            return Err(AppError::Unprocessable("default, fallback, title, embedding and vision must be permitted; clear or replace revoked choices explicitly".into()));
+            return Err(AppError::Unprocessable("default, fallback, title, embedding, vision and reranker must be permitted; clear or replace revoked choices explicitly".into()));
         }
         Ok(permitted)
     }
 
     /// Every single-model choice with the aptitude its use requires.
-    fn choices(&self) -> [(Use, Option<&ModelOfferKey>); 5] {
+    fn choices(&self) -> [(Use, Option<&ModelOfferKey>); 6] {
         [
             (Use::Chat, self.default.as_ref()),
             (Use::Chat, self.fallback.as_ref()),
             (Use::Chat, self.title.as_ref()),
             (Use::Embedding, self.embedding.as_ref()),
             (Use::Vision, self.vision.as_ref()),
+            (Use::Rerank, self.reranker.as_ref()),
         ]
     }
 }
@@ -231,6 +242,7 @@ pub(super) enum Use {
     Chat,
     Embedding,
     Vision,
+    Rerank,
 }
 
 impl Use {
@@ -240,11 +252,13 @@ impl Use {
         chat: Option<bool>,
         embedding: Option<bool>,
         vision: Option<bool>,
+        rerank: Option<bool>,
     ) -> bool {
         match self {
             Self::Chat => chat == Some(true),
             Self::Embedding => embedding == Some(true),
             Self::Vision => chat == Some(true) && vision != Some(false),
+            Self::Rerank => rerank == Some(true),
         }
     }
 }
@@ -273,7 +287,7 @@ pub(super) fn selectable(
 }
 
 pub(super) fn usable(metadata: &super::discovery::ModelMetadata) -> bool {
-    metadata.chat == Some(true) || metadata.embedding == Some(true)
+    metadata.chat == Some(true) || metadata.embedding == Some(true) || metadata.rerank == Some(true)
 }
 
 /// Shared source boundary for policy writes, recommendations and refresh admission.
@@ -358,7 +372,7 @@ pub(super) async fn require_selectable(
         return Err(AppError::problem(
             StatusCode::CONFLICT,
             "model_offer_not_selectable",
-            "New permissions and selections require a present chat or embedding offer successfully observed at the current enabled source revision.",
+            "New permissions and selections require a present chat, embedding or rerank offer successfully observed at the current enabled source revision.",
         ));
     }
     for (use_, key) in uses {
@@ -370,12 +384,13 @@ pub(super) async fn require_selectable(
                 row.metadata.chat,
                 row.metadata.embedding,
                 row.metadata.vision,
+                row.metadata.rerank,
             )
         }) {
             return Err(AppError::problem(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "model_offer_unsuited",
-                "Chat choices require a chat offer, the embedding choice an attested embedding offer and the vision choice a chat offer not reported without image input.",
+                "Each choice requires an offer with the corresponding chat, embedding, vision or rerank aptitude.",
             ));
         }
     }
@@ -419,6 +434,7 @@ pub(super) async fn replace(
         current.title.as_ref(),
         current.embedding.as_ref(),
         current.vision.as_ref(),
+        current.reranker.as_ref(),
     ];
     let mut uses = Vec::new();
     for ((use_, choice), old) in request.choices().into_iter().zip(current_choices) {
@@ -460,8 +476,9 @@ pub(super) async fn replace(
              (organization_id, revision, default_source_id, default_upstream_model_id,
               fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id,
               embedding_source_id, embedding_upstream_model_id, vision_source_id, vision_upstream_model_id,
+              reranker_source_id, reranker_upstream_model_id,
               created_by, updated_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
          on conflict (organization_id) do update set revision = excluded.revision,
              default_source_id = excluded.default_source_id,
              default_upstream_model_id = excluded.default_upstream_model_id,
@@ -473,6 +490,8 @@ pub(super) async fn replace(
              embedding_upstream_model_id = excluded.embedding_upstream_model_id,
              vision_source_id = excluded.vision_source_id,
              vision_upstream_model_id = excluded.vision_upstream_model_id,
+             reranker_source_id = excluded.reranker_source_id,
+             reranker_upstream_model_id = excluded.reranker_upstream_model_id,
              updated_by = excluded.updated_by, updated_at = now()",
     )
     .bind(organization_id)
@@ -487,6 +506,8 @@ pub(super) async fn replace(
     .bind(request.embedding.as_ref().map(|k| &k.upstream_model_id))
     .bind(request.vision.as_ref().map(|k| &k.source_id))
     .bind(request.vision.as_ref().map(|k| &k.upstream_model_id))
+    .bind(request.reranker.as_ref().map(|k| &k.source_id))
+    .bind(request.reranker.as_ref().map(|k| &k.upstream_model_id))
     .bind(uid)
     .execute(&mut *conn)
     .await?;

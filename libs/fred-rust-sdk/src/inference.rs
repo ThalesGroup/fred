@@ -54,13 +54,14 @@ pub struct InferenceSelection {
     pub policy_revision: i64,
 }
 
-/// Generation protocol only. An attested embedding offer is always called at
-/// `{api_root}/embeddings`, the one embedding endpoint of these APIs.
+/// Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`;
+/// a rerank offer is called at `{api_root}/rerank`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelWire {
     OpenaiChat,
     OpenaiResponses,
+    Rerank,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
@@ -172,6 +173,7 @@ impl ModelConnection {
                 && (!entra || self.api_root.starts_with("https://"))
                 && (self.route == ModelRoute::Standard
                     || (self.wire == ModelWire::OpenaiChat && self.api_version.is_some()))
+                && (self.wire != ModelWire::Rerank || self.api_version.is_none())
                 && self.api_version.as_deref().is_none_or(|version| {
                     !version.is_empty()
                         && version.len() <= 64

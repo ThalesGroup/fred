@@ -94,7 +94,7 @@ class ModelConnection(ResolverFact):
 
     credential_binding: str
     api_root: str
-    wire: Literal["openai_chat", "openai_responses"]
+    wire: Literal["openai_chat", "openai_responses", "rerank"]
     route: Literal["standard", "azure_deployment"]
     api_version: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
     dialect: Literal["openai", "openai_compatible", "mistral"]
@@ -113,6 +113,7 @@ class ModelConnection(ResolverFact):
                 self.route == "azure_deployment"
                 and (self.wire != "openai_chat" or self.api_version is None)
             )
+            or (self.wire == "rerank" and self.api_version is not None)
             or header in _RESERVED_HEADERS
             or header.startswith("content-")
             or any(
@@ -136,9 +137,15 @@ class ModelConnection(ResolverFact):
     def request_url(self, model: str) -> str:
         """The only generation URL this connection may reach for one model.
 
-        `wire` selects the generation protocol only. An embedding offer is always
-        called at `{base_url}/embeddings`, the one embedding endpoint of these APIs."""
-        leaf = "responses" if self.wire == "openai_responses" else "chat/completions"
+        `wire` selects the protocol. Embedding offers use `{base_url}/embeddings`;
+        rerank offers use `{base_url}/rerank`."""
+        leaf = (
+            "rerank"
+            if self.wire == "rerank"
+            else "responses"
+            if self.wire == "openai_responses"
+            else "chat/completions"
+        )
         query = f"?api-version={self.api_version}" if self.api_version else ""
         return f"{self.base_url(model)}/{leaf}{query}"
 
@@ -229,6 +236,7 @@ class ModelMetadata(ResolverFact):
     chat_provenance: Literal["source_guarantee", "api_metadata"] | None
     reasoning: bool | None = None
     embedding: bool | None = None
+    rerank: bool | None = None
     vision: bool | None = None
     display_name: str | None
     context_window_tokens: int | None
@@ -259,6 +267,7 @@ class OrganizationModelPolicy(ResolverFact):
     embedding: ModelOfferKey | None = None
     embedding_locked: bool = False
     vision: ModelOfferKey | None = None
+    reranker: ModelOfferKey | None = None
     created_by: str | None
     created_at: datetime | None
     updated_by: str | None
@@ -307,6 +316,7 @@ class RuntimeModels(ResolverFact):
                 self.policy.fallback,
                 self.policy.embedding,
                 self.policy.vision,
+                self.policy.reranker,
             )
             if k
         )

@@ -259,7 +259,7 @@ async fn a_declared_list_follows_the_published_path_without_discovery_or_permiss
     let offer = |id: &str| json!({"source_id":"d","upstream_model_id":id});
     let policy = |revision, permitted: Value, reasoning: Value| {
         json!({"expected_revision":revision,"permitted":permitted,"reasoning_enabled":reasoning,
-            "default":null,"fallback":null,"title":null,"embedding":null,"vision":null})
+            "default":null,"fallback":null,"title":null,"embedding":null,"vision":null,"reranker":null})
     };
 
     // Declared is not yet observed: nothing is published or selectable before a refresh.
@@ -532,7 +532,7 @@ async fn sources_isolate_inventory_refresh_policy_recommendation_and_admission()
     assert_eq!(body["code"], "model_source_not_assigned");
     assert_eq!(calls, provider.response.lock().await.2);
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null,"title":null,"embedding":null,"vision":null});
+    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null,"title":null,"embedding":null,"vision":null,"reranker":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, policy)
             .await
@@ -644,7 +644,7 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
     let identity = support::IdentityServer::start().await;
     let app = model_app(&e, &identity, platform.clone()).await;
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null,"title":null,"embedding":null,"vision":null});
+    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null,"title":null,"embedding":null,"vision":null,"reranker":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, empty)
             .await
@@ -1498,7 +1498,7 @@ async fn title_model_policy_uses_organization_offers_and_survives_reload() {
         .unwrap();
     assert_eq!(offer["selectable"], true);
     let path = format!("/organizations/{}/model-policy", org.id);
-    let mut body = json!({"expected_revision":1,"permitted":[key("a")],"reasoning_enabled":[],"default":key("a"),"fallback":null,"title":key("a"),"embedding":null,"vision":null});
+    let mut body = json!({"expected_revision":1,"permitted":[key("a")],"reasoning_enabled":[],"default":key("a"),"fallback":null,"title":key("a"),"embedding":null,"vision":null,"reranker":null});
     let (status, saved) = request(&app, &identity, Some("alice"), "PUT", &path, body.clone()).await;
     assert_eq!(status, 200, "{saved}");
     assert_eq!(saved["title"], key("a"));
@@ -1607,7 +1607,7 @@ async fn document_models_need_their_aptitude_and_the_indexed_corpus_keeps_its_em
     let body = |revision: i64, embedding: Value, vision: Value| {
         json!({"expected_revision":revision,"permitted":[offer("chat"),offer("see"),offer("embed")],
             "reasoning_enabled":[],"default":offer("chat"),"fallback":null,"title":null,
-            "embedding":embedding,"vision":vision})
+            "embedding":embedding,"vision":vision,"reranker":null})
     };
     let put = |payload: Value| {
         let (app, identity, path) = (&app, &identity, &path);
