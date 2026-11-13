@@ -804,7 +804,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("preserves API model counters on live tool calls without adding billing usage", async () => {
+  it("ignores retired tool attribution while retaining conversation usage", async () => {
     const usage = { input_tokens: 20672, output_tokens: 679, model_call_id: "response-1", tool_call_count: 2 };
     const events = [
       { kind: "tool_call", call_id: "c1", tool_name: "read_query", model_call_usage: usage },
@@ -813,6 +813,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         kind: "final",
         content: "done",
         model_call_usage: { input_tokens: 103991, output_tokens: 2956, tool_call_count: 0 },
+        token_usage: { input_tokens: 100, output_tokens: 7, total_tokens: 107 },
+        context_tokens: 100,
       },
     ];
     const fetchSpy = vi
@@ -825,14 +827,12 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       await latest.send("original", "session-1");
     });
     const call = latest.messages.find((message) => message.channel === "tool_call");
-    expect(call?.metadata?.model_call_usage).toEqual(usage);
+    expect(call?.metadata?.model_call_usage).toBeUndefined();
     expect(call?.metadata?.token_usage).toBeUndefined();
     const final = latest.messages.find((message) => message.role === "assistant" && message.channel === "final");
-    expect(final?.metadata?.model_call_usage).toEqual({
-      input_tokens: 103991,
-      output_tokens: 2956,
-      tool_call_count: 0,
-    });
+    expect(final?.metadata?.model_call_usage).toBeUndefined();
+    expect(final?.metadata?.token_usage?.total_tokens).toBe(107);
+    expect(final?.metadata?.context_tokens).toBe(100);
     fetchSpy.mockRestore();
   });
 

@@ -97,7 +97,6 @@ from fred_runtime.runtime_support.authority import RunStopError
 # - this file should decide when Fred invokes, streams, and emits runtime events
 # - the adapter file should deal with LangChain messages, stream payload shapes,
 #   and runnable config translation
-from fred_runtime.runtime_support.model_metadata import reported_model_call_usage
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
     complete_cleanup,
@@ -543,7 +542,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         collected_sources: tuple[VectorSearchHit, ...] = ()
         collected_ui_parts: tuple[UiPart, ...] = ()
         last_model_name: str | None = None
-        last_model_call_usage = None
         # Summed across every model call in the turn (tool-deciding calls plus
         # the final answer), not the last call's usage alone — a ReAct turn
         # commonly makes several calls, and each provider's usage_metadata is
@@ -1057,8 +1055,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
                         # Bill the requesting model response once, even when it
-                        # requests several tools. Scoped attribution below is
-                        # separate and never added to the running total.
+                        # requests several tools.
                         tool_model_name, tool_call_token_usage, _ = (
                             _runtime_metadata_from_message(message)
                         )
@@ -1068,12 +1065,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             total_token_usage, tool_call_token_usage
                         )
                         observe_model_call(tool_call_token_usage)
-                        model_call_usage = reported_model_call_usage(
-                            message,
-                            model=tool_model_name,
-                            tool_call_count=len(message.tool_calls),
-                        )
-                        last_model_call_usage = None
                         for tool_call in message.tool_calls:
                             name = str(tool_call.get("name") or "")
                             call_id = str(tool_call.get("id") or "")
@@ -1091,7 +1082,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 sequence=sequence,
                                 tool_name=name,
                                 call_id=call_id,
-                                model_call_usage=model_call_usage,
                                 arguments=cast(
                                     dict[str, object], tool_call.get("args") or {}
                                 ),
@@ -1109,9 +1099,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             total_token_usage, token_usage
                         )
                         observe_model_call(token_usage)
-                        last_model_call_usage = reported_model_call_usage(
-                            message, model=model_name, tool_call_count=0
-                        )
                         if finish_reason is not None:
                             last_finish_reason = finish_reason
                         last_assistant_message = _from_langchain_message_adapter(
@@ -1162,9 +1149,6 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     ui_parts=collected_ui_parts,
                     model_name=last_model_name,
                     token_usage=total_token_usage,
-                    model_call_usage=last_model_call_usage
-                    if last_assistant_message is not None
-                    else None,
                     context_tokens=context_tokens,
                     finish_reason=last_finish_reason,
                 )

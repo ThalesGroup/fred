@@ -158,10 +158,7 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
     assert len(finals) == 1
     # The bug: this used to equal just {"input_tokens": 30, ...} (the final
     # call alone), silently dropping the tool-deciding call's 120 tokens.
-    assert finals[0].model_call_usage is not None
-    assert finals[0].model_call_usage.input_tokens == 30
-    assert finals[0].model_call_usage.output_tokens == 10
-    assert finals[0].model_call_usage.tool_call_count == 0
+    assert "model_call_usage" not in finals[0].model_dump()
     assert finals[0].token_usage == {
         "input_tokens": 130,
         "output_tokens": 30,
@@ -1004,9 +1001,7 @@ async def test_a_turn_cut_short_by_a_tool_error_still_reports_its_context() -> N
 
 
 @pytest.mark.asyncio
-async def test_parallel_tools_share_recorded_model_usage_without_multiplying_billing() -> (
-    None
-):
+async def test_parallel_tools_preserve_turn_billing_without_tool_attribution() -> None:
     message = AIMessage(
         id="response-1",
         content="",
@@ -1054,21 +1049,14 @@ async def test_parallel_tools_share_recorded_model_usage_without_multiplying_bil
     collected = await _run_stream(events)
     calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
     assert len(calls) == 2
-    assert calls[0].model_call_usage == calls[1].model_call_usage
-    usage = calls[0].model_call_usage
-    assert usage is not None
-    assert usage.input_tokens == 20672
-    assert usage.output_tokens == 679
-    assert usage.tool_call_count == 2
-    assert usage.model_call_id == "response-1"
-    assert usage.model == "mistral-small"
+    assert all("model_call_usage" not in call.model_dump() for call in calls)
     final = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
     assert final.token_usage is not None
     assert final.token_usage["total_tokens"] == 21471
 
 
 @pytest.mark.asyncio
-async def test_parallel_scope_survives_missing_requesting_response_counters() -> None:
+async def test_parallel_tools_with_missing_counters_preserve_final_usage() -> None:
     request = AIMessage(
         content="",
         tool_calls=[
@@ -1098,11 +1086,8 @@ async def test_parallel_scope_survives_missing_requesting_response_counters() ->
     )
     calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
     assert len(calls) == 2
-    for call in calls:
-        assert call.model_call_usage is not None
-        assert call.model_call_usage.tool_call_count == 2
-        assert call.model_call_usage.input_tokens is None
-        assert call.model_call_usage.output_tokens is None
+    assert all("model_call_usage" not in call.model_dump() for call in calls)
     final_event = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
-    assert final_event.model_call_usage is not None
-    assert final_event.model_call_usage.output_tokens == 7
+    assert final_event.context_tokens == 100
+    assert final_event.token_usage is not None
+    assert final_event.token_usage["total_tokens"] == 107

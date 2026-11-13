@@ -3723,7 +3723,6 @@ async def _write_turn_history(
         ChatMessage,
         ChatMetadata,
         ChatTokenUsage,
-        ModelCallTokenUsage,
         Role,
         TextPart,
         make_assistant_final,
@@ -3882,7 +3881,6 @@ async def _write_turn_history(
     final_sources: list[VectorSearchHit] = []
     final_ui_parts: list[dict[str, Any]] = []
     final_token_usage: ChatTokenUsage | None = None
-    final_model_call_usage: ModelCallTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
@@ -3930,7 +3928,6 @@ async def _write_turn_history(
                     call_id=payload["call_id"],
                     name=payload["tool_name"],
                     args=payload.get("arguments", {}),
-                    model_call_usage=payload.get("model_call_usage"),
                 )
             )
 
@@ -4089,12 +4086,6 @@ async def _write_turn_history(
             )
 
         elif kind == "final":
-            raw_model_call_usage = payload.get("model_call_usage")
-            final_model_call_usage = (
-                ModelCallTokenUsage.model_validate(raw_model_call_usage)
-                if raw_model_call_usage is not None
-                else None
-            )
             final_content = payload.get("content", "")
             raw_sources = payload.get("sources") or []
             final_sources = [
@@ -4136,7 +4127,13 @@ async def _write_turn_history(
     # 3. Terminal assistant message (from FinalRuntimeEvent). A turn whose only
     # output is a card (no text, no model name) still has to leave a row, or the
     # card it produced is lost exactly as before ui_parts were persisted.
-    if final_content or final_model or final_ui_parts or final_model_call_usage:
+    if (
+        final_content
+        or final_model
+        or final_ui_parts
+        or final_token_usage is not None
+        or final_context_tokens is not None
+    ):
         messages.append(
             make_assistant_final(
                 session_id,
@@ -4145,7 +4142,6 @@ async def _write_turn_history(
                 text=final_content,
                 model=final_model,
                 usage=final_token_usage,
-                model_call_usage=final_model_call_usage,
                 sources=final_sources if final_sources else None,
                 ui_parts=final_ui_parts,
                 finish_reason=final_finish_reason,

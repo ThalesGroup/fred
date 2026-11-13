@@ -31,11 +31,7 @@ Example:
 
 from __future__ import annotations
 
-from fred_core.history.history_schema import (
-    FinishReason,
-    ModelCallTokenUsage,
-    coerce_finish_reason,
-)
+from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from langchain_core.messages import AIMessageChunk, BaseMessage
 
 
@@ -123,96 +119,6 @@ def _usage_candidates(message: BaseMessage) -> tuple[object, ...]:
         response.get("usage") if isinstance(response, dict) else None,
         additional.get("token_usage") if isinstance(additional, dict) else None,
         additional.get("usage") if isinstance(additional, dict) else None,
-    )
-
-
-def reported_model_call_usage(
-    message: BaseMessage, *, model: str | None, tool_call_count: int
-) -> ModelCallTokenUsage | None:
-    """Retain only counters actually reported by one completed API response.
-
-    Unlike billing normalization, this must not turn absent/invalid fields into
-    zero or infer a counter from a total. One response can request several tools.
-    """
-
-    def reported_count(usage: dict[str, object], keys: tuple[str, ...]) -> int | None:
-        for key in keys:
-            value = usage.get(key)
-            if value is None:
-                continue
-            if type(value) is int and value >= 0:
-                return value
-            if isinstance(value, str) and value.isascii() and value.isdecimal():
-                return int(value)
-            return None
-        return None
-
-    # Prefer raw provider payloads: adapters can synthesize zero for an absent
-    # field in UsageMetadata. A normalized-only zero has unknown provenance.
-    candidates = _usage_candidates(message)
-    for index, raw in enumerate((*candidates[1:], candidates[0])):
-        if not isinstance(raw, dict) or not raw:
-            continue
-        nested_usage = raw.get("usage")
-        usage = nested_usage if isinstance(nested_usage, dict) else raw
-        raw_provider = index < len(candidates) - 1
-        input_tokens = reported_count(
-            usage,
-            (
-                "input_tokens",
-                "prompt_tokens",
-                "prompt_tokens_total",
-                "input_token_count",
-                "prompt_eval_count",
-            ),
-        )
-        output_tokens = reported_count(
-            usage,
-            (
-                "output_tokens",
-                "completion_tokens",
-                "completion_tokens_total",
-                "output_token_count",
-                "eval_count",
-            ),
-        )
-        if not raw_provider:
-            input_tokens = input_tokens or None
-            output_tokens = output_tokens or None
-        if input_tokens is not None or output_tokens is not None:
-            return ModelCallTokenUsage(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                model=model,
-                model_call_id=message.id,
-                tool_call_count=tool_call_count,
-            )
-        if raw_provider and any(
-            key in usage
-            for key in (
-                "input_tokens",
-                "prompt_tokens",
-                "prompt_tokens_total",
-                "input_token_count",
-                "prompt_eval_count",
-                "output_tokens",
-                "completion_tokens",
-                "completion_tokens_total",
-                "output_token_count",
-                "eval_count",
-                "total_tokens",
-                "token_count",
-            )
-        ):
-            break
-    # Batch scope is known even when the provider omitted counters. Retaining
-    # it prevents a later response shared by parallel tools looking exclusive.
-    return (
-        ModelCallTokenUsage(
-            model=model, model_call_id=message.id, tool_call_count=tool_call_count
-        )
-        if tool_call_count
-        else None
     )
 
 

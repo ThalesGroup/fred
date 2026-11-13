@@ -44,11 +44,7 @@ from typing import (
     TypeVar,
 )
 
-from fred_core.history.history_schema import (
-    FinishReason,
-    ModelCallTokenUsage,
-    coerce_finish_reason,
-)
+from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
@@ -283,8 +279,6 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # Explicitly scoped attribution, never an additional tool billing total.
-    model_call_usage: ModelCallTokenUsage | None = None
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -496,8 +490,6 @@ class FinalRuntimeEvent(RuntimeEventBase):
     # billed: `new_input(T) = context_tokens(T) - (context_tokens(T-1) +
     # output_tokens(T-1))`. None when no model call reported an input count.
     context_tokens: int | None = None
-    # Last model response only; distinct from the billed turn sum above.
-    model_call_usage: ModelCallTokenUsage | None = None
     finish_reason: FinishReason | None = None
 
     # Same tolerant coercion as `ChatMetadata.finish_reason` (fred-core): a raw

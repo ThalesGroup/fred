@@ -231,15 +231,10 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     # trace rendered as if the tool had consumed it.
     assert messages[1].metadata.token_usage is None
     restored = ChatMessage.model_validate_json(messages[1].model_dump_json())
-    assert restored.metadata.model_call_usage is not None
-    assert restored.metadata.model_call_usage.input_tokens == 20672
-    assert restored.metadata.model_call_usage.output_tokens == 679
-    assert restored.metadata.model_call_usage.model_call_id == "response-1"
-    assert restored.metadata.model_call_usage.tool_call_count == 2
-
-    assert messages[3].metadata.model_call_usage is not None
-    assert messages[3].metadata.model_call_usage.input_tokens == 103991
-    assert messages[3].metadata.model_call_usage.output_tokens == 2956
+    assert "model_call_usage" not in restored.metadata.model_dump()
+    assert "model_call_usage" not in messages[3].metadata.model_dump()
+    assert messages[3].metadata.token_usage is not None
+    assert messages[3].metadata.token_usage.total_tokens == 15
     # Row 2 — tool result record
     assert messages[2].role == Role.tool
     assert messages[2].channel == Channel.tool_result
@@ -1649,7 +1644,7 @@ def test_history_endpoint_reports_consumed_pause_without_repair(
         asyncio.run(engine.dispose())
 
 
-def test_write_turn_history_preserves_usage_only_final_response() -> None:
+def test_write_turn_history_ignores_retired_attribution_on_empty_final() -> None:
     store = AsyncMock()
     store.next_rank = AsyncMock(return_value=0)
     payloads = [
@@ -1673,10 +1668,62 @@ def test_write_turn_history_preserves_usage_only_final_response() -> None:
         )
     )
     messages = store.save.call_args.kwargs["messages"]
+    assert len(messages) == 1
+    assert messages[0].role == Role.user
+
+
+@pytest.mark.parametrize(
+    "context_tokens,usage",
+    [(100, {"input_tokens": 100, "output_tokens": 7, "total_tokens": 107}), (0, None)],
+)
+def test_write_turn_history_preserves_empty_final_accounting(
+    context_tokens: int, usage: dict[str, int] | None
+) -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=[
+                {
+                    "kind": "final",
+                    "content": "",
+                    "token_usage": usage,
+                    "context_tokens": context_tokens,
+                }
+            ],
+            history_store=store,
+        )
+    )
+    messages = store.save.call_args.kwargs["messages"]
     final = next(
         m for m in messages if m.role == Role.assistant and m.channel == Channel.final
     )
     assert final.parts == []
-    assert final.metadata.model_call_usage is not None
-    assert final.metadata.model_call_usage.input_tokens == 100
-    assert final.metadata.model_call_usage.output_tokens == 7
+    assert final.metadata.context_tokens == context_tokens
+    assert "model_call_usage" not in final.metadata.model_dump()
+    if usage is not None:
+        assert final.metadata.token_usage is not None
+        assert final.metadata.token_usage.total_tokens == usage["total_tokens"]
+
+
+def test_historical_tool_attribution_remains_readable_as_extra_metadata() -> None:
+    message = ChatMessage.model_validate(
+        {
+            "session_id": "s1",
+            "exchange_id": "e1",
+            "rank": 1,
+            "timestamp": "2026-11-12T12:00:00Z",
+            "role": "assistant",
+            "channel": "tool_call",
+            "parts": [
+                {"type": "tool_call", "call_id": "c1", "name": "read_query", "args": {}}
+            ],
+            "metadata": {"model_call_usage": {"input_tokens": 100}},
+        }
+    )
+    restored = ChatMessage.model_validate_json(message.model_dump_json())
+    assert restored.parts[0].type == "tool_call"
+    assert restored.metadata.model_dump()["model_call_usage"] == {"input_tokens": 100}

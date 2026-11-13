@@ -374,20 +374,6 @@ class ChatTokenUsage(BaseModel):
     cache_creation_tokens: int = 0
 
 
-class ModelCallTokenUsage(BaseModel):
-    """Reported API usage of one model response, separate from turn billing.
-
-    This is attribution, not tool-only cost or an additional billable total.
-    Missing counters stay None; an explicit provider zero stays zero.
-    """
-
-    input_tokens: Optional[int] = Field(default=None, ge=0, strict=True)
-    output_tokens: Optional[int] = Field(default=None, ge=0, strict=True)
-    model: Optional[str] = None
-    model_call_id: Optional[str] = None
-    tool_call_count: int = Field(default=0, ge=0, strict=True)
-
-
 # Same bound as fred-sdk's `MAX_TURN_PROMPTS`, which this package cannot import.
 MAX_COMMAND_PROMPTS = 16
 
@@ -448,7 +434,6 @@ class ChatMetadata(BaseModel):
 
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
-    model_call_usage: Optional[ModelCallTokenUsage] = None
     # Assistant-final rows: size of the context at the end of the turn, i.e.
     # the input_tokens of the turn's last model call (#2403). Persisted so a
     # reloaded conversation can recompute each turn's MARGINAL cost the same
@@ -549,7 +534,6 @@ def make_assistant_final(
     ui_parts: Optional[List[Dict[str, Any]]] = None,
     finish_reason: Optional[str] = None,
     context_tokens: Optional[int] = None,
-    model_call_usage: Optional[ModelCallTokenUsage] = None,
 ) -> ChatMessage:
     """
     Build the terminal assistant message for a turn.
@@ -570,7 +554,6 @@ def make_assistant_final(
             model=model,
             token_usage=usage,
             context_tokens=context_tokens,
-            model_call_usage=model_call_usage,
             finish_reason=coerce_finish_reason(finish_reason),
             sources=sources or [],
             ui_parts=ui_parts or [],
@@ -585,16 +568,13 @@ def make_tool_call(
     call_id: str,
     name: str,
     args: Dict[str, Any],
-    *,
-    model_call_usage: Optional[ModelCallTokenUsage] = None,
 ) -> ChatMessage:
     """
     Build a tool-call record message.
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - optional model_call_usage attributes the requesting API response (#3527),
-      separately from billable token_usage (#2403).
+    - model token usage is accounted for by the turn, not the tool call.
     """
     return ChatMessage(
         session_id=session_id,
@@ -604,7 +584,7 @@ def make_tool_call(
         role=Role.assistant,
         channel=Channel.tool_call,
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
-        metadata=ChatMetadata(model_call_usage=model_call_usage),
+        metadata=ChatMetadata(),
     )
 
 
