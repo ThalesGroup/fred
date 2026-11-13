@@ -15,9 +15,9 @@ forms are refused explicitly, before any remote call.
 
 from __future__ import annotations
 
-import os
-import math
 import json
+import math
+import os
 from threading import Lock
 
 import httpx
