@@ -81,6 +81,7 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        rerank: bool = False,
         document_scope=None,
         library_tag_ids=None,
         document_uids=None,

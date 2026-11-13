@@ -122,6 +122,7 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        rerank: bool = False,
         document_scope=None,
         library_tag_ids=None,
         document_uids=None,
@@ -133,6 +134,7 @@ class _FakePort(DocumentSearchPort):
             {
                 "query": query,
                 "top_k": top_k,
+                "rerank": rerank,
                 "document_scope": document_scope,
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
@@ -330,6 +332,8 @@ def test_manifest_puts_sources_first_and_gates_corpus_fields() -> None:
     library_ui = fields["library_tag_ids"].ui
     assert library_ui is not None and library_ui.visible_when == "bind_libraries"
     assert not {"show_attach_files_control", "search_attachments_only"} & set(keys)
+    assert fields["rerank"].default is True
+    assert fields["rerank"].ui is not None and fields["rerank"].ui.advanced is True
 
 
 def _widgets(controls) -> list[str]:
@@ -573,6 +577,25 @@ async def test_search_policy_enforced_only_when_picker_hidden() -> None:
     )
     await _invoke_tool(cap, ctx)
     assert port.calls[0]["search_policy"] == "strict"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "configured, expected", [({}, True), ({"rerank": False}, False)]
+)
+async def test_reranking_setting_is_passed_to_document_search(
+    configured, expected
+) -> None:
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config=configured,
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["rerank"] is expected
 
 
 @pytest.mark.asyncio
@@ -1055,7 +1078,7 @@ async def test_tree_tool_clamps_render_budget_locally(
 
 def test_tree_manifest_and_model_schema_expose_only_navigation() -> None:
     cap = DocumentAccessCapability()
-    assert cap.manifest.version == "0.4.0"
+    assert cap.manifest.version == "0.4.1"
     ctx = build_capability_context(
         cap, identity=_identity(), services=_full_services(), config={}
     )

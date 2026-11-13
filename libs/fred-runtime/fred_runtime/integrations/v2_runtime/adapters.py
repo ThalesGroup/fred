@@ -1401,6 +1401,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        rerank: bool = False,
         document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
@@ -1436,6 +1437,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
                 question=query,
                 document_context=document_context,
                 top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
+                rerank=rerank,
                 search_policy=search_policy or get_search_policy(runtime_context),
             )
         except Exception as exc:
