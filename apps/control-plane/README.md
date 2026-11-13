@@ -1631,3 +1631,24 @@ make -C apps/control-plane test-integration CARGO_TEST_OPTS=managed_mcp
 (cd libs/fred-runtime && .venv/bin/pytest tests/test_managed_mcp.py tests/test_delegated_admission.py tests/test_mcp_document_scope.py tests/test_react_prompting.py)
 (cd apps/frontend && npx --no-install vitest run src/rework/components/pages/admin/McpConnectionsPage src/rework/components/pages/TeamAgentsPage/AgentFormModal src/rework/features/pipeline/weaver/resourceSupport.test.ts)
 ```
+
+### Personal profile photo (reception pending)
+
+`GET`, `PUT` (one multipart `file`) and `DELETE` share
+`/control-plane/v1/users/me/avatar`. They require an admitted human account and
+apply only to its verified subject, including a platform admin with no spaces.
+GET returns a PNG or 204 when absent; responses are private and not HTTP-cached.
+The browser uses its authenticated client, never a bearer in an image URL.
+
+Migration `0025_user_avatar.sql` records one active photo and at most one pending
+upload per subject. S3 retains the normalized 192 x 192 PNG in the existing content
+namespace; no organization document or quota is created. Inputs are JPEG, PNG or
+WebP, at most 5 MiB and 4096 x 4096 pixels. Decoding is bounded and off the async
+executor. Replacement/removal retire old objects; the existing cleanup worker
+handles expiry, failed transfers and orphans. Content uploads and cleanup must be
+enabled. No additional bucket, worker or public image route is needed.
+
+Reception: apply the migration through the normal initialization command, restart
+Control Plane, then import, replace, reload and remove a photo from Settings.
+Check the personal navigation avatar and a platform-only account. The new unit and
+OpenAPI fixtures and existing frontend tests have not been executed for this port.

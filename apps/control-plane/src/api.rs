@@ -1216,6 +1216,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(me))
         .merge(crate::user_preferences::routes())
+        .merge(crate::user_avatar::routes())
         .routes(routes!(my_spaces))
         .routes(routes!(delete_space))
         .routes(routes!(deletion_status))

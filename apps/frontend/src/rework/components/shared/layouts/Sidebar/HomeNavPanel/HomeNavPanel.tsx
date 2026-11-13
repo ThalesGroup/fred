@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import {
   useMySpacesQuery,
+  useGetMyAvatarQuery,
   useMeQuery,
   useCreatePersonalSpaceMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -34,14 +35,13 @@ import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
 import { getTeamRecency, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
 import { useCurrentUserPreference } from "../../../../../../app/userPreferences.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
-import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 
 /** Home navigation uses Control Plane memberships and current space permissions. */
 export default function HomeNavPanel() {
   const { t } = useTranslation();
   const { defaultTeamAvatarFile } = useFrontendProperties();
-  const { bootstrap } = useFrontendBootstrap();
+  const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const [search, setSearch] = useState("");
   const spaces = useMySpacesQuery();
   const me = useMeQuery();
@@ -200,7 +200,7 @@ export default function HomeNavPanel() {
                 name={t("rework.home.personalSpace")}
                 description={t("rework.home.personalSpaceDescription")}
                 personal
-                imgUrl={bootstrap?.current_user?.avatar_image_url ?? undefined}
+                imgUrl={pictureUrl || undefined}
                 avatarName={KeyCloakService.GetUserFullName()}
                 avatarColor={PERSONAL_TEAM_COLOR}
               />

@@ -278,6 +278,9 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
+| GET | `/users/me/avatar` | `get_my_avatar` | Required |
+| PUT | `/users/me/avatar` | `put_my_avatar` | Required |
+| DELETE | `/users/me/avatar` | `delete_my_avatar` | Required |
 | GET | `/users/me/preferences` | `get_my_preferences` | Required |
 | PATCH | `/users/me/preferences` | `patch_my_preferences` | Required |
 | GET | `/users/platform-roles` | `list_platform_roles` | Required |

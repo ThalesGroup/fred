@@ -2491,3 +2491,28 @@ Code applicatif Python/TypeScript : +15/-4 ; tests : +42/-1 ; configuration CI/c
 générés et documentation comptés séparément. Pas de campagne de tests fonctionnels,
 réception navigateur, publication ou redémarrage de service. Prochaine action :
 validation fonctionnelle par Dimi puis commit du merge s'il l'approuve.
+
+## 19. Photo de profil personnelle - 13 novembre 2026
+
+Portage ciblé sur Weaver `74b5f3106`, comparé au parcours de Swift `b7bf4412a` ;
+aucune nouvelle fusion et aucune modification de la borne Swift intégrée.
+La carte d'import et son recadrage existants sont réutilisés. Rust expose GET,
+PUT et DELETE sur `/control-plane/v1/users/me/avatar` ; le client est régénéré,
+les réglages et avatars personnels ne dépendent plus du bootstrap Python pour
+la photo. Le partage des avatars dans les annuaires d'autres utilisateurs reste
+hors de ce lot personnel.
+
+Le catalogue SQL (`0025_user_avatar.sql`) protège la publication et la suppression
+concurrentes ; le stockage S3, ses limites de transferts et son nettoyage sont
+réutilisés. Les images sont décodées et normalisées côté serveur. Un nouveau
+catalogue de fichiers d'espace, des URLs publiques et un worker dédié ne sont
+pas nécessaires. Les ajouts de code couvrent le contrat photo manquant et son
+cycle de vie ; les composants d'import/recadrage et les traductions sont conservés.
+
+Diff du lot : production +514/-27 lignes (migration comprise), tests +93/-28,
+client généré et verrou de dépendances +130/-1 ; documentation comptée séparément.
+
+Contrat OpenAPI et client RTK générés. Migration non appliquée, aucun service
+redémarré, aucun commit ni push. Tests et code-quality non lancés à la demande de
+Dimi ; réception import/remplacement/rechargement/suppression et vérification des
+courses et droits à effectuer par le développeur avant validation du parcours.

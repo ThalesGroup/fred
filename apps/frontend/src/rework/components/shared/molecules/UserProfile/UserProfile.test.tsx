@@ -23,7 +23,7 @@ const identity = vi.hoisted(() => ({
   navigate: vi.fn(),
   support: undefined as string | undefined,
   avatar: undefined as string | undefined,
-  bootstrap: vi.fn(),
+  avatarQuery: vi.fn(),
   patchHistory: vi.fn(),
 }));
 vi.mock("../../../../../security/KeycloakService.ts", () => ({
@@ -38,10 +38,10 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ contactSupportLink: identity.support }),
 }));
-vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
-  useFrontendBootstrap: (skip: boolean) => {
-    identity.bootstrap(skip);
-    return { bootstrap: { current_user: { avatar_image_url: identity.avatar } } };
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
+    identity.avatarQuery(skip);
+    return { currentData: skip ? undefined : identity.avatar };
   },
 }));
 vi.mock("../../../../features/announcements/usePatchNoteHistory", () => ({
@@ -149,9 +149,9 @@ it("retains the shared profile but drops business enrichment when entering the p
   mount(true);
   expect(container!.querySelector("img")?.getAttribute("src")).toBe(identity.avatar);
   act(() => root!.render(<UserProfile admitted platformArea />));
-  expect(identity.bootstrap).toHaveBeenLastCalledWith(true);
+  expect(identity.avatarQuery).toHaveBeenLastCalledWith(false);
   expect(identity.patchHistory).toHaveBeenLastCalledWith(true);
-  expect(container!.querySelector("img")).toBeNull();
+  expect(container!.querySelector("img")?.getAttribute("src")).toBe(identity.avatar);
   const profile = container!.querySelector<HTMLButtonElement>('[role="menuitem"]')!;
   expect(profile.textContent).toContain("rework.profileMenu.profile");
   act(() => profile.click());

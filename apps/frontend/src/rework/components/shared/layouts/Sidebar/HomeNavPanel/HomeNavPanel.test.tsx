@@ -42,6 +42,7 @@ vi.mock("../../../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserFullName: () => state.user },
 }));
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetMyAvatarQuery: () => ({ currentData: undefined }),
   useMeQuery: () => ({ data: { user_id: state.user } }),
   useMySpacesQuery: () => {
     const data = [
@@ -95,7 +96,6 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   },
   useCreatePersonalSpaceMutation: () => [state.open, { isLoading: false }],
 }));
-vi.mock("../../../../../../hooks/useFrontendBootstrap", () => ({ useFrontendBootstrap: () => ({}) }));
 vi.mock("../../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({}) }));
 vi.mock("@shared/atoms/UserAvatar/UserAvatar.tsx", () => ({ default: () => <span>avatar</span> }));
 vi.mock("@shared/atoms/TeamInitials/TeamInitials.tsx", () => ({ default: () => <span>initials</span> }));

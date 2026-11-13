@@ -157,6 +157,7 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "MyAvatar",
     "SpaceMembers",
     "MySpaces",
     "SpaceAccess",
@@ -180,6 +181,42 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    getMyAvatar(endpoint) {
+      endpoint.providesTags = ["MyAvatar"];
+      endpoint.keepUnusedDataFor = 0;
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        return {
+          ...(typeof request === "string" ? { url: request } : request),
+          // Authenticated binary transport, cached as a serializable image source.
+          // No bearer in an image URL and no object URL lifetime to manage.
+          responseHandler: async (response: Response) => {
+            if (!response.ok) return response.json();
+            if (response.status === 204) return "";
+            const blob = await response.blob();
+            return new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(blob);
+            });
+          },
+        };
+      };
+    },
+    putMyAvatar(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      endpoint.invalidatesTags = ["MyAvatar"];
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
+    deleteMyAvatar: { invalidatesTags: ["MyAvatar"], extraOptions: { retryUnauthorized: false } },
     spaceCapabilityPolicies: {
       providesTags: (_result, _error, { spaceId }) => [{ type: "SpaceCapabilityPolicies", id: spaceId }],
     },
@@ -736,6 +773,9 @@ export const {
   useDeleteFolderMutation,
   useDeleteDocumentMutation,
   useMeQuery,
+  useGetMyAvatarQuery,
+  usePutMyAvatarMutation,
+  useDeleteMyAvatarMutation,
   useMySpacesQuery,
   useCreatePersonalSpaceMutation,
   useOnboardingStatusQuery,

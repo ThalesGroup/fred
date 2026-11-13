@@ -53,6 +53,7 @@ pub mod skills;
 pub mod space_members;
 pub mod spaces;
 pub mod supervision;
+pub mod user_avatar;
 pub mod user_preferences;
 pub mod users;
 pub mod wiki;

@@ -75,7 +75,7 @@ fn malformed(error: axum::extract::multipart::MultipartError) -> AppError {
     }
 }
 
-pub(super) fn token_current(user: &CurrentUser) -> AppResult<()> {
+pub(crate) fn token_current(user: &CurrentUser) -> AppResult<()> {
     if user
         .valid_until
         .is_some_and(|deadline| Utc::now().timestamp_millis() as f64 / 1000.0 >= deadline)
@@ -90,8 +90,13 @@ pub(super) fn token_current(user: &CurrentUser) -> AppResult<()> {
 }
 
 impl Storage {
-    /// Catalogue originals use the upload's anonymous spool, quota and durable receipt.
-    pub(super) async fn spool_snapshot(&self, filename: &str, bytes: &[u8]) -> AppResult<Spool> {
+    /// Server-produced bytes reuse the private spool and checksum used by multipart uploads.
+    pub(crate) async fn spool_bytes(
+        &self,
+        filename: &str,
+        mime: &str,
+        bytes: &[u8],
+    ) -> AppResult<Spool> {
         if bytes.len() as u64 > self.config.limits.file_bytes || bytes.len() > 32 * 1024 * 1024 {
             return Err(invalid("Configuration file exceeds the upload limit"));
         }
@@ -107,8 +112,7 @@ impl Storage {
         Ok(Spool {
             file,
             name,
-            mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                .into(),
+            mime: mime.to_owned(),
             size: bytes.len() as i64,
             digest: Sha256::digest(bytes).into(),
         })

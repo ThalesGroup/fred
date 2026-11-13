@@ -16,6 +16,36 @@ fn schema() -> Value {
 }
 
 #[test]
+fn personal_avatar_uses_one_versioned_authenticated_resource() {
+    let api = schema();
+    let path = &api["paths"]["/control-plane/v1/users/me/avatar"];
+    assert_eq!(path["get"]["operationId"], "get_my_avatar");
+    assert_eq!(path["put"]["operationId"], "put_my_avatar");
+    assert_eq!(path["delete"]["operationId"], "delete_my_avatar");
+    assert!(
+        path["get"]["responses"]["200"]["content"]
+            .get("image/png")
+            .is_some()
+    );
+    assert!(
+        path["put"]["requestBody"]["content"]
+            .get("multipart/form-data")
+            .is_some()
+    );
+    for method in ["get", "put", "delete"] {
+        assert!(path[method]["responses"].get("401").is_some());
+        assert!(path[method]["responses"].get("403").is_some());
+        assert!(path[method]["responses"].get("204").is_some());
+    }
+    assert!(
+        api["security"]
+            .as_array()
+            .is_some_and(|security| !security.is_empty())
+    );
+    assert!(api["paths"].get("/users/me/avatar").is_none());
+}
+
+#[test]
 fn immediate_deletion_is_an_optional_query_on_the_cleanup_routes() {
     let api = schema();
     for path in [
@@ -139,6 +169,9 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /gcu",
         "post /bootstrap/platform-admin",
         "get /me",
+        "get /users/me/avatar",
+        "put /users/me/avatar",
+        "delete /users/me/avatar",
         "get /users/me/preferences",
         "patch /users/me/preferences",
         "get /me/spaces",

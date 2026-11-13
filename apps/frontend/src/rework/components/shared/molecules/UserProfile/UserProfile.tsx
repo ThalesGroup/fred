@@ -21,7 +21,7 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
+import { useGetMyAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory";
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
@@ -42,7 +42,10 @@ export default function UserProfile({
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
   const [open, setOpen] = useState(false);
-  const { bootstrap } = useFrontendBootstrap(!admitted || platformArea || organizationArea || agentManagement);
+  const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, {
+    skip: !admitted,
+    refetchOnMountOrArgChange: 60,
+  });
   const { notes: patchNotes } = usePatchNoteHistory(!admitted || platformArea || organizationArea || agentManagement);
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -138,11 +141,7 @@ export default function UserProfile({
           aria-haspopup="menu"
           aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
         >
-          <UserAvatar
-            name={userFullName}
-            size="small"
-            imageUrl={admitted && !platformArea ? bootstrap?.current_user?.avatar_image_url : undefined}
-          />
+          <UserAvatar name={userFullName} size="small" imageUrl={admitted ? pictureUrl || undefined : undefined} />
         </button>
       </Tooltip>
       {admitted && !platformArea && (

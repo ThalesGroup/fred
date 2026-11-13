@@ -40,7 +40,7 @@ const h = vi.hoisted(() => ({
   refetchKnowledgeBases: vi.fn(),
   knowledgeBasesQuery: vi.fn(),
   selectedTeam: vi.fn(),
-  bootstrap: vi.fn(),
+  avatarQuery: vi.fn(),
   wiki: vi.fn(),
   applications: vi.fn(),
   flags: vi.fn(),
@@ -58,6 +58,10 @@ const h = vi.hoisted(() => ({
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
+  useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
+    h.avatarQuery(skip);
+    return { currentData: skip ? undefined : h.userPictureUrl };
+  },
   useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
   useWikiAvailabilityQuery: (
     args: { spaceId: string },
@@ -116,20 +120,6 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
   }),
-}));
-vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: (skip: boolean) => (
-    h.bootstrap(skip),
-    {
-      bootstrap:
-        h.charterEnabled === undefined && h.userPictureUrl === undefined
-          ? undefined
-          : {
-              team_admin_charter_enabled: h.charterEnabled,
-              current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
-            },
-    }
-  ),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: (name: string, skip: boolean) => (
@@ -396,7 +386,7 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["member"] }];
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
-  expect(h.bootstrap).toHaveBeenLastCalledWith(true);
+  expect(h.avatarQuery).toHaveBeenLastCalledWith(true);
   expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
   expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
   expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
@@ -436,7 +426,7 @@ it("gives an owner the Weaver settings entry without reading content or conversa
     const settings = renderToStaticMarkup(<TeamContentNavbar />);
     expect(settings).toContain('href="/team/team-1/settings/members"');
     expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
-    expect(h.bootstrap).toHaveBeenLastCalledWith(true);
+    expect(h.avatarQuery).toHaveBeenLastCalledWith(true);
   } finally {
     h.memberships = [];
     h.canManage = false;

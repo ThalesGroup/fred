@@ -4061,6 +4061,7 @@
       },
       "disconnect": "Déconnexion",
       "picture": {
+        "loadFailed": "La photo de profil n'a pas pu être chargée",
         "title": "Photo de profil",
         "import": "Importer",
         "hint": "JPEG, PNG ou WebP · 5 Mo maximum",

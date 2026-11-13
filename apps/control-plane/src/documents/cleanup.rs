@@ -83,6 +83,34 @@ impl Storage {
     async fn cleanup_page(&self, owner: Uuid) -> Result<()> {
         self.cleanup_contents(None, Some(owner)).await?;
         let batch = i64::from(self.config.limits.cleanup_batch);
+        // Expiry arbitrates with publication on the same row. Retired rows stay
+        // protected until the possible PUT window has elapsed; late S3 writes
+        // are then recovered by this same installation-owned orphan inventory.
+        sqlx::query("update user_avatar set status='retired' where id in (select id from user_avatar where status='pending' and expires_at<=clock_timestamp() order by expires_at,id limit $1 for update skip locked)")
+            .bind(batch).execute(&self.pool).await?;
+        let avatars: Vec<(Uuid, String)> = sqlx::query_as("select id,object_key from user_avatar where status='retired' and expires_at<=clock_timestamp() order by expires_at,id limit $1")
+            .bind(batch).fetch_all(&self.pool).await?;
+        for (id, key) in avatars {
+            self.renew(owner).await?;
+            ensure!(
+                self.original_id(&key) == Some(id),
+                "cleanup key outside content namespace"
+            );
+            let deleted = match self.objects.owns_original(&key).await {
+                Ok(false) => true,
+                Ok(true) => self.objects.delete(&key).await.is_ok(),
+                Err(_) => false,
+            };
+            if deleted {
+                sqlx::query("delete from user_avatar where id=$1 and status='retired'")
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+            } else {
+                sqlx::query("update user_avatar set expires_at=clock_timestamp()+interval '1 minute' where id=$1 and status='retired'")
+                    .bind(id).execute(&self.pool).await?;
+            }
+        }
         let expired: Vec<(Uuid,Uuid)> = sqlx::query_as("select id,organization_id from document_upload where status='pending' and expires_at<=clock_timestamp() and cleanup_due_at<=clock_timestamp() order by cleanup_due_at,expires_at,id limit $1")
             .bind(batch).fetch_all(&self.pool).await?;
         for (id, org) in expired {
@@ -160,7 +188,7 @@ impl Storage {
             if let Some((id, org)) = pending {
                 self.expire_or_defer(id, org).await?;
             }
-            let live: bool=sqlx::query_scalar("select exists(select 1 from document_content where object_key=$1 and cleaned_at is null) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
+            let live: bool=sqlx::query_scalar("select exists(select 1 from document_content where object_key=$1 and cleaned_at is null) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from user_avatar where object_key=$1 and (status in ('pending','active') or expires_at>clock_timestamp())) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
                 .bind(&key).fetch_one(&self.pool).await?;
             // Unknown ownership never authorizes deletion. Count inaccessible
             // candidates conservatively and advance so one key cannot starve a sweep.

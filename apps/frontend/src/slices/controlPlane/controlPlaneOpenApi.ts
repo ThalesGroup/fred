@@ -1211,6 +1211,15 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
+    getMyAvatar: build.query<GetMyAvatarApiResponse, GetMyAvatarApiArg>({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar` }),
+    }),
+    putMyAvatar: build.mutation<PutMyAvatarApiResponse, PutMyAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/users/me/avatar`, method: "PUT", body: queryArg.fileUpload }),
+    }),
+    deleteMyAvatar: build.mutation<DeleteMyAvatarApiResponse, DeleteMyAvatarApiArg>({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
     }),
@@ -2218,6 +2227,14 @@ export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
 };
+export type GetMyAvatarApiResponse = /** status 200 undefined */ string;
+export type GetMyAvatarApiArg = void;
+export type PutMyAvatarApiResponse = unknown;
+export type PutMyAvatarApiArg = {
+  fileUpload: FileUpload;
+};
+export type DeleteMyAvatarApiResponse = unknown;
+export type DeleteMyAvatarApiArg = void;
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
 export type PatchMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
@@ -4436,6 +4453,10 @@ export const {
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  useGetMyAvatarQuery,
+  useLazyGetMyAvatarQuery,
+  usePutMyAvatarMutation,
+  useDeleteMyAvatarMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,
