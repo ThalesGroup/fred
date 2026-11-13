@@ -21,7 +21,6 @@ import os
 from threading import Lock
 
 import httpx
-
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.weaver import InferenceAdmission, InferenceCredentialBinding
