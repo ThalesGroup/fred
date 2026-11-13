@@ -15,6 +15,6 @@
 
 ## 4. Integration and close-out
 
-- [ ] 4.1 Run the affected offline test suites and one root `make code-quality` near completion; verify all required checks pass and document any unrelated baseline failures.
-- [ ] 4.2 Review the complete diff against its actual target branch, obtain an independent read-only review and the required performance review for the shared model factory path, then resolve findings; verify the review record names the reviewed base and head, coverage, findings, and dispositions.
-- [ ] 4.3 Reconcile this change's proposal, design, tasks, and delta spec with the implementation, then sync and archive the change after acceptance; verify the current capability spec contains the shipped behavior and the tracking issue or PR records the result.
+- [x] 4.1 Run the affected offline test suites and one root `make code-quality` near completion; verify all required checks pass and document any unrelated baseline failures.
+- [x] 4.2 Review the complete diff against its actual target branch, obtain an independent read-only review and the required performance review for the shared model factory path, then resolve findings; verify the review record names the reviewed base and head, coverage, findings, and dispositions.
+- [x] 4.3 Reconcile this change's proposal, design, tasks, and delta spec with the implementation, then sync and archive the change after acceptance; verify the current capability spec contains the shipped behavior and the tracking issue or PR records the result.

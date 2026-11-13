@@ -142,4 +142,4 @@ def test_mistral_pdf_ocr_extractor_keeps_name_based_provider_selection(monkeypat
 
     extractor = MistralPdfOcrExtractor(ModelConfiguration(provider="mistral", name="mistral-ocr-latest"))
 
-    assert extractor.api_key == "fallback-key"
+    assert extractor.api_key == "fallback-key"  # pragma: allowlist secret

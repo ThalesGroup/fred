@@ -1,8 +1,10 @@
+# Knowledge Flow Model Configuration Specification
+
 ## Purpose
 
 Defines how Knowledge Flow selects environment-provided credentials for its configured external models without coupling independent model uses to one API key.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Knowledge Flow selects an API key for each OpenAI-compatible model use
 
@@ -44,6 +46,6 @@ Knowledge Flow SHALL use the selected credential for the corresponding model cli
 
 #### Scenario: Worker execution
 
-- **GIVEN** a worker processes a document using embeddings or remote OCR
+- **GIVEN** a worker processes a document using embeddings or invokes the remote OCR extractor
 - **WHEN** the configured model use is constructed in that worker
 - **THEN** it follows the same dedicated-key and fallback rules as the API process

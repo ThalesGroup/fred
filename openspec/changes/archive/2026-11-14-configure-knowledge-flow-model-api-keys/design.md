@@ -30,6 +30,8 @@ Extend the shared factory entry points with an optional explicit OpenAI API key 
 
 Remote OCR is a separate HTTP path selected by its Mistral model name. It uses the same role precedence for `KNOWLEDGE_FLOW_OCR_API_KEY` regardless of the configured provider label, preserving existing OCR selection. Its HTTP client receives the selected key for that OCR invocation.
 
+The remote extractor is not currently called by the standard PDF ingestion pipeline, which continues to use local OCR. This change configures credentials for the extractor's existing invocation path and does not change which OCR engine ingestion selects.
+
 ### Preserve startup and deployment behavior
 
 Knowledge Flow's embedding startup check uses the new resolution rule; it does not require `OPENAI_API_KEY` when `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` is available. Optional model uses continue to resolve credentials when constructed. Add the four optional names to the Knowledge Flow Helm `dotenv` examples and the local configuration guide. The current chart mounts the same Knowledge Flow Secret into API and extraction workers, so no separate worker secret source is needed.

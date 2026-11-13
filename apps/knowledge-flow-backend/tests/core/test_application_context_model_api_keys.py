@@ -24,7 +24,7 @@ def test_model_factories_receive_distinct_keys(app_context: ApplicationContext, 
 
     def fake_model(_cfg: ModelConfiguration, *, openai_api_key: str | None = None) -> Any:
         overlap.wait(timeout=5)
-        assert context_module.os.environ["OPENAI_API_KEY"] == "fallback-key"
+        assert context_module.os.environ["OPENAI_API_KEY"] == "fallback-key"  # pragma: allowlist secret
         calls.append(("chat", openai_api_key))
         return object()
 
@@ -61,9 +61,7 @@ def test_embedding_key_permits_startup_without_global_key(app_context: Applicati
     assert isinstance(context, ApplicationContext)
 
 
-def test_only_global_key_reaches_all_model_factories(
-    app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_only_global_key_reaches_all_model_factories(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "fallback-key")
     for role in ("CHAT", "VISION", "EMBEDDINGS"):
         monkeypatch.delenv(f"KNOWLEDGE_FLOW_{role}_API_KEY", raising=False)
