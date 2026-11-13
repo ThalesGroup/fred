@@ -47,7 +47,10 @@ def observe_model_response(response: httpx.Response) -> None:
     ):
         observation.fields["response_streaming"] = True
     if observation.allow_request_ids:
-        for header in ("x-request-id", "apim-request-id"):
+        headers = ("x-request-id", "apim-request-id")
+        if 400 <= response.status_code < 600:
+            headers += ("x-correlation-id",)
+        for header in headers:
             value = response.headers.get(header, "")
             if _REQUEST_ID.fullmatch(value):
                 observation.fields[header.replace("-", "_")] = value

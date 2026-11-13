@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from collections import deque
@@ -19,6 +20,20 @@ from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
 from openai import APIConnectionError, APIStatusError
 
 Scalar = str | int | float | bool | None
+
+_PROVIDER_ERROR_CODES = frozenset(
+    {
+        "context_length_exceeded",
+        "insufficient_quota",
+        "invalid_api_key",
+        "model_not_found",
+        "rate_limit_exceeded",
+    }
+)
+_PROVIDER_ERROR_TYPES = frozenset(
+    {"invalid_request_error", "rate_limit_error", "server_error"}
+)
+_MAX_HTTP_ERROR_JSON_BYTES = 16 * 1024
 
 # Pod-local instantaneous counts, never an admission/concurrency control.
 _active: dict[tuple[str, str], int] = {}
@@ -58,7 +73,38 @@ def exception_chain(exc: BaseException) -> tuple[list[BaseException], bool]:
     return result, truncated or bool(pending)
 
 
+def _provider_error_name(error: APIStatusError | httpx.HTTPStatusError) -> str | None:
+    """Extract an allowlisted category from the SDK body or buffered HTTP JSON."""
+    body: object
+    if isinstance(error, APIStatusError):
+        body = error.body
+    else:
+        try:
+            content = error.response.content
+            if len(content) > _MAX_HTTP_ERROR_JSON_BYTES:
+                return None
+            body = json.loads(content)
+        except (httpx.ResponseNotRead, ValueError, RecursionError):
+            return None
+    if not isinstance(body, dict):
+        return None
+
+    # The OpenAI SDK usually unwraps the outer error object for us.
+    fields = body.get("error", body)
+    if isinstance(fields, dict):
+        code = fields.get("code")
+        if isinstance(code, str) and code in _PROVIDER_ERROR_CODES:
+            return code
+        error_type = fields.get("type")
+        if isinstance(error_type, str) and error_type in _PROVIDER_ERROR_TYPES:
+            return error_type
+    if body.get("detail") == "OASValidation":
+        return "OASValidation"
+    return None
+
+
 def classify_error(exc: BaseException) -> dict[str, Scalar]:
+    """Build safe diagnostics from an exception and its bounded cause chain."""
     if isinstance(exc, asyncio.CancelledError):
         return {"error_code": "cancelled"}
     chain, _ = exception_chain(exc)
@@ -85,12 +131,15 @@ def classify_error(exc: BaseException) -> dict[str, Scalar]:
                 if isinstance(current, APIStatusError)
                 else current.response.status_code
             )
-            return {
+            fields: dict[str, Scalar] = {
                 "error_code": "rate_limited"
                 if status == 429
                 else "provider_http_error",
                 "http_status": status,
             }
+            if 400 <= status < 600 and (name := _provider_error_name(current)):
+                fields["provider_error_name"] = name
+            return fields
     # Transport wrappers can hide a more specific cause; check them last.
     if any(isinstance(e, (APIConnectionError, httpx.NetworkError)) for e in chain):
         return {"error_code": "connection_error"}

@@ -31,14 +31,14 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
-from openai import APIConnectionError
+from openai import APIConnectionError, APIStatusError
 from pydantic import SecretStr
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_hosts(["127.0.0.1"])]
 
 
 @asynccontextmanager
-async def stream_server(mode: str):
+async def stream_server(mode: str, *, rejection: tuple[int, bytes] | None = None):
     tasks: set[asyncio.Task] = set()
     requests: list[dict] = []
     first_sent = asyncio.Event()
@@ -56,6 +56,18 @@ async def stream_server(mode: str):
             )
             body = json.loads(await reader.readexactly(length))
             requests.append(body)
+            if rejection is not None:
+                status, payload = rejection
+                writer.write(
+                    f"HTTP/1.1 {status} Test Error\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Content-Type: application/json\r\n"
+                    "x-correlation-id: synthetic-gateway-correlation\r\n"
+                    "Connection: close\r\n\r\n".encode()
+                    + payload
+                )
+                await writer.drain()
+                return
             selected = mode
             delta: dict[str, Any] = {"role": "assistant", "content": "synthetic-answer"}
             if mode == "tool_fragments":
@@ -229,6 +241,67 @@ def terminal_records(caplog):
     return [
         r for r in caplog.records if r.msg == "event=llm_call_completed diagnostics=%s"
     ]
+
+
+@pytest.mark.parametrize(
+    ("status", "payload", "reason"),
+    [
+        (
+            400,
+            b'{"message":"Bad Request","status":400,"detail":"OASValidation"}',
+            "OASValidation",
+        ),
+        (
+            400,
+            b'{"error":{"code":"context_length_exceeded","type":"invalid_request_error"}}',
+            "context_length_exceeded",
+        ),
+        (
+            500,
+            b'{"error":{"code":"private-provider-value","type":"server_error"}}',
+            "server_error",
+        ),
+        (400, b'{"detail":"private-provider-value"}', None),
+        (502, b"<html>private-provider-value</html>", None),
+    ],
+    ids=["gateway-400", "openai-code", "openai-type", "unknown-detail", "html-502"],
+)
+async def test_provider_rejection_in_call_and_support_logs(
+    status, payload, reason, caplog
+):
+    tracer = Mock(captures_content=False)
+    async with stream_server("success", rejection=(status, payload)) as (model, _, _):
+        with pytest.raises(APIStatusError) as caught:
+            await invoke(model, middleware(tracer=tracer))
+        message = report_execution_error(
+            logging.getLogger("test.support"), caught.value, "execution"
+        )
+
+    (terminal,) = terminal_records(caplog)
+    support = next(r for r in caplog.records if hasattr(r, "error_ref"))
+    (failure,) = support.llm_failures
+    assert support.error_ref in message
+    assert failure["llm_call_id"] == terminal.llm_call_id
+    assert failure["error_code"] == terminal.error_code == "provider_http_error"
+    assert failure["http_status"] == terminal.http_status == status
+    assert (
+        failure["x_correlation_id"]
+        == terminal.x_correlation_id
+        == "synthetic-gateway-correlation"
+    )
+    if reason is None:
+        assert "provider_error_name" not in failure
+        assert not hasattr(terminal, "provider_error_name")
+    else:
+        assert failure["provider_error_name"] == terminal.provider_error_name == reason
+    assert "private-provider-value" not in terminal.getMessage()
+    assert "private-provider-value" not in support.getMessage()
+    span_keys = {
+        call.args[0]
+        for call in tracer.start_span.return_value.set_attribute.call_args_list
+    }
+    assert "http_status" in span_keys
+    assert {"provider_error_name", "x_correlation_id"}.isdisjoint(span_keys)
 
 
 @pytest.mark.parametrize(
