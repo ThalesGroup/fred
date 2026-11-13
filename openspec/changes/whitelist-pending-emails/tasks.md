@@ -8,19 +8,18 @@
 
 ## 2. Cleanup filter and bulk removal (backend)
 
-- [x] 2.1 `overlap=rule|whitelist_only` on the users listing: rule evaluation on stored evidence, team members via one `lookup_subjects` per eligible team
+- [x] 2.1 `overlap=rule|whitelist_only|unknown` on the users listing: rule evaluation on stored evidence, team members via one `lookup_subjects` per eligible team
 - [x] 2.2 `POST /admin/platform/access/users/revoke` (`user_ids` or `all_matching` + `excluded_ids`), atomic, actor safeguard
-- [x] 2.3 Tests: unknown evidence excluded and counted, both filters, counts, select-all with exclusions, safeguard refusal, non-admin refused
+- [x] 2.3 Tests: unknown evidence listed only under "To check", both filters, counts, select-all with exclusions, safeguard refusal, non-admin refused
 
 ## 3. Frontend
 
 - [x] 3.1 Regenerate the control-plane client
 - [x] 3.2 Pending emails list with Remove on Whitelist > Users
 - [x] 3.3 Add dialog: "Add <email>" when the search is a valid email with no match
-- [x] 3.4 Chip bar (All / Admitted by the rule / Whitelist only) and the unknown-evidence notice
-- [x] 3.5 Refresh button: refetches the current listing (no new endpoint)
-- [x] 3.6 Row checkboxes, header select-all across pages, bulk bar with Remove and confirmation
-- [x] 3.7 fr/en strings, tests
+- [x] 3.4 Chip bar (All / Admitted by the rule / Whitelist only / To check) with per-chip counts
+- [x] 3.5 Row checkboxes, header select-all across pages, bulk bar with Remove and confirmation
+- [x] 3.6 fr/en strings, tests
 
 ## 4. Close-out
 

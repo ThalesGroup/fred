@@ -27,7 +27,7 @@ A platform administrator SHALL be able to whitelist an email address that matche
 
 ### Requirement: Administrators clean up redundant exceptions
 
-The whitelist SHALL offer a filter with three exclusive choices: all exceptions, exceptions of people also admitted by the saved rule, and exceptions of people with no admission source other than that exception. The filter SHALL apply server-side, before pagination, and the total SHALL count the filtered set. Rule overlap SHALL use the stored verified evidence and the saved rule. Team overlap SHALL be resolved without one authorization check per person. Each row SHALL be selectable, and a header control SHALL select every exception matching the current search and filter across all pages, after which individual rows MAY be deselected. Removing the selection SHALL be one atomic operation. When filtering is active and the acting administrator would lose their last admission source, the whole removal SHALL be refused.
+The whitelist SHALL offer a filter with four exclusive choices: all exceptions, exceptions of people also admitted by the saved rule, exceptions of people with no admission source other than that exception, and exceptions of people the saved rule cannot classify from their stored evidence. The filter SHALL apply server-side, before pagination, and the total SHALL count the filtered set. Rule overlap SHALL use the stored verified evidence and the saved rule. Team overlap SHALL be resolved without one authorization check per person. Each row SHALL be selectable, and a header control SHALL select every exception matching the current search and filter across all pages, after which individual rows MAY be deselected. Removing the selection SHALL be one atomic operation. When filtering is active and the acting administrator would lose their last admission source, the whole removal SHALL be refused.
 
 #### Scenario: Rule widened
 
@@ -55,6 +55,6 @@ The whitelist SHALL offer a filter with three exclusive choices: all exceptions,
 
 - **GIVEN** the saved rule now uses a claim path that a whitelisted person's stored evidence does not contain
 - **WHEN** an administrator selects either filter
-- **THEN** that person SHALL be listed in neither, and the response SHALL report the count of such people
+- **THEN** that person SHALL be listed in neither, and SHALL be listed by the "to check" choice
 - **WHEN** that person makes a new request carrying the claim
 - **THEN** a later read SHALL classify them by the rule
