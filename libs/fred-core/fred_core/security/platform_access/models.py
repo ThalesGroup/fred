@@ -63,6 +63,18 @@ class PlatformAccessUserRow(Base):
     )
 
 
+class PlatformAccessPendingEmailRow(Base):
+    """A whitelisted email nobody has signed in with yet; turned into an exception on first use."""
+
+    __tablename__ = "platform_access_pending_emails"
+
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    granted_by: Mapped[str] = mapped_column(String, nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
 class PlatformAccessLinkRow(Base):
     __tablename__ = "platform_access_links"
 

@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     JsonValue,
     field_validator,
+    model_validator,
 )
 
 
@@ -49,6 +50,42 @@ class PlatformAccessUser(BaseModel):
 class PlatformAccessUsersPage(BaseModel):
     items: list[PlatformAccessUser]
     total: int
+    # With `overlap`: exceptions whose stored evidence lacks a claim the rule uses.
+    unknown_count: int | None = None
+
+
+class RevokedPlatformAccessUsers(BaseModel):
+    removed_count: int
+
+
+class PlatformAccessPendingEmail(BaseModel):
+    email: str
+    granted_by: str
+    granted_at: datetime
+
+
+class AddPlatformAccessPendingEmail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(
+        min_length=3, max_length=320, pattern=r"^\s*[^@\s]+@[^@\s]+\.[^@\s]+\s*$"
+    )
+
+
+class RevokePlatformAccessUsers(BaseModel):
+    """Either explicit ids, or every exception matching the listing's search and filter."""
+
+    model_config = ConfigDict(extra="forbid")
+    user_ids: list[UUID] = Field(default_factory=list, max_length=10000)
+    all_matching: bool = False
+    query: str = Field(default="", max_length=200)
+    overlap: Literal["rule", "whitelist_only"] | None = None
+    excluded_ids: list[UUID] = Field(default_factory=list, max_length=10000)
+
+    @model_validator(mode="after")
+    def one_selection(self) -> "RevokePlatformAccessUsers":
+        if self.all_matching == bool(self.user_ids):
+            raise ValueError("Send either user_ids or all_matching")
+        return self
 
 
 class PlatformAccessActivationUser(PlatformAccessUser):

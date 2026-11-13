@@ -5089,7 +5089,10 @@
         "searchTooBroad": "Too many results. Refine the search.",
         "alreadyGranted": "Already on the whitelist",
         "more_one": "{{count}} more result. Refine the search to see it.",
-        "more_other": "{{count}} more results. Refine the search to see them."
+        "more_other": "{{count}} more results. Refine the search to see them.",
+        "addEmail": "Add {{email}}",
+        "emailDescription": "Not yet known to the platform",
+        "emailKnown": "This address belongs to a known user. Select them in the search."
       },
       "addedOn": "Added on",
       "origin": {
@@ -5112,6 +5115,37 @@
         "free_other": "Link access: {{teams}}",
         "summary": "Other access: {{details}}",
         "separator": "; "
+      },
+      "overlapFilter": {
+        "group": "Filter the whitelist",
+        "all": "All",
+        "rule": "Admitted by the rule",
+        "whitelistOnly": "Whitelist only"
+      },
+      "unknownEvidence_one": "{{count}} person has not been seen yet with what the rule checks: they appear in no filter until their next sign-in.",
+      "unknownEvidence_other": "{{count}} people have not been seen yet with what the rule checks: they appear in no filter until their next sign-in.",
+      "refresh": "Refresh",
+      "selection": {
+        "selectAll": "Select all, across every page",
+        "count_one": "{{count}} selected",
+        "count_other": "{{count}} selected",
+        "clear": "Clear selection",
+        "remove": "Remove"
+      },
+      "bulkRemove": {
+        "title_one": "Remove {{count}} person from the whitelist?",
+        "title_other": "Remove {{count}} people from the whitelist?",
+        "message": "Their individual entry will be deleted. People with no other access will no longer be able to sign in.",
+        "confirm": "Remove",
+        "done_one": "{{count}} person removed from the whitelist.",
+        "done_other": "{{count}} people removed from the whitelist."
+      },
+      "pendingEmails": {
+        "title": "Waiting for first sign-in",
+        "hint": "On first sign-in, the person moves to the table below.",
+        "addedOn": "Added on {{date}}",
+        "removeAria": "Remove {{email}} from the whitelist",
+        "removed": "{{email}} removed from the whitelist."
       }
     },
     "agentMarketplace": {

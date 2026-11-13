@@ -5089,7 +5089,10 @@
         "searchTooBroad": "Trop de résultats. Précisez la recherche.",
         "alreadyGranted": "Déjà dans la liste blanche",
         "more_one": "{{count}} autre résultat. Précisez la recherche pour l'afficher.",
-        "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher."
+        "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher.",
+        "addEmail": "Ajouter {{email}}",
+        "emailDescription": "Personne pas encore connue de la plateforme",
+        "emailKnown": "Cette adresse appartient à un utilisateur connu. Sélectionnez-le dans la recherche."
       },
       "addedOn": "Ajouté le",
       "origin": {
@@ -5112,6 +5115,37 @@
         "free_other": "Accès par lien : {{teams}}",
         "summary": "Autres accès : {{details}}",
         "separator": " ; "
+      },
+      "overlapFilter": {
+        "group": "Filtrer la liste blanche",
+        "all": "Tous",
+        "rule": "Admis par la règle",
+        "whitelistOnly": "Liste blanche seule"
+      },
+      "unknownEvidence_one": "{{count}} personne n'a pas encore été vue avec ce que la règle vérifie : elle n'apparaît dans aucun filtre jusqu'à sa prochaine connexion.",
+      "unknownEvidence_other": "{{count}} personnes n'ont pas encore été vues avec ce que la règle vérifie : elles n'apparaissent dans aucun filtre jusqu'à leur prochaine connexion.",
+      "refresh": "Actualiser",
+      "selection": {
+        "selectAll": "Tout sélectionner, sur toutes les pages",
+        "count_one": "{{count}} sélectionné",
+        "count_other": "{{count}} sélectionnés",
+        "clear": "Désélectionner",
+        "remove": "Retirer"
+      },
+      "bulkRemove": {
+        "title_one": "Retirer {{count}} personne de la liste blanche ?",
+        "title_other": "Retirer {{count}} personnes de la liste blanche ?",
+        "message": "Leur entrée individuelle sera supprimée. Les personnes sans autre accès ne pourront plus se connecter.",
+        "confirm": "Retirer",
+        "done_one": "{{count}} personne retirée de la liste blanche.",
+        "done_other": "{{count}} personnes retirées de la liste blanche."
+      },
+      "pendingEmails": {
+        "title": "En attente de première connexion",
+        "hint": "À sa première connexion, la personne passe dans le tableau ci-dessous.",
+        "addedOn": "Ajoutée le {{date}}",
+        "removeAria": "Retirer {{email}} de la liste blanche",
+        "removed": "{{email}} retirée de la liste blanche."
       }
     },
     "agentMarketplace": {

@@ -11,6 +11,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import Switch from "@shared/atoms/Switch/Switch";
+import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
@@ -26,6 +27,10 @@ import {
   useSetPlatformFilteringMutation,
   useGrantPlatformUsersMutation,
   useRevokePlatformUserMutation,
+  useRevokePlatformUsersMutation,
+  usePlatformAccessPendingEmailsQuery,
+  useAddPlatformPendingEmailMutation,
+  useRemovePlatformPendingEmailMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -59,6 +64,13 @@ function otherAccessLines(user: PlatformAccessUser, t: TFunction): string[] {
       ),
   ];
 }
+type Overlap = "rule" | "whitelist_only";
+// Header "select all" covers every matching row across pages: kept as the excluded rows, not a list.
+type Selection = { mode: "ids"; ids: ReadonlySet<string> } | { mode: "all"; excluded: ReadonlySet<string> };
+const NO_SELECTION: Selection = { mode: "ids", ids: new Set<string>() };
+const ALL: Selection = { mode: "all", excluded: new Set<string>() };
+const isSelected = (selection: Selection, id: string) =>
+  selection.mode === "all" ? !selection.excluded.has(id) : selection.ids.has(id);
 // First option of the table's rows-per-page selector.
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -73,6 +85,9 @@ export default function PlatformAccessPage() {
   const [query, setQuery] = useState("");
   const [teamQuery, setTeamQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState<"allowed" | null>(null);
+  const [overlap, setOverlap] = useState<Overlap | null>(null);
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [adding, setAdding] = useState(false);
   const [refreshingT0, setRefreshingT0] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,9 +107,12 @@ export default function PlatformAccessPage() {
   const usersShown = enabled && tabIndex === 1;
   // The whitelist is the people holding an individual exception, never every known user.
   const users = usePlatformAccessUsersQuery(
-    { offset, limit: pageSize, query: searchQuery, exceptionsOnly: true },
+    { offset, limit: pageSize, query: searchQuery, exceptionsOnly: true, ...(overlap ? { overlap } : {}) },
     { skip: !usersShown },
   );
+  // A selection is relative to one search and filter: changing either starts over.
+  useEffect(() => setSelection(NO_SELECTION), [searchQuery, overlap]);
+  const pendingEmails = usePlatformAccessPendingEmailsQuery(undefined, { skip: !usersShown });
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
   const userRows = users.isError ? undefined : users.currentData?.items;
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
@@ -113,6 +131,12 @@ export default function PlatformAccessPage() {
   const [filter] = useSetPlatformFilteringMutation();
   const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();
+  const [revokeUsers] = useRevokePlatformUsersMutation();
+  const [addPendingEmail] = useAddPlatformPendingEmailMutation();
+  const [removePendingEmail] = useRemovePlatformPendingEmailMutation();
+  const selectedCount =
+    selection.mode === "all" ? Math.max(userTotal - selection.excluded.size, 0) : selection.ids.size;
+  const everythingSelected = selection.mode === "all" && selection.excluded.size === 0;
   const [importT0] = useImportPlatformT0Mutation();
   const [setTeam] = useSetPlatformTeamMutation();
   const run = async (action: () => Promise<unknown>) => {
@@ -127,7 +151,9 @@ export default function PlatformAccessPage() {
             ? "rework.platformAccess.actorLockout"
             : detail === "platform_access_policy_required"
               ? "rework.platformAccess.rule.required"
-              : "rework.platformAccess.failed",
+              : detail === "platform_access_email_known"
+                ? "rework.platformAccess.addDialog.emailKnown"
+                : "rework.platformAccess.failed",
         ),
       });
     } finally {
@@ -233,7 +259,34 @@ export default function PlatformAccessPage() {
                   onChange={setQuery}
                 />
               </div>
+              <FilterChips<Overlap>
+                options={[
+                  { id: "rule", label: t("rework.platformAccess.overlapFilter.rule") },
+                  { id: "whitelist_only", label: t("rework.platformAccess.overlapFilter.whitelistOnly") },
+                ]}
+                value={overlap}
+                onChange={(next) => {
+                  setOverlap(next);
+                  setOffset(0);
+                }}
+                allLabel={t("rework.platformAccess.overlapFilter.all")}
+                aria-label={t("rework.platformAccess.overlapFilter.group")}
+              />
               <div className={styles.importRow}>
+                <IconButton
+                  type="button"
+                  variant="icon"
+                  size="medium"
+                  color="on-surface-retreat"
+                  icon={{ category: "outlined", type: "refresh" }}
+                  title={t("rework.platformAccess.refresh")}
+                  aria-label={t("rework.platformAccess.refresh")}
+                  disabled={users.isFetching}
+                  onClick={() => {
+                    void users.refetch();
+                    void pendingEmails.refetch();
+                  }}
+                />
                 {t0.data?.completed_at ? (
                   <>
                     <span role="status">{t("rework.platformAccess.t0Done")}</span>
@@ -283,6 +336,71 @@ export default function PlatformAccessPage() {
                 </Button>
               </div>
             </div>
+            {overlap === null && (pendingEmails.data?.length ?? 0) > 0 && (
+              <section className={styles.pendingEmails} aria-labelledby={`${panelId}-pending-title`}>
+                <h3 id={`${panelId}-pending-title`} className={styles.pendingTitle}>
+                  {t("rework.platformAccess.pendingEmails.title")}
+                </h3>
+                <p className={styles.hint}>{t("rework.platformAccess.pendingEmails.hint")}</p>
+                <ul className={styles.pendingList}>
+                  {pendingEmails.data?.map((entry) => (
+                    <li key={entry.email} className={styles.pendingItem}>
+                      <span className={styles.pendingEmail}>{entry.email}</span>
+                      <span className={styles.hint}>
+                        {t("rework.platformAccess.pendingEmails.addedOn", {
+                          date: new Date(entry.granted_at).toLocaleDateString(i18n.language),
+                        })}
+                      </span>
+                      <IconButton
+                        type="button"
+                        variant="icon"
+                        size="medium"
+                        color="on-surface-retreat"
+                        icon={{ category: "outlined", type: "close" }}
+                        title={t("rework.platformAccess.remove")}
+                        aria-label={t("rework.platformAccess.pendingEmails.removeAria", { email: entry.email })}
+                        disabled={locked}
+                        onClick={() =>
+                          void run(async () => {
+                            await removePendingEmail({ email: entry.email }).unwrap();
+                            showSuccess({
+                              summary: t("rework.platformAccess.pendingEmails.removed", { email: entry.email }),
+                            });
+                          })
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {overlap !== null && (users.currentData?.unknown_count ?? 0) > 0 && (
+              <p className={styles.hint} role="status">
+                {t("rework.platformAccess.unknownEvidence", { count: users.currentData?.unknown_count ?? 0 })}
+              </p>
+            )}
+            {selectedCount > 0 && (
+              <div
+                className={styles.selectionBar}
+                role="toolbar"
+                aria-label={t("rework.platformAccess.selection.remove")}
+              >
+                <span>{t("rework.platformAccess.selection.count", { count: selectedCount })}</span>
+                <Button
+                  color="error"
+                  variant="outlined"
+                  size="small"
+                  icon={{ category: "outlined", type: "delete" }}
+                  disabled={locked || users.isFetching}
+                  onClick={() => setConfirmingRemoval(true)}
+                >
+                  {t("rework.platformAccess.selection.remove")}
+                </Button>
+                <Button color="primary" variant="text" size="small" onClick={() => setSelection(NO_SELECTION)}>
+                  {t("rework.platformAccess.selection.clear")}
+                </Button>
+              </div>
+            )}
             {users.isFetching && !userRows && <Spinner statusText={t("rework.platformAccess.loading")} />}
             {usersShown && !users.isFetching && !users.isError && userTotal === 0 && (
               <p className={styles.hint}>
@@ -294,6 +412,31 @@ export default function PlatformAccessPage() {
                 size="small"
                 data={userRows ?? []}
                 rowKey={(user) => user.user_id}
+                selectable
+                selectedKeys={
+                  new Set(
+                    (userRows ?? []).filter((user) => isSelected(selection, user.user_id)).map((user) => user.user_id),
+                  )
+                }
+                onSelectionChange={(keys) =>
+                  setSelection((current) => {
+                    // The table reports this page's checked rows: fold each row's state back into the selection.
+                    const flips = (userRows ?? []).filter(
+                      (user) => keys.has(user.user_id) !== isSelected(current, user.user_id),
+                    );
+                    const toggled = new Set<string>(current.mode === "all" ? current.excluded : current.ids);
+                    flips.forEach((user) =>
+                      toggled.has(user.user_id) ? toggled.delete(user.user_id) : toggled.add(user.user_id),
+                    );
+                    return current.mode === "all" ? { mode: "all", excluded: toggled } : { mode: "ids", ids: toggled };
+                  })
+                }
+                headerSelection={{
+                  checked: everythingSelected,
+                  indeterminate: selectedCount > 0 && !everythingSelected,
+                  onChange: () => setSelection(everythingSelected ? NO_SELECTION : ALL),
+                  ariaLabel: t("rework.platformAccess.selection.selectAll"),
+                }}
                 serverPagination={{
                   offset,
                   limit: pageSize,
@@ -478,10 +621,15 @@ export default function PlatformAccessPage() {
             open={adding}
             busy={busy}
             onClose={() => setAdding(false)}
-            onConfirm={(userIds) =>
+            onConfirm={(userIds, emails) =>
               void run(async () => {
-                await grantUsers({ grantPlatformAccessUsers: { user_ids: userIds } }).unwrap();
-                showSuccess({ summary: t("rework.platformAccess.grantedSelected", { count: userIds.length }) });
+                if (userIds.length) await grantUsers({ grantPlatformAccessUsers: { user_ids: userIds } }).unwrap();
+                for (const email of emails) {
+                  await addPendingEmail({ addPlatformAccessPendingEmail: { email } }).unwrap();
+                }
+                showSuccess({
+                  summary: t("rework.platformAccess.grantedSelected", { count: userIds.length + emails.length }),
+                });
                 setAdding(false);
                 // Newest first: the people just added head the first page of the unfiltered list.
                 setQuery("");
@@ -491,6 +639,29 @@ export default function PlatformAccessPage() {
             }
           />
           {refreshingT0 && <PlatformAccessT0RefreshDialog onClose={() => setRefreshingT0(false)} />}
+          <ConfirmationDialog
+            open={confirmingRemoval}
+            criticalAction
+            title={t("rework.platformAccess.bulkRemove.title", { count: selectedCount })}
+            message={t("rework.platformAccess.bulkRemove.message")}
+            confirmLabel={t("rework.platformAccess.bulkRemove.confirm")}
+            cancelLabel={t("common.cancel")}
+            confirmDisabled={busy}
+            onCancel={() => setConfirmingRemoval(false)}
+            onConfirm={() =>
+              void run(async () => {
+                const result = await revokeUsers({
+                  revokePlatformAccessUsers:
+                    selection.mode === "all"
+                      ? { all_matching: true, query: searchQuery, overlap, excluded_ids: [...selection.excluded] }
+                      : { user_ids: [...selection.ids] },
+                }).unwrap();
+                showSuccess({ summary: t("rework.platformAccess.bulkRemove.done", { count: result.removed_count }) });
+                setSelection(NO_SELECTION);
+                setConfirmingRemoval(false);
+              })
+            }
+          />
           {filterConfirmation !== undefined && state.data && (
             <PlatformAccessActivationDialog
               enabling={filterConfirmation}

@@ -7,6 +7,16 @@ import type { PlatformAccessUser } from "../../../../../slices/controlPlane/cont
 import { usePlatformAccessUsersQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const PAGE_SIZE = 25;
+// Mirrors the server's check; the server stays the authority.
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// An email nobody signed in with travels as a pseudo user: one pending list for both.
+const EMAIL_KEY = "email:";
+const emailEntry = (email: string): PlatformAccessUser => ({
+  user_id: `${EMAIL_KEY}${email}`,
+  username: email,
+  email,
+  sources: [],
+});
 
 function userLabel(user: PlatformAccessUser): string {
   const identifier = user.username || user.email || user.user_id;
@@ -23,7 +33,7 @@ export default function PlatformAccessAddUsersDialog({
   open: boolean;
   busy: boolean;
   onClose: () => void;
-  onConfirm: (userIds: string[]) => void;
+  onConfirm: (userIds: string[], emails: string[]) => void;
 }) {
   const { t } = useTranslation();
   const [typed, setTyped] = useState("");
@@ -53,7 +63,13 @@ export default function PlatformAccessAddUsersDialog({
   const settled = searchable && wanted === searchQuery && !users.isFetching;
   const page = settled && !users.isError ? users.currentData : undefined;
   const pendingIds = new Set(pending.map((user) => user.user_id));
-  const options = (page?.items ?? [])
+  const options: {
+    key: string;
+    value: PlatformAccessUser;
+    label: string;
+    disabled: boolean;
+    description: string | undefined;
+  }[] = (page?.items ?? [])
     .filter((user) => !pendingIds.has(user.user_id))
     .map((user) => {
       const granted = user.sources.some((source) => source.kind === "manual" || source.kind === "t0");
@@ -65,6 +81,22 @@ export default function PlatformAccessAddUsersDialog({
         description: granted ? t("rework.platformAccess.addDialog.alreadyGranted") : undefined,
       };
     });
+  // Someone with no account yet is whitelisted by email, unless that address is already known.
+  const typedEmail = wanted.toLowerCase();
+  const offerEmail =
+    page !== undefined &&
+    EMAIL.test(typedEmail) &&
+    !page.items.some((user) => user.email?.toLowerCase() === typedEmail) &&
+    !pendingIds.has(`${EMAIL_KEY}${typedEmail}`);
+  if (offerEmail) {
+    options.unshift({
+      key: `${EMAIL_KEY}${typedEmail}`,
+      value: emailEntry(typedEmail),
+      label: t("rework.platformAccess.addDialog.addEmail", { email: typedEmail }),
+      disabled: false,
+      description: t("rework.platformAccess.addDialog.emailDescription"),
+    });
+  }
   const lastShown = page?.items[page.items.length - 1];
   if (page && lastShown && page.total > page.items.length) {
     // A line of the menu, never selectable: it carries a user only because options are typed by their value.
@@ -107,7 +139,13 @@ export default function PlatformAccessAddUsersDialog({
       cancelLabel={t("common.cancel")}
       confirmLabel={t("rework.platformAccess.addDialog.confirm")}
       confirmDisabled={pending.length === 0 || busy}
-      onConfirm={() => onConfirm(pending.map((user) => user.user_id))}
+      onConfirm={() => {
+        const isEmail = (user: PlatformAccessUser) => user.user_id.startsWith(EMAIL_KEY);
+        onConfirm(
+          pending.filter((user) => !isEmail(user)).map((user) => user.user_id),
+          pending.filter(isEmail).map((user) => user.email ?? ""),
+        );
+      }}
       // A grant in flight keeps the dialog, so a failure still shows the selection it was for.
       onClose={() => {
         if (!busy) onClose();

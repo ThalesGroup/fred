@@ -123,7 +123,7 @@ it("keeps the selection across searches and grants it in one confirmation", () =
   expect(pendingText()).toContain("alice");
   expect(pendingText()).toContain("bob");
   act(() => confirm().click());
-  expect(onConfirm).toHaveBeenCalledWith(["a", "b"]);
+  expect(onConfirm).toHaveBeenCalledWith(["a", "b"], []);
 });
 
 it("leaves already selected people out of the suggestions and lets them be removed", () => {
@@ -212,4 +212,27 @@ it("cannot be confirmed twice or dismissed while the grant is being saved", () =
   show({ busy: false });
   act(() => button("common.cancel").click());
   expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("offers to whitelist a typed email nobody holds, lowercased, and confirms it apart from people", () => {
+  state.users = [];
+  show();
+  search(" Jane@Example.org ");
+  act(() => option("rework.platformAccess.addDialog.addEmail").click());
+  expect(pendingText()).toContain("jane@example.org");
+  state.users = [alice];
+  search("al");
+  act(() => option("alice").click());
+  act(() => confirm().click());
+  expect(onConfirm).toHaveBeenCalledWith(["a"], ["jane@example.org"]);
+});
+
+it("does not offer an email that a known user already has, nor text that is not an email", () => {
+  state.users = [{ ...alice, email: "alice@example.org" }];
+  show();
+  search("ALICE@example.org");
+  expect(options().some((node) => node.textContent?.includes("addEmail"))).toBe(false);
+  state.users = [];
+  search("not-an-email");
+  expect(options().some((node) => node.textContent?.includes("addEmail"))).toBe(false);
 });

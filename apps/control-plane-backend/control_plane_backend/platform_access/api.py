@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -29,6 +29,7 @@ from control_plane_backend.platform_access import service
 from control_plane_backend.platform_access.directory import PlatformAccessDirectory
 from control_plane_backend.platform_access.schemas import (
     AcceptFreeEnrollmentCgu,
+    AddPlatformAccessPendingEmail,
     CreatePlatformEnrollmentLink,
     DeletedPlatformEnrollmentLinks,
     EnrollmentResult,
@@ -36,6 +37,7 @@ from control_plane_backend.platform_access.schemas import (
     GrantPlatformAccessUsers,
     PlatformAccessActivationPreview,
     PlatformAccessOwnClaims,
+    PlatformAccessPendingEmail,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
@@ -48,6 +50,8 @@ from control_plane_backend.platform_access.schemas import (
     PlatformT0Preview,
     PlatformT0RefreshMode,
     RefreshPlatformT0,
+    RevokedPlatformAccessUsers,
+    RevokePlatformAccessUsers,
     SetPlatformAccessPolicy,
     SetPlatformAccessTeam,
     SetPlatformFiltering,
@@ -172,10 +176,72 @@ async def list_platform_access_users(
     exceptions_only: bool = Query(
         False, description="Only users holding an individual exception."
     ),
+    overlap: Literal["rule", "whitelist_only"] | None = Query(
+        None,
+        description=(
+            "Exceptions only, narrowed to people the rule also admits, or to people "
+            "with no other admission source. Requires exceptions_only."
+        ),
+    ),
 ) -> PlatformAccessUsersPage:
+    if overlap is not None and not exceptions_only:
+        raise HTTPException(422, "platform_access_overlap_needs_exceptions_only")
     return await service.users_page(
-        access, offset, limit, query, exceptions_only, PlatformAccessDirectory(deps)
+        access,
+        offset,
+        limit,
+        query,
+        exceptions_only,
+        PlatformAccessDirectory(deps),
+        overlap,
     )
+
+
+@router.post(
+    "/admin/platform/access/users/revoke", response_model=RevokedPlatformAccessUsers
+)
+async def revoke_platform_access_users(
+    body: RevokePlatformAccessUsers, access: Access, user: Admin, deps: UserDeps
+) -> RevokedPlatformAccessUsers:
+    removed = await service.revoke_users(
+        access, user, body, PlatformAccessDirectory(deps)
+    )
+    emit_audit_log(
+        "platform.access.users.revoked",
+        actor_uid=user.uid,
+        all_matching=body.all_matching,
+        overlap=body.overlap,
+        removed_count=removed,
+    )
+    return RevokedPlatformAccessUsers(removed_count=removed)
+
+
+@router.get(
+    "/admin/platform/access/pending-emails",
+    response_model=list[PlatformAccessPendingEmail],
+)
+async def list_platform_access_pending_emails(
+    access: Access, user: Admin
+) -> list[PlatformAccessPendingEmail]:
+    return await service.pending_emails(access)
+
+
+@router.post("/admin/platform/access/pending-emails", status_code=204)
+async def add_platform_access_pending_email(
+    body: AddPlatformAccessPendingEmail, access: Access, user: Admin, deps: UserDeps
+) -> None:
+    await service.add_pending_email(
+        access, user, body.email, PlatformAccessDirectory(deps)
+    )
+    emit_audit_log("platform.access.pending_email.added", actor_uid=user.uid)
+
+
+@router.delete("/admin/platform/access/pending-emails/{email}", status_code=204)
+async def remove_platform_access_pending_email(
+    email: str, access: Access, user: Admin
+) -> None:
+    await service.remove_pending_email(access, email)
+    emit_audit_log("platform.access.pending_email.removed", actor_uid=user.uid)
 
 
 @router.post("/admin/platform/access/users", status_code=204)

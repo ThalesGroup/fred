@@ -97,6 +97,7 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
           query: queryArg.query,
           exceptions_only: queryArg.exceptionsOnly,
+          overlap: queryArg.overlap,
         },
       }),
     }),
@@ -108,6 +109,41 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/access/users`,
         method: "POST",
         body: queryArg.grantPlatformAccessUsers,
+      }),
+    }),
+    revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: build.mutation<
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse,
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/revoke`,
+        method: "POST",
+        body: queryArg.revokePlatformAccessUsers,
+      }),
+    }),
+    listPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGet: build.query<
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse,
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/pending-emails` }),
+    }),
+    addPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPost: build.mutation<
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse,
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails`,
+        method: "POST",
+        body: queryArg.addPlatformAccessPendingEmail,
+      }),
+    }),
+    removePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDelete: build.mutation<
+      RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiResponse,
+      RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails/${queryArg.email}`,
+        method: "DELETE",
       }),
     }),
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
@@ -2600,10 +2636,29 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   query?: string;
   /** Only users holding an individual exception. */
   exceptionsOnly?: boolean;
+  /** Exceptions only, narrowed to people the rule also admits, or to people with no other admission source. Requires exceptions_only. */
+  overlap?: ("rule" | "whitelist_only") | null;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
   grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg = {
+  revokePlatformAccessUsers: RevokePlatformAccessUsers;
+};
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPendingEmail[];
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg = void;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse = unknown;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg = {
+  addPlatformAccessPendingEmail: AddPlatformAccessPendingEmail;
+};
+export type RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiResponse =
+  unknown;
+export type RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiArg = {
+  email: string;
 };
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
@@ -4503,9 +4558,28 @@ export type PlatformAccessUser = {
 export type PlatformAccessUsersPage = {
   items: PlatformAccessUser[];
   total: number;
+  unknown_count?: number | null;
 };
 export type GrantPlatformAccessUsers = {
   user_ids: string[];
+};
+export type RevokedPlatformAccessUsers = {
+  removed_count: number;
+};
+export type RevokePlatformAccessUsers = {
+  user_ids?: string[];
+  all_matching?: boolean;
+  query?: string;
+  overlap?: ("rule" | "whitelist_only") | null;
+  excluded_ids?: string[];
+};
+export type PlatformAccessPendingEmail = {
+  email: string;
+  granted_by: string;
+  granted_at: string;
+};
+export type AddPlatformAccessPendingEmail = {
+  email: string;
 };
 export type PlatformT0Preview = {
   candidates: number;
@@ -7072,6 +7146,11 @@ export const {
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation,
+  useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useLazyListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation,
+  useRemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteMutation,
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
   usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,

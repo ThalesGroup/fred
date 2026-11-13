@@ -48,6 +48,14 @@ const state = vi.hoisted(() => ({
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
+  unknownCount: null as number | null,
+  refetchUsers: vi.fn(),
+  refetchPending: vi.fn(),
+  pending: [] as { email: string; granted_by: string; granted_at: string }[],
+  pickedEmails: [] as string[],
+  revokeUsers: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 2 }) })),
+  addEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
+  removeEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
 }));
 // Keys only, plus the team names a string is given so grouped lines can be told apart.
 vi.mock("react-i18next", () => ({
@@ -90,14 +98,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   usePlatformAccessUsersQuery: (args: unknown, options: unknown) => {
     state.searchUsers(args, options);
     // As RTK Query does: nothing while skipped, and no current data while another page or search loads.
-    if ((options as { skip: boolean }).skip) return { isFetching: false, isError: false };
+    if ((options as { skip: boolean }).skip) return { isFetching: false, isError: false, refetch: state.refetchUsers };
     return {
+      refetch: state.refetchUsers,
       isFetching: state.usersFetching,
       isError: state.usersError,
       data: { total: 1, items: [{ user_id: "old", username: "Previous search", sources: [] }] },
       currentData: state.usersFetching
         ? undefined
-        : { total: state.usersTotal ?? state.users.length, items: state.users },
+        : { total: state.usersTotal ?? state.users.length, items: state.users, unknown_count: state.unknownCount },
     };
   },
   usePlatformAccessT0Query: (_args: unknown, options: { skip: boolean }) => {
@@ -118,6 +127,11 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useRevokePlatformUserMutation: () => [state.revoke],
+  useRevokePlatformUsersMutation: () => [state.revokeUsers],
+  usePlatformAccessPendingEmailsQuery: (_args: unknown, options: { skip: boolean }) =>
+    options.skip ? { refetch: state.refetchPending } : { data: state.pending, refetch: state.refetchPending },
+  useAddPlatformPendingEmailMutation: () => [state.addEmail],
+  useRemovePlatformPendingEmailMutation: () => [state.removeEmail],
   useImportPlatformT0Mutation: () => [state.importT0],
   useSetPlatformTeamMutation: () => [state.setTeam],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
@@ -145,11 +159,11 @@ vi.mock("./PlatformAccessAddUsersDialog", () => ({
     open: boolean;
     busy: boolean;
     onClose: () => void;
-    onConfirm: (ids: string[]) => void;
+    onConfirm: (ids: string[], emails: string[]) => void;
   }) =>
     open ? (
       <div data-testid="add-users-dialog" data-busy={busy}>
-        <button type="button" onClick={() => onConfirm(state.picked)}>
+        <button type="button" onClick={() => onConfirm(state.picked, state.pickedEmails)}>
           Confirm selection
         </button>
         <button type="button" onClick={onClose}>
@@ -189,6 +203,9 @@ beforeEach(() => {
   state.previewFetching = false;
   state.previewError = false;
   state.configured = true;
+  state.unknownCount = null;
+  state.pending = [];
+  state.pickedEmails = [];
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   host = document.createElement("div");
@@ -296,12 +313,100 @@ it("tells an empty whitelist apart from a search without match", () => {
   expect(panel.textContent).not.toContain("rework.platformAccess.emptyWhitelist");
 });
 
-it("offers removal only, without row selection or a bulk bar", () => {
+const usersPanel = () => host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
+const checkboxes = () => [...usersPanel().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+const lastUsersQuery = () => state.searchUsers.mock.lastCall![0] as Record<string, unknown>;
+const chip = (key: string) =>
+  [...usersPanel().querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent?.includes(key))!;
+const twoUsers = () => {
+  state.users = [
+    { user_id: "a", username: "Alice", email: null, sources: [{ kind: "manual" }] },
+    { user_id: "b", username: "Bob", email: null, sources: [{ kind: "manual" }] },
+  ];
+  state.usersTotal = 240;
+};
+
+it("starts each row with a checkbox and keeps the per-row removal", () => {
   render("");
-  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
-  expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
+  // Header plus one per row.
+  expect(checkboxes()).toHaveLength(2);
   expect(pageButton("rework.platformAccess.remove")).toBeDefined();
-  expect(host.textContent).not.toContain("alice@example.org");
+  expect(host.textContent).not.toContain("rework.platformAccess.selection.count");
+});
+
+it("selects every matching row across pages from the header, then removes all but the unchecked one", async () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[0].click());
+  expect(checkboxes().every((box) => box.checked)).toBe(true);
+  act(() => checkboxes()[2].click());
+  expect(checkboxes()[0].indeterminate).toBe(true);
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.revokeUsers).toHaveBeenCalledWith({
+    revokePlatformAccessUsers: { all_matching: true, query: "", overlap: null, excluded_ids: ["b"] },
+  });
+  expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.bulkRemove.done" });
+  expect(checkboxes().some((box) => box.checked)).toBe(false);
+});
+
+it("removes only the rows checked one by one", async () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.revokeUsers).toHaveBeenCalledWith({ revokePlatformAccessUsers: { user_ids: ["a"] } });
+});
+
+it("filters by access overlap, restarts at page one, clears the selection and explains unknown evidence", () => {
+  twoUsers();
+  state.unknownCount = 3;
+  render("");
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.overlapFilter.rule").click());
+  expect(lastUsersQuery()).toMatchObject({ overlap: "rule", offset: 0, exceptionsOnly: true });
+  expect(checkboxes().some((box) => box.checked)).toBe(false);
+  expect(host.textContent).toContain("rework.platformAccess.unknownEvidence");
+  act(() => chip("rework.platformAccess.overlapFilter.all").click());
+  expect(lastUsersQuery()).not.toHaveProperty("overlap");
+  expect(host.textContent).not.toContain("rework.platformAccess.unknownEvidence");
+});
+
+it("refreshes the listing and the pending emails on demand", () => {
+  render("");
+  const refresh = usersPanel().querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.refresh"]')!;
+  act(() => refresh.click());
+  expect(state.refetchUsers).toHaveBeenCalledTimes(1);
+  expect(state.refetchPending).toHaveBeenCalledTimes(1);
+});
+
+it("lists emails waiting for a first sign-in and removes one", async () => {
+  state.pending = [{ email: "jane@example.org", granted_by: "admin", granted_at: "2026-11-13T10:00:00Z" }];
+  render("");
+  expect(usersPanel().textContent).toContain("jane@example.org");
+  const remove = usersPanel().querySelector<HTMLButtonElement>(
+    '[aria-label="rework.platformAccess.pendingEmails.removeAria"]',
+  )!;
+  await act(async () => remove.click());
+  expect(state.removeEmail).toHaveBeenCalledWith({ email: "jane@example.org" });
+  act(() => chip("rework.platformAccess.overlapFilter.rule").click());
+  expect(usersPanel().textContent).not.toContain("jane@example.org");
+});
+
+it("whitelists typed emails alongside selected people", async () => {
+  state.pickedEmails = ["jane@example.org"];
+  render("");
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
+  expect(state.addEmail).toHaveBeenCalledWith({ addPlatformAccessPendingEmail: { email: "jane@example.org" } });
 });
 
 it("shows when and how each individual access was added, and one chip detailing the other access", () => {
@@ -341,6 +446,8 @@ it("shows when and how each individual access was added, and one chip detailing 
     (node) => node.textContent,
   );
   expect(headers).toEqual([
+    // The selection column's header holds only the select-all checkbox.
+    "",
     "rework.teamSettings.members.table.identifiant",
     "rework.teamSettings.members.table.firstName",
     "rework.teamSettings.members.table.lastName",
@@ -354,7 +461,8 @@ it("shows when and how each individual access was added, and one chip detailing 
       node.textContent?.includes(name),
     )!;
   const cells = (name: string) => [...row(name).querySelectorAll<HTMLElement>(`:scope > [class*="datatable-cell"]`)];
-  const [, , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
+  // The selection checkbox comes first.
+  const [, , , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
   expect(aliceDate.textContent).toBe(new Date("2026-03-04T10:20:30Z").toLocaleString("en"));
   expect(aliceOrigin.textContent).toBe("rework.platformAccess.origin.manual");
   // One chip whatever the number of other sources, focusable, named with the whole list.
@@ -384,7 +492,7 @@ it("shows when and how each individual access was added, and one chip detailing 
   });
 
   // Only the groups that apply are listed, and a team without a name never shows its identifier.
-  const chloe = cells("Chloe")[5].querySelector<HTMLElement>('[role="note"]')!;
+  const chloe = cells("Chloe")[6].querySelector<HTMLElement>('[role="note"]')!;
   expect(chloe.getAttribute("aria-label")).toBe("rework.platformAccess.otherAccess.summary");
   expect(state.translated).toHaveBeenCalledWith("rework.platformAccess.otherAccess.summary", {
     details: "rework.platformAccess.otherAccess.free[rework.platformAccess.otherAccess.unnamedTeam]",
@@ -394,7 +502,7 @@ it("shows when and how each individual access was added, and one chip detailing 
     expect.objectContaining({ details: expect.stringContaining("open-uid") }),
   );
 
-  const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
+  const [, , , , bobDate, bobOrigin, bobOthers] = cells("Bob");
   expect(bobDate.textContent).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
   expect(bobOrigin.textContent).toBe("rework.platformAccess.origin.t0");
   // Nothing else grants access: the cell is empty, without chip or marker.
