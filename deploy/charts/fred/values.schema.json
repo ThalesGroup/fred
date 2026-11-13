@@ -7267,7 +7267,7 @@
                           "type": "boolean"
                         },
                         "query": {
-                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
+                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.\n- Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.",
                           "properties": {
                             "engine": {
                               "const": "duckdb",
@@ -7338,6 +7338,33 @@
                               "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
                               "title": "Duckdb Memory Limit",
                               "type": "string"
+                            },
+                            "duckdb_ca_cert_file": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+                              "title": "Duckdb Ca Cert File"
+                            },
+                            "duckdb_enable_server_cert_verification": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
+                              "title": "Duckdb Enable Server Cert Verification"
                             },
                             "max_selected_datasets": {
                               "default": 50,
@@ -9777,7 +9804,7 @@
                           "type": "boolean"
                         },
                         "query": {
-                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
+                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.\n- Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.",
                           "properties": {
                             "engine": {
                               "const": "duckdb",
@@ -9848,6 +9875,33 @@
                               "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
                               "title": "Duckdb Memory Limit",
                               "type": "string"
+                            },
+                            "duckdb_ca_cert_file": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+                              "title": "Duckdb Ca Cert File"
+                            },
+                            "duckdb_enable_server_cert_verification": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
+                              "title": "Duckdb Enable Server Cert Verification"
                             },
                             "max_selected_datasets": {
                               "default": 50,
@@ -12210,7 +12264,7 @@
                           "type": "boolean"
                         },
                         "query": {
-                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
+                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.\n- Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.",
                           "properties": {
                             "engine": {
                               "const": "duckdb",
@@ -12281,6 +12335,33 @@
                               "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
                               "title": "Duckdb Memory Limit",
                               "type": "string"
+                            },
+                            "duckdb_ca_cert_file": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+                              "title": "Duckdb Ca Cert File"
+                            },
+                            "duckdb_enable_server_cert_verification": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
+                              "title": "Duckdb Enable Server Cert Verification"
                             },
                             "max_selected_datasets": {
                               "default": 50,
@@ -14627,7 +14708,7 @@
                           "type": "boolean"
                         },
                         "query": {
-                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
+                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.\n- Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.",
                           "properties": {
                             "engine": {
                               "const": "duckdb",
@@ -14698,6 +14779,33 @@
                               "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
                               "title": "Duckdb Memory Limit",
                               "type": "string"
+                            },
+                            "duckdb_ca_cert_file": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+                              "title": "Duckdb Ca Cert File"
+                            },
+                            "duckdb_enable_server_cert_verification": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
+                              "title": "Duckdb Enable Server Cert Verification"
                             },
                             "max_selected_datasets": {
                               "default": 50,
@@ -17044,7 +17152,7 @@
                           "type": "boolean"
                         },
                         "query": {
-                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.",
+                          "description": "Runtime settings for dataset-centric SQL queries.\n\nWhy this exists:\n- Tabular querying now runs on transient Parquet datasets rather than\n  long-lived SQL tables.\n- These values keep query execution bounded and configurable from YAML.\n\nHow to use:\n- Keep the default `duckdb` engine.\n- Tune result limits and backend-internal presigned URL TTL per deployment.\n- Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.",
                           "properties": {
                             "engine": {
                               "const": "duckdb",
@@ -17115,6 +17223,33 @@
                               "pattern": "(?i)^\\d+(\\.\\d+)?\\s*(B|[KMGT]B|[KMGT]iB)$",
                               "title": "Duckdb Memory Limit",
                               "type": "string"
+                            },
+                            "duckdb_ca_cert_file": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+                              "title": "Duckdb Ca Cert File"
+                            },
+                            "duckdb_enable_server_cert_verification": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null,
+                              "description": "Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
+                              "title": "Duckdb Enable Server Cert Verification"
                             },
                             "max_selected_datasets": {
                               "default": 50,

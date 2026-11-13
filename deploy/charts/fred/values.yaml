@@ -355,6 +355,10 @@ x-kf-storage: &kf-storage
       internal_presigned_ttl_seconds: 3600
       default_max_rows: 200
       max_rows: 1000
+      # Set both options for HTTPS Parquet reads against a private CA.
+      # Mount the CA bundle in the Knowledge Flow container before enabling them.
+      duckdb_ca_cert_file: null
+      duckdb_enable_server_cert_verification: null
 
 global:
   kubeconfig: ""

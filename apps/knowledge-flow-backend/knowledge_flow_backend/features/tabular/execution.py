@@ -303,6 +303,10 @@ def open_duckdb_connection(handle: DuckDBAbortHandle, *, config: TabularQueryCon
         connection.execute(f"SET threads={int(config.duckdb_threads)}")
         connection.execute(f"SET memory_limit='{config.duckdb_memory_limit}'")
         connection.execute(f"SET temp_directory='{_TEMP_DIRECTORY}'")
+        if config.duckdb_ca_cert_file is not None:
+            connection.execute("SET ca_cert_file = ?", [config.duckdb_ca_cert_file])
+        if config.duckdb_enable_server_cert_verification is not None:
+            connection.execute("SET enable_server_cert_verification = ?", [config.duckdb_enable_server_cert_verification])
         handle.bind(connection)
     except BaseException:
         connection.close()

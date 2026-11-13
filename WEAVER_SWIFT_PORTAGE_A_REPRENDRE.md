@@ -2458,3 +2458,36 @@ Le checkout principal `~/Work/weaver/fred` est resté propre au SHA initial pend
 la clôture. Aucun push ni déploiement ; réception navigateur/worker réel encore à
 effectuer. La promotion de cette branche isolée vers la branche de travail commune
 reste une opération distincte des résolutions déjà effectuées.
+
+
+### Résolution du merge Swift du 13 novembre 2026
+
+Merge commencé par Dimi sur `weaver`, dans `~/Work/common/fred`, puis résolu
+par Codex sans commit ni push. Base Weaver :
+`5052116a7f20cfeb3e341d865f0d6d086aa29081` ; dernière borne Swift intégrée :
+`222bc60acda8b806c2186bd241dfbf3db180fac2` ; cible du merge en cours :
+`b7bf4412a38f991423713d96649a0a7c0994dc36`, également `origin/swift` au relevé.
+La borne intégrée reste inchangée tant que le commit de fusion n'est pas créé.
+
+| Arrivée Swift | Résolution Weaver |
+| --- | --- |
+| `77f799d5c` : préparation v3.11.0 | Versions de packages/charts Weaver 5.0.0, bornes `<6`, versions de contrats de capacités et locks conservés. Les changements entrants des locks sont exclusivement des versions Fred et une révision de format uv. Guides de migration Swift et annonces de fonctionnalités différées exclus ; aucune restauration de `docs/swift` ou de `platform-ops`. |
+| `2270f27b7`, `743a0666b` : publication Docker | Export OCI avec provenance et entrée Trivy repris. Liste Weaver conservée : l'image PyMuPDF appartient au worker séparé. Le workflow existant ne reçoit pas de voie de récupération additionnelle. |
+| `ed1b056fe` : faux échec PowerPoint | Les quatre écritures conservent les routes et droits CP Weaver. Retrait du `refetch` dans leur traitement de succès : le polling existant par organisation/pod rafraîchit sous trois secondes hors latence serveur. Les réponses Weaver ne sont pas les settings complets Swift ; le helper de cache Swift et son test ne sont donc pas importés. Assertions de non-régression adaptées dans le test Weaver existant. |
+| `b7bf4412a` : TLS DuckDB | Champs portés dans `fred_knowledge.configuration.TabularQueryConfig`, propriétaire commun actuel ; exécution et tests Swift repris. Schémas API/worker/chart régénérés depuis les modèles, valeurs et documentation conservées. Aucun ancien modèle de stockage ou d'ingestion réintroduit. |
+
+Les lots précédemment différés (analytics, accueil) et l'exclusion des brouillons
+restent distincts de ces cinq arrivées. Aucun changement de migration ou de
+registre d'activités Temporal dans ce delta. Les notes opérateur OCI, TLS et
+PowerPoint sont dans `deploy/release-notes/changes/`.
+
+Validation : zéro entrée non fusionnée ; `git diff --cached --check` réussi ;
+`make code-quality` global réussi, frontend inclus (trois avertissements
+`reportUnreachable` dans des fichiers worker inchangés). Génération des schémas
+API/worker puis `make generate-chart-schema` réussie ; JSON/YAML et absence de
+marqueurs contrôlés. `scripts/migration_guides.py check-pr --base HEAD --worktree`
+réussi : quatre notes du merge et une note locale préexistante, non ajoutée à l'index.
+Code applicatif Python/TypeScript : +15/-4 ; tests : +42/-1 ; configuration CI/chart,
+générés et documentation comptés séparément. Pas de campagne de tests fonctionnels,
+réception navigateur, publication ou redémarrage de service. Prochaine action :
+validation fonctionnelle par Dimi puis commit du merge s'il l'approuve.

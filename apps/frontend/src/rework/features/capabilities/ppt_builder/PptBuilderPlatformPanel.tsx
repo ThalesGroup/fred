@@ -109,6 +109,7 @@ export function PptBuilderPlatformPanel({
       : null
     : { kind: "builtin" as const, baseUrl: baseUrl ?? undefined };
 
+  // Scoped polling refreshes settings independently of successful writes.
   const handlePick = async (file: File) => {
     try {
       await uploadTemplate({
@@ -118,7 +119,6 @@ export function PptBuilderPlatformPanel({
         fileUpload: { file },
       }).unwrap();
       showSuccess({ summary: t(`${K}.uploaded`) });
-      await query.refetch();
     } catch (error) {
       showError({ summary: t(`${K}.uploadError`), detail: normalizeApiError(error).detail });
     } finally {
@@ -129,7 +129,6 @@ export function PptBuilderPlatformPanel({
     try {
       await rerun({ ...target, powerPointChange: { expected_file_id: expectedFileId } }).unwrap();
       showSuccess({ summary: t(`${K}.rerunStarted`) });
-      await query.refetch();
     } catch (error) {
       showError({ summary: t(`${K}.rerunError`), detail: normalizeApiError(error).detail });
     }
@@ -140,7 +139,6 @@ export function PptBuilderPlatformPanel({
       await resetTemplate({ ...target, expectedFileId }).unwrap();
       showSuccess({ summary: t(`${K}.resetDone`) });
       setDraft(null);
-      await query.refetch();
     } catch (error) {
       showError({ summary: t(`${K}.resetError`), detail: normalizeApiError(error).detail });
     }
@@ -158,7 +156,6 @@ export function PptBuilderPlatformPanel({
           },
         }).unwrap();
         showSuccess({ summary: t(`${K}.overridesSaved`) });
-        await query.refetch();
       } catch (error) {
         showError({ summary: t(`${K}.overridesError`), detail: normalizeApiError(error).detail });
         return;
