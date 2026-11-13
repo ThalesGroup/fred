@@ -71,13 +71,13 @@ export function clippedTabularText(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
 }
 
-export function previewTabularRows(rows: Record<string, unknown>[]) {
+export function previewTabularRows(rows: Record<string, unknown>[], { allColumns = false } = {}) {
   let fieldsTruncated = false;
   const preview = rows.slice(0, ROW_PREVIEW_COUNT).map((row) => {
     const fields: [string, unknown][] = [];
     for (const name in row) {
       if (!Object.prototype.hasOwnProperty.call(row, name)) continue;
-      if (fields.length === COLUMN_PREVIEW_COUNT) {
+      if (!allColumns && fields.length === COLUMN_PREVIEW_COUNT) {
         fieldsTruncated = true;
         break;
       }
@@ -85,8 +85,9 @@ export function previewTabularRows(rows: Record<string, unknown>[]) {
       let display = value;
       if (typeof value === "string") display = clippedTabularText(value, CELL_PREVIEW_CHARS);
       else if (value !== null && typeof value === "object") display = "[...]";
-      if (display !== value || name.length > COLUMN_NAME_PREVIEW_CHARS) fieldsTruncated = true;
-      fields.push([clippedTabularText(name, COLUMN_NAME_PREVIEW_CHARS), display]);
+      const columnName = allColumns ? name : clippedTabularText(name, COLUMN_NAME_PREVIEW_CHARS);
+      if (display !== value || columnName !== name) fieldsTruncated = true;
+      fields.push([columnName, display]);
     }
     return Object.fromEntries(fields);
   });

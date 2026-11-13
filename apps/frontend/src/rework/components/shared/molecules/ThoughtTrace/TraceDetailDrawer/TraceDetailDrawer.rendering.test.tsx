@@ -82,16 +82,38 @@ function queryEntry(
   };
 }
 
+it.each([20, 64])("shows every returned column across five preview rows with %i columns", (columnCount) => {
+  const rows = Array.from({ length: 200 }, (_, row) =>
+    Object.fromEntries(
+      Array.from({ length: columnCount }, (_, column) => [`column_${column}`, `value_${row}_${column}`]),
+    ),
+  );
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
+  const preview = JSON.parse(container.querySelectorAll("pre code")[1].textContent ?? "[]");
+  expect(preview).toEqual(rows.slice(0, 5));
+  expect(container.textContent).not.toContain("value_5_0");
+});
+
+it("preserves distinct complete column names when their prefixes match", () => {
+  const prefix = "long_column_name_".repeat(8);
+  const rows = [{ [`${prefix}first`]: 1, [`${prefix}second`]: 2 }];
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
+  const preview = JSON.parse(container.querySelectorAll("pre code")[1].textContent ?? "[]");
+  expect(preview).toEqual(rows);
+});
+
 it("opens a wide query with visible SQL and bounded DOM work", () => {
   const rows = Array.from({ length: 200 }, (_, row) =>
     Object.fromEntries(Array.from({ length: 64 }, (_, column) => [`column_${column}`, `value_${row}_${column}`])),
   );
   act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows)} onClose={() => {}} />));
   expect(container.textContent).toContain("SELECT");
-  expect(container.querySelectorAll("*").length).toBeLessThan(2500);
+  const previewNodeCount = container.querySelectorAll("pre")[1].querySelectorAll("*").length;
   expect(container.textContent).toContain("value_0_0");
   expect(container.textContent).not.toContain("value_5_0");
-  expect(container.textContent).not.toContain("value_0_8");
+  expect(container.textContent).toContain("value_0_63");
+  act(() => root.render(<TraceDetailDrawer entry={queryEntry(rows.slice(0, 5))} onClose={() => {}} />));
+  expect(container.querySelectorAll("pre")[1].querySelectorAll("*").length).toBe(previewNodeCount);
 });
 
 async function copyBlock(index: number) {
@@ -122,7 +144,7 @@ it("bounds long cells and nested values while copying the entire recorded respon
   ]);
   act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
   expect(container.textContent.length).toBeLessThan(3000);
-  expect(container.textContent).toContain("some columns or values shortened");
+  expect(container.textContent).toContain("some values shortened");
   expect(container.textContent).not.toContain("nested-".repeat(10));
   await copyBlock(1);
   expect(writeRichClipboard).toHaveBeenLastCalledWith("", toolResultContent(entry.result));

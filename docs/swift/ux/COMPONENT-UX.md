@@ -874,8 +874,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
 - **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
-  a JSON response preview with the existing syntax colors, limited to five rows,
-  eight columns and shortened cells. One compact localized sentence identifies
+  a JSON response preview with the existing syntax colors, limited to five rows
+  with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
   preview limits and complete-copy behavior; copy actions retain the complete
   recorded SQL and response. Oversized SQL uses a bounded plain-text preview. The drawer
   retains the status and duration badges. Full-context model token counters are

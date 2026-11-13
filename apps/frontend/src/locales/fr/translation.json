@@ -2660,7 +2660,7 @@
         "emptyCatalog": "Ce catalogue est vide.",
         "queryPreview_one": "Aperçu de {{count}} ligne sur {{total}}{{shortened}}{{copy}}.",
         "queryPreview_other": "Aperçu de {{count}} lignes sur {{total}}{{shortened}}{{copy}}.",
-        "queryPreviewShortened": ", certaines colonnes ou valeurs sont abrégées",
+        "queryPreviewShortened": ", certaines valeurs sont abrégées",
         "queryPreviewCopy": " ; Copier récupère la réponse enregistrée complète",
         "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
         "kind": {

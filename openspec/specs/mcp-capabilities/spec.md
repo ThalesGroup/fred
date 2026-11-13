@@ -279,13 +279,14 @@ The existing chat trace drawer SHALL show the failed action, its recorded busine
 
 ### Requirement: Tabular query details remain responsive for large returned payloads
 
-Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL bound visible rows, columns and cell text and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. The bounded JSON preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. Oversized SQL SHALL receive a bounded visible preview with an explicit truncation indication and access to its complete original through copying. Live and reloaded traces SHALL use the same interpretation; opening a step SHALL NOT re-run its tool.
+Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL show up to five rows with every returned column and complete column names, while bounding long cell text and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. The bounded JSON preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. Oversized SQL SHALL receive a bounded visible preview with an explicit truncation indication and access to its complete original through copying. Live and reloaded traces SHALL use the same interpretation; opening a step SHALL NOT re-run its tool.
 
 #### Scenario: Wide query response
 - **GIVEN** a successful query result with hundreds of rows and dozens of columns
 - **WHEN** the user opens its trace step
 - **THEN** the drawer displays SQL above a bounded response preview and identifies the returned row count and preview limits
-- **AND** initial rendered work does not grow with the total number of returned cells
+- **AND** all returned columns are visible for each of the first five rows
+- **AND** initial rendered work does not grow with the number of rows beyond those five preview rows
 
 #### Scenario: Oversized cell or SQL
 - **WHEN** a query contains very long SQL or its result contains a very long cell

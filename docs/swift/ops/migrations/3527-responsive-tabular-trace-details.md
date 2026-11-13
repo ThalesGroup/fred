@@ -25,7 +25,7 @@ Deploy Fred normally. Existing conversations use the improved detail view withou
 
 ## Validation
 
-Open a recorded tabular query with a wide response. Check that SQL appears promptly above a limited JSON response preview with its existing syntax colors, copying retains the complete original SQL/response, and status and duration retain their previous presentation. Check that full model-call usage is not displayed as individual tool consumption, including for one-row responses and after reload, and that no model-usage explanation paragraph is added. No token count should be inferred from payload length or replaced by zero when the tool API supplies none.
+Open a recorded tabular query with a wide response. Check that SQL appears promptly above a limited JSON response preview with its existing syntax colors and every returned column, copying retains the complete original SQL/response, and status and duration retain their previous presentation. Check that full model-call usage is not displayed as individual tool consumption, including for one-row responses and after reload, and that no model-usage explanation paragraph is added. No token count should be inferred from payload length or replaced by zero when the tool API supplies none.
 
 ## Rollback
 
@@ -33,4 +33,4 @@ Use the normal component rollback procedure. Older readers can ignore the additi
 
 ## Limitations
 
-The visible preview omits some rows, columns and long cell contents; the response copy action retains the full recorded response. Model-call usage includes full prompts/completions and does not measure an individual tool. The drawer omits such counters; the current tabular API supplies no per-tool token breakdown. Optional model metadata remains available through existing history/API data. No automatic production backfill or trace lookup is introduced.
+The visible preview shows all columns of the first five rows and shortens long cell contents; the response copy action retains the full recorded response. Model-call usage includes full prompts/completions and does not measure an individual tool. The drawer omits such counters; the current tabular API supplies no per-tool token breakdown. Optional model metadata remains available through existing history/API data. No automatic production backfill or trace lookup is introduced.

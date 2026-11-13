@@ -134,7 +134,7 @@ const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
 const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: SqlQueryResult; content?: string }) {
   const { t } = useTranslation();
   const rowCount = t("rework.chatTrace.rows", { count: data.rows.length });
-  const preview = useMemo(() => previewTabularRows(data.rows), [data.rows]);
+  const preview = useMemo(() => previewTabularRows(data.rows, { allColumns: true }), [data.rows]);
   const code = useMemo(() => JSON.stringify(preview.rows, null, 2), [preview]);
 
   return (

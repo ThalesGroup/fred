@@ -2660,7 +2660,7 @@
         "emptyCatalog": "This catalog is empty.",
         "queryPreview_one": "Preview of {{count}} row out of {{total}}{{shortened}}{{copy}}.",
         "queryPreview_other": "Preview of {{count}} rows out of {{total}}{{shortened}}{{copy}}.",
-        "queryPreviewShortened": ", with some columns or values shortened",
+        "queryPreviewShortened": ", with some values shortened",
         "queryPreviewCopy": "; Copy retrieves the complete recorded response",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
