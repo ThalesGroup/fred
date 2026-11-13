@@ -2113,6 +2113,55 @@
       "type": "object",
       "additionalProperties": false
     },
+    "RerankerModelConfiguration": {
+      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+      "properties": {
+        "provider": {
+          "const": "rerank",
+          "title": "Provider",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/RerankerSettings"
+        }
+      },
+      "required": [
+        "provider",
+        "name",
+        "settings"
+      ],
+      "title": "RerankerModelConfiguration",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "RerankerSettings": {
+      "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+      "properties": {
+        "base_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
+        },
+        "api_key_env": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Api Key Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url",
+        "api_key_env"
+      ],
+      "title": "RerankerSettings",
+      "type": "object",
+      "additionalProperties": false
+    },
     "SchedulerBackend": {
       "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```",
       "enum": [
@@ -2961,6 +3010,18 @@
         }
       ],
       "default": null
+    },
+    "reranker_model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RerankerModelConfiguration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
     },
     "security": {
       "$ref": "#/$defs/SecurityConfiguration"

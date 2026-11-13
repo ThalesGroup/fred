@@ -105,6 +105,7 @@ class VectorSearchClient(KfBaseClient):
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
+        rerank: bool = False,
     ) -> List[VectorSearchHit]:
         """
         Perform a vector search against the Knowledge Flow backend. This method
@@ -122,10 +123,15 @@ class VectorSearchClient(KfBaseClient):
             "team_id": str?,
             "session_id": str?,
             "include_session_scope": bool,
-            "include_corpus_scope": bool
+            "include_corpus_scope": bool,
+            "rerank": bool
           }
         """
-        payload: Dict[str, Any] = {"question": question, "top_k": top_k}
+        payload: Dict[str, Any] = {
+            "question": question,
+            "top_k": top_k,
+            "rerank": rerank,
+        }
         if document_library_tags_ids:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if document_uids:

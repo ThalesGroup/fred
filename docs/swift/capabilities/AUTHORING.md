@@ -104,6 +104,11 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For document retrieval, `ctx.services.document_search.search(..., rerank=True)`
+requests Knowledge Flow reranking after its visibility checks. The capability's
+advanced `rerank` setting defaults to true; other port callers retain the false
+default. Configure the remote model in Knowledge Flow, or use its local
+CrossEncoder when no remote model is configured.
 For conversation-scoped text files, use `ctx.services.conversation_filesystem`
 (`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
 `origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the

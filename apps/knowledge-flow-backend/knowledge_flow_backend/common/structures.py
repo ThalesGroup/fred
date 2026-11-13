@@ -34,7 +34,7 @@ from fred_core.common import (
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import IngestionProcessingProfile as IngestionProcessingProfile
 from fred_pod.common.structures import LogOutputFormat
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import WithJsonSchema
 
 """
@@ -1106,6 +1106,23 @@ class ObservabilityConfig(BaseModel):
     kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
 
 
+class RerankerSettings(BaseModel):
+    """Settings for Knowledge Flow's indexed-results rerank endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+    base_url: AnyHttpUrl
+    api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+class RerankerModelConfiguration(BaseModel):
+    """Configure a remote reranker with the usual provider/name/settings shape."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["rerank"]
+    name: str = Field(min_length=1)
+    settings: RerankerSettings
+
+
 class Configuration(BaseModel):
     app: AppConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
@@ -1122,6 +1139,10 @@ class Configuration(BaseModel):
         description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
     )
     crossencoder_model: Optional[ModelConfiguration] = None
+    reranker_model: Optional[RerankerModelConfiguration] = Field(
+        default=None,
+        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+    )
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
@@ -1140,6 +1161,13 @@ class Configuration(BaseModel):
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
+
+    @model_validator(mode="after")
+    def require_reranker_credential(self) -> "Configuration":
+        """Fail at startup if a configured remote reranker cannot authenticate."""
+        if self.reranker_model and not os.getenv(self.reranker_model.settings.api_key_env):
+            raise ValueError("Remote reranker API credential is missing")
+        return self
 
     @model_validator(mode="before")
     @classmethod

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,8 @@
 // `bind_libraries` must not show the library picker while team documents is off.
 // The optional badge sits right after the capability name.
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
@@ -39,6 +42,7 @@ const FIELDS = [
   { key: "team_documents", type: "boolean", title: "t", default: true },
   { key: "bind_libraries", type: "boolean", title: "b", default: false, ui: { visible_when: "team_documents" } },
   { key: "library_tag_ids", type: "array", title: "l", ui: { visible_when: "bind_libraries" } },
+  { key: "rerank", type: "boolean", title: "r", default: true, ui: { group: "retrieval", advanced: true } },
 ] as NonNullable<CapabilityCatalogEntry["config_fields"]>;
 
 function render(configValues: Record<string, unknown>): string {
@@ -57,6 +61,30 @@ function render(configValues: Record<string, unknown>): string {
 }
 
 describe("CapabilityConfigForm visible_when", () => {
+  it("renders reranking in the advanced section", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CapabilityConfigForm
+          capability={{ id: "document_access" } as CapabilityCatalogEntry}
+          configFields={FIELDS}
+          configValues={{}}
+          disabled={false}
+          assetFiles={{}}
+          onConfigChange={() => {}}
+          onAssetFileChange={() => {}}
+          onBlockingErrorChange={() => {}}
+        />,
+      );
+    });
+    const advanced = container.querySelector("button");
+    expect(advanced?.textContent).toContain("rework.teams.formAgent.advancedSettings");
+    expect(container.textContent).not.toContain("field:rerank");
+    act(() => advanced?.click());
+    expect(container.textContent).toContain("field:rerank");
+    act(() => root.unmount());
+  });
   it("shows the picker while its whole gate chain is on", () => {
     expect(render({ team_documents: true, bind_libraries: true })).toContain("field:library_tag_ids");
   });
