@@ -167,7 +167,8 @@ Build and validate the package artifacts without uploading:
 make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
 ```
 
-The dry run builds every package, including unchanged ones. `make publish-libs`
+The dry run builds every package, including unchanged ones.
+`make publish-libs BASE_TAG=code/vX.Y.Z`
 later validates and uploads only coordinates absent from PyPI, in dependency order,
 after a separate publication authorization. Do not publish during tag preparation.
 

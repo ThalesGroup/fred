@@ -1,3 +1,18 @@
+**v3.11.1** - 2026-11-13
+
+- **Summary**
+
+  Platform presentation template uploads now report success correctly. Administrators can enable tabular document reads from HTTPS storage that uses a private certificate authority.
+
+- **Bug Fixes**
+
+  - Upload a platform presentation template without seeing a false error after it succeeds (#3525)
+  - Read tabular documents from HTTPS storage using a private certificate authority once it is configured (#3529)
+
+- **Deployment note**
+
+  Normal deployment needs no additional action. Private certificate authority support requires optional setup in the operator guide.
+
 **v3.11.0** - 2026-11-12
 
 - **Summary**

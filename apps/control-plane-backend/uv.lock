@@ -620,7 +620,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.1"
+version = "4.6.2"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -766,7 +766,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.1"
+version = "4.6.2"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

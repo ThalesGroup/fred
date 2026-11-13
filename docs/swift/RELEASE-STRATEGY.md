@@ -184,14 +184,17 @@ make python-release-plan BASE_TAG=code/vX.Y.Z
 make prepare-python-release BASE_TAG=code/vX.Y.Z \
   CAPABILITY_PACKAGES="fred-capability-documents" \
   CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-make publish-libs-dry-run
+make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
 # Inspect the target/dist artifacts and the PyPI comparison.
 
 export PYPI_TOKEN=...
-make publish-libs
+make publish-libs BASE_TAG=code/vX.Y.Z
 ```
 
 Prepare these versions and synchronized locks in the release-preparation PR.
+Use the previous stable code tag as `BASE_TAG` for both publication checks so
+packages still awaiting upload from an earlier release retain compatible older
+dependency floors while newly prepared packages require the current floors.
 The affected Python CI jobs install with `uv sync --locked`; review their results
 before merge. Use the actual previous stable code tag from `make release-plan`, not the
 placeholder above. Repeat `--capability` and `--manifest` selections through
