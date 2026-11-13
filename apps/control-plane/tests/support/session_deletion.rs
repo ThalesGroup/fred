@@ -44,6 +44,7 @@ async fn immediate_session_deletion_requires_platform_owner_and_preserves_accept
     let fresh = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
     let identity = support::IdentityServer::start().await;
     let app = api::routes(api::AppState {
+        history: None,
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
         directory: None,
@@ -246,6 +247,7 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
     assert_eq!(still_unmarked, None);
     let identity = support::IdentityServer::start().await;
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
         directory: Some(identity.directory()),

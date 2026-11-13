@@ -12,6 +12,7 @@ import type {
   MarketplaceEntryDetail,
   MarketplaceProposal,
   InstallationReceipt,
+  ProposalSpace,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -50,6 +51,16 @@ import { enhancedControlPlaneApi as api } from "../../../../slices/controlPlane/
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import MarketplaceTopPrompts from "../HomePage/MarketplaceTopPrompts/MarketplaceTopPrompts";
 import { CROSS_SESSION_REFRESH_INTERVAL_MS } from "@core/hooks/crossSessionRefresh";
+vi.mock("@core/hooks/useWorkingOrganization", async () => {
+  const { useMarketplacesQuery } = await import("../../../../slices/controlPlane/controlPlaneApiEnhancements");
+  const { sessionQueryArgs } = await import("../../../../slices/controlPlane/controlPlaneApi");
+  return {
+    useWorkingOrganization: () => {
+      const marketplaces = useMarketplacesQuery(sessionQueryArgs({}), { refetchOnMountOrArgChange: true });
+      return { organizationId: "catalogue", marketplaces, loading: marketplaces.isLoading };
+    },
+  };
+});
 import MarketplacePage from "./MarketplacePage";
 import MarketplaceDetailDialog from "./MarketplaceDetailDialog";
 import MarketplaceProposalDialog from "./MarketplaceProposalDialog";
@@ -155,10 +166,12 @@ beforeEach(() => {
             id: "destination",
             name: "My space",
             kind: "personal",
-            organization_id: catalogue,
+            parent_id: null,
+            path: ["destination"],
+            personal_owner: "viewer",
             marketplace_space_ids: [catalogue],
             resource_kinds: ["prompt", "skill", "agent"],
-          },
+          } satisfies ProposalSpace,
           { id: "incompatible", name: "Wrong kind", resource_kinds: ["skill"], marketplace_space_ids: [catalogue] },
         ]);
       if (path.endsWith("/prompt-categories")) return page([]);
@@ -528,7 +541,7 @@ it("keeps the real prompt proposal dialog stable through mounting, focus and dis
   await settledDiscovery();
   const dialog = document.querySelector('[role="dialog"]');
   expect(dialog).not.toBeNull();
-  (document.querySelector('select[aria-label="rework.localMarketplace.catalogue"]') as HTMLElement).focus();
+  button("submit").focus();
   const focused = document.activeElement;
   let release: (() => void) | undefined;
   override = async (request) => {

@@ -48,6 +48,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub history: Option<Arc<dyn crate::analytics::history::Reader>>,
     pub agent_catalog: crate::agents::PlatformConfig,
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
@@ -1199,6 +1200,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::marketplaces::routes())
         .merge(crate::wiki::http::routes())
         .merge(crate::sessions::routes())
+        .merge(crate::analytics::routes())
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())
         .routes(routes!(create_space))
@@ -1216,6 +1218,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(bootstrap_platform_admin))
         .routes(routes!(me))
         .merge(crate::user_preferences::routes())
+        .merge(crate::user_avatar::routes())
         .routes(routes!(my_spaces))
         .routes(routes!(delete_space))
         .routes(routes!(deletion_status))

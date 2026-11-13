@@ -52,6 +52,7 @@ async fn setup_with_content_limits(
     attest_embedding_model(&d.e.pool).await;
     d.app = api::router(
         api::AppState {
+            history: None,
             agent_catalog: Default::default(),
             pool: d.e.pool.clone(),
             auth: Arc::new(d.identity.auth().await),

@@ -11,6 +11,7 @@ pub mod object_store;
 pub mod powerpoint;
 mod reads;
 mod upload;
+pub(crate) use upload::token_current;
 
 use crate::{
     domain::Permission,
@@ -144,7 +145,7 @@ impl Storage {
         &self,
         ex: impl sqlx::PgExecutor<'e>,
     ) -> AppResult<()> {
-        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_content where cleaned_at is null and cleanup_after<=clock_timestamp()),0)::bigint + coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where status='retired' and cleaned_at is null),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(ex).await?;
+        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_content where cleaned_at is null and cleanup_after<=clock_timestamp()),0)::bigint + coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where status='retired' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from user_avatar where status<>'active'),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(ex).await?;
         if backlog >= self.config.limits.cleanup_backlog_bytes {
             return Err(unavailable());
         }

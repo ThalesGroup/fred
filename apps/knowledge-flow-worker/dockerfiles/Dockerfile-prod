@@ -64,6 +64,7 @@ COPY scripts/makefiles /workspace/scripts/makefiles
 COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
 COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
 COPY libs/fred-knowledge/pyproject.toml /workspace/libs/fred-knowledge/
+COPY libs/fred-sdk/pyproject.toml /workspace/libs/fred-sdk/
 RUN --mount=type=secret,id=ca-bundle \
     --mount=type=cache,id=fred-knowledge-uv,target=/root/.cache/uv \
     if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
@@ -169,6 +170,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-worker/pyproject.toml ap
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-knowledge /workspace/libs/fred-knowledge
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-worker/README.md /workspace/apps/knowledge-flow-worker/
 COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-worker/knowledge_flow_worker /workspace/apps/knowledge-flow-worker/knowledge_flow_worker
 # Install the same canonical model used by Rust, including editable installs.

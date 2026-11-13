@@ -1,3 +1,4 @@
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +23,7 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
+  const { organization } = useWorkingOrganization();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
 
   const navigationItems: NavigationMenuItemProps[] = [
@@ -54,7 +56,7 @@ export default function MarketplaceNavbar() {
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
-      <SpaceHeader title={t("rework.sidebar.marketplace.title")} />
+      <SpaceHeader eyebrow={organization?.name} title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );

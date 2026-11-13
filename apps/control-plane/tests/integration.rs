@@ -1054,6 +1054,7 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         .insert("observer".into(), "observer".into());
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let app = routes(AppState {
+        history: None,
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
@@ -1187,6 +1188,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             config.security.user.claims.uid = Some("preferred_username".into());
         }
         let app = routes(AppState {
+            history: None,
             agent_catalog: Default::default(),
             onboarding: Default::default(),
             lifecycle: Default::default(),
@@ -1632,6 +1634,7 @@ async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
         } else {
             // Admission accepts this bearer; it expires while the import waits.
             let app = routes(AppState {
+                history: None,
                 agent_catalog: Default::default(),
                 onboarding: Default::default(),
                 lifecycle: Default::default(),
@@ -1867,6 +1870,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     std::fs::remove_file(output).unwrap();
 
     let app = control_plane::api::routes(control_plane::api::AppState {
+        history: None,
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
@@ -2192,6 +2196,7 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     let directory = server.directory();
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let app = routes(AppState {
+        history: None,
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
@@ -2399,6 +2404,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let state = AppState {
+        history: None,
         agent_catalog: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
@@ -2811,6 +2817,7 @@ async fn local_admission_requires_explicit_registration_and_a_role() {
         .unwrap();
     let identity = support::IdentityServer::start().await;
     let app = api::routes(api::AppState {
+        history: None,
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
@@ -3419,6 +3426,7 @@ async fn organization_admins_name_owners_and_read_nothing() {
 async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Router {
     control_plane::api::router(
         control_plane::api::AppState {
+            history: None,
             agent_catalog: Default::default(),
             auth: std::sync::Arc::new(identity.auth().await),
             pool: e.pool.clone(),
@@ -4855,6 +4863,7 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     .await
     .unwrap();
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(auth),
         onboarding: Onboarding {

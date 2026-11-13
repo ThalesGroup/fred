@@ -1649,3 +1649,278 @@ make -C apps/control-plane test-integration CARGO_TEST_OPTS=managed_mcp
 (cd libs/fred-runtime && .venv/bin/pytest tests/test_managed_mcp.py tests/test_delegated_admission.py tests/test_mcp_document_scope.py tests/test_react_prompting.py)
 (cd apps/frontend && npx --no-install vitest run src/rework/components/pages/admin/McpConnectionsPage src/rework/components/pages/TeamAgentsPage/AgentFormModal src/rework/features/pipeline/weaver/resourceSupport.test.ts)
 ```
+
+### Personal profile photo (reception pending)
+
+`GET`, `PUT` (one multipart `file`) and `DELETE` share
+`/control-plane/v1/users/me/avatar`. They require an admitted human account and
+apply only to its verified subject, including a platform admin with no spaces.
+GET returns a PNG or 204 when absent; responses are private and not HTTP-cached.
+The browser uses its authenticated client, never a bearer in an image URL.
+
+Migration `0025_user_avatar.sql` records one active photo and at most one pending
+upload per subject. S3 retains the normalized 192 x 192 PNG in the existing content
+namespace; no organization document or quota is created. Inputs are JPEG, PNG or
+WebP, at most 5 MiB and 4096 x 4096 pixels. Decoding is bounded and off the async
+executor. Replacement/removal retire old objects; the existing cleanup worker
+handles expiry, failed transfers and orphans. Content uploads and cleanup must be
+enabled. No additional bucket, worker or public image route is needed.
+
+Reception: apply the migration through the normal initialization command, restart
+Control Plane, then import, replace, reload and remove a photo from Settings.
+Check the personal navigation avatar and a platform-only account. The new unit and
+OpenAPI fixtures and existing frontend tests have not been executed for this port.
+
+## Consumption analytics
+
+`POST /control-plane/v1/analytics/query` reads recorded model consumption through
+one common contract. It replaces `GET /me/usage` and `GET /spaces/{space_id}/usage`;
+those routes are removed. The write/report endpoint and its idempotency are unchanged.
+The operator pipeline and the personal block of `TeamUsagePage` are wired to this contract when an explicit working organization is supplied.
+Collective dashboards and the home-page token sparkline keep their historical clients.
+Personal screens consume the shared `useWorkingOrganization()` context. A missing,
+loading or failed organization prevents personal reads and hides stale responses;
+there is no local selector or global fallback. Source wiring and generated contracts
+are not browser reception evidence.
+
+A request names 1..8 results. For example:
+
+```json
+{"queries":[{"name":"input","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["usage.input_tokens"],"group_by":[]}]}
+```
+
+For one recorded report containing 100 input tokens, the response is:
+
+```json
+{"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}}
+```
+
+Names are distinct ASCII alphanumeric/underscore strings, 1..64 bytes. Scope is
+mandatory: `{"kind":"self","organization_id":"<working-organization UUID>"}`, or
+`{"kind":"space","id":"<team-or-project UUID>"}`. Self combines the verified
+subject AND that one organization. The organization must be active and the person
+must retain a live non-personal role somewhere in it, including governance roles.
+An old personal-space grant alone is insufficient; no organization or no current
+right is a refusal, never a global fallback. Within an authorized organization,
+old team/project memberships are not required to read one's own recorded facts.
+No additional consent gate is introduced for self. Service
+accounts and the `service_agent` role are refused. Collective reads retain
+admission/consent and direct `ReadUsage` (Owner/Analyst), with the existing
+outside-context, retirement and permission refusal precedence. Teams include
+active, retired and purged projects; projects include only themselves. No user,
+session or exchange identity is returned or accepted as a filter/group.
+
+Every result requires `[since, until)` with explicit offset-bearing timestamps,
+`since < until`, duration <=366 days and timezone `UTC`. Grouping is omitted/empty
+for a total, or exactly one of `time`, `agent`, `model`. Only time grouping accepts
+an optional bucket (`hour`, `day`, `week`); otherwise it is resolved automatically:
+hour through 48 hours, day through 92 days, week thereafter. Weeks start Monday.
+The first bucket may start before `since`, but facts remain clipped to the period.
+Empty time buckets contain zero. Groups with no facts are absent.
+
+Measures are a nonempty distinct selection of `usage.input_tokens`,
+`usage.output_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens`,
+`usage.total_tokens`, `usage.recorded_exchanges`. Total tokens mean input + output,
+without adding cache counters again. All values are non-negative decimal integer
+strings, including SQL sums larger than bigint; JavaScript consumers must retain
+strings or use `BigInt`, never silently convert to `Number`. Units are `token` or
+`exchange`, and `value_type` is `integer`.
+
+Recorded exchanges are distinct `(session_id, exchange_id)` whose first recorded
+consumption belongs to the period. Previous reports are consulted even before
+`since`: HITL resumes add tokens but not an exchange. Generated titles also create
+recorded exchanges, so this measure does not count user messages. An exchange may
+appear under multiple models; model distinct counts are not additive. Agent keys
+are `(agent_instance_id, space_id)` with a nullable current/retained name; model
+keys are `(model_source_id, upstream_model_id)`.
+
+Agent/model rankings alone accept `limit` (1..100, default 100), ordered by input +
+output tokens descending and stable identity keys for ties. An additional SQL row
+detects truncation; `truncated:true` must be disclosed. Totals always include all
+facts, independent of rankings. No implicit Other row or inferred remainder is
+returned. Time series are never silently truncated.
+
+Limits are 64 KiB request, 1000 points per series, 5000 maximum returned rows per
+batch and 2 MiB serialized response. Invalid fields/combinations return 422
+`invalid_fields`; row/byte budget failures return 422 `query_too_large`; oversized
+requests return 413 `request_too_large`. Unknown fields, additional dimensions,
+filters, comparison, multiple spaces in one scope, organization/platform scopes
+and non-UTC calendars are rejected. There is no storage selection or expression API.
+
+The service validates every query and authorizes every scope before reading data.
+All SQL result reads use one `REPEATABLE READ READ ONLY` transaction. Compatible
+scope/period requests share the full journal reader; multiple requested series
+intervals need separate reads, while totals/rankings reuse one. The output limit
+does not bound scanned facts or prior-exchange lookups: statements have a 5-second
+timeout, locks a 1-second timeout, and the whole operation (including pool waits)
+a 10-second deadline. A database/deadline failure returns 503
+`dependency_unavailable` without partial results or fabricated zeros.
+
+`calculation:exact` describes recorded facts only. Collection is best effort and
+`collection_completeness:unknown` states that no completeness watermark is measured.
+Each measure declares `calculation:exact` or `estimated`; the batch summary is
+`mixed` when both occur. Token-only consumers retain `calculation:exact`.
+
+The personal screen submits two independent batches, using the generated RTK query
+client (POST remains the HTTP method). For the same explicit period and `scope:{kind:"self",organization_id:"<active UUID>"}`:
+
+| Batch | Result name | Measures | Grouping |
+| --- | --- | --- | --- |
+| SQL | `total` | `usage.input_tokens`, `usage.output_tokens`, `usage.total_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens` | total |
+| SQL | `series` | `usage.total_tokens` | time |
+| SQL | `agents` | `usage.total_tokens` | agent, limit 100 |
+| SQL | `models` | `usage.total_tokens` | model, limit 100 |
+| SQL | `impact` | `usage.cost_eur`, `usage.co2e_grams`, `usage.energy_kwh` | total |
+| History | `skills` | `skills.user_loads`, `skills.agent_loads`, `skills.total_loads` | skill, limit 100 |
+
+SQL returns `results.total/series/agents/models/impact`; history returns `results.skills`.
+A row's `values` contains exact integer strings. Estimated decimals are instead in
+`estimates`, for example `"usage.cost_eur":{"value":null,"coverage":"unavailable","fallback":true}`.
+`coverage` is `complete`, `partial` or `unavailable`; `value:null` is not zero.
+Empty SQL consumption yields a calculated zero. Partial sums include only fully
+covered reports for that measure; they are not estimates of the uncovered portion.
+
+Estimates use every journal report before ranking truncation, with PostgreSQL numeric
+arithmetic. Rust embeds the same maintained
+[`model_impact_factors.yaml`](../../libs/fred-core/fred_core/kpi/model_impact_factors.yaml)
+that Python consumes; the Docker build includes that source. It documents the static
+Mistral LCA extrapolation and energy assumptions. Lookup uses `upstream_model_id`,
+with an explicitly flagged `default` for unlisted models. A known model's missing
+or zero coefficients are unavailable, not free. Input includes cache reads and
+creation: cost subtracts the clamped cache-read subset before charging its separate
+rate, never adds creation again; CO2e and energy use input + output. USD cost is
+converted with the catalog's static `usd_per_eur:1.12`, copied from Swift's display
+convention, not a market quote. Currently all cost coefficients are unpopulated;
+nonempty usage therefore has no cost estimate. No pricing or measurement claims
+follow from these estimates.
+
+Historical loads use `analytics/history.rs::Reader`, implemented by the OpenSearch
+adapter. The port accepts a trusted subject, server-resolved organization space IDs, validated period and ranking limit;
+its `skill_loads` and `completed_turns` operations fix the supported observations.
+The planner shares compatible scope/period/reader calls across named results.
+No engine type or DSL crosses into the service. Only self reads are supported;
+collective history is forbidden and mixed SQL/history batches fail before execution.
+Organization authorization and placement are resolved in a short SQL snapshot, released
+before HTTP. No HTTP history call runs under a SQL transaction and no common
+cross-source snapshot is claimed. A consumption-journal failure can leave skills
+available; a failure of SQL authorization itself must deny historical reads. The UI preserves the available batch when the other fails, uses session-bound
+RTK arguments including the organization and `currentData`, and explicitly refreshes fixed periods.
+The dashboard and home consumption tiles use the shared `useWorkingOrganization()`
+context. Missing, loading or failed context skips personal reads and hides stale
+results, with no local selector or global fallback. Home requests one total named
+`usage` with tokens, CO2e and energy through the same generated query client.
+
+The adapter filters `dims.user_id`, mandatory `dims.space_id` terms from that organization,
+`metric.name`, `dims.skill_origin` and
+`@timestamp` in `[since,until)`. Counts are successful-load events, not `metric.value`
+or actor type. Like Swift, the grouping key is **skill name**, merging equal names
+across spaces and revisions within the working organization; skill ownership does
+not restrict self events. Placement follows the execution space. The Python KPI
+mapping now indexes the already-emitted `dims.space_id`; no second emitter was added.
+Old indexes missing this mapping are refused. Adding a mapping
+does not backfill old unindexed events; no shared-index repair is performed.
+
+A single composite aggregation gathers up to 10,001 names across all shards,
+then sorts exact counts by total descending/name ascending and returns the requested
+top-N with truncation. More than 10,000 names is an explicit budget error, not an
+approximate ranking. Response bytes are bounded at 8 MiB internally and 2 MiB publicly.
+Mapping incompatibility, absent index, partial shards, timeout and missing source
+are unavailable errors, never empty success. Collection completeness remains unknown.
+
+Configure optional `storage.history` with `url`, one concrete `index`, and paired
+`username`/`password_env_var` references if authentication is required. Grant read,
+search and mapping inspection on that index only; credentials follow existing env
+Secret conventions. The adapter pools one reqwest client, verifies TLS, disables
+redirects, bounds connection time at 2s and each HTTP call at 5s, with 4s search and
+10s batch deadlines. No runtime index creation or mapping mutation occurs.
+
+`tests/support/usage.rs` exercises SQL isolation, estimates, cache, coverage and bounds;
+`tests/analytics_history.rs` exercises the actual HTTP adapter and optionally a real
+three-shard disposable OpenSearch via `CONTROL_PLANE_IT_OPENSEARCH`. Frontend tests
+exercise rendering and real RTK cache/identity isolation. Production capacity and
+functional browser reception remain separate.
+
+### Personal activity (implementation; reception pending)
+
+The three home counters and two rankings use the same POST service, without an
+additional endpoint or preset. Scope is always the authenticated person AND the
+currently authorized working organization. The UI keeps 7/30/90-day periods and
+requests the preceding equal-duration `[since-duration,since)` window explicitly.
+The window ends at observation time when entering the view or changing period;
+it is not rounded down, so recently created conversations are included.
+The retained-catalogue definition below is an accepted difference from Swift;
+completed turns preserve Swift's event-count meaning, not a unique-message count.
+
+| Indicator / measure | Persistent fact and reference date | Aggregation | Deletion / withdrawal |
+| --- | --- | --- | --- |
+| New retained conversations / `activity.retained_conversations` | SQL `session_metadata.created_at`, non-deleting session and space | Count creations in the period, self only, total only | Marking for deletion removes it immediately; purge does not change it again. Previous-period counts also use today's retained catalogue. |
+| Messages sent / `activity.completed_turns` | Observed `agent.turn_completed`, event completion timestamp | Count events, including errors and HITL pause/resume executions | Retained historical observations survive independent session/agent deletion subject to history retention/erasure; losing organization access denies the read. |
+| Agents used / `activity.agents_used` | Same events, stable instance UUID | Exact distinct UUIDs across the complete bounded read, total only | Homonyms remain distinct, renamed/deleted agents retain their identity. |
+| Activity in teams/spaces / completed turns, `space` grouping | Same events at canonical execution placement; SQL current direct memberships | Count per currently joined team, project or personal space; retain zero rows, rank then limit | Withdrawn/deleting spaces disappear from this ranking; totals still cover the person's organization history. Projects are separate direct-membership spaces, not silently rolled into parent-team rights. |
+| Most-used agents / completed turns, `agent` grouping | Same events and last observed name | Aggregate by UUID across all execution spaces, rank then limit | Deleted instances retain their observed name; space sublabel is the latest observed execution space. |
+
+Retries without a completion event do not add a turn; retries that produce another
+completion event count again, like Swift. There is no exchange-level deduplication.
+Title generation emits a different metric and is excluded. `usage.recorded_exchanges`
+remains unchanged and must not supply these counters. Both rankings sort by descending
+count, then ascending UUID. `limit` is 1..100; home requests 5 and discloses `truncated`.
+A distinct total never comes from the limited list. Integer strings remain `BigInt`
+through UI formatting, comparison and bar scaling.
+
+Final REST bodies for `POST /control-plane/v1/analytics/query`, using 7-day windows
+(the UI substitutes the working organization's UUID and selected period):
+
+```json
+{"queries":[
+  {"name":"current","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]},
+  {"name":"previous","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-10-30T00:00:00Z","until":"2026-11-06T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]}
+]}
+```
+
+```json
+{"queries":[
+  {"name":"current","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns","activity.agents_used"]},
+  {"name":"previous","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-10-30T00:00:00Z","until":"2026-11-06T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns","activity.agents_used"]},
+  {"name":"teams","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns"],"group_by":["space"],"limit":5},
+  {"name":"agents","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns"],"group_by":["agent"],"limit":5}
+]}
+```
+
+Service paths:
+
+- `analytics::query_analytics -> plan -> execute -> sessions::usage::read::retained_conversations`:
+  existing authorization, read-only SQL snapshot and timeouts; the catalogue's
+  space/owner index bounds the owner scan, with creation time as a residual filter.
+- `analytics::query_analytics -> plan -> history::execute -> Reader::completed_turns`:
+  authorize all scopes and resolve organization spaces/current memberships in SQL,
+  release the transaction, then read history once per scope/period. `turn_result`
+  supplies totals and both rankings from that complete set. The adapter reuses the
+  pooled HTTP client, mapping validation, deadline, byte and shard checks. Its
+  composite `(space,instance)` read rejects more than 10,000 groups, missing UUIDs
+  or counts inconsistent with exact matching hits; it does not return an approximate top-N.
+
+`agent_app::_emit_turn_completed` now carries the trusted `space_id` on stream,
+execute and evaluate paths. `team_id` alone cannot attribute personal spaces or
+projects correctly. Old observations without canonical placement cannot be recovered
+by this change and are excluded: no cross-organization fallback or index mutation
+is performed. History can also omit observations from producers that do not emit
+this metric (including the embedded Rust agent). Collection remains explicitly
+unknown; zero means no matching observed events, not proof of no activity. The UI
+states this limitation for figures and comparisons. Missing source/mapping or partial
+source responses yield unavailable, not a successful empty list.
+
+`HomePage::ActivityTab` owns the two generated-client subscriptions. Arguments bind
+session identity, organization and membership snapshot; `currentData` hides old
+organization/account replies. Current Weaver memberships supply names/roles only;
+server authorization and membership selection precede ranking. Shared cards, initials,
+bars and FR/EN translations remain; absent comparison data never produces a stable
+badge. The obsolete five handwritten legacy hook aliases are removed. The frozen
+legacy generated client remains for unmigrated dashboards (its source snapshot is
+not present here); it is not manually edited. Recent agents, cleanup, trends and
+the existing consumption/impact subscriptions are unchanged.
+
+Added regression sources cover canonical project/personal/HITL emission, SQL deletion
+and adjacent windows, Acme/Globex and revocation, shared historical reads, exact counts,
+homonyms, membership filtering before limits, late UI responses and unavailable/empty
+states. Execution of tests and code-quality remains assigned to Dimi; these additions
+are not a claim of passing tests or deployed reception.

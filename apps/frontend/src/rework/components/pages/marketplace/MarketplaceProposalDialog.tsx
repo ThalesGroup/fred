@@ -1,3 +1,4 @@
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
@@ -9,7 +10,6 @@ import Button from "@shared/atoms/Button/Button";
 import Select from "@shared/molecules/Select/Select";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import {
-  useMarketplacesQuery,
   useMarketplaceProposalSpacesQuery,
   useMarketplaceEntriesQuery,
   useMarketplaceProposalsQuery,
@@ -56,17 +56,15 @@ function ProposalContext({ source, onClose, recoveryOnly = false, sourceName }: 
     source.source_resource_id,
   ]);
   const spaces = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), { refetchOnMountOrArgChange: true });
-  const catalogues = useMarketplacesQuery(sessionQueryArgs({}), { refetchOnMountOrArgChange: true });
-  const [catalogue, setCatalogue] = useState("");
+  const { marketplaces: catalogues, organizationId } = useWorkingOrganization();
   const permitted = spaces.currentData?.items.find(
     (space) => space.id === source.source_space_id && space.resource_kinds.includes(source.kind),
   );
   const choices =
-    catalogues.currentData?.items.filter((item) => permitted?.marketplace_space_ids.includes(item.space_id)) ?? [];
-  const selected =
-    attempt.args?.marketplaceSpaceId ??
-    choices.find((item) => item.space_id === catalogue)?.space_id ??
-    choices[0]?.space_id;
+    catalogues.currentData?.items.filter(
+      (item) => item.space_id === organizationId && permitted?.marketplace_space_ids.includes(item.space_id),
+    ) ?? [];
+  const selected = attempt.args?.marketplaceSpaceId ?? choices[0]?.space_id;
   return (
     <Dialog
       open
@@ -88,15 +86,6 @@ function ProposalContext({ source, onClose, recoveryOnly = false, sourceName }: 
           <p>{t("rework.localMarketplace.noSource")}</p>
         ) : (
           <>
-            {!attempt.started && (
-              <Select
-                size="small"
-                label={t("rework.localMarketplace.catalogue")}
-                value={selected}
-                options={choices.map((item) => ({ key: item.space_id, value: item.space_id, label: item.name }))}
-                onChange={setCatalogue}
-              />
-            )}
             <ProposalForm
               key={selected}
               sourceName={sourceName}

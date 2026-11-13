@@ -13,20 +13,24 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type {
-  SkillUsageResponse,
-  SkillUsageRow,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import DataTable, { type DataTableColumn } from "../DataTable/LocalizedDataTable";
 import styles from "./SkillUsageTable.module.css";
 
+interface SkillUsageRow {
+  skill_name: string;
+  user_count: number | bigint;
+  model_count: number | bigint;
+  total: number | bigint;
+}
+
 interface Props {
-  data?: SkillUsageResponse;
+  data?: { rows: SkillUsageRow[]; truncated?: boolean };
+  agentLabel?: string;
   isLoading: boolean;
   isError: boolean;
 }
 
-export default function SkillUsageTable({ data, isLoading, isError }: Props) {
+export default function SkillUsageTable({ data, agentLabel, isLoading, isError }: Props) {
   const { t, i18n } = useTranslation();
   const columns: DataTableColumn<SkillUsageRow>[] = [
     {
@@ -37,10 +41,10 @@ export default function SkillUsageTable({ data, isLoading, isError }: Props) {
       cellRenderer: (row) => row.skill_name,
     },
     ...(["user_count", "model_count", "total"] as const).map((key) => ({
-      label: t(`rework.analytics.skillUsage.${key}`),
+      label: key === "model_count" && agentLabel ? agentLabel : t(`rework.analytics.skillUsage.${key}`),
       size: "1fr",
       sortable: true,
-      sortValue: (row: SkillUsageRow) => row[key],
+      sortValue: (row: SkillUsageRow) => String(row[key]).padStart(20, "0"),
       cellRenderer: (row: SkillUsageRow) => row[key].toLocaleString(i18n.language),
     })),
   ];

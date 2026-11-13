@@ -14,24 +14,13 @@
 
 import type { HomePeriod } from "./HomePage.tsx";
 
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
-
 /** ISO `since`/`until` window ending "now", for a home period (7/30/90 days).
  * Shape matches every KPI preset arg (`{ since, until }`). "Now" is captured at
  * call time, so callers MUST memoise on `period` (a fresh `until` every render
  * would change the RTK Query cache key and refetch in a loop). */
 export function homePeriodRange(period: HomePeriod): { since: string; until: string } {
-  // Rounded so that coming back within five minutes reuses the cached answer.
-  const until = new Date(Math.floor(Date.now() / FIVE_MINUTES_MS) * FIVE_MINUTES_MS);
+  // End at observation time: rounding down excludes conversations just created.
+  const until = new Date();
   const since = new Date(until.getTime() - period * 24 * 60 * 60 * 1000);
   return { since: since.toISOString(), until: until.toISOString() };
-}
-
-const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits });
-
-/** Compact French token count: `280 k`, `1,2 M`, `640`. */
-export function formatCompactTokens(n: number): string {
-  if (n >= 1_000_000) return `${nf(1).format(n / 1_000_000)} M`;
-  if (n >= 1_000) return `${nf(0).format(Math.round(n / 1_000))} k`;
-  return nf(0).format(n);
 }

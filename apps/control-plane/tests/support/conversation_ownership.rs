@@ -121,6 +121,7 @@ async fn runtime_payload_cascade_requires_no_cross_component_content_access() {
     );
     let identity = support::IdentityServer::start().await;
     let app = control_plane::api::routes(control_plane::api::AppState {
+        history: None,
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
         directory: Some(identity.directory()),

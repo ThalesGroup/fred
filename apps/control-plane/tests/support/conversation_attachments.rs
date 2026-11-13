@@ -1375,6 +1375,7 @@ async fn conversation_outputs_are_private_conditional_and_retired_with_the_sessi
     config.security.delegation.service_accounts_only = true;
     d.app = api::router(
         api::AppState {
+            history: None,
             pool: d.e.pool.clone(),
             auth: Arc::new(
                 Authenticator::start(config.security().unwrap())

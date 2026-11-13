@@ -10,6 +10,7 @@ use support::{IdentityServer, request};
 
 async fn app(e: &Env, identity: &IdentityServer) -> Router {
     routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),

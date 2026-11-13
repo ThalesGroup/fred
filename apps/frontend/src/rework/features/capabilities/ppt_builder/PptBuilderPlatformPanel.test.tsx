@@ -17,11 +17,13 @@ const h = vi.hoisted(() => ({
   queryArgs: [] as unknown[],
   fail: false,
   refetch: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("react-redux", () => ({ useSelector: () => "/pod-a/ppt_builder" }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
 vi.mock("./PatternReviewDialog", () => ({
   PatternReviewDialog: (props: ComponentProps<typeof PatternReviewDialog>) => {
@@ -84,6 +86,11 @@ beforeEach(() => {
   h.queryArgs = [];
   h.review = null;
   h.fail = false;
+  h.showSuccess.mockReset();
+  h.showError.mockReset();
+  h.refetch.mockReset().mockImplementation(() => {
+    throw new Error("Cannot refetch a query that has not been started yet.");
+  });
   h.settings = {
     current: {
       source: "builtin",
@@ -148,6 +155,9 @@ describe("Swift common-template drawer on Weaver", () => {
       },
     ]);
     expect(container.textContent).not.toContain("common.save");
+    expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.uploaded` });
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.refetch).not.toHaveBeenCalled();
   });
 
   it("keeps the effective slides during a failed replacement and retries the candidate", async () => {
@@ -182,6 +192,8 @@ describe("Swift common-template drawer on Weaver", () => {
     await click(`${K}.reset`);
     expect(h.calls).toHaveLength(1);
     await click(`${K}.resetConfirm.confirm`);
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.refetch).not.toHaveBeenCalled();
     expect(h.calls[1]).toEqual({
       name: "reset",
       arg: { spaceId: "org-a", runtimeId: "pod-a", expectedFileId: "candidate" },
@@ -209,8 +221,11 @@ describe("Swift common-template drawer on Weaver", () => {
       },
     });
     h.fail = false;
+    h.showError.mockClear();
     await act(async () => h.review?.onClose());
     expect(container.textContent).not.toContain("slide-review");
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.refetch).not.toHaveBeenCalled();
   });
 
   it("changes every query scope when another organization or pod is opened", async () => {

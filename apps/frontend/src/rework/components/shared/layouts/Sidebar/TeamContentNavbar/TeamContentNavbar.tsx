@@ -1,3 +1,4 @@
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,7 @@ import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useEffect } from "react";
 import {
   useMySpacesQuery,
+  useGetMyAvatarQuery,
   useMarketplaceProposalSpacesQuery,
   useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -40,7 +42,6 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
-import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { IconType } from "@shared/utils/Type.ts";
@@ -64,6 +65,7 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
+  const { organizationId } = useWorkingOrganization();
   const agentManagement = isWeaverContentRoute(pathname);
   const navigate = useNavigate();
 
@@ -71,7 +73,9 @@ export default function TeamContentNavbar() {
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const space = !memberships.isError
     ? memberships.currentData?.find((item) =>
-        agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
+        agentManagement && teamId === "personal"
+          ? item.kind === "personal" && item.organization_id === organizationId
+          : item.id === teamId,
       )
     : undefined;
   const organization = space && memberships.currentData?.find((item) => item.id === space.organization_id);
@@ -107,7 +111,10 @@ export default function TeamContentNavbar() {
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
   const hasAgentWorkspace = space?.kind !== "organization";
 
-  const { bootstrap } = useFrontendBootstrap(agentManagement);
+  const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, {
+    skip: !isPersonalTeam,
+    refetchOnMountOrArgChange: 60,
+  });
 
   // Record every entry into a team so the Home nav-panel switcher can offer a
   // "recently viewed" sort. Client-only (localStorage), best-effort.
@@ -179,11 +186,7 @@ export default function TeamContentNavbar() {
     ? t("rework.sidebar.team.userTeam")
     : (space?.name ?? publicationTeam?.name ?? selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
-    <UserAvatar
-      name={KeyCloakService.GetUserFullName()}
-      size="x-small"
-      imageUrl={bootstrap?.current_user?.avatar_image_url}
-    />
+    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" imageUrl={pictureUrl || undefined} />
   ) : selectedTeam?.avatar_image_url ? (
     <img
       className={styles.teamPanelAvatar}

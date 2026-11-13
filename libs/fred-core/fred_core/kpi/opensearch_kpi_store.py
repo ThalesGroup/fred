@@ -64,6 +64,8 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "env": {"type": "keyword"},
                     "cluster": {"type": "keyword"},
                     "user_id": {"type": "keyword"},
+                    # Trusted execution placement, needed for organization-bounded self reads.
+                    "space_id": {"type": "keyword"},
                     # Conversation id carried by every session-scoped KPI row
                     # (react/graph phase, tool). Explicit keyword so the RGPD
                     # erasure `update_by_query` can `term`-match it (CTRLP-12 A3).
@@ -121,8 +123,10 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "bytes_out": {"type": "long"},
                     "chunks": {"type": "integer"},
                     "vectors": {"type": "integer"},
+                    "tool_count": {"type": "long"},
                     "input_tokens": {"type": "long"},
                     "output_tokens": {"type": "long"},
+                    "cache_read_tokens": {"type": "long"},
                 }
             },
             "labels": {"type": "keyword"},

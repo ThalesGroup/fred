@@ -18,12 +18,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({
+  workingId: "Acme",
+  choices: [{ id: "Acme", name: "Acme" }],
+  selectOrganization: vi.fn(() => true),
   name: "Alice" as string | null,
   username: "alice" as string | null,
   navigate: vi.fn(),
   support: undefined as string | undefined,
   avatar: undefined as string | undefined,
-  bootstrap: vi.fn(),
+  avatarQuery: vi.fn(),
   patchHistory: vi.fn(),
 }));
 vi.mock("../../../../../security/KeycloakService.ts", () => ({
@@ -38,10 +41,10 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ contactSupportLink: identity.support }),
 }));
-vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
-  useFrontendBootstrap: (skip: boolean) => {
-    identity.bootstrap(skip);
-    return { bootstrap: { current_user: { avatar_image_url: identity.avatar } } };
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
+    identity.avatarQuery(skip);
+    return { currentData: skip ? undefined : identity.avatar };
   },
 }));
 vi.mock("../../../../features/announcements/usePatchNoteHistory", () => ({
@@ -54,6 +57,15 @@ vi.mock("@shared/molecules/PatchNoteDialog/PatchNoteDialog", () => ({ PatchNoteD
 vi.mock("react-router-dom", () => ({ useNavigate: () => identity.navigate }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
+
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    organizationId: identity.workingId,
+    organization: identity.choices.find((item) => item.id === identity.workingId),
+    organizations: identity.choices,
+    selectOrganization: identity.selectOrganization,
+  }),
 }));
 
 import UserProfile from "./UserProfile";
@@ -82,6 +94,8 @@ function mount(admitted = false) {
 }
 
 afterEach(() => {
+  identity.choices = [{ id: "Acme", name: "Acme" }];
+  identity.workingId = "Acme";
   identity.support = undefined;
   identity.avatar = undefined;
   vi.clearAllMocks();
@@ -149,11 +163,33 @@ it("retains the shared profile but drops business enrichment when entering the p
   mount(true);
   expect(container!.querySelector("img")?.getAttribute("src")).toBe(identity.avatar);
   act(() => root!.render(<UserProfile admitted platformArea />));
-  expect(identity.bootstrap).toHaveBeenLastCalledWith(true);
+  expect(identity.avatarQuery).toHaveBeenLastCalledWith(false);
   expect(identity.patchHistory).toHaveBeenLastCalledWith(true);
-  expect(container!.querySelector("img")).toBeNull();
+  expect(container!.querySelector("img")?.getAttribute("src")).toBe(identity.avatar);
   const profile = container!.querySelector<HTMLButtonElement>('[role="menuitem"]')!;
   expect(profile.textContent).toContain("rework.profileMenu.profile");
   act(() => profile.click());
   expect(identity.navigate).toHaveBeenCalledWith("/settings");
+});
+
+it("offers the only organization choice in the profile, then returns to Home", () => {
+  identity.choices = [
+    { id: "Acme", name: "Acme" },
+    { id: "Globex", name: "Globex" },
+  ];
+  mount(true);
+  const choices = container!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+  expect([...choices].map((item) => item.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  act(() => choices[1].click());
+  expect(identity.selectOrganization).toHaveBeenCalledWith("Globex");
+  expect(identity.navigate).toHaveBeenCalledWith("/home");
+  expect(container!.querySelector('[role="menu"]')).toBeNull();
+});
+
+it("shows one organization read-only and no organization before admission", () => {
+  mount();
+  expect(container!.textContent).not.toContain("Acme");
+  act(() => root!.render(<UserProfile admitted />));
+  expect(container!.textContent).toContain("Acme");
+  expect(container!.querySelector('[role="menuitemradio"]')).toBeNull();
 });

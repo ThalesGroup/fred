@@ -55,6 +55,13 @@ const injectedRtkApi = api.injectEndpoints({
     messages: build.query<MessagesApiResponse, MessagesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    queryAnalytics: build.query<QueryAnalyticsApiResponse, QueryAnalyticsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/analytics/query`,
+        method: "POST",
+        body: queryArg.analyticsRequest,
+      }),
+    }),
     authorizeDocument: build.mutation<AuthorizeDocumentApiResponse, AuthorizeDocumentApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/authorize/document`,
@@ -370,15 +377,6 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     mySpaces: build.query<MySpacesApiResponse, MySpacesApiArg>({
       query: () => ({ url: `/control-plane/v1/me/spaces` }),
-    }),
-    myUsage: build.query<MyUsageApiResponse, MyUsageApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/me/usage`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-        },
-      }),
     }),
     organizationAgents: build.query<OrganizationAgentsApiResponse, OrganizationAgentsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents` }),
@@ -1050,15 +1048,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    spaceUsage: build.query<SpaceUsageApiResponse, SpaceUsageApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/usage`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-        },
-      }),
-    }),
     wikiAvailability: build.query<WikiAvailabilityApiResponse, WikiAvailabilityApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/availability`,
@@ -1211,6 +1200,15 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
+    getMyAvatar: build.query<GetMyAvatarApiResponse, GetMyAvatarApiArg>({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar` }),
+    }),
+    putMyAvatar: build.mutation<PutMyAvatarApiResponse, PutMyAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/users/me/avatar`, method: "PUT", body: queryArg.fileUpload }),
+    }),
+    deleteMyAvatar: build.mutation<DeleteMyAvatarApiResponse, DeleteMyAvatarApiArg>({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
       query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
     }),
@@ -1275,6 +1273,10 @@ export type ExecuteStreamApiArg = {
 export type MessagesApiResponse = /** status 200 undefined */ ChatMessage[];
 export type MessagesApiArg = {
   sessionId: string;
+};
+export type QueryAnalyticsApiResponse = /** status 200 undefined */ AnalyticsResponse;
+export type QueryAnalyticsApiArg = {
+  analyticsRequest: AnalyticsRequest;
 };
 export type AuthorizeDocumentApiResponse = /** status 200 Success */ Allowed;
 export type AuthorizeDocumentApiArg = {
@@ -1507,13 +1509,6 @@ export type CreatePersonalSpaceApiArg = {
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
-export type MyUsageApiResponse = /** status 200 undefined */ UsageResponse;
-export type MyUsageApiArg = {
-  /** Inclusive ISO 8601 instant with offset; defaults to 30 days before until. */
-  since?: string;
-  /** Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. */
-  until?: string;
-};
 export type OrganizationAgentsApiResponse = /** status 200 undefined */ AgentEnablement[];
 export type OrganizationAgentsApiArg = {
   organizationId: string;
@@ -2091,14 +2086,6 @@ export type DeleteSkillApiArg = {
   spaceId: string;
   skillId: string;
 };
-export type SpaceUsageApiResponse = /** status 200 undefined */ UsageResponse;
-export type SpaceUsageApiArg = {
-  spaceId: string;
-  /** Inclusive ISO 8601 instant with offset; defaults to 30 days before until. */
-  since?: string;
-  /** Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. */
-  until?: string;
-};
 export type WikiAvailabilityApiResponse = /** status 200 undefined */ WikiAvailability;
 export type WikiAvailabilityApiArg = {
   person?: string;
@@ -2218,6 +2205,14 @@ export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
 };
+export type GetMyAvatarApiResponse = /** status 200 undefined */ string;
+export type GetMyAvatarApiArg = void;
+export type PutMyAvatarApiResponse = unknown;
+export type PutMyAvatarApiArg = {
+  fileUpload: FileUpload;
+};
+export type DeleteMyAvatarApiResponse = unknown;
+export type DeleteMyAvatarApiArg = void;
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
 export type PatchMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
@@ -2401,6 +2396,140 @@ export type ChatMessage = {
   role: string;
   session_id: string;
   timestamp: string;
+};
+export type CalculationPrecision = "exact" | "estimated" | "mixed";
+export type CollectionCompleteness = "unknown";
+export type AnalyticsInterval = "hour" | "day" | "week";
+export type ConsumptionMeasure =
+  | "usage.input_tokens"
+  | "usage.output_tokens"
+  | "usage.cache_read_tokens"
+  | "usage.cache_creation_tokens"
+  | "usage.total_tokens"
+  | "usage.recorded_exchanges"
+  | "usage.cost_eur"
+  | "usage.co2e_grams"
+  | "usage.energy_kwh"
+  | "skills.user_loads"
+  | "skills.agent_loads"
+  | "skills.total_loads"
+  | "activity.retained_conversations"
+  | "activity.completed_turns"
+  | "activity.agents_used";
+export type AnalyticsUnit =
+  | "token"
+  | "exchange"
+  | "eur"
+  | "gramco2e"
+  | "kwh"
+  | "load"
+  | "conversation"
+  | "turn"
+  | "agent";
+export type AnalyticsValueType = "integer" | "decimal";
+export type AnalyticsMeasure = {
+  calculation: CalculationPrecision;
+  id: ConsumptionMeasure;
+  unit: AnalyticsUnit;
+  value_type: AnalyticsValueType;
+};
+export type AnalyticsDimensions =
+  | {
+      kind: "total";
+    }
+  | {
+      kind: "skill";
+      name: string;
+    }
+  | {
+      kind: "time";
+      /** UTC bucket start; the first bucket may precede since, but counts are clipped to the period. */
+      start: string;
+    }
+  | {
+      agent_instance_id: string;
+      /** Current/retained session name (consumption), latest observed name (turns), or null. Never an identity key. */
+      display_name: string | null;
+      kind: "agent";
+      space_id: string;
+    }
+  | {
+      kind: "space";
+      space_id: string;
+    }
+  | {
+      kind: "model";
+      model_source_id: string;
+      upstream_model_id: string;
+    };
+export type EstimateCoverage = "complete" | "partial" | "unavailable";
+export type AnalyticsEstimate = {
+  coverage: EstimateCoverage;
+  /** At least one model used the catalog's explicitly configured default factors. */
+  fallback: boolean;
+  value: string | null;
+};
+export type AnalyticsRow = {
+  dimensions: AnalyticsDimensions;
+  /** Estimated decimal values are separate from exact counters. Null is never zero. */
+  estimates?: {
+    [key: string]: AnalyticsEstimate;
+  };
+  /** Exact decimal integer strings for matching facts; collection completeness is declared separately. */
+  values: {
+    [key: string]: string;
+  };
+};
+export type AnalyticsTimezone = "UTC";
+export type AnalyticsResult = {
+  bucket?: AnalyticsInterval | null;
+  measures: AnalyticsMeasure[];
+  rows: AnalyticsRow[];
+  since: string;
+  timezone: AnalyticsTimezone;
+  /** Rankings may be truncated; SQL totals and estimates cover all recorded facts. */
+  truncated: boolean;
+  until: string;
+};
+export type AnalyticsResponse = {
+  /** Batch summary; precision is also declared per measure. */
+  calculation: CalculationPrecision;
+  collection_completeness: CollectionCompleteness;
+  /** SQL results share one read-only snapshot. Historical batches are separate; mixed sources are refused. */
+  results: {
+    [key: string]: AnalyticsResult;
+  };
+};
+export type AnalyticsGrouping = "time" | "agent" | "model" | "skill" | "space";
+export type AnalyticsScope =
+  | {
+      kind: "self";
+      organization_id: string;
+    }
+  | {
+      id: string;
+      kind: "space";
+    };
+export type AnalyticsPeriod = {
+  bucket?: AnalyticsInterval | null;
+  /** Inclusive instant with offset. Maximum duration: 366 days. */
+  since: string;
+  timezone: AnalyticsTimezone;
+  /** Exclusive instant with offset. */
+  until: string;
+};
+export type AnalyticsQuery = {
+  /** Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill. */
+  group_by?: AnalyticsGrouping[];
+  /** Rankings only, default 100. Descending tokens, loads or turns, then stable identity. */
+  limit?: number | null;
+  measures: ConsumptionMeasure[];
+  name: string;
+  scope: AnalyticsScope;
+  time: AnalyticsPeriod;
+};
+export type AnalyticsRequest = {
+  queries: AnalyticsQuery[];
 };
 export type Allowed = {
   allowed: boolean;
@@ -2902,42 +3031,6 @@ export type MySpace = Space & {
   organization_id: string;
   /** Roles held directly on this space. */
   roles: Role[];
-};
-export type UsageTotals = {
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  /** Distinct (session_id, exchange_id) whose first consumption falls in the range.
-    HITL resumes add tokens, never another turn. */
-  turns: number;
-};
-export type AgentUsage = UsageTotals & {
-  agent_instance_id: string;
-  /** Current instance name, latest retained session name, or null. */
-  display_name: string | null;
-  /** Consumption space recorded in the journal. */
-  space_id: string;
-};
-export type ModelUsageTotals = UsageTotals & {
-  model_source_id: string;
-  upstream_model_id: string;
-};
-export type UsageInterval = "hour" | "day" | "week";
-export type UsagePoint = UsageTotals & {
-  /** Start of the UTC bucket; the first bucket may start before since. */
-  start: string;
-};
-export type UsageResponse = {
-  /** Sorted by input + output tokens descending. No per-user breakdown. */
-  by_agent: AgentUsage[];
-  /** Sorted by input + output tokens descending; a turn may use several models. */
-  by_model: ModelUsageTotals[];
-  interval: UsageInterval;
-  series: UsagePoint[];
-  since: string;
-  totals: UsageTotals;
-  until: string;
 };
 export type AgentCapabilityKind = "agent";
 export type AgentScopePolicy = "admin_gated";
@@ -4209,6 +4302,8 @@ export const {
   useExecuteStreamMutation,
   useMessagesQuery,
   useLazyMessagesQuery,
+  useQueryAnalyticsQuery,
+  useLazyQueryAnalyticsQuery,
   useAuthorizeDocumentMutation,
   useAuthorizePlatformMutation,
   useAuthorizeScopeMutation,
@@ -4275,8 +4370,6 @@ export const {
   useCreatePersonalSpaceMutation,
   useMySpacesQuery,
   useLazyMySpacesQuery,
-  useMyUsageQuery,
-  useLazyMyUsageQuery,
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
@@ -4415,8 +4508,6 @@ export const {
   useLazyGetSkillQuery,
   usePutSkillMutation,
   useDeleteSkillMutation,
-  useSpaceUsageQuery,
-  useLazySpaceUsageQuery,
   useWikiAvailabilityQuery,
   useLazyWikiAvailabilityQuery,
   useWikiPagesQuery,
@@ -4439,6 +4530,10 @@ export const {
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  useGetMyAvatarQuery,
+  useLazyGetMyAvatarQuery,
+  usePutMyAvatarMutation,
+  useDeleteMyAvatarMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,

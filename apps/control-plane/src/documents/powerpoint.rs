@@ -259,7 +259,12 @@ impl Storage {
             match input {
                 PowerPointUpload::Multipart(multipart) => self.spool(multipart).await,
                 PowerPointUpload::Snapshot { name, bytes } => {
-                    self.spool_snapshot(&name, &bytes).await
+                    self.spool_bytes(
+                        &name,
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        &bytes,
+                    )
+                    .await
                 }
             }
         })

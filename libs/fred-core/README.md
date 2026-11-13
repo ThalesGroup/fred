@@ -45,6 +45,32 @@ cases, end users should not install `fred-core` directly: `fred-sdk[agents]`
 pulls it in. A Knowledge Base pod wants `fred-pod` (via the lean `fred-sdk`
 base) and not this package at all.
 
+## KPI quantity indexing
+
+`KPI_INDEX_MAPPING` in `fred_core/kpi/opensearch_kpi_store.py` explicitly indexes
+the quantities emitted by `Quantities`, including `tool_count` and
+`cache_read_tokens` as `long`. The existing producer initialization adds missing
+fields to an existing index; it does not recreate the index or rewrite documents.
+The analytics reader remains read-only. Deploying infrastructure alone does not
+apply this mapping: a producer using the updated `fred-core` must initialize it.
+
+With `dynamic: false`, quantities written before their mapping existed remain in
+`_source` but do not become aggregatable merely by adding the mapping. Historical
+reindexing is a separate operator decision; no automatic backfill is performed.
+
+Offline contract/reconciliation regressions are in
+`fred_core/tests/kpi/test_opensearch_kpi_store_ensure_ready.py`. The real aggregation
+regression is opt-in, against a **disposable local HTTP OpenSearch** (never a shared
+cluster or a port-forward to one). It creates and removes only UUID-named fixture
+indexes, covering fresh creation and additive mapping without historical backfill:
+
+```bash
+FRED_CORE_IT_OPENSEARCH=http://127.0.0.1:9200 uv run pytest -m integration \
+  fred_core/tests/kpi/test_opensearch_kpi_quantities_integration.py
+```
+
+The integration regression is excluded from the default offline `make test`.
+
 ## Weaver authorization model consumer
 
 `fred_core.security.rebac.authorization_binding.read_authorization_binding`

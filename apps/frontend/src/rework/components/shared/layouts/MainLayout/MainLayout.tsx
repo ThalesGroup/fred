@@ -1,3 +1,4 @@
+import WorkingOrganizationRoute from "@core/guards/WorkingOrganizationRoute";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,11 +48,9 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
         </div>
         <main className={styles.content}>
           {navigation ? (
-            platformArea || organizationArea || isWeaverContentRoute(pathname) ? (
-              <Outlet />
-            ) : (
-              <AdmittedWorkspace />
-            )
+            <WorkingOrganizationRoute>
+              {platformArea || organizationArea || isWeaverContentRoute(pathname) ? <Outlet /> : <AdmittedWorkspace />}
+            </WorkingOrganizationRoute>
           ) : (
             children
           )}

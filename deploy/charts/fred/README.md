@@ -83,6 +83,34 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   or `FRONTEND_KNOWLEDGE_FLOW_UPSTREAM` in `env` or `extraEnvVars` for another
   address or DNS domain. Nginx's request-time resolver needs fully qualified names.
 
+For an internal HTTPS object store with a private CA, create a Secret containing
+`ca-bundle.pem` and mount it in the Knowledge Flow API pod. Set the DuckDB options
+in the same deployment values file:
+
+```yaml
+applications:
+  knowledge-flow-backend:
+    configuration:
+      storage:
+        tabular_store:
+          query:
+            duckdb_ca_cert_file: /etc/fred/tls/ca-bundle.pem
+            duckdb_enable_server_cert_verification: true
+    extraVolumes:
+      - name: duckdb-ca
+        secret:
+          secretName: fred-ca-bundle
+    extraVolumeMounts:
+      - name: duckdb-ca
+        mountPath: /etc/fred/tls/ca-bundle.pem
+        subPath: ca-bundle.pem
+        readOnly: true
+```
+
+The CA Secret must exist before deploying the chart. If a Knowledge Flow worker
+also reads tabular Parquet artifacts, repeat the configuration and mount under
+`applications.knowledge-flow-worker` because YAML anchors do not carry overrides.
+
 The local k3d example in fred-deployment-factory applies
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
 followed by built image tags and operator overrides. No manager-specific factory

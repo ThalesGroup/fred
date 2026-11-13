@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Renders inline, next to any token-usage widget — never as a separate panel
-// (KPI-ANALYTICS-RFC.md §2.7). CO2e/kWh are shown unconditionally (essential);
-// $ cost sits behind the Disclosure atom (optional/collapsible, secondary).
-// One component reused at every scope (platform, team, personal) that shows
-// token usage, so the same figures aren't computed three times over.
-
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import type { AnalyticsEstimate, AnalyticsRow } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import styles from "./TokenUsageImpact.module.css";
 
@@ -29,27 +25,58 @@ interface ImpactRow {
 }
 
 interface TokenUsageImpactProps {
-  rows: ImpactRow[] | undefined;
+  rows?: ImpactRow[];
+  estimates?: AnalyticsRow["estimates"];
   isLoading: boolean;
+  isError?: boolean;
 }
 
-export default function TokenUsageImpact({ rows, isLoading }: TokenUsageImpactProps) {
-  const { t } = useTranslation();
+function legacyEstimate(rows: ImpactRow[] | undefined, key: keyof ImpactRow): AnalyticsEstimate {
+  const known = (rows ?? []).flatMap((row) => (row[key] == null || !Number.isFinite(row[key]) ? [] : [row[key]!]));
+  const sum = known.reduce((a, b) => a + b, 0);
+  return {
+    value: known.length && Number.isFinite(sum) ? String(sum) : null,
+    coverage: !known.length ? "unavailable" : known.length === rows?.length ? "complete" : "partial",
+    fallback: false,
+  };
+}
 
-  if (isLoading || !rows || rows.length === 0) return null;
+export function formatImpactEstimate(
+  estimate: AnalyticsEstimate | undefined,
+  unit: string,
+  locale: string,
+  t: TFunction,
+) {
+  const value = estimate?.value == null ? undefined : Number(estimate.value);
+  if (value === undefined || !Number.isFinite(value) || estimate?.coverage === "unavailable")
+    return t("rework.tokenUsageImpact.unavailable");
+  return `${value.toLocaleString(locale, { maximumFractionDigits: 6 })} ${unit}${estimate?.coverage === "partial" ? ` (${t("rework.tokenUsageImpact.partial")})` : ""}${estimate?.fallback ? ` (${t("rework.tokenUsageImpact.fallback")})` : ""}`;
+}
 
-  const co2eGrams = rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0);
-  const kwh = rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0);
-  const costUsd = rows.reduce((acc, r) => acc + (r.cost_usd ?? 0), 0);
-
+export default function TokenUsageImpact({ rows, estimates, isLoading, isError = false }: TokenUsageImpactProps) {
+  const { t, i18n } = useTranslation();
+  const display = (estimate: AnalyticsEstimate | undefined, unit: string) =>
+    formatImpactEstimate(estimate, unit, i18n.language, t);
+  const co2e = estimates?.["usage.co2e_grams"] ?? (estimates ? undefined : legacyEstimate(rows, "co2e_grams"));
+  const energy = estimates?.["usage.energy_kwh"] ?? (estimates ? undefined : legacyEstimate(rows, "kwh"));
+  const cost = estimates?.["usage.cost_eur"] ?? (estimates ? undefined : legacyEstimate(rows, "cost_usd"));
   return (
     <div className={styles.impact}>
-      <span className={styles.estimate}>
-        {t("rework.tokenUsageImpact.summary", { co2e: co2eGrams.toFixed(1), kwh: kwh.toFixed(2) })}
-      </span>
-      <Disclosure title={t("rework.tokenUsageImpact.costTitle")}>
-        <span className={styles.cost}>{t("rework.tokenUsageImpact.costValue", { cost: costUsd.toFixed(4) })}</span>
-      </Disclosure>
+      {isError ? (
+        <span role="alert">{t("common.loadingError")}</span>
+      ) : isLoading ? (
+        <span role="status">{t("common.loading")}</span>
+      ) : (
+        <>
+          <span className={styles.estimate}>
+            {t("rework.tokenUsageImpact.estimates")}: {display(co2e, "g CO2e")} · {display(energy, "kWh")}
+          </span>
+          <Disclosure title={t("rework.tokenUsageImpact.costTitle")}>
+            <span className={styles.cost}>{display(cost, estimates ? "EUR" : "USD")}</span>
+            {estimates && <p>{t("rework.tokenUsageImpact.staticFactors")}</p>}
+          </Disclosure>
+        </>
+      )}
     </div>
   );
 }

@@ -803,7 +803,6 @@ export const {
   useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
     useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
-  useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
@@ -824,13 +823,6 @@ export const {
   useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
   useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
-  // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
-  useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetQuery: useUserAgentsUsedTotalQuery,
-  // Home dashboard leaderboard — top agents / top teams (#2298).
-  useHandlerControlPlaneV1KpiPresetsUserTopAgentsGetQuery: useUserTopAgentsQuery,
-  useHandlerControlPlaneV1KpiPresetsUserTopTeamsGetQuery: useUserTopTeamsQuery,
   // Home dashboard — most recently used agents, newest first (#2298).
   useHandlerControlPlaneV1KpiPresetsUserRecentAgentsGetQuery: useUserRecentAgentsQuery,
   // Lazy agent-instances fetch — the recent-agents preset returns only ids, so
@@ -839,9 +831,6 @@ export const {
   // Home cleanup tool — inactive conversations across spaces + bulk delete (#2298).
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery: useMyInactiveSessionsQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation: useBulkDeleteMySessionsMutation,
-  useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
-  useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
   // Platform-wide or team-scoped token usage (OBSERV-02 v3, F1/F2) — same
   // shape as the user_-prefixed personal presets above, different scope.
   useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,

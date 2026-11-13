@@ -61,6 +61,7 @@ class TabularQueryConfig(BaseModel):
     How to use:
     - Keep the default `duckdb` engine.
     - Tune result limits and backend-internal presigned URL TTL per deployment.
+    - Set DuckDB's CA file and server verification for HTTPS Parquet reads when needed.
     """
 
     engine: Literal["duckdb"] = Field(
@@ -110,6 +111,15 @@ class TabularQueryConfig(BaseModel):
         default="256MB",
         pattern=r"(?i)^\d+(\.\d+)?\s*(B|[KMGT]B|[KMGT]iB)$",
         description="Buffer-manager budget per DuckDB connection, e.g. '256MB'. Validated at startup so a typo fails fast instead of at the first query.",
+    )
+    duckdb_ca_cert_file: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Optional CA bundle path for DuckDB httpfs HTTPS reads. The file must be readable inside the Knowledge Flow container.",
+    )
+    duckdb_enable_server_cert_verification: bool | None = Field(
+        default=None,
+        description="Optional DuckDB httpfs server certificate verification setting. Omit to retain the installed DuckDB default.",
     )
     max_selected_datasets: int = Field(
         default=50,

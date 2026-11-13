@@ -1,3 +1,4 @@
+import { WorkingOrganizationProvider } from "@core/hooks/useWorkingOrganization";
 import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
@@ -81,19 +82,21 @@ function AdmittedContent() {
   const agentManagement = isWeaverContentRoute(pathname);
   return (
     <OnboardingGuard>
-      <OrganizationSupervisionAccessProvider>
-        <ManagerArea>
-          {(business) => (
-            <div className={appStyles.appContent}>
-              {business && !agentManagement && <AnnouncementStack />}
-              <div className={appStyles.routedContent}>
-                {business && !agentManagement && <PatchNoteGate />}
-                <Outlet />
+      <WorkingOrganizationProvider>
+        <OrganizationSupervisionAccessProvider>
+          <ManagerArea>
+            {(business) => (
+              <div className={appStyles.appContent}>
+                {business && !agentManagement && <AnnouncementStack />}
+                <div className={appStyles.routedContent}>
+                  {business && !agentManagement && <PatchNoteGate />}
+                  <Outlet />
+                </div>
               </div>
-            </div>
-          )}
-        </ManagerArea>
-      </OrganizationSupervisionAccessProvider>
+            )}
+          </ManagerArea>
+        </OrganizationSupervisionAccessProvider>
+      </WorkingOrganizationProvider>
     </OnboardingGuard>
   );
 }

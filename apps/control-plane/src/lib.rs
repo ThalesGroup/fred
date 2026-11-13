@@ -26,6 +26,7 @@ macro_rules! space_target {
 
 pub mod agent_instances;
 pub mod agents;
+pub mod analytics;
 pub mod api;
 pub use fred_rust_sdk::security::authentication as auth;
 pub mod authorization;
@@ -53,6 +54,7 @@ pub mod skills;
 pub mod space_members;
 pub mod spaces;
 pub mod supervision;
+pub mod user_avatar;
 pub mod user_preferences;
 pub mod users;
 pub mod wiki;

@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import { skipToken } from "@reduxjs/toolkit/query";
+import { useParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./TeamUsagePage.module.css";
 import {
   useAgentsTotalQuery,
   useSkillUsageQuery,
-  useUserSkillUsageQuery,
   useDocumentsTotalQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
@@ -26,9 +28,6 @@ import {
   useTokenUsageByModelQuery,
   useTokenUsageOverTimeQuery,
   useTopAgentsByConversationsQuery,
-  useUserTokenUsageOverTimeQuery,
-  useUserTokenUsageByAgentQuery,
-  useUserTokenUsageByModelQuery,
 } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
@@ -39,7 +38,11 @@ import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSe
 import BarChart from "@shared/molecules/BarChart/BarChart";
 import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import PersonalUsage from "./PersonalUsage";
+import { personalQueries } from "./personalUsage";
+import { useQueryAnalyticsQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
@@ -54,13 +57,22 @@ import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
  * above it. In-page gating only, no route guard (`FRONTEND-AUTHZ-PATTERN.md`):
  * a plain `team_member` (or anyone on a personal team, which has no elevated
  * roles at all) sees their personal token sections below. Skill usage always
- * follows the selected space: personal in personal space, team in team space.
+ * appears in personal space with self events within the working organization; collective skills keep their scope.
  */
 export default function TeamUsagePage() {
+  const workingOrganization = useWorkingOrganization();
+  const organizationId =
+    workingOrganization.loading || workingOrganization.error ? undefined : workingOrganization.organizationId;
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
 
-  const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
+  const { teamId } = useParams<{ teamId: string }>();
+  const space = workingOrganization.memberships.currentData?.find(
+    (item) => item.id === teamId && item.organization_id === organizationId,
+  );
+  const isPersonalTeam = space?.kind === "personal";
+  // Personal UUIDs and their placement come from Weaver, never Swift's ID convention/bootstrap.
+  const { selectedTeam } = useSelectedTeam(isPersonalTeam || !organizationId);
   const capabilities = useTeamCapabilities(selectedTeam);
   // The personal team is granted `can_update_resources`/`can_update_agents`
   // unconditionally (`teams/system.py::build_personal_team`) so its owner can
@@ -77,47 +89,22 @@ export default function TeamUsagePage() {
   // personal sections, so the personal usage title stays correct for them.
   const pageTitle = elevated ? t("rework.teamUsage.team.pageTitle") : t("rework.teamUsage.title");
 
-  // #2148: `refetchOnMountOrArgChange: 300` implements the "5 minute
-  // client-side TTL, does not re-fetch on every render" policy
-  // KPI-ANALYTICS-RFC.md §2.6 already documents — every preset below used
-  // `true` instead, which ignored cache age and refetched on every mount.
-  const {
-    data: overTimeData,
-    isLoading: overTimeIsLoading,
-    isFetching: overTimeIsFetching,
-    isError: overTimeIsError,
-  } = useUserTokenUsageOverTimeQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
+  const identity = KeyCloakService.GetSessionIdentity();
+  const args = useMemo(
+    () =>
+      ({
+        usage: organizationId
+          ? sessionQueryArgs({ analyticsRequest: { queries: personalQueries(timeRange, organizationId, false) } })
+          : skipToken,
+        skills: organizationId
+          ? sessionQueryArgs({ analyticsRequest: { queries: personalQueries(timeRange, organizationId, true) } })
+          : skipToken,
+        // Identity changes must bind fresh arguments even for an unchanged period.
+      }) as const,
+    [timeRange, identity, organizationId],
   );
-
-  const {
-    data: byAgentData,
-    isLoading: byAgentIsLoading,
-    isError: byAgentIsError,
-  } = useUserTokenUsageByAgentQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-
-  const {
-    data: byModelData,
-    isLoading: byModelIsLoading,
-    isError: byModelIsError,
-  } = useUserTokenUsageByModelQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { refetchOnMountOrArgChange: 300 },
-  );
-
-  const {
-    currentData: personalSkillUsageData,
-    isFetching: personalSkillUsageIsFetching,
-    isLoading: personalSkillUsageIsLoading,
-    isError: personalSkillUsageIsError,
-  } = useUserSkillUsageQuery(
-    { since: timeRange.since, until: timeRange.until },
-    { skip: !isPersonalTeam, refetchOnMountOrArgChange: 300 },
-  );
+  const usage = useQueryAnalyticsQuery(args.usage, { refetchOnMountOrArgChange: 300 });
+  const personalSkills = useQueryAnalyticsQuery(args.skills, { skip: !isPersonalTeam, refetchOnMountOrArgChange: 300 });
 
   // Team-scoped shared section (§2.5 Page 2) — skipped entirely for anyone
   // without an elevated role, both to avoid the wasted/rejected call and
@@ -187,29 +174,13 @@ export default function TeamUsagePage() {
   };
 
   const handleRefresh = () => {
-    setTimeRange(refreshTimeRange(timeRange));
+    if (!organizationId) return;
+    const next = refreshTimeRange(timeRange);
+    if (next.since === timeRange.since && next.until === timeRange.until) {
+      void usage.refetch();
+      if (isPersonalTeam) void personalSkills.refetch();
+    } else setTimeRange(next);
   };
-
-  const serviceDown = [
-    overTimeIsError,
-    byAgentIsError,
-    byModelIsError,
-    isPersonalTeam ? personalSkillUsageIsError : !elevated || !teamId || skillUsageIsError,
-  ].every(Boolean);
-
-  if (serviceDown) {
-    return (
-      <div className={styles.page}>
-        <PageHeader title={pageTitle} />
-        <ServiceNotice
-          icon="cloud_off"
-          title={t("rework.serviceNotice.controlPlane.title")}
-          description={t("rework.serviceNotice.controlPlane.description")}
-          centered
-        />
-      </div>
-    );
-  }
 
   return (
     <div className={styles.page}>
@@ -225,7 +196,7 @@ export default function TeamUsagePage() {
               size="small"
               icon={{ category: "outlined", type: "refresh" }}
               onClick={handleRefresh}
-              disabled={overTimeIsFetching}
+              disabled={!organizationId || usage.isFetching || (isPersonalTeam && personalSkills.isFetching)}
               title={t("common.refresh")}
             />
           </>
@@ -331,48 +302,12 @@ export default function TeamUsagePage() {
         </Disclosure>
       )}
 
-      {isPersonalTeam && (
-        <Disclosure title={t("rework.teamUsage.personalSkillsSectionTitle")} defaultOpen>
-          <SkillUsageTable
-            data={personalSkillUsageData}
-            isLoading={personalSkillUsageIsLoading || (personalSkillUsageIsFetching && !personalSkillUsageData)}
-            isError={personalSkillUsageIsError}
-          />
-        </Disclosure>
-      )}
-
-      <Disclosure title={t("rework.teamUsage.personalSectionTitle")} defaultOpen>
-        <div className={styles.chartGrid}>
-          <div className={styles.cellFull}>
-            <TimeSeriesLineChart
-              title={t("rework.teamUsage.tokensOverTime.title")}
-              rows={overTimeData?.rows ?? []}
-              interval={overTimeData?.interval}
-              valueLabel={t("rework.teamUsage.tokensOverTime.valueLabel")}
-              isFetching={overTimeIsFetching}
-              isLoading={overTimeIsLoading}
-              isError={overTimeIsError}
-            />
-            <TokenUsageImpact rows={overTimeData?.rows} isLoading={overTimeIsLoading} />
-          </div>
-          <BarChart
-            title={t("rework.teamUsage.byAgent.title")}
-            rows={agentUsageRows(byAgentData?.rows, t)}
-            valueLabel={t("rework.teamUsage.byAgent.valueLabel")}
-            emptyMessage={t("rework.teamUsage.byAgent.empty")}
-            isLoading={byAgentIsLoading}
-            isError={byAgentIsError}
-          />
-          <BarChart
-            title={t("rework.teamUsage.byModel.title")}
-            rows={byModelData?.rows ?? []}
-            valueLabel={t("rework.teamUsage.byModel.valueLabel")}
-            emptyMessage={t("rework.teamUsage.byModel.empty")}
-            isLoading={byModelIsLoading}
-            isError={byModelIsError}
-          />
-        </div>
-      </Disclosure>
+      <PersonalUsage
+        organizationId={organizationId}
+        usage={usage}
+        skills={personalSkills}
+        withSkills={isPersonalTeam}
+      />
     </div>
   );
 }

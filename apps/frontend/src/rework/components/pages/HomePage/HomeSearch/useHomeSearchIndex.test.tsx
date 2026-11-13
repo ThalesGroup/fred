@@ -35,6 +35,9 @@ vi.mock("../../../../../security/KeycloakService", () => ({
   },
 }));
 vi.mock("../../../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({ organizationId: "org", memberships: { ...h.context, refetch: h.refetch } }),
+}));
 import { enhancedControlPlaneApi as api } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useHomeSearchIndex } from "./useHomeSearchIndex";
 import HomeSearch from "./HomeSearch";

@@ -7,7 +7,7 @@
 
 mod attachments;
 pub(crate) mod title;
-mod usage;
+pub(crate) mod usage;
 
 pub(crate) use usage::{ModelUsage, UsageProvenance, UsageReport, persist_usage};
 

@@ -51,7 +51,9 @@
   bottom: 0;
   left: calc(100% + var(--spacing-xs));
   z-index: 10;
-  width: 240px;
+  width: min(320px, calc(100vw - 80px));
+  max-height: calc(100dvh - var(--spacing-xl));
+  overflow-y: auto;
 }
 
 .popoverBox {
@@ -65,4 +67,15 @@
     bottom: calc(100% + var(--spacing-xs));
     left: auto;
   }
+}
+
+.organizationLabel {
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.organizationName {
+  padding: var(--spacing-xs) var(--spacing-s);
+  overflow-wrap: anywhere;
 }

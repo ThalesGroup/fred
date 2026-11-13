@@ -21,7 +21,7 @@ import {
 import OrganizationSupervisionPage from "./OrganizationSupervisionPage";
 import AdminNavbar from "../../shared/layouts/Sidebar/AdminNavbar/AdminNavbar";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
-import { localStorageKey } from "../../../../hooks/useLocalStorageState";
+import { WorkingOrganizationProvider, useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => ({ isAdmin: false }) }));
 vi.mock("@hooks/useUserCapabilities.ts", () => ({ useUserCapabilities: () => ({}) }));
@@ -77,7 +77,8 @@ const membership = (id: string, roles: MySpace["roles"] = ["organization_admin",
   personal_owner: null,
   path: [id],
 });
-const preferenceKey = localStorageKey("admin.organization:fixture/owner");
+const preferenceKey = "working.organization:fixture/owner";
+let working: ReturnType<typeof useWorkingOrganization>;
 const NativeRequest = globalThis.Request;
 let requests: {
   search: string;
@@ -98,6 +99,7 @@ function makeStore() {
   });
 }
 function AccessProbe() {
+  working = useWorkingOrganization();
   access = useOrganizationSupervisionAccess();
   owner = useOrganizationOwner();
   return null;
@@ -122,6 +124,8 @@ async function reply(path: string, data: unknown, status = 200) {
 }
 async function authorize(org = "org") {
   await reply("/me/spaces", [membership(org)]);
+  await waitFor(() => expect(working.loading).toBe(false));
+  if (working.organizationId !== org) chooseOrganization(org);
   await waitFor(() =>
     expect(requests.find((request) => request.path === "/authorize/space")?.body).toEqual({
       space_id: org,
@@ -148,7 +152,7 @@ async function loaded(org = "org") {
 }
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  localStorage.clear();
+  sessionStorage.clear();
   requests = [];
   vi.stubGlobal(
     "Request",
@@ -159,6 +163,10 @@ beforeEach(() => {
     },
   );
   vi.stubGlobal("fetch", async (request: Request) => {
+    if (new URL(request.url).pathname.endsWith("/me/marketplaces"))
+      return new Response(JSON.stringify({ items: [], next_cursor: null }), {
+        headers: { "Content-Type": "application/json" },
+      });
     const body = request.method === "POST" ? await request.json() : undefined;
     return new Promise<Response>((resolve, reject) =>
       requests.push({
@@ -181,23 +189,22 @@ function render() {
     root.render(
       <Provider store={store}>
         <MemoryRouter initialEntries={["/admin/supervision"]}>
-          <OrganizationSupervisionAccessProvider>
-            <AccessProbe />
-            <AdminNavbar />
-            <OrganizationSupervisionPage />
-          </OrganizationSupervisionAccessProvider>
+          <WorkingOrganizationProvider>
+            <OrganizationSupervisionAccessProvider>
+              <AccessProbe />
+              <AdminNavbar />
+              <OrganizationSupervisionPage />
+            </OrganizationSupervisionAccessProvider>
+          </WorkingOrganizationProvider>
         </MemoryRouter>
       </Provider>,
     ),
   );
 }
 function chooseOrganization(name: string) {
-  act(() => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
-  const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find((node) =>
-    node.textContent?.includes(name),
-  );
-  expect(item).toBeDefined();
-  act(() => item!.click());
+  act(() => {
+    expect(working.selectOrganization(name)).toBe(true);
+  });
 }
 async function decision(org: string, allowed = true) {
   await waitFor(() =>
@@ -322,7 +329,7 @@ it("switches the header, rights and requests together, resets team/cursors and i
   await waitFor(() => expect(requests.some((r) => r.search.includes("acme-next"))).toBe(true));
   const late = requests.splice(0);
   chooseOrganization("Globex");
-  expect(container.querySelector('button[aria-haspopup="menu"]')?.textContent).toContain("Globex");
+  expect(container.querySelector("h2")?.previousElementSibling?.textContent).toContain("Globex");
   expect(owner.isOwner).toBe(false);
   expect(owner.organizationId).toBeUndefined();
   expect(container.querySelector('a[href="/admin/features"]')).toBeNull();
@@ -362,7 +369,7 @@ it("switches the header, rights and requests together, resets team/cursors and i
   expect(requests[0].search).toBe("");
 });
 
-it("restores a selection on reload, revalidates it and falls back after revocation", async () => {
+it("restores a selection on reload and never switches organizations when its admin role is revoked", async () => {
   await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
   await decision("Acme");
   await reply("/organizations/Acme/supervision", summary("Acme"));
@@ -371,55 +378,40 @@ it("restores a selection on reload, revalidates it and falls back after revocati
   await decision("Globex");
   await reply("/organizations/Globex/supervision", summary("Globex"));
   await loaded("Globex");
-  expect(JSON.parse(localStorage.getItem(preferenceKey)!)).toBe("Globex");
+  expect(sessionStorage.getItem(preferenceKey)).toBe("Globex");
   act(() => root.render(null));
   store.dispatch(api.util.resetApiState());
   store = makeStore();
   render();
-  expect(container.textContent).not.toContain("Team Globex");
   await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
   await decision("Globex");
   await reply("/organizations/Globex/supervision", summary("Globex"));
   await loaded("Globex");
   act(() => window.dispatchEvent(new Event("focus")));
   await reply("/me/spaces", [membership("Acme"), membership("Globex", ["member"])]);
-  await decision("Acme");
-  await reply("/organizations/Acme/supervision", summary("Acme"));
-  await loaded("Acme");
-  expect(JSON.parse(localStorage.getItem(preferenceKey)!)).toBe("Acme");
-  expect(container.querySelector('button[aria-haspopup="menu"]')).toBeNull();
-  act(() => window.dispatchEvent(new Event("focus")));
-  await reply("/me/spaces", []);
-  await waitFor(() => expect(container.textContent).toContain("rework.supervision.contextUnavailable"));
-  expect(access.allowed).toBe(false);
+  await decision("Globex", false);
+  await denied();
+  expect(working.organizationId).toBe("Globex");
   expect(owner.isOwner).toBe(false);
-  expect(container.textContent).not.toContain("Team Acme");
-  expect(localStorage.getItem(preferenceKey)).toBeNull();
   expect(requests).toHaveLength(0);
 });
 
-it("rejects a stored unauthorized context and never promotes child or member roles", async () => {
+it("never promotes a selected member or child-space role to organization owner", async () => {
   act(() => root.render(null));
-  localStorage.setItem(preferenceKey, JSON.stringify("Hidden"));
+  sessionStorage.setItem(preferenceKey, "Hidden");
   render();
   await reply("/me/spaces", [
     membership("Hidden", ["member"]),
     { ...membership("team"), kind: "team" },
     membership("Acme"),
-    membership("Globex", ["owner"]),
   ]);
-  await decision("Acme");
-  await reply("/organizations/Acme/supervision", summary("Acme"));
-  await loaded("Acme");
-  act(() => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
-  const choices = [...container.querySelectorAll('[role="menuitemradio"]')];
-  expect(choices).toHaveLength(2);
-  expect(choices.map((node) => node.textContent).join()).not.toMatch(/Hidden|team|spaces.platform/);
-  act(() => (choices[1] as HTMLButtonElement).click());
-  await decision("Globex", false);
+  await decision("Hidden", false);
   await denied();
-  expect(owner.isOwner).toBe(true);
-  expect(owner.organizationId).toBe("Globex");
+  expect(owner.isOwner).toBe(false);
+  expect(working.organizationId).toBe("Hidden");
+  chooseOrganization("team");
+  expect(owner.isOwner).toBe(false);
+  expect(access.organizationId).toBeUndefined();
   expect(requests).toHaveLength(0);
 });
 

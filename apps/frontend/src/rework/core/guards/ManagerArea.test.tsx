@@ -35,6 +35,9 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: false }),
 }));
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({ organization: { id: "org-1", name: "Acme" } }),
+}));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: false, organizations: [] }),
 }));

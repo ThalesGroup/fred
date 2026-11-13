@@ -156,6 +156,7 @@ async fn model_app(
     platform: PlatformConfig,
 ) -> Router {
     routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: platform,
         auth: Arc::new(identity.auth().await),
@@ -901,6 +902,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     config.security.delegation.accept_delegated_calls = true;
     config.security.delegation.service_accounts_only = true;
     let state = AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: platform,
         auth: Arc::new(

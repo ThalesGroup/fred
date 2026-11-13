@@ -41,6 +41,7 @@ utoipa-axum = "0.3"
 zip = { version = "9.0.3", default-features = false, features = ["deflate"] }
 
 rmcp = { version = "=3.9.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
 jsonwebtoken = { workspace = true }

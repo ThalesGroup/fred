@@ -19,6 +19,9 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
+import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext, useRef } from "react";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
@@ -28,7 +31,13 @@ import { saveUserPreference, updateCurrentUserPreference } from "../../../../app
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
-import { useMeQuery, useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
+import {
+  useMeQuery,
+  useMySpacesQuery,
+  useGetMyAvatarQuery,
+  usePutMyAvatarMutation,
+  useDeleteMyAvatarMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { getConfig } from "../../../../common/config";
 
@@ -53,6 +62,13 @@ export default function UserSettingsPage() {
   useRefetchOnWindowFocus(memberships.refetch, false);
   const spacesById = new Map(memberships.currentData?.map((space) => [space.id, space]));
   const { notifyApiError } = useApiErrorToast();
+  const picture = useGetMyAvatarQuery(undefined, { refetchOnMountOrArgChange: 60 });
+  useRefetchOnWindowFocus(picture.refetch, false);
+  const pictureUrl = picture.currentData || undefined;
+  const [uploadPicture, { isLoading: isUploadingPicture }] = usePutMyAvatarMutation();
+  const [deletePicture, { isLoading: isDeletingPicture }] = useDeleteMyAvatarMutation();
+  const { showConfirmationDialog } = useConfirmationDialog();
+  const { showSuccess } = useToast();
   const spaceLabel = (space: MySpace) => {
     const path = (space.kind === "personal" ? [space.organization_id, ...space.path] : space.path)
       .map((id) => spacesById.get(id))
@@ -84,6 +100,32 @@ export default function UserSettingsPage() {
       });
   };
 
+  const handlePictureUpload = async (file: File) => {
+    await uploadPicture({ fileUpload: { file } }).unwrap();
+    showSuccess({ summary: t("rework.userSettings.picture.uploaded") });
+  };
+
+  const handlePictureDelete = () => {
+    showConfirmationDialog({
+      criticalAction: true,
+      title: t("rework.userSettings.picture.deleteTitle"),
+      message: t("rework.userSettings.picture.deleteMessage"),
+      confirmButtonLabel: t("rework.userSettings.picture.deleteConfirm"),
+      cancelButtonLabel: t("rework.userSettings.picture.deleteCancel"),
+      onConfirm: () => {
+        deletePicture()
+          .unwrap()
+          .then(() => showSuccess({ summary: t("rework.userSettings.picture.deleted") }))
+          .catch((error) =>
+            notifyApiError(error, {
+              summary: t("rework.userSettings.picture.deleteFailed"),
+              fallbackDetail: t("rework.userSettings.picture.deleteFailedDetail"),
+            }),
+          );
+      },
+    });
+  };
+
   return (
     <div className={styles.userSettingsPageRoot}>
       <div className={styles.userSettingsPage}>
@@ -109,13 +151,35 @@ export default function UserSettingsPage() {
           </Button>
         </div>
         <div className={styles.userSettingsDescription}>
-          <UserAvatar name={userFullName} size={"large"} />
+          <UserAvatar name={userFullName} size={"large"} imageUrl={pictureUrl} />
           <div className={styles.userSettingsIdentity}>
             <span className={styles.userSettingsIdentityName}>{username}</span>
             <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
             <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
           </div>
         </div>
+        <section className={styles.userSettingsCard}>
+          {picture.isError && (
+            <div role="alert">
+              <span>{t("rework.userSettings.picture.loadFailed")}</span>
+              <Button color="primary" variant="text" size="small" onClick={() => void picture.refetch()}>
+                {t("rework.provisioning.retryAuthority")}
+              </Button>
+            </div>
+          )}
+          <AvatarUploadCard
+            title={t("rework.userSettings.picture.title")}
+            hint={t("rework.userSettings.picture.hint")}
+            importLabel={t("rework.userSettings.picture.import")}
+            emptyLabel={t("rework.userSettings.picture.empty")}
+            imageUrl={pictureUrl}
+            onUpload={handlePictureUpload}
+            uploading={isUploadingPicture}
+            onDelete={handlePictureDelete}
+            deleteLabel={t("rework.userSettings.picture.delete")}
+            deleting={isDeletingPicture}
+          />
+        </section>
         <section className={styles.userSettingsCard} aria-labelledby="profile-access-title">
           <h2 id="profile-access-title" className={styles.userSettingsCardTitle}>
             {t("rework.userSettings.accessTitle")}

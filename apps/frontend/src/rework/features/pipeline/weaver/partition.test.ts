@@ -6,7 +6,11 @@ import type { WeaverChecks } from "./checks";
 import type { StepReport } from "../types";
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), fixture: vi.fn(), provision: vi.fn(), baseline: vi.fn() }));
 const endpoints = vi.hoisted(
-  () => new Proxy({}, { get: (_target, name) => ({ initiate: (args: unknown) => ({ name, args }) }) }),
+  () =>
+    new Proxy(
+      {},
+      { get: (_target, name) => ({ initiate: (args: unknown, options?: unknown) => ({ name, args, options }) }) },
+    ),
 );
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   enhancedControlPlaneApi: { endpoints },
@@ -201,24 +205,21 @@ describe("path scenario ownership", () => {
   });
   it("queries team and project usage with each selected space", async () => {
     mock.invoke.mockImplementation(async ({ name }) =>
-      name === "authorizeSpace"
-        ? { allowed: true }
-        : {
-            totals: { turns: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
-            series: [],
-            by_agent: [],
-            by_model: [],
-            since: "2026-01-01T00:00:00Z",
-            until: "2026-01-02T00:00:00Z",
-            interval: "day",
-          },
+      name === "authorizeSpace" ? { allowed: true } : usageFixture(),
     );
     for (const level of ["team", "project"] as const) {
       expect(await run(level, "observability")).toEqual([
         expect.objectContaining({ id: "space-usage", status: "passed" }),
       ]);
       expect(mock.invoke).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "spaceUsage", args: expect.objectContaining({ spaceId: level }) }),
+        expect.objectContaining({
+          name: "queryAnalytics",
+          args: {
+            analyticsRequest: {
+              queries: expect.arrayContaining([expect.objectContaining({ scope: { kind: "space", id: level } })]),
+            },
+          },
+        }),
       );
     }
   });
@@ -247,31 +248,101 @@ describe("path scenario ownership", () => {
   });
 });
 
-it.each(["valid", "negative", "mismatch", "duplicate", "invalid-date"])(
-  "validates usage evidence: %s",
-  async (mode) => {
-    const totals = { turns: 1, input_tokens: 10, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
-    const point = { ...totals, start: "2026-01-01T00:00:00Z" };
-    const usage = {
-      totals,
-      series: [point],
-      by_agent: [],
-      by_model: [],
-      since: point.start,
-      until: "2026-01-02T00:00:00Z",
-      interval: "day",
-    };
-    if (mode === "negative") totals.input_tokens = -1;
-    if (mode === "mismatch") totals.turns = 2;
-    if (mode === "duplicate") usage.series.push({ ...point });
-    if (mode === "invalid-date") usage.until = "invalid";
-    mock.invoke.mockImplementation(async ({ name }) => (name === "authorizeSpace" ? { allowed: true } : usage));
-    const results = await run("team", "observability");
-    expect(results).toContainEqual(
-      expect.objectContaining({ id: "space-usage", status: mode === "valid" ? "passed" : "failed" }),
-    );
-  },
-);
+function usageFixture(input = "10") {
+  const values = {
+    "usage.recorded_exchanges": "1",
+    "usage.input_tokens": input,
+    "usage.output_tokens": "2",
+    "usage.cache_read_tokens": "0",
+    "usage.cache_creation_tokens": "0",
+  };
+  const common = {
+    since: "2026-01-01T00:00:00Z",
+    until: "2026-01-02T00:00:00Z",
+    timezone: "UTC",
+    truncated: false,
+    measures: Object.keys(values).map((id) => ({
+      id,
+      unit: id === "usage.recorded_exchanges" ? "exchange" : "token",
+      value_type: "integer",
+      calculation: "exact",
+    })),
+  };
+  return {
+    calculation: "exact",
+    collection_completeness: "unknown",
+    results: {
+      total: { ...common, rows: [{ dimensions: { kind: "total" }, values: { ...values } }] },
+      series: {
+        ...common,
+        bucket: "day",
+        rows: [{ dimensions: { kind: "time", start: common.since }, values: { ...values } }],
+      },
+      agents: { ...common, rows: [] },
+      models: { ...common, rows: [] },
+    },
+  };
+}
+
+it.each(
+  [
+    "valid",
+    "large",
+    "negative",
+    "mismatch",
+    "duplicate",
+    "invalid-date",
+    "invalid-bucket",
+    "numeric",
+    "estimated",
+  ].flatMap((mode) => (["none", "agents", "models"] as const).map((truncated) => ({ mode, truncated }))),
+)("validates analytics evidence: $mode (truncated: $truncated)", async ({ mode, truncated }) => {
+  const usage = usageFixture(mode === "large" ? "27670116110564327421" : "10");
+  if (mode === "estimated") usage.results.total.measures[0].calculation = "estimated";
+  if (mode === "negative") usage.results.total.rows[0].values["usage.input_tokens"] = "-1";
+  if (mode === "mismatch") usage.results.total.rows[0].values["usage.recorded_exchanges"] = "2";
+  if (mode === "duplicate") usage.results.series.rows.push({ ...usage.results.series.rows[0] });
+  if (mode === "invalid-date") usage.results.total.until = "invalid";
+  if (mode === "invalid-bucket") usage.results.series.rows[0].dimensions.start = "invalid";
+  if (mode === "numeric") Object.assign(usage.results.total.rows[0].values, { "usage.input_tokens": 10 });
+  if (truncated !== "none") usage.results[truncated].truncated = true;
+  mock.invoke.mockImplementation(async ({ name }) => (name === "authorizeSpace" ? { allowed: true } : usage));
+  expect(await run("team", "observability")).toContainEqual(
+    expect.objectContaining({
+      id: "space-usage",
+      status: ["valid", "large"].includes(mode) ? "passed" : "failed",
+      ...(["valid", "large"].includes(mode) && truncated !== "none"
+        ? { detail: expect.stringContaining("Usage rankings are truncated.") }
+        : {}),
+    }),
+  );
+});
+
+it("reads personal analytics without accessing the selected space", async () => {
+  const checks = context("shared");
+  Object.defineProperty(checks, "spaceId", {
+    get() {
+      throw new Error("Selected space accessed");
+    },
+  });
+  mock.invoke.mockImplementation(async ({ name }) => (name === "queryAnalytics" ? usageFixture() : {}));
+  expect(await run("shared", "observability", checks)).toContainEqual(
+    expect.objectContaining({ id: "personal-usage", status: "passed" }),
+  );
+  expect(mock.invoke).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: "queryAnalytics",
+      options: { subscribe: false, forceRefetch: true },
+      args: {
+        analyticsRequest: {
+          queries: expect.arrayContaining([
+            expect.objectContaining({ scope: { kind: "self", organization_id: "organization" } }),
+          ]),
+        },
+      },
+    }),
+  );
+});
 
 it.each(["ready", "degraded", "unknown", "updating"])(
   "checks workload state instead of snapshot presence: %s",

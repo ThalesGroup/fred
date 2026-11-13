@@ -21,6 +21,7 @@ struct Fixture {
     identity: support::IdentityServer,
     workload: String,
     space: Uuid,
+    organization: Uuid,
     session: Uuid,
     agent: Uuid,
     report: Uuid,
@@ -31,11 +32,25 @@ impl Fixture {
     }
 
     async fn with_runtime(embedded: bool) -> Self {
+        Self::with_history(embedded, None).await
+    }
+
+    async fn with_history(
+        embedded: bool,
+        history: Option<std::sync::Arc<dyn control_plane::analytics::history::Reader>>,
+    ) -> Self {
         let e = env().await;
         bootstrap::grant_root(&e.pool, "usage-fixture-root")
             .await
             .unwrap();
         let (_, team) = org_and_team(&e).await;
+        sqlx::query(
+            "insert into space_role_grant(space_id,subject,role) values($1,'bob','member')",
+        )
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
         let agent = Uuid::new_v4();
         let session = Uuid::new_v4();
         let (runtime, source_agent) = if embedded {
@@ -63,6 +78,7 @@ impl Fixture {
             .await
             .unwrap();
         let app = routes(AppState {
+            history,
             pool: e.pool.clone(),
             auth: std::sync::Arc::new(auth),
             // Recording consumption must not refresh the admitted person's consent.
@@ -89,6 +105,7 @@ impl Fixture {
             identity,
             workload,
             space: team.id,
+            organization: team.organization,
             session,
             agent,
             report: Uuid::new_v4(),
@@ -181,8 +198,32 @@ fn usage() -> Value {
 }
 
 impl Fixture {
-    async fn get(&self, user: Option<&str>, path: &str) -> (u16, Value) {
-        support::request(&self.app, &self.identity, user, "GET", path, Value::Null).await
+    async fn analytics(&self, user: Option<&str>, mut body: Value) -> (u16, Value) {
+        // Existing fixtures default to their own organization; explicit invalid scopes stay intact.
+        if let Some(queries) = body["queries"].as_array_mut() {
+            for q in queries {
+                if q["scope"]["kind"] == "self" && q["scope"].get("organization_id").is_none() {
+                    q["scope"]["organization_id"] = json!(self.organization);
+                }
+            }
+        }
+        support::request(
+            &self.app,
+            &self.identity,
+            user,
+            "POST",
+            "/analytics/query",
+            body,
+        )
+        .await
+    }
+
+    async fn read_usage(&self, user: Option<&str>, space: Option<Uuid>) -> (u16, Value) {
+        self.analytics(
+            user,
+            analytics_request(space, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z"),
+        )
+        .await
     }
 
     async fn admit(&self, user: &str) {
@@ -234,7 +275,13 @@ impl Fixture {
     }
 }
 
-const READ_RANGE: &str = "since=2026-01-01T00:00:00Z&until=2026-01-03T00:00:00Z";
+fn analytics_request(space: Option<Uuid>, since: &str, until: &str) -> Value {
+    let scope = space.map_or(json!({"kind":"self"}), |id| json!({"kind":"space","id":id}));
+    let queries: Vec<_> = [("total",vec![]),("series",vec!["time"]),("agents",vec!["agent"]),("models",vec!["model"])]
+        .into_iter().map(|(name,group)| json!({"name":name,"scope":scope,"time":{"since":since,"until":until,"timezone":"UTC"},
+            "measures":["usage.recorded_exchanges","usage.input_tokens","usage.output_tokens","usage.cache_read_tokens","usage.cache_creation_tokens"],"group_by":group})).collect();
+    json!({"queries":queries})
+}
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
@@ -256,23 +303,10 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
         }
         drop(conn);
         f.admit(user).await;
-        let (status, response) = f
-            .get(
-                Some(user),
-                &format!("/spaces/{}/usage?{READ_RANGE}", f.space),
-            )
-            .await;
+        let (status, response) = f.read_usage(Some(user), Some(f.space)).await;
         assert_eq!(status, expected, "{user}: {response}");
         // A team role does not authorize the project's own endpoint.
-        assert_eq!(
-            f.get(
-                Some(user),
-                &format!("/spaces/{}/usage?{READ_RANGE}", project.id)
-            )
-            .await
-            .0,
-            403
-        );
+        assert_eq!(f.read_usage(Some(user), Some(project.id)).await.0, 403);
     }
     f.admit("alice").await;
     let personal = spaces::create_personal_space(&f.pool, "alice", org)
@@ -280,12 +314,7 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
         .unwrap()
         .0;
     for unsupported in [org, personal.id] {
-        let (status, error) = f
-            .get(
-                Some("alice"),
-                &format!("/spaces/{unsupported}/usage?{READ_RANGE}"),
-            )
-            .await;
+        let (status, error) = f.read_usage(Some("alice"), Some(unsupported)).await;
         assert_eq!(status, 422, "{error}");
         assert_eq!(error["code"], "invalid_fields");
     }
@@ -301,12 +330,10 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
     .unwrap();
     f.admit("parent-owner").await;
     assert_eq!(
-        f.get(Some("parent-owner"), &format!("/spaces/{}/usage", f.space))
-            .await
-            .0,
+        f.read_usage(Some("parent-owner"), Some(f.space)).await.0,
         403
     );
-    assert_eq!(f.get(None, "/me/usage").await.0, 401);
+    assert_eq!(f.read_usage(None, None).await.0, 401);
 }
 
 #[tokio::test]
@@ -395,52 +422,49 @@ async fn team_usage_includes_retired_and_purged_projects_and_their_agent_names()
         .unwrap();
     }
     f.admit("analyst").await;
-    let (status, team) = f
-        .get(
-            Some("analyst"),
-            &format!("/spaces/{}/usage?{READ_RANGE}", f.space),
-        )
-        .await;
+    let (status, team) = f.read_usage(Some("analyst"), Some(f.space)).await;
     assert_eq!(status, 200, "{team}");
     assert_eq!(
-        team["totals"],
-        json!({"turns":4,"input_tokens":1000,"output_tokens":120,"cache_read_tokens":80,"cache_creation_tokens":40})
+        team["results"]["total"]["rows"][0]["values"],
+        json!({"usage.recorded_exchanges":"4","usage.input_tokens":"1000","usage.output_tokens":"120","usage.cache_read_tokens":"80","usage.cache_creation_tokens":"40"})
     );
     assert_eq!(
-        team["by_agent"]
+        team["results"]["agents"]["rows"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|a| a["display_name"].as_str().unwrap())
+            .map(|a| a["dimensions"]["display_name"].as_str().unwrap())
             .collect::<Vec<_>>(),
         vec!["Purged", "Retired", "Active", "Usage"]
     );
     assert_eq!(
-        team["by_agent"][0]["agent_instance_id"],
+        team["results"]["agents"]["rows"][0]["dimensions"]["agent_instance_id"],
         agents[2].to_string()
     );
-    assert_eq!(team["by_agent"][0]["space_id"], purged.id.to_string());
-    assert!(!team.to_string().contains("user_id"));
-    let (status, project) = f
-        .get(
-            Some("alice"),
-            &format!("/spaces/{}/usage?{READ_RANGE}", active.id),
-        )
-        .await;
-    assert_eq!(status, 200, "{project}");
-    assert_eq!(project["totals"]["input_tokens"], 200);
-    assert_eq!(project["by_agent"].as_array().unwrap().len(), 1);
     assert_eq!(
-        f.get(Some("alice"), &format!("/spaces/{}/usage", retired.id))
-            .await
-            .0,
-        409
+        team["results"]["agents"]["rows"][0]["dimensions"]["space_id"],
+        purged.id.to_string()
     );
+    assert!(!team.to_string().contains("user_id"));
+    let (status, project) = f.read_usage(Some("alice"), Some(active.id)).await;
+    assert_eq!(status, 200, "{project}");
+    assert_eq!(
+        project["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "200"
+    );
+    assert_eq!(
+        project["results"]["agents"]["rows"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(f.read_usage(Some("alice"), Some(retired.id)).await.0, 409);
 }
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn personal_usage_keeps_only_the_persons_facts_after_all_roles_are_removed() {
+async fn personal_usage_retains_old_space_facts_only_while_the_organization_is_authorized() {
     let f = Fixture::new().await;
     let org = f.organization().await;
     let project = f.project("Project").await;
@@ -458,11 +482,12 @@ async fn personal_usage_keeps_only_the_persons_facts_after_all_roles_are_removed
     let (_, bob_session) = f.agent_session(f.space, "bob", "Bob").await;
     f.record_at(f.space, bob_session, "other", "2026-01-01T12:00:00Z", 900)
         .await;
-    sqlx::query("delete from space_role_grant where subject='alice'")
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id<>$1")
+        .bind(org)
         .execute(&f.pool)
         .await
         .unwrap();
-    // No bootstrap or current consent either: authentication alone suffices.
+    // Old space memberships are unnecessary; a current organization grant remains required.
     sqlx::query("delete from platform_bootstrap")
         .execute(&f.pool)
         .await
@@ -471,24 +496,30 @@ async fn personal_usage_keeps_only_the_persons_facts_after_all_roles_are_removed
         .execute(&f.pool)
         .await
         .unwrap();
-    let (status, own) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
+    let (status, own) = f.read_usage(Some("alice"), None).await;
     assert_eq!(status, 200, "{own}");
-    assert_eq!(own["totals"]["turns"], 3);
-    assert_eq!(own["totals"]["input_tokens"], 500);
-    let (status, bob) = f.get(Some("bob"), &format!("/me/usage?{READ_RANGE}")).await;
-    assert_eq!(status, 200, "{bob}");
-    assert_eq!(bob["totals"]["input_tokens"], 900);
     assert_eq!(
-        f.get(
-            Some("alice"),
-            &format!("/me/usage?{READ_RANGE}&user_id=bob")
-        )
-        .await
-        .0,
-        422
+        own["results"]["total"]["rows"][0]["values"]["usage.recorded_exchanges"],
+        "3"
     );
+    assert_eq!(
+        own["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "500"
+    );
+    let (status, bob) = f.read_usage(Some("bob"), None).await;
+    assert_eq!(status, 200, "{bob}");
+    assert_eq!(
+        bob["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "900"
+    );
+    let mut spoof = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    spoof["queries"][0]["scope"]["user_id"] = json!("bob");
+    assert_eq!(f.analytics(Some("alice"), spoof).await.0, 422);
+    sqlx::query("delete from space_role_grant where subject='alice'")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_ne!(f.read_usage(Some("alice"), None).await.0, 200);
 }
 
 #[tokio::test]
@@ -504,36 +535,69 @@ async fn hitl_turns_stay_at_first_consumption_while_tokens_follow_each_report() 
     let (_, other_session) = f.agent_session(f.space, "alice", "Other").await;
     f.record_at(f.space, other_session, "hitl", "2026-01-02T02:30:00Z", 50)
         .await;
-    for path in ["/me/usage".to_owned(), format!("/spaces/{}/usage", f.space)] {
-        let (status, all) = f.get(Some("alice"), &format!("{path}?{READ_RANGE}")).await;
+    for space in [None, Some(f.space)] {
+        let (status, all) = f.read_usage(Some("alice"), space).await;
         assert_eq!(status, 200, "{all}");
         assert_eq!(
-            all["totals"],
-            json!({"turns":2,"input_tokens":350,"output_tokens":90,"cache_read_tokens":60,"cache_creation_tokens":30})
+            all["results"]["total"]["rows"][0]["values"],
+            json!({"usage.recorded_exchanges":"2","usage.input_tokens":"350","usage.output_tokens":"90","usage.cache_read_tokens":"60","usage.cache_creation_tokens":"30"})
         );
-        assert_eq!(all["interval"], "hour");
-        assert_eq!(all["series"].as_array().unwrap().len(), 48);
+        assert_eq!(all["results"]["series"]["bucket"], "hour");
         assert_eq!(
-            all["series"][0],
-            json!({"start":"2026-01-01T00:00:00Z","turns":0,"input_tokens":0,"output_tokens":0,"cache_read_tokens":0,"cache_creation_tokens":0})
+            all["results"]["series"]["rows"].as_array().unwrap().len(),
+            48
         );
-        assert_eq!(all["series"][23]["turns"], 1);
-        assert_eq!(all["series"][25]["turns"], 0);
-        assert_eq!(all["series"][25]["input_tokens"], 200);
-        assert_eq!(all["series"][26]["turns"], 1);
-        assert_eq!(all["by_agent"][0]["turns"], 1);
-        assert_eq!(all["by_model"][0]["turns"], 2);
+        assert_eq!(
+            all["results"]["series"]["rows"][0],
+            json!({"dimensions":{"kind":"time","start":"2026-01-01T00:00:00Z"},"values":{"usage.recorded_exchanges":"0","usage.input_tokens":"0","usage.output_tokens":"0","usage.cache_read_tokens":"0","usage.cache_creation_tokens":"0"}})
+        );
+        assert_eq!(
+            all["results"]["series"]["rows"][23]["values"]["usage.recorded_exchanges"],
+            "1"
+        );
+        assert_eq!(
+            all["results"]["series"]["rows"][25]["values"]["usage.recorded_exchanges"],
+            "0"
+        );
+        assert_eq!(
+            all["results"]["series"]["rows"][25]["values"]["usage.input_tokens"],
+            "200"
+        );
+        assert_eq!(
+            all["results"]["series"]["rows"][26]["values"]["usage.recorded_exchanges"],
+            "1"
+        );
+        assert_eq!(
+            all["results"]["agents"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "1"
+        );
+        assert_eq!(
+            all["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "2"
+        );
         let (status, resumed) = f
-            .get(
+            .analytics(
                 Some("alice"),
-                &format!("{path}?since=2026-01-02T01:00:00Z&until=2026-01-02T02:00:00Z"),
+                analytics_request(space, "2026-01-02T01:00:00Z", "2026-01-02T02:00:00Z"),
             )
             .await;
         assert_eq!(status, 200, "{resumed}");
-        assert_eq!(resumed["totals"]["turns"], 0);
-        assert_eq!(resumed["totals"]["input_tokens"], 200);
-        assert_eq!(resumed["by_agent"][0]["turns"], 0);
-        assert_eq!(resumed["by_model"][0]["turns"], 0);
+        assert_eq!(
+            resumed["results"]["total"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "0"
+        );
+        assert_eq!(
+            resumed["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+            "200"
+        );
+        assert_eq!(
+            resumed["results"]["agents"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "0"
+        );
+        assert_eq!(
+            resumed["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "0"
+        );
     }
 }
 
@@ -547,34 +611,55 @@ async fn usage_names_fall_back_to_latest_session_and_models_sort_by_total_tokens
     let newer_session = Uuid::new_v4();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision,updated_at) values($1,'alice',$2,$3,$3,'native','Latest snapshot',1,now()+interval '1 second')")
         .bind(newer_session).bind(f.space).bind(f.agent).execute(&f.pool).await.unwrap();
-    let (_, current) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
-    assert_eq!(current["by_agent"][0]["display_name"], "Usage");
-    assert_eq!(current["totals"]["turns"], 1);
-    assert_eq!(current["by_model"][0]["model_source_id"], "test-source");
-    assert_eq!(current["by_model"][1]["model_source_id"], "other-source");
-    assert_eq!(current["by_model"][0]["turns"], 1);
-    assert_eq!(current["by_model"][1]["turns"], 1);
+    let (_, current) = f.read_usage(Some("alice"), None).await;
+    assert_eq!(
+        current["results"]["agents"]["rows"][0]["dimensions"]["display_name"],
+        "Usage"
+    );
+    assert_eq!(
+        current["results"]["total"]["rows"][0]["values"]["usage.recorded_exchanges"],
+        "1"
+    );
+    assert_eq!(
+        current["results"]["models"]["rows"][0]["dimensions"]["model_source_id"],
+        "test-source"
+    );
+    assert_eq!(
+        current["results"]["models"]["rows"][1]["dimensions"]["model_source_id"],
+        "other-source"
+    );
+    assert_eq!(
+        current["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
+        "1"
+    );
+    assert_eq!(
+        current["results"]["models"]["rows"][1]["values"]["usage.recorded_exchanges"],
+        "1"
+    );
     sqlx::query("delete from agent_instance where agent_instance_id=$1")
         .bind(f.agent)
         .execute(&f.pool)
         .await
         .unwrap();
-    let (_, deleted) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
-    assert_eq!(deleted["by_agent"][0]["display_name"], "Latest snapshot");
+    let (_, deleted) = f.read_usage(Some("alice"), None).await;
+    assert_eq!(
+        deleted["results"]["agents"]["rows"][0]["dimensions"]["display_name"],
+        "Latest snapshot"
+    );
     sqlx::query("delete from session_metadata where agent_instance_id=$1")
         .bind(f.agent)
         .execute(&f.pool)
         .await
         .unwrap();
-    let (_, purged) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
-    assert_eq!(purged["by_agent"][0]["display_name"], Value::Null);
-    assert_eq!(purged["totals"], deleted["totals"]);
+    let (_, purged) = f.read_usage(Some("alice"), None).await;
+    assert_eq!(
+        purged["results"]["agents"]["rows"][0]["dimensions"]["display_name"],
+        Value::Null
+    );
+    assert_eq!(
+        purged["results"]["total"]["rows"][0]["values"],
+        deleted["results"]["total"]["rows"][0]["values"]
+    );
 }
 
 #[tokio::test]
@@ -582,23 +667,25 @@ async fn usage_names_fall_back_to_latest_session_and_models_sort_by_total_tokens
 async fn usage_ranges_validate_dates_and_generate_continuous_utc_buckets() {
     let f = Fixture::new().await;
     f.admit("alice").await;
-    for path in ["/me/usage".to_owned(), format!("/spaces/{}/usage", f.space)] {
-        for invalid in [
-            "since=no-date",
-            "until=2026-01-01",
-            "since=2026-01-01T00:00:00",
-            "since=2026-01-01T00:00:00Z&until=2026-01-01T00:00:00Z",
-            "since=2026-01-02T00:00:00Z&until=2026-01-01T00:00:00Z",
-            "since=2024-01-01T00:00:00Z&until=2025-01-01T00:00:01Z",
+    for space in [None, Some(f.space)] {
+        for (since, until) in [
+            ("no-date", "2026-01-02T00:00:00Z"),
+            ("2026-01-01T00:00:00Z", "2026-01-01"),
+            ("2026-01-01T00:00:00", "2026-01-02T00:00:00Z"),
+            ("2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"),
+            ("2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z"),
+            ("2024-01-01T00:00:00Z", "2025-01-01T00:00:01Z"),
         ] {
-            let (status, error) = f.get(Some("alice"), &format!("{path}?{invalid}")).await;
-            assert_eq!(status, 422, "{invalid}: {error}");
+            let (status, error) = f
+                .analytics(Some("alice"), analytics_request(space, since, until))
+                .await;
+            assert_eq!(status, 422, "{error}");
             assert_eq!(error["code"], "invalid_fields");
         }
-        for (since, until, interval, count, first) in [
+        for (since, until, bucket, count, first) in [
             (
-                "2026-01-01T01:15:00%2B02:00",
-                "2026-01-01T03:00:00%2B02:00",
+                "2026-01-01T01:15:00+02:00",
+                "2026-01-01T03:00:00+02:00",
                 "hour",
                 2,
                 "2025-12-31T23:00:00Z",
@@ -619,39 +706,31 @@ async fn usage_ranges_validate_dates_and_generate_continuous_utc_buckets() {
             ),
         ] {
             let (status, response) = f
-                .get(
-                    Some("alice"),
-                    &format!("{path}?since={since}&until={until}"),
-                )
+                .analytics(Some("alice"), analytics_request(space, since, until))
                 .await;
             assert_eq!(status, 200, "{response}");
-            assert_eq!(response["interval"], interval);
-            let series = response["series"].as_array().unwrap();
+            assert_eq!(response["results"]["series"]["bucket"], bucket);
+            let series = response["results"]["series"]["rows"].as_array().unwrap();
             assert_eq!(series.len(), count);
-            assert_eq!(series[0]["start"], first);
+            assert_eq!(series[0]["dimensions"]["start"], first);
             for point in series {
-                for field in [
-                    "turns",
-                    "input_tokens",
-                    "output_tokens",
-                    "cache_read_tokens",
-                    "cache_creation_tokens",
-                ] {
-                    assert_eq!(point[field], 0);
-                }
+                assert!(
+                    point["values"]
+                        .as_object()
+                        .unwrap()
+                        .values()
+                        .all(|v| v == "0")
+                );
             }
-            assert_eq!(response["by_agent"], json!([]));
-            assert_eq!(response["by_model"], json!([]));
+            assert_eq!(response["results"]["agents"]["rows"], json!([]));
+            assert_eq!(response["results"]["models"]["rows"], json!([]));
         }
-        let before = chrono::Utc::now();
-        let (status, defaults) = f.get(Some("alice"), &path).await;
-        assert_eq!(status, 200, "{defaults}");
-        let since: chrono::DateTime<chrono::Utc> =
-            defaults["since"].as_str().unwrap().parse().unwrap();
-        let until: chrono::DateTime<chrono::Utc> =
-            defaults["until"].as_str().unwrap().parse().unwrap();
-        assert_eq!(until - since, chrono::Duration::days(30));
-        assert!(until >= before && until <= chrono::Utc::now());
+        let mut missing = analytics_request(space, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+        missing["queries"][0]["time"]
+            .as_object_mut()
+            .unwrap()
+            .remove("until");
+        assert_eq!(f.analytics(Some("alice"), missing).await.0, 422);
     }
 }
 
@@ -898,12 +977,16 @@ async fn usage_requires_a_trusted_workload_and_uses_session_provenance_after_ret
         .unwrap();
     assert_eq!(retained, 4);
     f.admit("alice").await;
-    let (status, retained_usage) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
+    let (status, retained_usage) = f.read_usage(Some("alice"), None).await;
     assert_eq!(status, 200, "{retained_usage}");
-    assert_eq!(retained_usage["totals"]["input_tokens"], 400);
-    assert_eq!(retained_usage["totals"]["turns"], 1);
+    assert_eq!(
+        retained_usage["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "400"
+    );
+    assert_eq!(
+        retained_usage["results"]["total"]["rows"][0]["values"]["usage.recorded_exchanges"],
+        "1"
+    );
 }
 
 #[tokio::test]
@@ -979,13 +1062,20 @@ async fn usage_after_effective_purge_keeps_server_provenance_and_idempotency() {
     .await
     .unwrap();
     assert_eq!(provenance, vec![("alice".into(), f.space, f.agent); 4]);
-    let (status, retained) = f
-        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
-        .await;
+    let (status, retained) = f.read_usage(Some("alice"), None).await;
     assert_eq!(status, 200, "{retained}");
-    assert_eq!(retained["totals"]["input_tokens"], 400);
-    assert_eq!(retained["totals"]["turns"], 1);
-    assert_eq!(retained["by_agent"][0]["display_name"], Value::Null);
+    assert_eq!(
+        retained["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "400"
+    );
+    assert_eq!(
+        retained["results"]["total"]["rows"][0]["values"]["usage.recorded_exchanges"],
+        "1"
+    );
+    assert_eq!(
+        retained["results"]["agents"]["rows"][0]["dimensions"]["display_name"],
+        Value::Null
+    );
 }
 
 #[tokio::test]
@@ -1216,4 +1306,817 @@ async fn usage_requires_exactly_one_uuid_idempotency_key() {
         .unwrap();
     assert_eq!(count, 0);
     assert_eq!(f.post(&f.workload, &path, &body).await.0, 204);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn analytics_rejects_unsupported_requests_and_keeps_batches_atomic() {
+    let f = Fixture::new().await;
+    let mut base = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    for q in base["queries"].as_array_mut().unwrap() {
+        q["scope"]["organization_id"] = json!(f.organization);
+    }
+    for (pointer, invalid) in [
+        ("/queries/0/scope", json!({})),
+        ("/queries/0/scope", Value::Null),
+        ("/queries/0/scope", json!({"kind":"spaces","ids":[]})),
+        ("/queries/0/scope", json!({"kind":"platform"})),
+        (
+            "/queries/0/scope",
+            json!({"kind":"organization","id":f.space}),
+        ),
+        ("/queries/0/time/timezone", json!("Europe/Paris")),
+        ("/queries/0/measures", json!(["usage.unknown"])),
+        ("/queries/0/measures", json!([])),
+        (
+            "/queries/0/measures",
+            json!(["usage.input_tokens", "usage.input_tokens"]),
+        ),
+        ("/queries/0/group_by", json!(["user"])),
+        ("/queries/0/group_by", json!(["agent", "model"])),
+        ("/queries/1/name", json!("total")),
+        ("/queries/0/name", json!("")),
+        ("/queries", json!([])),
+    ] {
+        let mut body = base.clone();
+        *body.pointer_mut(pointer).unwrap() = invalid;
+        let (status, error) = f.analytics(Some("alice"), body).await;
+        assert_eq!(status, 422, "{pointer}: {error}");
+        assert!(error.get("results").is_none());
+    }
+    for field in ["filters", "comparison", "calendar", "engine"] {
+        let mut body = base.clone();
+        body["queries"][0][field] = json!({});
+        assert_eq!(f.analytics(Some("alice"), body).await.0, 422, "{field}");
+    }
+    let mut body = base.clone();
+    body["queries"][0].as_object_mut().unwrap().remove("scope");
+    assert_eq!(f.analytics(Some("alice"), body).await.0, 422);
+    for (index, limit) in [(0, 1), (1, 1), (2, 0), (3, 101)] {
+        let mut body = base.clone();
+        body["queries"][index]["limit"] = json!(limit);
+        assert_eq!(f.analytics(Some("alice"), body).await.0, 422);
+    }
+    let mut body = base.clone();
+    body["queries"] = json!(vec![body["queries"][0].clone(); 9]);
+    assert_eq!(f.analytics(Some("alice"), body).await.0, 422);
+    let mut body = base.clone();
+    body["queries"][1]["time"]["bucket"] = json!("hour");
+    body["queries"][1]["time"]["until"] = json!("2026-12-31T00:00:00Z");
+    let (status, error) = f.analytics(Some("alice"), body).await;
+    assert_eq!(status, 422);
+    assert_eq!(error["code"], "query_too_large");
+    // An authorized personal query cannot hide a forbidden collective query.
+    f.admit("alice").await;
+    let mut body = base.clone();
+    body["queries"][3]["scope"] = json!({"kind":"space","id":Uuid::new_v4()});
+    let (status, error) = f.analytics(Some("alice"), body).await;
+    assert_eq!(status, 404);
+    assert!(error.get("results").is_none());
+    let now = chrono::Utc::now().timestamp();
+    for claims in [
+        json!({"sub":"service-account-runtime", "preferred_username":"service-account-runtime","client_id":"runtime"}),
+        json!({"sub":"role-only", "preferred_username":"role-only","resource_access":{"app":{"roles":["service_agent"]}}}),
+    ] {
+        let mut claims = claims;
+        for (key, value) in json!({"iss":f.identity.realm,"aud":"app","iat":now,"exp":now+300})
+            .as_object()
+            .unwrap()
+        {
+            claims[key] = value.clone();
+        }
+        let token = f.identity.sign(claims);
+        assert_eq!(f.post(&token, "/analytics/query", &base).await.0, 403);
+    }
+    for path in ["/me/usage".to_owned(), format!("/spaces/{}/usage", f.space)] {
+        assert_eq!(
+            support::request(
+                &f.app,
+                &f.identity,
+                Some("alice"),
+                "GET",
+                &path,
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+    }
+    let mut too_big = base.clone();
+    too_big["queries"][0]["name"] = json!("x".repeat(70_000));
+    assert_eq!(f.analytics(Some("alice"), too_big).await.0, 413);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn analytics_preserves_big_integers_and_marks_truncated_rankings() {
+    let f = Fixture::new().await;
+    let max = i64::MAX;
+    for n in 0..3 {
+        let mut offer = model("source", &format!("model-{n}"));
+        offer["input_tokens"] = json!(max);
+        let report = json!({"occurred_at":"2026-01-01T12:00:00Z", "models":[offer]});
+        assert_eq!(
+            f.post_report(
+                &f.workload,
+                &f.path(&format!("exchange-{n}")),
+                &report,
+                Uuid::new_v4()
+            )
+            .await
+            .0,
+            204
+        );
+    }
+    let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    request["queries"][3]["limit"] = json!(2);
+    request["queries"][0]["measures"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("usage.total_tokens"));
+    let (status, body) = f.analytics(Some("alice"), request).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["calculation"], "exact");
+    assert_eq!(body["collection_completeness"], "unknown");
+    let total = &body["results"]["total"]["rows"][0]["values"];
+    assert_eq!(
+        total["usage.input_tokens"],
+        (i128::from(max) * 3).to_string()
+    );
+    assert_eq!(
+        total["usage.total_tokens"],
+        (i128::from(max) * 3 + 90).to_string()
+    );
+    assert_eq!(body["results"]["models"]["truncated"], true);
+    assert_eq!(
+        body["results"]["models"]["rows"].as_array().unwrap().len(),
+        2
+    );
+    assert_eq!(
+        body["results"]["models"]["rows"][0]["dimensions"]["upstream_model_id"],
+        "model-0"
+    );
+    for name in ["total", "series", "agents"] {
+        assert_eq!(body["results"][name]["truncated"], false);
+    }
+    for measure in [
+        "usage.input_tokens",
+        "usage.output_tokens",
+        "usage.recorded_exchanges",
+    ] {
+        let sum: i128 = body["results"]["series"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                r["values"][measure]
+                    .as_str()
+                    .unwrap()
+                    .parse::<i128>()
+                    .unwrap()
+            })
+            .sum();
+        assert_eq!(total[measure], sum.to_string());
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn analytics_source_lock_failure_never_returns_zero_or_partial_results() {
+    let f = Fixture::new().await;
+    let mut held = f.pool.begin().await.unwrap();
+    sqlx::query("lock table model_usage in access exclusive mode")
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let (status, body) = f.read_usage(Some("alice"), None).await;
+    assert_eq!(status, 503, "{body}");
+    assert_eq!(body["code"], "dependency_unavailable");
+    assert!(body.get("results").is_none());
+    held.rollback().await.unwrap();
+    assert_eq!(f.read_usage(Some("alice"), None).await.0, 200);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn analytics_distinct_reads_share_a_snapshot_during_concurrent_reporting() {
+    let f = Fixture::new().await;
+    f.record_at(f.space, f.session, "before", "2026-01-01T12:00:00Z", 100)
+        .await;
+    // Only this disposable database: gate the journal scan after its snapshot is
+    // acquired, without adding any test hook to production code.
+    sqlx::raw_sql(
+        "alter table model_usage rename to fixture_usage;
+        create function fixture_usage_gate() returns boolean language plpgsql volatile as $$
+        begin perform pg_advisory_xact_lock(897126); return true; end $$;
+        create view model_usage as select * from fixture_usage where fixture_usage_gate();",
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let mut gate = f.pool.begin().await.unwrap();
+    sqlx::query("select pg_advisory_xact_lock(897126)")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let mut body = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    // Two genuinely distinct SQL reads; compatible total/series/rankings are
+    // separately covered by the planner test and existing equivalence tests.
+    let mut second = body["queries"][0].clone();
+    second["name"] = json!("later_end");
+    second["time"]["until"] = json!("2026-01-04T00:00:00Z");
+    body["queries"].as_array_mut().unwrap().push(second);
+    let request = f.analytics(Some("alice"), body);
+    let writer = async {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("select exists(select 1 from pg_stat_activity where datname=current_database() and wait_event='advisory' and query like 'with scoped%')")
+                    .fetch_one(&f.pool).await.unwrap();
+                if waiting { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        sqlx::query("insert into fixture_usage select $1,session_id,'after',occurred_at,space_id,user_id,agent_instance_id,model_source_id,upstream_model_id,200,output_tokens,cache_read_tokens,cache_creation_tokens from fixture_usage limit 1")
+            .bind(Uuid::new_v4()).execute(&f.pool).await.unwrap();
+        gate.commit().await.unwrap();
+    };
+    let ((status, response), ()) = tokio::join!(request, writer);
+    assert_eq!(status, 200, "{response}");
+    for name in ["total", "later_end"] {
+        assert_eq!(
+            response["results"][name]["rows"][0]["values"]["usage.input_tokens"],
+            "100"
+        );
+    }
+    let (status, after) = f.read_usage(Some("alice"), None).await;
+    assert_eq!(status, 200, "{after}");
+    assert_eq!(
+        after["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+        "300"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn analytics_documented_request_and_response() {
+    let f = Fixture::new().await;
+    f.record_at(f.space, f.session, "one", "2026-01-01T12:00:00Z", 100)
+        .await;
+    let (status, response) = f.analytics(Some("alice"), json!({"queries":[{"name":"input","scope":{"kind":"self"},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["usage.input_tokens"],"group_by":[]}]})).await;
+    assert_eq!(status, 200, "{response}");
+    assert_eq!(
+        response,
+        json!({"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}})
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_estimates_cover_all_models_and_keep_zero_distinct_from_missing() {
+    let f = Fixture::new().await;
+    let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    request["queries"][0]["measures"] = json!([
+        "usage.total_tokens",
+        "usage.cost_eur",
+        "usage.co2e_grams",
+        "usage.energy_kwh"
+    ]);
+    let (status, empty) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{empty}");
+    assert_eq!(
+        empty["results"]["total"]["rows"][0]["estimates"]["usage.cost_eur"]["value"],
+        "0"
+    );
+    for n in 0..101 {
+        let body = json!({"occurred_at":"2026-01-01T12:00:00Z", "models":[model("source", &format!("unknown-{n}"))]});
+        assert_eq!(
+            f.post_report(
+                &f.workload,
+                &f.path(&format!("turn-{n}")),
+                &body,
+                Uuid::new_v4()
+            )
+            .await
+            .0,
+            204
+        );
+    }
+    let (status, body) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["calculation"], "mixed");
+    assert_eq!(body["results"]["models"]["truncated"], true);
+    let row = &body["results"]["total"]["rows"][0];
+    assert_eq!(row["values"]["usage.total_tokens"], "13130");
+    assert_eq!(row["estimates"]["usage.cost_eur"]["value"], Value::Null);
+    assert_eq!(
+        row["estimates"]["usage.cost_eur"]["coverage"],
+        "unavailable"
+    );
+    let co2e = &row["estimates"]["usage.co2e_grams"];
+    assert_eq!(co2e["fallback"], true);
+    assert_eq!(co2e["coverage"], "complete");
+    assert!((co2e["value"].as_str().unwrap().parse::<f64>().unwrap() - 7.878).abs() < 1e-10);
+    let (_, bob) = f.analytics(Some("bob"), request).await;
+    assert_eq!(
+        bob["results"]["total"]["rows"][0]["estimates"]["usage.cost_eur"]["value"],
+        "0"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors() {
+    let f = Fixture::new().await;
+    assert_eq!(f.post(&f.workload, &f.path("one"), &usage()).await.0, 204);
+    // Synthetic coefficients are test inputs only; production embeds the sole maintained YAML.
+    let base = json!({"usd_per_eur":2,"models":{"default":{
+        "cost_per_1k_input_tokens":1,"cost_per_1k_output_tokens":2,"cost_per_1k_cached_input_tokens":0.1,
+        "co2e_grams_per_1k_tokens":3,"kwh_per_1k_tokens":0.001
+    }}});
+    let sql = concat!(
+        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1) ",
+        include_str!("../../src/sessions/usage/read.sql"),
+        ") result where start is null and agent_instance_id is null and model_source_id is null"
+    );
+    let since: chrono::DateTime<chrono::Utc> = "2026-01-01T00:00:00Z".parse().unwrap();
+    let until: chrono::DateTime<chrono::Utc> = "2026-01-03T00:00:00Z".parse().unwrap();
+    for (catalog, expected_value, coverage) in [
+        (base.clone(), Some(0.142), "complete"),
+        (
+            {
+                let mut c = base.clone();
+                c["models"]["default"]["cost_per_1k_cached_input_tokens"] = json!(0);
+                c
+            },
+            None,
+            "unavailable",
+        ),
+    ] {
+        let estimates: Value = sqlx::query_scalar(sql)
+            .bind("alice")
+            .bind(since)
+            .bind(until)
+            .bind("day")
+            .bind(101_i64)
+            .bind(catalog)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+        assert_eq!(estimates["usage.cost_eur"]["coverage"], coverage);
+        let value = estimates["usage.cost_eur"]["value"]
+            .as_str()
+            .map(|v| v.parse::<f64>().unwrap());
+        assert_eq!(value, expected_value);
+        assert_eq!(estimates["usage.energy_kwh"]["coverage"], "complete");
+    }
+    sqlx::query(
+        "update model_usage set upstream_model_id='missing' where model_source_id='other-source'",
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let mut partial = base;
+    partial["models"]["missing"] = json!({});
+    let estimates: Value = sqlx::query_scalar(sql)
+        .bind("alice")
+        .bind(since)
+        .bind(until)
+        .bind("day")
+        .bind(101_i64)
+        .bind(partial)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(estimates["usage.cost_eur"]["coverage"], "partial");
+    assert_eq!(
+        estimates["usage.cost_eur"]["value"]
+            .as_str()
+            .unwrap()
+            .parse::<f64>()
+            .unwrap(),
+        0.071
+    );
+    assert_eq!(estimates["usage.co2e_grams"]["coverage"], "partial");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_historical_is_self_only_and_unavailable_is_not_empty() {
+    let f = Fixture::new().await;
+    let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    let q = json!({"name":"skills","scope":{"kind":"self"},"time":request["queries"][0]["time"],"measures":["skills.user_loads","skills.agent_loads","skills.total_loads"],"group_by":["skill"]});
+    request["queries"] = json!([q]);
+    assert_eq!(f.analytics(Some("alice"), request.clone()).await.0, 503);
+    assert_eq!(f.analytics(None, request.clone()).await.0, 401);
+    let mut collective = request.clone();
+    collective["queries"][0]["scope"] = json!({"kind":"space","id":f.space});
+    assert_eq!(f.analytics(Some("alice"), collective).await.0, 403);
+    let mut forged = request.clone();
+    forged["queries"][0]["scope"]["user_id"] = json!("bob");
+    assert_eq!(f.analytics(Some("alice"), forged).await.0, 422);
+    request["queries"].as_array_mut().unwrap().push(
+        analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z")["queries"][0]
+            .clone(),
+    );
+    assert_eq!(f.analytics(Some("alice"), request).await.0, 422);
+    assert_eq!(f.read_usage(Some("alice"), None).await.0, 200);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_historical_route_injects_identity_and_never_needs_a_sql_transaction() {
+    use axum::{
+        Json,
+        routing::{get, post},
+    };
+    use control_plane::analytics::opensearch::{Config, OpenSearch};
+    let observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let capture = observed.clone();
+    let upstream = Router::new()
+        .route("/fixture/_mapping", get(|| async { Json(json!({"fixture":{"mappings":{"properties":{
+            "@timestamp":{"type":"date"},"metric":{"properties":{"name":{"type":"keyword"}}},
+            "dims":{"properties":{"space_id":{"type":"keyword"},"user_id":{"type":"keyword"},"skill_name":{"type":"keyword"},"skill_origin":{"type":"keyword"}}}
+        }}}})) }))
+        .route("/fixture/_search", post(move |Json(body): Json<Value>| { let capture = capture.clone(); async move {
+            capture.lock().unwrap().push(body["query"]["bool"]["filter"][2]["terms"]["dims.space_id"].clone());
+            let subject=&body["query"]["bool"]["filter"][1]["term"]["dims.user_id"];
+            let count=if subject == "alice" { 3 } else if subject == "bob" { 7 } else { panic!("unexpected subject") };
+            Json(json!({"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
+                "key":{"skill":"read"},"doc_count":count,"origins":{"buckets":{"user":{"doc_count":count},"agent":{"doc_count":0}}}
+            }]}}}))
+        }}));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = Config {
+        url: format!("http://{}", listener.local_addr().unwrap()),
+        index: "fixture".into(),
+        username: None,
+        password_env_var: None,
+    };
+    let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    let f = Fixture::with_history(false, Some(OpenSearch::configured(&config).unwrap())).await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    // Journal reads fail while organization authority remains available.
+    let mut locked = f.pool.begin().await.unwrap();
+    sqlx::query("lock table model_usage in access exclusive mode")
+        .execute(&mut *locked)
+        .await
+        .unwrap();
+    let request = json!({"queries":[{"name":"skills","scope":{"kind":"self"},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["skills.user_loads","skills.agent_loads","skills.total_loads"],"group_by":["skill"],"limit":100}]});
+    for (subject, count) in [("alice", "3"), ("bob", "7")] {
+        let (status, response) = f.analytics(Some(subject), request.clone()).await;
+        assert_eq!(status, 200, "{response}");
+        assert_eq!(
+            response["results"]["skills"]["rows"][0]["values"]["skills.total_loads"],
+            count
+        );
+        assert_eq!(response["calculation"], "exact");
+        assert_eq!(response["collection_completeness"], "unknown");
+    }
+    let mut globex_request = request.clone();
+    globex_request["queries"][0]["scope"]["organization_id"] = json!(globex.id);
+    assert_eq!(
+        f.analytics(Some("alice"), globex_request.clone()).await.0,
+        200
+    );
+    assert_eq!(f.analytics(Some("bob"), globex_request).await.0, 404);
+    {
+        let calls = observed.lock().unwrap();
+        assert_eq!(calls.len(), 3); // Bob's forbidden organization never reaches the source.
+        for scope in &calls[..2] {
+            let ids = scope.as_array().unwrap();
+            assert!(ids.contains(&json!(f.space)));
+            assert!(!ids.contains(&json!(globex.id)));
+        }
+        assert_eq!(calls[2], json!([globex.id]));
+    }
+    assert_ne!(f.read_usage(Some("alice"), None).await.0, 200);
+    server.abort();
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn personal_analytics_never_combines_acme_and_globex_and_requires_current_organization_access()
+ {
+    let f = Fixture::new().await;
+    sqlx::query("update space set name='Acme' where id=$1")
+        .bind(f.organization)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    let team = spaces::create_space(
+        &f.pool,
+        "alice",
+        SpaceKind::Team,
+        globex.id,
+        "Globex team".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let (_, session) = f.agent_session(team.id, "alice", "Globex agent").await;
+    f.record_at(f.space, f.session, "acme", "2026-01-01T12:00:00Z", 100)
+        .await;
+    f.record_at(team.id, session, "globex", "2026-01-01T12:00:00Z", 300)
+        .await;
+    for (org, tokens, co2e) in [(f.organization, "130", 0.078), (globex.id, "330", 0.198)] {
+        let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+        for q in request["queries"].as_array_mut().unwrap() {
+            q["scope"]["organization_id"] = json!(org);
+            q["measures"] = json!([
+                "usage.total_tokens",
+                "usage.cost_eur",
+                "usage.co2e_grams",
+                "usage.energy_kwh"
+            ]);
+        }
+        let (status, response) = f.analytics(Some("alice"), request).await;
+        assert_eq!(status, 200, "{response}");
+        for name in ["total", "agents", "models"] {
+            let rows = response["results"][name]["rows"].as_array().unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["values"]["usage.total_tokens"], tokens);
+            assert!(
+                (rows[0]["estimates"]["usage.co2e_grams"]["value"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+                    - co2e)
+                    .abs()
+                    < 1e-10
+            );
+            assert_eq!(
+                rows[0]["estimates"]["usage.cost_eur"]["coverage"],
+                "unavailable"
+            );
+            assert!(
+                (rows[0]["estimates"]["usage.energy_kwh"]["value"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+                    - co2e / 200.0)
+                    .abs()
+                    < 1e-10
+            );
+        }
+        let sum: u64 = response["results"]["series"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                r["values"]["usage.total_tokens"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<u64>()
+                    .unwrap()
+            })
+            .sum();
+        assert_eq!(sum.to_string(), tokens);
+    }
+    let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+    let token = f.identity.token("alice");
+    // Deliberately bypass the test fixture's default organization: the public contract requires it.
+    assert_eq!(f.post(&token, "/analytics/query", &request).await.0, 422);
+    for q in request["queries"].as_array_mut().unwrap() {
+        q["scope"]["organization_id"] = json!(globex.id);
+    }
+    assert_eq!(f.analytics(Some("bob"), request.clone()).await.0, 404);
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)").bind(globex.id).execute(&f.pool).await.unwrap();
+    assert_eq!(f.analytics(Some("alice"), request).await.0, 404);
+    assert_eq!(f.read_usage(Some("alice"), None).await.0, 200);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn boss_platform_admin_observes_only_self_in_one_authorized_organization() {
+    let f = Fixture::new().await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    control_plane::authorization::write_platform(
+        &mut f.pool.acquire().await.unwrap(),
+        "boss",
+        control_plane::roles::PlatformRole::PlatformAdmin,
+        true,
+    )
+    .await
+    .unwrap();
+    for org in [f.organization, globex.id] {
+        sqlx::query(
+            "insert into space_role_grant(space_id,subject,role) values($1,'boss','member')",
+        )
+        .bind(org)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    }
+    let (_, acme_session) = f.agent_session(f.space, "boss", "Boss Acme").await;
+    let (_, globex_session) = f.agent_session(globex.id, "boss", "Boss Globex").await;
+    f.record_at(f.space, acme_session, "acme", "2026-01-01T12:00:00Z", 100)
+        .await;
+    f.record_at(
+        globex.id,
+        globex_session,
+        "globex",
+        "2026-01-01T12:00:00Z",
+        300,
+    )
+    .await;
+    // Platform administration must not add Alice's consumption to Boss's self view.
+    f.record_at(f.space, f.session, "alice", "2026-01-01T12:00:00Z", 900)
+        .await;
+    let request = |org| {
+        json!({"queries":[{"name":"total","scope":{"kind":"self","organization_id":org},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},
+        "measures":["usage.input_tokens"]}]})
+    };
+    for (org, expected) in [
+        (f.organization, "100"),
+        (globex.id, "300"),
+        (f.organization, "100"),
+    ] {
+        let (status, response) = f.analytics(Some("boss"), request(org)).await;
+        assert_eq!(status, 200, "{response}");
+        assert_eq!(
+            response["results"]["total"]["rows"][0]["values"]["usage.input_tokens"],
+            expected
+        );
+    }
+    sqlx::query("delete from space_role_grant where subject='boss' and space_id=$1")
+        .bind(globex.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(f.analytics(Some("boss"), request(globex.id)).await.0, 404);
+    assert_eq!(
+        f.analytics(Some("boss"), request(f.organization)).await.0,
+        200
+    );
+    // His platform role also grants no implicit collective analytics permission.
+    f.admit("boss").await;
+    assert_eq!(f.read_usage(Some("boss"), Some(f.space)).await.0, 403);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn retained_creations_use_adjacent_windows_subject_organization_and_deletion_state() {
+    let f = Fixture::new().await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    let team = spaces::create_space(
+        &f.pool,
+        "alice",
+        SpaceKind::Team,
+        globex.id,
+        "Globex team".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let (_, other) = f.agent_session(team.id, "alice", "Same name").await;
+    let (_, bob) = f.agent_session(f.space, "bob", "Same name").await;
+    sqlx::query(
+        "update session_metadata set created_at='2026-01-02T00:00:00Z' where session_id=any($1)",
+    )
+    .bind(vec![f.session, other, bob])
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let request = |organization| {
+        json!({"queries":[
+            {"name":"previous","scope":{"kind":"self","organization_id":organization},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-02T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]},
+            {"name":"current","scope":{"kind":"self","organization_id":organization},"time":{"since":"2026-01-02T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]}
+        ]})
+    };
+    for organization in [f.organization, globex.id] {
+        let (status, body) = f.analytics(Some("alice"), request(organization)).await;
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(
+            body["results"]["previous"]["rows"][0]["values"]["activity.retained_conversations"],
+            "0"
+        );
+        assert_eq!(
+            body["results"]["current"]["rows"][0]["values"]["activity.retained_conversations"],
+            "1"
+        );
+    }
+    assert_eq!(f.analytics(Some("bob"), request(globex.id)).await.0, 404);
+    assert_eq!(f.analytics(None, request(f.organization)).await.0, 401);
+    f.retire().await;
+    let (status, body) = f.analytics(Some("alice"), request(f.organization)).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["current"]["rows"][0]["values"]["activity.retained_conversations"],
+        "0"
+    );
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
+        .bind(f.organization).execute(&f.pool).await.unwrap();
+    assert_eq!(
+        f.analytics(Some("alice"), request(f.organization)).await.0,
+        404
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
+    use control_plane::analytics::history::{ReadError, ReadScope, Reader, SkillResult, TurnCount};
+    use futures::future::BoxFuture;
+    use std::sync::{Arc, Mutex};
+    type Calls = Arc<Mutex<Vec<(String, Vec<Uuid>)>>>;
+    struct Turns {
+        calls: Calls,
+    }
+    impl Reader for Turns {
+        fn skill_loads<'a>(
+            &'a self,
+            _: ReadScope<'a>,
+        ) -> BoxFuture<'a, Result<SkillResult, ReadError>> {
+            Box::pin(async { Err(ReadError::Unavailable) })
+        }
+        fn completed_turns<'a>(
+            &'a self,
+            q: ReadScope<'a>,
+        ) -> BoxFuture<'a, Result<Vec<TurnCount>, ReadError>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((q.subject.into(), q.spaces.to_vec()));
+            Box::pin(async move {
+                Ok(q.spaces
+                    .iter()
+                    .map(|id| TurnCount {
+                        space_id: *id,
+                        agent_instance_id: *id,
+                        display_name: Some("Same name".into()),
+                        latest: q.since,
+                        count: 1,
+                    })
+                    .collect())
+            })
+        }
+    }
+    let calls: Calls = Default::default();
+    let f = Fixture::with_history(
+        false,
+        Some(Arc::new(Turns {
+            calls: calls.clone(),
+        })),
+    )
+    .await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    let query = |name, group: Vec<&str>| {
+        json!({"name":name,"scope":{"kind":"self","organization_id":f.organization},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-02T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.completed_turns"],"group_by":group})
+    };
+    let request = json!({"queries":[query("total",vec![]),query("agents",vec!["agent"]),query("spaces",vec!["space"])]});
+    let (status, body) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(calls.lock().unwrap().len(), 1);
+    let scope = calls.lock().unwrap()[0].clone();
+    assert_eq!(scope.0, "alice");
+    assert!(scope.1.contains(&f.space));
+    assert!(!scope.1.contains(&globex.id));
+    assert!(
+        body["results"]["spaces"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["dimensions"]["space_id"] == json!(f.space))
+    );
+    // Withdrawal removes the team before limiting, while personal historical totals remain.
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id=$1")
+        .bind(f.space)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (status, body) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert!(
+        !body["results"]["spaces"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["dimensions"]["space_id"] == json!(f.space))
+    );
+    let mut foreign = request.clone();
+    for q in foreign["queries"].as_array_mut().unwrap() {
+        q["scope"]["organization_id"] = json!(globex.id);
+    }
+    assert_eq!(f.analytics(Some("bob"), foreign).await.0, 404);
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
+        .bind(f.organization).execute(&f.pool).await.unwrap();
+    assert_eq!(f.analytics(Some("alice"), request).await.0, 404);
+    assert_eq!(calls.lock().unwrap().len(), 2);
 }

@@ -12,7 +12,7 @@ provides a versioned view. Regenerate this inventory with `make -C docs/architec
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
@@ -31,6 +31,12 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | --- | --- | --- | --- |
 | POST | `/agents/execute/stream` | `execute_stream` | Required |
 | GET | `/agents/sessions/{session_id}/messages` | `messages` | Required |
+
+## /analytics routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| POST | `/analytics/query` | `query_analytics` | Required |
 
 ## /authorize routes
 
@@ -142,7 +148,6 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | GET | `/me/onboarding` | `onboarding_status` | Required |
 | POST | `/me/personal-space` | `create_personal_space` | Required |
 | GET | `/me/spaces` | `my_spaces` | Required |
-| GET | `/me/usage` | `my_usage` | Required |
 
 ## /organizations routes
 
@@ -256,7 +261,6 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |
 | PUT | `/spaces/{space_id}/skills/{skill_id}` | `put_skill` | Required |
 | DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
-| GET | `/spaces/{space_id}/usage` | `space_usage` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |
 | POST | `/spaces/{space_id}/wiki/pages` | `create_wiki_page` | Required |
@@ -278,9 +282,52 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
+| GET | `/users/me/avatar` | `get_my_avatar` | Required |
+| PUT | `/users/me/avatar` | `put_my_avatar` | Required |
+| DELETE | `/users/me/avatar` | `delete_my_avatar` | Required |
 | GET | `/users/me/preferences` | `get_my_preferences` | Required |
 | PATCH | `/users/me/preferences` | `patch_my_preferences` | Required |
 | GET | `/users/platform-roles` | `list_platform_roles` | Required |
 | PUT | `/users/{user}/platform-roles/{role}` | `grant_platform_role` | Required |
 | DELETE | `/users/{user}/platform-roles/{role}` | `revoke_platform_role` | Required |
 <!-- end generated -->
+
+## Consumption analytics
+
+`POST /analytics/query` replaces the two consumption GET routes. The
+[component contract](../../apps/control-plane/README.md#consumption-analytics)
+contains a request/response example, grouping rules, precision and budgets.
+[analytics/mod.rs](../../apps/control-plane/src/analytics/mod.rs) validates the
+batch, reuses the existing authorization decisions and executes compatible reads
+once inside a read-only repeatable-read transaction. The journal aggregation stays
+in [read.rs](../../apps/control-plane/src/sessions/usage/read.rs) and
+[read.sql](../../apps/control-plane/src/sessions/usage/read.sql).
+
+The [usage integration fixtures](../../apps/control-plane/tests/support/usage.rs)
+cover isolation, collective rights, purge, HITL, numeric precision, refusal limits,
+source failures and concurrent snapshot reads. Planner tests cover reuse across
+named results. These checks establish backend contracts, not dashboard reception.
+Consumers include [the operator pipeline](../../apps/frontend/src/rework/features/pipeline/weaver/platformChecks.ts)
+and the [personal block](../../apps/frontend/src/rework/components/pages/TeamUsagePage/PersonalUsage.tsx).
+The personal block requires `organizationId` from the shared working-organization
+context before reading SQL/estimation and skill-history batches.
+[TeamUsagePage](../../apps/frontend/src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx)
+and the home consumption tiles read the shared `useWorkingOrganization()` hook;
+a missing, loading or failed context prevents every personal analytics read.
+No screen adds an organization selector or falls back to global consumption. The
+[historical port](../../apps/control-plane/src/analytics/history.rs) accepts self scope
+within one currently authorized organization only; its [OpenSearch adapter](../../apps/control-plane/src/analytics/opensearch.rs)
+keeps engine details outside the service and refuses incomplete source responses.
+[Adapter tests](../../apps/control-plane/tests/analytics_history.rs) cover HTTP and
+three-shard aggregation. Shared YAML factors feed journal-derived estimates, with
+per-measure precision, missing coverage and fallback markers. Collective dashboards
+retain their historical clients; this source wiring does not attest browser reception.
+
+The home activity wiring also uses this service: the
+[personal activity contract](../../apps/control-plane/README.md#personal-activity-implementation-reception-pending)
+defines retained SQL creations separately from observed completed turns and exact
+distinct agents. `HomePage::ActivityTab` shares generated-client requests for counters
+and rankings; the historical port exposes a bounded `completed_turns` operation.
+Current memberships are applied server-side before space ranking limits. This source
+wiring excludes old events without canonical execution placement and does not establish
+browser or deployment reception; the existing consumption/impact wiring is preserved.

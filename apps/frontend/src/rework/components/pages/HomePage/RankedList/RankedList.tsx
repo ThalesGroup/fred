@@ -13,13 +13,14 @@
 // limitations under the License.
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./RankedList.module.scss";
 
 export interface RankedItem {
   key: string;
   label: string;
   sublabel?: string;
-  value: number;
+  value: bigint;
   unit?: string;
   /** Optional leading visual (e.g. a team avatar) rendered before the label. */
   leading?: ReactNode;
@@ -34,8 +35,13 @@ interface RankedListProps {
  * relative to the leader, and the value. Shared by the home page's most-used
  * agents and most-active teams. */
 export default function RankedList({ items, emptyLabel }: RankedListProps) {
+  const { i18n } = useTranslation();
   if (items.length === 0) return <div className={styles.empty}>{emptyLabel}</div>;
-  const max = Math.max(...items.map((i) => i.value), 1);
+  // Only the bounded visual ratio is rounded; the displayed count stays exact.
+  const max = items.reduce((maximum, item) => {
+    const value = item.value;
+    return value > maximum ? value : maximum;
+  }, 1n);
 
   return (
     <div className={styles.list}>
@@ -44,16 +50,16 @@ export default function RankedList({ items, emptyLabel }: RankedListProps) {
           <span className={styles.rank}>{index + 1}</span>
           {item.leading && <span className={styles.leading}>{item.leading}</span>}
           <div className={styles.main}>
-            <div className={styles.label}>
+            <div className={styles.label} title={[item.label, item.sublabel].filter(Boolean).join(" · ")}>
               {item.label}
               {item.sublabel && <span className={styles.sublabel}> · {item.sublabel}</span>}
             </div>
             <div className={styles.bar}>
-              <span style={{ width: `${Math.round((item.value / max) * 100)}%` }} />
+              <span style={{ width: `${(item.value * 200n + max) / (2n * max)}%` }} />
             </div>
           </div>
           <div className={styles.value}>
-            {item.value.toLocaleString("fr-FR")}
+            {item.value.toLocaleString(i18n.language)}
             {item.unit && <span className={styles.unit}> {item.unit}</span>}
           </div>
         </div>

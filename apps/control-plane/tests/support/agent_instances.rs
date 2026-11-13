@@ -154,6 +154,7 @@ fn definition() -> Value {
 }
 async fn app(e: &Env, identity: &support::IdentityServer, catalog: &Catalog) -> Router {
     routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: catalog.config(),
         auth: Arc::new(identity.auth().await),

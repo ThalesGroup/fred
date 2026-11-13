@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The shared profile uses manager authority without mounting the Python avatar path.
+// The profile and photo use the Rust Control Plane, including for platform-only users.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -23,6 +23,9 @@ import type { UiTheme } from "../../../../app/uiThemes.ts";
 import type { Me, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 const state = vi.hoisted(() => ({
+  avatar: undefined as string | undefined,
+  uploadPicture: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  deletePicture: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   spaces: [] as MySpace[],
   spacesError: false,
   spacesFetching: false,
@@ -74,6 +77,9 @@ vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ siteTitle: "Fred", siteSubtitle: "" }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useGetMyAvatarQuery: () => ({ currentData: state.avatar, refetch: vi.fn(), isError: false }),
+  usePutMyAvatarMutation: () => [state.uploadPicture, { isLoading: false }],
+  useDeleteMyAvatarMutation: () => [state.deletePicture, { isLoading: false }],
   useMeQuery: () => state,
   useMySpacesQuery: () => ({
     currentData: state.spaces,
@@ -102,6 +108,13 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
 
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
   useApiErrorToast: () => ({ notifyApiError: vi.fn() }),
+}));
+
+vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
+  useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }));
 
 import UserSettingsPage from "./UserSettingsPage";
@@ -150,6 +163,7 @@ beforeEach(() => {
   state.fullName = "Ada Lovelace";
   state.email = "ada@example.com";
   state.authEnabled = true;
+  state.avatar = undefined;
   state.spaces = [];
   state.spacesError = state.spacesFetching = false;
   state.data = { user_id: "ada-id", username: "ada", platform_roles: ["platform_admin"] };
@@ -164,15 +178,15 @@ afterEach(() => {
 });
 
 describe("shared UserSettingsPage", () => {
-  it("shows the owner's identity and manager roles with no spaces or photo dependency", () => {
+  it("offers a personal photo to a platform admin without spaces", () => {
     render();
     expect(container.textContent).toContain("Ada Lovelace");
     expect(container.textContent).toContain("ada@example.com");
     expect(container.textContent).toContain(
       "rework.userSettings.platformRoles: rework.platformRoles.roles.platform_admin",
     );
-    expect(container.querySelector('input[type="file"]')).toBeNull();
-    expect(container.textContent).not.toContain("rework.userSettings.picture");
+    expect(container.textContent).toContain("rework.userSettings.picture.title");
+    expect(container.querySelector('input[type="file"][data-testid="avatar-upload-input"]')).not.toBeNull();
     expect([...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
       "/gdpr",
       "/gcu",

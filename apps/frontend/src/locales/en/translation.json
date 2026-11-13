@@ -2270,7 +2270,12 @@
     "tokenUsageImpact": {
       "costTitle": "Estimated cost",
       "costValue": "${{cost}} (estimated)",
-      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)",
+      "unavailable": "Estimate unavailable",
+      "partial": "partial coverage",
+      "fallback": "default factors used",
+      "estimates": "Estimated impact",
+      "staticFactors": "Static model factors from the Fred catalog, not measurements or billing. EUR uses the configured display rate, not a live market rate."
     },
     "teamUsage": {
       "personalSkillsSectionTitle": "My skill usage",
@@ -2758,31 +2763,43 @@
       },
       "topAgents": {
         "title": "Your most-used agents",
-        "unit": "conv.",
-        "empty": "No agent used in this period."
+        "unit": "runs",
+        "empty": "No agent use observed in this period."
       },
       "topTeams": {
-        "title": "Your activity across your teams",
-        "unit": "conv.",
+        "title": "Your activity in your teams and spaces",
+        "unit": "runs",
         "personalSpace": "Personal space",
-        "empty": "You are not a member of any team.",
+        "empty": "No space memberships in this organization.",
         "role": {
-          "team_admin": "Owner",
-          "team_editor": "Editor",
-          "team_analyst": "Analyst",
-          "team_member": "Member"
+          "owner": "Owner",
+          "editor": "Editor",
+          "analyst": "Analyst",
+          "member": "Member",
+          "organization_admin": "Admin"
         }
       },
       "activity": {
         "title": "Your activity",
-        "conversations": "New conversations",
+        "conversations": "New retained conversations",
         "messages": "Messages sent",
         "agents": "Agents used",
         "deltaUp": "▲ {{pct}}% ({{abs}})",
         "deltaDown": "▼ {{pct}}% ({{abs}})",
         "deltaFlat": "flat",
         "vsPrevious": "vs previous period",
-        "periodCaption": "over the last {{count}} days"
+        "periodCaption": "over the last {{count}} days",
+        "conversationsDefinition": "Created in the period and still retained. Deletion reduces this count.",
+        "messagesDefinition": "Observed executions, including errors and resumes; title generations excluded.",
+        "agentsDefinition": "Distinct agents by stable identity, including deleted agents.",
+        "loading": "Loading your activity…",
+        "error": "Unable to load your activity.",
+        "unavailable": "History or data temporarily unavailable.",
+        "organizationRequired": "Working organization unavailable. Choose one from your account menu.",
+        "deletedAgent": "Deleted or unnamed agent",
+        "unavailableSpace": "Unavailable space",
+        "truncated": "Showing the first 5 entries. Counters include all recorded data.",
+        "observed": "Conversations created in the period and still retained. Messages and rankings: observed executions, including errors and resumes, excluding titles. History may be incomplete; older events without an identifiable organization are excluded, including from comparisons."
       }
     },
     "mainNav": {
@@ -2793,6 +2810,9 @@
       "adminConsole": "Technical console"
     },
     "profileMenu": {
+      "workingOrganization": "Working organization",
+      "organizationLink": "This resource belongs to {{name}}.",
+      "continueInOrganization": "Continue in {{name}}",
       "contactSupport": "Contact support",
       "profile": "Profile",
       "trigger": "{{name}}'s account",
@@ -3123,12 +3143,7 @@
           "uiSettings": "User interface"
         },
         "platformTitle": "Platform",
-        "title": "Administration",
-        "spaces": {
-          "switch": "Switch administration space",
-          "platform": "Platform administration",
-          "organizations": "My organizations"
-        }
+        "title": "Administration"
       },
       "chatList": {
         "answerReady": "Answer ready",
@@ -4068,6 +4083,7 @@
       },
       "disconnect": "Disconnect",
       "picture": {
+        "loadFailed": "The profile photo could not be loaded",
         "title": "Profile picture",
         "import": "Import",
         "hint": "JPEG, PNG or WebP · 5 MB maximum",
@@ -5309,6 +5325,15 @@
       "readyHint": "Select this connection in the configuration of agents that need its tools.",
       "continue": "Continue",
       "manage": "Manage connection"
+    },
+    "personalAnalytics": {
+      "organizationRequired": "Working organization unavailable. Select an organization from your account menu to view your usage.",
+      "agent": "Agent",
+      "observed": "Observed loads; collection completeness is unknown. Skills with the same name are grouped together.",
+      "total": "Total tokens: {{value}}",
+      "chartOverflow": "These exact counters exceed the chart precision. Values are shown in the table.",
+      "dimension": "Series",
+      "truncated": "Ranking truncated to 100 entries. Totals and estimates cover all recorded usage."
     }
   },
   "runtime": {
