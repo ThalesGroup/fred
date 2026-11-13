@@ -428,7 +428,8 @@ export function AgentFormBody({
 
       {suspensionMessage && (
         <div
-          className={`${styles.suspensionBanner} ${preparationInProgress ? styles.preparationBanner : ""}`}
+          className={styles.suspensionBanner}
+          data-severity={preparationInProgress ? "warning" : "error"}
           role={preparationInProgress ? "status" : "alert"}
         >
           <strong>{suspensionTitle}</strong> {suspensionMessage}

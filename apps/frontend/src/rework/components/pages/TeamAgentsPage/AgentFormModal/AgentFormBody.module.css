@@ -208,7 +208,7 @@
   font: var(--font-body-small);
 }
 
-.preparationBanner {
+.suspensionBanner[data-severity="warning"] {
   background: var(--warning-container);
   color: var(--on-warning-container);
 }
