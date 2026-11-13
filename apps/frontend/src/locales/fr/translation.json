@@ -440,6 +440,7 @@
       },
       "analysis": {
         "staged": "Le template sera lu une fois votre {{agentsNicknameSingular}} enregistré. Votre {{agentsNicknameSingular}} devient disponible quand c'est terminé.",
+        "uploading": "Téléversement du template... Vous pouvez fermer cette fenêtre ; le téléversement et l'analyse continuent en arrière-plan. Votre {{agentsNicknameSingular}} deviendra disponible une fois la lecture terminée.",
         "inProgress": "Lecture du template en cours… Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
         "failed": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible tant qu'il ne l'est pas ; enregistrez votre {{agentsNicknameSingular}} pour le relire.",

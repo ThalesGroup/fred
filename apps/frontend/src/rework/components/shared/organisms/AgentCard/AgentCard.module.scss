@@ -140,10 +140,14 @@
 // leaves the card's geometry identical to every other card. Click through, so
 // the footer buttons underneath stay reachable.
 .suspensionWarning {
+  display: flex;
   position: absolute;
   right: var(--spacing-s);
   bottom: var(--spacing-s);
   left: var(--spacing-s);
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
   z-index: 1;
   pointer-events: none;
   text-align: center;

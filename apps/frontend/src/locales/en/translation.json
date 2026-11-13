@@ -440,6 +440,7 @@
       },
       "analysis": {
         "staged": "The template will be read once you save your {{agentsNicknameSingular}}. Your {{agentsNicknameSingular}} becomes available when that is done.",
+        "uploading": "Uploading the template... You can close this window; upload and analysis continue in the background. Your {{agentsNicknameSingular}} becomes available once it has been read.",
         "inProgress": "Reading the template… Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
         "failed": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until it is; save your {{agentsNicknameSingular}} to read it again.",

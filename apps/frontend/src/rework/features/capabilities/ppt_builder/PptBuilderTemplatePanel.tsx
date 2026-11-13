@@ -157,7 +157,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           )}
         </div>
 
-        <AnalysisStatus analysis={analysis} />
+        <AnalysisStatus analysis={analysis} submitting={disabled} />
 
         {analysis.droppedOverrides.length > 0 && (
           <p className={styles.summary}>
@@ -213,17 +213,29 @@ export function TemplateGuideLink() {
 }
 
 /** The line under the upload row: what happens to the template next. */
-export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
+export function AnalysisStatus({
+  analysis,
+  submitting = false,
+}: {
+  analysis: PptBuilderAnalysis;
+  submitting?: boolean;
+}) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const { phase } = analysis;
 
   if (phase === "staged")
-    return <p className={styles.status}>{t("capability.ppt_builder.analysis.staged", { agentsNicknameSingular })}</p>;
+    return submitting ? (
+      <p className={styles.status} role="status">
+        <Spinner size={16} decorative /> {t("capability.ppt_builder.analysis.uploading", { agentsNicknameSingular })}
+      </p>
+    ) : (
+      <p className={styles.status}>{t("capability.ppt_builder.analysis.staged", { agentsNicknameSingular })}</p>
+    );
   if (isInProgress(phase) || (phase === "unknown" && analysis.statusLoading) || analysis.refreshing) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} />{" "}
+        <Spinner size={16} decorative />{" "}
         {t(
           analysis.refreshing
             ? "capability.ppt_builder.analysis.refreshing"

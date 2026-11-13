@@ -134,7 +134,7 @@ export function usePptBuilderAnalysis({
   const [retryFailed, setRetryFailed] = useState(false);
   const statusQuery = useGetPptBuilderAnalysisQuery(
     { instanceId: agentInstanceId ?? "", teamId },
-    { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
+    { skip: !routed || !agentInstanceId || !templateSha, pollingInterval, refetchOnMountOrArgChange: true },
   );
   // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
   // neither hide the analysis nor stop the polling of one in progress.
@@ -207,7 +207,7 @@ export function usePptBuilderAnalysis({
 
   return {
     phase,
-    statusLoading: statusQuery.isLoading,
+    statusLoading: statusQuery.isFetching,
     stagedFile,
     hasPersistedTemplate: templateSha !== null,
     error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
