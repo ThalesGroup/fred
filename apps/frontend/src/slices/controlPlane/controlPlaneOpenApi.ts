@@ -97,6 +97,7 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
           query: queryArg.query,
           exceptions_only: queryArg.exceptionsOnly,
+          overlap: queryArg.overlap,
         },
       }),
     }),
@@ -108,6 +109,53 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/access/users`,
         method: "POST",
         body: queryArg.grantPlatformAccessUsers,
+      }),
+    }),
+    countPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGet: build.query<
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse,
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/overlap-counts`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
+    revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: build.mutation<
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse,
+      RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/revoke`,
+        method: "POST",
+        body: queryArg.revokePlatformAccessUsers,
+      }),
+    }),
+    listPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGet: build.query<
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse,
+      ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/pending-emails` }),
+    }),
+    addPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPost: build.mutation<
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse,
+      AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails`,
+        method: "POST",
+        body: queryArg.addPlatformAccessPendingEmail,
+      }),
+    }),
+    removePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePost: build.mutation<
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse,
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/pending-emails/remove`,
+        method: "POST",
+        body: queryArg.removePlatformAccessPendingEmails,
       }),
     }),
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
@@ -2600,10 +2648,34 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   query?: string;
   /** Only users holding an individual exception. */
   exceptionsOnly?: boolean;
+  /** Exceptions only, narrowed to people the rule also admits, to people with no other admission source, or to people whose stored evidence lacks a claim the rule uses. Requires exceptions_only. */
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
   grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOverlapCounts;
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg = {
+  query?: string;
+};
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg = {
+  revokePlatformAccessUsers: RevokePlatformAccessUsers;
+};
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPendingEmail[];
+export type ListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetApiArg = void;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiResponse = unknown;
+export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg = {
+  addPlatformAccessPendingEmail: AddPlatformAccessPendingEmail;
+};
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg = {
+  removePlatformAccessPendingEmails: RemovePlatformAccessPendingEmails;
 };
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
@@ -4506,6 +4578,32 @@ export type PlatformAccessUsersPage = {
 };
 export type GrantPlatformAccessUsers = {
   user_ids: string[];
+};
+export type PlatformAccessOverlapCounts = {
+  rule: number;
+  whitelist_only: number;
+  unknown: number;
+};
+export type RevokedPlatformAccessUsers = {
+  removed_count: number;
+};
+export type RevokePlatformAccessUsers = {
+  user_ids?: string[];
+  all_matching?: boolean;
+  query?: string;
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
+  excluded_ids?: string[];
+};
+export type PlatformAccessPendingEmail = {
+  email: string;
+  granted_by: string;
+  granted_at: string;
+};
+export type AddPlatformAccessPendingEmail = {
+  email: string;
+};
+export type RemovePlatformAccessPendingEmails = {
+  emails: string[];
 };
 export type PlatformT0Preview = {
   candidates: number;
@@ -7072,6 +7170,13 @@ export const {
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
+  useLazyCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
+  useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation,
+  useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useLazyListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
+  useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation,
+  useRemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostMutation,
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
   usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,

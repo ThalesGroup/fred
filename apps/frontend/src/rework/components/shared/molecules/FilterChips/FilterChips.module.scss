@@ -44,9 +44,9 @@
   }
 
   &[data-active="true"] {
-    border-color: var(--primary);
-    background: var(--primary);
-    color: var(--on-primary);
+    border-color: var(--primary-container);
+    background: var(--primary-container);
+    color: var(--on-primary-container);
   }
 }
 

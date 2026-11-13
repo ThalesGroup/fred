@@ -628,6 +628,9 @@ def decode_jwt(
         username=username_value if isinstance(username_value, str) else "",
         roles=client_roles,
         email=email_value if isinstance(email_value, str) else None,
+        email_verified=verified
+        if isinstance(verified := payload.get("email_verified"), bool)
+        else None,
         first_name=given_name_value if isinstance(given_name_value, str) else None,
         last_name=family_name_value if isinstance(family_name_value, str) else None,
         client_id=client_id,

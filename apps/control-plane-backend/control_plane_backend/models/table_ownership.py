@@ -86,6 +86,7 @@ SHARED_CORE_TABLES: frozenset[str] = frozenset(
         "platform_access_users",
         "platform_access_removals",
         "platform_access_links",
+        "platform_access_pending_emails",
     }
 )
 

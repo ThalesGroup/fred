@@ -31,6 +31,7 @@ from fred_core.security.platform_access.access_control import (
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessPendingEmailRow,
     PlatformAccessRemovalRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -71,6 +72,7 @@ class MembershipEngine(NoopRebacEngine):
         self.permission_checks: list[OrganizationPermission] = []
         self.writes = []
         self.write_failure = False
+        self.subject_lookups: list[str] = []
 
     async def _lookup_resources_raw(self, subject, permission, resource_type, **kwargs):
         return [
@@ -82,6 +84,14 @@ class MembershipEngine(NoopRebacEngine):
         if permission == OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS:
             return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
+
+    async def lookup_subjects(self, resource, relation, subject_type, **kwargs):
+        self.subject_lookups.append(resource.id)
+        if relation == RelationType.PLATFORM_ACCESS_MANAGER:
+            ids = self.admins
+        else:
+            ids = {uid for uid, teams in self.members.items() if resource.id in teams}
+        return [RebacReference(Resource.USER, uid) for uid in sorted(ids)]
 
     async def check_user_permission_or_raise(self, *args, **kwargs):
         self.permission_checks.append(args[1])
@@ -115,6 +125,7 @@ async def access(tmp_path):
             PlatformAccessLinkJoinerRow,
             PlatformAccessSettingsRow,
             PlatformAccessUserRow,
+            PlatformAccessPendingEmailRow,
         ):
             await connection.run_sync(cast(Table, model.__table__).create)
     value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
@@ -748,6 +759,7 @@ async def pg_access(monkeypatch):
                 PlatformAccessRemovalRow,
                 PlatformAccessSettingsRow,
                 PlatformAccessUserRow,
+                PlatformAccessPendingEmailRow,
             ):
                 await connection.run_sync(cast(Table, model.__table__).create)
         value = PlatformAccess(PlatformAccessStore(engine), MembershipEngine())
@@ -2494,3 +2506,223 @@ async def test_first_import_still_requires_inactive_filtering(access):
     assert (await access.state()).filtering_enabled
     assert (await service.t0(access)).completed_at is None
     assert await access.store.exception(UUID(person.uid)) is None
+
+
+def email_user(email: str, verified: bool | None = True) -> KeycloakUser:
+    person = user()
+    return person.model_copy(update={"email": email, "email_verified": verified})
+
+
+@pytest.mark.asyncio
+async def test_pending_email_becomes_manual_exception_on_first_verified_sign_in(
+    access,
+):
+    actor = user("accepted")
+    await access.observe(actor)
+    await service.set_filtering(access, actor, True)
+    await service.add_pending_email(access, actor, "  Jane@Example.org ")
+    assert [entry.email for entry in await service.pending_emails(access)] == [
+        "jane@example.org"
+    ]
+
+    unverified = email_user("jane@example.org", verified=False)
+    assert not await access.admitted(unverified)
+    assert len(await service.pending_emails(access)) == 1
+
+    jane = email_user("JANE@example.org")
+    assert await access.admitted(jane)
+    exception = await access.store.exception(UUID(jane.uid))
+    assert exception is not None and exception.source == "manual"
+    assert exception.granted_by == actor.uid
+    assert await service.pending_emails(access) == []
+    # Next request goes through the ordinary exception, without the pending table.
+    assert await access.admitted(jane)
+    assert not await access.admitted(email_user("someone@example.org"))
+
+
+@pytest.mark.asyncio
+async def test_pending_email_refuses_known_identity_and_can_be_removed(access):
+    actor = user("accepted")
+    known = email_user("known@example.org")
+    await access.observe(known)
+    async with access.store.mutation() as session:
+        (await access.store.user(UUID(known.uid), session)).email = "Known@Example.org"
+    with pytest.raises(HTTPException) as refused:
+        await service.add_pending_email(access, actor, "known@example.org")
+    assert refused.value.detail == "platform_access_email_known"
+    await service.add_pending_email(access, actor, "new@example.org")
+    await service.add_pending_email(access, actor, "NEW@example.org")
+    assert len(await service.pending_emails(access)) == 1
+    await service.add_pending_email(access, actor, "other@example.org")
+    assert (
+        await service.remove_pending_emails(
+            access, ["New@example.org", "other@example.org", "absent@example.org"]
+        )
+        == 2
+    )
+    assert await service.pending_emails(access) == []
+
+
+async def seed_cleanup_population(access):
+    """Exceptions for: rule match, rule miss, team member, unknown evidence."""
+    actor = user("accepted")
+    matching, missing, member = user("accepted"), user("other"), user("other")
+    for person in (matching, missing, member):
+        await access.observe(person)
+    never_seen = uuid4()
+    async with access.store.mutation() as session:
+        session.add(UserRow(id=never_seen, username="never"))
+        await session.flush()
+        for uid in (matching.uid, missing.uid, member.uid, str(never_seen)):
+            await access.store.add_exception(UUID(uid), actor.uid, "manual", session)
+        (await access.store.team("demo", session)).platform_access_allowed = True
+    access.rebac.members[member.uid] = {"demo"}
+    return actor, matching, missing, member, never_seen
+
+
+@pytest.mark.asyncio
+async def test_overlap_filters_classify_rule_whitelist_only_and_unknown(access):
+    actor, matching, missing, member, never_seen = await seed_cleanup_population(access)
+    rule = await service.users_page(access, 0, 25, "", True, overlap="rule")
+    assert [item.user_id for item in rule.items] == [matching.uid]
+    assert rule.total == 1
+
+    only = await service.users_page(access, 0, 25, "", True, overlap="whitelist_only")
+    assert [item.user_id for item in only.items] == [missing.uid]
+    assert only.total == 1
+    unknown = await service.users_page(access, 0, 25, "", True, overlap="unknown")
+    assert [item.user_id for item in unknown.items] == [str(never_seen)]
+    # One admin lookup plus one per eligible team, never one per person.
+    assert access.rebac.subject_lookups.count("demo") == 1
+    assert len(access.rebac.subject_lookups) == 2
+
+
+@pytest.mark.asyncio
+async def test_whitelist_only_trusts_lookups_below_the_cap(access, monkeypatch):
+    await seed_cleanup_population(access)
+
+    async def no_per_person_check(uid):
+        raise AssertionError("per-person check without a truncated lookup")
+
+    monkeypatch.setattr(access, "access_manager_uid", no_per_person_check)
+    counts = await service.overlap_counts(access, "", None)
+    assert (counts.rule, counts.whitelist_only, counts.unknown) == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_whitelist_only_rechecks_people_a_truncated_lookup_missed(
+    access, monkeypatch
+):
+    actor, matching, missing, member, never_seen = await seed_cleanup_population(access)
+    real_lookup = access.rebac.lookup_subjects
+    monkeypatch.setattr(service, "LIST_USERS_LIMIT", 0)
+
+    async def truncated(resource, relation, subject_type, **kwargs):
+        found = await real_lookup(resource, relation, subject_type, **kwargs)
+        return [] if resource.id == "demo" else found
+
+    access.rebac.lookup_subjects = truncated
+    only = await service.users_page(access, 0, 25, "", True, overlap="whitelist_only")
+    assert [item.user_id for item in only.items] == [missing.uid]
+
+    everyone = await service.users_page(access, 0, 25, "", True)
+    assert everyone.total == 4
+    counts = await service.overlap_counts(access, "", None)
+    assert (counts.rule, counts.whitelist_only, counts.unknown) == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_overlap_evaluates_expired_evidence(access):
+    actor = user("accepted")
+    expired = user("accepted").model_copy(
+        update={"admission_expires_at": time.time() - 10}
+    )
+    await access.observe(expired)
+    async with access.store.mutation() as session:
+        await access.store.add_exception(
+            UUID(expired.uid), actor.uid, "manual", session
+        )
+    rule = await service.users_page(access, 0, 25, "", True, overlap="rule")
+    assert [item.user_id for item in rule.items] == [expired.uid]
+
+
+@pytest.mark.asyncio
+async def test_bulk_revoke_all_matching_honours_exclusions_and_lockout(access):
+    actor, matching, missing, member, never_seen = await seed_cleanup_population(access)
+    second = user("accepted")
+    await access.observe(second)
+    async with access.store.mutation() as session:
+        await access.store.add_exception(UUID(second.uid), actor.uid, "manual", session)
+    removed = await service.revoke_users(
+        access,
+        actor,
+        service.RevokePlatformAccessUsers(
+            all_matching=True, overlap="rule", excluded_ids=[UUID(second.uid)]
+        ),
+    )
+    assert removed == 1
+    assert await access.store.exception(UUID(matching.uid)) is None
+    assert await access.store.exception(UUID(second.uid)) is not None
+    async with access.store.read() as session:
+        assert await session.get(PlatformAccessRemovalRow, UUID(matching.uid))
+
+    # Removing the acting administrator's last source rolls the whole call back.
+    lonely = user("other")
+    await access.observe(lonely)
+    async with access.store.mutation() as session:
+        await access.store.add_exception(
+            UUID(lonely.uid), lonely.uid, "manual", session
+        )
+    await service.set_filtering(access, lonely, True)
+    with pytest.raises(HTTPException, match="platform_access_actor_lockout"):
+        await service.revoke_users(
+            access,
+            lonely,
+            service.RevokePlatformAccessUsers(
+                user_ids=[UUID(lonely.uid), UUID(missing.uid)]
+            ),
+        )
+    assert await access.store.exception(UUID(missing.uid)) is not None
+
+
+def test_bulk_revoke_body_requires_exactly_one_selection():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        service.RevokePlatformAccessUsers()
+    with pytest.raises(ValidationError):
+        service.RevokePlatformAccessUsers(all_matching=True, user_ids=[uuid4()])
+
+
+@pytest.mark.asyncio
+async def test_cleanup_and_pending_email_endpoints_require_platform_admin(access):
+    access.rebac.admin = False
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[get_user_service_dependencies] = local_user_deps
+    app.dependency_overrides[api.get_current_user] = user
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        calls = (
+            client.get("/admin/platform/access/pending-emails"),
+            client.post(
+                "/admin/platform/access/pending-emails", json={"email": "a@b.org"}
+            ),
+            client.post(
+                "/admin/platform/access/pending-emails/remove",
+                json={"emails": ["a@b.org"]},
+            ),
+            client.post(
+                "/admin/platform/access/users/revoke", json={"all_matching": True}
+            ),
+            client.get(
+                "/admin/platform/access/users",
+                params={"exceptions_only": True, "overlap": "rule"},
+            ),
+            client.get("/admin/platform/access/users/overlap-counts"),
+        )
+        for call in calls:
+            assert (await call).status_code == 403
+    assert await service.pending_emails(access) == []

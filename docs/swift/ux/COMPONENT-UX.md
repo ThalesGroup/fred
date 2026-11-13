@@ -6098,3 +6098,31 @@ note for distinct counts.
 
 - Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
   a sequential ramp for cohort cells) wait for the design-system update.
+
+### Platform access whitelist cleanup and shared fixes — 2026-11-13
+
+Whitelist > Users: "Add" with an attached `more` menu (`IconButtonMenu`, "Add all
+existing accounts", always confirmed) on the left; filter chips (All, Admitted by
+the rule, Whitelist only, To check, Pending), each with a count and a tooltip,
+then a narrow search on the right, right above a full-height table. Checking a
+row shows a right-aligned selection bar on its own line; the header checkbox
+selects every matching row across pages. Empty listings use `PageEmptyState`.
+Teams follows the same toolbar layout.
+
+Shared changes made for it, kept for every consumer:
+
+- `FilterChips`: optional `tooltip` per option and `allTooltip`; the active chip
+  is `primary-container` / `on-primary-container`.
+- `Tooltip`: a string `content` wraps at 250px. The limit is now applied inline
+  while measuring and kept when placing; before, the measured height came from a
+  narrower panel than the one rendered, and wrapping hints floated far above
+  their trigger.
+- `IconButtonMenu`: opt-in `align="start"` opens the menu from the trigger's
+  left edge (used by the whitelist toolbar); every other menu keeps its
+  right-edge alignment.
+- `DataTable`: optional `headerSelection` overrides the page-scoped header
+  checkbox, for selections spanning a server-paginated list.
+
+#### Open UX issues
+
+_(none)_

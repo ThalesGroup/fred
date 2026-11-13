@@ -66,13 +66,11 @@
 }
 
 /* A hint too long for one line: the panel keeps its own padding and colour and
- * simply wraps. Bounded, because a sentence allowed to run the viewport is
- * read no better than a truncated one. */
+ * simply wraps, at the width Tooltip.tsx sets inline (PROSE_MAX_WIDTH_PX). */
 .tooltip-content-prose {
-  max-width: 250px;
   white-space: normal;
   /* A backend error can carry a path or a URL with nothing to break on, which
-     would run straight past the width above. */
+     would run straight past that width. */
   word-break: break-word;
 }
 

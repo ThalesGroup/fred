@@ -80,6 +80,9 @@ const TOOLTIP_GAP_PX = 4;
 const INTERACTIVE_CLOSE_DELAY_MS = 150;
 // Minimum breathing room from the viewport edge when clamping/flipping.
 const VIEWPORT_MARGIN_PX = 4;
+// A text hint wraps at this width: a sentence running the whole screen reads no
+// better than a truncated one. Set inline, where it cannot be overridden.
+const PROSE_MAX_WIDTH_PX = 250;
 
 interface TriggerRect {
   top: number;
@@ -256,7 +259,13 @@ export const Tooltip = ({
     // one-line hint on a short window has the same problem.
     const availableHeight = viewportHeight() - 2 * VIEWPORT_MARGIN_PX;
     const availableWidth = viewportWidth() - 2 * VIEWPORT_MARGIN_PX;
+    // Wrapping text takes its height from its width limit and the room where it
+    // sits: measure under the limit it will render with, from the same corner.
+    const maxWidth = typeof content === "string" ? Math.min(PROSE_MAX_WIDTH_PX, availableWidth) : availableWidth;
+    const placed = { top: el.style.top, left: el.style.left, maxWidth: el.style.maxWidth };
+    Object.assign(el.style, { top: "0px", left: "0px", maxWidth: `${maxWidth}px` });
     const { width: rawWidth, height: rawHeight } = el.getBoundingClientRect();
+    Object.assign(el.style, placed);
     const height = Math.min(rawHeight, availableHeight);
     const width = Math.min(rawWidth, availableWidth);
 
@@ -305,7 +314,7 @@ export const Tooltip = ({
       top,
       left,
       maxHeight: availableHeight,
-      maxWidth: availableWidth,
+      maxWidth,
       overflow: "auto",
     });
   }, [triggerRect, placement, gapPx, content, text]);

@@ -12,11 +12,12 @@ from fastapi import HTTPException
 from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.delegation import require_active_subject
-from fred_core.security.models import AccountStatusError
+from fred_core.security.models import AccountStatusError, Resource
 from fred_core.security.platform_access.access_control import PlatformAccess
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessPendingEmailRow,
     PlatformAccessRemovalRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
@@ -27,7 +28,16 @@ from fred_core.security.platform_access.rules import (
     extract_claims,
     path_key,
 )
-from fred_core.security.platform_access.store import PlatformAccessStore
+from fred_core.security.platform_access.store import (
+    PlatformAccessStore,
+    normalize_email,
+)
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    RebacDisabledResult,
+    RebacReference,
+    RelationType,
+)
 from fred_core.sql.accent_folding import fold_text
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
@@ -47,7 +57,9 @@ from control_plane_backend.platform_access.schemas import (
     FreeEnrollmentPreview,
     PlatformAccessActivationPreview,
     PlatformAccessActivationUser,
+    PlatformAccessOverlapCounts,
     PlatformAccessOwnClaims,
+    PlatformAccessPendingEmail,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
@@ -62,6 +74,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformT0Preview,
     PlatformT0RefreshMode,
     RefreshPlatformT0,
+    RevokePlatformAccessUsers,
     TeamJoinLink,
 )
 from control_plane_backend.platform_access.t0 import run_t0
@@ -220,6 +233,137 @@ async def grant_users(
     return granted_count
 
 
+async def remove_exceptions(
+    actor: KeycloakUser, user_ids: list[UUID], session: AsyncSession
+) -> int:
+    """Delete exceptions and record each removal, so a T0 refresh cannot restore it."""
+    removed = 0
+    now = datetime.now(timezone.utc)
+    for start in range(0, len(user_ids), 500):
+        batch = user_ids[start : start + 500]
+        present = list(
+            await session.scalars(
+                select(PlatformAccessUserRow.user_id).where(
+                    PlatformAccessUserRow.user_id.in_(batch)
+                )
+            )
+        )
+        if not present:
+            continue
+        removals = {
+            row.user_id: row
+            for row in await session.scalars(
+                select(PlatformAccessRemovalRow).where(
+                    PlatformAccessRemovalRow.user_id.in_(present)
+                )
+            )
+        }
+        for uid in present:
+            removal = removals.get(uid)
+            if removal is None:
+                removal = PlatformAccessRemovalRow(user_id=uid)
+                session.add(removal)
+            removal.removed_at, removal.removed_by = now, actor.uid
+        await session.execute(
+            delete(PlatformAccessUserRow).where(
+                PlatformAccessUserRow.user_id.in_(present)
+            )
+        )
+        removed += len(present)
+    return removed
+
+
+async def revoke_users(
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    body: RevokePlatformAccessUsers,
+    directory: PlatformAccessDirectory | None = None,
+) -> int:
+    if body.all_matching:
+        entries = (
+            (await classified_entries(access, body.query, directory, body.overlap))[
+                body.overlap
+            ]
+            if body.overlap is not None
+            else (await exception_entries(access, body.query, directory))[0]
+        )
+        excluded = {str(uid) for uid in body.excluded_ids}
+        selected = [UUID(e[0].id) for e in entries if e[0].id not in excluded]
+    else:
+        selected = list(body.user_ids)
+    selected = sorted(set(selected))
+    async with access.store.mutation() as session:
+        await access.state(session)
+        removed = await remove_exceptions(actor, selected, session)
+        await preserve_actor(access, actor, session)
+    return removed
+
+
+async def pending_emails(access: PlatformAccess) -> list[PlatformAccessPendingEmail]:
+    async with access.store.read() as session:
+        rows = await session.scalars(
+            select(PlatformAccessPendingEmailRow).order_by(
+                PlatformAccessPendingEmailRow.granted_at.desc(),
+                PlatformAccessPendingEmailRow.email,
+            )
+        )
+        return [
+            PlatformAccessPendingEmail(
+                email=row.email, granted_by=row.granted_by, granted_at=row.granted_at
+            )
+            for row in rows
+        ]
+
+
+async def add_pending_email(
+    access: PlatformAccess,
+    actor: KeycloakUser,
+    email: str,
+    directory: PlatformAccessDirectory | None = None,
+) -> None:
+    email = normalize_email(email)
+    # One person, one entry: a known identity goes through the people picker instead.
+    if directory is not None and not directory.local:
+        profiles = await directory.search(email)
+        if any(normalize_email(p.email or "") == email for p in profiles):
+            raise HTTPException(409, "platform_access_email_known")
+    async with access.store.mutation() as session:
+        await access.state(session)
+        known = await session.scalar(
+            select(
+                select(UserRow.id).where(func.lower(UserRow.email) == email).exists()
+            )
+        )
+        if known:
+            raise HTTPException(409, "platform_access_email_known")
+        if await session.get(PlatformAccessPendingEmailRow, email) is None:
+            session.add(
+                PlatformAccessPendingEmailRow(
+                    email=email,
+                    granted_by=actor.uid,
+                    granted_at=datetime.now(timezone.utc),
+                )
+            )
+
+
+async def remove_pending_emails(access: PlatformAccess, emails: list[str]) -> int:
+    wanted = sorted({normalize_email(email) for email in emails})
+    async with access.store.mutation() as session:
+        present = list(
+            await session.scalars(
+                select(PlatformAccessPendingEmailRow.email).where(
+                    PlatformAccessPendingEmailRow.email.in_(wanted)
+                )
+            )
+        )
+        await session.execute(
+            delete(PlatformAccessPendingEmailRow).where(
+                PlatformAccessPendingEmailRow.email.in_(present)
+            )
+        )
+        return len(present)
+
+
 async def set_user(
     access: PlatformAccess,
     actor: KeycloakUser,
@@ -246,16 +390,199 @@ async def set_user(
         if grant:
             await access.store.add_exception(uid, actor.uid, "manual", session)
         else:
-            exception = await access.store.exception(uid, session)
-            if exception is not None:
-                removal = await session.get(PlatformAccessRemovalRow, uid)
-                if removal is None:
-                    removal = PlatformAccessRemovalRow(user_id=uid)
-                    session.add(removal)
-                removal.removed_at = datetime.now(timezone.utc)
-                removal.removed_by = actor.uid
-                await session.delete(exception)
+            await remove_exceptions(actor, [uid], session)
         await preserve_actor(access, actor, session)
+
+
+Entry = tuple[UserSummary, UserRow | None, PlatformAccessUserRow | None]
+Overlap = Literal["rule", "whitelist_only", "unknown"]
+
+
+def local_summary(row: UserRow) -> UserSummary:
+    return UserSummary(
+        id=str(row.id),
+        username=row.username,
+        email=row.email,
+        first_name=row.first_name,
+        last_name=row.last_name,
+    )
+
+
+async def exception_entries(
+    access: PlatformAccess,
+    query: str,
+    directory: PlatformAccessDirectory | None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> tuple[list[Entry], int]:
+    """Individual exceptions matching the search, newest first, with their total."""
+    if directory is None or directory.local:
+        rows = await access.store.users_with_exceptions(
+            offset, limit, query, exceptions_only=True
+        )
+        total = await access.store.user_count(query, exceptions_only=True)
+        return [(local_summary(row), row, exception) for row, exception in rows], total
+    try:
+        query_id = UUID(query.strip())
+    except ValueError:
+        query_id = None
+    if query_id is not None or not query.strip():
+        needle = str(query_id) if query_id is not None else ""
+        rows = await access.store.users_with_exceptions(
+            offset, limit, needle, exceptions_only=True
+        )
+        total = await access.store.user_count(needle, exceptions_only=True)
+        resolved = await directory.by_ids(str(row.id) for row, _ in rows)
+    else:
+        candidates = await access.store.users_with_exceptions(
+            0, None, exceptions_only=True
+        )
+        resolved = await directory.by_ids(str(row.id) for row, _ in candidates)
+        needle = fold_text(query.strip())
+        matched = [
+            (row, exception)
+            for row, exception in candidates
+            if (profile := resolved.get(str(row.id))) is not None
+            and any(
+                needle in fold_text(value)
+                for value in (
+                    profile.username,
+                    profile.email,
+                    profile.first_name,
+                    profile.last_name,
+                )
+                if value
+            )
+        ]
+        total = len(matched)
+        rows = matched[offset : None if limit is None else offset + limit]
+    return [
+        (resolved.get(str(row.id), UserSummary(id=str(row.id))), row, exception)
+        for row, exception in rows
+    ], total
+
+
+def rule_evidence(
+    row: UserRow | None, policy: PlatformAccessPolicy | None
+) -> bool | None:
+    """Whether the last stored evidence passes the rule; None when it cannot tell.
+
+    Unlike admission, expiry is ignored: the question is who the rule covers, not
+    who is signed in. Evidence holds only the rule's claim paths at observation time.
+    """
+    if policy is None:
+        return False
+    attributes = row.admission_attribute if row is not None else None
+    if row is None or row.admission_conflicted or attributes is None:
+        return None
+    if any(
+        path_key(condition.claim) not in attributes for condition in policy.conditions
+    ):
+        return None
+    return allows(policy, evaluate(policy, attributes))
+
+
+# OpenFGA's default ListUsers cap; a lookup this large may have been cut short.
+LIST_USERS_LIMIT = 1000
+
+
+async def other_sources(access: PlatformAccess, candidates: list[str]) -> set[str]:
+    """Candidates admitted by an admin role or a team.
+
+    One `lookup_subjects` per eligible team settles everyone at once. A lookup that
+    reaches the server's ListUsers cap may be truncated: only then do the people it
+    missed get the exact per-person check.
+    """
+    slots = asyncio.Semaphore(8)
+
+    async def subjects(
+        resource: Resource, relation: RelationType, ref: str
+    ) -> set[str]:
+        async with slots:
+            found = await access.rebac.lookup_subjects(
+                RebacReference(resource, ref),
+                relation,
+                Resource.USER,
+                consistency_token=access.rebac.HIGHER_CONSISTENCY,
+            )
+        if isinstance(found, RebacDisabledResult):
+            raise HTTPException(503, "platform_access_unavailable")
+        return {subject.id for subject in found}
+
+    teams = await access.store.teams(eligible_only=True)
+    joined = await access.store.free_joined_teams()
+
+    def counts(uid: str, team: TeamMetadataRow) -> bool:
+        return team.platform_access_allowed or (
+            team.platform_access_free and team.id in joined.get(UUID(uid), set())
+        )
+
+    found = await asyncio.gather(
+        subjects(
+            Resource.ORGANIZATION,
+            RelationType.PLATFORM_ACCESS_MANAGER,
+            ORGANIZATION_ID,
+        ),
+        *(subjects(Resource.TEAM, RelationType.TEAM_MEMBER, team.id) for team in teams),
+    )
+    admitted = {uid for uid in candidates if uid in found[0]}
+    for team, members in zip(teams, found[1:]):
+        admitted |= {uid for uid in candidates if uid in members and counts(uid, team)}
+    if all(len(members) < LIST_USERS_LIMIT for members in found):
+        return admitted
+
+    async def exact(uid: str) -> bool:
+        async with slots:
+            if await access.access_manager_uid(uid):
+                return True
+            own = [team for team in teams if counts(uid, team)]
+            return any(
+                await access.rebac.has_team_memberships(uid, [t.id for t in own])
+            )
+
+    rest = [uid for uid in candidates if uid not in admitted]
+    verdicts = await asyncio.gather(*(exact(uid) for uid in rest))
+    return admitted | {uid for uid, other in zip(rest, verdicts) if other}
+
+
+async def classified_entries(
+    access: PlatformAccess,
+    query: str,
+    directory: PlatformAccessDirectory | None,
+    only: Overlap | None = None,
+) -> dict[Overlap, list[Entry]]:
+    """Exceptions per cleanup filter; "unknown" is what the rule cannot classify yet.
+
+    `only` skips the team and admin lookups when "whitelist_only" is not wanted.
+    Without a search, directory profiles are left for the caller to resolve on the
+    page it shows, never for every exception.
+    """
+    policy = access.policy(await access.state())
+    if directory is not None and not directory.local and not query.strip():
+        rows = await access.store.users_with_exceptions(0, None, exceptions_only=True)
+        entries = [(UserSummary(id=str(row.id)), row, exc) for row, exc in rows]
+    else:
+        entries, _ = await exception_entries(access, query, directory)
+    verdicts = await asyncio.to_thread(
+        lambda: [rule_evidence(row, policy) for _, row, _ in entries]
+    )
+    groups: dict[Overlap, list[Entry]] = {
+        "rule": [e for e, v in zip(entries, verdicts) if v is True],
+        "unknown": [e for e, v in zip(entries, verdicts) if v is None],
+        "whitelist_only": [],
+    }
+    if only in (None, "whitelist_only"):
+        candidates = [e for e, v in zip(entries, verdicts) if v is False]
+        others = await other_sources(access, [e[0].id for e in candidates])
+        groups["whitelist_only"] = [e for e in candidates if e[0].id not in others]
+    return groups
+
+
+async def overlap_counts(
+    access: PlatformAccess, query: str, directory: PlatformAccessDirectory | None
+) -> PlatformAccessOverlapCounts:
+    groups = await classified_entries(access, query, directory)
+    return PlatformAccessOverlapCounts(**{k: len(v) for k, v in groups.items()})
 
 
 async def users_page(
@@ -265,113 +592,60 @@ async def users_page(
     query: str,
     exceptions_only: bool = False,
     directory: PlatformAccessDirectory | None = None,
+    overlap: Overlap | None = None,
 ) -> PlatformAccessUsersPage:
     policy = access.policy(await access.state())
-    if directory is not None and not directory.local:
-        if exceptions_only:
-            try:
-                query_id = UUID(query.strip())
-            except ValueError:
-                query_id = None
-            if query_id is not None:
-                rows = await access.store.users_with_exceptions(
-                    offset, limit, str(query_id), exceptions_only=True
-                )
-                total = await access.store.user_count(
-                    str(query_id), exceptions_only=True
-                )
-                resolved = await directory.by_ids(str(row.id) for row, _ in rows)
-            elif query.strip():
-                candidates = await access.store.users_with_exceptions(
-                    0, None, exceptions_only=True
-                )
-                resolved = await directory.by_ids(str(row.id) for row, _ in candidates)
-                needle = fold_text(query.strip())
-                matched = [
-                    (row, exception)
-                    for row, exception in candidates
-                    if (profile := resolved.get(str(row.id))) is not None
-                    and any(
-                        needle in fold_text(value)
-                        for value in (
-                            profile.username,
-                            profile.email,
-                            profile.first_name,
-                            profile.last_name,
+    if overlap is not None:
+        groups = await classified_entries(access, query, directory, overlap)
+        selected = groups[overlap]
+        entries, total = selected[offset : offset + limit], len(selected)
+        if directory is not None and not directory.local and not query.strip():
+            resolved = await directory.by_ids(profile.id for profile, _, _ in entries)
+            entries = [
+                (resolved.get(profile.id, profile), row, exception)
+                for profile, row, exception in entries
+            ]
+    elif exceptions_only:
+        entries, total = await exception_entries(
+            access, query, directory, offset, limit
+        )
+    elif directory is not None and not directory.local:
+        selected_profiles, total = await directory.search_page(
+            query.strip(), offset, limit
+        )
+        ids = {directory.uuid(profile) for profile in selected_profiles}
+        async with access.store.read() as session:
+            local_rows = {
+                UUID(str(row.id)): row
+                for row in (
+                    await session.scalars(select(UserRow).where(UserRow.id.in_(ids)))
+                ).all()
+            }
+            exceptions = {
+                UUID(str(row.user_id)): row
+                for row in (
+                    await session.scalars(
+                        select(PlatformAccessUserRow).where(
+                            PlatformAccessUserRow.user_id.in_(ids)
                         )
-                        if value
                     )
-                ]
-                total = len(matched)
-                rows = matched[offset : offset + limit]
-            else:
-                rows = await access.store.users_with_exceptions(
-                    offset, limit, exceptions_only=True
-                )
-                total = await access.store.user_count(exceptions_only=True)
-                resolved = await directory.by_ids(str(row.id) for row, _ in rows)
-            entries = [
-                (resolved.get(str(row.id), UserSummary(id=str(row.id))), row, exception)
-                for row, exception in rows
-            ]
-        else:
-            selected, total = await directory.search_page(query.strip(), offset, limit)
-            ids = {directory.uuid(profile) for profile in selected}
-            async with access.store.read() as session:
-                local_rows = {
-                    UUID(str(row.id)): row
-                    for row in (
-                        await session.scalars(
-                            select(UserRow).where(UserRow.id.in_(ids))
-                        )
-                    ).all()
-                }
-                exceptions = {
-                    UUID(str(row.user_id)): row
-                    for row in (
-                        await session.scalars(
-                            select(PlatformAccessUserRow).where(
-                                PlatformAccessUserRow.user_id.in_(ids)
-                            )
-                        )
-                    ).all()
-                }
-            entries = [
-                (
-                    profile,
-                    local_rows.get(directory.uuid(profile)),
-                    exceptions.get(directory.uuid(profile)),
-                )
-                for profile in selected
-            ]
-    else:
-        identities_only = (
-            directory is not None and directory.local and not exceptions_only
-        )
-        rows = await access.store.users_with_exceptions(
-            offset,
-            limit,
-            query,
-            exceptions_only=exceptions_only,
-            identities_only=identities_only,
-        )
-        total = await access.store.user_count(
-            query, exceptions_only=exceptions_only, identities_only=identities_only
-        )
+                ).all()
+            }
         entries = [
             (
-                UserSummary(
-                    id=str(row.id),
-                    username=row.username,
-                    email=row.email,
-                    first_name=row.first_name,
-                    last_name=row.last_name,
-                ),
-                row,
-                exception,
+                profile,
+                local_rows.get(directory.uuid(profile)),
+                exceptions.get(directory.uuid(profile)),
             )
-            for row, exception in rows
+            for profile in selected_profiles
         ]
+    else:
+        identities_only = directory is not None and directory.local
+        rows = await access.store.users_with_exceptions(
+            offset, limit, query, identities_only=identities_only
+        )
+        total = await access.store.user_count(query, identities_only=identities_only)
+        entries = [(local_summary(row), row, exception) for row, exception in rows]
     slots = asyncio.Semaphore(8)
 
     async def project(

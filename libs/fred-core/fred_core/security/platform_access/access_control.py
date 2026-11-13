@@ -196,8 +196,13 @@ class PlatformAccess:
                 if isinstance(user, KeycloakUser):
                     await self.store.observe(user, self.policy(state))
                 return True
-            return await self.eligible(
+            if await self.eligible(
                 user, policy=self.policy(state), use_current_policy=False
+            ):
+                return True
+            # Read only on refusal, so admitted requests never touch pending emails.
+            return isinstance(user, KeycloakUser) and await self.store.claim_pending(
+                user
             )
         except HTTPException:
             raise
@@ -261,6 +266,7 @@ async def initialize_platform_access(
             # Free admission is derived from Free-link joins on every backend.
             "platform_access_links",
             "platform_access_link_joiners",
+            "platform_access_pending_emails",
         ],
         component="platform-access",
         migrate_command="make db-upgrade (apps/control-plane-backend)",

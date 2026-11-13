@@ -9,13 +9,14 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fred_pod.security.platform_access import PlatformAccessPolicy
-from fred_pod.security.structure import KeycloakUser
+from fred_pod.security.structure import KeycloakUser, is_service_agent
 from sqlalchemy import ColumnElement, delete, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.security.platform_access.models import (
     PlatformAccessLinkJoinerRow,
     PlatformAccessLinkRow,
+    PlatformAccessPendingEmailRow,
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
@@ -48,6 +49,10 @@ def warn_unavailable(kind: str, error: BaseException) -> None:
         type(error).__name__,
         f" (SQLSTATE {code})" if code else "",
     )
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
 
 
 class PlatformAccessStore:
@@ -276,6 +281,40 @@ class PlatformAccessStore:
                     granted_at=datetime.now(timezone.utc),
                 )
             )
+
+    async def claim_pending(self, user: KeycloakUser) -> bool:
+        """Turn a pending email matching this verified token into a manual exception."""
+        email = normalize_email(user.email or "")
+        if (
+            not email
+            or user.email_verified is False
+            or user.service_account
+            or is_service_agent(user)
+        ):
+            return False
+        async with self.read() as s:
+            if await s.get(PlatformAccessPendingEmailRow, email) is None:
+                return False
+        async with self.mutation() as session:
+            pending = await session.get(PlatformAccessPendingEmailRow, email)
+            uid = UUID(user.uid)
+            if pending is None:
+                # A concurrent request of the same person may have just claimed it.
+                return await self.exception(uid, session) is not None
+            if await self.user(uid, session) is None:
+                session.add(UserRow(id=uid, email=user.email))
+                await session.flush()
+            if await self.exception(uid, session) is None:
+                session.add(
+                    PlatformAccessUserRow(
+                        user_id=uid,
+                        source="manual",
+                        granted_by=pending.granted_by,
+                        granted_at=pending.granted_at,
+                    )
+                )
+            await session.delete(pending)
+            return True
 
     async def observe(
         self, user: KeycloakUser, policy: PlatformAccessPolicy | None
