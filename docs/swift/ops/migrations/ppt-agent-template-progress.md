@@ -2,8 +2,8 @@
 schema: 1
 title: "Show progress while an agent's PowerPoint template is prepared"
 impact: none
-configuration: none
-configuration_reason: "Only frontend progress indicators and text change; no configuration keys or defaults change."
+configuration: local
+configuration_reason: "The local fred-agents production YAML now pins the Temporal endpoint and PPT preparation limits; deployed chart values and defaults do not change."
 no_action_reason: "Existing upload and analysis APIs are unchanged; the indicators appear after a normal deployment."
 ---
 
@@ -13,11 +13,15 @@ Existing Fred deployments using PowerPoint template overrides on agents.
 
 ## Prerequisites
 
-No additional prerequisites beyond the normal deployment procedure.
+No additional deployment prerequisites beyond the normal procedure.
 
 ## Configuration
 
-No configuration changes are required.
+For a local run, point the control-plane, knowledge-flow and fred-agents
+`config/.env` files at `./config/configuration_prod.yaml`. Start the
+fred-agents preparation worker with `make run-worker` from `apps/fred-agents`.
+The committed production YAML already enables `ppt_builder` preparation on
+the runtime and control-plane sides and configures Knowledge Flow vision.
 
 ## Upgrade
 
