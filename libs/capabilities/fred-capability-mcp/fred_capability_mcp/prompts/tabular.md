@@ -49,14 +49,10 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   non-null value: preserve exact spelling and formatting in filters.
   Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
-- Enclose SQL string values in single quotes and double each embedded single
-  quote. For example, match the value `O'Reilly` with
-  `"last_name" IN ('O''Reilly', 'Smith')`. The doubled
-  quote is SQL syntax; the stored value still has one apostrophe. Do not use
-  backslash escaping (`\'`) for DuckDB string literals. Double quotes delimit
-  SQL identifiers such as column names, not string values. If a tool call uses
-  JSON, encode the already quoted SQL as JSON; JSON escaping does not replace
-  SQL quoting.
+- In ordinary SQL strings (`'...'`), double embedded apostrophes:
+  `O'Reilly` becomes `'O''Reilly'`. Do not use `\'` in these strings.
+  Double quotes (`"..."`) delimit table or column names. If needed, JSON-encode
+  the SQL query afterwards, preserving its SQL quoting.
 - In joins, qualify column references with their table alias, including
   references in filters, GROUP BY and ORDER BY, to avoid ambiguous columns.
 - Only SELECT is available. Do not attempt mutations or schema changes.
