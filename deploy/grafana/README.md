@@ -1,5 +1,24 @@
 # Fred Grafana dashboards
 
+## Platform health
+
+Import [`fred-platform-health.json`](fred-platform-health.json) through
+**Dashboards > New > Import** and select a Prometheus data source with Fred's
+`agent_turn_completed_count`, `api_request_latency_ms_count`, and
+`api_request_latency_ms_bucket` metrics. Use a source that scrapes the agent
+runtimes, control plane, and Knowledge Flow to see all services.
+
+The summary cards follow the selected time range. **Cluster** and **Namespace**
+apply to all panels when the corresponding labels are available in Prometheus.
+Keep **All** selected for labels your scrape pipeline does not supply.
+**Chat runtime** applies to the chat metrics. The
+**24h error rate** and **Error rate detail** controls default to **On** and
+apply to both error-rate charts. They use dropdowns for Grafana 12.1
+compatibility. Expand **HTTP route latency** to investigate a route spike.
+The latency panels use 2xx and 3xx responses.
+
+## Agent runtime
+
 Import [`fred-agent-runtime.json`](fred-agent-runtime.json) through Grafana's
 **Dashboards → New → Import** page and select the Prometheus data source that
 scrapes the Fred agent runtimes. The dashboard does not require a particular
