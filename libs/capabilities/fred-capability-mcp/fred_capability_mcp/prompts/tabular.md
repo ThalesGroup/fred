@@ -50,8 +50,8 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
 - Enclose SQL string values in single quotes and double each embedded single
-  quote. For example, match the value `Chef d'Etablissement` with
-  `"Role" IN ('Chef d''Etablissement', 'Responsable Sécurité')`. The doubled
+  quote. For example, match the value `O'Reilly` with
+  `"last_name" IN ('O''Reilly', 'Smith')`. The doubled
   quote is SQL syntax; the stored value still has one apostrophe. Do not use
   backslash escaping (`\'`) for DuckDB string literals. Double quotes delimit
   SQL identifiers such as column names, not string values. If a tool call uses
