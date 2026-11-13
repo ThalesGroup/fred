@@ -2553,7 +2553,13 @@ async def test_pending_email_refuses_known_identity_and_can_be_removed(access):
     await service.add_pending_email(access, actor, "new@example.org")
     await service.add_pending_email(access, actor, "NEW@example.org")
     assert len(await service.pending_emails(access)) == 1
-    await service.remove_pending_email(access, "New@example.org")
+    await service.add_pending_email(access, actor, "other@example.org")
+    assert (
+        await service.remove_pending_emails(
+            access, ["New@example.org", "other@example.org", "absent@example.org"]
+        )
+        == 2
+    )
     assert await service.pending_emails(access) == []
 
 
@@ -2689,7 +2695,10 @@ async def test_cleanup_and_pending_email_endpoints_require_platform_admin(access
             client.post(
                 "/admin/platform/access/pending-emails", json={"email": "a@b.org"}
             ),
-            client.delete("/admin/platform/access/pending-emails/a@b.org"),
+            client.post(
+                "/admin/platform/access/pending-emails/remove",
+                json={"emails": ["a@b.org"]},
+            ),
             client.post(
                 "/admin/platform/access/users/revoke", json={"all_matching": True}
             ),

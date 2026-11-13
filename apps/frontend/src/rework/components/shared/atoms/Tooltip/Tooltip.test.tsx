@@ -242,6 +242,42 @@ describe("Tooltip", () => {
     expect(parseFloat(panel.style.top)).toBeGreaterThanOrEqual(4);
   });
 
+  it("measures wrapping text from the same corner, so sibling triggers get panels at the same height", () => {
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 800, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+    act(() => {
+      root.render(
+        <Tooltip content="A sentence long enough to wrap onto several short lines.">
+          <button>Trigger</button>
+        </Tooltip>,
+      );
+    });
+    const wrapper = container.firstElementChild as HTMLElement;
+    wrapper.getBoundingClientRect = () =>
+      ({ top: 300, bottom: 320, left: 400, right: 460, width: 60, height: 20 }) as DOMRect;
+    act(() => {
+      (container.querySelector("button") as HTMLButtonElement).dispatchEvent(
+        new MouseEvent("mouseover", { bubbles: true }),
+      );
+    });
+    const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+    // Wrapped at the 250px limit from the measuring corner it is 60px tall; any
+    // other limit or position would give another height.
+    panel.getBoundingClientRect = () =>
+      ({
+        width: 250,
+        height: panel.style.left === "0px" && panel.style.top === "0px" && panel.style.maxWidth === "250px" ? 60 : 140,
+      }) as DOMRect;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    // 300 (trigger top) - 4 (gap) - 60 (height measured at the corner).
+    expect(parseFloat(panel.style.top)).toBe(236);
+    // Measured in place, then moved where it belongs, keeping the width it was measured at.
+    expect(parseFloat(panel.style.left)).toBe(305);
+    expect(panel.style.maxWidth).toBe("250px");
+  });
+
   it("stays open while the pointer moves into an interactive panel", () => {
     vi.useFakeTimers();
     try {

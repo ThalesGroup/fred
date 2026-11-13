@@ -62,9 +62,12 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
     const rect = anchor.getBoundingClientRect();
     const spaceBelow = viewportHeight() - rect.bottom;
     const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
+    // Opens toward the wider side: a row menu at the right edge grows left, a
+    // button on the left of the page grows right instead of over its neighbours.
+    const growRight = rect.left + rect.width / 2 < viewportWidth() / 2;
     setPopoverStyle({
       position: "fixed",
-      right: viewportWidth() - rect.right,
+      ...(growRight ? { left: rect.left } : { right: viewportWidth() - rect.right }),
       ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
   }, []);

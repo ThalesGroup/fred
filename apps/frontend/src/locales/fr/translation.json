@@ -4839,14 +4839,12 @@
       "title": "Accès plateforme",
       "description": "Choisissez qui peut utiliser la plateforme : une règle sur le compte, et une liste blanche d'utilisateurs et d'équipes.",
       "disabled": "Cette page n'est disponible que si la connexion des utilisateurs et le contrôle des droits sont activés sur cette instance.",
-      "t0Hint": "Ajoutez les utilisateurs existants que la règle n'accepte pas déjà à la liste blanche. Vous pouvez relancer cet import à tout moment.",
-      "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} déjà acceptés par la règle.",
       "t0Refresh": {
-        "title": "Actualiser la liste blanche",
+        "title": "Ajouter tous les comptes existants",
         "mode": "Mode de mise à jour",
         "preserve_removals": "Conserver les retraits",
         "include_removed": "Réinclure les personnes retirées",
-        "confirm": "Relancer l'import",
+        "confirm": "Ajouter",
         "includeWarning": "Cette relance pourra réajouter les personnes retirées manuellement de la liste blanche.",
         "missingHistory": "L'historique des retraits n'est pas disponible. Cette relance recalculera toute la liste blanche et pourra réajouter des personnes retirées manuellement. Une réimportation complète est nécessaire avant de pouvoir conserver les retraits lors des prochaines relances.",
         "preview": "Estimation : {{count}} utilisateurs à ajouter ; {{skipped}} retraits conservés.",
@@ -4854,8 +4852,7 @@
         "success_other": "Liste blanche mise à jour : {{count}} utilisateurs ajoutés.",
         "conflict": "La configuration ou le dernier import a changé. Vérifiez l'estimation actualisée avant de confirmer à nouveau."
       },
-      "t0Done": "Import initial terminé",
-      "t0Import": "Importer les utilisateurs existants",
+      "t0Import": "Ajouter tous les comptes existants",
       "search": "Rechercher un utilisateur de la liste blanche",
       "exception": "Actions",
       "remove": "Retirer",
@@ -5121,14 +5118,21 @@
         "all": "Tous",
         "rule": "Admis par la règle",
         "whitelistOnly": "Liste blanche seule",
-        "unknown": "À vérifier"
+        "unknown": "À vérifier",
+        "pending": "En attente",
+        "allHint": "Toutes les personnes de la liste blanche.",
+        "ruleHint": "Personnes que la règle actuelle admet déjà : leur entrée dans la liste blanche est redondante.",
+        "whitelistOnlyHint": "Personnes dont la liste blanche est le seul accès : les retirer leur fait perdre l'accès.",
+        "unknownHint": "Personnes que la règle ne peut pas encore classer : il manque un attribut qu'elle vérifie. Leur cas sera connu à leur prochaine connexion.",
+        "pendingHint": "E-mails ajoutés pour des personnes qui ne se sont jamais connectées. À leur première connexion, elles passent dans la liste blanche."
       },
       "selection": {
         "selectAll": "Tout sélectionner, sur toutes les pages",
         "count_one": "{{count}} sélectionné",
         "count_other": "{{count}} sélectionnés",
         "clear": "Désélectionner",
-        "remove": "Retirer"
+        "remove": "Retirer",
+        "label": "Actions sur la sélection"
       },
       "bulkRemove": {
         "title_one": "Retirer {{count}} personne de la liste blanche ?",
@@ -5139,14 +5143,10 @@
         "done_other": "{{count}} personnes retirées de la liste blanche."
       },
       "pendingEmails": {
-        "title": "En attente de première connexion",
-        "hint": "À sa première connexion, la personne passe dans le tableau ci-dessous.",
-        "addedOn": "Ajoutée le {{date}}",
-        "removeAria": "Retirer {{email}} de la liste blanche",
-        "removed": "{{email}} retirée de la liste blanche."
+        "removed": "{{email}} retirée de la liste blanche.",
+        "email": "E-mail"
       },
       "moreActions": "Plus d'actions",
-      "t0Reimport": "Réimporter les utilisateurs existants",
       "emptyState": {
         "searchHint": "Vérifiez l'orthographe, ou cherchez par identifiant, nom ou e-mail.",
         "emptyHint": "Ajoutez les personnes qui doivent accéder à la plateforme quelle que soit la règle.",
@@ -5161,7 +5161,18 @@
         "unknown": {
           "title": "Rien à vérifier",
           "hint": "La règle a pu classer toutes les personnes de la liste blanche."
+        },
+        "pending": {
+          "title": "Aucune adresse en attente",
+          "hint": "Tous les e-mails ajoutés ont déjà servi à une première connexion."
         }
+      },
+      "searchPlaceholder": "Rechercher",
+      "t0Confirm": {
+        "title": "Ajouter tous les comptes existants ?",
+        "message_one": "{{count}} compte sera ajouté à la liste blanche pour garder son accès quand le filtrage sera actif. {{matching}} déjà admis par la règle ne sont pas concernés.",
+        "message_other": "{{count}} comptes seront ajoutés à la liste blanche pour garder leur accès quand le filtrage sera actif. {{matching}} déjà admis par la règle ne sont pas concernés.",
+        "confirm": "Ajouter"
       }
     },
     "agentMarketplace": {

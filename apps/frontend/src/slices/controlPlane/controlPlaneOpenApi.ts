@@ -148,13 +148,14 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.addPlatformAccessPendingEmail,
       }),
     }),
-    removePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDelete: build.mutation<
-      RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiResponse,
-      RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiArg
+    removePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePost: build.mutation<
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse,
+      RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg
     >({
       query: (queryArg) => ({
-        url: `/control-plane/v1/admin/platform/access/pending-emails/${queryArg.email}`,
-        method: "DELETE",
+        url: `/control-plane/v1/admin/platform/access/pending-emails/remove`,
+        method: "POST",
+        body: queryArg.removePlatformAccessPendingEmails,
       }),
     }),
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
@@ -2671,10 +2672,10 @@ export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendin
 export type AddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostApiArg = {
   addPlatformAccessPendingEmail: AddPlatformAccessPendingEmail;
 };
-export type RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiResponse =
-  unknown;
-export type RemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteApiArg = {
-  email: string;
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiResponse =
+  /** status 200 Successful Response */ RevokedPlatformAccessUsers;
+export type RemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostApiArg = {
+  removePlatformAccessPendingEmails: RemovePlatformAccessPendingEmails;
 };
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
@@ -4600,6 +4601,9 @@ export type PlatformAccessPendingEmail = {
 };
 export type AddPlatformAccessPendingEmail = {
   email: string;
+};
+export type RemovePlatformAccessPendingEmails = {
+  emails: string[];
 };
 export type PlatformT0Preview = {
   candidates: number;
@@ -7172,7 +7176,7 @@ export const {
   useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
   useLazyListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
   useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation,
-  useRemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteMutation,
+  useRemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostMutation,
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
   usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,

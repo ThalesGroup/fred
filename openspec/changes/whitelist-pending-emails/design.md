@@ -22,3 +22,5 @@
 - **Toolbar:** "Add" then a "more" menu holding the initial import or reimport on the left; the overlap chips then a half-width search on the right, right above the table.
 - **Chip counts** come from `GET /admin/platform/access/users/overlap-counts`, requested once per search; the listing stays paginated. The "All" chip has no count (FilterChips offers none); the pagination shows the total.
 - **Active chip** uses primary-container / on-primary-container in the shared FilterChips (owner's choice after trying secondary-container); this changes all five FilterChips screens.
+- **Pending emails live behind a "Pending" chip**, not in a list above the table: at 50 addresses a list is unreadable, and mixing emails with people in one table would leave half the columns empty. The chip shows the count; the table switches to email, added on and remove columns, filtered by the search on the client since the list arrives in one response. Removal is one bulk route for one or many.
+- **Every chip has a tooltip** saying what the table lists (FilterChips gains optional `tooltip` and `allTooltip`).

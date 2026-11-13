@@ -125,7 +125,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     addPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPost: {
       invalidatesTags: ["PlatformAccess"],
     },
-    removePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDelete: {
+    removePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePost: {
       invalidatesTags: ["PlatformAccess"],
     },
     importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
@@ -1268,8 +1268,8 @@ export const {
     usePlatformAccessPendingEmailsQuery,
   useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation:
     useAddPlatformPendingEmailMutation,
-  useRemovePlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsEmailDeleteMutation:
-    useRemovePlatformPendingEmailMutation,
+  useRemovePlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsRemovePostMutation:
+    useRemovePlatformPendingEmailsMutation,
   useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation: useImportPlatformT0Mutation,
   useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation: useSetPlatformTeamMutation,
   useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation:

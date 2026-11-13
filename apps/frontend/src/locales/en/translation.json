@@ -4839,14 +4839,12 @@
       "title": "Platform access",
       "description": "Choose who can use the platform: a rule on the account, and a whitelist of users and teams.",
       "disabled": "This page is only available when user sign-in and permission checks are enabled on this instance.",
-      "t0Hint": "Add existing users who are not already accepted by the rule to the whitelist. You can run this import again at any time.",
-      "t0Preview": "{{count}} users to import; {{matching}} already accepted by the rule.",
       "t0Refresh": {
-        "title": "Refresh the whitelist",
+        "title": "Add all existing accounts",
         "mode": "Update mode",
         "preserve_removals": "Preserve removals",
         "include_removed": "Include removed people",
-        "confirm": "Run import again",
+        "confirm": "Add",
         "includeWarning": "This refresh can re-add people manually removed from the whitelist.",
         "missingHistory": "Removal history is unavailable. This refresh will recalculate the entire whitelist and can re-add people who were manually removed. A full import is required before future refreshes can preserve removals.",
         "preview": "Estimate: {{count}} users to add; {{skipped}} removals preserved.",
@@ -4854,8 +4852,7 @@
         "success_other": "Whitelist updated: {{count}} users added.",
         "conflict": "The configuration or last import changed. Check the updated estimate before confirming again."
       },
-      "t0Done": "Initial import completed",
-      "t0Import": "Import existing users",
+      "t0Import": "Add all existing accounts",
       "search": "Search a whitelisted user",
       "exception": "Actions",
       "remove": "Remove",
@@ -5121,14 +5118,21 @@
         "all": "All",
         "rule": "Admitted by the rule",
         "whitelistOnly": "Whitelist only",
-        "unknown": "To check"
+        "unknown": "To check",
+        "pending": "Pending",
+        "allHint": "Everyone on the whitelist.",
+        "ruleHint": "People the current rule already admits: their whitelist entry is redundant.",
+        "whitelistOnlyHint": "People whose only access is the whitelist: removing them takes their access away.",
+        "unknownHint": "People the rule cannot classify yet: an attribute it checks is missing. Their case will be known at their next sign-in.",
+        "pendingHint": "Emails added for people who have never signed in. On first sign-in, they move to the whitelist."
       },
       "selection": {
         "selectAll": "Select all, across every page",
         "count_one": "{{count}} selected",
         "count_other": "{{count}} selected",
         "clear": "Clear selection",
-        "remove": "Remove"
+        "remove": "Remove",
+        "label": "Selection actions"
       },
       "bulkRemove": {
         "title_one": "Remove {{count}} person from the whitelist?",
@@ -5139,14 +5143,10 @@
         "done_other": "{{count}} people removed from the whitelist."
       },
       "pendingEmails": {
-        "title": "Waiting for first sign-in",
-        "hint": "On first sign-in, the person moves to the table below.",
-        "addedOn": "Added on {{date}}",
-        "removeAria": "Remove {{email}} from the whitelist",
-        "removed": "{{email}} removed from the whitelist."
+        "removed": "{{email}} removed from the whitelist.",
+        "email": "Email"
       },
       "moreActions": "More actions",
-      "t0Reimport": "Reimport existing users",
       "emptyState": {
         "searchHint": "Check the spelling, or search by identifier, name or email.",
         "emptyHint": "Add the people who must reach the platform whatever the rule says.",
@@ -5161,7 +5161,18 @@
         "unknown": {
           "title": "Nothing to check",
           "hint": "The rule could classify everyone on the whitelist."
+        },
+        "pending": {
+          "title": "No pending addresses",
+          "hint": "Every added email has already been used for a first sign-in."
         }
+      },
+      "searchPlaceholder": "Search",
+      "t0Confirm": {
+        "title": "Add all existing accounts?",
+        "message_one": "{{count}} account will be added to the whitelist to keep its access once filtering is on. {{matching}} already admitted by the rule are left out.",
+        "message_other": "{{count}} accounts will be added to the whitelist to keep their access once filtering is on. {{matching}} already admitted by the rule are left out.",
+        "confirm": "Add"
       }
     },
     "agentMarketplace": {

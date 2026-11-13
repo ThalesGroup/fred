@@ -346,13 +346,22 @@ async def add_pending_email(
             )
 
 
-async def remove_pending_email(access: PlatformAccess, email: str) -> None:
+async def remove_pending_emails(access: PlatformAccess, emails: list[str]) -> int:
+    wanted = sorted({normalize_email(email) for email in emails})
     async with access.store.mutation() as session:
-        await session.execute(
-            delete(PlatformAccessPendingEmailRow).where(
-                PlatformAccessPendingEmailRow.email == normalize_email(email)
+        present = list(
+            await session.scalars(
+                select(PlatformAccessPendingEmailRow.email).where(
+                    PlatformAccessPendingEmailRow.email.in_(wanted)
+                )
             )
         )
+        await session.execute(
+            delete(PlatformAccessPendingEmailRow).where(
+                PlatformAccessPendingEmailRow.email.in_(present)
+            )
+        )
+        return len(present)
 
 
 async def set_user(

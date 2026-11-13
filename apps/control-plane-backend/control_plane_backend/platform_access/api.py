@@ -51,6 +51,7 @@ from control_plane_backend.platform_access.schemas import (
     PlatformT0Preview,
     PlatformT0RefreshMode,
     RefreshPlatformT0,
+    RemovePlatformAccessPendingEmails,
     RevokedPlatformAccessUsers,
     RevokePlatformAccessUsers,
     SetPlatformAccessPolicy,
@@ -252,12 +253,20 @@ async def add_platform_access_pending_email(
     emit_audit_log("platform.access.pending_email.added", actor_uid=user.uid)
 
 
-@router.delete("/admin/platform/access/pending-emails/{email}", status_code=204)
-async def remove_platform_access_pending_email(
-    email: str, access: Access, user: Admin
-) -> None:
-    await service.remove_pending_email(access, email)
-    emit_audit_log("platform.access.pending_email.removed", actor_uid=user.uid)
+@router.post(
+    "/admin/platform/access/pending-emails/remove",
+    response_model=RevokedPlatformAccessUsers,
+)
+async def remove_platform_access_pending_emails(
+    body: RemovePlatformAccessPendingEmails, access: Access, user: Admin
+) -> RevokedPlatformAccessUsers:
+    removed = await service.remove_pending_emails(access, body.emails)
+    emit_audit_log(
+        "platform.access.pending_emails.removed",
+        actor_uid=user.uid,
+        removed_count=removed,
+    )
+    return RevokedPlatformAccessUsers(removed_count=removed)
 
 
 @router.post("/admin/platform/access/users", status_code=204)

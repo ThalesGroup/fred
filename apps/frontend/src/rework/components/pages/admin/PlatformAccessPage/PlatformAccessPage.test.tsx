@@ -55,7 +55,7 @@ const state = vi.hoisted(() => ({
   pickedEmails: [] as string[],
   revokeUsers: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 2 }) })),
   addEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
-  removeEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
+  removeEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 1 }) })),
 }));
 // Keys only, plus the team names a string is given so grouped lines can be told apart.
 vi.mock("react-i18next", () => ({
@@ -135,7 +135,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     return options.skip ? {} : { currentData: { rule: 4, whitelist_only: 7, unknown: 2 } };
   },
   useAddPlatformPendingEmailMutation: () => [state.addEmail],
-  useRemovePlatformPendingEmailMutation: () => [state.removeEmail],
+  useRemovePlatformPendingEmailsMutation: () => [state.removeEmail],
   useImportPlatformT0Mutation: () => [state.importT0],
   useSetPlatformTeamMutation: () => [state.setTeam],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
@@ -381,17 +381,39 @@ it("filters by access overlap, restarts at page one and clears the selection", (
   expect(lastUsersQuery()).not.toHaveProperty("overlap");
 });
 
-it("lists emails waiting for a first sign-in and removes one", async () => {
-  state.pending = [{ email: "jane@example.org", granted_by: "admin", granted_at: "2026-11-13T10:00:00Z" }];
+it("switches the table to emails waiting for a first sign-in, and removes one or a selection", async () => {
+  state.pending = [
+    { email: "jane@example.org", granted_by: "admin", granted_at: "2026-11-13T10:00:00Z" },
+    { email: "paul@example.org", granted_by: "admin", granted_at: "2026-11-12T10:00:00Z" },
+  ];
   render("");
+  expect(usersPanel().textContent).not.toContain("jane@example.org");
+  expect(chip("rework.platformAccess.overlapFilter.pending").textContent).toContain("2");
+  act(() => chip("rework.platformAccess.overlapFilter.pending").click());
+  // People are not requested while the pending emails are shown.
+  expect(state.searchUsers.mock.lastCall![1]).toEqual({ skip: true });
   expect(usersPanel().textContent).toContain("jane@example.org");
-  const remove = usersPanel().querySelector<HTMLButtonElement>(
-    '[aria-label="rework.platformAccess.pendingEmails.removeAria"]',
+  const row = [...usersPanel().querySelectorAll<HTMLElement>('[class*="datatable-row"]')].find((node) =>
+    node.textContent?.includes("jane@example.org"),
+  )!;
+  const remove = [...row.querySelectorAll("button")].find(
+    (node) => node.textContent === "rework.platformAccess.remove",
   )!;
   await act(async () => remove.click());
-  expect(state.removeEmail).toHaveBeenCalledWith({ email: "jane@example.org" });
-  act(() => chip("rework.platformAccess.overlapFilter.rule").click());
-  expect(usersPanel().textContent).not.toContain("jane@example.org");
+  expect(state.removeEmail).toHaveBeenCalledWith({
+    removePlatformAccessPendingEmails: { emails: ["jane@example.org"] },
+  });
+  act(() => checkboxes()[0].click());
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.removeEmail).toHaveBeenLastCalledWith({
+    removePlatformAccessPendingEmails: { emails: ["paul@example.org"] },
+  });
+  expect(state.revokeUsers).not.toHaveBeenCalled();
 });
 
 it("whitelists typed emails alongside selected people", async () => {
@@ -852,8 +874,14 @@ it("keeps the import in the more menu, next to the add button, and runs it from 
   expect(addUsersButton().nextElementSibling?.contains(moreMenu())).toBe(true);
   act(() => moreMenu().click());
   const option = menuOptions().find((node) => node.textContent?.includes("rework.platformAccess.t0Import"))!;
-  expect(option.textContent).toContain("rework.platformAccess.t0Preview");
-  await act(async () => option.click());
+  act(() => option.click());
+  // Never on the click alone: a dialog states how many accounts it adds first.
+  expect(state.importT0).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("rework.platformAccess.t0Confirm.message");
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.t0Confirm.confirm",
+  )!;
+  await act(async () => confirm.click());
   expect(state.importT0).toHaveBeenCalledTimes(1);
 });
 
@@ -1159,9 +1187,7 @@ it("offers the reimport from the more menu after completion, with filtering on o
   expect(moreMenu().disabled).toBe(false);
   act(() => moreMenu().click());
   const labels = menuOptions().map((node) => node.textContent);
-  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Reimport"))).toBe(true);
-  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Done"))).toBe(true);
-  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Import"))).toBe(false);
+  expect(labels).toEqual(["rework.platformAccess.t0Import"]);
   expect(state.importT0).not.toHaveBeenCalled();
   state.filteringEnabled = true;
   act(() => root.render(<PlatformAccessPage />));

@@ -15,7 +15,7 @@
 ## 3. Frontend
 
 - [x] 3.1 Regenerate the control-plane client
-- [x] 3.2 Pending emails list with Remove on Whitelist > Users
+- [x] 3.2 Pending chip switching the table to pending emails, with selection and bulk removal
 - [x] 3.3 Add dialog: "Add <email>" when the search is a valid email with no match
 - [x] 3.4 Chip bar (All / Admitted by the rule / Whitelist only / To check) with per-chip counts
 - [x] 3.5 Row checkboxes, header select-all across pages, bulk bar with Remove and confirmation

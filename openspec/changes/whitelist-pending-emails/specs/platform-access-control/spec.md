@@ -22,8 +22,8 @@ A platform administrator SHALL be able to whitelist an email address that matche
 
 #### Scenario: Removal and authority
 
-- **WHEN** an administrator removes a pending entry, or a non-platform administrator calls any pending-email operation
-- **THEN** the entry SHALL be deleted, respectively the call SHALL be refused without change
+- **WHEN** an administrator removes one or several pending entries in one call, or a non-platform administrator calls any pending-email operation
+- **THEN** the entries SHALL be deleted, respectively the call SHALL be refused without change
 
 ### Requirement: Administrators clean up redundant exceptions
 

@@ -5,7 +5,6 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import Chip from "@shared/atoms/Chip/Chip";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
@@ -33,7 +32,7 @@ import {
   usePlatformAccessPendingEmailsQuery,
   usePlatformAccessOverlapCountsQuery,
   useAddPlatformPendingEmailMutation,
-  useRemovePlatformPendingEmailMutation,
+  useRemovePlatformPendingEmailsMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -68,14 +67,29 @@ function otherAccessLines(user: PlatformAccessUser, t: TFunction): string[] {
   ];
 }
 type Overlap = "rule" | "whitelist_only" | "unknown";
+// "pending" lists whitelisted emails nobody signed in with yet, instead of people.
+type View = Overlap | "pending";
 // An empty filter is good news for cleanup: the icon says so rather than "nothing found".
-const EMPTY_OVERLAP_ICON = { rule: "check_circle", whitelist_only: "shield", unknown: "check" } as const;
+const EMPTY_OVERLAP_ICON = {
+  rule: "check_circle",
+  whitelist_only: "shield",
+  unknown: "check",
+  pending: "check",
+} as const;
 // Header "select all" covers every matching row across pages: kept as the excluded rows, not a list.
 type Selection = { mode: "ids"; ids: ReadonlySet<string> } | { mode: "all"; excluded: ReadonlySet<string> };
 const NO_SELECTION: Selection = { mode: "ids", ids: new Set<string>() };
 const ALL: Selection = { mode: "all", excluded: new Set<string>() };
 const isSelected = (selection: Selection, id: string) =>
   selection.mode === "all" ? !selection.excluded.has(id) : selection.ids.has(id);
+// A table reports its checked keys: fold each row's new state back into the selection.
+function foldSelection(current: Selection, keys: ReadonlySet<string | number>, rowKeys: string[]): Selection {
+  const toggled = new Set<string>(current.mode === "all" ? current.excluded : current.ids);
+  rowKeys
+    .filter((key) => keys.has(key) !== isSelected(current, key))
+    .forEach((key) => (toggled.has(key) ? toggled.delete(key) : toggled.add(key)));
+  return current.mode === "all" ? { mode: "all", excluded: toggled } : { mode: "ids", ids: toggled };
+}
 // First option of the table's rows-per-page selector.
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -90,11 +104,12 @@ export default function PlatformAccessPage() {
   const [query, setQuery] = useState("");
   const [teamQuery, setTeamQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState<"allowed" | null>(null);
-  const [overlap, setOverlap] = useState<Overlap | null>(null);
+  const [overlap, setOverlap] = useState<View | null>(null);
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [adding, setAdding] = useState(false);
   const [refreshingT0, setRefreshingT0] = useState(false);
+  const [confirmingImport, setConfirmingImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<boolean>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
@@ -112,8 +127,14 @@ export default function PlatformAccessPage() {
   const usersShown = enabled && tabIndex === 1;
   // The whitelist is the people holding an individual exception, never every known user.
   const users = usePlatformAccessUsersQuery(
-    { offset, limit: pageSize, query: searchQuery, exceptionsOnly: true, ...(overlap ? { overlap } : {}) },
-    { skip: !usersShown },
+    {
+      offset,
+      limit: pageSize,
+      query: searchQuery,
+      exceptionsOnly: true,
+      ...(overlap && overlap !== "pending" ? { overlap } : {}),
+    },
+    { skip: !usersShown || overlap === "pending" },
   );
   // A selection is relative to one search and filter: changing either starts over.
   useEffect(() => setSelection(NO_SELECTION), [searchQuery, overlap]);
@@ -121,6 +142,10 @@ export default function PlatformAccessPage() {
   // One request per search, not per page: each chip shows how many people it lists.
   const overlapCounts = usePlatformAccessOverlapCountsQuery({ query: searchQuery }, { skip: !usersShown });
   const countOf = (key: Overlap) => overlapCounts.currentData?.[key];
+  // Few enough to arrive in one response: the search narrows them here, like the teams.
+  const pendingView = overlap === "pending";
+  const pendingNeedle = foldForSearch(searchQuery);
+  const pendingRows = (pendingEmails.data ?? []).filter((entry) => foldForSearch(entry.email).includes(pendingNeedle));
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
   const userRows = users.isError ? undefined : users.currentData?.items;
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
@@ -141,9 +166,10 @@ export default function PlatformAccessPage() {
   const [revoke] = useRevokePlatformUserMutation();
   const [revokeUsers] = useRevokePlatformUsersMutation();
   const [addPendingEmail] = useAddPlatformPendingEmailMutation();
-  const [removePendingEmail] = useRemovePlatformPendingEmailMutation();
+  const [removePendingEmails] = useRemovePlatformPendingEmailsMutation();
+  const viewTotal = pendingView ? pendingRows.length : userTotal;
   const selectedCount =
-    selection.mode === "all" ? Math.max(userTotal - selection.excluded.size, 0) : selection.ids.size;
+    selection.mode === "all" ? Math.max(viewTotal - selection.excluded.size, 0) : selection.ids.size;
   const everythingSelected = selection.mode === "all" && selection.excluded.size === 0;
   const [importT0] = useImportPlatformT0Mutation();
   const [setTeam] = useSetPlatformTeamMutation();
@@ -245,7 +271,7 @@ export default function PlatformAccessPage() {
             )}
           </div>
           <div
-            className={styles.panel}
+            className={`${styles.panel} ${styles.fill}`}
             id={`${panelId}-users-panel`}
             role="tabpanel"
             aria-labelledby={`${panelId}-users-tab`}
@@ -254,48 +280,12 @@ export default function PlatformAccessPage() {
           >
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedUsers")}</h2>
-              <p className={styles.hint}>{t("rework.platformAccess.whitelistedUsersHint")}</p>
+              <p className={styles.hint} title={t("rework.platformAccess.whitelistedUsersHint")}>
+                {t("rework.platformAccess.whitelistedUsersHint")}
+              </p>
             </div>
-            {overlap === null && (pendingEmails.data?.length ?? 0) > 0 && (
-              <section className={styles.pendingEmails} aria-labelledby={`${panelId}-pending-title`}>
-                <h3 id={`${panelId}-pending-title`} className={styles.pendingTitle}>
-                  {t("rework.platformAccess.pendingEmails.title")}
-                </h3>
-                <p className={styles.hint}>{t("rework.platformAccess.pendingEmails.hint")}</p>
-                <ul className={styles.pendingList}>
-                  {pendingEmails.data?.map((entry) => (
-                    <li key={entry.email} className={styles.pendingItem}>
-                      <span className={styles.pendingEmail}>{entry.email}</span>
-                      <span className={styles.hint}>
-                        {t("rework.platformAccess.pendingEmails.addedOn", {
-                          date: new Date(entry.granted_at).toLocaleDateString(i18n.language),
-                        })}
-                      </span>
-                      <IconButton
-                        type="button"
-                        variant="icon"
-                        size="medium"
-                        color="on-surface-retreat"
-                        icon={{ category: "outlined", type: "close" }}
-                        title={t("rework.platformAccess.remove")}
-                        aria-label={t("rework.platformAccess.pendingEmails.removeAria", { email: entry.email })}
-                        disabled={locked}
-                        onClick={() =>
-                          void run(async () => {
-                            await removePendingEmail({ email: entry.email }).unwrap();
-                            showSuccess({
-                              summary: t("rework.platformAccess.pendingEmails.removed", { email: entry.email }),
-                            });
-                          })
-                        }
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
             <div className={styles.toolbar}>
-              <div className={styles.toolbarGroup}>
+              <div className={styles.addActions}>
                 <Button
                   color="primary"
                   variant="filled"
@@ -321,8 +311,7 @@ export default function PlatformAccessPage() {
                           {
                             key: "reimport",
                             value: "reimport",
-                            label: t("rework.platformAccess.t0Reimport"),
-                            description: t("rework.platformAccess.t0Done"),
+                            label: t("rework.platformAccess.t0Import"),
                           },
                         ]
                       : [
@@ -330,52 +319,38 @@ export default function PlatformAccessPage() {
                             key: "import",
                             value: "import",
                             label: t("rework.platformAccess.t0Import"),
-                            description: t0.data
-                              ? t("rework.platformAccess.t0Preview", {
-                                  count: t0.data.candidates,
-                                  matching: t0.data.matching,
-                                })
-                              : undefined,
-                            tooltip: t("rework.platformAccess.t0Hint"),
                           },
                         ]
                   }
-                  onSelect={(action) =>
-                    action === "reimport" ? setRefreshingT0(true) : void run(() => importT0({ body: null }).unwrap())
-                  }
+                  onSelect={(action) => (action === "reimport" ? setRefreshingT0(true) : setConfirmingImport(true))}
                 />
-                {selectedCount > 0 && (
-                  <>
-                    <span role="status">{t("rework.platformAccess.selection.count", { count: selectedCount })}</span>
-                    <Button
-                      color="error"
-                      variant="outlined"
-                      size="small"
-                      icon={{ category: "outlined", type: "delete" }}
-                      disabled={locked || users.isFetching}
-                      onClick={() => setConfirmingRemoval(true)}
-                    >
-                      {t("rework.platformAccess.selection.remove")}
-                    </Button>
-                    <Button color="primary" variant="text" size="small" onClick={() => setSelection(NO_SELECTION)}>
-                      {t("rework.platformAccess.selection.clear")}
-                    </Button>
-                  </>
-                )}
               </div>
               <div className={styles.toolbarGroup}>
-                <FilterChips<Overlap>
+                <FilterChips<View>
                   options={[
-                    { id: "rule", label: t("rework.platformAccess.overlapFilter.rule"), count: countOf("rule") },
+                    {
+                      id: "rule",
+                      label: t("rework.platformAccess.overlapFilter.rule"),
+                      count: countOf("rule"),
+                      tooltip: t("rework.platformAccess.overlapFilter.ruleHint"),
+                    },
                     {
                       id: "whitelist_only",
                       label: t("rework.platformAccess.overlapFilter.whitelistOnly"),
                       count: countOf("whitelist_only"),
+                      tooltip: t("rework.platformAccess.overlapFilter.whitelistOnlyHint"),
                     },
                     {
                       id: "unknown",
                       label: t("rework.platformAccess.overlapFilter.unknown"),
                       count: countOf("unknown"),
+                      tooltip: t("rework.platformAccess.overlapFilter.unknownHint"),
+                    },
+                    {
+                      id: "pending",
+                      label: t("rework.platformAccess.overlapFilter.pending"),
+                      count: pendingEmails.data ? pendingRows.length : undefined,
+                      tooltip: t("rework.platformAccess.overlapFilter.pendingHint"),
                     },
                   ]}
                   value={overlap}
@@ -384,13 +359,14 @@ export default function PlatformAccessPage() {
                     setOffset(0);
                   }}
                   allLabel={t("rework.platformAccess.overlapFilter.all")}
+                  allTooltip={t("rework.platformAccess.overlapFilter.allHint")}
                   aria-label={t("rework.platformAccess.overlapFilter.group")}
                 />
                 <div className={styles.search}>
                   <SearchInput
                     size="small"
                     value={query}
-                    placeholder={t("rework.platformAccess.search")}
+                    placeholder={t("rework.platformAccess.searchPlaceholder")}
                     ariaLabel={t("rework.platformAccess.search")}
                     clearAriaLabel={t("rework.platformAccess.clearSearch")}
                     onChange={setQuery}
@@ -398,34 +374,122 @@ export default function PlatformAccessPage() {
                 </div>
               </div>
             </div>
-            {users.isFetching && !userRows && <Spinner statusText={t("rework.platformAccess.loading")} />}
-            {usersShown && !users.isFetching && !users.isError && userTotal === 0 && (
-              <PageEmptyState
-                {...(searchQuery
-                  ? {
-                      icon: "search_off",
-                      message: t("rework.platformAccess.noUsers"),
-                      description: t("rework.platformAccess.emptyState.searchHint"),
-                    }
-                  : overlap
+            {selectedCount > 0 && (
+              <div
+                className={styles.selectionBar}
+                role="toolbar"
+                aria-label={t("rework.platformAccess.selection.label")}
+              >
+                <span role="status">{t("rework.platformAccess.selection.count", { count: selectedCount })}</span>
+                <Button
+                  color="error"
+                  variant="outlined"
+                  size="small"
+                  icon={{ category: "outlined", type: "delete" }}
+                  disabled={locked || users.isFetching}
+                  onClick={() => setConfirmingRemoval(true)}
+                >
+                  {t("rework.platformAccess.selection.remove")}
+                </Button>
+                <Button color="primary" variant="text" size="small" onClick={() => setSelection(NO_SELECTION)}>
+                  {t("rework.platformAccess.selection.clear")}
+                </Button>
+              </div>
+            )}
+            {(pendingView ? pendingEmails.isFetching && !pendingEmails.data : users.isFetching && !userRows) && (
+              <Spinner statusText={t("rework.platformAccess.loading")} />
+            )}
+            {usersShown &&
+              (pendingView
+                ? pendingEmails.data !== undefined && pendingRows.length === 0
+                : !users.isFetching && !users.isError && userTotal === 0) && (
+                <PageEmptyState
+                  {...(searchQuery
                     ? {
-                        icon: EMPTY_OVERLAP_ICON[overlap],
-                        message: t(`rework.platformAccess.emptyState.${overlap}.title`),
-                        description: t(`rework.platformAccess.emptyState.${overlap}.hint`),
+                        icon: "search_off",
+                        message: t("rework.platformAccess.noUsers"),
+                        description: t("rework.platformAccess.emptyState.searchHint"),
                       }
-                    : {
-                        icon: "person_add",
-                        message: t("rework.platformAccess.emptyWhitelist"),
-                        description: t("rework.platformAccess.emptyState.emptyHint"),
-                        action: {
-                          label: t("rework.platformAccess.addUsers"),
-                          onClick: () => setAdding(true),
-                          disabled: locked,
-                        },
-                      })}
+                    : overlap
+                      ? {
+                          icon: EMPTY_OVERLAP_ICON[overlap],
+                          message: t(`rework.platformAccess.emptyState.${overlap}.title`),
+                          description: t(`rework.platformAccess.emptyState.${overlap}.hint`),
+                        }
+                      : {
+                          icon: "person_add",
+                          message: t("rework.platformAccess.emptyWhitelist"),
+                          description: t("rework.platformAccess.emptyState.emptyHint"),
+                          action: {
+                            label: t("rework.platformAccess.addUsers"),
+                            onClick: () => setAdding(true),
+                            disabled: locked,
+                          },
+                        })}
+                />
+              )}
+            {pendingView && pendingRows.length > 0 && (
+              <DataTable
+                size="small"
+                data={pendingRows}
+                rowKey={(entry) => entry.email}
+                pageSize={DEFAULT_PAGE_SIZE}
+                selectable
+                selectedKeys={new Set(pendingRows.filter((e) => isSelected(selection, e.email)).map((e) => e.email))}
+                onSelectionChange={(keys) =>
+                  setSelection((current) =>
+                    foldSelection(
+                      current,
+                      keys,
+                      pendingRows.map((e) => e.email),
+                    ),
+                  )
+                }
+                headerSelection={{
+                  checked: everythingSelected,
+                  indeterminate: selectedCount > 0 && !everythingSelected,
+                  onChange: () => setSelection(everythingSelected ? NO_SELECTION : ALL),
+                  ariaLabel: t("rework.platformAccess.selection.selectAll"),
+                }}
+                columns={[
+                  {
+                    label: t("rework.platformAccess.pendingEmails.email"),
+                    size: "1fr",
+                    cellRenderer: (entry) => entry.email,
+                  },
+                  {
+                    label: t("rework.platformAccess.addedOn"),
+                    size: "11rem",
+                    cellRenderer: (entry) => new Date(entry.granted_at).toLocaleString(i18n.language),
+                  },
+                  {
+                    label: t("rework.platformAccess.exception"),
+                    size: "10rem",
+                    cellRenderer: (entry) => (
+                      <Button
+                        color="error"
+                        variant="outlined"
+                        size="small"
+                        disabled={locked || pendingEmails.isFetching}
+                        onClick={() =>
+                          void run(async () => {
+                            await removePendingEmails({
+                              removePlatformAccessPendingEmails: { emails: [entry.email] },
+                            }).unwrap();
+                            showSuccess({
+                              summary: t("rework.platformAccess.pendingEmails.removed", { email: entry.email }),
+                            });
+                          })
+                        }
+                      >
+                        {t("rework.platformAccess.remove")}
+                      </Button>
+                    ),
+                  },
+                ]}
               />
             )}
-            {userTotal > 0 && (
+            {!pendingView && userTotal > 0 && (
               <DataTable
                 size="small"
                 data={userRows ?? []}
@@ -437,17 +501,13 @@ export default function PlatformAccessPage() {
                   )
                 }
                 onSelectionChange={(keys) =>
-                  setSelection((current) => {
-                    // The table reports this page's checked rows: fold each row's state back into the selection.
-                    const flips = (userRows ?? []).filter(
-                      (user) => keys.has(user.user_id) !== isSelected(current, user.user_id),
-                    );
-                    const toggled = new Set<string>(current.mode === "all" ? current.excluded : current.ids);
-                    flips.forEach((user) =>
-                      toggled.has(user.user_id) ? toggled.delete(user.user_id) : toggled.add(user.user_id),
-                    );
-                    return current.mode === "all" ? { mode: "all", excluded: toggled } : { mode: "ids", ids: toggled };
-                  })
+                  setSelection((current) =>
+                    foldSelection(
+                      current,
+                      keys,
+                      (userRows ?? []).map((user) => user.user_id),
+                    ),
+                  )
                 }
                 headerSelection={{
                   checked: everythingSelected,
@@ -558,7 +618,7 @@ export default function PlatformAccessPage() {
             )}
           </div>
           <div
-            className={styles.panel}
+            className={`${styles.panel} ${styles.fill}`}
             id={`${panelId}-teams-panel`}
             role="tabpanel"
             aria-labelledby={`${panelId}-teams-tab`}
@@ -567,32 +627,36 @@ export default function PlatformAccessPage() {
           >
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedTeams")}</h2>
-              <p className={styles.hint}>{t("rework.platformAccess.whitelistedTeamsHint")}</p>
+              <p className={styles.hint} title={t("rework.platformAccess.whitelistedTeamsHint")}>
+                {t("rework.platformAccess.whitelistedTeamsHint")}
+              </p>
             </div>
             <div className={styles.toolbar}>
-              <div className={styles.search}>
-                <SearchInput
-                  size="small"
-                  value={teamQuery}
-                  placeholder={t("rework.platformAccess.searchTeam")}
-                  ariaLabel={t("rework.platformAccess.searchTeam")}
-                  clearAriaLabel={t("rework.platformAccess.clearSearch")}
-                  onChange={setTeamQuery}
+              <div className={styles.toolbarGroup}>
+                <FilterChips<"allowed">
+                  options={[
+                    {
+                      id: "allowed",
+                      label: t("rework.platformAccess.teamFilter.allowed"),
+                      count: (teams.data ?? []).filter((team) => team.allowed).length,
+                    },
+                  ]}
+                  value={teamFilter}
+                  onChange={setTeamFilter}
+                  allLabel={t("rework.platformAccess.teamFilter.all")}
+                  aria-label={t("rework.platformAccess.teamFilter.group")}
                 />
+                <div className={styles.search}>
+                  <SearchInput
+                    size="small"
+                    value={teamQuery}
+                    placeholder={t("rework.platformAccess.searchPlaceholder")}
+                    ariaLabel={t("rework.platformAccess.searchTeam")}
+                    clearAriaLabel={t("rework.platformAccess.clearSearch")}
+                    onChange={setTeamQuery}
+                  />
+                </div>
               </div>
-              <FilterChips<"allowed">
-                options={[
-                  {
-                    id: "allowed",
-                    label: t("rework.platformAccess.teamFilter.allowed"),
-                    count: (teams.data ?? []).filter((team) => team.allowed).length,
-                  },
-                ]}
-                value={teamFilter}
-                onChange={setTeamFilter}
-                allLabel={t("rework.platformAccess.teamFilter.all")}
-                aria-label={t("rework.platformAccess.teamFilter.group")}
-              />
             </div>
             {teamsNarrowed && teamRows.length === 0 && (
               <p className={styles.hint}>{t("rework.platformAccess.noTeams")}</p>
@@ -658,6 +722,28 @@ export default function PlatformAccessPage() {
           />
           {refreshingT0 && <PlatformAccessT0RefreshDialog onClose={() => setRefreshingT0(false)} />}
           <ConfirmationDialog
+            open={confirmingImport}
+            title={t("rework.platformAccess.t0Confirm.title")}
+            message={
+              t0.data
+                ? t("rework.platformAccess.t0Confirm.message", {
+                    count: t0.data.candidates,
+                    matching: t0.data.matching,
+                  })
+                : undefined
+            }
+            confirmLabel={t("rework.platformAccess.t0Confirm.confirm")}
+            cancelLabel={t("common.cancel")}
+            confirmDisabled={busy || !t0.data}
+            onCancel={() => setConfirmingImport(false)}
+            onConfirm={() =>
+              void run(async () => {
+                await importT0({ body: null }).unwrap();
+                setConfirmingImport(false);
+              })
+            }
+          />
+          <ConfirmationDialog
             open={confirmingRemoval}
             criticalAction
             title={t("rework.platformAccess.bulkRemove.title", { count: selectedCount })}
@@ -668,12 +754,26 @@ export default function PlatformAccessPage() {
             onCancel={() => setConfirmingRemoval(false)}
             onConfirm={() =>
               void run(async () => {
-                const result = await revokeUsers({
-                  revokePlatformAccessUsers:
-                    selection.mode === "all"
-                      ? { all_matching: true, query: searchQuery, overlap, excluded_ids: [...selection.excluded] }
-                      : { user_ids: [...selection.ids] },
-                }).unwrap();
+                const result = pendingView
+                  ? await removePendingEmails({
+                      removePlatformAccessPendingEmails: {
+                        emails:
+                          selection.mode === "all"
+                            ? pendingRows.map((e) => e.email).filter((email) => !selection.excluded.has(email))
+                            : [...selection.ids],
+                      },
+                    }).unwrap()
+                  : await revokeUsers({
+                      revokePlatformAccessUsers:
+                        selection.mode === "all"
+                          ? {
+                              all_matching: true,
+                              query: searchQuery,
+                              overlap,
+                              excluded_ids: [...selection.excluded],
+                            }
+                          : { user_ids: [...selection.ids] },
+                    }).unwrap();
                 showSuccess({ summary: t("rework.platformAccess.bulkRemove.done", { count: result.removed_count }) });
                 setSelection(NO_SELECTION);
                 setConfirmingRemoval(false);

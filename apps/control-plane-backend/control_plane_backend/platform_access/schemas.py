@@ -75,6 +75,11 @@ class AddPlatformAccessPendingEmail(BaseModel):
     )
 
 
+class RemovePlatformAccessPendingEmails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    emails: list[str] = Field(min_length=1, max_length=10000)
+
+
 class RevokePlatformAccessUsers(BaseModel):
     """Either explicit ids, or every exception matching the listing's search and filter."""
 
