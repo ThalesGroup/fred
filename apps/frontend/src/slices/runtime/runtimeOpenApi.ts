@@ -995,11 +995,19 @@ export type ExecutionInterruptedRuntimeEvent = {
   sequence?: number;
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
+export type ModelCallTokenUsage = {
+  input_tokens?: number | null;
+  model?: string | null;
+  model_call_id?: string | null;
+  output_tokens?: number | null;
+  tool_call_count?: number;
+};
 export type FinalRuntimeEvent = {
   content?: string;
   context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   kind?: "final";
+  model_call_usage?: ModelCallTokenUsage | null;
   model_name?: string | null;
   rank?: number | null;
   sequence?: number;
@@ -1087,6 +1095,7 @@ export type ToolCallRuntimeEvent = {
   };
   call_id: string;
   kind?: "tool_call";
+  model_call_usage?: ModelCallTokenUsage | null;
   rank?: number | null;
   sequence?: number;
   tool_name: string;
@@ -1286,6 +1295,7 @@ export type ChatMetadata = {
   finish_reason?: FinishReason | null;
   latency_ms?: number | null;
   model?: string | null;
+  model_call_usage?: ModelCallTokenUsage | null;
   sources?: VectorSearchHit[];
   token_usage?: ChatTokenUsage | null;
   ui_parts?: {

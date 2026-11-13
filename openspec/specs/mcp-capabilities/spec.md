@@ -276,3 +276,51 @@ The existing chat trace drawer SHALL show the failed action, its recorded busine
 - **WHEN** a failed result has an empty diagnostic, unrecognized provider text or a malformed diagnostic message
 - **THEN** the drawer shows a localized fallback indicating that no further safe diagnostic was recorded
 - **AND** no arbitrary response text, credential or private URL is revealed
+
+### Requirement: Tabular query details remain responsive for large returned payloads
+
+Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL show up to five rows with every returned column and complete column names, while bounding long cell text and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. The bounded JSON preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. Oversized SQL SHALL receive a bounded visible preview with an explicit truncation indication and access to its complete original through copying. Live and reloaded traces SHALL use the same interpretation; opening a step SHALL NOT re-run its tool.
+
+#### Scenario: Wide query response
+- **GIVEN** a successful query result with hundreds of rows and dozens of columns
+- **WHEN** the user opens its trace step
+- **THEN** the drawer displays SQL above a bounded response preview and identifies the returned row count and preview limits
+- **AND** all returned columns are visible for each of the first five rows
+- **AND** initial rendered work does not grow with the number of rows beyond those five preview rows
+
+#### Scenario: Oversized cell or SQL
+- **WHEN** a query contains very long SQL or its result contains a very long cell
+- **THEN** the visible preview is bounded and identifies truncation
+- **AND** copying the SQL or recorded response preserves the complete original content
+
+#### Scenario: Reopen, switch or stream
+- **WHEN** a user opens a recorded query, switches to another step, reopens the query or receives unrelated streaming text
+- **THEN** the drawer remains responsive and shows the selected call's SQL and preview without executing another query
+
+#### Scenario: Failure and unknown-tool compatibility
+- **WHEN** a failed supported tabular call or an unsupported tool is inspected
+- **THEN** existing safe failure diagnostics and unknown-tool redaction remain in force
+
+### Requirement: Tabular details do not attribute full model usage to an individual tool
+
+The tabular tool drawer MUST NOT label a model request's complete prompt or completion counters as tokens sent or received by an individual tool. This applies to requesting, following and historical model-response metadata, including shared tool batches. When the tool API supplies no token breakdown for that tool, the drawer SHALL omit token counters rather than substitute global model usage, derive an estimate or claim zero consumption. The drawer SHALL retain status, duration, SQL, bounded syntax-colored results and complete supported-copy behavior, without an added model-usage explanation paragraph.
+
+#### Scenario: One returned row and large model context
+- **GIVEN** a tabular query returns one row without tool-specific API usage
+- **AND** the following model response reports 59260 input and 12426 output tokens
+- **WHEN** the user opens the tool details
+- **THEN** no tool token badges display those global model counters
+- **AND** the status, duration, SQL and returned row remain available without a model-usage explanation paragraph
+
+#### Scenario: Live updates and reload
+- **WHEN** model-call usage arrives after a tool result or the conversation is reloaded with model usage metadata
+- **THEN** the tool drawer does not reinterpret that metadata as an individual tool's consumption
+
+#### Scenario: Missing or zero model usage
+- **WHEN** model metadata has missing, invalid or zero counters but no tool-specific API breakdown exists
+- **THEN** no estimated, unavailable-placeholder or zero-valued tool consumption badge is displayed
+
+#### Scenario: Shared model response
+- **WHEN** one model exchange includes results from several tools
+- **THEN** its full request and response usage is not presented as the consumption of each tool
+- **AND** existing conversation accounting remains unchanged

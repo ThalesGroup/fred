@@ -158,6 +158,10 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
     assert len(finals) == 1
     # The bug: this used to equal just {"input_tokens": 30, ...} (the final
     # call alone), silently dropping the tool-deciding call's 120 tokens.
+    assert finals[0].model_call_usage is not None
+    assert finals[0].model_call_usage.input_tokens == 30
+    assert finals[0].model_call_usage.output_tokens == 10
+    assert finals[0].model_call_usage.tool_call_count == 0
     assert finals[0].token_usage == {
         "input_tokens": 130,
         "output_tokens": 30,
@@ -997,3 +1001,108 @@ async def test_a_turn_cut_short_by_a_tool_error_still_reports_its_context() -> N
     ]
 
     assert final.context_tokens == 500
+
+
+@pytest.mark.asyncio
+async def test_parallel_tools_share_recorded_model_usage_without_multiplying_billing() -> (
+    None
+):
+    message = AIMessage(
+        id="response-1",
+        content="",
+        tool_calls=[
+            {"id": f"call-{i}", "name": "read_query", "args": {}} for i in range(2)
+        ],
+        usage_metadata={
+            "input_tokens": 20672,
+            "output_tokens": 679,
+            "total_tokens": 21351,
+        },
+        response_metadata={"model_name": "mistral-small"},
+    )
+    events = [
+        ("updates", {"agent": {"messages": [message]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(content="ok", tool_call_id=f"call-{i}")
+                        for i in range(2)
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="done",
+                            usage_metadata={
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                                "total_tokens": 120,
+                            },
+                        )
+                    ]
+                }
+            },
+        ),
+    ]
+    collected = await _run_stream(events)
+    calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
+    assert len(calls) == 2
+    assert calls[0].model_call_usage == calls[1].model_call_usage
+    usage = calls[0].model_call_usage
+    assert usage is not None
+    assert usage.input_tokens == 20672
+    assert usage.output_tokens == 679
+    assert usage.tool_call_count == 2
+    assert usage.model_call_id == "response-1"
+    assert usage.model == "mistral-small"
+    final = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
+    assert final.token_usage is not None
+    assert final.token_usage["total_tokens"] == 21471
+
+
+@pytest.mark.asyncio
+async def test_parallel_scope_survives_missing_requesting_response_counters() -> None:
+    request = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": f"c{i}", "name": "read_query", "args": {}} for i in range(2)
+        ],
+    )
+    final = AIMessage(
+        content="",
+        usage_metadata={"input_tokens": 100, "output_tokens": 7, "total_tokens": 107},
+    )
+    collected = await _run_stream(
+        [
+            ("updates", {"agent": {"messages": [request]}}),
+            (
+                "updates",
+                {
+                    "tools": {
+                        "messages": [
+                            ToolMessage(content="ok", tool_call_id=f"c{i}")
+                            for i in range(2)
+                        ]
+                    }
+                },
+            ),
+            ("updates", {"agent": {"messages": [final]}}),
+        ]
+    )
+    calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
+    assert len(calls) == 2
+    for call in calls:
+        assert call.model_call_usage is not None
+        assert call.model_call_usage.tool_call_count == 2
+        assert call.model_call_usage.input_tokens is None
+        assert call.model_call_usage.output_tokens is None
+    final_event = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
+    assert final_event.model_call_usage is not None
+    assert final_event.model_call_usage.output_tokens == 7

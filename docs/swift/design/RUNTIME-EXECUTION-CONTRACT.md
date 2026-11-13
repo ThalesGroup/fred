@@ -702,7 +702,8 @@ provider's tokenizer.
 | --- | --- |
 | `final.token_usage` | Billed usage of the whole turn: the sum of every model call, since each provider reports per call (§8.41) |
 | `final.context_tokens` | `input_tokens` of the turn's last model call, i.e. the context left at turn end. ReAct only; Graph agents leave it `None` and UIs fall back to `token_usage` (§8.57) |
-| `tool_call` / `tool_result` | No token figure: a tool call costs nothing by itself (§8.57) |
+| `tool_call.model_call_usage` / `final.model_call_usage` | Optional API-reported input/output of that single model response (§8.57), separate from turn billing; never an individual tool-consumption counter |
+| `tool_result` | No isolated token cost: SQL/tool execution does not itself report model usage |
 
 The assistant-final history row persists both fields (`ChatMetadata`), so a
 reloaded conversation shows what the live stream showed. Rows written before
@@ -4419,15 +4420,25 @@ tokenizer. `FinalRuntimeEvent` gains one field:
 | --- | --- |
 | `context_tokens: int \| None` | `input_tokens` of the turn's LAST model call — the context size at turn end |
 
-`ToolCallRuntimeEvent.token_usage` is **removed**, and tool rows now carry no
-token figure at all: a tool call costs nothing by itself, so the row shows
-latency only. (An intermediate version of this work added a
-`tool_context_cost` map attributing each round's context growth per `call_id`;
-it served its diagnostic purpose — proving the tools cost ~2 300 tokens, not
-~17 500 — and was then removed along with its display as UI weight. The
-measurement is recoverable from this issue's history if a per-tool figure is
-ever wanted again.) `token_usage` on `FinalRuntimeEvent` is unchanged and still
-carries the billed total.
+`ToolCallRuntimeEvent.token_usage` remains removed. Issue #3527 adds optional
+`model_call_usage` to tool-call and final events and `ChatMetadata`, separate
+from billing: nullable `input_tokens`/`output_tokens`, optional `model` and
+`model_call_id`, and `tool_call_count` (default 0, the number of tools requested
+by that response). Final events carry the last response's own usage, never the
+summed turn usage. ReAct extracts these counters once per completed response.
+Raw provider fields take precedence; missing/invalid fields and normalized-only
+zeros without known raw presence remain unavailable. Explicit raw zero stays
+zero. Existing billing normalization is unchanged.
+
+Per-response usage remains model-call metadata, including when it is attached to
+a historical tool-result row during a scoped trace recovery. It does not report
+the token size or consumption of that tool's arguments/results. The tabular
+drawer therefore does not render model-call token badges or their scope
+paragraph. `read_query` returns SQL, rows and dataset references without its own
+token breakdown; neither character-based estimates, a difference between model
+requests nor a zero count is substituted. Existing model usage collection and
+conversation/billing accounting remain unchanged. No trace lookup, tokenization
+or network call is added to the drawer or runtime path.
 
 **The conversation header sums what the messages display, not the invoice.**
 Summing billed usage there put `72 595` above two messages badged `16 871` and
