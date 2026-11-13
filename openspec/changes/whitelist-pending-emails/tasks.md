@@ -3,7 +3,7 @@
 - [x] 1.1 Model `PlatformAccessPendingEmailRow` + control-plane Alembic migration (single head)
 - [x] 1.2 Store: list, add, delete, and `claim_pending(user)` conversion under the policy lock
 - [x] 1.3 `admitted()`: on refusal, try `claim_pending` and admit when converted
-- [x] 1.4 API + service: `GET/POST/DELETE /admin/platform/access/pending-emails`, `409 platform_access_email_known`
+- [x] 1.4 API + service: `GET/POST /admin/platform/access/pending-emails`, `POST .../pending-emails/remove`, `409 platform_access_email_known`
 - [x] 1.5 Tests: conversion, `email_verified: false`, case-insensitive match, known email refused, non-admin refused
 
 ## 2. Cleanup filter and bulk removal (backend)
@@ -27,7 +27,10 @@
 
 ## Verification
 
-- `apps/control-plane-backend`: `pytest tests/test_platform_access.py tests/test_table_ownership.py` → 74 passed, 12 skipped (PostgreSQL-only); ruff, `ruff --select I`, basedpyright clean.
-- `libs/fred-core`: `pytest fred_core/tests/security/test_platform_access.py fred_core/tests/security/test_oidc_provider_tokens.py` → 83 passed.
-- `apps/frontend`: `vitest run PlatformAccessPage DataTable` → all passed; `tsc --noEmit`, prettier, eslint clean.
-- `alembic heads` → single head `e5b1c9d3a742`. Not yet run: a real `alembic upgrade head` on PostgreSQL, and the owner's live test.
+- Independent review (base `origin/swift`, head `b702a9fd9`): 7 findings. Fixed: per-person fallback now only after a lookup reaches the ListUsers cap; a concurrent claim of the same pending email now admits the losing request; `IconButtonMenu` start alignment made opt-in; duplicate `aria-description` on chips dropped; migration note label; the rejected email is named when adding fails. Kept by design: a select-all removal re-resolves the matching set at confirm time.
+- `apps/control-plane-backend`: `make code-quality` clean; `make test` → 2252 passed, 10 skipped, plus `test_authz_endpoint_matrix` after adding the five new routes to `authz-endpoint-matrix.yaml`; `ruff --select I` clean.
+- `libs/fred-core`: `make code-quality` clean; `make test` → 1309 passed.
+- `apps/frontend`: `make code-quality` (tsc, prettier, eslint) clean; `make test` → 5225 passed, 8 skipped.
+- Alembic: single head `e5b1c9d3a742`; real `alembic upgrade head` on the local PostgreSQL (backup taken first).
+- Tooltip placement measured in headless Chrome: chip tooltips end 4px above chips at the same height on one row.
+- Owner live test on the local stack: pending email, chips, counts, tooltips, selection, bulk removal, "Add all existing accounts" confirmation.

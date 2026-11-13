@@ -11,7 +11,7 @@
 
 ## Cleanup filter and bulk removal
 
-- **Filter is server-side**, because the table is paginated. When `overlap` is set, the service loads every individual exception once and computes, per person: rule match from the last stored verified evidence, ignoring its expiry (admission requires unexpired evidence, but the question here is who the rule covers, not who is signed in), team sources from one `lookup_subjects` call per authorized or Free team (not one check per person), and admin. Then it filters, counts and paginates. Without `overlap`, the current path is unchanged.
+- **Filter is server-side**, because the table is paginated. When `overlap` is set, the service loads every individual exception once and computes, per person: rule match from the last stored verified evidence, ignoring its expiry (admission requires unexpired evidence, but the question here is who the rule covers, not who is signed in), team sources from one `lookup_subjects` call per authorized or Free team (not one check per person), and admin from one organization lookup. A lookup returning as many people as the ListUsers cap (1000 by default) may be truncated: only then are the people it missed checked one by one. Then it filters, counts and paginates. Without `overlap`, the current path is unchanged.
 - **"Whitelist only"** means no source other than the individual exception: no rule, team, Free or admin source.
 - **Select all across pages** is sent as a query (`all_matching` + `query` + `overlap` + `excluded_ids`), not as a list of ids, so the server resolves the exact set at request time; the deletion then runs in one transaction. The UI shows "N selected" from the filtered `total` minus the excluded ids.
 - **Atomic and guarded.** The removal runs in one transaction under the policy lock. If filtering is active and the acting administrator would lose their last source, the whole call is refused with the existing error.
@@ -24,3 +24,10 @@
 - **Active chip** uses primary-container / on-primary-container in the shared FilterChips (owner's choice after trying secondary-container); this changes all five FilterChips screens.
 - **Pending emails live behind a "Pending" chip**, not in a list above the table: at 50 addresses a list is unreadable, and mixing emails with people in one table would leave half the columns empty. The chip shows the count; the table switches to email, added on and remove columns, filtered by the search on the client since the list arrives in one response. Removal is one bulk route for one or many.
 - **Every chip has a tooltip** saying what the table lists (FilterChips gains optional `tooltip` and `allTooltip`).
+
+## Owner review iterations
+
+- Toolbar: "Add" with its "more" menu on the left ("Add all existing accounts", confirmed before the first import); chips with counts and tooltips, then a small search on the right. The selection bar sits on its own row under the toolbar, right-aligned, so it never shifts the layout. Tables fill the remaining height. The Teams tab uses the same toolbar layout.
+- Pending emails are a "Pending" chip that switches the table to the pending list, not a separate block, so 50 addresses stay readable.
+- No refresh button: reloading the page re-reads everything.
+- Shared component fixes: prose tooltips wrap at 250px and are placed from their measured size; `IconButtonMenu` takes `align="start"` (opt-in, other menus unchanged); `DataTable` takes an optional `headerSelection`; active `FilterChips` use primary-container.
