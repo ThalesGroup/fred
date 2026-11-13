@@ -33,6 +33,21 @@ You'll need to provide values for:
 - LLM API keys / tokens
 - Access credentials for PostgreSQL (and optionally MinIO, OpenSearch, Temporal, etc.)
 
+### OpenAI-compatible model API keys
+
+Each Knowledge Flow model use can have its own key in `config/.env` or the process environment:
+
+| Model use | Dedicated variable |
+| --- | --- |
+| Chat (`chat_model`) | `KNOWLEDGE_FLOW_CHAT_API_KEY` |
+| Vision (`vision_model`) | `KNOWLEDGE_FLOW_VISION_API_KEY` |
+| Embeddings (`embedding_model`) | `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` |
+| Remote OCR (`ocr_model`) | `KNOWLEDGE_FLOW_OCR_API_KEY` |
+
+For chat, vision, and embeddings configured with `provider: openai`, and for the remote Mistral OCR extractor, a nonempty dedicated key takes precedence. If it is unset or blank, Knowledge Flow uses `OPENAI_API_KEY`. Setting only `OPENAI_API_KEY` therefore works for all four model uses. If neither key is available for a configured use, that use fails before sending a model request. Other chat, vision, and embedding providers retain their existing authentication settings.
+
+In Helm, set these variables under `applications.knowledge-flow-backend.dotenv`. The API and Knowledge Flow workers mount the resulting `knowledge-flow-backend-env` Secret, including extraction workers. Restart affected pods after changing environment credentials.
+
 ---
 
 ## Tabular Data Runtime
