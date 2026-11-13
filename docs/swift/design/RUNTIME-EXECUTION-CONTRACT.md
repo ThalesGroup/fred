@@ -702,7 +702,7 @@ provider's tokenizer.
 | --- | --- |
 | `final.token_usage` | Billed usage of the whole turn: the sum of every model call, since each provider reports per call (§8.41) |
 | `final.context_tokens` | `input_tokens` of the turn's last model call, i.e. the context left at turn end. ReAct only; Graph agents leave it `None` and UIs fall back to `token_usage` (§8.57) |
-| `tool_call.model_call_usage` / `final.model_call_usage` | Optional API-reported input/output of that single model response (§8.57), separate from turn billing; the tool drawer selects the first response AFTER its result |
+| `tool_call.model_call_usage` / `final.model_call_usage` | Optional API-reported input/output of that single model response (§8.57), separate from turn billing; never an individual tool-consumption counter |
 | `tool_result` | No isolated token cost: SQL/tool execution does not itself report model usage |
 
 The assistant-final history row persists both fields (`ChatMetadata`), so a
@@ -4430,18 +4430,15 @@ Raw provider fields take precedence; missing/invalid fields and normalized-only
 zeros without known raw presence remain unavailable. Explicit raw zero stays
 zero. Existing billing normalization is unchanged.
 
-The tabular drawer selects the first assistant model response after the selected
-tool result, in the same session/exchange by rank: the next tool-call row or the
-final row. It never substitutes the model response preparing that tool, another
-turn, or billed totals. A locally recovered historical result can retain exact
-following-response usage directly in its metadata when no final row survived.
-The badges read "Tokens sent" / "Tokens received"; a visible sentence explains
-these are API measurements of the following LLM exchange including the full
-context, not isolated tool-result size. A preceding parallel tool batch shares
-that exchange, and the visible explanation identifies sharing. Without a
-reported following response, counts stay unavailable. Live/reloaded history use
-the same selection. No trace lookup, tokenization or network call is added to
-the request path. `FinalRuntimeEvent.token_usage` remains the billed turn total.
+Per-response usage remains model-call metadata, including when it is attached to
+a historical tool-result row during a scoped trace recovery. It does not report
+the token size or consumption of that tool's arguments/results. The tabular
+drawer therefore does not render model-call token badges or their scope
+paragraph. `read_query` returns SQL, rows and dataset references without its own
+token breakdown; neither character-based estimates, a difference between model
+requests nor a zero count is substituted. Existing model usage collection and
+conversation/billing accounting remain unchanged. No trace lookup, tokenization
+or network call is added to the drawer or runtime path.
 
 **The conversation header sums what the messages display, not the invoice.**
 Summing billed usage there put `72 595` above two messages badged `16 871` and

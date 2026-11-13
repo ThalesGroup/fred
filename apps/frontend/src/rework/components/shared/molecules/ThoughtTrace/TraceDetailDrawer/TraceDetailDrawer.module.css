@@ -51,10 +51,6 @@
   font: var(--font-label-small);
 }
 
-.modelUsageScope {
-  margin: 0 0 var(--spacing-s);
-}
-
 .previewNotice {
   margin: 0;
 }

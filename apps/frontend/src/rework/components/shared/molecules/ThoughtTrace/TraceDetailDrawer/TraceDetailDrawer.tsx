@@ -14,7 +14,7 @@
 
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatMessage, ModelCallTokenUsage } from "../../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
@@ -40,7 +40,6 @@ import {
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
-  followingModelCallUsage,
   toolArgs,
   toolCallId,
   toolName,
@@ -303,55 +302,8 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-function ModelCallUsageBadges({ call, usage }: { call: ChatMessage; usage: ModelCallTokenUsage | null }) {
-  const { t, i18n } = useTranslation();
-  if (!isTabularQueryTool(toolName(call)) && tabularToolKind(toolName(call)) === null) return null;
-  const sharedCount = call.metadata?.model_call_usage?.tool_call_count ?? 1;
-  const help = [
-    t("rework.chatTrace.modelCallUsage.scope"),
-    sharedCount > 1 ? t("rework.chatTrace.modelCallUsage.shared", { count: sharedCount }) : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const count = (value: number | null | undefined) =>
-    value != null && Number.isSafeInteger(value) && value >= 0
-      ? value.toLocaleString(i18n.language)
-      : t("rework.chatTrace.modelCallUsage.unavailable");
-  return (
-    <>
-      <span
-        className={styles.latencyBadge}
-        title={help}
-        aria-label={`${t("rework.chatTrace.modelCallUsage.input", { value: count(usage?.input_tokens) })}. ${help}`}
-      >
-        {t("rework.chatTrace.modelCallUsage.input", { value: count(usage?.input_tokens) })}
-      </span>
-      <span
-        className={styles.latencyBadge}
-        title={help}
-        aria-label={`${t("rework.chatTrace.modelCallUsage.output", { value: count(usage?.output_tokens) })}. ${help}`}
-      >
-        {t("rework.chatTrace.modelCallUsage.output", { value: count(usage?.output_tokens) })}
-      </span>
-    </>
-  );
-}
-
-function ModelCallUsageScope({ call }: { call: ChatMessage }) {
-  const { t } = useTranslation();
-  if (!isTabularQueryTool(toolName(call)) && tabularToolKind(toolName(call)) === null) return null;
-  const sharedCount = call.metadata?.model_call_usage?.tool_call_count ?? 1;
-  return (
-    <p className={`${styles.metaInfo} ${styles.modelUsageScope}`}>
-      {t("rework.chatTrace.modelCallUsage.scope")}
-      {sharedCount > 1 && ` ${t("rework.chatTrace.modelCallUsage.shared", { count: sharedCount })}`}
-    </p>
-  );
-}
-
 export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
   const { t } = useTranslation();
-  const usage = useMemo(() => (entry ? followingModelCallUsage(entry, messages) : null), [entry, messages]);
   const label = entry ? entryLabel(entry, (key) => t(key)) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
@@ -365,7 +317,6 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
       open={entry !== null}
       onClose={onClose}
       title={label}
-      wrapTitle
       titleAccessory={
         toolStatus ? (
           <>
@@ -380,14 +331,12 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
                 {toolLatency}
               </span>
             )}
-            {entry?.kind === "combo" && <ModelCallUsageBadges call={entry.call} usage={usage} />}
           </>
         ) : undefined
       }
       layout="overlay"
       width="720px"
     >
-      {entry?.kind === "combo" && <ModelCallUsageScope call={entry.call} />}
       {entry &&
         (isError ? (
           <ErrorDetail entry={entry} />

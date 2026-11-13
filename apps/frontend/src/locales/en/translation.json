@@ -2629,13 +2629,6 @@
       "details": "Details",
       "documents_one": "{{count}} document",
       "documents_other": "{{count}} documents",
-      "modelCallUsage": {
-        "input": "Tokens sent: {{value}}",
-        "output": "Tokens received: {{value}}",
-        "unavailable": "unavailable",
-        "scope": "API measurements for the LLM exchange following this tool's result, including full context; they do not measure the tool result alone.",
-        "shared": "This exchange follows a batch of {{count}} tools; its counters are shared."
-      },
       "executionTime": "Execution time: {{duration}}",
       "turnFailed": "The turn failed — open for details",
       "hide": "Hide the agent's reasoning and tool calls",

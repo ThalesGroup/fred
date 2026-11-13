@@ -2629,13 +2629,6 @@
       "details": "Détails",
       "documents_one": "{{count}} document",
       "documents_other": "{{count}} documents",
-      "modelCallUsage": {
-        "input": "Tokens envoyés : {{value}}",
-        "output": "Tokens reçus : {{value}}",
-        "unavailable": "indisponible",
-        "scope": "Mesures API de l'échange LLM suivant le retour de cet outil, contexte complet inclus ; elles ne mesurent pas le résultat de l'outil seul.",
-        "shared": "Cet échange suit un lot de {{count}} outils ; ses compteurs sont partagés."
-      },
       "executionTime": "Temps d'exécution : {{duration}}",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",

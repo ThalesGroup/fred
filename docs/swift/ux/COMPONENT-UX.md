@@ -878,13 +878,11 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   eight columns and shortened cells. One compact localized sentence identifies
   preview limits and complete-copy behavior; copy actions retain the complete
   recorded SQL and response. Oversized SQL uses a bounded plain-text preview. The drawer
-  retains status and duration badges alongside exact recorded API-model input and
-  output counters for the first LLM exchange after the result. A visible sentence
-  explains its full-context/shared-batch scope; the requesting model call and
-  isolated tool-result size are not substituted. Missing counts
-  stay unavailable; counts are never estimated from payload length. Model billing
-  and conversation context totals are unchanged. Unrelated
-  streaming updates reuse the query preview.
+  retains the status and duration badges. Full-context model token counters are
+  not displayed as individual tool consumption, and the former model-usage
+  explanation paragraph is omitted. No token count is estimated or replaced by
+  zero when the tool API reports none. Model billing and conversation context
+  totals are unchanged. Unrelated streaming updates reuse the query preview.
 
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same

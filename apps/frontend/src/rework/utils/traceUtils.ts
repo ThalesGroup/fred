@@ -15,7 +15,6 @@
 import type {
   Channel,
   ChatMessage,
-  ModelCallTokenUsage,
   SkillLoadAttribution,
   ToolCallPart,
   ToolResultPart,
@@ -62,27 +61,6 @@ export const FINAL_CHANNELS: Channel[] = ["final"];
 export type TraceEntry =
   | { kind: "solo"; message: ChatMessage }
   | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
-
-/** First provider exchange after the tool result, never the requesting call or turn totals. */
-export function followingModelCallUsage(entry: TraceEntry, messages: ChatMessage[] = []): ModelCallTokenUsage | null {
-  if (entry.kind !== "combo" || !entry.result) return null;
-  // Older local traces may have this exact per-call attribution restored onto
-  // the result when no final history row survived. It is never computed here.
-  if (entry.result.metadata?.model_call_usage) return entry.result.metadata.model_call_usage;
-  let next: ChatMessage | undefined;
-  for (const message of messages) {
-    if (
-      message.exchange_id !== entry.call.exchange_id ||
-      message.session_id !== entry.call.session_id ||
-      message.rank <= entry.result.rank ||
-      message.role !== "assistant" ||
-      (message.channel !== "tool_call" && message.channel !== "final")
-    )
-      continue;
-    if (!next || message.rank < next.rank) next = message;
-  }
-  return next?.metadata?.model_call_usage ?? null;
-}
 
 export type TraceStatus = "unavailable" | "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
 

@@ -300,27 +300,26 @@ Opening a supported tabular query step SHALL expose its recorded SQL and query s
 - **WHEN** a failed supported tabular call or an unsupported tool is inspected
 - **THEN** existing safe failure diagnostics and unknown-tool redaction remain in force
 
-### Requirement: Tabular tool details expose recorded API model usage with explicit scope
+### Requirement: Tabular details do not attribute full model usage to an individual tool
 
-Tabular tool details SHALL expose the exact input and output counters reported by the API for the first model exchange following the recorded tool result, visibly identifying its full-context model-call scope rather than claiming isolated tool-result or execution cost. Missing counters SHALL remain unavailable; explicit raw-provider zero SHALL remain zero. Normalized-only zeros without known raw presence SHALL remain unavailable. The system MUST NOT derive these counters from character counts, tokenizers, neighboring requests or timing. Live events and stored history SHALL retain the same values and scope. Multiple tools requested by one response SHALL identify shared usage and MUST NOT multiply conversation billing totals. The existing status, duration and bounded syntax-colored result presentation SHALL remain available.
+The tabular tool drawer MUST NOT label a model request's complete prompt or completion counters as tokens sent or received by an individual tool. This applies to requesting, following and historical model-response metadata, including shared tool batches. When the tool API supplies no token breakdown for that tool, the drawer SHALL omit token counters rather than substitute global model usage, derive an estimate or claim zero consumption. The drawer SHALL retain status, duration, SQL, bounded syntax-colored results and complete supported-copy behavior, without an added model-usage explanation paragraph.
 
-#### Scenario: Exact API counters survive reload
-- **WHEN** an API model response reports input and output counters after receiving a tabular tool result
-- **THEN** its tool details show those exact counters in the live conversation and after reload with the API-model scope explained
+#### Scenario: One returned row and large model context
+- **GIVEN** a tabular query returns one row without tool-specific API usage
+- **AND** the following model response reports 59260 input and 12426 output tokens
+- **WHEN** the user opens the tool details
+- **THEN** no tool token badges display those global model counters
+- **AND** the status, duration, SQL and returned row remain available without a model-usage explanation paragraph
 
-#### Scenario: Partial or absent usage
-- **WHEN** a counter is missing, invalid or not recorded
-- **THEN** the drawer identifies it as unavailable without inventing a number
-- **AND** a valid explicitly reported zero is displayed as zero
+#### Scenario: Live updates and reload
+- **WHEN** model-call usage arrives after a tool result or the conversation is reloaded with model usage metadata
+- **THEN** the tool drawer does not reinterpret that metadata as an individual tool's consumption
+
+#### Scenario: Missing or zero model usage
+- **WHEN** model metadata has missing, invalid or zero counters but no tool-specific API breakdown exists
+- **THEN** no estimated, unavailable-placeholder or zero-valued tool consumption badge is displayed
 
 #### Scenario: Shared model response
-- **WHEN** one model response requests several tools
-- **THEN** each associated tabular detail identifies that the counters cover the shared model response
-- **AND** conversation billing counts that model response once
-
-#### Scenario: Correct exchange rather than requesting-call usage
-- **GIVEN** the requesting model response reports 20077 input and 644 output tokens
-- **AND** the next response after the SQL result reports 103991 input and 2956 output tokens
-- **WHEN** the user inspects that SQL step
-- **THEN** its badges display 103991 sent and 2956 received with visible full-context API scope
-- **AND** no usage from a different exchange, the requesting call or a billable turn sum is substituted
+- **WHEN** one model exchange includes results from several tools
+- **THEN** its full request and response usage is not presented as the consumption of each tool
+- **AND** existing conversation accounting remains unchanged

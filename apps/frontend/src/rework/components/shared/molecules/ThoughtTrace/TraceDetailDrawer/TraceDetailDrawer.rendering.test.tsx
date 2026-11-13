@@ -165,7 +165,7 @@ it.each(["en", "fr"])("does not invent token counts from the payload in %s", asy
   act(() => root.render(<TraceDetailDrawer entry={queryEntry([{ amount: 123 }])} onClose={() => {}} />));
   const header = container.querySelector("aside")?.firstElementChild?.firstElementChild;
   expect(header?.textContent).not.toContain("~");
-  expect(header?.textContent).toContain(language === "fr" ? "indisponible" : "unavailable");
+  expect(header?.textContent).not.toMatch(/tokens|indisponible|unavailable/i);
   expect(header?.textContent).toContain("390ms");
 });
 
@@ -182,67 +182,78 @@ it("keeps running and failure status without guessing token usage", () => {
   expect(container.querySelector("[data-status='failure']")).not.toBeNull();
 });
 
-it.each(["en", "fr"])("shows API counters with scope and one compact preview sentence in %s", async (language) => {
-  await i18next.changeLanguage(language);
-  const entry = queryEntry(
-    Array.from({ length: 200 }, () => Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`column${i}`, i]))),
-  );
-  entry.call.metadata = { model_call_usage: { input_tokens: 20077, output_tokens: 644, tool_call_count: 2 } };
-  entry.result!.metadata = { model_call_usage: { input_tokens: 103991, output_tokens: 2956 } };
-  act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
-  const badges = [...container.querySelectorAll<HTMLElement>("span[title]")];
-  expect(badges).toHaveLength(2);
-  expect(container.textContent).toContain(language === "fr" ? "contexte complet inclus" : "including full context");
-  expect(badges[0].textContent?.replace(/[\s,]/g, "")).toContain("103991");
-  expect(badges[1].textContent?.replace(/[\s,]/g, "")).toContain("2956");
-  expect(badges[0].title).toContain(language === "fr" ? "lot de 2 outils" : "batch of 2 tools");
-  const notices = [...container.querySelectorAll("p")].filter((p) =>
-    p.textContent?.includes(language === "fr" ? "Aperçu de" : "Preview of"),
-  );
-  expect(notices).toHaveLength(1);
-  expect(notices[0].textContent).toContain(language === "fr" ? "5 lignes sur 200" : "5 rows out of 200");
-  expect(notices[0].textContent).toContain(
-    language === "fr" ? "réponse enregistrée complète" : "complete recorded response",
-  );
-  expect(notices[0].textContent?.match(/\./g)).toHaveLength(1);
-});
+it.each(["en", "fr"])(
+  "retains one compact preview sentence without model token attribution in %s",
+  async (language) => {
+    await i18next.changeLanguage(language);
+    const entry = queryEntry(
+      Array.from({ length: 200 }, () => Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`column${i}`, i]))),
+    );
+    entry.call.metadata = { model_call_usage: { input_tokens: 20077, output_tokens: 644, tool_call_count: 2 } };
+    entry.result!.metadata = { model_call_usage: { input_tokens: 103991, output_tokens: 2956 } };
+    act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
+    const header = container.querySelector("aside")?.firstElementChild?.firstElementChild;
+    expect(header?.textContent).not.toMatch(/tokens|103.?991|2.?956/i);
+    expect(container.textContent).not.toMatch(/Mesures API|API measurements/);
+    const notices = [...container.querySelectorAll("p")].filter((p) =>
+      p.textContent?.includes(language === "fr" ? "Aperçu de" : "Preview of"),
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0].textContent).toContain(language === "fr" ? "5 lignes sur 200" : "5 rows out of 200");
+    expect(notices[0].textContent).toContain(
+      language === "fr" ? "réponse enregistrée complète" : "complete recorded response",
+    );
+    expect(notices[0].textContent?.match(/\./g)).toHaveLength(1);
+  },
+);
 
-it("keeps explicit API zero distinct from missing output and hides counters on unknown tools", () => {
+it("does not present model zero or missing usage as a tool token count", () => {
   const entry = queryEntry([]);
   entry.result!.metadata = { model_call_usage: { input_tokens: 0 } };
   act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
-  const badges = [...container.querySelectorAll<HTMLElement>("span[title]")];
-  expect(badges[0].textContent).toBe("Tokens sent: 0");
-  expect(badges[1].textContent).toBe("Tokens received: unavailable");
-  entry.call.parts = [{ type: "tool_call", name: "custom_tool", call_id: "c", args: {} }];
-  act(() => root.render(<TraceDetailDrawer entry={{ ...entry, call: { ...entry.call } }} onClose={() => {}} />));
-  expect(container.querySelectorAll("span[title]")).toHaveLength(0);
+  const header = container.querySelector("aside")?.firstElementChild?.firstElementChild;
+  expect(header?.textContent).not.toMatch(/tokens|unavailable/i);
+  expect(container.querySelector("[data-status='success']")).not.toBeNull();
 });
 
-it("updates badges when the following API exchange completes and preserves them on reload", () => {
-  const entry = queryEntry([{ amount: 1 }]);
-  entry.call.metadata = { model_call_usage: { input_tokens: 20077, output_tokens: 644 } };
+it("keeps global API usage out of one-row tool details during streaming and reload", () => {
+  const entry = queryEntry([{ id: 7, valeur: "site", regle_enfreinte: "REG-019" }]);
+  entry.call.metadata = { model_call_usage: { input_tokens: 58774, output_tokens: 228 } };
   const final: ChatMessage = {
     ...entry.call,
     rank: 4,
     channel: "final",
     parts: [{ type: "text", text: "done" }],
-    metadata: { model_call_usage: { input_tokens: 103991, output_tokens: 2956, tool_call_count: 0 } },
+    metadata: { model_call_usage: { input_tokens: 59260, output_tokens: 12426, tool_call_count: 0 } },
   };
-  act(() => root.render(<TraceDetailDrawer entry={entry} messages={[entry.call, entry.result!]} onClose={() => {}} />));
-  expect(container.textContent).toContain("Tokens sent: unavailable");
+  const render = (selected: TraceEntry, messages: ChatMessage[]) =>
+    act(() => root.render(<TraceDetailDrawer entry={selected} messages={messages} onClose={() => {}} />));
+  const assertToolScope = () => {
+    const header = container.querySelector("aside")?.firstElementChild?.firstElementChild;
+    expect(header?.textContent?.replace(/[\s,]/g, "")).not.toMatch(/59260|12426|58774|tokens|unavailable/i);
+    expect(container.textContent).not.toContain("API measurements for the LLM exchange");
+    expect(header?.textContent).toContain("390ms");
+    expect(container.textContent).toContain("REG-019");
+  };
+  render(entry, [entry.call, entry.result!]);
+  assertToolScope();
+  const query = container.querySelector("pre");
   const messages = [entry.call, entry.result!, final];
-  act(() => root.render(<TraceDetailDrawer entry={entry} messages={messages} onClose={() => {}} />));
-  expect(container.textContent?.replace(/[\s,]/g, "")).toContain("Tokenssent:103991");
-  expect(container.textContent).not.toContain("20,077");
-  act(() =>
-    root.render(
-      <TraceDetailDrawer
-        entry={JSON.parse(JSON.stringify(entry))}
-        messages={JSON.parse(JSON.stringify(messages))}
-        onClose={() => {}}
-      />,
-    ),
-  );
-  expect(container.textContent?.replace(/[\s,]/g, "")).toContain("Tokensreceived:2956");
+  render(entry, messages);
+  assertToolScope();
+  expect(container.querySelector("pre")).toBe(query);
+  render(JSON.parse(JSON.stringify(entry)), JSON.parse(JSON.stringify(messages)));
+  assertToolScope();
+});
+
+it("does not expose full-context usage on failed or unknown tools", () => {
+  const entry = queryEntry([]);
+  entry.result!.metadata = { model_call_usage: { input_tokens: 59260, output_tokens: 12426 } };
+  entry.result!.parts = [{ type: "tool_result", call_id: "c", content: "", ok: false }];
+  act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
+  expect(container.querySelector("[data-status='failure']")).not.toBeNull();
+  expect(container.querySelector("aside")?.firstElementChild?.textContent).not.toMatch(/tokens|59.?260/i);
+  entry.call.parts = [{ type: "tool_call", name: "custom_tool", call_id: "c", args: {} }];
+  act(() => root.render(<TraceDetailDrawer entry={{ ...entry, call: { ...entry.call } }} onClose={() => {}} />));
+  expect(container.querySelector("aside")?.firstElementChild?.textContent).not.toMatch(/tokens|59.?260/i);
 });
