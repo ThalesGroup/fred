@@ -190,7 +190,7 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 
 VERSION ?=
 PYPI_UV ?= $(shell command -v uv 2>/dev/null)
-PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
+PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py $(if $(BASE_TAG),--base-tag "$(BASE_TAG)",)
 
 # The Python packages published to PyPI, in dependency order: the libs, then
 # the capabilities. Each pyproject.toml owns its package version.
