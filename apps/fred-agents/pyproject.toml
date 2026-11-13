@@ -22,6 +22,7 @@ dependencies = [
   # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
   "fred-capability-mcp>=4.5.1",
   "fred-capability-web-research>=4.5.1",
+  "fred-capability-spreadsheet>=4.5.1",
   "uvicorn>=0.35",
 ]
 
@@ -69,6 +70,7 @@ fred-capability-documents = { path = "../../libs/capabilities/fred-capability-do
 fred-capability-document-access = { path = "../../libs/capabilities/fred-capability-document-access", editable = true }
 fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }
 fred-capability-web-research = { path = "../../libs/capabilities/fred-capability-web-research", editable = true }
+fred-capability-spreadsheet = { path = "../../libs/capabilities/fred-capability-spreadsheet", editable = true }
 
 [dependency-groups]
 dev = [

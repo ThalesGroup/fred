@@ -29,6 +29,7 @@ import {
   CAP_DOCUMENT_SUMMARIZE,
   CAP_DOCUMENT_VERBATIM,
   CAP_PPT_FILLER,
+  CAP_SPREADSHEET,
   CAP_TABULAR,
   CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
@@ -46,6 +47,7 @@ const ATTACHMENTS = packById("attachments");
 const TEAM_DOCUMENTS = packById("team_documents");
 const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
+const SPREADSHEET = packById("spreadsheet");
 const SHARED_IDS = [
   CAP_DOCUMENT_ACCESS,
   CAP_TABULAR,
@@ -295,6 +297,12 @@ describe("plain packs and included capability status", () => {
     state = applyPackToggle(WORD, false, state, ALL_IDS);
     expect(state.selectedCapabilityIds).toEqual([CAP_PPT_FILLER]);
     expect(derivePackChecked(PPT, state, ALL_IDS)).toBe(true);
+  });
+
+  it("selects the spreadsheet capability only when the team can use it", () => {
+    const state = applyPackToggle(SPREADSHEET, true, empty(), new Set([CAP_SPREADSHEET]));
+    expect(state.selectedCapabilityIds).toEqual([CAP_SPREADSHEET]);
+    expect(applyPackToggle(SPREADSHEET, true, empty(), ALL_IDS).selectedCapabilityIds).toEqual([]);
   });
 
   it("reads active, inactive, and unavailable from live selection and availability", () => {
