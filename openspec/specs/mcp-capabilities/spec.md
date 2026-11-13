@@ -279,7 +279,7 @@ The existing chat trace drawer SHALL show the failed action, its recorded busine
 
 ### Requirement: Tabular query details remain responsive for large returned payloads
 
-Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL show up to ten rows with every returned column and complete column names, while bounding long cell text, and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. When recorded rows remain hidden, a small localized action below the JSON preview SHALL reveal the next ten rows, or the remaining rows if fewer than ten remain, retaining the already visible rows. The action SHALL state the actual next row count and disappear when every recorded row is visible. The preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. Oversized SQL SHALL receive a bounded visible preview with an explicit truncation indication and access to its complete original through copying. Live and reloaded traces SHALL use the same interpretation; opening or expanding a step SHALL NOT re-run its tool, fetch additional database rows or change the recorded response and its tool-owned notices.
+Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL show up to ten rows with every returned column and complete column names, while bounding long cell text, and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. When recorded rows remain hidden, a small localized action below the JSON preview SHALL reveal the next ten rows, or the remaining rows if fewer than ten remain, retaining the already visible rows. The action SHALL state the actual next row count and disappear when every recorded row is visible. The preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. The recorded SQL SHALL be displayed in full without a character limit or a long-query preview notice, retaining SQL formatting, syntax colors and copying of the unchanged original. Live and reloaded traces SHALL use the same interpretation; opening or expanding a step SHALL NOT re-run its tool, fetch additional database rows or change the recorded response and its tool-owned notices.
 
 #### Scenario: Wide query response
 - **GIVEN** a successful query result with hundreds of rows and dozens of columns
@@ -302,7 +302,8 @@ Opening a supported tabular query step SHALL expose its recorded SQL and query s
 
 #### Scenario: Oversized cell or SQL
 - **WHEN** a query contains very long SQL or its result contains a very long cell
-- **THEN** the visible preview is bounded and identifies truncation
+- **THEN** the entire recorded SQL is displayed with its existing formatting and syntax colors, without truncation or a long-query preview notice
+- **AND** long result cells remain shortened in the response preview with its existing notice
 - **AND** copying the SQL or recorded response preserves the complete original content, including rows that have not been revealed
 
 #### Scenario: Reopen, switch or stream

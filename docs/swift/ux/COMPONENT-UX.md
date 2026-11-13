@@ -877,7 +877,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   a JSON response preview with the existing syntax colors, initially limited to ten rows
   with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
   preview limits and complete-copy behavior; copy actions retain the complete
-  recorded SQL and response. Oversized SQL uses a bounded plain-text preview. The drawer
+  recorded SQL and response. SQL is shown in full with its existing formatting and
+  syntax colors, without a character limit or long-query preview notice. The drawer
   retains the status and duration badges. Full-context model token counters are
   not displayed as individual tool consumption, and the former model-usage
   explanation paragraph is omitted. No token count is estimated or replaced by

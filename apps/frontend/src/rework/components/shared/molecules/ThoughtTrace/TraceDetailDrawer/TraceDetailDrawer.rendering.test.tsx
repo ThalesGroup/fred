@@ -246,14 +246,17 @@ it("bounds long cells and nested values while copying the entire recorded respon
   expect(writeRichClipboard).toHaveBeenLastCalledWith("", toolResultContent(entry.result));
 });
 
-it("bounds oversized SQL without formatting it and copies the complete original", async () => {
+it("shows long SQL in full with syntax colors and copies the complete original", async () => {
   const format = vi.spyOn(sqlFormatting, "formatSqlForDisplay");
   const sql = "SELECT " + "column_name, ".repeat(2000) + "last_column FROM d_table";
   act(() => root.render(<TraceDetailDrawer entry={queryEntry([], sql)} onClose={() => {}} />));
-  expect(format).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Long query preview");
-  expect(container.textContent).not.toContain("last_column");
-  expect(container.querySelectorAll("*").length).toBeLessThan(2500);
+  const query = container.querySelector("pre code")!;
+  expect(query.textContent?.replace(/\s/g, "")).toBe(sql.replace(/\s/g, ""));
+  expect(query.textContent).toContain("last_column");
+  expect(query.textContent).toContain("d_table");
+  expect(query.querySelectorAll("span[style]").length).toBeGreaterThan(0);
+  expect(format).toHaveBeenCalledTimes(1);
+  expect(container.textContent).not.toMatch(/Long query preview|Aperçu d'une requête longue/);
   await copyBlock(0);
   expect(writeRichClipboard).toHaveBeenLastCalledWith("", sql);
 });
@@ -276,6 +279,21 @@ it("preserves the selected query through streaming updates, switching and reopen
   render(first);
   expect(container.textContent).toContain("first_table");
   expect(container.textContent).not.toContain("second_table");
+});
+
+it("shows failed SQL beyond the diagnostic argument budget without truncating the query", async () => {
+  const sql = "SELECT " + "column_name, ".repeat(2000) + "last_column FROM d_table";
+  const entry = queryEntry([], sql);
+  entry.result!.parts = [
+    { type: "tool_result", call_id: sql, ok: false, content: "Exactly one SQL statement is allowed" },
+  ];
+  act(() => root.render(<TraceDetailDrawer entry={entry} onClose={() => {}} />));
+  const query = container.querySelector("pre code")!;
+  expect(query.textContent?.replace(/\s/g, "")).toBe(sql.replace(/\s/g, ""));
+  expect(container.textContent).not.toContain("[truncated]");
+  expect(container.querySelector("[data-status='failure']")).not.toBeNull();
+  await copyBlock(0);
+  expect(writeRichClipboard).toHaveBeenLastCalledWith("", sql);
 });
 
 it.each(["en", "fr"])("does not invent token counts from the payload in %s", async (language) => {

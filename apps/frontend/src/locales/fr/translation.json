@@ -2640,7 +2640,6 @@
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
-      "sqlPreview": "Aperçu d'une requête longue. Copiez pour obtenir le SQL original complet.",
       "copyFullResponse": "Le bouton de copie de la réponse copie la réponse enregistrée complète.",
       "sqlQuery": "Requête :",
       "sqlResponse": "Réponse :",

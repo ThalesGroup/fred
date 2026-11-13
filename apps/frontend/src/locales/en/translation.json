@@ -2640,7 +2640,6 @@
       "rows_other": "{{count}} rows",
       "running": "running…",
       "show": "Show the agent's reasoning and tool calls",
-      "sqlPreview": "Long query preview. Copy to get the complete original SQL.",
       "copyFullResponse": "The response copy button copies the complete recorded response.",
       "sqlQuery": "Query:",
       "sqlResponse": "Response:",

@@ -25,7 +25,7 @@ Deploy Fred normally. Existing conversations use the improved detail view withou
 
 ## Validation
 
-Open a recorded tabular query with a wide response. Check that SQL appears promptly above ten JSON response rows with the existing syntax colors and every returned column. Reveal ten additional recorded rows per click, check the final remainder and action disappearance, and check that switching or reopening resets the preview. Copying must retain the complete original SQL/response, including unrevealed rows, and status and duration must retain their previous presentation. Check that full model-call usage is not displayed as individual tool consumption, including for one-row responses and after reload, and that no model-usage explanation paragraph is added. No token count should be inferred from payload length or replaced by zero when the tool API supplies none.
+Open a recorded tabular query with a wide response. Check that the full SQL is visible above ten JSON response rows with the existing syntax colors and every returned column. Long SQL must include its final statement text without a character cutoff or long-query preview notice. Reveal ten additional recorded rows per click, check the final remainder and action disappearance, and check that switching or reopening resets the preview. Copying must retain the complete original SQL/response, including unrevealed rows, and status and duration must retain their previous presentation. Check that full model-call usage is not displayed as individual tool consumption, including for one-row responses and after reload, and that no model-usage explanation paragraph is added. No token count should be inferred from payload length or replaced by zero when the tool API supplies none.
 
 ## Rollback
 

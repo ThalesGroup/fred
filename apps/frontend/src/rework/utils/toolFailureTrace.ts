@@ -87,7 +87,15 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const budget = { remaining: 20000 };
   const displayed = tabular
     ? Object.fromEntries(
-        (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
+        (ARGUMENTS[slug] ?? [])
+          .filter((key) => key in args)
+          .map((key) => [
+            key,
+            displayArgument(
+              args[key],
+              key === "sql" && typeof args[key] === "string" ? { remaining: Infinity } : budget,
+            ),
+          ]),
       )
     : null;
   const sqlFailure =

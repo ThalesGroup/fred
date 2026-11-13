@@ -116,18 +116,15 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-const SQL_PREVIEW_CHARS = 4000;
 const SQL_ROW_PAGE_SIZE = 10;
 
 const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
   const { t } = useTranslation();
-  const formatted = useMemo(() => (sql.length > SQL_PREVIEW_CHARS ? sql : formatSqlForDisplay(sql)), [sql]);
-  const truncated = formatted.length > SQL_PREVIEW_CHARS;
+  const formatted = useMemo(() => formatSqlForDisplay(sql), [sql]);
   return (
     <div className={styles.toolSection}>
       <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
-      <CodeBlock code={formatted.slice(0, SQL_PREVIEW_CHARS)} copyText={sql} language="sql" highlight={!truncated} />
-      {truncated && <p className={styles.metaInfo}>{t("rework.chatTrace.sqlPreview")}</p>}
+      <CodeBlock code={formatted} copyText={sql} language="sql" />
     </div>
   );
 });
