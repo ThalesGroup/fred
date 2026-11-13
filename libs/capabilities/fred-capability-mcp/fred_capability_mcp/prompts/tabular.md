@@ -32,7 +32,12 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
    queried; one workbook UID makes all its tables available. Cross-table
    and cross-document joins are supported within the authorized scope.
    Use a separate call for each independent SQL statement; never combine
-   several statements in one call.
+   several statements in one call. Omit `max_rows` for the deployment default
+   (500); pass JSON `null` to disable the tool-added row limit, or a positive
+   integer with no server row ceiling. SQL LIMIT still applies. The deployment
+   character budget (50,000 by default) always retains only complete rows.
+   The tool's `message` after `rows` explains omitted data or a reached row limit;
+   treat those results as partial rather than inferring totals from them.
 
 ### Keep references and types exact
 
@@ -55,8 +60,10 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
 
 ### Interpret results before taking another action
 
-- Reuse a successful result. An empty `rows` array with `error=null` is a
-  successful query with zero matching rows, not an execution failure.
+- Reuse a successful result. With `error=null`, inspect `message`: empty
+  `rows` can mean no matches or a first row exceeding the character budget.
+  Neither is an execution failure; for truncation select fewer columns or
+  shorten large fields.
   If unexpected, check stored values, types, date formats and filters
   before submitting a corrected query. Do not repeat an unchanged
   successful query. A returned zero count or null aggregate is still a row.

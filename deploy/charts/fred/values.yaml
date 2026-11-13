@@ -424,8 +424,8 @@ x-kf-storage: &kf-storage
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
 
 x-kf-mcp: &kf-mcp
   reports_enabled: true

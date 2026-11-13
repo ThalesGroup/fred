@@ -232,7 +232,8 @@ class TabularQueryRequest(BaseModel):
     If omitted, SQL may reference any table in the active authorized scope;
     only referenced tables are mounted. The query must read at least one table
     and respect the server's dataset limit. Scope parameters do not grant access.
-    max_rows caps the returned preview; compute totals and statistics in SQL.
+    Omit max_rows for the configured default; explicit null disables the row limit.
+    The server character budget always applies; compute totals and statistics in SQL.
     """
 
     sql: str = Field(
@@ -260,7 +261,9 @@ class TabularQueryRequest(BaseModel):
         description="Team ID required when owner_filter is 'team'.",
     )
     max_rows: Optional[int] = Field(
-        default=None, ge=1, description="Maximum result rows to return, capped by the server. For totals or statistics, aggregate in SQL rather than counting this preview."
+        default=None,
+        ge=1,
+        description="Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals.",
     )
 
     @property
@@ -284,7 +287,7 @@ class RawSQLResponse(BaseModel):
     rows: list[dict] = Field(default_factory=list)
     error: Optional[str] = None
     message: str | None = Field(
-        default=None, description="Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information."
+        default=None, description="Tool-owned success explanation after row data: character truncation, reached row limit, or no matching rows. Partial results are not execution errors."
     )
     dataset_uids: list[str] = Field(default_factory=list)
     query_aliases: list[str] = Field(default_factory=list)

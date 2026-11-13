@@ -50,6 +50,7 @@ from knowledge_flow_backend.features.tabular.execution import (
     open_duckdb_connection,
     run_duckdb_job,
 )
+from knowledge_flow_backend.features.tabular.query_result import QueryPreview, read_query_preview
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularColumnDescription,
@@ -679,12 +680,9 @@ class TabularService:
 
         allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
         query_config = self.tabular_config.query
-        effective_max_rows = min(
-            request.max_rows or query_config.default_max_rows,
-            query_config.max_rows,
-        )
+        effective_max_rows = request.max_rows if "max_rows" in request.model_fields_set else query_config.default_max_rows
 
-        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], list[ResolvedDataset]]:
+        def _job(handle: DuckDBAbortHandle) -> tuple[str, QueryPreview, list[ResolvedDataset]]:
             connection = open_duckdb_connection(handle, config=query_config)
             try:
                 handle.raise_if_aborted()
@@ -699,18 +697,17 @@ class TabularService:
                 )
                 self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
                 handle.raise_if_aborted()
-                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
                 with _redacting_query_execution_errors(
                     diagnostic_relations=validated.diagnostic_relations,
                     mounted_columns={dataset.query_alias: [column.name for column in dataset.artifact.columns] for dataset in mounted_datasets},
                 ):
-                    rows_df = connection.execute(limited_query).df()
-                return validated.sql, dataframe_to_records(rows_df), mounted_datasets
+                    preview = read_query_preview(connection, validated.sql, row_limit=effective_max_rows, max_output_chars=query_config.max_output_chars, handle=handle)
+                return validated.sql, preview, mounted_datasets
             finally:
                 close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
-        sql_query, rows, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
+        sql_query, preview, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
 
         duration_ms = (time.perf_counter() - started_at) * 1000
         logger.info(
@@ -719,15 +716,15 @@ class TabularService:
             [dataset.metadata.document_uid for dataset in mounted_datasets],
             [dataset.query_alias for dataset in mounted_datasets],
             hashlib.sha256(sql_query.encode("utf-8")).hexdigest(),
-            len(rows),
+            len(preview.rows),
             duration_ms,
         )
 
         return RawSQLResponse(
             sql_query=sql_query,
-            rows=rows,
+            rows=preview.rows,
             error=None,
-            message="Requête exécutée avec succès : 0 ligne correspondant aux conditions." if not rows else None,
+            message=preview.message,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )

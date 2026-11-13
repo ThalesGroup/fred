@@ -135,8 +135,8 @@ applications:
             access_mode: "presigned_url"
             # TTL for the internal signed URL; keep short — only DuckDB uses it.
             internal_presigned_ttl_seconds: 3600
-            default_max_rows: 200
-            max_rows: 1000
+            default_max_rows: 500
+            max_output_chars: 50000
         vector_store:
           type: pgvector
           collection_name: fred_chunks

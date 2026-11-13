@@ -47,9 +47,11 @@ async def test_enabled_mcp_catalog_exposes_selected_tools(app_context, monkeypat
         assert catalogs[2]["read_query"].parameters["required"] == ["sql"]
         assert "max_rows" in catalogs[2]["read_query"].parameters["properties"]
         assert "DuckDB SELECT" in catalogs[2]["read_query"].description
-        assert "rows=[]" in catalogs[2]["read_query"].description
+        assert "character budget" in catalogs[2]["read_query"].description
         assert "last-resort" in catalogs[2]["search_tabular_values"].description
         query_properties = catalogs[2]["read_query"].parameters["properties"]
+        assert "explicit JSON null" in query_properties["max_rows"]["description"]
+        assert "character budget" in query_properties["max_rows"]["description"]
         assert "DuckDB SELECT" in query_properties["sql"]["description"]
         assert "query_alias" in query_properties["sql"]["description"]
         assert "document uids" in query_properties["dataset_uids"]["description"].lower()

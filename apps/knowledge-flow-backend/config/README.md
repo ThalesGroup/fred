@@ -84,9 +84,16 @@ storage:
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
 ```
+
+`query.default_max_rows` applies when `read_query.max_rows` is omitted. Explicit
+JSON `null` disables the tool-added row limit; positive values have no server row
+ceiling. The configured `max_output_chars` always bounds the compact JSON rows
+array, keeping complete rows. Metadata and the tool-owned explanation follow in
+addition to this budget. SQL-authored LIMIT and execution budgets still apply.
+Remove the retired `query.max_rows` deployment key when upgrading.
 
 Behavior by storage backend:
 

@@ -14,6 +14,8 @@
 
 """Issue #3059: nullable tabular results must survive HTTP JSON serialization."""
 
+import asyncio
+import json
 from datetime import datetime
 
 import httpx
@@ -140,3 +142,90 @@ async def test_extracted_excel_nullable_date_query_returns_json_null(tmp_path, t
         {"reference": "CMD001", "date_expedition": "2026-02-02T00:00:00", "amount": 0.0},
         {"reference": "CMD002", "date_expedition": None, "amount": 12.5},
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("via_mcp", [False, True])
+async def test_row_limit_presence_survives_http_and_mcp(tmp_path, metadata_store, tabular_app, monkeypatch, via_mcp):
+    import httpx2
+
+    from knowledge_flow_backend import mcp_mount
+    from tests.security.test_mcp_v2_mount import _request
+
+    app, service = tabular_app
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="limits", file_name="limits.csv", content="id\n" + "\n".join(str(i) for i in range(2105)))
+    [dataset] = await service.list_datasets(_user())
+    sql = f"SELECT id FROM {dataset.query_alias} ORDER BY id"
+
+    async def authenticate(request, token):
+        yield None
+
+    monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
+    if via_mcp:
+        mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Tabular", description="Tabular", tags={"Tabular"})
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            for extra, expected in [({}, 500), ({"max_rows": None}, 2105), ({"max_rows": 2100}, 2100), ({}, 500)]:
+                arguments = {"sql": sql, **extra}
+                if via_mcp:
+                    response = await _request(client, "tools/call", {"name": "read_query", "arguments": arguments})
+                    result = response.json()["result"]
+                    assert not result.get("isError"), result
+                    payload = result["structuredContent"]
+                    assert json.loads(result["content"][0]["text"]) == payload
+                else:
+                    response = await client.post("/tabular/query", json=arguments)
+                    payload = response.json()
+                assert response.status_code == 200, response.text
+                assert len(payload["rows"]) == expected
+                assert payload["rows"][0] == {"id": 0}
+                assert payload["rows"][-1] == {"id": expected - 1}
+                if expected < 2105:
+                    assert "dditional rows may match" in payload["message"]
+                else:
+                    assert payload["message"] is None
+            if via_mcp:
+                calls = await asyncio.gather(
+                    *(_request(client, "tools/call", {"name": "read_query", "arguments": {"sql": sql, **extra}}) for extra in ({}, {"max_rows": None}, {}, {"max_rows": 2100}))
+                )
+                assert [len(call.json()["result"]["structuredContent"]["rows"]) for call in calls] == [500, 2105, 500, 2100]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_rows,total,expected_count", [(500, 300, "300 rows matching"), (500, 600, "500 requested"), (None, 600, "Additional rows were omitted")])
+async def test_character_truncation_message_counts_and_complete_rows(tmp_path, metadata_store, tabular_app, max_rows, total, expected_count):
+    app, service = tabular_app
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="wide", file_name="wide.csv", content="id,label\n" + "\n".join(f"{i},valeur-é" for i in range(total)))
+    [dataset] = await service.list_datasets(_user())
+    service.tabular_config.query.max_output_chars = 200
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/tabular/query", json={"sql": f"SELECT * FROM {dataset.query_alias} ORDER BY id", "max_rows": max_rows})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    rows = payload["rows"]
+    assert 0 < len(rows) < 10
+    assert [row["id"] for row in rows] == list(range(len(rows)))
+    assert all(row["label"] == "valeur-é" for row in rows)
+    serialized = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    assert len(serialized) <= 200
+    assert len(json.dumps(rows + [{"id": len(rows), "label": "valeur-é"}], ensure_ascii=False, separators=(",", ":"))) > 200
+    assert expected_count in payload["message"]
+    assert "avoid saturating the model context" in payload["message"]
+    assert payload["error"] is None
+    assert response.text.index('"rows"') < response.text.index('"message"')
+
+
+@pytest.mark.asyncio
+async def test_first_oversized_row_is_not_reported_as_no_matches(tmp_path, metadata_store, tabular_app):
+    app, service = tabular_app
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="huge", file_name="huge.csv", content="id,label\n0," + "x" * 100 + "\n1,small\n")
+    [dataset] = await service.list_datasets(_user())
+    service.tabular_config.query.max_output_chars = 30
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/tabular/query", json={"sql": f"SELECT * FROM {dataset.query_alias} ORDER BY id", "max_rows": None})
+    payload = response.json()
+    assert payload["rows"] == []
+    assert "first row exceeds" in payload["message"]
+    assert "columns" in payload["message"]
+    assert "0 rows matched" not in payload["message"]
+    assert payload["error"] is None

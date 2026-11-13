@@ -149,8 +149,9 @@ const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: Sql
           <div className={styles.errorBox}>{data.error}</div>
         ) : (
           <>
-            {data.rows.length === 0 && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
+            {data.rows.length === 0 && !data.message && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
             <CodeBlock code={code} copyText={content} language="json" />
+            {typeof data.message === "string" && data.message && <p>{data.message}</p>}
             {(data.rows.length > ROW_PREVIEW_COUNT || preview.fieldsTruncated) && (
               <p className={`${styles.metaInfo} ${styles.previewNotice}`}>
                 {t("rework.chatTrace.tabular.queryPreview", {

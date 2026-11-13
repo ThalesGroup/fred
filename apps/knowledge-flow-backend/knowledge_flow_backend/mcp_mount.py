@@ -35,6 +35,7 @@ _REFERENCE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}
 _OPERATION_EXTENSION = "fred.mcp.operation"
 # Each transport dispatch owns its bag, including when ASGI creates child tasks.
 _operation: ContextVar[dict[str, str] | None] = ContextVar("fred_mcp_operation", default=None)
+_unlimited_query: ContextVar[bool] = ContextVar("fred_mcp_unlimited_query", default=False)
 
 
 class _DelegatedMCPTransport(httpx2.AsyncBaseTransport):
@@ -72,8 +73,11 @@ class _DelegatedMCPTransport(httpx2.AsyncBaseTransport):
                 body = json.loads(content)
             except (ValueError, UnicodeError):
                 body = None
-            if isinstance(body, dict) and any(name in body for name in GRANT_PARAM_NAMES):
+            restore_query_null = _unlimited_query.get() and request.url.path.endswith("/tabular/query")
+            if isinstance(body, dict) and (restore_query_null or any(name in body for name in GRANT_PARAM_NAMES)):
                 body = {name: value for name, value in body.items() if name not in GRANT_PARAM_NAMES}
+                if restore_query_null:
+                    body["max_rows"] = None
                 content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
                 headers.pop("transfer-encoding", None)
                 headers["content-length"] = str(len(content))
@@ -175,6 +179,10 @@ def _curate_tool(route: Any, tool: Any) -> None:
 
 class _ToolErrorPolicy(Middleware):
     async def on_call_tool(self, context: MiddlewareContext, call_next: Any) -> ToolResult:
+        # FastMCP's OpenAPI director drops explicit null body arguments.
+        # Keep read_query's null/omitted distinction local to this invocation.
+        arguments = context.message.arguments or {}
+        token = _unlimited_query.set(context.message.name == "read_query" and "max_rows" in arguments and arguments["max_rows"] is None)
         try:
             return await call_next(context)
         except Exception as exc:
@@ -195,6 +203,8 @@ class _ToolErrorPolicy(Middleware):
                 content=f"Error calling {context.message.name}. Status code: {status}. Response: {response.text}",
                 is_error=True,
             )
+        finally:
+            _unlimited_query.reset(token)
 
 
 def _mcp_http_client(app: FastAPI) -> httpx2.AsyncClient:

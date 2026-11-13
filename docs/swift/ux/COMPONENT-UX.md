@@ -884,6 +884,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   zero when the tool API reports none. Model billing and conversation context
   totals are unchanged. Unrelated streaming updates reuse the query preview.
 
+- **Tool-owned SQL result notices (2026-11-13)** - SQL details preserve the tool's
+  English result message after row data, including truncation that returns zero
+  rows. Historical empty results without a message retain their localized empty
+  success text. Result limits are specified in
+  [Tabular Query Safety](../../../openspec/specs/tabular-query-safety/spec.md).
+
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same
   payload validation and hiding of internal document IDs and SQL aliases apply.

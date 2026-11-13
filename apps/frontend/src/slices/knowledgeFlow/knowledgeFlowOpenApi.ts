@@ -3339,7 +3339,7 @@ export type RawSqlResponse = {
     [key: string]: any;
   }[];
   error?: string | null;
-  /** Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. */
+  /** Tool-owned success explanation after row data: character truncation, reached row limit, or no matching rows. Partial results are not execution errors. */
   message?: string | null;
   dataset_uids?: string[];
   query_aliases?: string[];
@@ -3360,7 +3360,7 @@ export type TabularQueryRequest = {
   owner_filter?: OwnerFilter | null;
   /** Team ID required when owner_filter is 'team'. */
   team_id?: string | null;
-  /** Maximum result rows to return, capped by the server. For totals or statistics, aggregate in SQL rather than counting this preview. */
+  /** Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {

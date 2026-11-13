@@ -844,3 +844,22 @@ describe("TraceDetailDrawer web research", () => {
     );
   });
 });
+
+describe("TraceDetailDrawer SQL result limits", () => {
+  it.each([{ rows: [] }, { rows: [{ id: 1 }] }])("shows the tool explanation after row data for %j", ({ rows }) => {
+    const notice = "The data volume was limited to avoid saturating the model context.";
+    const entry = tabularEntry("read_query", {
+      sql_query: "SELECT * FROM d_sales",
+      rows,
+      error: null,
+      message: notice,
+    });
+    for (const recorded of [entry, JSON.parse(JSON.stringify(entry)) as typeof entry]) {
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={recorded} onClose={() => undefined} />);
+      expect(html).toContain(notice);
+      expect(html.indexOf(notice)).toBeGreaterThan(html.indexOf('data-language="json"'));
+      expect(html).not.toContain("0 rows matched the conditions");
+      expect(html).toContain('data-status="success"');
+    }
+  });
+});

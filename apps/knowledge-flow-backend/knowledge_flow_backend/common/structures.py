@@ -934,14 +934,14 @@ class TabularQueryConfig(BaseModel):
         description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads.",
     )
     default_max_rows: int = Field(
-        default=200,
+        default=500,
         ge=1,
         description="Default preview row limit applied when callers omit max_rows.",
     )
-    max_rows: int = Field(
-        default=1000,
-        ge=1,
-        description="Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
+    max_output_chars: int = Field(
+        default=50000,
+        ge=2,
+        description="Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
     )
     max_concurrent_queries: int = Field(
         default=2,
@@ -973,6 +973,13 @@ class TabularQueryConfig(BaseModel):
         ge=1,
         description="Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_retired_row_ceiling(cls, values: object) -> object:
+        if isinstance(values, dict) and "max_rows" in values:
+            raise ValueError("query.max_rows is no longer supported. Use query.max_output_chars to bound result data.")
+        return values
 
 
 class TabularStoreConfig(BaseModel):

@@ -2533,17 +2533,17 @@
           "type": "integer"
         },
         "default_max_rows": {
-          "default": 200,
+          "default": 500,
           "description": "Default preview row limit applied when callers omit max_rows.",
           "minimum": 1,
           "title": "Default Max Rows",
           "type": "integer"
         },
-        "max_rows": {
-          "default": 1000,
-          "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-          "minimum": 1,
-          "title": "Max Rows",
+        "max_output_chars": {
+          "default": 50000,
+          "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+          "minimum": 2,
+          "title": "Max Output Chars",
           "type": "integer"
         },
         "max_concurrent_queries": {

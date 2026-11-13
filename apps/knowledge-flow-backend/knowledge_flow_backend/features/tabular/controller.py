@@ -237,13 +237,18 @@ class TabularController:
             contains document UIDs; one workbook UID selects all its tables.
             Only referenced authorized tables are mounted. At least one dataset
             alias is required; cross-table/document joins must stay within the
-            server's dataset limit. max_rows limits returned rows: compute
-            totals and aggregates in SQL instead of inferring them from previews.
+            server's dataset limit. Omit max_rows for the deployment default
+            (500 rows), pass JSON null for no tool-added row limit, or a positive
+            integer without a server row ceiling. SQL LIMIT remains effective.
+            A deployment character budget (default 50,000) always keeps only
+            complete rows. Compute totals and aggregates in SQL.
+            The tool's message after rows explains truncation or a reached row
+            limit; further rows can match when that limit is reached.
 
-            Returns sql_query, rows, error and dataset references. rows=[] with
-            error=null is a successful query with zero matching rows and an
-            explicit success message. A zero count or null aggregate is still a
-            row. Reuse successful results; inspect types/filters before changing
+            Returns sql_query, rows, error, message and dataset references.
+            error=null indicates success; inspect message to distinguish no
+            matches from zero returned rows because the first row exceeds the
+            character budget. A zero count or null aggregate is still a row. Reuse successful results; inspect types/filters before changing
             an unexpectedly empty query instead of repeating it unchanged.
 
             HTTP 400 requires correcting SQL/arguments; a memory-budget error
