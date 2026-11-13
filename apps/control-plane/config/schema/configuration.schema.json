@@ -287,7 +287,7 @@
     },
     "DeclaredModel": {
       "additionalProperties": false,
-      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
+      "description": "Chat is guaranteed by this declaration, except for embedding offers or a\nsource whose inference wire attests reranking.",
       "properties": {
         "context_window_tokens": {
           "format": "int64",

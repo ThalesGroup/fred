@@ -156,6 +156,7 @@ erDiagram
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, reranker_source_id, reranker_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
@@ -208,6 +209,8 @@ erDiagram
   timestamp_with_time_zone embedding_locked_at
   text vision_source_id FK
   text vision_upstream_model_id FK
+  text reranker_source_id FK
+  text reranker_upstream_model_id FK
 }
 
 "control_plane.organization_model_permission" {
@@ -248,7 +251,7 @@ One of: `discovery_only`, `discovery_and_inference`.
 
 ### DeclaredModel
 
-Chat is guaranteed by this declaration, except for an offer the source attests in `embedding_models`; an absent fact stays unknown.
+Chat is guaranteed by this declaration, except for embedding offers or a source whose inference wire attests reranking.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -351,9 +354,9 @@ Platform approval of one source. Contains references only, never secret values.
 
 ### ModelWire
 
-Generation protocol only. An attested embedding offer is always called at `{api_root}/embeddings`, the one embedding endpoint of these APIs.
+Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`; a rerank offer is called at `{api_root}/rerank`.
 
-One of: `openai_chat`, `openai_responses`.
+One of: `openai_chat`, `openai_responses`, `rerank`.
 
 ### OrganizationModels
 
@@ -365,6 +368,7 @@ One of: `openai_chat`, `openai_responses`.
 | `organization` | string | yes | Exact existing organization name, resolved using the provisioning SQL lookup. |
 | `permitted` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes |  |
 | `reasoning_enabled` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 |  |  |
+| `reranker` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `sources` | array of string, max items 64 | yes |  |
 | `vision` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 

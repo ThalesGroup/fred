@@ -45,17 +45,13 @@ jobs:
         include:
           - app: knowledge-flow-backend
             dir: apps/knowledge-flow-backend
-            uv_args: --extra dev
           - app: knowledge-flow-worker
             dir: apps/knowledge-flow-worker
-            uv_args: --extra dev
           - app: fred-agents
             dir: apps/fred-agents
-            uv_args: ""
           # The Knowledge Base pod configuration, embedded in the knowledge-base chart.
           - app: fred-sdk
             dir: libs/fred-sdk
-            uv_args: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -66,10 +62,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "0.13.5"
-
-      - name: Install dependencies
-        run: uv sync ${{ matrix.uv_args }}
-        working-directory: ${{ matrix.dir }}
 
       - name: Schema drift check
         run: make check-config-schema-drift
