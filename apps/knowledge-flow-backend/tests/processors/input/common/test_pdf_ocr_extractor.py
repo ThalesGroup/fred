@@ -14,6 +14,7 @@
 
 from pathlib import Path
 
+import pytest
 from fred_core.common import ModelConfiguration
 
 from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import (
@@ -45,12 +46,21 @@ def test_build_pdf_ocr_extractor_recognizes_mistral_ocr():
     assert isinstance(extractor, BasePdfOcrExtractor)
 
 
-def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_path: Path):
+@pytest.mark.parametrize(
+    ("dedicated_key", "expected_key"),
+    [("ocr-key", "ocr-key"), (" ", "test-key"), (None, "test-key")],
+)
+def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_path: Path, dedicated_key: str | None, expected_key: str):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    if dedicated_key is None:
+        monkeypatch.delenv("KNOWLEDGE_FLOW_OCR_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("KNOWLEDGE_FLOW_OCR_API_KEY", dedicated_key)
 
     requests: list[tuple[str, str, object, object]] = []
+    headers: list[dict[str, str]] = []
 
     class FakeResponse:
         def __init__(self, payload):
@@ -64,7 +74,7 @@ def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_p
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
-            pass
+            headers.append(kwargs["headers"])
 
         def __enter__(self):
             return self
@@ -115,3 +125,21 @@ def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_p
     assert requests[1][1] == "https://api.mistral.ai/v1/files/file-123/url"
     assert requests[2][1] == "https://api.mistral.ai/v1/ocr"
     assert requests[2][2]["include_image_base64"] is True
+    assert headers == [{"Authorization": f"Bearer {expected_key}"}]
+
+
+def test_mistral_pdf_ocr_extractor_requires_key_before_request(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("KNOWLEDGE_FLOW_OCR_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="KNOWLEDGE_FLOW_OCR_API_KEY"):
+        MistralPdfOcrExtractor(ModelConfiguration(provider="openai", name="mistral-ocr-latest"))
+
+
+def test_mistral_pdf_ocr_extractor_keeps_name_based_provider_selection(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fallback-key")
+    monkeypatch.delenv("KNOWLEDGE_FLOW_OCR_API_KEY", raising=False)
+
+    extractor = MistralPdfOcrExtractor(ModelConfiguration(provider="mistral", name="mistral-ocr-latest"))
+
+    assert extractor.api_key == "fallback-key"

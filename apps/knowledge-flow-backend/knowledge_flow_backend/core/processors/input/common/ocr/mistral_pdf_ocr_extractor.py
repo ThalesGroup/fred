@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from pathlib import Path
 from typing import Any, Dict
 
 import httpx
 from fred_core.common import ModelConfiguration
 
+from knowledge_flow_backend.common.model_api_keys import api_key_for_role
 from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import (
     BasePdfOcrExtractor,
     RemotePdfOcrImage,
@@ -65,9 +65,7 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
         self.settings: Dict[str, Any] = dict(ocr_cfg.settings or {})
         self.base_url = str(self.settings.get("base_url") or "https://api.mistral.ai/v1").rstrip("/")
         self.timeout = _resolve_timeout(self.settings)
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError(f"Missing OPENAI_API_KEY for remote OCR model '{ocr_cfg.name}'.")
+        self.api_key = api_key_for_role("ocr")
         self.signed_url_expiry_hours = int(self.settings.get("signed_url_expiry_hours") or 1)
         self.include_image_base64 = bool(self.settings.get("include_image_base64") or False)
 

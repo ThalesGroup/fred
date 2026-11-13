@@ -23,6 +23,7 @@ from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from knowledge_flow_backend.common.model_api_keys import openai_api_key_for_model
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,7 @@ def build_image_describer(
     if not vision_cfg:
         logger.info("No vision configuration found; images won't be described.")
         return None
-    model = get_model(vision_cfg)  # one constructor for all providers
+    model = get_model(vision_cfg, openai_api_key=openai_api_key_for_model(vision_cfg, "vision"))
     return VisionImageDescriber(model, system_prompt or VISION_DESCRIBE_PROMPT_V1, provider=vision_cfg.provider)
 
 
