@@ -96,6 +96,6 @@ def test_turn_quantities_aggregate_without_reindexing_old_documents(
             }
     finally:
         try:
-            client.indices.delete(index=index, ignore=[404])
+            client.indices.delete(index=index, params={"ignore": [404]})
         finally:
             client.close()

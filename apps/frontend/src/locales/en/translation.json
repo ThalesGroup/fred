@@ -2271,6 +2271,7 @@
       "staticFactors": "Static model factors from the Fred catalog, not measurements or billing. EUR uses the configured display rate, not a live market rate."
     },
     "teamUsage": {
+      "projectPageTitle": "Project usage",
       "personalSkillsSectionTitle": "My skill usage",
       "title": "My usage",
       "personalSectionTitle": "My usage",
@@ -5319,11 +5320,20 @@
       "continue": "Continue",
       "manage": "Manage connection"
     },
+    "consumption": {
+      "teamTitle": "Team consumption",
+      "projectTitle": "Project consumption",
+      "total_tokens": "Total tokens",
+      "input_tokens": "Input tokens",
+      "output_tokens": "Output tokens",
+      "cache_read_tokens": "Cache read tokens",
+      "cache_creation_tokens": "Cache creation tokens",
+      "recorded": "Totals cover received usage reports; collection completeness is unknown. Cache counters are included in input tokens and are not added to the total again."
+    },
     "personalAnalytics": {
       "organizationRequired": "Working organization unavailable. Select an organization from your account menu to view your usage.",
       "agent": "Agent",
       "observed": "Observed loads; collection completeness is unknown. Skills with the same name are grouped together.",
-      "total": "Total tokens: {{value}}",
       "chartOverflow": "These exact counters exceed the chart precision. Values are shown in the table.",
       "dimension": "Series",
       "truncated": "Ranking truncated to 100 entries. Totals and estimates cover all recorded usage."

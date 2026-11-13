@@ -21,13 +21,13 @@ export interface KpiStatCardProps {
   label: string;
   /** Short definition shown in an info bubble beside the label. */
   hint?: string;
-  /** Fixed number of decimals, e.g. 4 for a cost; locale default when unset. */
+  /** Decimals for number values, e.g. 4 for a cost; bigint counters remain integers. */
   fractionDigits?: number;
   tone?: StatusBadgeTone;
   loadingLabel?: string;
   errorLabel?: string;
   noDataLabel?: string;
-  value?: number | null;
+  value?: number | bigint | null;
   /** Secondary line under the value, shown only when the value is. */
   caption?: string;
   delta?: number | null;
@@ -83,10 +83,12 @@ export default function KpiStatCard({
       {hasValue && (
         <div className={styles.valueRow}>
           <span className={styles.value}>
-            {value!.toLocaleString(undefined, {
-              minimumFractionDigits: fractionDigits,
-              maximumFractionDigits: fractionDigits,
-            })}
+            {typeof value === "bigint"
+              ? value.toLocaleString()
+              : value!.toLocaleString(undefined, {
+                  minimumFractionDigits: fractionDigits,
+                  maximumFractionDigits: fractionDigits,
+                })}
           </span>
           {deltaLabel !== undefined && <span className={deltaClass}>{deltaLabel}</span>}
         </div>

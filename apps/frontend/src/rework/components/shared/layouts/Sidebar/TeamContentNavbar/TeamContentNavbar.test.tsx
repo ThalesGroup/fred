@@ -1,4 +1,3 @@
-vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => ({ organizationId: "org" }) }));
 // @vitest-environment happy-dom
 // Copyright Thales 2026
 //
@@ -19,6 +18,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+  working: { organizationId: "org" as string | undefined, loading: false, error: undefined as unknown },
+  membershipError: false,
   canManage: false,
   canRead: true,
   memberships: [] as {
@@ -57,13 +58,15 @@ const h = vi.hoisted(() => ({
   userPictureUrl: undefined as string | undefined,
 }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => h.working }));
+
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
     h.avatarQuery(skip);
     return { currentData: skip ? undefined : h.userPictureUrl };
   },
-  useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
+  useMySpacesQuery: () => ({ currentData: h.memberships, isError: h.membershipError }),
   useWikiAvailabilityQuery: (
     args: { spaceId: string },
     options: { skip: boolean; refetchOnMountOrArgChange: boolean },
@@ -145,6 +148,10 @@ vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div 
 import TeamContentNavbar from "./TeamContentNavbar.tsx";
 
 beforeEach(() => {
+  h.working = { organizationId: "org", loading: false, error: undefined };
+  h.membershipError = false;
+  h.relations = ["team_member"];
+  h.canManage = false;
   h.pathname = "/team/team-1/resources";
   h.memberships = [];
   h.canRead = true;
@@ -484,4 +491,84 @@ it("offers only member projects of the current team", () => {
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(html).toContain('href="/team/atlas"');
   expect(html).not.toContain('href="/team/other"');
+});
+
+describe("TeamContentNavbar collective usage", () => {
+  beforeEach(() => {
+    h.pathname = "/team/team-1/agents";
+    h.canRead = false;
+    h.canManage = false;
+    h.memberships = [{ id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["analyst"] }];
+  });
+
+  it.each([
+    { kind: "team", role: "owner" },
+    { kind: "team", role: "analyst" },
+    { kind: "project", role: "owner" },
+    { kind: "project", role: "analyst" },
+  ])("links $kind usage for a direct $role independently of content or management", ({ kind, role }) => {
+    h.memberships[0] = { ...h.memberships[0], kind, roles: [role] };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<TeamContentNavbar />);
+    const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+    expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+  });
+
+  it.each(["member", "editor", "organization_admin"])("does not infer usage from %s or legacy roles", (role) => {
+    h.memberships[0].roles = [role];
+    h.canRead = h.canManage = true;
+    h.relations = ["team_admin", "team_analyst"];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
+
+  it.each(["owner", "organization_admin"])("does not inherit the parent %s role", (role) => {
+    h.memberships[0].roles = ["member"];
+    h.memberships.push({ id: "org", kind: "organization", name: "Acme", organization_id: "org", roles: [role] });
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
+
+  it.each(["loading", "error", "missing", "other-organization", "membership-error", "revoked"])(
+    "hides the entry for %s context despite previously available roles",
+    (state) => {
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/usage"');
+      if (state === "loading") h.working.loading = true;
+      if (state === "error") h.working.error = new Error("unavailable");
+      if (state === "missing") h.working.organizationId = undefined;
+      if (state === "other-organization") h.working.organizationId = "other";
+      if (state === "membership-error") h.membershipError = true;
+      if (state === "revoked") h.memberships[0].roles = ["member"];
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+    },
+  );
+
+  it.each(["usage", "settings/members"])("keeps Analyst out of management links on %s", (route) => {
+    h.pathname = `/team/team-1/${route}`;
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/usage"');
+    expect(html).not.toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain('href="/team/team-1/settings/offers"');
+  });
+
+  it("keeps management and usage navigation together for an authorized Owner", () => {
+    h.memberships[0].roles = ["owner"];
+    h.canManage = true;
+    h.pathname = "/team/team-1/settings/members";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/usage"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).toContain('href="/team/team-1/settings/offers"');
+  });
+
+  it("preserves the personal shortcut without a collective link and excludes organizations", () => {
+    h.memberships[0].kind = "personal";
+    h.memberships[0].roles = ["owner"];
+    const personal = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(personal).toContain('title="rework.teamUsage.title"');
+    expect(personal).not.toContain('href="/team/team-1/usage"');
+    h.memberships[0].kind = "organization";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
 });

@@ -253,7 +253,7 @@ fn turn_result(
         _ => return Err(super::invalid("unsupported turn grouping")),
     };
     // Stable identity ordering comes from BTreeMap; stable sort preserves it for ties.
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by_key(|row| std::cmp::Reverse(row.1));
     let truncated = ranked.len() > q.limit.unwrap_or(100);
     ranked.truncate(q.limit.unwrap_or(100));
     let rows = if q.group_by.is_empty() {

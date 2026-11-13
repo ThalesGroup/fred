@@ -2271,6 +2271,7 @@
       "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
     "teamUsage": {
+      "projectPageTitle": "Usage du projet",
       "personalSkillsSectionTitle": "Mon utilisation des skills",
       "title": "Mon utilisation",
       "personalSectionTitle": "Ma consommation",
@@ -5319,11 +5320,20 @@
       "continue": "Continuer",
       "manage": "Gérer la connexion"
     },
+    "consumption": {
+      "teamTitle": "Consommation de l'équipe",
+      "projectTitle": "Consommation du projet",
+      "total_tokens": "Total des tokens",
+      "input_tokens": "Tokens en entrée",
+      "output_tokens": "Tokens en sortie",
+      "cache_read_tokens": "Tokens lus en cache",
+      "cache_creation_tokens": "Tokens de création du cache",
+      "recorded": "Les totaux couvrent les rapports de consommation reçus ; l'exhaustivité de la collecte est inconnue. Les compteurs de cache sont inclus dans les tokens en entrée, sans être ajoutés une seconde fois au total."
+    },
     "personalAnalytics": {
       "organizationRequired": "Organisation de travail indisponible. Sélectionnez une organisation dans le menu de votre compte pour consulter votre consommation.",
       "agent": "Agent",
       "observed": "Chargements observés ; complétude de collecte inconnue. Les skills de même nom sont regroupés.",
-      "total": "Total des tokens : {{value}}",
       "chartOverflow": "Ces compteurs exacts dépassent la précision du graphique. Les valeurs sont affichées dans le tableau.",
       "dimension": "Série",
       "truncated": "Classement limité à 100 entrées. Les totaux et estimations couvrent toute la consommation enregistrée."

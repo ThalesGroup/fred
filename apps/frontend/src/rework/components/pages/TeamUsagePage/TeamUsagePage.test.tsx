@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Focus: the new team sections (KPI-ANALYTICS-RFC.md §2.5 Page 2) are
-// capability-conditional, in-page gating with no route guard
-// (FRONTEND-AUTHZ-PATTERN.md). `useTeamCapabilities`/`hasElevatedTeamRole`
-// run for real here (pure functions over `TeamPermission[]`) so each test
-// only has to set the permission array a real backend would return for that
-// role, rather than hand-picking booleans that could drift from the mapping.
+// Legacy sections keep their Swift permission gates independently of Weaver
+// consumption. The capability mapping runs unchanged over server permissions;
+// collectiveUsage.test.tsx exercises Weaver authority and the generated client.
 
 import { skipToken } from "@reduxjs/toolkit/query";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -66,6 +63,7 @@ vi.mock("@core/hooks/useWorkingOrganization", () => ({
         {
           id: h.selected.teamId,
           organization_id: h.organization.organizationId,
+          roles: ["member"],
           kind: h.weaverKind ?? (h.selected.isPersonalTeam ? "personal" : "team"),
         },
       ],
@@ -126,9 +124,6 @@ vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements
   useDocumentsTotalQuery: h.neutralQuery,
   useSessionsOverTimeQuery: h.neutralQuery,
   useStorageByTeamQuery: h.neutralQuery,
-  useTokenUsageOverTimeQuery: h.neutralQuery,
-  useTokenUsageByAgentQuery: h.neutralQuery,
-  useTokenUsageByModelQuery: h.neutralQuery,
   useTopAgentsByConversationsQuery: h.neutralQuery,
 }));
 
@@ -138,7 +133,7 @@ function render(): string {
   return renderToStaticMarkup(<TeamUsagePage />);
 }
 
-describe("TeamUsagePage capability-conditional sections (§2.5 Page 2)", () => {
+describe("TeamUsagePage retained legacy sections and personal usage", () => {
   it("shows only the personal section and the personal title for a plain team_member (no elevated role)", () => {
     h.selected = { teamId: "team-1", selectedTeam: team(["can_read", "can_use_team_agents"]), isPersonalTeam: false };
     const html = render();
@@ -362,8 +357,9 @@ it("uses the shared working organization for both personal batches after a switc
       h.organization.organizationId = organizationId;
       h.analytics.mockClear();
       render();
-      expect(h.analytics).toHaveBeenCalledTimes(2);
+      expect(h.analytics).toHaveBeenCalledTimes(3);
       for (const [args] of h.analytics.mock.calls) {
+        if (args === skipToken) continue;
         for (const query of args.analyticsRequest.queries)
           expect(query.scope).toEqual({ kind: "self", organization_id: organizationId });
       }
@@ -384,7 +380,7 @@ it.each([
   try {
     const html = render();
     expect(html).toContain("rework.personalAnalytics.organizationRequired");
-    expect(h.analytics).toHaveBeenCalledTimes(2);
+    expect(h.analytics).toHaveBeenCalledTimes(3);
     for (const [args] of h.analytics.mock.calls) expect(args).toBe(skipToken);
   } finally {
     h.organization = previous;

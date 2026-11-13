@@ -123,9 +123,11 @@ not assert complete collection. An exchange counts at its first consumption,
 including generated titles; it is not a count of user messages. Human-validation
 resumes add tokens at their consumption time without counting that exchange again.
 
-Automated checks exercise the backend read contract and its personal-screen wiring.
-Functional browser reception remains separate; collective dashboards keep their
-historical read paths.
+Consumption and its cost/impact estimates share the same read contract across
+personal, team and project views. The collective screen wiring is implemented;
+quality checks, tests and browser reception for that wiring remain Dimi's validation
+step. Other collective indicators retain their historical read paths and access
+rules. This does not establish full dashboard migration or collection completeness.
 The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
 its limits and verification sources.
 

@@ -5,6 +5,7 @@ import type {
   AnalyticsQuery,
   AnalyticsResult,
   AnalyticsRow,
+  AnalyticsScope,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 
@@ -23,6 +24,11 @@ export function personalQueries(range: TimeRange, organizationId: string, histor
         limit: 100,
       },
     ];
+  return consumptionQueries(range, base.scope);
+}
+
+export function consumptionQueries(range: TimeRange, scope: AnalyticsScope): AnalyticsQuery[] {
+  const base = { scope, time: { since: range.since, until: range.until, timezone: "UTC" } } as const;
   return [
     {
       ...base,

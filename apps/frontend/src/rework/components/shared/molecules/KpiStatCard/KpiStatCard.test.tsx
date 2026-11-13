@@ -91,3 +91,11 @@ it("shows the caption under the value, including a zero value, and hides it whil
     act(() => root.unmount());
   }
 });
+
+it.each([0n, 9007199254740993n])("formats bigint %s as an exact integer even with decimal options", (value) => {
+  const html = renderToStaticMarkup(
+    <KpiStatCard label="Tokens" value={value} fractionDigits={4} isLoading={false} isError={false} />,
+  );
+  expect(html).toContain(`>${value.toLocaleString()}</span>`);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) expect(html).not.toContain(Number(value).toLocaleString());
+});

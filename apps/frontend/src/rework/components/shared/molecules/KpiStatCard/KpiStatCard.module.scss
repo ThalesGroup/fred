@@ -45,9 +45,11 @@
   display: flex;
   justify-content: center;
   align-items: center;
+  min-width: 0;
   color: var(--on-surface);
   font: var(--font-headline-small-emphasized);
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .valueRow {
