@@ -1453,6 +1453,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
@@ -1493,6 +1494,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
                 session_id=runtime_context.session_id,
                 include_session_scope=include_session_scope,
                 include_corpus_scope=include_corpus_scope,
+                rerank=rerank,
             )
         except Exception as exc:
             # Same SDK-typed mapping the tree/summarize adapters already apply:

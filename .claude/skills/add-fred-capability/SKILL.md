@@ -100,6 +100,8 @@ config, turn options, and services reach the tool through the middleware closure
 `CapabilityContext` — never the tool schema. The per-turn binding and raw access token
 **never** enter `CapabilityContext`; platform access is only through typed
 `RuntimeServices` ports. `document_access` is the reference for all of this.
+`DocumentSearchPort.search(..., rerank=True)` opts into Knowledge Flow reranking
+after authorized retrieval; the port default is false for other callers.
 For conversation files, use `ctx.services.conversation_filesystem` with absolute virtual paths.
 Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
 see `AUTHORING.md` for the permission and mount contract.

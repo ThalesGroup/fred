@@ -1301,6 +1301,14 @@ with library patch versions. `fred-sdk` and `fred-runtime` advance to `4.4.2`,
 and document access requires that SDK floor. Publish the libraries after merge
 before updating external consumers.
 
+**Amendment (2026-11-13, Knowledge Flow reranking).** `search()` gains the
+additive `rerank: bool = False` keyword. The runtime adapter forwards it with
+the existing source ceilings to Knowledge Flow's `/vector/search`. The
+`document_access` advanced setting defaults to true, including for stored
+configurations without the field. Knowledge Flow reranks only visible hits;
+the flag does not expose a separate model-callable tool or change the port's
+identity boundary.
+
 `corpus_only` retains its wire name but means "Documents only": session
 attachments and team documents, intersected with the agent's ceilings and any
 explicit turn scope flags. It remains available when either source is enabled.
