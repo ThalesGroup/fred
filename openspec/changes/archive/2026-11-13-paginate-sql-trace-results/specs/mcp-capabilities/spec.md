@@ -49,6 +49,8 @@ Opening a supported tabular query step SHALL expose its recorded SQL and query s
 
 The tabular tool drawer MUST NOT label a model request's complete prompt or completion counters as tokens sent or received by an individual tool. This applies to requesting, following and historical model-response metadata, including shared tool batches. The drawer SHALL omit per-tool token counters rather than substitute global model usage, derive an estimate or claim zero consumption. The drawer SHALL retain status, duration, SQL, bounded syntax-colored results and complete supported-copy behavior, without an added model-usage explanation paragraph.
 
+New tool-call/final events and newly written history SHALL NOT include the dedicated `model_call_usage` attribution introduced for tool-token display. Established accumulated `token_usage` and final `context_tokens` SHALL retain their conversation-accounting meaning. Historical messages containing retired optional attribution metadata SHALL remain readable without a database rewrite.
+
 #### Scenario: One returned row and large model context
 - **GIVEN** a tabular query returns one row without tool-specific API usage
 - **AND** the following model response reports 59260 input and 12426 output tokens
@@ -69,7 +71,6 @@ The tabular tool drawer MUST NOT label a model request's complete prompt or comp
 - **THEN** its full request and response usage is not presented as the consumption of each tool
 - **AND** existing conversation accounting remains unchanged
 
-New tool-call/final events and newly written history SHALL NOT include the dedicated `model_call_usage` attribution introduced for tool-token display. Established accumulated `token_usage` and final `context_tokens` SHALL retain their conversation-accounting meaning. Historical messages containing retired optional attribution metadata SHALL remain readable without a database rewrite.
 
 #### Scenario: Retired attribution and preserved accounting
 - **WHEN** the runtime executes sequential or parallel tool calls and writes the completed turn
