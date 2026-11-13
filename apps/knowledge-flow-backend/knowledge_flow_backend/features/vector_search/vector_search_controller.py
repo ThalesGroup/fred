@@ -16,7 +16,6 @@ import logging
 from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.concurrency import run_in_threadpool
 from fred_core import (
     DocumentPermission,
     KeycloakUser,
@@ -28,6 +27,7 @@ from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import get_kpi_writer, get_rebac_engine
+from knowledge_flow_backend.features.vector_search.reranker import RerankerUnavailable
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, SimilaritySearchRequest, VisualEvidenceArtifactResponse
 
@@ -95,8 +95,11 @@ class VectorSearchController:
                         session_id=request.session_id,
                         include_session_scope=request.include_session_scope,
                         include_corpus_scope=request.include_corpus_scope,
+                        rerank=request.rerank,
                     )
                 return hits
+            except RerankerUnavailable:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="reranker_unavailable") from None
             except Exception as e:
                 logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -138,6 +141,8 @@ class VectorSearchController:
                         rerank=request.rerank,
                         min_score=request.min_score,
                     )
+            except RerankerUnavailable:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="reranker_unavailable") from None
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
             except Exception as e:
@@ -235,7 +240,7 @@ class VectorSearchController:
 
         @router.post(
             "/vector/rerank",
-            tags=["Vector Search"],
+            tags=["Vector Rerank"],
             summary="Sort documents according to their relevance",
             description="Returns a list of VectorSearchHit sorted by relevance",
             response_model=List[VectorSearchHit],
@@ -252,11 +257,9 @@ class VectorSearchController:
             rebac = get_rebac_engine()
             for document_uid in {hit.uid for hit in request.documents}:
                 await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
-            async with phase_timer(self.kpi, "vector_rerank"):
-                documents = await run_in_threadpool(
-                    self.service.rerank_documents,
-                    question=request.question,
-                    documents=request.documents,
-                    top_r=request.top_r,
-                )
+            try:
+                async with phase_timer(self.kpi, "vector_rerank"):
+                    documents = await self.service.rerank_documents(request.question, request.documents, request.top_r)
+            except RerankerUnavailable:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="reranker_unavailable") from None
             return documents

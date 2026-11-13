@@ -397,6 +397,14 @@ crossencoder_model:
     online: true
     local_path: ~/.cache/huggingface/hub
 
+# Optional remote reranker. Omit to use the local CrossEncoder above.
+# reranker_model:
+#   provider: rerank
+#   name: remote-reranker
+#   settings:
+#     base_url: https://models.example/v1
+#     api_key_env: RERANKER_API_KEY
+
 storage:
   postgres:
     sqlite_path: "~/.fred/knowledge-flow/knowledge-flow.db"

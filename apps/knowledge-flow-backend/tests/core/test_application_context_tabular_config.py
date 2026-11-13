@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
+
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
 from fred_core.common import DuckdbStoreConfig, ModelConfiguration, PostgresStoreConfig
@@ -23,10 +25,65 @@ from knowledge_flow_backend.common.structures import (
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
+    RerankerModelConfiguration,
     SchedulerConfig,
     StorageConfig,
     TemporalSchedulerConfig,
 )
+
+RERANKER_CREDENTIAL_ENV = f"RERANKER_TEST_{uuid.uuid4().hex.upper()}"
+
+
+def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch):
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    assert config.reranker_model is None
+
+    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, str(uuid.uuid4()))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+    }
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model == RerankerModelConfiguration.model_validate(payload["reranker_model"])
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"provider": "openai"},
+        {"name": ""},
+        {"settings": {"base_url": "file:///etc/passwd", "api_key_env": RERANKER_CREDENTIAL_ENV}},
+        {"settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV + "-invalid"}},
+    ],
+)
+def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, override):
+    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    remote = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+    }
+    remote.update(override)
+    payload["reranker_model"] = remote
+    with pytest.raises(ValueError):
+        Configuration.model_validate(payload)
+
+
+def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch):
+    monkeypatch.delenv(RERANKER_CREDENTIAL_ENV, raising=False)
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+    }
+    with pytest.raises(ValueError, match="Remote reranker API credential is missing"):
+        Configuration.model_validate(payload)
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
