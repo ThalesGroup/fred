@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
+
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
 from fred_core.common import DuckdbStoreConfig, ModelConfiguration, PostgresStoreConfig
@@ -34,7 +36,7 @@ def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monke
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     assert config.reranker_model is None
 
-    monkeypatch.setenv("TEST_RERANKER_KEY", "test-key")
+    monkeypatch.setenv("TEST_RERANKER_KEY", str(uuid.uuid4()))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
         "provider": "rerank",
@@ -55,7 +57,7 @@ def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monke
     ],
 )
 def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, override):
-    monkeypatch.setenv("TEST_RERANKER_KEY", "test-key")
+    monkeypatch.setenv("TEST_RERANKER_KEY", str(uuid.uuid4()))
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     remote = {

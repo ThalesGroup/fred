@@ -2114,6 +2114,7 @@
       "additionalProperties": false
     },
     "RerankerModelConfiguration": {
+      "additionalProperties": false,
       "description": "Configure a remote reranker with the usual provider/name/settings shape.",
       "properties": {
         "provider": {
@@ -2136,10 +2137,10 @@
         "settings"
       ],
       "title": "RerankerModelConfiguration",
-      "type": "object",
-      "additionalProperties": false
+      "type": "object"
     },
     "RerankerSettings": {
+      "additionalProperties": false,
       "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
       "properties": {
         "base_url": {
@@ -2159,8 +2160,7 @@
         "api_key_env"
       ],
       "title": "RerankerSettings",
-      "type": "object",
-      "additionalProperties": false
+      "type": "object"
     },
     "SchedulerBackend": {
       "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```",
