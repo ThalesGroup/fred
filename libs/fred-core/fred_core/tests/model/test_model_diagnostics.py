@@ -17,11 +17,16 @@ from fred_core.model.http_clients import get_shared_stack, shutdown_shared_clien
 
 
 @pytest.mark.parametrize("allow_ids", [False, True])
-def test_headers_are_allowlisted_and_body_not_read(allow_ids):
+@pytest.mark.parametrize(
+    ("status", "correlation"),
+    [(200, "gateway-id"), (400, "gateway-id"), (500, "https://private/?secret=value")],
+)
+def test_headers_are_allowlisted_and_body_not_read(allow_ids, status, correlation):
     response = httpx.Response(
-        200,
+        status,
         headers={
             "x-request-id": "synthetic-id",
+            "x-correlation-id": correlation,
             "apim-request-id": "https://private/?secret=value",
             "set-cookie": "private-cookie",
             "authorization": "private-header",
@@ -35,8 +40,9 @@ def test_headers_are_allowlisted_and_body_not_read(allow_ids):
     finally:
         active_model_http.reset(token)
     assert not response.is_stream_consumed
-    assert observation.fields["http_status"] == 200
+    assert observation.fields["http_status"] == status
     assert ("x_request_id" in observation.fields) == allow_ids
+    assert ("x_correlation_id" in observation.fields) == (allow_ids and status == 400)
     assert "private" not in repr(observation.fields)
     response.close()
 
