@@ -1,10 +1,10 @@
 ---
 schema: 1
 title: "Show progress while an agent's PowerPoint template is prepared"
-impact: none
+impact: minor
 configuration: local
 configuration_reason: "The local fred-agents production YAML now pins the Temporal endpoint and PPT preparation limits; deployed chart values and defaults do not change."
-no_action_reason: "Existing upload and analysis APIs are unchanged; the indicators appear after a normal deployment."
+impact_reason: "Agent template selection now uses temporary preparation records and new team-scoped upload endpoints."
 ---
 
 ## Applicability
@@ -25,18 +25,23 @@ the runtime and control-plane sides and configures Knowledge Flow vision.
 
 ## Upgrade
 
-Deploy Fred normally; no additional operator or user action is required.
+Apply the control-plane Alembic migration before deploying the new frontend.
+Deploy the updated control-plane API, fred-agents worker, and frontend together.
+Older clients may continue to use the existing upload-on-save route.
 
 ## Validation
 
-Upload a PowerPoint template override and save the agent. The form shows upload
-progress and says the window can be closed. The agent card shows preparation
-progress until
-the template analysis succeeds or fails.
+Select a PowerPoint template override during agent creation or editing. The form
+shows transfer and preparation progress immediately, without saving. The
+fred-agents worker starts analysis after the transfer. Close and reopen the form
+to check progress, then save to attach the prepared template to the agent.
 
 ## Rollback
 
-Use the normal rollback procedure; this change introduces no data migration.
+Rollback the frontend first, then the API and worker. The existing upload-on-save
+route remains available. The additive migration can remain in place during a
+code rollback. Its downgrade requires all temporary draft rows and assets to be
+cleaned before the draft owner-kind constraints can be removed.
 
 ## Limitations
 

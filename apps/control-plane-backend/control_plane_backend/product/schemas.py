@@ -1045,6 +1045,10 @@ class CreateAgentInstanceRequest(BaseModel):
             "verbatim. Values for unselected capabilities are ignored."
         ),
     )
+    capability_preparation_drafts: dict[str, str] | None = Field(
+        default=None,
+        description="Current preparation draft IDs keyed by selected capability.",
+    )
     recommended_chat_profile_id: str | None = Field(
         default=None,
         description=(
@@ -1123,6 +1127,10 @@ class UpdateAgentInstanceRequest(BaseModel):
             "capability's effective config is re-validated by the source pod "
             "and the returned stored envelope is persisted verbatim."
         ),
+    )
+    capability_preparation_drafts: dict[str, str] | None = Field(
+        default=None,
+        description="Current preparation draft IDs keyed by selected capability.",
     )
     recommended_chat_profile_id: str | None = Field(
         default=None,

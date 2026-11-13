@@ -94,6 +94,8 @@ function status(overrides: Partial<AnalysisStatusResponse>): AnalysisStatusRespo
 function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> = {}): PptBuilderAnalysis {
   return {
     phase,
+    temporary: false,
+    temporarySummary: null,
     statusLoading: false,
     stagedFile: undefined,
     hasPersistedTemplate: true,

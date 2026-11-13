@@ -130,6 +130,9 @@ async def persist_agent_preparations(
     selected_ids: Sequence[str],
     capability_config: Mapping[str, dict[str, object]],
     staged: Sequence[StagedAsset],
+    draft_ids: Mapping[str, str] | None = None,
+    draft_author_id: str | None = None,
+    draft_target_id: str | None = None,
 ) -> None:
     """Upsert current intentions in the same transaction as the agent revision."""
     current_rows = (
@@ -153,6 +156,8 @@ async def persist_agent_preparations(
         for entry in available
         if entry.preparation is not None and entry.id in selected_ids
     }
+    if draft_ids and (set(draft_ids) - set(declarations)):
+        raise ValueError("A draft targets an unselected preparation capability")
     for cap_id, row in current.items():
         if cap_id not in declarations:
             row.is_current = False
@@ -215,6 +220,8 @@ async def persist_agent_preparations(
             raise ValueError("Preparation config must be an object")
         full_config: dict[str, object] = dict(raw_config)
         if spec.activation_field and not full_config.get(spec.activation_field):
+            if draft_ids and cap_id in draft_ids:
+                raise ValueError("A draft requires an active preparation setting")
             if previous is not None:
                 previous.is_current = False
                 previous.superseded_at = utcnow()
@@ -226,11 +233,35 @@ async def persist_agent_preparations(
             if spec.config_fields is not None
             else full_config
         )
-        if len(assets) < spec.min_assets:
-            raise ValueError("Preparation requires an uploaded asset")
         serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))
         if len(serialized.encode("utf-8")) > 128 * 1024:
             raise ValueError("Preparation config exceeds 128 KiB")
+        if draft_ids and cap_id in draft_ids:
+            if (
+                new_assets
+                or not spec.supports_drafts
+                or not draft_author_id
+                or not draft_target_id
+            ):
+                raise ValueError("Invalid preparation draft adoption")
+            from control_plane_backend.capability_preparations.drafts import adopt_draft
+
+            await adopt_draft(
+                session,
+                draft_id=draft_ids[cap_id],
+                team_id=team_id,
+                author_id=draft_author_id,
+                target_id=draft_target_id,
+                agent_id=owner_id,
+                runtime_id=runtime_id,
+                capability_id=cap_id,
+                spec=spec,
+                config=config,
+                previous=previous,
+            )
+            continue
+        if len(assets) < spec.min_assets:
+            raise ValueError("Preparation requires an uploaded asset")
         if (
             previous is not None
             and previous.rules_version == spec.rules_version

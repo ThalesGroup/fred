@@ -1173,6 +1173,44 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.cleanupCompletion,
         }),
       }),
+    postTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost: build.mutation<
+      PostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostApiResponse,
+      PostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/capability-preparation-drafts`,
+        method: "POST",
+        body: queryArg.bodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost,
+      }),
+    }),
+    getTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGet: build.query<
+      GetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetApiResponse,
+      GetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/capability-preparation-drafts/${queryArg.draftId}`,
+      }),
+    }),
+    deleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDelete:
+      build.mutation<
+        DeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteApiResponse,
+        DeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/capability-preparation-drafts/${queryArg.draftId}`,
+          method: "DELETE",
+        }),
+      }),
+    postTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPost:
+      build.mutation<
+        PostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostApiResponse,
+        PostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/capability-preparation-drafts/${queryArg.draftId}/retry`,
+          method: "POST",
+        }),
+      }),
     bootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPost: build.mutation<
       BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse,
       BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
@@ -3278,6 +3316,32 @@ export type CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparation
     preparationId: string;
     cleanupCompletion: CleanupCompletion;
   };
+export type PostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostApiResponse =
+  /** status 201 Successful Response */ DraftPreparationStatus;
+export type PostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostApiArg = {
+  teamId: string;
+  bodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost: BodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost;
+};
+export type GetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetApiResponse =
+  /** status 200 Successful Response */ DraftPreparationStatus;
+export type GetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetApiArg = {
+  teamId: string;
+  draftId: string;
+};
+export type DeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteApiResponse =
+  unknown;
+export type DeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteApiArg =
+  {
+    teamId: string;
+    draftId: string;
+  };
+export type PostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostApiResponse =
+  /** status 200 Successful Response */ DraftPreparationStatus;
+export type PostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostApiArg =
+  {
+    teamId: string;
+    draftId: string;
+  };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
@@ -4978,6 +5042,7 @@ export type PreparationSpec = {
   public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
+  supports_drafts?: boolean;
   max_input_bytes?: number;
   max_attempts?: number;
   timeout_seconds?: number;
@@ -5170,6 +5235,10 @@ export type CreateAgentInstanceRequest = {
       [key: string]: any;
     };
   } | null;
+  /** Current preparation draft IDs keyed by selected capability. */
+  capability_preparation_drafts?: {
+    [key: string]: string;
+  } | null;
   /** Optional recommended chat profile. Must be a chat profile the team can use and has not disabled, served by the template's pod (else 422). Null follows the team default. */
   recommended_chat_profile_id?: string | null;
 };
@@ -5231,6 +5300,10 @@ export type UpdateAgentInstanceRequest = {
     [key: string]: {
       [key: string]: any;
     };
+  } | null;
+  /** Current preparation draft IDs keyed by selected capability. */
+  capability_preparation_drafts?: {
+    [key: string]: string;
   } | null;
   /** Recommended chat profile. Omit to leave it unchanged; pass null to follow the team default. Validated like on create. */
   recommended_chat_profile_id?: string | null;
@@ -5722,7 +5795,7 @@ export type PreparationStatusPage = {
 };
 export type PreparationWork = {
   preparation_id: string;
-  owner_kind: "agent" | "platform";
+  owner_kind: "agent" | "platform" | "draft";
   owner_id: string;
   runtime_id: string;
   capability_id: string;
@@ -5755,6 +5828,24 @@ export type WorkerPreparationResult = {
 };
 export type CleanupCompletion = {
   claim_id: string;
+};
+export type DraftPreparationStatus = {
+  draft_id: string;
+  expires_at: string;
+  preparation: PreparationStatus;
+  config: {
+    [key: string]: any;
+  };
+};
+export type BodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost = {
+  target_kind: string;
+  target_id: string;
+  capability_id: string;
+  slot_key: string;
+  group_id: string;
+  generation: number;
+  config_json: string;
+  file: string;
 };
 export type BootstrapPlatformAdminResponse = {
   /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
@@ -7239,6 +7330,11 @@ export const {
   useLazyGetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetQuery,
   usePostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostMutation,
   useCompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostMutation,
+  usePostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostMutation,
+  useGetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetQuery,
+  useLazyGetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetQuery,
+  useDeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteMutation,
+  usePostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,

@@ -16,7 +16,8 @@
 // the agent once it ends (so it leaves "preparing"), and writes the overrides.
 // A re-run is a save too: only the save carries the labelling model.
 
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { PptBuilderUploadContext } from "./PptBuilderUploadContext";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
@@ -56,6 +57,7 @@ const NO_OVERRIDES: PatternOverride[] = [];
 export type AnalysisPhase =
   | "builtin" // no template: the platform default is used (the built-in one unless replaced)
   | "staged" // a file is picked; it is analysed after the save
+  | "uploading"
   | "unknown" // a template is saved but its analysis cannot be read (yet)
   | AnalysisStatusResponse["status"];
 
@@ -90,6 +92,8 @@ interface Args {
 
 export interface PptBuilderAnalysis {
   phase: AnalysisPhase;
+  temporary: boolean;
+  temporarySummary: string | null;
   /** The saved template's status is still being fetched for the first time. */
   statusLoading: boolean;
   stagedFile: File | undefined;
@@ -125,6 +129,7 @@ export function usePptBuilderAnalysis({
   assetFiles,
   onAssetFileChange,
 }: Args): PptBuilderAnalysis {
+  const upload = useContext(PptBuilderUploadContext);
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const stagedFile = assetFiles[TEMPLATE_SLOT];
   const templateSha = readTemplateSha(configValues);
@@ -141,8 +146,8 @@ export function usePptBuilderAnalysis({
   const status = statusQuery.data;
   const [retryPreparation, { isLoading: retrying }] =
     usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation();
-  const phase = analysisPhase({ stagedFile, templateSha, status });
-  const refreshing = phase === "succeeded" && status?.refreshing === true;
+  const phase = stagedFile && upload ? upload.phase : analysisPhase({ stagedFile, templateSha, status });
+  const refreshing = !upload && phase === "succeeded" && status?.refreshing === true;
   const usesBuiltin = phase === "builtin";
   // Without a template of its own the agent builds on the platform default:
   // the administrator's once analysed, else the built-in one.
@@ -161,7 +166,7 @@ export function usePptBuilderAnalysis({
   // "preparing" suspension without waiting for the next listing.
   const [readinessCheck] = useAgentReadinessCheckMutation();
   useEffect(() => {
-    if (!teamId || !agentInstanceId || !status || isInProgress(phase) || phase === "unknown") return;
+    if (upload || !teamId || !agentInstanceId || !status || isInProgress(phase) || phase === "unknown") return;
     const key = `${status.template_sha256}:${status.status}:${status.updated_at}`;
     if (checkedAnalysis.get(agentInstanceId) === key) return;
     checkedAnalysis.set(agentInstanceId, key);
@@ -170,10 +175,10 @@ export function usePptBuilderAnalysis({
       .catch(() => {
         if (checkedAnalysis.get(agentInstanceId) === key) checkedAnalysis.delete(agentInstanceId);
       });
-  }, [teamId, agentInstanceId, status, phase, readinessCheck]);
+  }, [teamId, agentInstanceId, status, phase, readinessCheck, upload]);
 
   const inventory: TemplateInventory | null =
-    phase === "succeeded"
+    phase === "succeeded" && !upload
       ? (status?.inventory ?? null)
       : usesBuiltin
         ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
@@ -201,19 +206,22 @@ export function usePptBuilderAnalysis({
         ? { kind: "platform" }
         : null
       : { kind: "builtin" }
-    : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
+    : phase === "succeeded" && !upload && status?.has_thumbnails && agentInstanceId
       ? { kind: "analysis", instanceId: agentInstanceId, teamId }
       : null;
 
   return {
     phase,
+    temporary: !!stagedFile && !!upload,
+    temporarySummary: upload?.summary ?? null,
     statusLoading: statusQuery.isFetching,
     stagedFile,
     hasPersistedTemplate: templateSha !== null,
-    error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
-    canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
+    error: upload?.error ?? (phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null),
+    canRerun: !!upload?.retry || (Boolean(agentInstanceId) && canRerun(phase, status)),
     retry:
-      phase === "failed" && status?.labelling_key === "shared" && teamId && agentInstanceId
+      upload?.retry ??
+      (phase === "failed" && status?.labelling_key === "shared" && teamId && agentInstanceId
         ? async () => {
             setRetryFailed(false);
             try {
@@ -223,8 +231,8 @@ export function usePptBuilderAnalysis({
               setRetryFailed(true);
             }
           }
-        : null,
-    retrying,
+        : null),
+    retrying: retrying || !!upload?.retrying,
     retryFailed,
     refreshing,
     platformTemplate: platform ? { filename: platform.template_filename ?? null } : null,

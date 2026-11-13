@@ -127,8 +127,9 @@ scatter and bubble charts; a pie shows percentages unless you give a unit
 slide, its kind, and what was shortened, left out or continued on another
 slide.
 
-**How to set it up** — upload a `.pptx` template on the agent and save. The
-template is then read in the background: meanwhile the agent shows
+**How to set it up** - select a `.pptx` template in the agent form. Upload and
+reading start immediately. You can close the form while they continue. Save
+the agent to use the prepared template. While an adopted reading continues, the agent shows
 **Preparing — reading the PowerPoint template** and is not available; it will
 be available again on its own in a few minutes, when the reading is done, and
 you can close the window in the meantime. Then

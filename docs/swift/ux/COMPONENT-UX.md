@@ -3335,7 +3335,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
-- **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
+- **State isolation** - `FormState` resets on modal close unless a PowerPoint template upload is in progress. The in-flight upload and form state survive closing and reopening the same agent form; changing the target resets them. Template change resets tuning values.
 
 ---
 

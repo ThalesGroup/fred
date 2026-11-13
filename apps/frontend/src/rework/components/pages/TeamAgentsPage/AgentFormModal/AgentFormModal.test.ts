@@ -43,6 +43,7 @@ const EMPTY_CAPABILITY_STATE = {
   selectedCapabilityIds: [] as string[],
   capabilityConfigValues: {} as Record<string, Record<string, unknown>>,
   capabilityAssetFiles: {} as Record<string, Record<string, File | undefined>>,
+  capabilityPreparationDrafts: {} as Record<string, string>,
   capabilityBlockingErrors: {} as Record<string, string | null>,
 };
 

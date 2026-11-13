@@ -224,6 +224,12 @@ export function AnalysisStatus({
   const { agentsNicknameSingular } = useFrontendProperties();
   const { phase } = analysis;
 
+  if (phase === "uploading")
+    return (
+      <p className={styles.status} role="status">
+        <Spinner size={16} decorative /> {t("capability.ppt_builder.analysis.uploading", { agentsNicknameSingular })}
+      </p>
+    );
   if (phase === "staged")
     return submitting ? (
       <p className={styles.status} role="status">
@@ -239,21 +245,39 @@ export function AnalysisStatus({
         {t(
           analysis.refreshing
             ? "capability.ppt_builder.analysis.refreshing"
-            : "capability.ppt_builder.analysis.inProgress",
+            : analysis.temporary
+              ? "capability.ppt_builder.analysis.preparingBeforeSave"
+              : "capability.ppt_builder.analysis.inProgress",
           { agentsNicknameSingular },
         )}
       </p>
     );
   }
   if (phase === "unknown") return <p className={styles.status}>{t("capability.ppt_builder.analysis.unknown")}</p>;
+  if (phase === "succeeded" && analysis.temporary)
+    return (
+      <p className={styles.status} role="status">
+        {t("capability.ppt_builder.analysis.readyBeforeSave", {
+          agentsNicknameSingular,
+          summary: analysis.temporarySummary ?? "",
+        })}
+      </p>
+    );
   if (phase === "succeeded" && !analysis.canRerun) return null;
   if (phase === "builtin") return null;
 
   const message =
     phase === "failed"
-      ? t(analysis.retry ? "capability.ppt_builder.analysis.failedRetry" : "capability.ppt_builder.analysis.failed", {
-          agentsNicknameSingular,
-        })
+      ? t(
+          analysis.temporary
+            ? "capability.ppt_builder.analysis.failedBeforeSave"
+            : analysis.retry
+              ? "capability.ppt_builder.analysis.failedRetry"
+              : "capability.ppt_builder.analysis.failed",
+          {
+            agentsNicknameSingular,
+          },
+        )
       : phase === "interrupted"
         ? t("capability.ppt_builder.analysis.interrupted", { agentsNicknameSingular })
         : t("capability.ppt_builder.analysis.outdated", { agentsNicknameSingular });
