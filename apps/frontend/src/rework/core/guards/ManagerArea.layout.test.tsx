@@ -1,3 +1,6 @@
+vi.mock("@core/guards/WorkingOrganizationRoute", () => ({
+  default: ({ children }: { children: React.ReactNode }) => children,
+}));
 // @vitest-environment happy-dom
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
@@ -43,11 +46,12 @@ vi.mock("@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate", () => ({
 vi.mock("../../features/tasks/useTaskPolling", () => ({ useTaskPolling: () => undefined }));
 vi.mock("../../features/tasks/useTaskRehydration", () => ({ useTaskRehydration: () => undefined }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => ({ organization: ORG[0] }) }));
 import ManagerArea from "./ManagerArea";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 
 // The router wraps every route in the same content block, as here.
-it("keeps the shell mounted and focus on the switcher when switching from an organization page", () => {
+it("keeps the shell mounted when opening platform administration", () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement("div");
   document.body.append(host);
@@ -77,12 +81,11 @@ it("keeps the shell mounted and focus on the switcher when switching from an org
     ),
   );
   expect(host.textContent).toContain("Teams page");
-  const trigger = host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
-  act(() => trigger.click());
-  act(() => host.querySelector<HTMLButtonElement>('[role="menuitemradio"]')!.click());
+  const shell = host.querySelector("main");
+  act(() => host.querySelector<HTMLAnchorElement>('a[href="/admin/organizations"]')!.click());
   expect(host.textContent).toContain("Organizations page");
-  expect(host.querySelector('button[aria-haspopup="menu"]')).toBe(trigger);
-  expect(document.activeElement).toBe(trigger);
+  expect(host.querySelector("main")).toBe(shell);
+  expect(host.querySelector('button[aria-haspopup="menu"]')).toBeNull();
   act(() => root.unmount());
   host.remove();
 });

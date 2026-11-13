@@ -15,7 +15,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import type { LabelValuePoint } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./BarChart.module.scss";
 
 function useCssVars(ref: React.RefObject<HTMLElement | null>, ...names: string[]) {
@@ -31,7 +30,7 @@ function useCssVars(ref: React.RefObject<HTMLElement | null>, ...names: string[]
 
 interface BarChartProps {
   title: string;
-  rows: LabelValuePoint[];
+  rows: { id?: string; label: string; value: number }[];
   valueLabel?: string;
   emptyMessage?: string;
   isLoading: boolean;
@@ -87,6 +86,9 @@ export default function BarChart({
 
   const displayRows = sortOrder === "desc" ? [...rows].sort((a, b) => b.value - a.value) : rows;
 
+  const categoryKey = rows.some((row) => row.id != null) ? "id" : "label";
+  const categoryLabel = (key: string) => rows.find((row) => row.id === key)?.label ?? key;
+  const tooltipLabel = (key: string) => (categoryKey === "id" ? `${categoryLabel(key)} (${key})` : key);
   const isVertical = orientation === "vertical";
 
   // Horizontal: height grows with number of bars. Vertical: fixed height, width is unrestricted.
@@ -118,7 +120,8 @@ export default function BarChart({
                 {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} vertical={false} />}
                 <XAxis
                   type="category"
-                  dataKey="label"
+                  dataKey={categoryKey}
+                  tickFormatter={categoryLabel}
                   tick={{
                     fill: css["--on-surface-retreat"],
                     fontSize: compact ? 9 : 11,
@@ -148,6 +151,7 @@ export default function BarChart({
                   hide={compact}
                 />
                 <Tooltip
+                  labelFormatter={tooltipLabel}
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
                     background: css["--surface-floating"],
@@ -179,13 +183,15 @@ export default function BarChart({
                 />
                 <YAxis
                   type="category"
-                  dataKey="label"
+                  dataKey={categoryKey}
+                  tickFormatter={categoryLabel}
                   width={120}
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <Tooltip
+                  labelFormatter={tooltipLabel}
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
                     background: css["--surface-floating"],

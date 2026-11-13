@@ -118,6 +118,8 @@ pub struct ClaimsConfig {
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StorageConfig {
+    #[serde(default)]
+    pub history: Option<crate::analytics::opensearch::Config>,
     pub postgres: PostgresConfig,
     pub content: Option<crate::documents::config::ContentConfig>,
 }
@@ -196,6 +198,9 @@ impl Configuration {
 
     pub fn validate(&self) -> Result<()> {
         self.platform.validate()?;
+        if let Some(history) = &self.storage.history {
+            history.validate()?;
+        }
         if self.platform.knowledge_flow_url.is_some() {
             // Match the startup branches that leave AppState::directory absent.
             if self.security.user_directory == crate::users::DirectoryKind::Local {

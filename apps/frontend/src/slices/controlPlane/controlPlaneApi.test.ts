@@ -638,3 +638,116 @@ it("keeps MCP caches separate and refreshes dependent catalogs after publication
   expect(api.endpoints.mcpConnections.select({ spaceId: "org-b" })(store.getState()).data).toEqual([]);
   store.dispatch(api.util.resetApiState());
 });
+
+it("caches analytics by session and period, refreshes explicitly and isolates late responses", async () => {
+  const { sessionQueryArgs } = await import("./controlPlaneApi");
+  const { personalQueries } = await import("../../rework/components/pages/TeamUsagePage/personalUsage");
+  const reply = { calculation: "exact", collection_completeness: "unknown", results: {} };
+  const { store, fetch } = setup(reply);
+  const period = { since: "2026-01-01T00:00:00Z", until: "2026-01-03T00:00:00Z" };
+  const args = sessionQueryArgs({ analyticsRequest: { queries: personalQueries(period, "Acme", false) } });
+  const first = store.dispatch(api.endpoints.queryAnalytics.initiate(args));
+  await first.unwrap();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls[0][0].method).toBe("POST");
+  expect(fetch.mock.calls[0][0].url).toBe("http://localhost/control-plane/v1/analytics/query");
+  expect(await fetch.mock.calls[0][0].clone().json()).toEqual(args.analyticsRequest);
+  const same = store.dispatch(
+    api.endpoints.queryAnalytics.initiate(
+      sessionQueryArgs({ analyticsRequest: { queries: personalQueries(period, "Acme", false) } }),
+    ),
+  );
+  await same.unwrap();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await first.refetch().unwrap();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  let release!: () => void;
+  fetch.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return new Response(JSON.stringify(reply));
+  });
+  const laterArgs = sessionQueryArgs({
+    analyticsRequest: { queries: personalQueries({ ...period, until: "2026-01-04T00:00:00Z" }, "Acme", false) },
+  });
+  const pending = store.dispatch(api.endpoints.queryAnalytics.initiate(laterArgs));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+  expect(api.endpoints.queryAnalytics.select(laterArgs)(store.getState()).data).toBeUndefined();
+  vi.mocked(KeyCloakService.GetSessionIdentity).mockReturnValue("fixture/bob");
+  const bobArgs = sessionQueryArgs({ analyticsRequest: args.analyticsRequest });
+  expect(api.endpoints.queryAnalytics.select(bobArgs)(store.getState()).data).toBeUndefined();
+  const bob = store.dispatch(api.endpoints.queryAnalytics.initiate(bobArgs));
+  await bob.unwrap();
+  expect(fetch).toHaveBeenCalledTimes(4);
+  release();
+  expect((await pending).error).toEqual({ status: "CUSTOM_ERROR", error: "Account changed during request" });
+  expect(api.endpoints.queryAnalytics.select(bobArgs)(store.getState()).data).toEqual(reply);
+  [first, same, pending, bob].forEach((read) => read.unsubscribe());
+  vi.mocked(KeyCloakService.GetSessionIdentity).mockReturnValue("fixture/operator");
+  store.dispatch(api.util.resetApiState());
+});
+
+it("keeps Globex currentData after a late Acme reply for the same user", async () => {
+  const { sessionQueryArgs } = await import("./controlPlaneApi");
+  const { personalQueries } = await import("../../rework/components/pages/TeamUsagePage/personalUsage");
+  const { useQueryAnalyticsQuery } = await import("./controlPlaneOpenApi");
+  const { store, fetch } = setup({});
+  const period = { since: "2026-01-01T00:00:00Z", until: "2026-01-03T00:00:00Z" };
+  let release!: () => void;
+  fetch.mockImplementation(async (request: Request) => {
+    const body = await request.clone().json();
+    const org = body.queries[0].scope.organization_id;
+    if (org === "Acme")
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    return new Response(
+      JSON.stringify({
+        calculation: "exact",
+        collection_completeness: "unknown",
+        results: {
+          total: {
+            ...period,
+            timezone: "UTC",
+            measures: [],
+            truncated: false,
+            rows: [{ dimensions: { kind: "total" }, values: { "usage.total_tokens": org === "Acme" ? "130" : "330" } }],
+          },
+        },
+      }),
+    );
+  });
+  function Probe({ organizationId }: { organizationId: string }) {
+    const query = useQueryAnalyticsQuery(
+      sessionQueryArgs({ analyticsRequest: { queries: personalQueries(period, organizationId, false) } }),
+    );
+    return createElement("p", null, query.currentData?.results.total.rows[0].values["usage.total_tokens"] ?? "pending");
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const render = (organizationId: string) =>
+    root.render(createElement(Provider, { store, children: createElement(Probe, { organizationId }) }));
+  await act(async () => {
+    render("Acme");
+  });
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  expect(container.textContent).toBe("pending");
+  await act(async () => {
+    render("Globex");
+  });
+  await act(async () => {
+    await vi.waitFor(() => expect(container.textContent).toBe("330"));
+  });
+  await act(async () => {
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  expect(container.textContent).toBe("330");
+  await act(async () => {
+    render("Globex");
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await act(async () => root.unmount());
+  store.dispatch(api.util.resetApiState());
+});

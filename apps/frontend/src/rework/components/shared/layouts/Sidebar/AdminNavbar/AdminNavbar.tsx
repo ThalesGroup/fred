@@ -14,7 +14,7 @@ import { getConfig } from "../../../../../../common/config";
 // limitations under the License.
 
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
-import SpaceHeader, { type SpaceHeaderProps } from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
+import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -26,7 +26,7 @@ import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { organizationOwnerPages } from "@core/guards/organizationOwnerPages";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
-import AdminSpaceSwitcher, { type AdminSpace } from "./AdminSpaceSwitcher";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import styles from "./AdminNavbar.module.css";
 
 // One ordered list for the menu and the Admin landing: a page the caller cannot open is
@@ -55,38 +55,37 @@ function BusinessAdminNavbar() {
   return <NavigationMenu items={navigationItems} />;
 }
 
-/** One header for both spaces, so the switcher keeps focus across a space change. */
+/** Organization selection belongs to the profile; this link only changes admin area. */
 export default function AdminNavbar({ platformArea = false }: { platformArea?: boolean }) {
+  const { t } = useTranslation();
+  const manager = useManagerPlatformAdmin();
+  const { organization } = useWorkingOrganization();
+  const supervision = useOrganizationSupervisionAccess();
+  const owner = useOrganizationOwner();
+  const canChangeArea = platformArea ? supervision.offered || owner.isOwner : manager.isAdmin;
   return (
     <div className={styles.adminNavbarContainer}>
-      <AdminSpaceHeader current={platformArea ? "platform" : "organization"} />
+      <SpaceHeader
+        eyebrow={platformArea ? t("rework.sidebar.admin.platformTitle") : organization?.name}
+        title={t("rework.sidebar.admin.title")}
+      />
+      {canChangeArea && (
+        <NavigationMenu
+          items={[
+            {
+              type: "link",
+              label: platformArea
+                ? (organization?.name ?? t("rework.sidebar.admin.title"))
+                : t("rework.sidebar.admin.platformTitle"),
+              icon: { category: "outlined", type: platformArea ? "groups" : "admin_panel_settings" },
+              linkProps: { to: platformArea ? "/admin" : "/admin/organizations" },
+            },
+          ]}
+        />
+      )}
       {platformArea ? <PlatformAdminNavbar /> : <BusinessAdminNavbar />}
     </div>
   );
-}
-
-/** One available context stays read-only; multiple organizations also enable switching. */
-function AdminSpaceHeader({ current }: { current: AdminSpace }) {
-  const { t } = useTranslation();
-  const manager = useManagerPlatformAdmin();
-  const { organization, organizations, selectOrganization } = useOrganizationSupervisionAccess();
-  // Small line: whose administration; big line: the section.
-  const identity: SpaceHeaderProps = {
-    eyebrow: current === "platform" ? t("rework.sidebar.admin.platformTitle") : organization?.name,
-    title: t("rework.sidebar.admin.title"),
-  };
-  if (organizations.length + Number(manager.isAdmin) > 1)
-    return (
-      <AdminSpaceSwitcher
-        current={current}
-        identity={identity}
-        organizations={organizations}
-        organizationId={organization?.id}
-        onSelectOrganization={selectOrganization}
-        platformAdmin={manager.isAdmin}
-      />
-    );
-  return <SpaceHeader {...identity} />;
 }
 
 /** Platform pages only: organization pages are reached through the switcher. */

@@ -12,6 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { formatImpactEstimate } from "@shared/molecules/TokenUsageImpact/TokenUsageImpact";
+import { skipToken } from "@reduxjs/toolkit/query";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import {
+  useQueryAnalyticsQuery,
+  type QueryAnalyticsApiArg,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { sessionQueryArgs } from "../../../../../slices/controlPlane/controlPlaneApi";
+import { KeyCloakService } from "../../../../../security/KeycloakService";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -25,15 +34,12 @@ import { abortTurn } from "@core/hooks/backgroundTurns";
 import {
   useBulkDeleteMySessionsMutation,
   useMyInactiveSessionsQuery,
-  useUserTokenUsageOverTimeQuery,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import type { HomePeriod } from "../HomePage.tsx";
-import { formatCompactTokens, homePeriodRange } from "../homePeriod.ts";
+import { homePeriodRange } from "../homePeriod.ts";
 import CleanupDialog, { type CleanupGroup, type CleanupItem } from "../CleanupDialog/CleanupDialog.tsx";
 import styles from "./ResponsibleAiSection.module.scss";
-
-const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits });
 
 // A conversation counts as inactive after this many days without activity.
 const INACTIVE_DAYS = 5;
@@ -60,40 +66,48 @@ interface ResponsibleAiSectionProps {
  * (clean up stale conversations/files, watch token usage and footprint) over
  * the selected period. */
 export default function ResponsibleAiSection({ period }: ResponsibleAiSectionProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showSuccess } = useToast();
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
   const [cleanupKind, setCleanupKind] = useState<CleanupKind | null>(null);
 
-  // LIVE — the user's token usage + its green-cost estimate over the period,
-  // from the self-scoped `user_token_usage_over_time` preset (the server derives
-  // co2e/kwh per bucket). Memoise the range on `period`: a fresh `until` every
-  // render would change the cache key and refetch in a loop. TTL 300s
-  // (KPI-ANALYTICS-RFC.md §2.6).
+  const workingOrganization = useWorkingOrganization();
+  const organizationId =
+    workingOrganization.loading || workingOrganization.error ? undefined : workingOrganization.organizationId;
+  const identity = KeyCloakService.GetSessionIdentity();
   const range = useMemo(() => homePeriodRange(period), [period]);
-  const {
-    data: usageData,
-    isLoading: usageLoading,
-    isError: usageError,
-  } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300 });
-
-  const usage = useMemo(() => {
-    const rows = usageData?.rows ?? [];
-    return {
-      tokens: rows.reduce((acc, r) => acc + (r.value ?? 0), 0),
-      co2e: rows.reduce((acc, r) => acc + (r.co2e_grams ?? 0), 0),
-      kwh: rows.reduce((acc, r) => acc + (r.kwh ?? 0), 0),
-    };
-  }, [usageData]);
-
-  // "…" while the first fetch resolves, "—" if the KPI service is unavailable
-  // (OpenSearch down → 503); otherwise the real aggregate.
-  const tokensValue = usageLoading ? "…" : usageError ? "—" : `${formatCompactTokens(usage.tokens)} tokens`;
-  const footprintValue = usageLoading
+  const args = useMemo<QueryAnalyticsApiArg | typeof skipToken>(
+    () =>
+      organizationId
+        ? sessionQueryArgs<QueryAnalyticsApiArg>({
+            analyticsRequest: {
+              queries: [
+                {
+                  name: "usage",
+                  scope: { kind: "self", organization_id: organizationId },
+                  time: { ...range, timezone: "UTC" },
+                  measures: ["usage.total_tokens", "usage.co2e_grams", "usage.energy_kwh"],
+                },
+              ],
+            },
+          })
+        : skipToken,
+    [range, organizationId, identity],
+  );
+  const { currentData, isFetching, isError } = useQueryAnalyticsQuery(args, { refetchOnMountOrArgChange: 300 });
+  const usage = organizationId && !isError ? currentData?.results.usage.rows[0] : undefined;
+  const pending = organizationId && isFetching && !currentData;
+  const tokens = usage?.values["usage.total_tokens"];
+  const tokensValue = pending
     ? "…"
-    : usageError
+    : tokens === undefined
       ? "—"
-      : `≈ ${nf(1).format(usage.co2e)} g CO₂e · ${nf(2).format(usage.kwh)} kWh`;
+      : `${BigInt(tokens).toLocaleString(i18n.language)} tokens`;
+  const footprintValue = pending
+    ? "…"
+    : !usage
+      ? "—"
+      : `≈ ${formatImpactEstimate(usage.estimates?.["usage.co2e_grams"], "g CO₂e", i18n.language, t)} · ${formatImpactEstimate(usage.estimates?.["usage.energy_kwh"], "kWh", i18n.language, t)}`;
 
   // LIVE — the caller's inactive conversations across every space. Deliberately
   // NOT period-scoped (unlike the tiles above): a cleanup tool should surface

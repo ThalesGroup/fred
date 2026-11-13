@@ -1135,6 +1135,16 @@
             }
           ]
         },
+        "history": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Config"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "postgres": {
           "$ref": "#/$defs/PostgresConfig"
         }

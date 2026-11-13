@@ -18,6 +18,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({
+  workingId: "Acme",
+  choices: [{ id: "Acme", name: "Acme" }],
+  selectOrganization: vi.fn(() => true),
   name: "Alice" as string | null,
   username: "alice" as string | null,
   navigate: vi.fn(),
@@ -56,6 +59,15 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    organizationId: identity.workingId,
+    organization: identity.choices.find((item) => item.id === identity.workingId),
+    organizations: identity.choices,
+    selectOrganization: identity.selectOrganization,
+  }),
+}));
+
 import UserProfile from "./UserProfile";
 
 declare global {
@@ -82,6 +94,8 @@ function mount(admitted = false) {
 }
 
 afterEach(() => {
+  identity.choices = [{ id: "Acme", name: "Acme" }];
+  identity.workingId = "Acme";
   identity.support = undefined;
   identity.avatar = undefined;
   vi.clearAllMocks();
@@ -156,4 +170,26 @@ it("retains the shared profile but drops business enrichment when entering the p
   expect(profile.textContent).toContain("rework.profileMenu.profile");
   act(() => profile.click());
   expect(identity.navigate).toHaveBeenCalledWith("/settings");
+});
+
+it("offers the only organization choice in the profile, then returns to Home", () => {
+  identity.choices = [
+    { id: "Acme", name: "Acme" },
+    { id: "Globex", name: "Globex" },
+  ];
+  mount(true);
+  const choices = container!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+  expect([...choices].map((item) => item.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  act(() => choices[1].click());
+  expect(identity.selectOrganization).toHaveBeenCalledWith("Globex");
+  expect(identity.navigate).toHaveBeenCalledWith("/home");
+  expect(container!.querySelector('[role="menu"]')).toBeNull();
+});
+
+it("shows one organization read-only and no organization before admission", () => {
+  mount();
+  expect(container!.textContent).not.toContain("Acme");
+  act(() => root!.render(<UserProfile admitted />));
+  expect(container!.textContent).toContain("Acme");
+  expect(container!.querySelector('[role="menuitemradio"]')).toBeNull();
 });

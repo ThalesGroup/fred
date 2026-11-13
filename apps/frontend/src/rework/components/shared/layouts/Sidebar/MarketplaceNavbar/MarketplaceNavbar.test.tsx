@@ -28,6 +28,9 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   },
 }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({ organization: { name: "Acme" } }),
+}));
 import MarketplaceNavbar from "./MarketplaceNavbar";
 
 const render = () => {
@@ -54,7 +57,7 @@ describe("MarketplaceNavbar", () => {
   it("names the marketplace without inferring a catalogue from library access", () => {
     const { heading, eyebrow, button } = render();
     expect(heading).toBe("rework.sidebar.marketplace.title");
-    expect(eyebrow).toBeUndefined();
+    expect(eyebrow).toBe("Acme");
     expect(button).toBeNull();
   });
 

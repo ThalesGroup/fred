@@ -26,12 +26,3 @@ export function homePeriodRange(period: HomePeriod): { since: string; until: str
   const since = new Date(until.getTime() - period * 24 * 60 * 60 * 1000);
   return { since: since.toISOString(), until: until.toISOString() };
 }
-
-const nf = (maximumFractionDigits: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits });
-
-/** Compact French token count: `280 k`, `1,2 M`, `640`. */
-export function formatCompactTokens(n: number): string {
-  if (n >= 1_000_000) return `${nf(1).format(n / 1_000_000)} M`;
-  if (n >= 1_000) return `${nf(0).format(Math.round(n / 1_000))} k`;
-  return nf(0).format(n);
-}

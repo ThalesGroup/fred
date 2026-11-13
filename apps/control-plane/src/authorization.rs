@@ -523,3 +523,18 @@ pub async fn can_use_agent<'e>(
     }
     agent_default_on(ex, space.organization, template).await
 }
+
+/// A working organization requires a live non-personal grant, including governance.
+/// This grants self observation only, never collective ReadUsage or content access.
+pub(crate) async fn can_work_in_organization<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    organization: Uuid,
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar(concat!(subject_spaces!(),
+        "select exists(select 1 from subject_spaces where active and kind <> 'personal' and organization_id=$3)"))
+        .bind(subject)
+        .bind(roles_granting(SpacePermission::CreatePersonalSpace))
+        .bind(organization)
+        .fetch_one(ex).await?)
+}

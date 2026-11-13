@@ -289,6 +289,7 @@ impl Documents {
         }
         let app = api::router(
             api::AppState {
+                history: None,
                 agent_catalog: platform,
                 pool: e.pool.clone(),
                 auth: Arc::new(identity.auth().await),
@@ -551,6 +552,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
             .unwrap();
             app = api::router(
                 api::AppState {
+                    history: None,
                     agent_catalog: Default::default(),
                     pool: d.e.pool.clone(),
                     auth: Arc::new(d.identity.auth().await),

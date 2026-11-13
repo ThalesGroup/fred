@@ -119,6 +119,7 @@ async fn one_central_offer_two_pods_native_collision_and_local_ceiling() {
         enabled: true,
     });
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: config,
         auth: Arc::new(identity.auth().await),
@@ -701,6 +702,7 @@ async fn withdrawal_after_provisioning_removal_preserves_role_revision_and_valid
         let mut config = catalog.config();
         config.mcp_credentials = credentials;
         routes(AppState {
+            history: None,
             pool: e.pool.clone(),
             agent_catalog: config,
             auth: auth.clone(),
@@ -837,6 +839,7 @@ async fn native_tabular_needs_only_capability_policy_for_react_deep_and_fixed_ag
         // No KF server exists at this destination: administration/admission never probes it.
         config.knowledge_flow_url = Some("https://kf.invalid/api".into());
         let app = routes(AppState {
+            history: None,
             pool: e.pool.clone(),
             agent_catalog: config,
             auth: Arc::new(identity.auth().await),
@@ -1024,6 +1027,7 @@ async fn space_ownership_isolates_management_credentials_catalogs_and_purge() {
         secret_env: "UNUSED_FIXTURE_MCP_SECRET".into(),
     }];
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: config,
         auth: Arc::new(identity.auth().await),

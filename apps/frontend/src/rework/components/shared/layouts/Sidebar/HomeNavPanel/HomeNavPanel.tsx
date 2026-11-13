@@ -19,13 +19,12 @@ import type { MySpace } from "../../../../../../slices/controlPlane/controlPlane
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import Select from "@shared/molecules/Select/Select";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { useNavigate } from "react-router-dom";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import {
-  useMySpacesQuery,
   useGetMyAvatarQuery,
   useMeQuery,
   useCreatePersonalSpaceMutation,
@@ -39,11 +38,16 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 
 /** Home navigation uses Control Plane memberships and current space permissions. */
 export default function HomeNavPanel() {
+  const { organizationId } = useWorkingOrganization();
+  return <OrganizationHomeNavPanel key={organizationId ?? "no-context"} />;
+}
+
+function OrganizationHomeNavPanel() {
   const { t } = useTranslation();
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const [search, setSearch] = useState("");
-  const spaces = useMySpacesQuery();
+  const { memberships: spaces, organizationId, organization } = useWorkingOrganization();
   const me = useMeQuery();
   const navigate = useNavigate();
   const [openPersonal] = useCreatePersonalSpaceMutation();
@@ -59,22 +63,7 @@ export default function HomeNavPanel() {
       active.current = undefined;
     };
   }, [me.data?.user_id]);
-  const [selectedOrganization, setSelectedOrganization] = useState<string>();
-  const availableSpaces = spaces.isError ? [] : (spaces.currentData ?? []);
-  const organizations = availableSpaces.filter((space) => space.kind === "organization");
-  const organizationOptions = new Map(organizations.map((space) => [space.id, space.name]));
-  // A direct project membership can survive without an organization membership.
-  // Keep its scope selectable, using only names already disclosed by /me/spaces.
-  for (const space of availableSpaces) {
-    if (!organizationOptions.has(space.organization_id)) {
-      organizationOptions.set(space.organization_id, t("rework.home.organizationOf", { name: space.name }));
-    }
-  }
-  const organizationId =
-    selectedOrganization && organizationOptions.has(selectedOrganization)
-      ? selectedOrganization
-      : organizationOptions.keys().next().value;
-  const org = organizations.find((space) => space.id === organizationId);
+  const org = spaces.currentData?.find((space) => space.kind === "organization" && space.id === organizationId);
   const organizationContent = useSpaceAccess(spaces.isError ? undefined : org?.id, "read");
   const canOpen =
     !spaces.isError &&
@@ -127,9 +116,7 @@ export default function HomeNavPanel() {
   const groups = useMemo(() => {
     if (spaces.isError) return [];
     const available = (spaces.currentData ?? []).filter(
-      (space) =>
-        (space.kind === "team" || space.kind === "project") &&
-        (!organizationId || space.organization_id === organizationId),
+      (space) => (space.kind === "team" || space.kind === "project") && space.organization_id === organizationId,
     );
     const compare = (a: MySpace, b: MySpace) =>
       (sortMode === "recent" ? (recency[b.id] ?? 0) - (recency[a.id] ?? 0) : 0) || a.name.localeCompare(b.name);
@@ -168,18 +155,7 @@ export default function HomeNavPanel() {
 
   return (
     <div className={styles.panel}>
-      <SpaceHeader eyebrow={org?.name} title={t("rework.home.title")} />
-      {organizationOptions.size > 1 && (
-        <Select
-          size="small"
-          compact
-          label={t("rework.userSettings.spaceKinds.organization")}
-          value={organizationId}
-          options={Array.from(organizationOptions, ([id, name]) => ({ key: id, value: id, label: name }))}
-          onChange={setSelectedOrganization}
-          disabled={opening}
-        />
-      )}
+      <SpaceHeader eyebrow={organization?.name} title={t("rework.home.title")} />
 
       {((org && organizationContent.allowed) || canOpen) && (
         <section className={styles.spaces} aria-labelledby="home-spaces-title">

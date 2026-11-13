@@ -36,6 +36,7 @@ async fn request(
 }
 async fn state(e: &Env, identity: &support::IdentityServer) -> AppState {
     AppState {
+        history: None,
         agent_catalog: Default::default(),
         pool: e.pool.clone(),
         auth: Arc::new(identity.auth().await),

@@ -205,7 +205,7 @@ def test_ensure_ready_writes_nothing_when_the_index_is_current() -> None:
     assert indices.get_mapping_calls == 1
 
 
-@pytest.mark.parametrize("field", ["skill_name", "skill_origin"])
+@pytest.mark.parametrize("field", ["skill_name", "skill_origin", "space_id"])
 def test_ensure_ready_repairs_existing_skill_dimensions(field: str) -> None:
     store = _store_on_existing_index_missing(field)
     store.ensure_ready()

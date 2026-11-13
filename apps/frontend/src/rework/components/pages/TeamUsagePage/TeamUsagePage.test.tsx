@@ -19,6 +19,7 @@
 // only has to set the permission array a real backend would return for that
 // role, rather than hand-picking booleans that could drift from the mapping.
 
+import { skipToken } from "@reduxjs/toolkit/query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -27,6 +28,10 @@ import type {
 } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
+  organization: { organizationId: "Acme" as string | undefined, loading: false, error: undefined as unknown },
+  analytics: vi.fn(),
+  selectedQuery: vi.fn(),
+  weaverKind: undefined as string | undefined,
   selected: {
     teamId: "team-1",
     selectedTeam: undefined as TeamWithPermissions | undefined,
@@ -39,7 +44,7 @@ const h = vi.hoisted(() => ({
     isFetching: false,
     isError: false,
   })),
-  personalSkillQuery: vi.fn(() => ({
+  personalSkillQuery: vi.fn((_args?: unknown, _options?: unknown) => ({
     currentData: undefined,
     data: undefined,
     isLoading: false,
@@ -53,12 +58,50 @@ function team(permissions: TeamPermission[]): TeamWithPermissions {
   return { id: "team-1", name: "Team One", member_count: 4, permissions };
 }
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    ...h.organization,
+    memberships: {
+      currentData: [
+        {
+          id: h.selected.teamId,
+          organization_id: h.organization.organizationId,
+          kind: h.weaverKind ?? (h.selected.isPersonalTeam ? "personal" : "team"),
+        },
+      ],
+    },
+  }),
+}));
+
+vi.mock("../../../../security/KeycloakService", () => ({
+  KeyCloakService: { GetSessionIdentity: () => "alice" },
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useQueryAnalyticsQuery: (
+    args: { analyticsRequest: { queries: { name: string }[] } } | typeof skipToken,
+    options: unknown,
+  ) => {
+    h.analytics(args, options);
+    return args !== skipToken && args.analyticsRequest.queries[0].name === "skills"
+      ? h.personalSkillQuery(args, options)
+      : h.neutralQuery();
+  },
+}));
+
+vi.mock("react-router-dom", async (original) => ({
+  ...(await original<typeof import("react-router-dom")>()),
+  useParams: () => ({ teamId: h.selected.teamId }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => h.selected,
+  useSelectedTeam: (skip: boolean) => {
+    h.selectedQuery(skip);
+    return h.selected;
+  },
 }));
 
 vi.mock("@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart", () => ({
@@ -78,12 +121,8 @@ vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({
 }));
 
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useUserTokenUsageOverTimeQuery: h.neutralQuery,
-  useUserTokenUsageByAgentQuery: h.neutralQuery,
-  useUserTokenUsageByModelQuery: h.neutralQuery,
   useAgentsTotalQuery: h.neutralQuery,
   useSkillUsageQuery: h.skillQuery,
-  useUserSkillUsageQuery: h.personalSkillQuery,
   useDocumentsTotalQuery: h.neutralQuery,
   useSessionsOverTimeQuery: h.neutralQuery,
   useStorageByTeamQuery: h.neutralQuery,
@@ -205,7 +244,9 @@ it("does not substitute personal skills for unauthorized team counts in team spa
   expect(html).not.toContain("rework.teamUsage.personalSkillsSectionTitle");
   expect(html).not.toContain("rework.teamUsage.team.skillsSectionTitle");
   expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
-    { since: expect.any(String), until: expect.any(String) },
+    expect.objectContaining({
+      analyticsRequest: { queries: [expect.objectContaining({ scope: { kind: "self", organization_id: "Acme" } })] },
+    }),
     { skip: true, refetchOnMountOrArgChange: 300 },
   );
   expect(h.skillQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true, refetchOnMountOrArgChange: 300 });
@@ -222,7 +263,9 @@ it("shows only team skills for an elevated viewer in team space", () => {
     refetchOnMountOrArgChange: 300,
   });
   expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
-    { since: expect.any(String), until: expect.any(String) },
+    expect.objectContaining({
+      analyticsRequest: { queries: [expect.objectContaining({ scope: { kind: "self", organization_id: "Acme" } })] },
+    }),
     { skip: true, refetchOnMountOrArgChange: 300 },
   );
 });
@@ -273,7 +316,9 @@ it("keeps personal skills visible in personal space and suppresses stale persona
     expect(html).toContain("common.loading");
     expect(html.match(/aria-label="rework.analytics.skillUsage.title"/g)).toHaveLength(1);
     expect(h.personalSkillQuery).toHaveBeenLastCalledWith(
-      { since: expect.any(String), until: expect.any(String) },
+      expect.objectContaining({
+        analyticsRequest: { queries: [expect.objectContaining({ scope: { kind: "self", organization_id: "Acme" } })] },
+      }),
       { skip: false, refetchOnMountOrArgChange: 300 },
     );
   } finally {
@@ -285,7 +330,7 @@ it.each([
   { space: "personal", personal: true, permissions: [] as TeamPermission[] },
   { space: "team member", personal: false, permissions: ["can_read", "can_use_team_agents"] as TeamPermission[] },
   { space: "team editor", personal: false, permissions: ["can_read", "can_update_resources"] as TeamPermission[] },
-])("preserves the full service outage notice in $space space", ({ personal, permissions }) => {
+])("keeps controls and degraded sections visible during an outage in $space space", ({ personal, permissions }) => {
   h.selected = {
     teamId: personal ? "personal-u1" : "team-1",
     selectedTeam: team(permissions),
@@ -300,11 +345,69 @@ it.each([
   h.skillQuery.mockReturnValue(failed);
   try {
     const html = render();
-    expect(html).toContain("rework.serviceNotice.controlPlane.title");
-    expect(html).not.toContain("rework.analytics.skillUsage.title");
+    expect(html).toContain("rework.teamUsage.personalSectionTitle");
+    expect(html).toContain("time-range-selector");
+    expect(html).toContain("common.loadingError");
   } finally {
     h.neutralQuery.mockImplementation(previousNeutral!);
     h.personalSkillQuery.mockImplementation(previousPersonal!);
     h.skillQuery.mockImplementation(previousTeam!);
+  }
+});
+
+it("uses the shared working organization for both personal batches after a switch", () => {
+  h.selected = { teamId: "personal-u1", selectedTeam: undefined, isPersonalTeam: true };
+  try {
+    for (const organizationId of ["Acme", "Globex"]) {
+      h.organization.organizationId = organizationId;
+      h.analytics.mockClear();
+      render();
+      expect(h.analytics).toHaveBeenCalledTimes(2);
+      for (const [args] of h.analytics.mock.calls) {
+        for (const query of args.analyticsRequest.queries)
+          expect(query.scope).toEqual({ kind: "self", organization_id: organizationId });
+      }
+    }
+  } finally {
+    h.organization.organizationId = "Acme";
+  }
+});
+
+it.each([
+  { organizationId: undefined, loading: false, error: undefined },
+  { organizationId: "Acme", loading: true, error: undefined },
+  { organizationId: "Acme", loading: false, error: new Error("revoked") },
+])("skips every personal read without an admitted working context: %j", (context) => {
+  const previous = h.organization;
+  h.organization = context;
+  h.analytics.mockClear();
+  try {
+    const html = render();
+    expect(html).toContain("rework.personalAnalytics.organizationRequired");
+    expect(h.analytics).toHaveBeenCalledTimes(2);
+    for (const [args] of h.analytics.mock.calls) expect(args).toBe(skipToken);
+  } finally {
+    h.organization = previous;
+  }
+});
+
+it("uses Weaver personal UUID membership without the Swift bootstrap or ID prefix", async () => {
+  const { isWeaverContentRoute } = await import("@core/utils/weaverContentRoute");
+  const previous = h.selected;
+  h.selected = { teamId: "b0d8cda0-21e7-4e4e-989c-dfe67fcc8aef", selectedTeam: undefined, isPersonalTeam: false };
+  h.weaverKind = "personal";
+  try {
+    const html = render();
+    expect(isWeaverContentRoute(`/team/${h.selected.teamId}/usage`)).toBe(true);
+    expect(h.selectedQuery).toHaveBeenLastCalledWith(true);
+    expect(html).toContain("rework.teamUsage.personalSkillsSectionTitle");
+    expect(h.personalSkillQuery).toHaveBeenLastCalledWith(expect.anything(), {
+      skip: false,
+      refetchOnMountOrArgChange: 300,
+    });
+    expect(h.skillQuery).toHaveBeenLastCalledWith(expect.anything(), { skip: true, refetchOnMountOrArgChange: 300 });
+  } finally {
+    h.selected = previous;
+    h.weaverKind = undefined;
   }
 });

@@ -237,6 +237,12 @@ async fn serve(config: Config) -> Result<()> {
         _ => None,
     };
     let state = api::AppState {
+        history: config
+            .storage
+            .history
+            .as_ref()
+            .map(control_plane::analytics::opensearch::OpenSearch::configured)
+            .transpose()?,
         agent_catalog: config.platform.clone(),
         processing,
         content: content.clone(),

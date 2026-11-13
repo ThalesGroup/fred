@@ -1,3 +1,4 @@
+vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => ({ organizationId: "org" }) }));
 // @vitest-environment happy-dom
 // Copyright Thales 2026
 //

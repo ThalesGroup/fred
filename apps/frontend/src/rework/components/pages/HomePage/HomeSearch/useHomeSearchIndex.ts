@@ -1,3 +1,4 @@
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import type { store } from "../../../../../common/store";
-import {
-  enhancedControlPlaneApi as api,
-  useMySpacesQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { enhancedControlPlaneApi as api } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { type SearchSources, unifyPrompts } from "./homeSearchIndex";
 
 const EMPTY: SearchSources = { agents: [], teams: [], prompts: [] };
@@ -27,10 +25,14 @@ const EMPTY: SearchSources = { agents: [], teams: [], prompts: [] };
  * Four spaces at a time, one minute and 10,000 resources overall; a failed traversal is never shown
  * as a complete index. A denied scope contributes no resource data. */
 export function useHomeSearchIndex(active: boolean) {
-  const context = useMySpacesQuery(undefined, { skip: !active, refetchOnMountOrArgChange: true });
+  const { memberships: context, organizationId } = useWorkingOrganization();
   const dispatch = useDispatch<typeof store.dispatch>();
   const [refresh, setRefresh] = useState(0);
-  const spaces = context.currentData;
+  const spaces = useMemo(
+    () =>
+      organizationId ? context.currentData?.filter((space) => space.organization_id === organizationId) : undefined,
+    [context.currentData, organizationId],
+  );
   // Structural sharing keeps `spaces` through a refresh that changes nothing: no reindex.
   const scope = useMemo(() => ({ spaces, active, refresh }), [spaces, active, refresh]);
   const [snapshot, setSnapshot] = useState<{ scope: typeof scope; sources: SearchSources; failed: boolean }>();
@@ -118,7 +120,7 @@ export function useHomeSearchIndex(active: boolean) {
   return {
     ...(current?.sources ?? EMPTY),
     scope,
-    isLoading: active && !context.isError && !current,
+    isLoading: active && !!organizationId && !context.isError && !current,
     isError: context.isError || Boolean(current?.failed),
     retry,
   };

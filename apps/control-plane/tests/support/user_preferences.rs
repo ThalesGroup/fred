@@ -48,6 +48,7 @@ async fn preferences_are_personal_before_consent_and_patch_only_submitted_fields
         .unwrap();
     let identity = support::IdentityServer::start().await;
     let app = routes(AppState {
+        history: None,
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),

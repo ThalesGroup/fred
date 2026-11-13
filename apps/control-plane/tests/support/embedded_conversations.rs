@@ -152,6 +152,7 @@ async fn embedded_history_hides_foreign_retired_and_unreadable_spaces() {
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),

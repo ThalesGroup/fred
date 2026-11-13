@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import styles from "./UserProfile.module.scss";
@@ -26,7 +26,9 @@ import { usePatchNoteHistory } from "../../../../features/announcements/usePatch
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
-/** The account menu remains available before admission and never queries business data. */
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+
+/** Only the admitted section reads the working context; logout stays available before admission. */
 export default function UserProfile({
   admitted = false,
   agentManagement = false,
@@ -73,7 +75,20 @@ export default function UserProfile({
   return (
     <div className={styles.container} ref={containerRef}>
       {open && (
-        <div className={styles.popoverWrap}>
+        <div
+          className={styles.popoverWrap}
+          onKeyDown={(event) => {
+            if (event.key === "Tab") return setOpen(false);
+            const items = [
+              ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]:not([disabled])'),
+            ];
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: items.length - 1 }[event.key];
+            if (next === undefined || !items.length) return;
+            event.preventDefault();
+            items[(next + items.length) % items.length].focus();
+          }}
+        >
           <MenuPopover
             className={styles.popoverBox}
             headerTitle={userFullName}
@@ -105,6 +120,7 @@ export default function UserProfile({
                       : []),
                   ]
                 : [],
+              admitted ? [<WorkingOrganizationMenu key="organization" onClose={() => setOpen(false)} />] : [],
               admitted && contactSupportLink
                 ? [
                     <MenuPopoverItem
@@ -146,6 +162,47 @@ export default function UserProfile({
       </Tooltip>
       {admitted && !platformArea && (
         <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
+      )}
+    </div>
+  );
+}
+
+function WorkingOrganizationMenu({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const id = useId();
+  const context = useWorkingOrganization();
+  const choices = context.organizations;
+  return (
+    <div role="group" aria-labelledby={id}>
+      <div id={id} className={styles.organizationLabel}>
+        {t("rework.profileMenu.workingOrganization")}
+      </div>
+      {context.error || context.loading || !choices.length ? (
+        <p className={styles.organizationLabel} role="status">
+          {t(context.loading ? "common.loading" : "rework.manager.unavailable")}
+        </p>
+      ) : choices.length === 1 && context.organization ? (
+        <div className={styles.organizationName} title={context.organization.name}>
+          {context.organization.name}
+        </div>
+      ) : (
+        choices.map((organization) => (
+          <MenuPopoverItem
+            key={organization.id}
+            role="menuitemradio"
+            label={organization.name}
+            icon={{ category: "outlined", type: "groups" }}
+            selected={organization.id === context.organizationId}
+            trailingIcon={organization.id === context.organizationId ? "check" : undefined}
+            onClick={() => {
+              if (context.selectOrganization(organization.id)) {
+                onClose();
+                if (organization.id !== context.organizationId) navigate("/home");
+              }
+            }}
+          />
+        ))
       )}
     </div>
   );

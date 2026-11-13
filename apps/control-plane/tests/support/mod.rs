@@ -294,6 +294,7 @@ pub async fn member_organization(
     .await
     .unwrap();
     let app = routes(AppState {
+        history: None,
         agent_catalog: Default::default(),
         pool: pool.clone(),
         auth: std::sync::Arc::new(identity.auth().await),

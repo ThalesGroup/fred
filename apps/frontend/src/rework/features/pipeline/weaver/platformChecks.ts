@@ -3,7 +3,12 @@
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { knowledgeFlowApi } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { monitorApi } from "../../../../slices/monitor/monitorOpenApi";
-import type { UsageResponse } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  AnalyticsResponse,
+  AnalyticsRequest,
+  AnalyticsScope,
+  ConsumptionMeasure,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { platformSessionDeps } from "../deps/platformSession";
 import { runPlatformSessionChecks } from "../scenarios/platformScenario";
 import { FRESH } from "../deps/api";
@@ -159,50 +164,126 @@ export const documentSecurity: Scenario<WeaverChecks> = async (checks, report, s
   }
 };
 
-function verifyUsage(usage: UsageResponse) {
-  const keys = ["turns", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens"] as const;
+const usageMeasures: ConsumptionMeasure[] = [
+  "usage.recorded_exchanges",
+  "usage.input_tokens",
+  "usage.output_tokens",
+  "usage.cache_read_tokens",
+  "usage.cache_creation_tokens",
+];
+
+function usageRequest(scope: AnalyticsScope): AnalyticsRequest {
+  const until = new Date().toISOString();
+  const since = new Date(Date.parse(until) - 86400000).toISOString();
+  const shapes: Pick<AnalyticsRequest["queries"][number], "name" | "group_by">[] = [
+    { name: "total", group_by: [] },
+    { name: "series", group_by: ["time"] },
+    { name: "agents", group_by: ["agent"] },
+    { name: "models", group_by: ["model"] },
+  ];
+  return {
+    queries: shapes.map((shape) => ({
+      ...shape,
+      scope,
+      time: { since, until, timezone: "UTC" },
+      measures: usageMeasures,
+    })),
+  };
+}
+
+function verifyUsage(usage: AnalyticsResponse) {
   assert(
-    Array.isArray(usage.series) && Array.isArray(usage.by_agent) && Array.isArray(usage.by_model),
-    "Usage series or breakdowns are missing.",
+    usage.calculation === "exact" && usage.collection_completeness === "unknown",
+    "Invalid consumption guarantees.",
   );
-  const since = Date.parse(usage.since);
-  const until = Date.parse(usage.until);
+  const { total, series, agents, models } = usage.results;
+  assert(
+    [total, series, agents, models].every((result) => result && Array.isArray(result.rows)),
+    "Usage results are missing.",
+  );
+  const since = Date.parse(total.since);
+  const until = Date.parse(total.until);
   assert(
     Number.isFinite(since) &&
       Number.isFinite(until) &&
       since < until &&
-      ["hour", "day", "week"].includes(usage.interval),
+      series.bucket &&
+      ["hour", "day", "week"].includes(series.bucket),
     "Usage has an invalid reporting period.",
   );
+  for (const result of [total, series, agents, models]) {
+    assert(
+      result.since === total.since && result.until === total.until && result.timezone === "UTC",
+      "Usage results have inconsistent periods.",
+    );
+    assert(
+      usageMeasures.every((id) =>
+        result.measures.some(
+          (measure) =>
+            measure.id === id &&
+            measure.calculation === "exact" &&
+            measure.value_type === "integer" &&
+            measure.unit === (id === "usage.recorded_exchanges" ? "exchange" : "token"),
+        ),
+      ),
+      "Usage measure definitions are missing or invalid.",
+    );
+    assert(
+      result.rows.every((row) =>
+        usageMeasures.every((key) => typeof row.values[key] === "string" && /^(0|[1-9][0-9]*)$/.test(row.values[key])),
+      ),
+      "Usage contains missing or invalid integer counters.",
+    );
+  }
   assert(
-    [usage.totals, ...usage.series, ...usage.by_agent, ...usage.by_model].every(
-      (row) => row && keys.every((key) => Number.isSafeInteger(row[key]) && row[key] >= 0),
-    ),
-    "Usage contains missing or invalid counters.",
+    total.rows.length === 1 && total.rows[0].dimensions.kind === "total" && !total.truncated && !series.truncated,
+    "Usage total or series is incomplete.",
   );
-  const bucketSize = { hour: 3600000, day: 86400000, week: 604800000 }[usage.interval];
+  assert(
+    agents.rows.every((r) => r.dimensions.kind === "agent") && models.rows.every((r) => r.dimensions.kind === "model"),
+    "Invalid usage breakdown dimensions.",
+  );
+  const bucketSize = { hour: 3600000, day: 86400000, week: 604800000 }[series.bucket!];
   let previous = -Infinity;
-  for (const point of usage.series) {
-    const start = Date.parse(point.start);
+  for (const point of series.rows) {
+    assert(point.dimensions.kind === "time", "Invalid time dimension.");
+    const start = Date.parse(point.dimensions.kind === "time" ? point.dimensions.start : "");
     assert(
       Number.isFinite(start) && start > previous && start < until && start > since - bucketSize,
       "Usage buckets are unordered, duplicated or outside the reporting period.",
     );
     previous = start;
   }
+  const totals = total.rows[0].values;
   assert(
-    keys.every((key) => usage.series.reduce((sum, point) => sum + point[key], 0) === usage.totals[key]),
+    usageMeasures.every(
+      (key) => series.rows.reduce((sum, row) => sum + BigInt(row.values[key]), BigInt(0)) === BigInt(totals[key]),
+    ),
     "Usage totals do not match the time series.",
   );
-  return { value: true, detail: `${usage.totals.turns} turns in this period.` };
+  return {
+    value: true,
+    detail: `${totals["usage.recorded_exchanges"]} recorded exchanges in this period.${
+      agents.truncated || models.truncated ? " Usage rankings are truncated." : ""
+    }`,
+  };
 }
 export const sharedObservability: Scenario<WeaverChecks> = async (checks, report) => {
-  const since = new Date(Date.now() - 86400000).toISOString();
   await runStep(
     report,
     "personal-usage",
     "Validate personal usage counters and time series over the last day",
-    async () => verifyUsage(await checks.dispatch(cp.myUsage.initiate({ since }, FRESH)).unwrap()),
+    async () =>
+      verifyUsage(
+        await checks
+          .dispatch(
+            cp.queryAnalytics.initiate(
+              { analyticsRequest: usageRequest({ kind: "self", organization_id: checks.organizationId }) },
+              FRESH,
+            ),
+          )
+          .unwrap(),
+      ),
   );
   await runStep(report, "technical-status", "Verify readiness of monitored active workloads", async () => {
     try {
@@ -248,7 +329,6 @@ export const sharedObservability: Scenario<WeaverChecks> = async (checks, report
 };
 
 export const spaceObservability: Scenario<WeaverChecks> = async (checks, report, signal) => {
-  const since = new Date(Date.now() - 86400000).toISOString();
   await runStep(report, "space-usage", "Validate usage counters and time series in an authorized space", async () => {
     requireSpace(checks, signal);
     if (checks.spaceKind !== "team" && checks.spaceKind !== "project")
@@ -262,7 +342,11 @@ export const spaceObservability: Scenario<WeaverChecks> = async (checks, report,
       .unwrap();
     if (!permission.allowed) throw new SkipStep("The selected space does not grant access to usage.");
     return verifyUsage(
-      await checks.dispatch(cp.spaceUsage.initiate({ since, spaceId: checks.spaceId }, FRESH)).unwrap(),
+      await checks
+        .dispatch(
+          cp.queryAnalytics.initiate({ analyticsRequest: usageRequest({ kind: "space", id: checks.spaceId }) }, FRESH),
+        )
+        .unwrap(),
     );
   });
 };

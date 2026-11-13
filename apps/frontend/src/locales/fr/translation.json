@@ -2263,7 +2263,12 @@
     "tokenUsageImpact": {
       "costTitle": "Coût estimé",
       "costValue": "{{cost}} $ (estimé)",
-      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)",
+      "unavailable": "Estimation indisponible",
+      "partial": "couverture partielle",
+      "fallback": "facteurs par défaut utilisés",
+      "estimates": "Impact estimé",
+      "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
     "teamUsage": {
       "personalSkillsSectionTitle": "Mon utilisation des skills",
@@ -2786,6 +2791,9 @@
       "adminConsole": "Console technique"
     },
     "profileMenu": {
+      "workingOrganization": "Organisation de travail",
+      "organizationLink": "Cette ressource appartient à {{name}}.",
+      "continueInOrganization": "Continuer dans {{name}}",
       "contactSupport": "Contacter le support",
       "profile": "Profil",
       "trigger": "Compte de {{name}}",
@@ -3116,12 +3124,7 @@
           "uiSettings": "Interface utilisateur"
         },
         "platformTitle": "Plateforme",
-        "title": "Administration",
-        "spaces": {
-          "switch": "Changer d'espace d'administration",
-          "platform": "Administration de la plateforme",
-          "organizations": "Mes organisations"
-        }
+        "title": "Administration"
       },
       "chatList": {
         "answerReady": "Réponse prête",
@@ -5303,6 +5306,15 @@
       "readyHint": "Sélectionnez cette connexion dans la configuration des agents qui doivent utiliser ses outils.",
       "continue": "Continuer",
       "manage": "Gérer la connexion"
+    },
+    "personalAnalytics": {
+      "organizationRequired": "Organisation de travail indisponible. Sélectionnez une organisation dans le menu de votre compte pour consulter votre consommation.",
+      "agent": "Agent",
+      "observed": "Chargements observés ; complétude de collecte inconnue. Les skills de même nom sont regroupés.",
+      "total": "Total des tokens : {{value}}",
+      "chartOverflow": "Ces compteurs exacts dépassent la précision du graphique. Les valeurs sont affichées dans le tableau.",
+      "dimension": "Série",
+      "truncated": "Classement limité à 100 entrées. Les totaux et estimations couvrent toute la consommation enregistrée."
     }
   },
   "runtime": {

@@ -105,7 +105,9 @@ consumption aggregate must derive from the journal.
 
 The consumption read API exposes token totals, a continuous time series and
 breakdowns by agent and model. Any authenticated person can read their own
-consumption across all spaces, even after losing their roles. A direct Owner or
+consumption within one explicitly selected, authorized working organization.
+The person must retain a live non-personal grant in that active organization;
+former team/project memberships do not restrict their own historical facts within it. A direct Owner or
 Analyst role on a team or project grants access to its consumption aggregates.
 A team includes its projects, including retired and purged projects; a project
 includes only itself. Team aggregates include project agents and their names
@@ -113,11 +115,19 @@ even when the reader has no role in those projects. This grants no content acces
 and exposes no per-user breakdown. Organization consumption is outside this API;
 personal spaces are covered by the person's own view.
 
-The default range is the last 30 days, with a maximum of 366 days. Buckets use UTC:
-hourly up to 48 hours, daily up to 92 days, then weekly, with zeros for empty
-buckets. User-timezone bucketing is deferred. A turn counts once at its first
-consumption; resuming after human validation adds tokens at their consumption
-time without another turn, even across days or query boundaries.
+Consumption queries require an explicit period of at most 366 days. Named totals,
+UTC series and agent/model breakdowns share a coherent SQL snapshot and compatible
+results reuse the same aggregation. Counters travel as decimal integer strings;
+rankings explicitly report truncation. Exact arithmetic over recorded reports does
+not assert complete collection. An exchange counts at its first consumption,
+including generated titles; it is not a count of user messages. Human-validation
+resumes add tokens at their consumption time without counting that exchange again.
+
+Automated checks exercise the backend read contract and its personal-screen wiring.
+Functional browser reception remains separate; collective dashboards keep their
+historical read paths.
+The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
+its limits and verification sources.
 
 ## Operator diagnostics
 

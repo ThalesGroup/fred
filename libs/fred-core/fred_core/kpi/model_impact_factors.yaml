@@ -26,6 +26,8 @@
 # typically bill this well below the fresh-input rate (e.g. Anthropic ~10%,
 # OpenAI ~50%) — left at 0.0 ("not populated yet") until a real per-model
 # rate is confirmed against the provider's current pricing page.
+# Static display convention from Swift; not a live exchange rate. 1 EUR = 1.12 USD.
+usd_per_eur: 1.12
 models:
   # Fallback for any turn whose model_name is unlisted or not recorded at all.
   # Set to the platform's primary model (Mistral Small); raise it if larger

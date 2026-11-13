@@ -79,12 +79,15 @@ applies; an unsupported publication destination gives 400 after source authoriza
 
 | Action and HTTP entry | member | editor | owner | analyst | Extra condition / effect |
 | --- | --- | --- | --- | --- | --- |
-| Read space consumption - `GET /spaces/{space_id}/usage` | No | No | Yes, direct | Yes, direct | `ReadUsage` on the requested team/project. Team includes active, retired and purged projects and their agent names, without project roles. No per-user detail or content access. Organization and personal kinds are unsupported (422). |
-| Read own consumption - `GET /me/usage` | Yes | Yes | Yes | Yes | Authentication as a person only; no role, admission or CGU requirement. Only the verified subject's consumption, across all spaces including former memberships. |
+| Read space consumption - `POST /analytics/query`, scope `space` | No | No | Yes, direct | Yes, direct | `ReadUsage` on the requested team/project. Team includes active, retired and purged projects and their agent names, without project roles. No per-user detail or content access. Organization and personal kinds are unsupported (422). |
+| Read own consumption - `POST /analytics/query`, scope `self` | Yes | Yes | Yes | Yes | Verified person AND explicit active organization, with a current non-personal role in that organization. Own facts from former team/project memberships remain readable within that scope. No global fallback or new CGU gate. |
 
-Both routes use the [consumption journal reader](../../apps/control-plane/src/sessions/usage/read.rs)
-and accept a bounded date range; [A12](A12-control-plane-api.md) describes the contract.
-The personal route is also available to a person with none of the listed roles.
+Both scopes use the [consumption journal reader](../../apps/control-plane/src/sessions/usage/read.rs)
+through the [analytics service](../../apps/control-plane/src/analytics/mod.rs)
+and require an explicit bounded date range; [A12](A12-control-plane-api.md) describes the contract.
+A live organization-admin grant also permits self reads; a platform role or a leftover
+personal-space grant alone grants no organization context. Historical skill reads
+use the same self authorization and the server-resolved spaces of that organization.
 
 ## Model administration and the first managed chat
 

@@ -25,6 +25,12 @@ security:
   authorized_origins:
     - http://localhost:5173
 storage:
+  # Optional read-only historical KPI source. TLS is verified; credentials are env references.
+  # history:
+  #   url: https://opensearch.example.test:9200
+  #   index: weaver-kpi
+  #   username: fred-kpi-reader
+  #   password_env_var: FRED_KPI_READER_PASSWORD
   # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
   # content:
   #   endpoint: http://localhost:8333

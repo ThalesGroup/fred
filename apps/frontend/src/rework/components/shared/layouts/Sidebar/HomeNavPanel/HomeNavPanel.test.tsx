@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
     organization_id: string;
     roles: string[];
   }[],
+  selected: undefined as string | undefined,
   hideTeam: false,
   user: "priya",
   roles: ["owner"],
@@ -96,6 +97,22 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   },
   useCreatePersonalSpaceMutation: () => [state.open, { isLoading: false }],
 }));
+vi.mock("@core/hooks/useWorkingOrganization", async () => {
+  const api = await import("../../../../../../slices/controlPlane/controlPlaneApiEnhancements");
+  return {
+    useWorkingOrganization: () => {
+      const memberships = api.useMySpacesQuery();
+      const id = state.selected ?? (state.otherOrganization ? "other" : "org");
+      const available = memberships.currentData?.some((space) => space.organization_id === id);
+      const org = memberships.currentData?.find((space) => space.id === id && space.kind === "organization");
+      return {
+        memberships,
+        organizationId: available && !state.fail ? id : undefined,
+        organization: available ? { id, name: org?.name ?? "rework.home.organizationOf" } : undefined,
+      };
+    },
+  };
+});
 vi.mock("../../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({}) }));
 vi.mock("@shared/atoms/UserAvatar/UserAvatar.tsx", () => ({ default: () => <span>avatar</span> }));
 vi.mock("@shared/atoms/TeamInitials/TeamInitials.tsx", () => ({ default: () => <span>initials</span> }));
@@ -123,6 +140,7 @@ afterEach(async () => {
   node?.remove();
   node = undefined!;
   root = undefined!;
+  state.selected = undefined;
   state.extraSpaces = [];
   state.hideTeam = false;
   localStorage.clear();
@@ -276,6 +294,7 @@ it("heads Home with the section and the person's organization, read-only", async
 
 it("keeps the Home title without an organization", async () => {
   state.organization = false;
+  state.hideTeam = true;
   await render();
   expect(node.querySelector("h2")?.textContent).toBe("rework.home.title");
   expect(node.querySelector("h2")?.previousElementSibling).toBeNull();
@@ -300,11 +319,8 @@ it("lets a member choose the organization for both organization and personal-spa
   state.open.mockReturnValue({ unwrap: async () => ({ id: "new-personal" }) });
   await render();
   expect(node.querySelector('a[href="/team/other"]')).not.toBeNull();
-  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
-  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-    (el) => el.textContent === "Demo",
-  )!;
-  await act(async () => option.click());
+  state.selected = "org";
+  await render();
   expect(node.querySelector('a[href="/team/org"]')).not.toBeNull();
   expect(node.querySelector('a[href="/team/other"]')).toBeNull();
   await act(async () => entry()!.click());
@@ -313,7 +329,7 @@ it("lets a member choose the organization for both organization and personal-spa
   state.hideTeam = true;
   await render();
   expect(node.querySelector('a[href="/team/org"]')).toBeNull();
-  expect(node.querySelector('a[href="/team/other"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/other"]')).toBeNull();
 });
 
 const atlas = {
@@ -361,11 +377,8 @@ it("filters both teams and their projects by the selected organization", async (
   expect(node.querySelector('a[href="/team/support"]')).not.toBeNull();
   expect(node.querySelector('a[href="/team/fredlab"]')).toBeNull();
   expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
-  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
-  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-    (el) => el.textContent === "Demo",
-  )!;
-  await act(async () => option.click());
+  state.selected = "org";
+  await render();
   expect(node.querySelector('a[href="/team/support"]')).toBeNull();
   expect(node.querySelector('#projects-fredlab a[href="/team/atlas"]')).not.toBeNull();
   state.organization = false;
@@ -373,7 +386,7 @@ it("filters both teams and their projects by the selected organization", async (
   state.extraSpaces = state.extraSpaces.filter((space) => space.organization_id !== "org");
   await render();
   expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
-  expect(node.querySelector('a[href="/team/support"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/support"]')).toBeNull();
 });
 
 it("retains a project without a visible parent and removes stale entries on authority failure", async () => {
@@ -408,11 +421,8 @@ it("keeps an isolated project's organization selectable alongside an ordinary me
   state.extraSpaces = [atlas];
   await render();
   expect(node.querySelector('a[href="/team/atlas"]')).toBeNull();
-  await act(async () => node.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
-  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-    (el) => el.textContent === "rework.home.organizationOf",
-  )!;
-  await act(async () => option.click());
+  state.selected = "org";
+  await render();
   expect(node.querySelector('a[href="/team/atlas"]')).not.toBeNull();
   expect(node.querySelector('a[href="/team/org"]')).toBeNull();
   expect(entry()).toBeNull();

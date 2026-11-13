@@ -1,3 +1,4 @@
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,6 +65,7 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
+  const { organizationId } = useWorkingOrganization();
   const agentManagement = isWeaverContentRoute(pathname);
   const navigate = useNavigate();
 
@@ -71,7 +73,9 @@ export default function TeamContentNavbar() {
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const space = !memberships.isError
     ? memberships.currentData?.find((item) =>
-        agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
+        agentManagement && teamId === "personal"
+          ? item.kind === "personal" && item.organization_id === organizationId
+          : item.id === teamId,
       )
     : undefined;
   const organization = space && memberships.currentData?.find((item) => item.id === space.organization_id);

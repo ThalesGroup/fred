@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import WorkingOrganizationRoute from "@core/guards/WorkingOrganizationRoute";
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
@@ -63,12 +64,14 @@ export default function Sidebar({
         </div>
       </div>
       {navigation && (
-        <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
-          {sidebarMode === "HOME" && <HomeNavPanel />}
-          {sidebarMode === "TEAM" && <TeamContentNavbar />}
-          {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-          {sidebarMode === "ADMIN" && <AdminNavbar platformArea={platformArea} />}
-        </div>
+        <WorkingOrganizationRoute silent>
+          <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
+            {sidebarMode === "HOME" && <HomeNavPanel />}
+            {sidebarMode === "TEAM" && <TeamContentNavbar />}
+            {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
+            {sidebarMode === "ADMIN" && <AdminNavbar platformArea={platformArea} />}
+          </div>
+        </WorkingOrganizationRoute>
       )}
     </div>
   );

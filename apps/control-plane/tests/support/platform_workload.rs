@@ -30,6 +30,7 @@ async fn only_control_planes_own_workload_can_manage_runtime_state() {
         .await
         .unwrap();
     let app = routes(AppState {
+        history: None,
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(auth),
         onboarding: control_plane::onboarding::Onboarding {

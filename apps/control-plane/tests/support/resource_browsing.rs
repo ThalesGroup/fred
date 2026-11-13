@@ -90,6 +90,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     }
 
     let app = control_plane::api::routes(control_plane::api::AppState {
+        history: None,
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
@@ -240,6 +241,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         .unwrap();
 
     let app = control_plane::api::routes(control_plane::api::AppState {
+        history: None,
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
