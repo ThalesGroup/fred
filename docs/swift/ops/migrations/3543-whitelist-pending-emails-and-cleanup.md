@@ -26,7 +26,7 @@ Existing exceptions, rules and teams are unchanged.
 
 ## Validation
 
-In Platform access > Users, add an email that no user has yet: it appears under "Waiting for first sign-in". Sign in with that verified email while filtering is on: access is granted and the person moves to the whitelist table.
+In Platform access > Users, add an email that no user has yet: it appears under the "Pending" filter. Sign in with that verified email while filtering is on: access is granted and the person moves to the whitelist table.
 
 ## Rollback
 

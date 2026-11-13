@@ -5089,7 +5089,7 @@
         "more_other": "{{count}} more results. Refine the search to see them.",
         "addEmail": "Add {{email}}",
         "emailDescription": "Not yet known to the platform",
-        "emailKnown": "This address belongs to a known user. Select them in the search."
+        "emailKnown": "{{email}} belongs to a known user. Select them in the search."
       },
       "addedOn": "Added on",
       "origin": {

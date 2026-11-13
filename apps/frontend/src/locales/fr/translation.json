@@ -5089,7 +5089,7 @@
         "more_other": "{{count}} autres résultats. Précisez la recherche pour les afficher.",
         "addEmail": "Ajouter {{email}}",
         "emailDescription": "Personne pas encore connue de la plateforme",
-        "emailKnown": "Cette adresse appartient à un utilisateur connu. Sélectionnez-le dans la recherche."
+        "emailKnown": "{{email}} appartient à un utilisateur connu. Sélectionnez-le dans la recherche."
       },
       "addedOn": "Ajouté le",
       "origin": {

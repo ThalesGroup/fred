@@ -39,9 +39,11 @@ interface IconButtonMenuProps<T> {
   iconButton: IconButtonProps;
   options: OptionModel<T>[];
   onSelect: (value: T) => void;
+  /** "start" opens the menu from the trigger's left edge, over what follows it. */
+  align?: "start" | "end";
 }
 
-export default function IconButtonMenu<T>({ iconButton, options, onSelect }: IconButtonMenuProps<T>) {
+export default function IconButtonMenu<T>({ iconButton, options, onSelect, align = "end" }: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,15 +64,12 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
     const rect = anchor.getBoundingClientRect();
     const spaceBelow = viewportHeight() - rect.bottom;
     const openUp = spaceBelow < MIN_MENU_SPACE && rect.top > spaceBelow;
-    // Opens toward the wider side: a row menu at the right edge grows left, a
-    // button on the left of the page grows right instead of over its neighbours.
-    const growRight = rect.left + rect.width / 2 < viewportWidth() / 2;
     setPopoverStyle({
       position: "fixed",
-      ...(growRight ? { left: rect.left } : { right: viewportWidth() - rect.right }),
+      ...(align === "start" ? { left: rect.left } : { right: viewportWidth() - rect.right }),
       ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
-  }, []);
+  }, [align]);
 
   useLayoutEffect(() => {
     if (isOpen) updatePosition();

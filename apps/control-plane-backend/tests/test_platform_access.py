@@ -2598,9 +2598,24 @@ async def test_overlap_filters_classify_rule_whitelist_only_and_unknown(access):
 
 
 @pytest.mark.asyncio
-async def test_whitelist_only_rechecks_people_a_truncated_lookup_missed(access):
+async def test_whitelist_only_trusts_lookups_below_the_cap(access, monkeypatch):
+    await seed_cleanup_population(access)
+
+    async def no_per_person_check(uid):
+        raise AssertionError("per-person check without a truncated lookup")
+
+    monkeypatch.setattr(access, "access_manager_uid", no_per_person_check)
+    counts = await service.overlap_counts(access, "", None)
+    assert (counts.rule, counts.whitelist_only, counts.unknown) == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_whitelist_only_rechecks_people_a_truncated_lookup_missed(
+    access, monkeypatch
+):
     actor, matching, missing, member, never_seen = await seed_cleanup_population(access)
     real_lookup = access.rebac.lookup_subjects
+    monkeypatch.setattr(service, "LIST_USERS_LIMIT", 0)
 
     async def truncated(resource, relation, subject_type, **kwargs):
         found = await real_lookup(resource, relation, subject_type, **kwargs)

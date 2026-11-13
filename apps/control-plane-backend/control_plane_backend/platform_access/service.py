@@ -482,11 +482,16 @@ def rule_evidence(
     return allows(policy, evaluate(policy, attributes))
 
 
+# OpenFGA's default ListUsers cap; a lookup this large may have been cut short.
+LIST_USERS_LIMIT = 1000
+
+
 async def other_sources(access: PlatformAccess, candidates: list[str]) -> set[str]:
     """Candidates admitted by an admin role or a team.
 
-    One `lookup_subjects` per eligible team settles most people at once; it can be
-    truncated server-side, so whoever it misses gets the exact per-person check.
+    One `lookup_subjects` per eligible team settles everyone at once. A lookup that
+    reaches the server's ListUsers cap may be truncated: only then do the people it
+    missed get the exact per-person check.
     """
     slots = asyncio.Semaphore(8)
 
@@ -523,6 +528,8 @@ async def other_sources(access: PlatformAccess, candidates: list[str]) -> set[st
     admitted = {uid for uid in candidates if uid in found[0]}
     for team, members in zip(teams, found[1:]):
         admitted |= {uid for uid in candidates if uid in members and counts(uid, team)}
+    if all(len(members) < LIST_USERS_LIMIT for members in found):
+        return admitted
 
     async def exact(uid: str) -> bool:
         async with slots:

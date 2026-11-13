@@ -69,7 +69,6 @@ export default function FilterChips<T extends string = string>({
         className={styles.chip}
         data-active={active}
         aria-pressed={active}
-        aria-description={opt.tooltip}
         onClick={onClick}
       >
         {opt.label}

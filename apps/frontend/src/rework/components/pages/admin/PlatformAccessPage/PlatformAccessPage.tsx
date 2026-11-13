@@ -185,9 +185,7 @@ export default function PlatformAccessPage() {
             ? "rework.platformAccess.actorLockout"
             : detail === "platform_access_policy_required"
               ? "rework.platformAccess.rule.required"
-              : detail === "platform_access_email_known"
-                ? "rework.platformAccess.addDialog.emailKnown"
-                : "rework.platformAccess.failed",
+              : "rework.platformAccess.failed",
         ),
       });
     } finally {
@@ -297,6 +295,7 @@ export default function PlatformAccessPage() {
                   {t("rework.platformAccess.addUsers")}
                 </Button>
                 <IconButtonMenu<"import" | "reimport">
+                  align="start"
                   iconButton={{
                     variant: "icon",
                     size: "medium",
@@ -707,7 +706,14 @@ export default function PlatformAccessPage() {
               void run(async () => {
                 if (userIds.length) await grantUsers({ grantPlatformAccessUsers: { user_ids: userIds } }).unwrap();
                 for (const email of emails) {
-                  await addPendingEmail({ addPlatformAccessPendingEmail: { email } }).unwrap();
+                  try {
+                    await addPendingEmail({ addPlatformAccessPendingEmail: { email } }).unwrap();
+                  } catch (error) {
+                    if (normalizeApiError(error).detail !== "platform_access_email_known") throw error;
+                    // Name the rejected address: what came before it is already saved.
+                    showError({ summary: t("rework.platformAccess.addDialog.emailKnown", { email }) });
+                    return;
+                  }
                 }
                 showSuccess({
                   summary: t("rework.platformAccess.grantedSelected", { count: userIds.length + emails.length }),

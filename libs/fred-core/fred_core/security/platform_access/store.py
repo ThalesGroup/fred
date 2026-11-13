@@ -297,9 +297,10 @@ class PlatformAccessStore:
                 return False
         async with self.mutation() as session:
             pending = await session.get(PlatformAccessPendingEmailRow, email)
-            if pending is None:
-                return False
             uid = UUID(user.uid)
+            if pending is None:
+                # A concurrent request of the same person may have just claimed it.
+                return await self.exception(uid, session) is not None
             if await self.user(uid, session) is None:
                 session.add(UserRow(id=uid, email=user.email))
                 await session.flush()
