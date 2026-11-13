@@ -23,6 +23,7 @@ class PreparationSpec(BaseModel):
     public_config_fields: tuple[str, ...] = ()
     rules_version: str = Field(min_length=1, max_length=64)
     gates_readiness: bool = True
+    supports_drafts: bool = False
     max_input_bytes: int = Field(default=64 * 1024 * 1024, ge=1, le=64 * 1024 * 1024)
     max_attempts: int = Field(default=3, ge=1, le=10)
     timeout_seconds: int = Field(default=1200, ge=1, le=7200)
@@ -70,7 +71,7 @@ class PreparationWork(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     preparation_id: UUID
-    owner_kind: Literal["agent", "platform"]
+    owner_kind: Literal["agent", "platform", "draft"]
     owner_id: str = Field(min_length=1, max_length=255)
     runtime_id: str = Field(min_length=1, max_length=255)
     capability_id: str = Field(min_length=1, max_length=255)

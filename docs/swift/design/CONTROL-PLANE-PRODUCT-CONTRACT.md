@@ -5308,6 +5308,27 @@ Each capability has its own current preparation; an unchanged save keeps its
 existing intention. A new upload replaces only the uploaded slots. Superseded
 intentions remain historical and cannot publish a result.
 
+For PPT Builder in an agent form, selecting a file sends a bounded multipart
+upload before Save. The temporary preparation belongs to the editing user and
+team, targets either a template (creation) or an existing agent (editing), and
+expires after one hour. The dispatcher may start the worker as soon as the
+upload is stored. Closing the form does not stop that work or save an agent.
+Save accepts `capability_preparation_drafts` (capability ID to preparation ID),
+checks that the current upload matches the selected capability, target, runtime,
+rules and validated settings, then moves the same preparation and assets to
+the agent in the save transaction. Pending, running and succeeded results keep
+their preparation ID. Existing multipart saves remain supported.
+
+The temporary upload routes require `CAN_UPDATE_AGENTS`, an own credential and
+matching author/team ownership for status, retry and discard:
+
+| Route | Response or effect |
+| --- | --- |
+| `POST /teams/{team_id}/capability-preparation-drafts` | Multipart `target_kind`, `target_id`, `capability_id`, `slot_key`, `group_id`, `generation`, `config_json` and `file`. Returns the temporary preparation ID, validated config, expiry and initial status after durable admission. |
+| `GET /teams/{team_id}/capability-preparation-drafts/{draft_id}` | Current upload status and public preparation summary. |
+| `POST /teams/{team_id}/capability-preparation-drafts/{draft_id}/retry` | Reuses the stored asset after a failed analysis and returns the new preparation ID. |
+| `DELETE /teams/{team_id}/capability-preparation-drafts/{draft_id}` | Discards the current temporary preparation; cleanup reclaims its objects after active worker leases end. |
+
 The following team routes require `CAN_UPDATE_AGENTS` and an own credential.
 Both first check that the agent belongs to the target team:
 

@@ -1244,9 +1244,15 @@ built-in template.
   a separate "Use platform template" action clears any staged file and the
   agent's template edits in the draft. The platform or built-in template appears
   immediately; Save persists the choice, while closing the form discards it.
+  During a save with a staged file, the status line shows a spinner and says the
+  window can be closed while upload and analysis continue in the background.
+  Once saved, the agent card shows a spinner while the capability is
+  preparing; it disappears when preparation succeeds or fails.
 - **Analysis status** (Body Small, `on-surface-retreat`), read from
   `GET /analysis/{instance_id}` and polled every 3 s while pending/running
-  (a failed poll keeps the last answer on screen and polling goes on):
+  (a failed poll keeps the last answer on screen and polling goes on). Reopening
+  the form refetches the status so an older cached template result cannot hide
+  a replacement's progress:
   spinner + "Reading the template…" while in progress; on failure or
   interruption an `error`-coloured line and the backend's message, both
   telling the author to save the agent to read the template again (no
@@ -2383,6 +2389,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 - Description (3-line clamp).
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
+- The preparing banner has a spinner and an announced status while preparation is pending; both stop for a completed or failed preparation.
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
@@ -3328,7 +3335,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
-- **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
+- **State isolation** - `FormState` resets on modal close unless a PowerPoint template upload is in progress. The in-flight upload and form state survive closing and reopening the same agent form; changing the target resets them. Template change resets tuning values.
 
 ---
 

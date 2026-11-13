@@ -14,7 +14,7 @@
 
 import Button from "@shared/atoms/Button/Button.tsx";
 import SettingsModal from "@shared/organisms/SettingsModal/SettingsModal.tsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import {
@@ -23,9 +23,20 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import type {
   AgentTemplateSummary,
+  BodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost,
+  DraftPreparationStatus,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import {
+  useDeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteMutation,
+  useGetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetQuery,
+  usePostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostMutation,
+  usePostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostMutation,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { PptBuilderUploadContext } from "../../../../features/capabilities/ppt_builder/PptBuilderUploadContext.ts";
+import { TEMPLATE_SLOT } from "../../../../features/capabilities/ppt_builder/usePptBuilderAnalysis.ts";
+import { readTemplateSha } from "../../../../features/capabilities/ppt_builder/types.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog.tsx";
 import {
@@ -36,8 +47,12 @@ import {
 } from "./CreationAssistantDialog/creationAssistant.ts";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
-import { applyDocumentAccessConfigChange, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
-import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
+import {
+  applyDocumentAccessConfigChange,
+  normalizeDocumentAccessConfig,
+  type CapabilitySelectionState,
+} from "./toolPackLogic.ts";
+import { CAP_DOCUMENT_ACCESS, CAP_PPT_BUILDER } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { isAgentNameTaken } from "../agentNames.ts";
 
@@ -61,6 +76,7 @@ export type AgentFormPayload = {
    * Only files for ACTIVE capabilities are included.
    */
   capabilityAssetFiles: Record<string, Record<string, File>>;
+  capabilityPreparationDrafts: Record<string, string>;
   /**
    * True when the chosen template advertises at least one capability. When false
    * the caller omits capability fields from the request so a plain edit of a
@@ -97,6 +113,7 @@ type FormState = {
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   /** Pending capability asset files (capability id → AssetSlot.key → File, #1903). */
   capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  capabilityPreparationDrafts: Record<string, string>;
   /** Save-blocking problems reported by capability config widgets (null = none). */
   capabilityBlockingErrors: Record<string, string | null>;
 };
@@ -214,7 +231,7 @@ export function buildAgentFormSubmitPayload(
   // dropped, so a deselected capability's staged upload never reaches the pod.
   const effectiveAssetFiles = Object.fromEntries(
     Object.entries(form.capabilityAssetFiles)
-      .filter(([id]) => effectiveCapabilityIds.includes(id))
+      .filter(([id]) => effectiveCapabilityIds.includes(id) && !form.capabilityPreparationDrafts[id])
       .map(([id, slots]) => [
         id,
         Object.fromEntries(Object.entries(slots).filter(([, file]) => file instanceof File)) as Record<string, File>,
@@ -233,6 +250,11 @@ export function buildAgentFormSubmitPayload(
     selectedCapabilityIds: effectiveCapabilityIds,
     capabilityConfigValues: effectiveCapabilityConfig,
     capabilityAssetFiles: effectiveAssetFiles,
+    capabilityPreparationDrafts: Object.fromEntries(
+      Object.entries(form.capabilityPreparationDrafts).filter(
+        ([id, draftId]) => effectiveCapabilityIds.includes(id) && !!draftId,
+      ),
+    ),
     templateHasCapabilities: availableCapabilityIds.size > 0,
   };
 }
@@ -264,6 +286,19 @@ function isCapabilityBlocked(
 
 const NO_NAMES: ReadonlySet<string> = new Set();
 
+type PptUploadState = {
+  file: File;
+  phase: "uploading" | "admitted" | "failed";
+  draft: DraftPreparationStatus | null;
+  previousSha: string | null;
+  error: string | null;
+};
+
+function draftUploadError(error: unknown): string | null {
+  const detail = (error as { data?: { detail?: unknown } })?.data?.detail;
+  return typeof detail === "string" ? detail : null;
+}
+
 export default function AgentFormModal({
   isOpen,
   isSubmitting,
@@ -294,12 +329,87 @@ export default function AgentFormModal({
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
     capabilityAssetFiles: {},
+    capabilityPreparationDrafts: {},
     capabilityBlockingErrors: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [draftRevision, setDraftRevision] = useState(0);
+  const [pptUpload, setPptUpload] = useState<PptUploadState | null>(null);
+  const [pptRetrying, setPptRetrying] = useState(false);
+  const pptRetryInFlightRef = useRef(false);
+  const pptUploadRef = useRef<PptUploadState | null>(null);
+  const formRef = useRef(form);
+  formRef.current = form;
+  pptUploadRef.current = pptUpload;
+  const uploadTokenRef = useRef(0);
+  const uploadGroupRef = useRef(crypto.randomUUID());
+  const uploadGenerationRef = useRef(0);
+  const pptTargetRef = useRef<string | null>(null);
+  const saveRequestedRef = useRef(false);
+  const [postPptDraft] =
+    usePostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostMutation();
+  const [deletePptDraft] =
+    useDeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteMutation();
+  const [retryPptDraft] =
+    usePostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostMutation();
+  const draftId = pptUpload?.draft?.draft_id;
+  const { currentData: polledDraft, error: draftPollError } =
+    useGetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetQuery(
+      { teamId: teamId ?? "", draftId: draftId ?? "" },
+      {
+        skip: !isOpen || !teamId || !draftId,
+        refetchOnMountOrArgChange: true,
+        pollingInterval:
+          pptUpload?.phase === "admitted" &&
+          pptUpload.draft?.preparation.state !== "succeeded" &&
+          pptUpload.draft?.preparation.state !== "failed"
+            ? 3000
+            : 0,
+      },
+    );
+  useEffect(() => {
+    if (polledDraft?.draft_id) {
+      setPptUpload((previous) =>
+        previous?.draft?.draft_id === polledDraft.draft_id && previous.draft !== polledDraft
+          ? { ...previous, draft: polledDraft }
+          : previous,
+      );
+    }
+  }, [polledDraft]);
+  useEffect(() => {
+    if (!isOpen || !pptUpload?.draft) return;
+    const selectedDraftId = pptUpload.draft.draft_id;
+    const expire = () => {
+      if (pptUploadRef.current?.draft?.draft_id !== selectedDraftId) return;
+      setPptUpload((previous) =>
+        previous?.draft?.draft_id === selectedDraftId
+          ? { ...previous, phase: "failed", draft: null, error: t("capability.ppt_builder.analysis.expiredBeforeSave") }
+          : previous,
+      );
+      setForm((previous) => ({
+        ...previous,
+        capabilityPreparationDrafts: { ...previous.capabilityPreparationDrafts, [CAP_PPT_BUILDER]: "" },
+      }));
+    };
+    if (
+      (draftPollError as { status?: number } | undefined)?.status === 404 ||
+      (draftPollError as { status?: number } | undefined)?.status === 403
+    ) {
+      expire();
+      return;
+    }
+    const expiresAt = Date.parse(pptUpload.draft.expires_at);
+    let timer: number;
+    const checkExpiry = () => {
+      const delay = expiresAt - Date.now();
+      if (delay <= 0) expire();
+      else timer = window.setTimeout(checkExpiry, Math.min(delay, 60 * 60 * 1000));
+    };
+    checkExpiry();
+    return () => window.clearTimeout(timer);
+  }, [isOpen, pptUpload?.draft, draftPollError, t]);
   // The name is checked when the field is left, never while typing; a name the
   // form filled in itself (template, edited agent) counts as checked.
   const [nameChecked, setNameChecked] = useState(false);
@@ -319,8 +429,26 @@ export default function AgentFormModal({
       setSubmitAttempted(false);
       setActiveSection("general");
       setAssistantOpen(false);
+      if (saveRequestedRef.current) {
+        uploadTokenRef.current += 1;
+        setPptUpload(null);
+        pptTargetRef.current = null;
+        saveRequestedRef.current = false;
+      }
       return;
     }
+    if (
+      pptUploadRef.current &&
+      pptTargetRef.current ===
+        `${teamId}:${mode === "edit" ? `agent:${editInstance?.agent_instance_id}` : `template:${formRef.current.templateId}`}`
+    ) {
+      setStep(2);
+      return;
+    }
+    uploadTokenRef.current += 1;
+    uploadGroupRef.current = crypto.randomUUID();
+    uploadGenerationRef.current = 0;
+    setPptUpload(null);
     if (mode === "edit" && editInstance) {
       setForm({
         templateId: editInstance.template_id,
@@ -335,6 +463,7 @@ export default function AgentFormModal({
         // the form edits the inner `config` object only.
         capabilityConfigValues: extractCapabilityConfigValues(editInstance.capability_config),
         capabilityAssetFiles: {},
+        capabilityPreparationDrafts: {},
         capabilityBlockingErrors: {},
       });
       setStep(2);
@@ -350,13 +479,89 @@ export default function AgentFormModal({
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
         capabilityAssetFiles: {},
+        capabilityPreparationDrafts: {},
         capabilityBlockingErrors: {},
       });
       setStep(1);
     }
-  }, [isOpen, mode, editInstance]);
+  }, [isOpen, mode, editInstance, teamId]);
+
+  const startPptUpload = (file: File, config: Record<string, unknown>, previousSha: string | null) => {
+    const targetId = mode === "edit" ? editInstance?.agent_instance_id : formRef.current.templateId;
+    if (!teamId || !targetId) return;
+    pptTargetRef.current = `${teamId}:${mode === "edit" ? "agent" : "template"}:${targetId}`;
+    const token = ++uploadTokenRef.current;
+    const generation = ++uploadGenerationRef.current;
+    setPptUpload({ file, phase: "uploading", draft: null, previousSha, error: null });
+    setForm((previous) => ({
+      ...previous,
+      capabilityPreparationDrafts: { ...previous.capabilityPreparationDrafts, [CAP_PPT_BUILDER]: "" },
+    }));
+    const data = new FormData();
+    data.append("target_kind", mode === "edit" ? "agent" : "template");
+    data.append("target_id", targetId);
+    data.append("capability_id", CAP_PPT_BUILDER);
+    data.append("slot_key", TEMPLATE_SLOT);
+    data.append("group_id", uploadGroupRef.current);
+    data.append("generation", String(generation));
+    data.append("config_json", JSON.stringify(config));
+    data.append("file", file);
+    void postPptDraft({
+      teamId,
+      bodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost:
+        data as unknown as BodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost,
+    })
+      .unwrap()
+      .then((draft) => {
+        if (uploadTokenRef.current !== token) return;
+        setPptUpload({ file, phase: "admitted", draft, previousSha, error: null });
+        setForm((previous) => ({
+          ...previous,
+          capabilityConfigValues: {
+            ...previous.capabilityConfigValues,
+            [CAP_PPT_BUILDER]: { ...previous.capabilityConfigValues[CAP_PPT_BUILDER], ...draft.config },
+          },
+          capabilityPreparationDrafts: {
+            ...previous.capabilityPreparationDrafts,
+            [CAP_PPT_BUILDER]: draft.draft_id,
+          },
+        }));
+      })
+      .catch((error: unknown) => {
+        if (uploadTokenRef.current !== token) return;
+        setPptUpload({ file, phase: "failed", draft: null, previousSha, error: draftUploadError(error) });
+      });
+  };
+
+  const clearPptUpload = () => {
+    const previous = pptUploadRef.current;
+    uploadTokenRef.current += 1;
+    setPptUpload(null);
+    if (teamId && previous?.draft) {
+      void deletePptDraft({ teamId, draftId: previous.draft.draft_id });
+    }
+    setForm((current) => ({
+      ...current,
+      capabilityPreparationDrafts: { ...current.capabilityPreparationDrafts, [CAP_PPT_BUILDER]: "" },
+      capabilityConfigValues: previous
+        ? {
+            ...current.capabilityConfigValues,
+            [CAP_PPT_BUILDER]: {
+              ...current.capabilityConfigValues[CAP_PPT_BUILDER],
+              template_sha256: previous.previousSha,
+              template_key: previous.previousSha ? "ppt_builder_template.pptx" : null,
+            },
+          }
+        : current.capabilityConfigValues,
+    }));
+  };
 
   const handleTemplateSelect = (id: string) => {
+    uploadTokenRef.current += 1;
+    uploadGroupRef.current = crypto.randomUUID();
+    uploadGenerationRef.current = 0;
+    setPptUpload(null);
+    pptTargetRef.current = null;
     const tpl = templates.find((t) => t.template_id === id);
     const lang = i18n.language.split("-")[0];
     setForm({
@@ -370,6 +575,7 @@ export default function AgentFormModal({
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
       capabilityAssetFiles: {},
+      capabilityPreparationDrafts: {},
       capabilityBlockingErrors: {},
     });
     setActiveSection("general");
@@ -394,9 +600,28 @@ export default function AgentFormModal({
         [capabilityId]: { ...prev.capabilityConfigValues[capabilityId], [key]: value },
       },
     }));
+    if (capabilityId === CAP_PPT_BUILDER && key === "use_vision" && pptUploadRef.current) {
+      startPptUpload(
+        pptUploadRef.current.file,
+        { ...formRef.current.capabilityConfigValues[CAP_PPT_BUILDER], [key]: value },
+        pptUploadRef.current.previousSha,
+      );
+    }
   };
 
   const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: File | null) => {
+    if (capabilityId === CAP_PPT_BUILDER && slotKey === TEMPLATE_SLOT) {
+      if (file) {
+        startPptUpload(
+          file,
+          formRef.current.capabilityConfigValues[CAP_PPT_BUILDER] ?? {},
+          pptUploadRef.current?.previousSha ??
+            readTemplateSha(formRef.current.capabilityConfigValues[CAP_PPT_BUILDER] ?? {}),
+        );
+      } else {
+        clearPptUpload();
+      }
+    }
     setForm((prev) => ({
       ...prev,
       capabilityAssetFiles: {
@@ -415,6 +640,32 @@ export default function AgentFormModal({
             capabilityBlockingErrors: { ...prev.capabilityBlockingErrors, [capabilityId]: message },
           },
     );
+  };
+
+  const clearPptSelection = () => {
+    if (!pptUploadRef.current) return;
+    clearPptUpload();
+    setForm((previous) => ({
+      ...previous,
+      capabilityAssetFiles: {
+        ...previous.capabilityAssetFiles,
+        [CAP_PPT_BUILDER]: { ...previous.capabilityAssetFiles[CAP_PPT_BUILDER], [TEMPLATE_SLOT]: undefined },
+      },
+    }));
+  };
+
+  const handleCapabilitySelectionChange = (ids: string[]) => {
+    if (!ids.includes(CAP_PPT_BUILDER)) clearPptSelection();
+    setForm((previous) => ({ ...previous, selectedCapabilityIds: ids }));
+  };
+
+  const handleCapabilitySelectionReplace = (next: CapabilitySelectionState) => {
+    if (!next.selectedCapabilityIds.includes(CAP_PPT_BUILDER)) clearPptSelection();
+    setForm((previous) => ({
+      ...previous,
+      selectedCapabilityIds: next.selectedCapabilityIds,
+      capabilityConfigValues: next.capabilityConfigValues,
+    }));
   };
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
@@ -453,7 +704,12 @@ export default function AgentFormModal({
     !capabilityBlocked &&
     !nameTaken &&
     !recommendationReadPending;
-  const canSave = isFormValid && !isSubmitting;
+  const pptTransferPending =
+    !!form.capabilityAssetFiles[CAP_PPT_BUILDER]?.[TEMPLATE_SLOT] &&
+    (!pptUpload?.draft ||
+      pptUpload.phase !== "admitted" ||
+      form.capabilityPreparationDrafts[CAP_PPT_BUILDER] !== pptUpload.draft.draft_id);
+  const canSave = isFormValid && !isSubmitting && !pptTransferPending;
 
   // Every section holding a blocking problem, computed once: the tab badges
   // (after a submit attempt) and the tab the failed submit jumps to read it.
@@ -468,13 +724,14 @@ export default function AgentFormModal({
 
   const handleSubmit = async () => {
     setSubmitAttempted(true);
-    if (!canSave) {
+    if (!canSave || (pptUpload?.draft && Date.parse(pptUpload.draft.expires_at) <= Date.now())) {
       const firstErrorSection = (["general", "prompts", "tools", "commitments"] as const).find((s) =>
         sectionsWithErrors.has(s),
       );
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
+    saveRequestedRef.current = true;
     await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
   };
 
@@ -539,102 +796,151 @@ export default function AgentFormModal({
     ? t("rework.teams.formAgent.subtitleWithTemplate", { team: teamLabel, template: selectedTemplate.display_name })
     : t("rework.teams.formAgent.subtitle", { team: teamLabel });
 
+  const activePptDraft = polledDraft?.draft_id === draftId ? polledDraft : pptUpload?.draft;
+  const pptPhase =
+    pptUpload?.phase === "uploading" || pptUpload?.phase === "failed"
+      ? pptUpload.phase
+      : activePptDraft?.preparation.state;
+  const pptUploadContext =
+    pptUpload && pptPhase
+      ? {
+          phase: pptPhase,
+          draftId: activePptDraft?.draft_id ?? null,
+          error: pptUpload.error ?? activePptDraft?.preparation.error_detail ?? null,
+          summary: activePptDraft?.preparation.summary ?? null,
+          retrying: pptRetrying,
+          retry:
+            pptPhase === "failed"
+              ? async () => {
+                  if (!teamId) return;
+                  if (pptUpload.phase === "failed" || !activePptDraft) {
+                    startPptUpload(
+                      pptUpload.file,
+                      formRef.current.capabilityConfigValues[CAP_PPT_BUILDER] ?? {},
+                      pptUpload.previousSha,
+                    );
+                    return;
+                  }
+                  if (pptRetryInFlightRef.current) return;
+                  pptRetryInFlightRef.current = true;
+                  setPptRetrying(true);
+                  const token = uploadTokenRef.current;
+                  try {
+                    const next = await retryPptDraft({ teamId, draftId: activePptDraft.draft_id }).unwrap();
+                    if (uploadTokenRef.current !== token) return;
+                    setPptUpload({ ...pptUpload, phase: "admitted", draft: next, error: null });
+                    setForm((previous) => ({
+                      ...previous,
+                      capabilityPreparationDrafts: {
+                        ...previous.capabilityPreparationDrafts,
+                        [CAP_PPT_BUILDER]: next.draft_id,
+                      },
+                    }));
+                  } catch (error: unknown) {
+                    if (uploadTokenRef.current === token) {
+                      setPptUpload({ ...pptUpload, phase: "failed", error: draftUploadError(error) });
+                    }
+                  } finally {
+                    pptRetryInFlightRef.current = false;
+                    setPptRetrying(false);
+                  }
+                }
+              : null,
+        }
+      : null;
+
   return (
-    <SettingsModal
-      isOpen={isOpen}
-      onClose={onClose}
-      id="agent-form-modal"
-      cardClassName={styles.card}
-      title={title}
-      subtitle={subtitle}
-      actions={
-        <>
-          {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
-          {step === 2 && selectedTemplate && assistantButton}
-          <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
-            {t("rework.cancel")}
-          </Button>
-          {step === 2 && (
-            <Button
-              color={submitAttempted && !isFormValid ? "warning" : "primary"}
-              variant="filled"
-              size="medium"
-              disabled={nameTaken || recommendationReadPending}
-              onClick={handleSubmit}
-            >
-              {mode === "edit" ? t("rework.save") : t("rework.create")}
+    <PptBuilderUploadContext.Provider value={pptUploadContext}>
+      <SettingsModal
+        isOpen={isOpen}
+        onClose={onClose}
+        id="agent-form-modal"
+        cardClassName={styles.card}
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <>
+            {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
+            {step === 2 && selectedTemplate && assistantButton}
+            <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
+              {t("rework.cancel")}
             </Button>
-          )}
-        </>
-      }
-      footer={
-        mode === "edit" && onDelete ? (
-          <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-            {t("rework.delete")}
-          </Button>
-        ) : undefined
-      }
-    >
-      {step === 1 ? (
-        <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
-      ) : (
-        <AgentFormBody
-          mode={mode}
-          templates={templates}
-          templateId={form.templateId}
-          displayName={form.displayName}
-          role={form.role}
-          description={form.description}
-          usageStatement={form.usageStatement}
-          recommendedChatProfileId={recommendedChatProfileId}
-          tuningFieldValues={form.tuningValues}
-          selectedCapabilityIds={form.selectedCapabilityIds}
-          capabilityConfigValues={form.capabilityConfigValues}
-          capabilityAssetFiles={form.capabilityAssetFiles}
-          isSubmitting={isSubmitting}
-          submitAttempted={submitAttempted}
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-          errorSections={errorSections}
-          editInstance={editInstance}
-          teamId={teamId}
-          nameTaken={nameTaken}
-          onDisplayNameChange={(v) => {
-            setForm((prev) => ({ ...prev, displayName: v }));
-            setNameChecked(false);
-          }}
-          onDisplayNameBlur={() => setNameChecked(true)}
-          onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
-          onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
-          onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
-          onTuningChange={handleTuningChange}
-          onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
-          onCapabilitySelectionReplace={(next) =>
-            setForm((prev) => ({
-              ...prev,
-              selectedCapabilityIds: next.selectedCapabilityIds,
-              capabilityConfigValues: next.capabilityConfigValues,
-            }))
-          }
-          onCapabilityConfigChange={handleCapabilityConfigChange}
-          onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
-          onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
-          draftRevision={draftRevision}
-        />
-      )}
-      {assistantReady && teamId && (
-        <CreationAssistantDialog
-          open={assistantOpen}
-          teamId={teamId}
-          templateId={form.templateId}
-          capabilities={templateCapabilities}
-          hasPromptField={!!promptField}
-          current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
-          onApply={applyDraft}
-          onClose={() => setAssistantOpen(false)}
-        />
-      )}
-    </SettingsModal>
+            {step === 2 && (
+              <Button
+                color={submitAttempted && !isFormValid ? "warning" : "primary"}
+                variant="filled"
+                size="medium"
+                disabled={nameTaken || recommendationReadPending || pptTransferPending || isSubmitting}
+                onClick={handleSubmit}
+              >
+                {mode === "edit" ? t("rework.save") : t("rework.create")}
+              </Button>
+            )}
+          </>
+        }
+        footer={
+          mode === "edit" && onDelete ? (
+            <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
+              {t("rework.delete")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {step === 1 ? (
+          <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
+        ) : (
+          <AgentFormBody
+            mode={mode}
+            templates={templates}
+            templateId={form.templateId}
+            displayName={form.displayName}
+            role={form.role}
+            description={form.description}
+            usageStatement={form.usageStatement}
+            recommendedChatProfileId={recommendedChatProfileId}
+            tuningFieldValues={form.tuningValues}
+            selectedCapabilityIds={form.selectedCapabilityIds}
+            capabilityConfigValues={form.capabilityConfigValues}
+            capabilityAssetFiles={form.capabilityAssetFiles}
+            isSubmitting={isSubmitting}
+            submitAttempted={submitAttempted}
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            errorSections={errorSections}
+            editInstance={editInstance}
+            teamId={teamId}
+            nameTaken={nameTaken}
+            onDisplayNameChange={(v) => {
+              setForm((prev) => ({ ...prev, displayName: v }));
+              setNameChecked(false);
+            }}
+            onDisplayNameBlur={() => setNameChecked(true)}
+            onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
+            onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+            onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
+            onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
+            onTuningChange={handleTuningChange}
+            onCapabilitySelectionChange={handleCapabilitySelectionChange}
+            onCapabilitySelectionReplace={handleCapabilitySelectionReplace}
+            onCapabilityConfigChange={handleCapabilityConfigChange}
+            onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
+            onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+            draftRevision={draftRevision}
+          />
+        )}
+        {assistantReady && teamId && (
+          <CreationAssistantDialog
+            open={assistantOpen}
+            teamId={teamId}
+            templateId={form.templateId}
+            capabilities={templateCapabilities}
+            hasPromptField={!!promptField}
+            current={draftTargets(form, selectedTemplate, lang, promptField?.key, mode)}
+            onApply={applyDraft}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
+      </SettingsModal>
+    </PptBuilderUploadContext.Provider>
   );
 }

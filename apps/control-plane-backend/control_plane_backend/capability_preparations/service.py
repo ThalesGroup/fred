@@ -217,7 +217,7 @@ async def get_worker_work(
     )
     return PreparationWork(
         preparation_id=UUID(row.id),
-        owner_kind=cast(Literal["agent", "platform"], row.owner_kind),
+        owner_kind=cast(Literal["agent", "platform", "draft"], row.owner_kind),
         owner_id=row.owner_id,
         runtime_id=row.runtime_id,
         capability_id=row.capability_id,
@@ -461,6 +461,32 @@ async def claim_cleanup(
 ) -> list[CleanupLease]:
     """Lease old revisions after turns and worker attempts have aged out."""
     now = utcnow()
+    expired = (
+        (
+            await session.execute(
+                select(CapabilityPreparationRow)
+                .where(
+                    CapabilityPreparationRow.runtime_id == runtime_id,
+                    CapabilityPreparationRow.owner_kind == "draft",
+                    CapabilityPreparationRow.is_current.is_(True),
+                    CapabilityPreparationRow.draft_expires_at <= now,
+                )
+                .order_by(
+                    CapabilityPreparationRow.draft_expires_at,
+                    CapabilityPreparationRow.id,
+                )
+                .limit(min(limit, 20))
+                .with_for_update(skip_locked=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for draft in expired:
+        draft.is_current = False
+        draft.state = "obsolete"
+        draft.superseded_at = now - timedelta(hours=24)
+    await session.flush()
     rows = (
         (
             await session.execute(
@@ -473,9 +499,14 @@ async def claim_cleanup(
                     ),
                     CapabilityPreparationRow.cleaned_at.is_(None),
                     CapabilityPreparationRow.superseded_at <= now - timedelta(hours=24),
+                    CapabilityPreparationRow.deadline_at <= now,
                     or_(
                         CapabilityPreparationRow.dispatch_until.is_(None),
                         CapabilityPreparationRow.dispatch_until <= now,
+                    ),
+                    or_(
+                        CapabilityPreparationRow.lease_until.is_(None),
+                        CapabilityPreparationRow.lease_until <= now,
                     ),
                 )
                 .order_by(

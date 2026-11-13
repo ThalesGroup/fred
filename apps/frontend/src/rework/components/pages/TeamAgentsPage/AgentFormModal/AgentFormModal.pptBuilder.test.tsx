@@ -13,13 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act } from "react";
+import { act, useContext } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import type {
   AgentTemplateSummary,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { PptBuilderUploadContext } from "../../../../features/capabilities/ppt_builder/PptBuilderUploadContext";
+
+const { postDraftMock } = vi.hoisted(() => ({ postDraftMock: vi.fn() }));
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,6 +34,18 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
   useTeamRoutingPolicyQuery: () => ({ currentData: undefined, isError: false }),
   useAvailableModelProfilesQuery: () => ({ currentData: undefined, isError: false }),
+}));
+vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi.ts", () => ({
+  usePostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPostMutation: () => [
+    (args: unknown) => ({ unwrap: () => postDraftMock(args) }),
+  ],
+  useDeleteTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdDeleteMutation:
+    () => [() => ({ unwrap: () => Promise.resolve() })],
+  usePostTeamCapabilityPreparationDraftRetryControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdRetryPostMutation:
+    () => [() => ({ unwrap: () => Promise.reject(new Error("offline")) })],
+  useGetTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsDraftIdGetQuery: () => ({
+    currentData: undefined,
+  }),
 }));
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "Agent" }),
@@ -44,6 +59,12 @@ vi.mock("@shared/organisms/SettingsModal/SettingsModal.tsx", () => ({
       </div>
     ) : null,
 }));
+vi.mock("./CreationAssistantDialog/CreationAssistantDialog.tsx", () => ({ CreationAssistantDialog: () => null }));
+vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
+  TemplateBrowser: ({ onSelect }: { onSelect: (id: string) => void }) => (
+    <button onClick={() => onSelect("runtime:template")}>Select template</button>
+  ),
+}));
 vi.mock("./AgentFormBody.tsx", () => ({
   AgentFormBody: ({
     capabilityConfigValues,
@@ -55,6 +76,7 @@ vi.mock("./AgentFormBody.tsx", () => ({
     onCapabilityAssetFileChange: (id: string, slot: string, file: File | null) => void;
   }) => (
     <div>
+      <span data-testid="upload-phase">{useContext(PptBuilderUploadContext)?.phase ?? "none"}</span>
       <span data-testid="template-sha">{String(capabilityConfigValues.ppt_builder?.template_sha256)}</span>
       <button
         onClick={() => onCapabilityAssetFileChange("ppt_builder", "template", new File(["deck"], "replacement.pptx"))}
@@ -152,5 +174,191 @@ it("discards a pending template reset on close and submits it only after Save", 
   } finally {
     act(() => root.unmount());
     container.remove();
+  }
+});
+
+it("uploads a selected template before Save and attaches its preparation on Save", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const onSubmit = vi.fn(async (_payload: AgentFormPayload) => undefined);
+  let finishUpload: ((value: unknown) => void) | undefined;
+  postDraftMock.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+  );
+  try {
+    act(() =>
+      root.render(
+        <AgentFormModal
+          isOpen
+          isSubmitting={false}
+          mode="edit"
+          teamId="team"
+          editInstance={instance}
+          templates={[template]}
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+        />,
+      ),
+    );
+    const button = (label: string) =>
+      [...container.querySelectorAll("button")].find((item) => item.textContent === label);
+    expect(postDraftMock).not.toHaveBeenCalled();
+    act(() => button("Stage")?.click());
+    expect(postDraftMock).toHaveBeenCalledOnce();
+    const data = postDraftMock.mock.calls[0][0]
+      .bodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost as FormData;
+    expect(data.get("target_kind")).toBe("agent");
+    expect(data.get("target_id")).toBe("agent");
+    expect(container.querySelector('[data-testid="upload-phase"]')?.textContent).toBe("uploading");
+    expect(button("rework.save")?.disabled).toBe(true);
+    act(() => button("rework.save")?.click());
+    expect(onSubmit).not.toHaveBeenCalled();
+    await act(async () =>
+      finishUpload?.({
+        draft_id: "draft-id",
+        expires_at: "2099-11-13T11:00:00Z",
+        config: { template_sha256: "new-sha", use_vision: false },
+        preparation: { state: "pending", summary: null },
+      }),
+    );
+    expect(container.querySelector('[data-testid="upload-phase"]')?.textContent).toBe("pending");
+    expect(button("rework.save")?.disabled).toBe(false);
+    await act(async () => button("rework.save")?.click());
+    expect(onSubmit.mock.calls[0][0].capabilityPreparationDrafts).toEqual({ ppt_builder: "draft-id" });
+    expect(onSubmit.mock.calls[0][0].capabilityAssetFiles).toEqual({});
+    expect(onSubmit.mock.calls[0][0].capabilityConfigValues.ppt_builder.template_sha256).toBe("new-sha");
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    postDraftMock.mockReset();
+  }
+});
+
+it("starts upload during agent creation without creating the agent", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const onSubmit = vi.fn(async (_payload: AgentFormPayload) => undefined);
+  postDraftMock.mockImplementation(() => new Promise(() => undefined));
+  try {
+    act(() =>
+      root.render(
+        <AgentFormModal
+          isOpen
+          isSubmitting={false}
+          mode="create"
+          teamId="team"
+          templates={[{ ...template, template_id: "runtime:template" }]}
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+        />,
+      ),
+    );
+    const click = (label: string) =>
+      [...container.querySelectorAll("button")].find((item) => item.textContent === label)?.click();
+    act(() => click("Select template"));
+    act(() => click("Stage"));
+    expect(postDraftMock).toHaveBeenCalledOnce();
+    const data = postDraftMock.mock.calls[0][0]
+      .bodyPostTeamCapabilityPreparationDraftControlPlaneV1TeamsTeamIdCapabilityPreparationDraftsPost as FormData;
+    expect(data.get("target_kind")).toBe("template");
+    expect(data.get("target_id")).toBe("runtime:template");
+    expect(onSubmit).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    postDraftMock.mockReset();
+  }
+});
+
+it("requires reselecting an expired temporary template before Save", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const onSubmit = vi.fn(async (_payload: AgentFormPayload) => undefined);
+  postDraftMock.mockResolvedValue({
+    draft_id: "expired-draft",
+    expires_at: "2000-01-01T00:00:00Z",
+    config: { template_sha256: "new-sha", use_vision: false },
+    preparation: { state: "succeeded", summary: "Analysed 4 layouts" },
+  });
+  try {
+    act(() =>
+      root.render(
+        <AgentFormModal
+          isOpen
+          isSubmitting={false}
+          mode="edit"
+          teamId="team"
+          editInstance={instance}
+          templates={[template]}
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+        />,
+      ),
+    );
+    const button = (label: string) =>
+      [...container.querySelectorAll("button")].find((item) => item.textContent === label);
+    await act(async () => button("Stage")?.click());
+    expect(container.querySelector('[data-testid="upload-phase"]')?.textContent).toBe("failed");
+    expect(button("rework.save")?.disabled).toBe(true);
+    expect(onSubmit).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    postDraftMock.mockReset();
+  }
+});
+
+it("keeps the transfer alive when the form closes and reopens", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let finishUpload: ((value: unknown) => void) | undefined;
+  postDraftMock.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
+  );
+  const render = (isOpen: boolean) =>
+    act(() =>
+      root.render(
+        <AgentFormModal
+          isOpen={isOpen}
+          isSubmitting={false}
+          mode="edit"
+          teamId="team"
+          editInstance={instance}
+          templates={[template]}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />,
+      ),
+    );
+  try {
+    render(true);
+    act(() => [...container.querySelectorAll("button")].find((item) => item.textContent === "Stage")?.click());
+    expect(container.querySelector('[data-testid="upload-phase"]')?.textContent).toBe("uploading");
+    render(false);
+    await act(async () =>
+      finishUpload?.({
+        draft_id: "draft-id",
+        expires_at: "2099-11-13T11:00:00Z",
+        config: { template_sha256: "new-sha" },
+        preparation: { state: "pending", summary: null },
+      }),
+    );
+    render(true);
+    expect(container.querySelector('[data-testid="upload-phase"]')?.textContent).toBe("pending");
+    expect(postDraftMock).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    postDraftMock.mockReset();
   }
 });

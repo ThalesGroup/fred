@@ -439,11 +439,16 @@
         "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
       },
       "analysis": {
-        "staged": "The template will be read once you save your {{agentsNicknameSingular}}. Your {{agentsNicknameSingular}} becomes available when that is done.",
-        "inProgress": "Reading the template… Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
+        "staged": "The template is ready to upload. Select it again if the upload has not started.",
+        "uploading": "Uploading the template now... You can close this window; upload and analysis continue in the background.",
+        "preparingBeforeSave": "Reading the template in the background... You can save your {{agentsNicknameSingular}} while this continues, or close this window and return later.",
+        "readyBeforeSave": "Template analysis complete. Save your {{agentsNicknameSingular}} to use it. {{summary}}",
+        "inProgress": "Reading the template... Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
         "failed": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until it is; save your {{agentsNicknameSingular}} to read it again.",
         "failedRetry": "The template could not be read. Your {{agentsNicknameSingular}} stays unavailable until the analysis succeeds.",
+        "failedBeforeSave": "The template could not be uploaded or read. Retry or select another file before saving.",
+        "expiredBeforeSave": "This temporary template expired. Select the file again before saving.",
         "retry": "Run the analysis again",
         "retryError": "The analysis could not be started again.",
         "interrupted": "Reading the template was interrupted. Your {{agentsNicknameSingular}} stays unavailable until you save it to read the template again.",

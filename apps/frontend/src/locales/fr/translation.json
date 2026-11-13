@@ -439,11 +439,16 @@
         "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
       },
       "analysis": {
-        "staged": "Le template sera lu une fois votre {{agentsNicknameSingular}} enregistré. Votre {{agentsNicknameSingular}} devient disponible quand c'est terminé.",
-        "inProgress": "Lecture du template en cours… Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "staged": "Le template est prêt à être téléversé. Sélectionnez-le à nouveau si le téléversement n'a pas démarré.",
+        "uploading": "Téléversement du template en cours... Vous pouvez fermer cette fenêtre ; le téléversement et l'analyse continuent en arrière-plan.",
+        "preparingBeforeSave": "Lecture du template en arrière-plan... Vous pouvez enregistrer votre {{agentsNicknameSingular}} pendant cette étape, ou fermer cette fenêtre et revenir plus tard.",
+        "readyBeforeSave": "Lecture du template terminée. Enregistrez votre {{agentsNicknameSingular}} pour l'utiliser. {{summary}}",
+        "inProgress": "Lecture du template en cours... Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
         "failed": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible tant qu'il ne l'est pas ; enregistrez votre {{agentsNicknameSingular}} pour le relire.",
         "failedRetry": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à la réussite de la lecture.",
+        "failedBeforeSave": "Le template n'a pas pu être téléversé ou lu. Réessayez ou sélectionnez un autre fichier avant d'enregistrer.",
+        "expiredBeforeSave": "Ce template temporaire a expiré. Sélectionnez de nouveau le fichier avant d'enregistrer.",
         "retry": "Relancer la lecture",
         "retryError": "La lecture n'a pas pu être relancée.",
         "interrupted": "La lecture du template a été interrompue. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",

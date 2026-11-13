@@ -157,7 +157,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           )}
         </div>
 
-        <AnalysisStatus analysis={analysis} />
+        <AnalysisStatus analysis={analysis} submitting={disabled} />
 
         {analysis.droppedOverrides.length > 0 && (
           <p className={styles.summary}>
@@ -213,35 +213,71 @@ export function TemplateGuideLink() {
 }
 
 /** The line under the upload row: what happens to the template next. */
-export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
+export function AnalysisStatus({
+  analysis,
+  submitting = false,
+}: {
+  analysis: PptBuilderAnalysis;
+  submitting?: boolean;
+}) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const { phase } = analysis;
 
+  if (phase === "uploading")
+    return (
+      <p className={styles.status} role="status">
+        <Spinner size={16} decorative /> {t("capability.ppt_builder.analysis.uploading", { agentsNicknameSingular })}
+      </p>
+    );
   if (phase === "staged")
-    return <p className={styles.status}>{t("capability.ppt_builder.analysis.staged", { agentsNicknameSingular })}</p>;
+    return submitting ? (
+      <p className={styles.status} role="status">
+        <Spinner size={16} decorative /> {t("capability.ppt_builder.analysis.uploading", { agentsNicknameSingular })}
+      </p>
+    ) : (
+      <p className={styles.status}>{t("capability.ppt_builder.analysis.staged", { agentsNicknameSingular })}</p>
+    );
   if (isInProgress(phase) || (phase === "unknown" && analysis.statusLoading) || analysis.refreshing) {
     return (
       <p className={styles.status} role="status">
-        <Spinner size={16} />{" "}
+        <Spinner size={16} decorative />{" "}
         {t(
           analysis.refreshing
             ? "capability.ppt_builder.analysis.refreshing"
-            : "capability.ppt_builder.analysis.inProgress",
+            : analysis.temporary
+              ? "capability.ppt_builder.analysis.preparingBeforeSave"
+              : "capability.ppt_builder.analysis.inProgress",
           { agentsNicknameSingular },
         )}
       </p>
     );
   }
   if (phase === "unknown") return <p className={styles.status}>{t("capability.ppt_builder.analysis.unknown")}</p>;
+  if (phase === "succeeded" && analysis.temporary)
+    return (
+      <p className={styles.status} role="status">
+        {t("capability.ppt_builder.analysis.readyBeforeSave", {
+          agentsNicknameSingular,
+          summary: analysis.temporarySummary ?? "",
+        })}
+      </p>
+    );
   if (phase === "succeeded" && !analysis.canRerun) return null;
   if (phase === "builtin") return null;
 
   const message =
     phase === "failed"
-      ? t(analysis.retry ? "capability.ppt_builder.analysis.failedRetry" : "capability.ppt_builder.analysis.failed", {
-          agentsNicknameSingular,
-        })
+      ? t(
+          analysis.temporary
+            ? "capability.ppt_builder.analysis.failedBeforeSave"
+            : analysis.retry
+              ? "capability.ppt_builder.analysis.failedRetry"
+              : "capability.ppt_builder.analysis.failed",
+          {
+            agentsNicknameSingular,
+          },
+        )
       : phase === "interrupted"
         ? t("capability.ppt_builder.analysis.interrupted", { agentsNicknameSingular })
         : t("capability.ppt_builder.analysis.outdated", { agentsNicknameSingular });
