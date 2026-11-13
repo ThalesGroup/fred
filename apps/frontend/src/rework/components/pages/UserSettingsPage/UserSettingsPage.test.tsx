@@ -185,9 +185,8 @@ describe("shared UserSettingsPage", () => {
     expect(container.textContent).toContain(
       "rework.userSettings.platformRoles: rework.platformRoles.roles.platform_admin",
     );
-    expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(container.textContent).toContain("rework.userSettings.picture.title");
-    expect(container.querySelector('[data-testid="avatar-upload-input"]')).not.toBeNull();
+    expect(container.querySelector('input[type="file"][data-testid="avatar-upload-input"]')).not.toBeNull();
     expect([...container.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
       "/gdpr",
       "/gcu",
