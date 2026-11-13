@@ -217,16 +217,10 @@ export function AgentFormBody({
     dispatch(setCapabilityBaseUrls(Object.fromEntries(capabilities.map((entry) => [entry.id, entry.route_base_url]))));
   }, [dispatch, capabilities]);
 
-  // #1975 (RFC §3.9): a platform-suspended instance renders its broken
-  // capability in an error state with plain-language text and the two fix paths
-  // (untick/reset the capability and re-save, or contact a platform admin). A
-  // successful save re-validates every active slice and clears the suspension —
-  // there is no second clearing mechanism. The offending capability id is only
-  // derivable for the availability reasons (a selected id the template no
-  // longer advertises, including MCP capabilities, which are FGA/team-gated
-  // like every other capability); `capability_config_invalid` names no id (the
-  // pod's 422 wording is not carried on the summary), so its message is generic.
+  // Pending preparation clears when its worker finishes; other suspensions
+  // need an editor to resolve them.
   const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
+  const preparationInProgress = suspensionReason === "capability_pending" && !editInstance?.suspension_detail;
   const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
   const missingCapabilityIds =
     suspensionReason === "capability_unavailable" || suspensionReason === "capability_access_revoked"
@@ -433,7 +427,10 @@ export function AgentFormBody({
       )}
 
       {suspensionMessage && (
-        <div className={styles.suspensionBanner} role="alert">
+        <div
+          className={`${styles.suspensionBanner} ${preparationInProgress ? styles.preparationBanner : ""}`}
+          role={preparationInProgress ? "status" : "alert"}
+        >
           <strong>{suspensionTitle}</strong> {suspensionMessage}
         </div>
       )}

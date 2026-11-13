@@ -439,7 +439,7 @@
         "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
       },
       "analysis": {
-        "staged": "Le template sera lu une fois votre {{agentsNicknameSingular}} enregistré. Votre {{agentsNicknameSingular}} devient disponible quand c'est terminé.",
+        "staged": "Le téléversement du template démarre quand vous enregistrez votre {{agentsNicknameSingular}}. Sa lecture continue ensuite en arrière-plan ; votre {{agentsNicknameSingular}} devient disponible quand elle est terminée.",
         "uploading": "Téléversement du template... Vous pouvez fermer cette fenêtre ; le téléversement et l'analyse continuent en arrière-plan. Votre {{agentsNicknameSingular}} deviendra disponible une fois la lecture terminée.",
         "inProgress": "Lecture du template en cours… Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",

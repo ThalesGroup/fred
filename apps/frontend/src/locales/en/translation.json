@@ -439,7 +439,7 @@
         "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
       },
       "analysis": {
-        "staged": "The template will be read once you save your {{agentsNicknameSingular}}. Your {{agentsNicknameSingular}} becomes available when that is done.",
+        "staged": "The template upload starts when you save your {{agentsNicknameSingular}}. It is then read in the background; your {{agentsNicknameSingular}} becomes available when that is done.",
         "uploading": "Uploading the template... You can close this window; upload and analysis continue in the background. Your {{agentsNicknameSingular}} becomes available once it has been read.",
         "inProgress": "Reading the template… Your {{agentsNicknameSingular}} becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
