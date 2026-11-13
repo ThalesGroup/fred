@@ -30,6 +30,10 @@ from fred_core.common import ModelConfiguration
 from fred_core.model.diagnostics import effective_model_settings, log_model_settings
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
+from fred_core.model.streamed_tool_call_ids import (
+    NORMALIZE_TOOL_CALL_IDS_SETTING,
+    SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER,
+)
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
@@ -300,12 +304,15 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         ModelProvider.AZURE_APIM.value,
     ):
         _normalize_openai_compat(settings)
-    if provider in (
-        ModelProvider.OPENAI.value,
-        ModelProvider.AZURE_OPENAI.value,
-        ModelProvider.AZURE_APIM.value,
-    ):
         _apply_openai_stream_usage_default(settings)
+        normalize_tool_call_ids = settings.pop(NORMALIZE_TOOL_CALL_IDS_SETTING, True)
+        if not isinstance(normalize_tool_call_ids, bool):
+            raise ValueError(f"{NORMALIZE_TOOL_CALL_IDS_SETTING} must be a boolean.")
+        if not normalize_tool_call_ids:
+            settings["default_headers"] = {
+                **(settings.get("default_headers") or {}),
+                SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER: "1",
+            }
 
     # Extract an optional request-level timeout (applied at OpenAI client level)
     request_level_timeout = settings.get("request_timeout", None)
@@ -437,9 +444,10 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             api_version=api_version,
             azure_ad_token_provider=_token_provider,
             default_headers={
+                **(passthrough.pop("default_headers", None) or {}),
                 "TrustNest-Apim-Subscription-Key": os.environ[
                     "AZURE_APIM_SUBSCRIPTION_KEY"
-                ]
+                ],
             },
             **base_kwargs,
             **passthrough,
