@@ -1601,6 +1601,10 @@ applications:
       vision_worker_client_id: agentic
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
+      # Optional remote reranker for the API's document search. Set the same
+      # provider/name/settings shape as other models and provide the named key
+      # in knowledge-flow-backend-env. Null keeps the image CrossEncoder.
+      reranker_model: null
       storage:         *kf-storage
       integrations:
         prometheus:
@@ -1851,6 +1855,7 @@ applications:
       chat_model:      *kf-chat-model
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
+      reranker_model: null
       storage:         *kf-storage
       integrations:
         prometheus:
