@@ -31,6 +31,7 @@ from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
 from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
+from fred_knowledge.models import DocumentModelError
 from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from langchain_core.documents import Document
 
@@ -576,7 +577,30 @@ class VectorSearchService:
         # Verify the whole bounded union before applying the global limit.
         hits = (await self._visible_hits(scope, documents, user))[:pool]
         if rerank and hits:
-            hits = await asyncio.to_thread(self.rerank_documents, question, hits, top_r=top_k)
+            async with engine.connect() as conn:
+                try:
+                    remote = await organization_model(conn, context.space_id, "rerank")
+                except OrganizationModelUnavailable:
+                    raise HTTPException(status_code=503, detail="organization_reranker_unavailable") from None
+            if remote is None:
+                hits = await asyncio.to_thread(self.rerank_documents, question, hits, top_r=top_k)
+            else:
+                rerank_dims = self._kpi_search_dims(None, policy="rerank")
+                rerank_dims["model"] = remote.admission.selection.key.upstream_model_id
+                candidate_count = len(hits)
+                try:
+                    with self.kpi.timer("rag.rerank_latency_ms", dims=rerank_dims, actor=self._kpi_actor(user=None)) as kpi_dims:
+                        indices = await ApplicationContext.get_instance().get_document_models().rerank(remote.admission, question, [hit.content for hit in hits], min(top_k, candidate_count))
+                        kpi_dims["status"] = "ok"
+                except DocumentModelError:
+                    raise HTTPException(status_code=503, detail="organization_reranker_unavailable") from None
+                hits = [hits[index] for index in indices]
+                for name, value in (
+                    ("rag.rerank_total", 1),
+                    ("rag.rerank_docs_total", candidate_count),
+                    ("rag.rerank_top_r_total", min(top_k, candidate_count)),
+                ):
+                    self.kpi.count(name, value, dims={**rerank_dims, "status": "ok"}, actor=self._kpi_actor(user=None))
         if min_score is not None:
             hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
         hits = hits[:top_k]
