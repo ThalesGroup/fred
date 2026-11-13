@@ -99,3 +99,30 @@ pub(crate) async fn read(
     };
     Ok(query.fetch_all(conn).await?)
 }
+
+/// A creation count of the retained catalogue, not an immutable creation journal.
+pub(crate) async fn retained_conversations(
+    conn: &mut PgConnection,
+    scope: &UsageScope<'_>,
+    since: DateTime<Utc>,
+    until: DateTime<Utc>,
+) -> AppResult<String> {
+    let UsageScope::Person {
+        subject,
+        organization,
+    } = scope
+    else {
+        return Err(crate::error::AppError::Forbidden);
+    };
+    Ok(sqlx::query_scalar(concat!(
+        "select count(*)::text from session_metadata s join space p on p.id=s.space_id ",
+        "where s.user_id=$1 and p.organization_id=$2 and p.deletion_id is null ",
+        "and s.deletion_id is null and s.created_at >= $3 and s.created_at < $4"
+    ))
+    .bind(subject)
+    .bind(organization)
+    .bind(since)
+    .bind(until)
+    .fetch_one(conn)
+    .await?)
+}

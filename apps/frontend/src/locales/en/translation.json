@@ -2756,31 +2756,43 @@
       },
       "topAgents": {
         "title": "Your most-used agents",
-        "unit": "conv.",
-        "empty": "No agent used in this period."
+        "unit": "runs",
+        "empty": "No agent use observed in this period."
       },
       "topTeams": {
-        "title": "Your activity across your teams",
-        "unit": "conv.",
+        "title": "Your activity in your teams and spaces",
+        "unit": "runs",
         "personalSpace": "Personal space",
-        "empty": "You are not a member of any team.",
+        "empty": "No space memberships in this organization.",
         "role": {
-          "team_admin": "Owner",
-          "team_editor": "Editor",
-          "team_analyst": "Analyst",
-          "team_member": "Member"
+          "owner": "Owner",
+          "editor": "Editor",
+          "analyst": "Analyst",
+          "member": "Member",
+          "organization_admin": "Admin"
         }
       },
       "activity": {
         "title": "Your activity",
-        "conversations": "New conversations",
+        "conversations": "New retained conversations",
         "messages": "Messages sent",
         "agents": "Agents used",
         "deltaUp": "▲ {{pct}}% ({{abs}})",
         "deltaDown": "▼ {{pct}}% ({{abs}})",
         "deltaFlat": "flat",
         "vsPrevious": "vs previous period",
-        "periodCaption": "over the last {{count}} days"
+        "periodCaption": "over the last {{count}} days",
+        "conversationsDefinition": "Created in the period and still retained. Deletion reduces this count.",
+        "messagesDefinition": "Observed executions, including errors and resumes; title generations excluded.",
+        "agentsDefinition": "Distinct agents by stable identity, including deleted agents.",
+        "loading": "Loading your activity…",
+        "error": "Unable to load your activity.",
+        "unavailable": "History or data temporarily unavailable.",
+        "organizationRequired": "Working organization unavailable. Choose one from your account menu.",
+        "deletedAgent": "Deleted or unnamed agent",
+        "unavailableSpace": "Unavailable space",
+        "truncated": "Showing the first 5 entries. Counters include all recorded data.",
+        "observed": "Conversations created in the period and still retained. Messages and rankings: observed executions, including errors and resumes, excluding titles. History may be incomplete; older events without an identifiable organization are excluded, including from comparisons."
       }
     },
     "mainNav": {

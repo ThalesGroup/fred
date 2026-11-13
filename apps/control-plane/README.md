@@ -1660,12 +1660,10 @@ one common contract. It replaces `GET /me/usage` and `GET /spaces/{space_id}/usa
 those routes are removed. The write/report endpoint and its idempotency are unchanged.
 The operator pipeline and the personal block of `TeamUsagePage` are wired to this contract when an explicit working organization is supplied.
 Collective dashboards and the home-page token sparkline keep their historical clients.
-The shared working-organization UI context is not delivered yet. The current router
-renders `TeamUsagePage` without `organizationId`, so personal reads are deliberately
-skipped and a visible organization-required state replaces cached figures. This is
-an incomplete UI integration, not functional acceptance. The remaining raccord is
-to supply the shared context's validated active ID to that prop, with no KPI selector,
-then exercise organization switches in the browser. No independent selection was added.
+Personal screens consume the shared `useWorkingOrganization()` context. A missing,
+loading or failed organization prevents personal reads and hides stale responses;
+there is no local selector or global fallback. Source wiring and generated contracts
+are not browser reception evidence.
 
 A request names 1..8 results. For example:
 
@@ -1780,7 +1778,8 @@ follow from these estimates.
 
 Historical loads use `analytics/history.rs::Reader`, implemented by the OpenSearch
 adapter. The port accepts a trusted subject, server-resolved organization space IDs, validated period and ranking limit;
-its single `skill_loads` operation fixes the allowed dimension and three counters.
+its `skill_loads` and `completed_turns` operations fix the supported observations.
+The planner shares compatible scope/period/reader calls across named results.
 No engine type or DSL crosses into the service. Only self reads are supported;
 collective history is forbidden and mixed SQL/history batches fail before execution.
 Organization authorization and placement are resolved in a short SQL snapshot, released
@@ -1822,3 +1821,88 @@ redirects, bounds connection time at 2s and each HTTP call at 5s, with 4s search
 three-shard disposable OpenSearch via `CONTROL_PLANE_IT_OPENSEARCH`. Frontend tests
 exercise rendering and real RTK cache/identity isolation. Production capacity and
 functional browser reception remain separate.
+
+### Personal activity (implementation; reception pending)
+
+The three home counters and two rankings use the same POST service, without an
+additional endpoint or preset. Scope is always the authenticated person AND the
+currently authorized working organization. The UI keeps 7/30/90-day periods and
+requests the preceding equal-duration `[since-duration,since)` window explicitly.
+The window ends at observation time when entering the view or changing period;
+it is not rounded down, so recently created conversations are included.
+The retained-catalogue definition below is an accepted difference from Swift;
+completed turns preserve Swift's event-count meaning, not a unique-message count.
+
+| Indicator / measure | Persistent fact and reference date | Aggregation | Deletion / withdrawal |
+| --- | --- | --- | --- |
+| New retained conversations / `activity.retained_conversations` | SQL `session_metadata.created_at`, non-deleting session and space | Count creations in the period, self only, total only | Marking for deletion removes it immediately; purge does not change it again. Previous-period counts also use today's retained catalogue. |
+| Messages sent / `activity.completed_turns` | Observed `agent.turn_completed`, event completion timestamp | Count events, including errors and HITL pause/resume executions | Retained historical observations survive independent session/agent deletion subject to history retention/erasure; losing organization access denies the read. |
+| Agents used / `activity.agents_used` | Same events, stable instance UUID | Exact distinct UUIDs across the complete bounded read, total only | Homonyms remain distinct, renamed/deleted agents retain their identity. |
+| Activity in teams/spaces / completed turns, `space` grouping | Same events at canonical execution placement; SQL current direct memberships | Count per currently joined team, project or personal space; retain zero rows, rank then limit | Withdrawn/deleting spaces disappear from this ranking; totals still cover the person's organization history. Projects are separate direct-membership spaces, not silently rolled into parent-team rights. |
+| Most-used agents / completed turns, `agent` grouping | Same events and last observed name | Aggregate by UUID across all execution spaces, rank then limit | Deleted instances retain their observed name; space sublabel is the latest observed execution space. |
+
+Retries without a completion event do not add a turn; retries that produce another
+completion event count again, like Swift. There is no exchange-level deduplication.
+Title generation emits a different metric and is excluded. `usage.recorded_exchanges`
+remains unchanged and must not supply these counters. Both rankings sort by descending
+count, then ascending UUID. `limit` is 1..100; home requests 5 and discloses `truncated`.
+A distinct total never comes from the limited list. Integer strings remain `BigInt`
+through UI formatting, comparison and bar scaling.
+
+Final REST bodies for `POST /control-plane/v1/analytics/query`, using 7-day windows
+(the UI substitutes the working organization's UUID and selected period):
+
+```json
+{"queries":[
+  {"name":"current","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]},
+  {"name":"previous","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-10-30T00:00:00Z","until":"2026-11-06T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]}
+]}
+```
+
+```json
+{"queries":[
+  {"name":"current","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns","activity.agents_used"]},
+  {"name":"previous","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-10-30T00:00:00Z","until":"2026-11-06T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns","activity.agents_used"]},
+  {"name":"teams","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns"],"group_by":["space"],"limit":5},
+  {"name":"agents","scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-11-06T00:00:00Z","until":"2026-11-13T00:00:00Z","timezone":"UTC"},"measures":["activity.completed_turns"],"group_by":["agent"],"limit":5}
+]}
+```
+
+Service paths:
+
+- `analytics::query_analytics -> plan -> execute -> sessions::usage::read::retained_conversations`:
+  existing authorization, read-only SQL snapshot and timeouts; the catalogue's
+  space/owner index bounds the owner scan, with creation time as a residual filter.
+- `analytics::query_analytics -> plan -> history::execute -> Reader::completed_turns`:
+  authorize all scopes and resolve organization spaces/current memberships in SQL,
+  release the transaction, then read history once per scope/period. `turn_result`
+  supplies totals and both rankings from that complete set. The adapter reuses the
+  pooled HTTP client, mapping validation, deadline, byte and shard checks. Its
+  composite `(space,instance)` read rejects more than 10,000 groups, missing UUIDs
+  or counts inconsistent with exact matching hits; it does not return an approximate top-N.
+
+`agent_app::_emit_turn_completed` now carries the trusted `space_id` on stream,
+execute and evaluate paths. `team_id` alone cannot attribute personal spaces or
+projects correctly. Old observations without canonical placement cannot be recovered
+by this change and are excluded: no cross-organization fallback or index mutation
+is performed. History can also omit observations from producers that do not emit
+this metric (including the embedded Rust agent). Collection remains explicitly
+unknown; zero means no matching observed events, not proof of no activity. The UI
+states this limitation for figures and comparisons. Missing source/mapping or partial
+source responses yield unavailable, not a successful empty list.
+
+`HomePage::ActivityTab` owns the two generated-client subscriptions. Arguments bind
+session identity, organization and membership snapshot; `currentData` hides old
+organization/account replies. Current Weaver memberships supply names/roles only;
+server authorization and membership selection precede ranking. Shared cards, initials,
+bars and FR/EN translations remain; absent comparison data never produces a stable
+badge. The obsolete five handwritten legacy hook aliases are removed. The frozen
+legacy generated client remains for unmigrated dashboards (its source snapshot is
+not present here); it is not manually edited. Recent agents, cleanup, trends and
+the existing consumption/impact subscriptions are unchanged.
+
+Added regression sources cover canonical project/personal/HITL emission, SQL deletion
+and adjacent windows, Acme/Globex and revocation, shared historical reads, exact counts,
+homonyms, membership filtering before limits, late UI responses and unavailable/empty
+states. Execution of tests and code-quality remains assigned to Dimi; these additions
+are not a claim of passing tests or deployed reception.

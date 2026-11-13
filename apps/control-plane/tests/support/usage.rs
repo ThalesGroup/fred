@@ -1963,3 +1963,160 @@ async fn boss_platform_admin_observes_only_self_in_one_authorized_organization()
     f.admit("boss").await;
     assert_eq!(f.read_usage(Some("boss"), Some(f.space)).await.0, 403);
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn retained_creations_use_adjacent_windows_subject_organization_and_deletion_state() {
+    let f = Fixture::new().await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    let team = spaces::create_space(
+        &f.pool,
+        "alice",
+        SpaceKind::Team,
+        globex.id,
+        "Globex team".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let (_, other) = f.agent_session(team.id, "alice", "Same name").await;
+    let (_, bob) = f.agent_session(f.space, "bob", "Same name").await;
+    sqlx::query(
+        "update session_metadata set created_at='2026-01-02T00:00:00Z' where session_id=any($1)",
+    )
+    .bind(vec![f.session, other, bob])
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let request = |organization| {
+        json!({"queries":[
+            {"name":"previous","scope":{"kind":"self","organization_id":organization},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-02T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]},
+            {"name":"current","scope":{"kind":"self","organization_id":organization},"time":{"since":"2026-01-02T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["activity.retained_conversations"]}
+        ]})
+    };
+    for organization in [f.organization, globex.id] {
+        let (status, body) = f.analytics(Some("alice"), request(organization)).await;
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(
+            body["results"]["previous"]["rows"][0]["values"]["activity.retained_conversations"],
+            "0"
+        );
+        assert_eq!(
+            body["results"]["current"]["rows"][0]["values"]["activity.retained_conversations"],
+            "1"
+        );
+    }
+    assert_eq!(f.analytics(Some("bob"), request(globex.id)).await.0, 404);
+    assert_eq!(f.analytics(None, request(f.organization)).await.0, 401);
+    f.retire().await;
+    let (status, body) = f.analytics(Some("alice"), request(f.organization)).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["current"]["rows"][0]["values"]["activity.retained_conversations"],
+        "0"
+    );
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
+        .bind(f.organization).execute(&f.pool).await.unwrap();
+    assert_eq!(
+        f.analytics(Some("alice"), request(f.organization)).await.0,
+        404
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
+    use control_plane::analytics::history::{ReadError, ReadScope, Reader, SkillResult, TurnCount};
+    use futures::future::BoxFuture;
+    use std::sync::{Arc, Mutex};
+    type Calls = Arc<Mutex<Vec<(String, Vec<Uuid>)>>>;
+    struct Turns {
+        calls: Calls,
+    }
+    impl Reader for Turns {
+        fn skill_loads<'a>(
+            &'a self,
+            _: ReadScope<'a>,
+        ) -> BoxFuture<'a, Result<SkillResult, ReadError>> {
+            Box::pin(async { Err(ReadError::Unavailable) })
+        }
+        fn completed_turns<'a>(
+            &'a self,
+            q: ReadScope<'a>,
+        ) -> BoxFuture<'a, Result<Vec<TurnCount>, ReadError>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((q.subject.into(), q.spaces.to_vec()));
+            Box::pin(async move {
+                Ok(q.spaces
+                    .iter()
+                    .map(|id| TurnCount {
+                        space_id: *id,
+                        agent_instance_id: *id,
+                        display_name: Some("Same name".into()),
+                        latest: q.since,
+                        count: 1,
+                    })
+                    .collect())
+            })
+        }
+    }
+    let calls: Calls = Default::default();
+    let f = Fixture::with_history(
+        false,
+        Some(Arc::new(Turns {
+            calls: calls.clone(),
+        })),
+    )
+    .await;
+    let globex = support::member_organization(&f.pool, "Globex", "alice")
+        .await
+        .unwrap();
+    let query = |name, group: Vec<&str>| {
+        json!({"name":name,"scope":{"kind":"self","organization_id":f.organization},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-02T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.completed_turns"],"group_by":group})
+    };
+    let request = json!({"queries":[query("total",vec![]),query("agents",vec!["agent"]),query("spaces",vec!["space"])]});
+    let (status, body) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(calls.lock().unwrap().len(), 1);
+    let scope = calls.lock().unwrap()[0].clone();
+    assert_eq!(scope.0, "alice");
+    assert!(scope.1.contains(&f.space));
+    assert!(!scope.1.contains(&globex.id));
+    assert!(
+        body["results"]["spaces"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["dimensions"]["space_id"] == json!(f.space))
+    );
+    // Withdrawal removes the team before limiting, while personal historical totals remain.
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id=$1")
+        .bind(f.space)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (status, body) = f.analytics(Some("alice"), request.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert!(
+        !body["results"]["spaces"]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["dimensions"]["space_id"] == json!(f.space))
+    );
+    let mut foreign = request.clone();
+    for q in foreign["queries"].as_array_mut().unwrap() {
+        q["scope"]["organization_id"] = json!(globex.id);
+    }
+    assert_eq!(f.analytics(Some("bob"), foreign).await.0, 404);
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
+        .bind(f.organization).execute(&f.pool).await.unwrap();
+    assert_eq!(f.analytics(Some("alice"), request).await.0, 404);
+    assert_eq!(calls.lock().unwrap().len(), 2);
+}

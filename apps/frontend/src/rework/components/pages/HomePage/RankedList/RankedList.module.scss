@@ -76,9 +76,12 @@
 
 .value {
   flex-shrink: 0;
+  max-width: 50%;
   color: var(--on-surface-retreat);
   font: var(--font-label-large);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .unit {

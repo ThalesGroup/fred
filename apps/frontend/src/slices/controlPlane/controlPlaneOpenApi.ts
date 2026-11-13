@@ -2412,8 +2412,20 @@ export type ConsumptionMeasure =
   | "usage.energy_kwh"
   | "skills.user_loads"
   | "skills.agent_loads"
-  | "skills.total_loads";
-export type AnalyticsUnit = "token" | "exchange" | "eur" | "gramco2e" | "kwh" | "load";
+  | "skills.total_loads"
+  | "activity.retained_conversations"
+  | "activity.completed_turns"
+  | "activity.agents_used";
+export type AnalyticsUnit =
+  | "token"
+  | "exchange"
+  | "eur"
+  | "gramco2e"
+  | "kwh"
+  | "load"
+  | "conversation"
+  | "turn"
+  | "agent";
 export type AnalyticsValueType = "integer" | "decimal";
 export type AnalyticsMeasure = {
   calculation: CalculationPrecision;
@@ -2436,9 +2448,13 @@ export type AnalyticsDimensions =
     }
   | {
       agent_instance_id: string;
-      /** Current name, latest retained session name, or null. Never an identity key. */
+      /** Current/retained session name (consumption), latest observed name (turns), or null. Never an identity key. */
       display_name: string | null;
       kind: "agent";
+      space_id: string;
+    }
+  | {
+      kind: "space";
       space_id: string;
     }
   | {
@@ -2459,7 +2475,7 @@ export type AnalyticsRow = {
   estimates?: {
     [key: string]: AnalyticsEstimate;
   };
-  /** Decimal integer strings; zero means no recorded consumption, not proof of no activity. */
+  /** Exact decimal integer strings for matching facts; collection completeness is declared separately. */
   values: {
     [key: string]: string;
   };
@@ -2484,7 +2500,7 @@ export type AnalyticsResponse = {
     [key: string]: AnalyticsResult;
   };
 };
-export type AnalyticsGrouping = "time" | "agent" | "model" | "skill";
+export type AnalyticsGrouping = "time" | "agent" | "model" | "skill" | "space";
 export type AnalyticsScope =
   | {
       kind: "self";
@@ -2503,9 +2519,9 @@ export type AnalyticsPeriod = {
   until: string;
 };
 export type AnalyticsQuery = {
-  /** SQL: total (empty), time, agent or model. Historical loads: skill only; no cross-product. */
+  /** Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill. */
   group_by?: AnalyticsGrouping[];
-  /** Rankings only, default 100. SQL orders by total tokens; skills by total loads, then name. */
+  /** Rankings only, default 100. Descending tokens, loads or turns, then stable identity. */
   limit?: number | null;
   measures: ConsumptionMeasure[];
   name: string;

@@ -660,6 +660,11 @@ fn configuration_schema_is_generated_offline_and_matches_the_chart_input() {
     let committed: Value =
         serde_json::from_str(include_str!("../config/schema/configuration.schema.json")).unwrap();
     assert_eq!(actual, committed);
+    let history = &actual["$defs"]["StorageConfig"]["properties"]["history"]["oneOf"][0];
+    for field in ["url", "index", "username", "password_env_var"] {
+        assert!(history["properties"].get(field).is_some(), "missing {field}");
+    }
+    assert!(history["properties"].get("workers").is_none());
     assert_eq!(
         actual["$defs"]["LifecycleConfig"]["properties"]["sweep_interval"]["type"],
         "string"

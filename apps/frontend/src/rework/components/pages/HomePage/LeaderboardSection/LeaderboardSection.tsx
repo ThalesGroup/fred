@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
@@ -21,18 +22,24 @@ interface LeaderboardSectionProps {
   icon: IconType;
   title: string;
   children: ReactNode;
+  status?: string;
+  truncated?: boolean;
 }
 
 /** Shared section shell for the home-page leaderboards (most-used agents,
  * most-active teams): an icon + title header over a single card. */
-export default function LeaderboardSection({ icon, title, children }: LeaderboardSectionProps) {
+export default function LeaderboardSection({ icon, title, children, status, truncated }: LeaderboardSectionProps) {
+  const { t } = useTranslation();
   return (
     <section className={styles.section} aria-label={title}>
       <div className={styles.head}>
         <Icon category="outlined" type={icon} />
         <h2 className={styles.title}>{title}</h2>
       </div>
-      <div className={styles.card}>{children}</div>
+      <div className={styles.card}>
+        {status ? <p role="status">{t(`rework.home.activity.${status}`)}</p> : children}
+        {!status && truncated && <p>{t("rework.home.activity.truncated")}</p>}
+      </div>
     </section>
   );
 }

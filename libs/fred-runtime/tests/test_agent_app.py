@@ -2116,6 +2116,7 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     turn_completed = [e for e in emitted if e.get("name") == "agent.turn_completed"]
     assert len(turn_completed) == 1
     assert turn_completed[0]["dims"]["session_id"] == "session-depth"
+    assert turn_completed[0]["dims"]["space_id"] == SPACE_ID
     # Deliberately NOT carried — see RUNTIME-EXECUTION-CONTRACT.md §8.58.
     assert "exchange_id" not in turn_completed[0]["dims"]
     assert "user_id" not in turn_completed[0]["dims"]
@@ -5844,6 +5845,11 @@ def test_admitted_space_reaches_capability_history_and_checkpoints(
     team_id = SPACE_ID if kind == "project" else None
     identities = []
     bindings = []
+    emitted: list[dict] = []
+
+    class RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
 
     class ScopeCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
         manifest = CapabilityManifest(
@@ -5918,6 +5924,10 @@ def test_admitted_space_reaches_capability_history_and_checkpoints(
         "runtime_context": {"space_id": space_id},
     }
     with TestClient(app) as client:
+        recording = RecordingKPIWriter()
+        monkeypatch.setattr(
+            type(get_runtime_context()), "get_kpi_writer", lambda _self: recording
+        )
         registry = CapabilityRegistry()
         registry.register(ScopeCapability())
         app.state.capability_registry = registry
@@ -6013,6 +6023,10 @@ def test_admitted_space_reaches_capability_history_and_checkpoints(
         assert owner["user_id"] == "alice"
         assert provenance is not None
         assert provenance["space_id"] == space_id
+        turns = [e["dims"] for e in emitted if e.get("name") == "agent.turn_completed"]
+        assert turns
+        assert all(turn["space_id"] == space_id for turn in turns)
+        assert all(turn["team_id"] == team_id for turn in turns)
 
     assert len(app.state.resolver_requests) == (2 if pause else 1)
     assert identities and bindings

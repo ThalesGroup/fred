@@ -2756,31 +2756,43 @@
       },
       "topAgents": {
         "title": "Les agents que vous avez le plus utilisés",
-        "unit": "conv.",
-        "empty": "Aucun agent utilisé sur cette période."
+        "unit": "exéc.",
+        "empty": "Aucune utilisation d'agent observée sur cette période."
       },
       "topTeams": {
-        "title": "Votre activité au sein de vos équipes",
-        "unit": "conv.",
+        "title": "Votre activité dans vos équipes et espaces",
+        "unit": "exéc.",
         "personalSpace": "Espace personnel",
-        "empty": "Vous n'êtes membre d'aucune équipe.",
+        "empty": "Aucun espace d'appartenance dans cette organisation.",
         "role": {
-          "team_admin": "Responsable",
-          "team_editor": "Éditeur",
-          "team_analyst": "Analyste",
-          "team_member": "Membre"
+          "owner": "Responsable",
+          "editor": "Éditeur",
+          "analyst": "Analyste",
+          "member": "Membre",
+          "organization_admin": "Admin"
         }
       },
       "activity": {
         "title": "Votre activité",
-        "conversations": "Nouvelles conversations",
+        "conversations": "Nouvelles conversations conservées",
         "messages": "Messages envoyés",
         "agents": "Agents utilisés",
         "deltaUp": "▲ {{pct}} % ({{abs}})",
         "deltaDown": "▼ {{pct}} % ({{abs}})",
         "deltaFlat": "stable",
         "vsPrevious": "vs période précédente",
-        "periodCaption": "sur les {{count}} derniers jours"
+        "periodCaption": "sur les {{count}} derniers jours",
+        "conversationsDefinition": "Créées dans la période et encore conservées. Une suppression réduit ce compteur.",
+        "messagesDefinition": "Exécutions observées, erreurs et reprises comprises ; générations de titres exclues.",
+        "agentsDefinition": "Nombre distinct d'agents identifiés par leur identité stable, même après suppression.",
+        "loading": "Chargement de votre activité…",
+        "error": "Impossible de charger votre activité.",
+        "unavailable": "Historique ou données temporairement indisponibles.",
+        "organizationRequired": "Organisation de travail indisponible. Choisissez-la dans le menu de votre compte.",
+        "deletedAgent": "Agent supprimé ou sans nom",
+        "unavailableSpace": "Espace indisponible",
+        "truncated": "Les 5 premières entrées sont affichées. Les compteurs portent sur toutes les données enregistrées.",
+        "observed": "Conversations créées dans la période et encore conservées. Messages et classements : exécutions observées, erreurs et reprises comprises, titres exclus. L'historique peut être incomplet ; les anciens événements sans organisation identifiable sont exclus, y compris de la comparaison."
       }
     },
     "mainNav": {

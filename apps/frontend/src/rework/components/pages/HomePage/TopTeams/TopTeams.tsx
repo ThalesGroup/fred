@@ -12,84 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
-import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
-import { isPersonalTeamId } from "@shared/utils/teamId.ts";
-import { useUserTopTeamsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
-import type { HomePeriod } from "../HomePage.tsx";
-import { homePeriodRange } from "../homePeriod.ts";
-import LeaderboardSection from "../LeaderboardSection/LeaderboardSection.tsx";
-import RankedList, { type RankedItem } from "../RankedList/RankedList.tsx";
+import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
+import { teamColor } from "@shared/atoms/TeamInitials/teamColor";
+import type { AnalyticsResult, MySpace } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import LeaderboardSection from "../LeaderboardSection/LeaderboardSection";
+import RankedList, { type RankedItem } from "../RankedList/RankedList";
 import styles from "./TopTeams.module.scss";
 
-const TOP_N = 5;
-const ROLE_ORDER = ["team_admin", "pending_team_admin", "team_editor", "team_analyst", "team_member"] as const;
-
-interface TopTeamsProps {
-  period: HomePeriod;
-}
-
-/** Home page — the caller's own activity across the spaces they belong to over
- * the period (live: self-scoped `user_top_teams` preset — their own turn count
- * per team). The list, avatar and roles are their real membership from
- * bootstrap; the personal space is included in the ranking (shown without a
- * role sublabel, since collaboration roles don't apply there). */
-export default function TopTeams({ period }: TopTeamsProps) {
+export default function TopTeams({
+  result,
+  memberships,
+  status,
+}: {
+  result?: AnalyticsResult;
+  memberships: MySpace[];
+  status?: string;
+}) {
   const { t } = useTranslation();
-  const { availableTeams } = useFrontendBootstrap();
-
-  const range = useMemo(() => homePeriodRange(period), [period]);
-  const { data } = useUserTopTeamsQuery(range, { refetchOnMountOrArgChange: 300 });
-
-  // team_id → the caller's turn count over the period (0 when they've been idle
-  // in a team they belong to).
-  const activityByTeamId = useMemo(() => new Map((data?.rows ?? []).map((row) => [row.label, row.value])), [data]);
-
-  const memberTeams = availableTeams.filter((team) => team.is_member);
-
-  const items: RankedItem[] = memberTeams
-    .map((team) => {
-      // Collaboration roles are meaningless for the personal space — omit them,
-      // and show it as "Espace personnel" rather than its backend team name.
-      const isPersonal = isPersonalTeamId(team.id);
-      const displayName = isPersonal ? t("rework.home.topTeams.personalSpace") : team.name;
-      const roles = isPersonal ? [] : ROLE_ORDER.filter((role) => (team.my_relations ?? []).includes(role));
-      const avatar = team.avatar_image_url ? (
-        <img
-          className={styles.avatar}
-          src={team.avatar_image_url}
-          alt=""
-          aria-hidden="true"
-          width={28}
-          height={28}
-          decoding="async"
-        />
-      ) : (
-        <TeamInitials
-          className={styles.avatar}
-          name={displayName}
-          size="small"
-          shape="square"
-          color={teamColor(displayName)}
-        />
-      );
-      return {
-        key: team.id,
-        label: displayName,
-        sublabel: roles.length ? roles.map((role) => t(`rework.home.topTeams.role.${role}`)).join(" · ") : undefined,
-        value: activityByTeamId.get(team.id) ?? 0,
+  // Membership restriction, zeros, ordering and truncation are computed by the server.
+  // Membership data here supplies labels and roles only, never authorization or ranking.
+  const items: RankedItem[] = (result?.rows ?? []).flatMap((row) => {
+    if (row.dimensions.kind !== "space") return [];
+    const id = row.dimensions.space_id;
+    const space = memberships.find((s) => s.id === id);
+    const personal = space?.kind === "personal";
+    const label = personal
+      ? t("rework.home.topTeams.personalSpace")
+      : (space?.name ?? t("rework.home.activity.unavailableSpace"));
+    return [
+      {
+        key: id,
+        label,
+        sublabel: personal ? undefined : space?.roles.map((role) => t(`rework.home.topTeams.role.${role}`)).join(" · "),
+        value: BigInt(row.values["activity.completed_turns"]),
         unit: t("rework.home.topTeams.unit"),
-        leading: avatar,
-      };
-    })
-    .sort((a, b) => b.value - a.value)
-    .slice(0, TOP_N);
-
+        leading: (
+          <TeamInitials className={styles.avatar} name={label} size="small" shape="square" color={teamColor(label)} />
+        ),
+      },
+    ];
+  });
   return (
-    <LeaderboardSection icon="groups" title={t("rework.home.topTeams.title")}>
+    <LeaderboardSection
+      icon="groups"
+      title={t("rework.home.topTeams.title")}
+      status={status}
+      truncated={result?.truncated}
+    >
       <RankedList items={items} emptyLabel={t("rework.home.topTeams.empty")} />
     </LeaderboardSection>
   );

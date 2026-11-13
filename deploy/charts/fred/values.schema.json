@@ -19656,6 +19656,42 @@
                         }
                       ]
                     },
+                    "history": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "index": {
+                              "description": "A single concrete KPI index, not a pattern or alias spanning indexes.",
+                              "type": "string"
+                            },
+                            "password_env_var": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "username": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "index"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "postgres": {
                       "additionalProperties": false,
                       "properties": {
@@ -22028,6 +22064,42 @@
                           "required": [
                             "endpoint",
                             "bucket"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "history": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "index": {
+                              "description": "A single concrete KPI index, not a pattern or alias spanning indexes.",
+                              "type": "string"
+                            },
+                            "password_env_var": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "username": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "index"
                           ],
                           "type": "object"
                         },

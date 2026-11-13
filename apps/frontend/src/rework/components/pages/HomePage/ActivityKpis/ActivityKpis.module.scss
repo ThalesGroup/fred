@@ -34,7 +34,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--spacing-m);
 }
 
@@ -47,6 +47,7 @@
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
@@ -82,6 +83,7 @@
   font: 600 1.875rem / 1.1 var(--font-family-base);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .caption {

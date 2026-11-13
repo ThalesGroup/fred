@@ -119,6 +119,8 @@ pub struct ClaimsConfig {
 #[serde(deny_unknown_fields)]
 pub struct StorageConfig {
     #[serde(default)]
+    // Several modules export a `Config`; inline this one to avoid a schema-name collision.
+    #[schema(inline)]
     pub history: Option<crate::analytics::opensearch::Config>,
     pub postgres: PostgresConfig,
     pub content: Option<crate::documents::config::ContentConfig>,

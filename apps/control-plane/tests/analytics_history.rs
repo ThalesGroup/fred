@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
 };
 use control_plane::analytics::{
-    history::{ReadError, SkillRead},
+    history::{ReadError, ReadScope},
     opensearch::{Config, OpenSearch},
 };
 use serde_json::{Value, json};
@@ -21,8 +21,8 @@ fn mapping() -> Value {
         "dims":{"properties":{"space_id":{"type":"keyword"},"user_id":{"type":"keyword"},"skill_name":{"type":"keyword"},"skill_origin":{"type":"keyword"}}}
     }}})
 }
-fn query(subject: &str) -> SkillRead<'_> {
-    SkillRead {
+fn query(subject: &str) -> ReadScope<'_> {
+    ReadScope {
         subject,
         spaces: &ACME,
         since: "2026-01-01T00:00:00Z".parse().unwrap(),
@@ -228,4 +228,81 @@ async fn stalled_historical_http_is_unavailable_within_the_deadline() {
     .unwrap();
     assert!(matches!(result, Err(ReadError::Unavailable)));
     server.abort();
+}
+
+fn turn_response() -> Value {
+    json!({"timed_out":false,"_shards":{"total":3,"successful":3,"failed":0},
+        "hits":{"total":{"value":9007199254740995u64,"relation":"eq"}},
+        "aggregations":{"turns":{"buckets":[
+            {"key":{"space":ACME[0],"agent":uuid::Uuid::from_u128(10)},"doc_count":9007199254740993u64,
+             "latest":{"hits":{"hits":[{"_source":{"@timestamp":"2026-01-02T00:00:00Z","dims":{"agent_instance_name":"Same name"}}}]}}},
+            {"key":{"space":ACME[0],"agent":uuid::Uuid::from_u128(11)},"doc_count":2,
+             "latest":{"hits":{"hits":[{"_source":{"@timestamp":"2026-01-02T00:00:00Z","dims":{"agent_instance_name":"Same name"}}}]}}}
+        ]}}
+    })
+}
+
+#[tokio::test]
+async fn turn_adapter_requires_canonical_scope_complete_counts_and_half_open_windows() {
+    let valid = turn_response();
+    let mut replies = vec![valid.clone()];
+    for (path, value) in [
+        ("/timed_out", json!(true)),
+        ("/_shards/successful", json!(2)),
+        ("/hits/total/relation", json!("gte")),
+        ("/hits/total/value", json!(9007199254740996u64)),
+        ("/aggregations/turns/buckets/0/key/space", json!(GLOBEX[0])),
+        (
+            "/aggregations/turns/buckets/0/key/agent",
+            json!("missing-uuid"),
+        ),
+    ] {
+        let mut broken = valid.clone();
+        *broken.pointer_mut(path).unwrap() = value;
+        replies.push(broken);
+    }
+    for reply in replies {
+        let expected = reply == valid;
+        let app = Router::new()
+            .route("/fixture/_mapping", get(|| async {
+                let mut m = mapping();
+                m["mappings"]["properties"]["dims"]["properties"]["agent_instance_id"] = json!({"type":"keyword"});
+                m["mappings"]["properties"]["dims"]["properties"]["agent_instance_name"] = json!({"type":"keyword"});
+                Json(json!({"fixture":m}))
+            }))
+            .route("/fixture/_search", post(move |Json(body):Json<Value>| {
+                let reply = reply.clone();
+                async move {
+                    assert_eq!(body["query"]["bool"]["filter"], json!([
+                        {"term":{"metric.name":"agent.turn_completed"}},
+                        {"term":{"dims.user_id":"alice"}},
+                        {"terms":{"dims.space_id":[ACME[0]]}},
+                        {"range":{"@timestamp":{"gte":"2026-01-01T00:00:00Z","lt":"2026-01-03T00:00:00Z"}}}
+                    ]));
+                    // No title/token proxy, exchange deduplication, approximate cardinality or top-N shards.
+                    assert_eq!(body["aggs"]["turns"]["composite"]["size"], 10001);
+                    assert_eq!(body["track_total_hits"], true);
+                    Json(reply)
+                }
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let reader = OpenSearch::configured(&config(
+            format!("http://{}", listener.local_addr().unwrap()),
+            "fixture".into(),
+        ))
+        .unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let result = reader.completed_turns(query("alice")).await;
+        if expected {
+            let rows = result.unwrap();
+            assert_eq!(rows.len(), 2);
+            assert_ne!(rows[0].agent_instance_id, rows[1].agent_instance_id);
+            assert_eq!(rows[0].count, 9007199254740993);
+            // Two observed completions, e.g. HITL pause and resume, remain two.
+            assert_eq!(rows[1].count, 2);
+        } else {
+            assert!(matches!(result, Err(ReadError::Unavailable)));
+        }
+        server.abort();
+    }
 }

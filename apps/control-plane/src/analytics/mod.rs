@@ -188,22 +188,58 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
             return Err(invalid("Only one grouping is supported"));
         }
         let grouping = q.group_by.first();
-        if historical {
+        if q.measures
+            .iter()
+            .any(|m| m.reader() != q.measures[0].reader())
+        {
+            return Err(invalid(
+                "Measures from different readers require separate named queries",
+            ));
+        }
+        if q.measures[0].reader() != ReaderKind::Consumption {
             if !matches!(q.scope, AnalyticsScope::Personal { .. }) {
                 return Err(AppError::Forbidden);
             }
-            if grouping != Some(&AnalyticsGrouping::Skill) {
-                return Err(invalid("Historical loads require skill grouping"));
+            match q.measures[0].reader() {
+                ReaderKind::Skills if grouping != Some(&AnalyticsGrouping::Skill) => {
+                    return Err(invalid("Historical loads require skill grouping"));
+                }
+                ReaderKind::Turns
+                    if !matches!(
+                        grouping,
+                        None | Some(AnalyticsGrouping::Agent | AnalyticsGrouping::Space)
+                    ) =>
+                {
+                    return Err(invalid("Turns support total, agent or space grouping"));
+                }
+                ReaderKind::Turns
+                    if grouping.is_some()
+                        && q.measures.contains(&ConsumptionMeasure::AgentsUsed) =>
+                {
+                    return Err(invalid("Distinct agents require a total"));
+                }
+                ReaderKind::Conversations if grouping.is_some() => {
+                    return Err(invalid("Retained conversations require a total"));
+                }
+                _ => {}
             }
-        } else if grouping == Some(&AnalyticsGrouping::Skill) {
-            return Err(invalid("Skill grouping requires historical measures"));
+        } else if matches!(
+            grouping,
+            Some(AnalyticsGrouping::Skill | AnalyticsGrouping::Space)
+        ) {
+            return Err(invalid("This grouping requires historical measures"));
         }
         if q.time.bucket.is_some() && grouping != Some(&AnalyticsGrouping::Time) {
             return Err(invalid("A bucket requires time grouping"));
         }
         let ranked = matches!(
             grouping,
-            Some(AnalyticsGrouping::Agent | AnalyticsGrouping::Model | AnalyticsGrouping::Skill)
+            Some(
+                AnalyticsGrouping::Agent
+                    | AnalyticsGrouping::Model
+                    | AnalyticsGrouping::Skill
+                    | AnalyticsGrouping::Space
+            )
         );
         if q.limit.is_some() && !ranked || !(1..=100).contains(&q.limit.unwrap_or(100)) {
             return Err(invalid("Only rankings accept a limit of 1..100"));
@@ -237,7 +273,8 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
         let bucket = interval(&q.time);
         let compatible = plans.iter_mut().find(|p| {
             let other = &request.queries[p.query];
-            other.scope == q.scope
+            other.measures[0].reader() == q.measures[0].reader()
+                && other.scope == q.scope
                 && other.time.since == q.time.since
                 && other.time.until == q.time.until
                 && (q.group_by != [AnalyticsGrouping::Time] || p.interval == bucket)
@@ -310,7 +347,14 @@ async fn execute(
     plans: &[ReadPlan],
 ) -> AppResult<AnalyticsResponse> {
     if request.queries[0].measures[0].historical() {
-        return history::execute(&state.pool, state.history.as_deref(), &user.uid, request).await;
+        return history::execute(
+            &state.pool,
+            state.history.as_deref(),
+            &user.uid,
+            request,
+            plans,
+        )
+        .await;
     }
     if request
         .queries
@@ -345,6 +389,33 @@ async fn execute(
     let mut results = BTreeMap::new();
     for (p, scope) in plans.iter().zip(&scopes) {
         let q = &request.queries[p.query];
+        if q.measures[0] == ConsumptionMeasure::RetainedConversations {
+            let value =
+                read::retained_conversations(&mut tx, scope, q.time.since, q.time.until).await?;
+            for &i in &p.consumers {
+                let q = &request.queries[i];
+                results.insert(
+                    q.name.clone(),
+                    AnalyticsResult {
+                        since: q.time.since,
+                        until: q.time.until,
+                        timezone: q.time.timezone,
+                        bucket: None,
+                        measures: q.measures.iter().map(|m| m.metadata()).collect(),
+                        rows: vec![AnalyticsRow {
+                            dimensions: AnalyticsDimensions::Total,
+                            values: BTreeMap::from([(
+                                ConsumptionMeasure::RetainedConversations,
+                                value.clone(),
+                            )]),
+                            estimates: BTreeMap::new(),
+                        }],
+                        truncated: false,
+                    },
+                );
+            }
+            continue;
+        }
         let rows = read::read(
             &mut tx,
             scope,
@@ -427,7 +498,12 @@ fn result(
         };
         if matches!(
             grouping,
-            Some(AnalyticsGrouping::Agent | AnalyticsGrouping::Model | AnalyticsGrouping::Skill)
+            Some(
+                AnalyticsGrouping::Agent
+                    | AnalyticsGrouping::Model
+                    | AnalyticsGrouping::Skill
+                    | AnalyticsGrouping::Space
+            )
         ) && rows.len() == q.limit.unwrap_or(100)
         {
             truncated = true;
@@ -483,6 +559,38 @@ mod tests {
 
     fn query(name: &str, grouping: Vec<&str>) -> Value {
         json!({"name":name,"scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["usage.input_tokens"],"group_by":grouping})
+    }
+
+    #[test]
+    fn activity_plans_share_turn_reads_but_never_change_consumption_semantics() {
+        let mut total = query("total", vec![]);
+        total["measures"] = json!(["activity.completed_turns", "activity.agents_used"]);
+        let mut agents = query("agents", vec!["agent"]);
+        agents["measures"] = json!(["activity.completed_turns"]);
+        let mut spaces = agents.clone();
+        spaces["name"] = json!("spaces");
+        spaces["group_by"] = json!(["space"]);
+        let request: AnalyticsRequest =
+            serde_json::from_value(json!({"queries":[total.clone(),agents.clone(),spaces]}))
+                .unwrap();
+        let plans = plan(&request).unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].consumers.len(), 3);
+        for (measure, grouping) in [
+            ("activity.retained_conversations", "agent"),
+            ("activity.agents_used", "agent"),
+            ("usage.total_tokens", "space"),
+            ("activity.completed_turns", "time"),
+        ] {
+            agents["measures"] = json!([measure]);
+            agents["group_by"] = json!([grouping]);
+            let request: AnalyticsRequest =
+                serde_json::from_value(json!({"queries":[agents.clone()]})).unwrap();
+            assert!(plan(&request).is_err());
+        }
+        total["measures"] = json!(["activity.completed_turns", "usage.recorded_exchanges"]);
+        let request = serde_json::from_value(json!({"queries":[total]})).unwrap();
+        assert!(plan(&request).is_err());
     }
 
     #[test]

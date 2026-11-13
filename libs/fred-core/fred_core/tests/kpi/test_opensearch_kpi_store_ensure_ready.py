@@ -33,6 +33,7 @@ import copy
 from typing import Any, Dict, List, cast
 
 import pytest
+from fred_core.kpi.kpi_writer_structures import Quantities
 from fred_core.kpi.opensearch_kpi_store import KPI_INDEX_MAPPING, OpenSearchKPIStore
 from fred_core.store import MappingValidationError
 
@@ -80,6 +81,45 @@ class _FakeIndices:
 class _FakeClient:
     def __init__(self, mappings: Dict[str, Any], index: str) -> None:
         self.indices = _FakeIndices(mappings, index)
+
+
+def test_every_emitted_quantity_has_an_aggregatable_integer_mapping() -> None:
+    quantities = KPI_INDEX_MAPPING["mappings"]["properties"]["quantities"]["properties"]
+    assert set(quantities) == set(Quantities.model_fields)
+    for field in Quantities.model_fields:
+        assert quantities[field]["type"] in {"integer", "long"}, field
+        assert quantities[field].get("index", True) is True, field
+        assert quantities[field].get("doc_values", True) is True, field
+
+
+def test_turn_quantity_mapping_patch_is_additive_and_idempotent() -> None:
+    mappings = copy.deepcopy(KPI_INDEX_MAPPING["mappings"])
+    quantities = mappings["properties"]["quantities"]["properties"]
+    for field in ("tool_count", "cache_read_tokens"):
+        del quantities[field]
+    quantities["extension_count"] = {"type": "long"}
+    store = OpenSearchKPIStore.__new__(OpenSearchKPIStore)
+    store.index = "kpi-index"
+    client = _FakeClient(mappings, store.index)
+    store.client = client  # type: ignore[assignment]
+
+    store.ensure_ready()
+    store.ensure_ready()
+
+    assert client.indices.put_calls == [
+        {
+            "properties": {
+                "quantities": {
+                    "properties": {
+                        "tool_count": {"type": "long"},
+                        "cache_read_tokens": {"type": "long"},
+                    }
+                }
+            }
+        }
+    ]
+    assert quantities["extension_count"] == {"type": "long"}
+    assert quantities["input_tokens"] == {"type": "long"}
 
 
 def _store_on_existing_index_missing(field: str) -> OpenSearchKPIStore:

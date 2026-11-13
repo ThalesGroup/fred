@@ -24,11 +24,11 @@ pub struct AnalyticsQuery {
     pub time: AnalyticsPeriod,
     #[schema(min_items = 1, max_items = 12)]
     pub measures: Vec<ConsumptionMeasure>,
-    /// SQL: total (empty), time, agent or model. Historical loads: skill only; no cross-product.
+    /// Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill.
     #[serde(default)]
     #[schema(max_items = 1)]
     pub group_by: Vec<AnalyticsGrouping>,
-    /// Rankings only, default 100. SQL orders by total tokens; skills by total loads, then name.
+    /// Rankings only, default 100. Descending tokens, loads or turns, then stable identity.
     #[schema(minimum = 1, maximum = 100)]
     pub limit: Option<usize>,
 }
@@ -85,6 +85,7 @@ pub enum AnalyticsGrouping {
     Agent,
     Model,
     Skill,
+    Space,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, ToSchema)]
@@ -116,14 +117,47 @@ pub enum ConsumptionMeasure {
     AgentSkillLoads,
     #[serde(rename = "skills.total_loads")]
     TotalSkillLoads,
+    /// Created in the window and still retained (not marked for deletion). SQL creation date.
+    #[serde(rename = "activity.retained_conversations")]
+    RetainedConversations,
+    /// Observed agent.turn_completed events at completion, including errors and HITL resumes.
+    /// Titles and retries that emit no completion event do not count; this is not unique messages.
+    #[serde(rename = "activity.completed_turns")]
+    CompletedTurns,
+    /// Exact distinct stable instance UUIDs over all observed completed turns, before ranking limits.
+    #[serde(rename = "activity.agents_used")]
+    AgentsUsed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReaderKind {
+    Consumption,
+    Skills,
+    Turns,
+    Conversations,
 }
 
 impl ConsumptionMeasure {
     pub(crate) fn historical(self) -> bool {
         matches!(
             self,
-            Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads
+            Self::UserSkillLoads
+                | Self::AgentSkillLoads
+                | Self::TotalSkillLoads
+                | Self::CompletedTurns
+                | Self::AgentsUsed
         )
+    }
+    /// Fixed reader families, not an extensible query language.
+    pub(crate) fn reader(self) -> ReaderKind {
+        match self {
+            Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
+                ReaderKind::Skills
+            }
+            Self::CompletedTurns | Self::AgentsUsed => ReaderKind::Turns,
+            Self::RetainedConversations => ReaderKind::Conversations,
+            _ => ReaderKind::Consumption,
+        }
     }
     pub(crate) fn estimated(self) -> bool {
         matches!(self, Self::CostEur | Self::Co2eGrams | Self::EnergyKwh)
@@ -141,6 +175,9 @@ impl ConsumptionMeasure {
                 Self::Co2eGrams => AnalyticsUnit::GramCo2e,
                 Self::EnergyKwh => AnalyticsUnit::Kwh,
                 Self::RecordedExchanges => AnalyticsUnit::Exchange,
+                Self::RetainedConversations => AnalyticsUnit::Conversation,
+                Self::CompletedTurns => AnalyticsUnit::Turn,
+                Self::AgentsUsed => AnalyticsUnit::Agent,
                 Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
                     AnalyticsUnit::Load
                 }
@@ -209,6 +246,9 @@ pub enum AnalyticsUnit {
     GramCo2e,
     Kwh,
     Load,
+    Conversation,
+    Turn,
+    Agent,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -239,7 +279,7 @@ pub enum EstimateCoverage {
 #[derive(Serialize, ToSchema)]
 pub struct AnalyticsRow {
     pub dimensions: AnalyticsDimensions,
-    /// Decimal integer strings; zero means no recorded consumption, not proof of no activity.
+    /// Exact decimal integer strings for matching facts; collection completeness is declared separately.
     pub values: BTreeMap<ConsumptionMeasure, String>,
     /// Estimated decimal values are separate from exact counters. Null is never zero.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -261,9 +301,13 @@ pub enum AnalyticsDimensions {
     Agent {
         agent_instance_id: Uuid,
         space_id: Uuid,
-        /// Current name, latest retained session name, or null. Never an identity key.
+        /// Current/retained session name (consumption), latest observed name (turns), or null. Never an identity key.
         #[schema(required)]
         display_name: Option<String>,
+    },
+    /// Current direct membership, including personal spaces and projects; zero activity is retained.
+    Space {
+        space_id: Uuid,
     },
     Model {
         model_source_id: String,

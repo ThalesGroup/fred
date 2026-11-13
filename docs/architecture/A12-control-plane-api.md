@@ -307,7 +307,7 @@ The [usage integration fixtures](../../apps/control-plane/tests/support/usage.rs
 cover isolation, collective rights, purge, HITL, numeric precision, refusal limits,
 source failures and concurrent snapshot reads. Planner tests cover reuse across
 named results. These checks establish backend contracts, not dashboard reception.
-Consumers are [the operator pipeline](../../apps/frontend/src/rework/features/pipeline/weaver/platformChecks.ts)
+Consumers include [the operator pipeline](../../apps/frontend/src/rework/features/pipeline/weaver/platformChecks.ts)
 and the [personal block](../../apps/frontend/src/rework/components/pages/TeamUsagePage/PersonalUsage.tsx).
 The personal block requires `organizationId` from the shared working-organization
 context before reading SQL/estimation and skill-history batches.
@@ -322,3 +322,12 @@ keeps engine details outside the service and refuses incomplete source responses
 three-shard aggregation. Shared YAML factors feed journal-derived estimates, with
 per-measure precision, missing coverage and fallback markers. Collective dashboards
 retain their historical clients; this source wiring does not attest browser reception.
+
+The home activity wiring also uses this service: the
+[personal activity contract](../../apps/control-plane/README.md#personal-activity-implementation-reception-pending)
+defines retained SQL creations separately from observed completed turns and exact
+distinct agents. `HomePage::ActivityTab` shares generated-client requests for counters
+and rankings; the historical port exposes a bounded `completed_turns` operation.
+Current memberships are applied server-side before space ranking limits. This source
+wiring excludes old events without canonical execution placement and does not establish
+browser or deployment reception; the existing consumption/impact wiring is preserved.

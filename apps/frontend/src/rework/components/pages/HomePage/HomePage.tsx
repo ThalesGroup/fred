@@ -12,10 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService";
+import { skipToken } from "@reduxjs/toolkit/query";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
+import {
+  useQueryAnalyticsQuery,
+  type AnalyticsQuery,
+  type QueryAnalyticsApiArg,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { homePeriodRange } from "./homePeriod";
 import HomeSearch from "./HomeSearch/HomeSearch.tsx";
 import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
 import RecentAgents from "./RecentAgents/RecentAgents.tsx";
@@ -99,18 +108,106 @@ export default function HomePage() {
         </div>
       )}
 
-      {tabIndex === 1 && (
-        <>
-          <ActivityKpis period={period} />
-          <ResponsibleAiSection period={period} />
-          <div className={styles.cols}>
-            <TopTeams period={period} />
-            <TopAgents period={period} />
-          </div>
-        </>
-      )}
+      {tabIndex === 1 && <ActivityTab period={period} />}
 
       {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
     </div>
+  );
+}
+
+/** One mounted activity tab shares current/previous reads and server-ranked lists. */
+export function ActivityTab({ period }: { period: HomePeriod }) {
+  const { t } = useTranslation();
+  const context = useWorkingOrganization();
+  const organizationId = context.loading || context.error ? undefined : context.organizationId;
+  const identity = KeyCloakService.GetSessionIdentity();
+  const memberships = context.memberships.currentData?.filter((s) => s.organization_id === organizationId) ?? [];
+  // Membership changes invalidate server-ranked spaces too; no stale team list survives a withdrawal.
+  const membershipKey = JSON.stringify(memberships.map((s) => [s.id, s.roles]));
+  const range = useMemo(() => homePeriodRange(period), [period]);
+  const args = useMemo<{
+    sessions: QueryAnalyticsApiArg | typeof skipToken;
+    turns: QueryAnalyticsApiArg | typeof skipToken;
+  }>(() => {
+    if (!organizationId) return { sessions: skipToken, turns: skipToken };
+    const previous = {
+      since: new Date(2 * Date.parse(range.since) - Date.parse(range.until)).toISOString(),
+      until: range.since,
+    };
+    const scope = { kind: "self" as const, organization_id: organizationId };
+    const currentTime = { ...range, timezone: "UTC" as const };
+    const previousTime = { ...previous, timezone: "UTC" as const };
+    const request = (queries: AnalyticsQuery[]) =>
+      sessionQueryArgs<QueryAnalyticsApiArg & { membershipKey: string }>({
+        analyticsRequest: { queries },
+        membershipKey,
+      });
+    return {
+      sessions: request([
+        { name: "current", scope, time: currentTime, measures: ["activity.retained_conversations"] },
+        { name: "previous", scope, time: previousTime, measures: ["activity.retained_conversations"] },
+      ]),
+      turns: request([
+        { name: "current", scope, time: currentTime, measures: ["activity.completed_turns", "activity.agents_used"] },
+        { name: "previous", scope, time: previousTime, measures: ["activity.completed_turns", "activity.agents_used"] },
+        {
+          name: "teams",
+          scope,
+          time: currentTime,
+          measures: ["activity.completed_turns"],
+          group_by: ["space"],
+          limit: 5,
+        },
+        {
+          name: "agents",
+          scope,
+          time: currentTime,
+          measures: ["activity.completed_turns"],
+          group_by: ["agent"],
+          limit: 5,
+        },
+      ]),
+    };
+  }, [organizationId, identity, membershipKey, range]);
+  const sessions = useQueryAnalyticsQuery(args.sessions, { refetchOnMountOrArgChange: 300 });
+  const turns = useQueryAnalyticsQuery(args.turns, { refetchOnMountOrArgChange: 300 });
+  const status = (query: typeof sessions) => {
+    if (context.loading) return "loading";
+    if (context.error) return "error";
+    if (!organizationId) return "organizationRequired";
+    if (query.isError)
+      return query.error && "status" in query.error && query.error.status === 503 ? "unavailable" : "error";
+    if (!query.currentData) return query.isFetching || query.isUninitialized ? "loading" : "unavailable";
+    if (!query.currentData.results.current || !query.currentData.results.previous) return "unavailable";
+    return undefined;
+  };
+  const sessionStatus = status(sessions);
+  const turnStatus = status(turns);
+  const sessionData = sessionStatus ? undefined : sessions.currentData?.results;
+  const turnData = turnStatus ? undefined : turns.currentData?.results;
+  return (
+    <>
+      <ActivityKpis
+        period={period}
+        sessions={sessionData}
+        turns={turnData}
+        sessionStatus={sessionStatus}
+        turnStatus={turnStatus}
+      />
+      <ResponsibleAiSection period={period} />
+      <div className={styles.cols}>
+        <TopTeams
+          result={turnData?.teams}
+          memberships={memberships}
+          status={turnStatus ?? (turnData?.teams ? undefined : "unavailable")}
+        />
+        <TopAgents
+          result={turnData?.agents}
+          memberships={memberships}
+          status={turnStatus ?? (turnData?.agents ? undefined : "unavailable")}
+        />
+      </div>
+      <p>{t("rework.home.activity.observed")}</p>
+    </>
   );
 }

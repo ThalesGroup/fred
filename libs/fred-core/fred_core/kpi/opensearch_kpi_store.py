@@ -123,8 +123,10 @@ KPI_INDEX_MAPPING: Dict[str, Any] = {
                     "bytes_out": {"type": "long"},
                     "chunks": {"type": "integer"},
                     "vectors": {"type": "integer"},
+                    "tool_count": {"type": "long"},
                     "input_tokens": {"type": "long"},
                     "output_tokens": {"type": "long"},
+                    "cache_read_tokens": {"type": "long"},
                 }
             },
             "labels": {"type": "keyword"},
