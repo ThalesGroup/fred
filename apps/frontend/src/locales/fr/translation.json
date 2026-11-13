@@ -5068,13 +5068,13 @@
         "allowed": "Autorisées",
         "group": "Filtrer les équipes"
       },
-      "noUsers": "Aucun utilisateur de la liste blanche ne correspond à cette recherche.",
+      "noUsers": "Aucun résultat pour cette recherche",
       "teamAllowed": "Autorisée",
       "grantedSelected_one": "{{count}} utilisateur ajouté à la liste blanche.",
       "grantedSelected_other": "{{count}} utilisateurs ajoutés à la liste blanche.",
       "revokedUser": "{{user}} retiré de la liste blanche.",
-      "addUsers": "Ajouter des utilisateurs",
-      "emptyWhitelist": "La liste blanche ne contient aucun utilisateur pour l'instant. Utilisez « Ajouter des utilisateurs » pour en ajouter.",
+      "addUsers": "Ajouter",
+      "emptyWhitelist": "La liste blanche est vide",
       "addDialog": {
         "title": "Ajouter des utilisateurs",
         "subtitle": "Les personnes ajoutées à la liste blanche ont accès à la plateforme, quelle que soit la règle.",
@@ -5120,11 +5120,9 @@
         "group": "Filtrer la liste blanche",
         "all": "Tous",
         "rule": "Admis par la règle",
-        "whitelistOnly": "Liste blanche seule"
+        "whitelistOnly": "Liste blanche seule",
+        "unknown": "À vérifier"
       },
-      "unknownEvidence_one": "{{count}} personne n'a pas encore été vue avec ce que la règle vérifie : elle n'apparaît dans aucun filtre jusqu'à sa prochaine connexion.",
-      "unknownEvidence_other": "{{count}} personnes n'ont pas encore été vues avec ce que la règle vérifie : elles n'apparaissent dans aucun filtre jusqu'à leur prochaine connexion.",
-      "refresh": "Actualiser",
       "selection": {
         "selectAll": "Tout sélectionner, sur toutes les pages",
         "count_one": "{{count}} sélectionné",
@@ -5146,6 +5144,24 @@
         "addedOn": "Ajoutée le {{date}}",
         "removeAria": "Retirer {{email}} de la liste blanche",
         "removed": "{{email}} retirée de la liste blanche."
+      },
+      "moreActions": "Plus d'actions",
+      "t0Reimport": "Réimporter les utilisateurs existants",
+      "emptyState": {
+        "searchHint": "Vérifiez l'orthographe, ou cherchez par identifiant, nom ou e-mail.",
+        "emptyHint": "Ajoutez les personnes qui doivent accéder à la plateforme quelle que soit la règle.",
+        "rule": {
+          "title": "Aucune entrée redondante",
+          "hint": "Personne dans la liste blanche n'est aussi admis par la règle actuelle."
+        },
+        "whitelist_only": {
+          "title": "Tout le monde a un autre accès",
+          "hint": "Personne ne dépend uniquement de la liste blanche pour se connecter."
+        },
+        "unknown": {
+          "title": "Rien à vérifier",
+          "hint": "La règle a pu classer toutes les personnes de la liste blanche."
+        }
       }
     },
     "agentMarketplace": {

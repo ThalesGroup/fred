@@ -48,10 +48,10 @@ const state = vi.hoisted(() => ({
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
-  unknownCount: null as number | null,
   refetchUsers: vi.fn(),
   refetchPending: vi.fn(),
   pending: [] as { email: string; granted_by: string; granted_at: string }[],
+  countQueries: vi.fn(),
   pickedEmails: [] as string[],
   revokeUsers: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 2 }) })),
   addEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
@@ -106,7 +106,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       data: { total: 1, items: [{ user_id: "old", username: "Previous search", sources: [] }] },
       currentData: state.usersFetching
         ? undefined
-        : { total: state.usersTotal ?? state.users.length, items: state.users, unknown_count: state.unknownCount },
+        : { total: state.usersTotal ?? state.users.length, items: state.users },
     };
   },
   usePlatformAccessT0Query: (_args: unknown, options: { skip: boolean }) => {
@@ -130,6 +130,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useRevokePlatformUsersMutation: () => [state.revokeUsers],
   usePlatformAccessPendingEmailsQuery: (_args: unknown, options: { skip: boolean }) =>
     options.skip ? { refetch: state.refetchPending } : { data: state.pending, refetch: state.refetchPending },
+  usePlatformAccessOverlapCountsQuery: (args: unknown, options: { skip: boolean }) => {
+    state.countQueries(args, options);
+    return options.skip ? {} : { currentData: { rule: 4, whitelist_only: 7, unknown: 2 } };
+  },
   useAddPlatformPendingEmailMutation: () => [state.addEmail],
   useRemovePlatformPendingEmailMutation: () => [state.removeEmail],
   useImportPlatformT0Mutation: () => [state.importT0],
@@ -203,7 +207,6 @@ beforeEach(() => {
   state.previewFetching = false;
   state.previewError = false;
   state.configured = true;
-  state.unknownCount = null;
   state.pending = [];
   state.pickedEmails = [];
   vi.clearAllMocks();
@@ -365,26 +368,17 @@ it("removes only the rows checked one by one", async () => {
   expect(state.revokeUsers).toHaveBeenCalledWith({ revokePlatformAccessUsers: { user_ids: ["a"] } });
 });
 
-it("filters by access overlap, restarts at page one, clears the selection and explains unknown evidence", () => {
+it("filters by access overlap, restarts at page one and clears the selection", () => {
   twoUsers();
-  state.unknownCount = 3;
   render("");
   act(() => checkboxes()[1].click());
   act(() => chip("rework.platformAccess.overlapFilter.rule").click());
   expect(lastUsersQuery()).toMatchObject({ overlap: "rule", offset: 0, exceptionsOnly: true });
   expect(checkboxes().some((box) => box.checked)).toBe(false);
-  expect(host.textContent).toContain("rework.platformAccess.unknownEvidence");
+  act(() => chip("rework.platformAccess.overlapFilter.unknown").click());
+  expect(lastUsersQuery()).toMatchObject({ overlap: "unknown", offset: 0 });
   act(() => chip("rework.platformAccess.overlapFilter.all").click());
   expect(lastUsersQuery()).not.toHaveProperty("overlap");
-  expect(host.textContent).not.toContain("rework.platformAccess.unknownEvidence");
-});
-
-it("refreshes the listing and the pending emails on demand", () => {
-  render("");
-  const refresh = usersPanel().querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.refresh"]')!;
-  act(() => refresh.click());
-  expect(state.refetchUsers).toHaveBeenCalledTimes(1);
-  expect(state.refetchPending).toHaveBeenCalledTimes(1);
 });
 
 it("lists emails waiting for a first sign-in and removes one", async () => {
@@ -731,7 +725,7 @@ it("keeps user controls in Users and team authorization in Teams", () => {
   const teamPanel = host.querySelector<HTMLElement>('[id$="-teams-panel"]')!;
   expect(userPanel.textContent).toContain("rework.platformAccess.remove");
   expect(userPanel.textContent).toContain("rework.platformAccess.addUsers");
-  expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
+  expect(userPanel.querySelector('[aria-label="rework.platformAccess.moreActions"]')).not.toBeNull();
   expect(userPanel.hidden).toBe(false);
   expect(teamPanel.hidden).toBe(true);
   openTab("teams");
@@ -850,15 +844,17 @@ it("preserves the rule draft, the search and the page across tabs without mutati
   expect(state.revoke).not.toHaveBeenCalled();
   expect(state.importT0).not.toHaveBeenCalled();
 });
-it("reduces the completed import to a discreet status without an import action", () => {
-  state.completed = true;
+const moreMenu = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.moreActions"]')!;
+const menuOptions = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+it("keeps the import in the more menu, next to the add button, and runs it from there", async () => {
   render();
-  expect(host.querySelector('[role="status"]')?.textContent).toContain("rework.platformAccess.t0Done");
-  expect(host.textContent).not.toContain("rework.platformAccess.t0Hint");
-  expect(
-    [...host.querySelectorAll("button")].some((node) => node.textContent === "rework.platformAccess.t0Import"),
-  ).toBe(false);
-  expect(state.importT0).not.toHaveBeenCalled();
+  expect(addUsersButton().textContent).toContain("rework.platformAccess.addUsers");
+  expect(addUsersButton().nextElementSibling?.contains(moreMenu())).toBe(true);
+  act(() => moreMenu().click());
+  const option = menuOptions().find((node) => node.textContent?.includes("rework.platformAccess.t0Import"))!;
+  expect(option.textContent).toContain("rework.platformAccess.t0Preview");
+  await act(async () => option.click());
+  expect(state.importT0).toHaveBeenCalledTimes(1);
 });
 
 it("says so when a search matches no user and shows progress while searching", () => {
@@ -1156,15 +1152,47 @@ it("shows a supported page size and lets the administrator change it", () => {
   expect(state.filter).not.toHaveBeenCalled();
 });
 
-it("offers the small refresh action after completion with filtering on or off", () => {
+it("offers the reimport from the more menu after completion, with filtering on or off", () => {
   state.completed = true;
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
-  const action = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.t0Refresh.title"]')!;
-  expect(action().disabled).toBe(false);
-  expect(action().title).toBe("rework.platformAccess.t0Refresh.title");
+  expect(moreMenu().disabled).toBe(false);
+  act(() => moreMenu().click());
+  const labels = menuOptions().map((node) => node.textContent);
+  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Reimport"))).toBe(true);
+  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Done"))).toBe(true);
+  expect(labels.some((text) => text?.includes("rework.platformAccess.t0Import"))).toBe(false);
   expect(state.importT0).not.toHaveBeenCalled();
   state.filteringEnabled = true;
   act(() => root.render(<PlatformAccessPage />));
-  expect(action().disabled).toBe(false);
+  expect(moreMenu().disabled).toBe(false);
+});
+
+it("explains an empty filter with its own empty state, and offers adding only on an empty whitelist", () => {
+  state.users = [];
+  render("");
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.emptyHint");
+  const addButtons = () =>
+    [...usersPanel().querySelectorAll("button")].filter((node) =>
+      node.textContent?.includes("rework.platformAccess.addUsers"),
+    );
+  // The toolbar's button and the empty state's.
+  expect(addButtons()).toHaveLength(2);
+  act(() => chip("rework.platformAccess.overlapFilter.unknown").click());
+  expect(addButtons()).toHaveLength(1);
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.unknown.title");
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.unknown.hint");
+  expect(usersPanel().textContent).not.toContain("rework.platformAccess.emptyState.emptyHint");
+});
+
+it("shows how many people each cleanup chip lists, counted once per search", () => {
+  render("");
+  expect(chip("rework.platformAccess.overlapFilter.rule").textContent).toContain("4");
+  expect(chip("rework.platformAccess.overlapFilter.whitelistOnly").textContent).toContain("7");
+  expect(chip("rework.platformAccess.overlapFilter.unknown").textContent).toContain("2");
+  const calls = state.countQueries.mock.calls.length;
+  act(() => pageButton("2")?.click());
+  search("bo");
+  expect(state.countQueries.mock.lastCall).toEqual([{ query: "bo" }, { skip: false }]);
+  expect(state.countQueries.mock.calls.length).toBeGreaterThan(calls);
 });

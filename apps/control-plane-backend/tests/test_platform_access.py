@@ -2579,11 +2579,13 @@ async def test_overlap_filters_classify_rule_whitelist_only_and_unknown(access):
     actor, matching, missing, member, never_seen = await seed_cleanup_population(access)
     rule = await service.users_page(access, 0, 25, "", True, overlap="rule")
     assert [item.user_id for item in rule.items] == [matching.uid]
-    assert rule.total == 1 and rule.unknown_count == 1
+    assert rule.total == 1
 
     only = await service.users_page(access, 0, 25, "", True, overlap="whitelist_only")
     assert [item.user_id for item in only.items] == [missing.uid]
-    assert only.total == 1 and only.unknown_count == 1
+    assert only.total == 1
+    unknown = await service.users_page(access, 0, 25, "", True, overlap="unknown")
+    assert [item.user_id for item in unknown.items] == [str(never_seen)]
     # One admin lookup plus one per eligible team, never one per person.
     assert access.rebac.subject_lookups.count("demo") == 1
     assert len(access.rebac.subject_lookups) == 2
@@ -2603,7 +2605,9 @@ async def test_whitelist_only_rechecks_people_a_truncated_lookup_missed(access):
     assert [item.user_id for item in only.items] == [missing.uid]
 
     everyone = await service.users_page(access, 0, 25, "", True)
-    assert everyone.total == 4 and everyone.unknown_count is None
+    assert everyone.total == 4
+    counts = await service.overlap_counts(access, "", None)
+    assert (counts.rule, counts.whitelist_only, counts.unknown) == (1, 1, 1)
 
 
 @pytest.mark.asyncio
@@ -2693,6 +2697,7 @@ async def test_cleanup_and_pending_email_endpoints_require_platform_admin(access
                 "/admin/platform/access/users",
                 params={"exceptions_only": True, "overlap": "rule"},
             ),
+            client.get("/admin/platform/access/users/overlap-counts"),
         )
         for call in calls:
             assert (await call).status_code == 403

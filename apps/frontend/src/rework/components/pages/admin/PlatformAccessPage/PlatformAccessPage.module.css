@@ -6,7 +6,6 @@
   margin: 0 auto;
   width: 100%;
   max-width: 1080px;
-  overflow: auto;
   font: var(--font-body-medium);
 }
 .navigation {
@@ -244,10 +243,16 @@
   align-items: center;
   gap: var(--spacing-s);
 }
-.search {
-  flex: 1 1 20rem;
+.toolbarGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
   min-width: 0;
-  max-width: 30rem;
+}
+.search {
+  flex: 0 1 15rem;
+  min-width: 0;
 }
 .pendingEmails {
   display: flex;
@@ -277,25 +282,6 @@
   flex: 1 1 12rem;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.selectionBar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-s);
-}
-.importRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-s);
-}
-.importRow > button {
-  flex-shrink: 0;
-  max-width: 100%;
-}
-.importRow > span {
-  color: var(--on-surface-retreat);
 }
 .reviewHeader {
   display: flex;

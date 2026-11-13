@@ -36,6 +36,7 @@ from control_plane_backend.platform_access.schemas import (
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessActivationPreview,
+    PlatformAccessOverlapCounts,
     PlatformAccessOwnClaims,
     PlatformAccessPendingEmail,
     PlatformAccessPolicyPreview,
@@ -176,11 +177,12 @@ async def list_platform_access_users(
     exceptions_only: bool = Query(
         False, description="Only users holding an individual exception."
     ),
-    overlap: Literal["rule", "whitelist_only"] | None = Query(
+    overlap: Literal["rule", "whitelist_only", "unknown"] | None = Query(
         None,
         description=(
-            "Exceptions only, narrowed to people the rule also admits, or to people "
-            "with no other admission source. Requires exceptions_only."
+            "Exceptions only, narrowed to people the rule also admits, to people "
+            "with no other admission source, or to people whose stored evidence "
+            "lacks a claim the rule uses. Requires exceptions_only."
         ),
     ),
 ) -> PlatformAccessUsersPage:
@@ -195,6 +197,20 @@ async def list_platform_access_users(
         PlatformAccessDirectory(deps),
         overlap,
     )
+
+
+@router.get(
+    "/admin/platform/access/users/overlap-counts",
+    response_model=PlatformAccessOverlapCounts,
+)
+async def count_platform_access_overlaps(
+    access: Access,
+    user: Admin,
+    deps: UserDeps,
+    query: str = Query("", max_length=200),
+) -> PlatformAccessOverlapCounts:
+    """How many exceptions each cleanup filter lists for this search."""
+    return await service.overlap_counts(access, query, PlatformAccessDirectory(deps))
 
 
 @router.post(

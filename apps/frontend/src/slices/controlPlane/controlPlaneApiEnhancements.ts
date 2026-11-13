@@ -116,6 +116,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
     revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
     revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: { invalidatesTags: ["PlatformAccess"] },
+    countPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGet: {
+      providesTags: ["PlatformAccess"],
+    },
     listPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGet: {
       providesTags: ["PlatformAccess"],
     },
@@ -1259,6 +1262,8 @@ export const {
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation: useGrantPlatformUsersMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation: useRevokePlatformUserMutation,
   useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation: useRevokePlatformUsersMutation,
+  useCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery:
+    usePlatformAccessOverlapCountsQuery,
   useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery:
     usePlatformAccessPendingEmailsQuery,
   useAddPlatformAccessPendingEmailControlPlaneV1AdminPlatformAccessPendingEmailsPostMutation:

@@ -57,6 +57,7 @@ from control_plane_backend.platform_access.schemas import (
     FreeEnrollmentPreview,
     PlatformAccessActivationPreview,
     PlatformAccessActivationUser,
+    PlatformAccessOverlapCounts,
     PlatformAccessOwnClaims,
     PlatformAccessPendingEmail,
     PlatformAccessPolicyPreview,
@@ -280,7 +281,9 @@ async def revoke_users(
 ) -> int:
     if body.all_matching:
         entries = (
-            (await overlapping_entries(access, body.query, body.overlap, directory))[0]
+            (await classified_entries(access, body.query, directory, body.overlap))[
+                body.overlap
+            ]
             if body.overlap is not None
             else (await exception_entries(access, body.query, directory))[0]
         )
@@ -383,7 +386,7 @@ async def set_user(
 
 
 Entry = tuple[UserSummary, UserRow | None, PlatformAccessUserRow | None]
-Overlap = Literal["rule", "whitelist_only"]
+Overlap = Literal["rule", "whitelist_only", "unknown"]
 
 
 def local_summary(row: UserRow) -> UserSummary:
@@ -526,14 +529,15 @@ async def other_sources(access: PlatformAccess, candidates: list[str]) -> set[st
     return admitted | {uid for uid, other in zip(rest, verdicts) if other}
 
 
-async def overlapping_entries(
+async def classified_entries(
     access: PlatformAccess,
     query: str,
-    overlap: Overlap,
     directory: PlatformAccessDirectory | None,
-) -> tuple[list[Entry], int]:
-    """Exceptions matching one cleanup filter, and how many the rule cannot classify.
+    only: Overlap | None = None,
+) -> dict[Overlap, list[Entry]]:
+    """Exceptions per cleanup filter; "unknown" is what the rule cannot classify yet.
 
+    `only` skips the team and admin lookups when "whitelist_only" is not wanted.
     Without a search, directory profiles are left for the caller to resolve on the
     page it shows, never for every exception.
     """
@@ -546,12 +550,23 @@ async def overlapping_entries(
     verdicts = await asyncio.to_thread(
         lambda: [rule_evidence(row, policy) for _, row, _ in entries]
     )
-    unknown = sum(verdict is None for verdict in verdicts)
-    if overlap == "rule":
-        return [e for e, v in zip(entries, verdicts) if v is True], unknown
-    candidates = [e for e, v in zip(entries, verdicts) if v is False]
-    others = await other_sources(access, [e[0].id for e in candidates])
-    return [e for e in candidates if e[0].id not in others], unknown
+    groups: dict[Overlap, list[Entry]] = {
+        "rule": [e for e, v in zip(entries, verdicts) if v is True],
+        "unknown": [e for e, v in zip(entries, verdicts) if v is None],
+        "whitelist_only": [],
+    }
+    if only in (None, "whitelist_only"):
+        candidates = [e for e, v in zip(entries, verdicts) if v is False]
+        others = await other_sources(access, [e[0].id for e in candidates])
+        groups["whitelist_only"] = [e for e in candidates if e[0].id not in others]
+    return groups
+
+
+async def overlap_counts(
+    access: PlatformAccess, query: str, directory: PlatformAccessDirectory | None
+) -> PlatformAccessOverlapCounts:
+    groups = await classified_entries(access, query, directory)
+    return PlatformAccessOverlapCounts(**{k: len(v) for k, v in groups.items()})
 
 
 async def users_page(
@@ -564,11 +579,9 @@ async def users_page(
     overlap: Overlap | None = None,
 ) -> PlatformAccessUsersPage:
     policy = access.policy(await access.state())
-    unknown_count: int | None = None
     if overlap is not None:
-        selected, unknown_count = await overlapping_entries(
-            access, query, overlap, directory
-        )
+        groups = await classified_entries(access, query, directory, overlap)
+        selected = groups[overlap]
         entries, total = selected[offset : offset + limit], len(selected)
         if directory is not None and not directory.local and not query.strip():
             resolved = await directory.by_ids(profile.id for profile, _, _ in entries)
@@ -662,9 +675,7 @@ async def users_page(
             )
 
     items = await asyncio.gather(*(project(*entry) for entry in entries))
-    return PlatformAccessUsersPage(
-        items=items, total=total, unknown_count=unknown_count
-    )
+    return PlatformAccessUsersPage(items=items, total=total)
 
 
 async def activation_preview(

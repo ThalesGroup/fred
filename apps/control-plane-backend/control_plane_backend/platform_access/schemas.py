@@ -50,12 +50,16 @@ class PlatformAccessUser(BaseModel):
 class PlatformAccessUsersPage(BaseModel):
     items: list[PlatformAccessUser]
     total: int
-    # With `overlap`: exceptions whose stored evidence lacks a claim the rule uses.
-    unknown_count: int | None = None
 
 
 class RevokedPlatformAccessUsers(BaseModel):
     removed_count: int
+
+
+class PlatformAccessOverlapCounts(BaseModel):
+    rule: int
+    whitelist_only: int
+    unknown: int
 
 
 class PlatformAccessPendingEmail(BaseModel):
@@ -78,7 +82,7 @@ class RevokePlatformAccessUsers(BaseModel):
     user_ids: list[UUID] = Field(default_factory=list, max_length=10000)
     all_matching: bool = False
     query: str = Field(default="", max_length=200)
-    overlap: Literal["rule", "whitelist_only"] | None = None
+    overlap: Literal["rule", "whitelist_only", "unknown"] | None = None
     excluded_ids: list[UUID] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode="after")

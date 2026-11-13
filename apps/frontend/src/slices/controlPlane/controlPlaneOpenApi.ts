@@ -111,6 +111,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.grantPlatformAccessUsers,
       }),
     }),
+    countPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGet: build.query<
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse,
+      CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/overlap-counts`,
+        params: {
+          query: queryArg.query,
+        },
+      }),
+    }),
     revokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePost: build.mutation<
       RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse,
       RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiArg
@@ -2636,12 +2647,17 @@ export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiA
   query?: string;
   /** Only users holding an individual exception. */
   exceptionsOnly?: boolean;
-  /** Exceptions only, narrowed to people the rule also admits, or to people with no other admission source. Requires exceptions_only. */
-  overlap?: ("rule" | "whitelist_only") | null;
+  /** Exceptions only, narrowed to people the rule also admits, to people with no other admission source, or to people whose stored evidence lacks a claim the rule uses. Requires exceptions_only. */
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
 };
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
 export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
   grantPlatformAccessUsers: GrantPlatformAccessUsers;
+};
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOverlapCounts;
+export type CountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetApiArg = {
+  query?: string;
 };
 export type RevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostApiResponse =
   /** status 200 Successful Response */ RevokedPlatformAccessUsers;
@@ -4558,10 +4574,14 @@ export type PlatformAccessUser = {
 export type PlatformAccessUsersPage = {
   items: PlatformAccessUser[];
   total: number;
-  unknown_count?: number | null;
 };
 export type GrantPlatformAccessUsers = {
   user_ids: string[];
+};
+export type PlatformAccessOverlapCounts = {
+  rule: number;
+  whitelist_only: number;
+  unknown: number;
 };
 export type RevokedPlatformAccessUsers = {
   removed_count: number;
@@ -4570,7 +4590,7 @@ export type RevokePlatformAccessUsers = {
   user_ids?: string[];
   all_matching?: boolean;
   query?: string;
-  overlap?: ("rule" | "whitelist_only") | null;
+  overlap?: ("rule" | "whitelist_only" | "unknown") | null;
   excluded_ids?: string[];
 };
 export type PlatformAccessPendingEmail = {
@@ -7146,6 +7166,8 @@ export const {
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
+  useCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
+  useLazyCountPlatformAccessOverlapsControlPlaneV1AdminPlatformAccessUsersOverlapCountsGetQuery,
   useRevokePlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersRevokePostMutation,
   useListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,
   useLazyListPlatformAccessPendingEmailsControlPlaneV1AdminPlatformAccessPendingEmailsGetQuery,

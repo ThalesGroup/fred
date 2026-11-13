@@ -5068,13 +5068,13 @@
         "allowed": "Allowed",
         "group": "Filter teams"
       },
-      "noUsers": "No whitelisted user matches this search.",
+      "noUsers": "No results for this search",
       "teamAllowed": "Allowed",
       "grantedSelected_one": "{{count}} user added to the whitelist.",
       "grantedSelected_other": "{{count}} users added to the whitelist.",
       "revokedUser": "{{user}} removed from the whitelist.",
-      "addUsers": "Add users",
-      "emptyWhitelist": "The whitelist has no user yet. Use “Add users” to add some.",
+      "addUsers": "Add",
+      "emptyWhitelist": "The whitelist is empty",
       "addDialog": {
         "title": "Add users",
         "subtitle": "People added to the whitelist can use the platform whatever the rule says.",
@@ -5120,11 +5120,9 @@
         "group": "Filter the whitelist",
         "all": "All",
         "rule": "Admitted by the rule",
-        "whitelistOnly": "Whitelist only"
+        "whitelistOnly": "Whitelist only",
+        "unknown": "To check"
       },
-      "unknownEvidence_one": "{{count}} person has not been seen yet with what the rule checks: they appear in no filter until their next sign-in.",
-      "unknownEvidence_other": "{{count}} people have not been seen yet with what the rule checks: they appear in no filter until their next sign-in.",
-      "refresh": "Refresh",
       "selection": {
         "selectAll": "Select all, across every page",
         "count_one": "{{count}} selected",
@@ -5146,6 +5144,24 @@
         "addedOn": "Added on {{date}}",
         "removeAria": "Remove {{email}} from the whitelist",
         "removed": "{{email}} removed from the whitelist."
+      },
+      "moreActions": "More actions",
+      "t0Reimport": "Reimport existing users",
+      "emptyState": {
+        "searchHint": "Check the spelling, or search by identifier, name or email.",
+        "emptyHint": "Add the people who must reach the platform whatever the rule says.",
+        "rule": {
+          "title": "No redundant entries",
+          "hint": "Nobody on the whitelist is also admitted by the current rule."
+        },
+        "whitelist_only": {
+          "title": "Everyone has another access",
+          "hint": "Nobody depends on the whitelist alone to sign in."
+        },
+        "unknown": {
+          "title": "Nothing to check",
+          "hint": "The rule could classify everyone on the whitelist."
+        }
       }
     },
     "agentMarketplace": {

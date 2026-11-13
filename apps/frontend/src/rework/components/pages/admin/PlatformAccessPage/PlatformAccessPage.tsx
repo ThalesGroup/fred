@@ -13,6 +13,8 @@ import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import Switch from "@shared/atoms/Switch/Switch";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
@@ -29,6 +31,7 @@ import {
   useRevokePlatformUserMutation,
   useRevokePlatformUsersMutation,
   usePlatformAccessPendingEmailsQuery,
+  usePlatformAccessOverlapCountsQuery,
   useAddPlatformPendingEmailMutation,
   useRemovePlatformPendingEmailMutation,
   useImportPlatformT0Mutation,
@@ -64,7 +67,9 @@ function otherAccessLines(user: PlatformAccessUser, t: TFunction): string[] {
       ),
   ];
 }
-type Overlap = "rule" | "whitelist_only";
+type Overlap = "rule" | "whitelist_only" | "unknown";
+// An empty filter is good news for cleanup: the icon says so rather than "nothing found".
+const EMPTY_OVERLAP_ICON = { rule: "check_circle", whitelist_only: "shield", unknown: "check" } as const;
 // Header "select all" covers every matching row across pages: kept as the excluded rows, not a list.
 type Selection = { mode: "ids"; ids: ReadonlySet<string> } | { mode: "all"; excluded: ReadonlySet<string> };
 const NO_SELECTION: Selection = { mode: "ids", ids: new Set<string>() };
@@ -113,6 +118,9 @@ export default function PlatformAccessPage() {
   // A selection is relative to one search and filter: changing either starts over.
   useEffect(() => setSelection(NO_SELECTION), [searchQuery, overlap]);
   const pendingEmails = usePlatformAccessPendingEmailsQuery(undefined, { skip: !usersShown });
+  // One request per search, not per page: each chip shows how many people it lists.
+  const overlapCounts = usePlatformAccessOverlapCountsQuery({ query: searchQuery }, { skip: !usersShown });
+  const countOf = (key: Overlap) => overlapCounts.currentData?.[key];
   // Rows of another page or search are never shown; the total keeps the pagination in place meanwhile.
   const userRows = users.isError ? undefined : users.currentData?.items;
   const userTotal = users.isError ? 0 : (users.currentData?.total ?? users.data?.total ?? 0);
@@ -248,94 +256,6 @@ export default function PlatformAccessPage() {
               <h2 className={styles.sectionTitle}>{t("rework.platformAccess.whitelistedUsers")}</h2>
               <p className={styles.hint}>{t("rework.platformAccess.whitelistedUsersHint")}</p>
             </div>
-            <div className={styles.toolbar}>
-              <div className={styles.search}>
-                <SearchInput
-                  size="small"
-                  value={query}
-                  placeholder={t("rework.platformAccess.search")}
-                  ariaLabel={t("rework.platformAccess.search")}
-                  clearAriaLabel={t("rework.platformAccess.clearSearch")}
-                  onChange={setQuery}
-                />
-              </div>
-              <FilterChips<Overlap>
-                options={[
-                  { id: "rule", label: t("rework.platformAccess.overlapFilter.rule") },
-                  { id: "whitelist_only", label: t("rework.platformAccess.overlapFilter.whitelistOnly") },
-                ]}
-                value={overlap}
-                onChange={(next) => {
-                  setOverlap(next);
-                  setOffset(0);
-                }}
-                allLabel={t("rework.platformAccess.overlapFilter.all")}
-                aria-label={t("rework.platformAccess.overlapFilter.group")}
-              />
-              <div className={styles.importRow}>
-                <IconButton
-                  type="button"
-                  variant="icon"
-                  size="medium"
-                  color="on-surface-retreat"
-                  icon={{ category: "outlined", type: "refresh" }}
-                  title={t("rework.platformAccess.refresh")}
-                  aria-label={t("rework.platformAccess.refresh")}
-                  disabled={users.isFetching}
-                  onClick={() => {
-                    void users.refetch();
-                    void pendingEmails.refetch();
-                  }}
-                />
-                {t0.data?.completed_at ? (
-                  <>
-                    <span role="status">{t("rework.platformAccess.t0Done")}</span>
-                    <IconButton
-                      type="button"
-                      color="primary"
-                      variant="icon"
-                      size="2xs"
-                      icon={{ category: "outlined", type: "refresh" }}
-                      title={t("rework.platformAccess.t0Refresh.title")}
-                      aria-label={t("rework.platformAccess.t0Refresh.title")}
-                      disabled={locked || t0.isFetching || t0.isError}
-                      onClick={() => setRefreshingT0(true)}
-                    />
-                  </>
-                ) : (
-                  <>
-                    {t0.data && (
-                      <span>
-                        {t("rework.platformAccess.t0Preview", {
-                          count: t0.data.candidates,
-                          matching: t0.data.matching,
-                        })}
-                      </span>
-                    )}
-                    <Button
-                      color="primary"
-                      variant="outlined"
-                      size="small"
-                      title={t("rework.platformAccess.t0Hint")}
-                      disabled={locked || !t0.data || t0.isFetching || t0.isError}
-                      onClick={() => void run(() => importT0({ body: null }).unwrap())}
-                    >
-                      {t("rework.platformAccess.t0Import")}
-                    </Button>
-                  </>
-                )}
-                <Button
-                  color="primary"
-                  variant="filled"
-                  size="small"
-                  icon={{ category: "outlined", type: "add" }}
-                  disabled={locked}
-                  onClick={() => setAdding(true)}
-                >
-                  {t("rework.platformAccess.addUsers")}
-                </Button>
-              </div>
-            </div>
             {overlap === null && (pendingEmails.data?.length ?? 0) > 0 && (
               <section className={styles.pendingEmails} aria-labelledby={`${panelId}-pending-title`}>
                 <h3 id={`${panelId}-pending-title`} className={styles.pendingTitle}>
@@ -374,38 +294,136 @@ export default function PlatformAccessPage() {
                 </ul>
               </section>
             )}
-            {overlap !== null && (users.currentData?.unknown_count ?? 0) > 0 && (
-              <p className={styles.hint} role="status">
-                {t("rework.platformAccess.unknownEvidence", { count: users.currentData?.unknown_count ?? 0 })}
-              </p>
-            )}
-            {selectedCount > 0 && (
-              <div
-                className={styles.selectionBar}
-                role="toolbar"
-                aria-label={t("rework.platformAccess.selection.remove")}
-              >
-                <span>{t("rework.platformAccess.selection.count", { count: selectedCount })}</span>
+            <div className={styles.toolbar}>
+              <div className={styles.toolbarGroup}>
                 <Button
-                  color="error"
-                  variant="outlined"
+                  color="primary"
+                  variant="filled"
                   size="small"
-                  icon={{ category: "outlined", type: "delete" }}
-                  disabled={locked || users.isFetching}
-                  onClick={() => setConfirmingRemoval(true)}
+                  icon={{ category: "outlined", type: "add" }}
+                  disabled={locked}
+                  onClick={() => setAdding(true)}
                 >
-                  {t("rework.platformAccess.selection.remove")}
+                  {t("rework.platformAccess.addUsers")}
                 </Button>
-                <Button color="primary" variant="text" size="small" onClick={() => setSelection(NO_SELECTION)}>
-                  {t("rework.platformAccess.selection.clear")}
-                </Button>
+                <IconButtonMenu<"import" | "reimport">
+                  iconButton={{
+                    variant: "icon",
+                    size: "medium",
+                    color: "on-surface-retreat",
+                    icon: { category: "outlined", type: "more_vert" },
+                    "aria-label": t("rework.platformAccess.moreActions"),
+                    disabled: locked || !t0.data || t0.isFetching || t0.isError,
+                  }}
+                  options={
+                    t0.data?.completed_at
+                      ? [
+                          {
+                            key: "reimport",
+                            value: "reimport",
+                            label: t("rework.platformAccess.t0Reimport"),
+                            description: t("rework.platformAccess.t0Done"),
+                          },
+                        ]
+                      : [
+                          {
+                            key: "import",
+                            value: "import",
+                            label: t("rework.platformAccess.t0Import"),
+                            description: t0.data
+                              ? t("rework.platformAccess.t0Preview", {
+                                  count: t0.data.candidates,
+                                  matching: t0.data.matching,
+                                })
+                              : undefined,
+                            tooltip: t("rework.platformAccess.t0Hint"),
+                          },
+                        ]
+                  }
+                  onSelect={(action) =>
+                    action === "reimport" ? setRefreshingT0(true) : void run(() => importT0({ body: null }).unwrap())
+                  }
+                />
+                {selectedCount > 0 && (
+                  <>
+                    <span role="status">{t("rework.platformAccess.selection.count", { count: selectedCount })}</span>
+                    <Button
+                      color="error"
+                      variant="outlined"
+                      size="small"
+                      icon={{ category: "outlined", type: "delete" }}
+                      disabled={locked || users.isFetching}
+                      onClick={() => setConfirmingRemoval(true)}
+                    >
+                      {t("rework.platformAccess.selection.remove")}
+                    </Button>
+                    <Button color="primary" variant="text" size="small" onClick={() => setSelection(NO_SELECTION)}>
+                      {t("rework.platformAccess.selection.clear")}
+                    </Button>
+                  </>
+                )}
               </div>
-            )}
+              <div className={styles.toolbarGroup}>
+                <FilterChips<Overlap>
+                  options={[
+                    { id: "rule", label: t("rework.platformAccess.overlapFilter.rule"), count: countOf("rule") },
+                    {
+                      id: "whitelist_only",
+                      label: t("rework.platformAccess.overlapFilter.whitelistOnly"),
+                      count: countOf("whitelist_only"),
+                    },
+                    {
+                      id: "unknown",
+                      label: t("rework.platformAccess.overlapFilter.unknown"),
+                      count: countOf("unknown"),
+                    },
+                  ]}
+                  value={overlap}
+                  onChange={(next) => {
+                    setOverlap(next);
+                    setOffset(0);
+                  }}
+                  allLabel={t("rework.platformAccess.overlapFilter.all")}
+                  aria-label={t("rework.platformAccess.overlapFilter.group")}
+                />
+                <div className={styles.search}>
+                  <SearchInput
+                    size="small"
+                    value={query}
+                    placeholder={t("rework.platformAccess.search")}
+                    ariaLabel={t("rework.platformAccess.search")}
+                    clearAriaLabel={t("rework.platformAccess.clearSearch")}
+                    onChange={setQuery}
+                  />
+                </div>
+              </div>
+            </div>
             {users.isFetching && !userRows && <Spinner statusText={t("rework.platformAccess.loading")} />}
             {usersShown && !users.isFetching && !users.isError && userTotal === 0 && (
-              <p className={styles.hint}>
-                {t(searchQuery ? "rework.platformAccess.noUsers" : "rework.platformAccess.emptyWhitelist")}
-              </p>
+              <PageEmptyState
+                {...(searchQuery
+                  ? {
+                      icon: "search_off",
+                      message: t("rework.platformAccess.noUsers"),
+                      description: t("rework.platformAccess.emptyState.searchHint"),
+                    }
+                  : overlap
+                    ? {
+                        icon: EMPTY_OVERLAP_ICON[overlap],
+                        message: t(`rework.platformAccess.emptyState.${overlap}.title`),
+                        description: t(`rework.platformAccess.emptyState.${overlap}.hint`),
+                      }
+                    : {
+                        icon: "person_add",
+                        message: t("rework.platformAccess.emptyWhitelist"),
+                        description: t("rework.platformAccess.emptyState.emptyHint"),
+                        action: {
+                          label: t("rework.platformAccess.addUsers"),
+                          onClick: () => setAdding(true),
+                          disabled: locked,
+                        },
+                      })}
+              />
             )}
             {userTotal > 0 && (
               <DataTable
