@@ -7975,19 +7975,6 @@
                               "minLength": 1,
                               "title": "Base Url",
                               "type": "string"
-                            },
-                            "api_key_env": {
-                              "anyOf": [
-                                {
-                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "title": "Api Key Env"
                             }
                           },
                           "required": [
@@ -13129,19 +13116,6 @@
                               "minLength": 1,
                               "title": "Base Url",
                               "type": "string"
-                            },
-                            "api_key_env": {
-                              "anyOf": [
-                                {
-                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "title": "Api Key Env"
                             }
                           },
                           "required": [
@@ -18280,19 +18254,6 @@
                               "minLength": 1,
                               "title": "Base Url",
                               "type": "string"
-                            },
-                            "api_key_env": {
-                              "anyOf": [
-                                {
-                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "title": "Api Key Env"
                             }
                           },
                           "title": "RerankerSettings",
@@ -23216,19 +23177,6 @@
                               "minLength": 1,
                               "title": "Base Url",
                               "type": "string"
-                            },
-                            "api_key_env": {
-                              "anyOf": [
-                                {
-                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "title": "Api Key Env"
                             }
                           },
                           "title": "RerankerSettings",
@@ -28152,19 +28100,6 @@
                               "minLength": 1,
                               "title": "Base Url",
                               "type": "string"
-                            },
-                            "api_key_env": {
-                              "anyOf": [
-                                {
-                                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "title": "Api Key Env"
                             }
                           },
                           "title": "RerankerSettings",

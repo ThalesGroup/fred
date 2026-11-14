@@ -136,7 +136,7 @@ class DocumentReranker:
         client = self._client
         assert configuration is not None and client is not None
         try:
-            key = api_key_for_role("reranker", preferred_variable=configuration.settings.api_key_env)
+            key = api_key_for_role("reranker")
         except ValueError as error:
             raise RerankerUnavailable("Remote reranker unavailable") from error
         payload = {

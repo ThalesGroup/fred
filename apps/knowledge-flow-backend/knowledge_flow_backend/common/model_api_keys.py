@@ -25,9 +25,9 @@ def openai_api_key_for_model(config: ModelConfiguration, role: ModelRole) -> str
     return api_key_for_role(role)
 
 
-def api_key_for_role(role: ModelRole, *, preferred_variable: str | None = None) -> str:
+def api_key_for_role(role: ModelRole) -> str:
     dedicated_variable = _API_KEY_VARIABLES[role]
-    variables = tuple(dict.fromkeys(variable for variable in (preferred_variable, dedicated_variable, "OPENAI_API_KEY") if variable))
+    variables = (dedicated_variable, "OPENAI_API_KEY")
     for variable in variables:
         value = os.getenv(variable, "").strip()
         if value:

@@ -1,6 +1,6 @@
 ## Context
 
-See `proposal.md` for the motivation and `specs/knowledge-flow-model-configuration/spec.md` for behavior. Knowledge Flow configures `chat_model`, `embedding_model`, optional `vision_model`, `ocr_model`, and `reranker_model` independently. Its chat, vision, and embedding clients use the shared `fred_core.model.factory`; remote OCR and the remote reranker use separate HTTP paths. The reranker currently requires `settings.api_key_env` and validates the named variable at startup. Knowledge Flow also validates the embedding credential during startup. The Helm chart supplies Knowledge Flow's `.env` from its `dotenv` Secret, which the extraction workers mount too.
+See `proposal.md` for the motivation and `specs/knowledge-flow-model-configuration/spec.md` for behavior. Knowledge Flow configures `chat_model`, `embedding_model`, optional `vision_model`, `ocr_model`, and `reranker_model` independently. Its chat, vision, and embedding clients use the shared `fred_core.model.factory`; remote OCR and the remote reranker use separate HTTP paths. The merged reranker requires `settings.api_key_env`, while this branch introduced a dedicated-key fallback. Knowledge Flow also validates the embedding credential during startup. The Helm chart supplies Knowledge Flow's `.env` from its `dotenv` Secret, which the extraction workers mount too.
 
 ## Goals / Non-Goals
 
@@ -20,7 +20,7 @@ See `proposal.md` for the motivation and `specs/knowledge-flow-model-configurati
 
 ### Resolve role-specific variables in Knowledge Flow
 
-A small Knowledge Flow credential resolver maps five configuration roles to `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, and `KNOWLEDGE_FLOW_RERANKER_API_KEY`. It reads the dedicated variable, then `OPENAI_API_KEY` if the dedicated value is absent or blank. It raises a role-specific configuration error if neither is nonblank. A dedicated value therefore works even when `OPENAI_API_KEY` is absent. Callers for other chat, vision, and embedding providers keep their existing authentication path.
+A small Knowledge Flow credential resolver maps five configuration roles to `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, and `KNOWLEDGE_FLOW_RERANKER_API_KEY`. It reads the dedicated variable, then `OPENAI_API_KEY` if the dedicated value is absent or blank. It raises a role-specific configuration error if neither is nonblank. A dedicated value therefore works even when `OPENAI_API_KEY` is absent. No model has a custom credential-variable setting. Callers for other chat, vision, and embedding providers keep their existing authentication path.
 
 This keeps the names tied to Knowledge Flow's configured uses. Deriving names from model wire IDs would change credentials on model upgrades and cannot distinguish the same wire ID at different gateways. Adding a secret value to `ModelConfiguration.settings` would risk copying secrets into logs or catalog projections.
 
@@ -32,7 +32,7 @@ Remote OCR is a separate HTTP path selected by its Mistral model name. It uses t
 
 The remote extractor is not currently called by the standard PDF ingestion pipeline, which continues to use local OCR. This change configures credentials for the extractor's existing invocation path and does not change which OCR engine ingestion selects.
 
-The remote reranker already accepts a named environment variable in `settings.api_key_env`. Make that field optional, retaining it as an explicit highest-priority override when supplied. Otherwise `KNOWLEDGE_FLOW_RERANKER_API_KEY` is the dedicated variable. A missing or blank override falls through to the dedicated variable and then `OPENAI_API_KEY`. Apply this rule both at startup validation and when building each remote request. The local CrossEncoder path does not need a key.
+Remove the remote reranker's `settings.api_key_env` field and resolve `KNOWLEDGE_FLOW_RERANKER_API_KEY`, then `OPENAI_API_KEY`, both at startup validation and when building each remote request. Keep its settings model strict so a legacy field is rejected rather than silently ignored while traffic switches accounts. The local CrossEncoder path does not need a key.
 
 ### Preserve startup and deployment behavior
 
@@ -43,8 +43,8 @@ Knowledge Flow's embedding startup check uses the new resolution rule; it does n
 - A missing dedicated variable intentionally falls back to `OPENAI_API_KEY`, which can select a different account than the operator expected. Document the precedence and verify it in tests; this is the requested compatibility behavior.
 - Environment-backed keys are fixed for a running pod, and the embedding client is cached. Rotation requires restarting affected API and worker pods, as it does today.
 - Changing a shared factory affects other callers. Keep its new argument optional and test both explicit and legacy paths, including concurrent client construction and non-OpenAI providers.
-- An existing reranker deployment may use a custom `api_key_env`. Keep that explicit variable first so the new default does not redirect its requests to another account.
+- Existing remote reranker configurations containing `settings.api_key_env` must remove the field before upgrading. Reject stale settings rather than silently redirecting authentication.
 
 ## Migration Plan
 
-Existing deployments need no configuration change. Operators may populate any dedicated variable in Knowledge Flow's local `.env` or deployed environment, including the Helm `dotenv` Secret, and restart affected pods. Leaving or clearing a dedicated variable restores `OPENAI_API_KEY` selection unless an explicit reranker override remains set. Before reverting the code with a remote reranker enabled, restore its required `settings.api_key_env` and named variable or disable it. No data migration is involved.
+Deployments without a remote reranker need no configuration change. The merged reranker has not been deployed yet, so no existing deployment needs to migrate its `settings.api_key_env` field. New remote reranker configurations provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY`. Operators may populate other dedicated variables in Knowledge Flow's local `.env` or deployed environment, including the Helm `dotenv` Secret, and restart affected pods. Leaving or clearing a dedicated variable restores `OPENAI_API_KEY` selection. No data migration is involved.

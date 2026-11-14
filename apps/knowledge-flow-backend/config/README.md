@@ -47,8 +47,6 @@ Each Knowledge Flow model use can have its own key in `config/.env` or the proce
 
 For chat, vision, and embeddings configured with `provider: openai`, the remote Mistral OCR extractor, and the remote reranker, a nonempty dedicated key takes precedence. If it is unset or blank, Knowledge Flow uses `OPENAI_API_KEY`. Setting only `OPENAI_API_KEY` therefore works for all five model uses. If neither key is available for a configured use, that use fails before sending a model request. Other chat, vision, and embedding providers retain their existing authentication settings. The local CrossEncoder needs no API key.
 
-An explicitly configured `reranker_model.settings.api_key_env` takes precedence over `KNOWLEDGE_FLOW_RERANKER_API_KEY`. If that variable is unset or blank, the reranker uses its dedicated key and then `OPENAI_API_KEY`. Existing custom reranker variable names remain supported.
-
 The remote OCR extractor is not currently wired into the standard PDF ingestion pipeline, which uses local OCR. Setting `KNOWLEDGE_FLOW_OCR_API_KEY` configures the remote extractor when it is invoked; it does not switch PDF ingestion to remote OCR.
 
 In Helm, set these variables under `applications.knowledge-flow-backend.dotenv`. The API and Knowledge Flow workers mount the resulting `knowledge-flow-backend-env` Secret, including extraction workers. Restart affected pods after changing environment credentials.
@@ -71,7 +69,7 @@ reranker_model:
     base_url: https://models.example/v1
 ```
 
-Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge Flow's environment secret, not in YAML. You may also set `settings.api_key_env` to an existing custom variable name. The service calls `POST {base_url}/rerank` with `model`, `query`,
+Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge Flow's environment secret, not in YAML. The service calls `POST {base_url}/rerank` with `model`, `query`,
 `documents` and `top_n` and expects indexed `results` with `index` and
 `relevance_score`. A missing key prevents startup. An unavailable configured
 remote model produces a 503 for reranking requests; it does not switch to the

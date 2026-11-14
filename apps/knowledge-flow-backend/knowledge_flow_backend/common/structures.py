@@ -1113,7 +1113,6 @@ class RerankerSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     base_url: AnyHttpUrl
-    api_key_env: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class RerankerModelConfiguration(BaseModel):
@@ -1168,7 +1167,7 @@ class Configuration(BaseModel):
     def require_reranker_credential(self) -> "Configuration":
         """Fail at startup if a configured remote reranker cannot authenticate."""
         if self.reranker_model:
-            api_key_for_role("reranker", preferred_variable=self.reranker_model.settings.api_key_env)
+            api_key_for_role("reranker")
         return self
 
     @model_validator(mode="before")

@@ -31,19 +31,17 @@ from knowledge_flow_backend.common.structures import (
     TemporalSchedulerConfig,
 )
 
-RERANKER_CREDENTIAL_ENV = f"RERANKER_TEST_{uuid.uuid4().hex.upper()}"
-
 
 def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch):
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     assert config.reranker_model is None
 
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, str(uuid.uuid4()))
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
         "provider": "rerank",
         "name": "remote-reranker",
-        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+        "settings": {"base_url": "https://models.example/v1"},
     }
     parsed = Configuration.model_validate(payload)
     assert parsed.reranker_model == RerankerModelConfiguration.model_validate(payload["reranker_model"])
@@ -54,18 +52,18 @@ def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monke
     [
         {"provider": "openai"},
         {"name": ""},
-        {"settings": {"base_url": "file:///tmp/invalid", "api_key_env": RERANKER_CREDENTIAL_ENV}},
-        {"settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV + "-invalid"}},
+        {"settings": {"base_url": "file:///tmp/invalid"}},
+        {"settings": {"base_url": "https://models.example/v1", "api_key_env": str(uuid.uuid4())}},
     ],
 )
 def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, override):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, str(uuid.uuid4()))
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     remote = {
         "provider": "rerank",
         "name": "remote-reranker",
-        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+        "settings": {"base_url": "https://models.example/v1"},
     }
     remote.update(override)
     payload["reranker_model"] = remote
@@ -74,14 +72,14 @@ def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, ove
 
 
 def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch):
-    for variable in (RERANKER_CREDENTIAL_ENV, "KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+    for variable in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(variable, raising=False)
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
         "provider": "rerank",
         "name": "remote-reranker",
-        "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+        "settings": {"base_url": "https://models.example/v1"},
     }
     with pytest.raises(ValueError, match="Missing API key for reranker model"):
         Configuration.model_validate(payload)
@@ -89,7 +87,7 @@ def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch)
 
 @pytest.mark.parametrize("variable", ["KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"])
 def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable):
-    for candidate in (RERANKER_CREDENTIAL_ENV, "KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+    for candidate in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(candidate, raising=False)
     monkeypatch.setenv(variable, str(uuid.uuid4()))
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
@@ -102,7 +100,7 @@ def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, mo
 
     parsed = Configuration.model_validate(payload)
     assert parsed.reranker_model is not None
-    assert parsed.reranker_model.settings.api_key_env is None
+    assert str(parsed.reranker_model.settings.base_url) == "https://models.example/v1"
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:

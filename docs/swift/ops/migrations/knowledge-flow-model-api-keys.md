@@ -15,11 +15,11 @@ For optional activation, obtain the credentials for each model endpoint. No data
 
 ## Configuration
 
-Set any of `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, or `KNOWLEDGE_FLOW_RERANKER_API_KEY` in the Knowledge Flow environment or `applications.knowledge-flow-backend.dotenv` Helm values. A nonblank dedicated key takes precedence for its use. An unset or blank dedicated key falls back to `OPENAI_API_KEY`; setting only `OPENAI_API_KEY` remains valid for all five uses. For an existing remote reranker configuration, an explicitly named `settings.api_key_env` remains first priority; if that variable is blank, the dedicated key and global fallback apply. The reranker's `api_key_env` setting is now optional. Do not place credentials in model YAML.
+Set any of `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, or `KNOWLEDGE_FLOW_RERANKER_API_KEY` in the Knowledge Flow environment or `applications.knowledge-flow-backend.dotenv` Helm values. A nonblank dedicated key takes precedence for its use. An unset or blank dedicated key falls back to `OPENAI_API_KEY`; setting only `OPENAI_API_KEY` remains valid for all five uses. The remote reranker's `settings.api_key_env` field is removed; configure its key through the environment. Do not place credentials in model YAML.
 
 ## Upgrade
 
-Deploy normally if retaining the single key. To activate separate keys, update the Knowledge Flow environment or Helm Secret values, then restart the Knowledge Flow API and affected workers so they load the new environment. No special rollout order is required.
+Deploy normally if retaining the single key and not using `reranker_model.settings.api_key_env`. If a remote reranker configuration contains that field, remove it and set `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` before upgrading. To activate separate keys, update the Knowledge Flow environment or Helm Secret values, then restart the Knowledge Flow API and affected workers so they load the new environment. No special rollout order is required.
 
 ## Validation
 
@@ -27,7 +27,7 @@ Exercise the configured chat, vision, embedding, and remote reranking paths with
 
 ## Rollback
 
-To return to one key on this version, clear the dedicated variables and any explicit reranker `settings.api_key_env` override, then restart the affected API and workers with `OPENAI_API_KEY` available. Before rolling back the code, restore a remote reranker's required `settings.api_key_env` and the named environment variable, or disable `reranker_model`; the previous version cannot start with only `base_url`. Keep `OPENAI_API_KEY` available for the other uses. No data rollback is required.
+To return to one key on this version, clear the dedicated variables, then restart the affected API and workers with `OPENAI_API_KEY` available. Before rolling back the code with a remote reranker enabled, restore its required `settings.api_key_env` and the named environment variable, or disable `reranker_model`; the previous version cannot start with only `base_url`. No data rollback is required.
 
 ## Limitations
 

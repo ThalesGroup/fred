@@ -15,27 +15,22 @@ from knowledge_flow_backend.features.vector_search.reranker import (
     RerankerUnavailable,
 )
 
-RERANKER_CREDENTIAL_ENV = f"RERANKER_TEST_{uuid.uuid4().hex.upper()}"
 RERANKER_CREDENTIAL = str(uuid.uuid4())
 
 
-def _remote(*, api_key_env: str | None = RERANKER_CREDENTIAL_ENV) -> RerankerModelConfiguration:
-    settings = {"base_url": "https://models.example/v1"}
-    if api_key_env is not None:
-        settings["api_key_env"] = api_key_env
+def _remote() -> RerankerModelConfiguration:
     return RerankerModelConfiguration.model_validate(
         {
             "provider": "rerank",
             "name": "remote-reranker",
-            "settings": settings,
+            "settings": {"base_url": "https://models.example/v1"},
         }
     )
 
 
 @pytest.mark.asyncio
 async def test_remote_rerank_uses_indexed_results_and_auth(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
-    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     monkeypatch.setenv("OPENAI_API_KEY", str(uuid.uuid4()))
     seen = []
 
@@ -70,7 +65,7 @@ async def test_remote_rerank_uses_dedicated_key_then_global_fallback(monkeypatch
         return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.9}]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        ranker = DocumentReranker(_remote(api_key_env=None), lambda: None, client=client)
+        ranker = DocumentReranker(_remote(), lambda: None, client=client)
         assert await ranker.rank("query", ["first"], 1) == [0]
         monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", "  ")
         assert await ranker.rank("query", ["first"], 1) == [0]
@@ -89,7 +84,7 @@ async def test_remote_rerank_missing_keys_sends_no_request(monkeypatch):
         return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.9}]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        ranker = DocumentReranker(_remote(api_key_env=None), lambda: None, client=client)
+        ranker = DocumentReranker(_remote(), lambda: None, client=client)
         with pytest.raises(RerankerUnavailable):
             await ranker.rank("query", ["first"], 1)
 
@@ -108,7 +103,7 @@ async def test_remote_rerank_missing_keys_sends_no_request(monkeypatch):
     ],
 )
 async def test_remote_rerank_rejects_invalid_results(monkeypatch, response):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _request: response)) as client:
         ranker = DocumentReranker(_remote(), lambda: None, client=client)
         with pytest.raises(RerankerUnavailable):
@@ -117,7 +112,7 @@ async def test_remote_rerank_rejects_invalid_results(monkeypatch, response):
 
 @pytest.mark.asyncio
 async def test_remote_rerank_rejects_timeout_and_oversized_response(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
 
     def timeout(_request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timeout")
@@ -131,7 +126,7 @@ async def test_remote_rerank_rejects_timeout_and_oversized_response(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_remote_rerank_binds_encoded_cjk_request_size(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     sizes = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -146,7 +141,7 @@ async def test_remote_rerank_binds_encoded_cjk_request_size(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_remote_rerank_batches_legacy_large_requests(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     batch_sizes = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -163,7 +158,7 @@ async def test_remote_rerank_batches_legacy_large_requests(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_remote_rerank_has_total_deadline_for_trickling_response(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     monkeypatch.setattr("knowledge_flow_backend.features.vector_search.reranker.REMOTE_TOTAL_TIMEOUT_SECONDS", 0.01)
 
     class Trickle(httpx.AsyncByteStream):
@@ -180,7 +175,7 @@ async def test_remote_rerank_has_total_deadline_for_trickling_response(monkeypat
 
 @pytest.mark.asyncio
 async def test_remote_rerank_never_falls_back_after_failure(monkeypatch):
-    monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", RERANKER_CREDENTIAL)
     local_calls = 0
 
     def local_factory():

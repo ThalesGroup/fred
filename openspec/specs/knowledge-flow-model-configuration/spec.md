@@ -42,15 +42,15 @@ Knowledge Flow SHALL use `KNOWLEDGE_FLOW_CHAT_API_KEY` for its chat model, `KNOW
 
 #### Scenario: Explicit reranker variable
 
-- **GIVEN** the remote reranker configures `settings.api_key_env` and its named variable is nonblank
-- **WHEN** Knowledge Flow validates the model or sends a reranking request
-- **THEN** that variable takes precedence over `KNOWLEDGE_FLOW_RERANKER_API_KEY` and `OPENAI_API_KEY`
+- **GIVEN** the remote reranker configures the removed `settings.api_key_env` field
+- **WHEN** Knowledge Flow validates the model
+- **THEN** it rejects the unknown setting
 
 #### Scenario: Missing explicit reranker variable
 
-- **GIVEN** the remote reranker configures `settings.api_key_env` but that variable is absent or blank
+- **GIVEN** `KNOWLEDGE_FLOW_RERANKER_API_KEY` is absent or blank
 - **WHEN** Knowledge Flow validates the model or sends a reranking request
-- **THEN** it uses `KNOWLEDGE_FLOW_RERANKER_API_KEY`, or `OPENAI_API_KEY` when the dedicated variable is also absent or blank
+- **THEN** it uses `OPENAI_API_KEY` if nonblank
 
 #### Scenario: Local reranker
 
