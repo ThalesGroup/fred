@@ -47,13 +47,15 @@ pub async fn grant(
     target: &str,
     role: PlatformRole,
 ) -> AppResult<()> {
-    let mut tx = bootstrap::locked(pool).await?;
-    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
+    // Authorize discovery without retaining a SQL connection across the directory call.
+    authorization::require_platform(pool, caller, PlatformPermission::ManagePlatform).await?;
     let directory = directory
         .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
     if !directory.exists(target).await? {
         return Err(AppError::NotFound);
     }
+    let mut tx = bootstrap::locked(pool).await?;
+    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
     authorization::write_platform(&mut tx, target, role, true).await?;
     crate::logging::audit_relation(Some(caller), target, role.relation(), "platform:root", true);
     tx.commit().await?;

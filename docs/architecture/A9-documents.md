@@ -320,6 +320,16 @@ Implementation references for [conversation documents](05-documents.md#55-docume
 Workspace previews render text literally and limit the displayed beginning to
 256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and
 after a turn ends. These are current working files, not immutable revisions.
+
+The `scratchpad` and `.deep` byte and file-count limits are independent soft
+limits. Each write or edit recounts the namespace from object storage; no usage
+cache survives the operation, and a failed recount refuses the mutation.
+The process-local namespace lock stays with an admitted mutation until it really
+finishes, including after caller cancellation. The turn lease does not drain
+outstanding object writes, and the erasure fence tracks their completion without
+reserving quota. Cross-process writes can therefore overshoot a limit; subsequent
+checks observe the excess but do not automatically remove files.
+
 The scoped runtime tests in [`test_weaver_history_access.py`](../../libs/fred-runtime/tests/test_weaver_history_access.py)
 cover Deep writes, direct reads, foreign-user refusal, revocation and path
 isolation. Frontend tests cover routing, refresh, preview and attachment

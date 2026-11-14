@@ -170,11 +170,17 @@ and [role semantics](A11-roles.md).
 
 ## Mutation ordering and revocation
 
-Mutations acquire the relevant SQL advisory locks before checking authority,
+Mutations acquire the relevant SQL advisory locks before the final authority check,
 and retain them through commit. Role changes and content writes use the same
 organization serialization; platform changes acquire the platform lock first.
 Checks and role writes use that transaction's connection. A successful revocation
 therefore precedes subsequent decisions without a second authorization service.
+
+Role grants authorize the caller before looking up the target identity, without
+retaining a SQL connection or transaction during the directory call. They recheck
+authority and business constraints under the mutation locks before writing; a
+revocation committed during the lookup prevents the grant. Identity existence
+remains an observation at lookup time, not protection against later IAM deletion.
 
 No mutation may remove the last required administrator or owner, or leave dependent
 child grants without direct parent content membership. External Keycloak operations

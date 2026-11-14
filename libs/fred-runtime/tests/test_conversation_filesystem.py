@@ -24,7 +24,11 @@ from fred_core.filesystem.structures import (
 )
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_runtime.app import ConversationFilesystemQuotaConfig
-from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.conversation_filesystem import (
+    _FILESYSTEM_WRITES,
+    ConversationFilesystemService,
+    ConversationTextNamespacePort,
+)
 from fred_sdk.contracts.runtime import (
     ConversationScratchpadEditConflictError,
     ConversationScratchpadFileNotFoundError,
@@ -556,3 +560,286 @@ async def test_uuid_aliases_share_physical_identity_and_purge(alias):
     await writer.purge()
     assert await other.scratchpad().read_text("note") == "retained"
     assert not await reader.scratchpad().exists("again")
+
+
+type NamespacePair = tuple[
+    _MemoryFilesystem,
+    ConversationFilesystemService,
+    ConversationTextNamespacePort,
+    ConversationTextNamespacePort,
+]
+
+
+@pytest.fixture(params=("scratchpad", ".deep"))
+def independent_namespaces(request: pytest.FixtureRequest) -> NamespacePair:
+    # Distinct clients emulate separate processes over the same object store.
+    # Two services using one client would share the process-local lock/cache.
+    first_storage, second_storage = _MemoryFilesystem(), _MemoryFilesystem()
+    second_storage.files = first_storage.files
+    first_service = ConversationFilesystemService(first_storage, "conversation-a")
+    second_service = ConversationFilesystemService(second_storage, "conversation-a")
+    first = first_service.namespace(request.param, max_bytes=100, max_files=3)
+    second = second_service.namespace(request.param, max_bytes=100, max_files=3)
+    return first_storage, second_service, first, second
+
+
+@pytest.mark.asyncio
+async def test_remote_addition_is_counted_before_byte_quota_refusal(
+    independent_namespaces: NamespacePair,
+) -> None:
+    storage, _, first, second = independent_namespaces
+    await first.write_bytes("a", b"x" * 40)
+    await second.write_bytes("b", b"x" * 40)
+    before = dict(storage.files)
+
+    with pytest.raises(ConversationScratchpadQuotaExceededError) as error:
+        await first.write_bytes("c", b"x" * 30)
+
+    assert (error.value.resource, error.value.attempted) == ("bytes", 110)
+    assert storage.files == before
+
+
+@pytest.mark.asyncio
+async def test_remote_additions_and_replacements_use_current_file_count(
+    independent_namespaces: NamespacePair,
+) -> None:
+    storage, _, first, second = independent_namespaces
+    await first.write_text("a", "")
+    await second.write_text("b", "")
+    await second.write_text("c", "")
+    # A remotely created empty file is a replacement, not a fourth file.
+    await first.write_text("b", "replacement")
+    before = dict(storage.files)
+
+    with pytest.raises(ConversationScratchpadQuotaExceededError) as error:
+        await first.write_text("d", "")
+
+    assert (error.value.resource, error.value.attempted) == ("files", 4)
+    assert storage.files == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ("write", "edit"))
+async def test_remote_replacement_growth_and_shrink_are_observed(
+    independent_namespaces: NamespacePair,
+    operation: str,
+) -> None:
+    storage, _, first, second = independent_namespaces
+    await first.write_text("a", "x" * 40)
+    await first.write_text("b", "x" * 40)
+    await second.write_text("b", "x" * 60)
+
+    async def replace(size: int) -> None:
+        if operation == "write":
+            await first.write_text("a", "x" * size)
+        else:
+            assert await first.edit_text("a", "x" * 40, "x" * size) == 1
+
+    before = dict(storage.files)
+    with pytest.raises(ConversationScratchpadQuotaExceededError) as error:
+        await replace(50)
+    assert (error.value.resource, error.value.attempted) == ("bytes", 110)
+    assert storage.files == before
+
+    await second.write_text("b", "x" * 10)
+    await replace(90)
+    assert len(storage.files) == 2
+    assert sum(map(len, storage.files.values())) == 100
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("removal", ("file", "directory", "namespace", "conversation"))
+async def test_remote_removal_releases_bytes_and_file_budget(
+    independent_namespaces: NamespacePair,
+    removal: str,
+) -> None:
+    storage, second_service, first, second = independent_namespaces
+    await first.write_text("folder/a", "x" * 100)
+    await first.write_text("folder/b", "")
+    await first.write_text("folder/c", "")
+    if removal == "file":
+        await second.delete("folder/a")
+    elif removal == "directory":
+        await second.delete("folder")
+    elif removal == "namespace":
+        await second.purge()
+    else:
+        await second_service.purge()
+
+    await first.write_bytes("new", b"x" * 100)
+    assert sum(map(len, storage.files.values())) == 100
+    assert len(storage.files) == (3 if removal == "file" else 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ("list", "missing_size_read"))
+async def test_recount_failure_after_success_never_uses_empty_or_previous_usage(
+    independent_namespaces: NamespacePair,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    storage, _, first, second = independent_namespaces
+    await first.write_text("a", "x" * 40)
+    await second.write_text("b", "x" * 40)
+    before = dict(storage.files)
+    original_list = storage.list
+
+    async def failing_list(prefix: str = "") -> list[FilesystemResourceInfoResult]:
+        entries = await original_list(prefix)
+        if failure == "list":
+            # The provider can fail after collecting part of a paginated list.
+            raise OSError("listing unavailable")
+        for entry in entries:
+            entry.size = None
+        return entries
+
+    async def failing_read(path: str) -> bytes:
+        raise OSError("size unavailable")
+
+    monkeypatch.setattr(storage, "list", failing_list)
+    monkeypatch.setattr(storage, "read", failing_read)
+    with pytest.raises(ConversationScratchpadStorageError):
+        await first.write_text("c", "x" * 30)
+    assert storage.files == before
+
+    monkeypatch.setattr(storage, "list", original_list)
+    with pytest.raises(ConversationScratchpadQuotaExceededError):
+        await first.write_text("c", "x" * 30)
+    assert storage.files == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ("write", "edit", "delete", "purge"))
+@pytest.mark.parametrize("namespace_id", ("scratchpad", ".deep"))
+async def test_cancelled_mutation_holds_lock_until_storage_finishes(
+    operation: str,
+    namespace_id: str,
+) -> None:
+    entered, release, waiting = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class SlowFilesystem(_MemoryFilesystem):
+        slow = False
+
+        async def write(self, path: str, data: bytes | str) -> None:
+            if self.slow:
+                entered.set()
+                await release.wait()
+            await super().write(path, data)
+
+        async def delete(self, path: str) -> None:
+            if self.slow:
+                entered.set()
+                await release.wait()
+            await super().delete(path)
+
+    storage = SlowFilesystem()
+    first = ConversationFilesystemService(storage, "conversation-a").namespace(
+        namespace_id, max_bytes=5, max_files=1
+    )
+    second = ConversationFilesystemService(storage, "conversation-a").namespace(
+        namespace_id, max_bytes=5, max_files=1
+    )
+    if operation != "write":
+        await first.write_text("a", "x")
+    storage.slow = True
+    if operation == "write":
+        mutation = first.write_text("a", "xxxxx")
+    elif operation == "edit":
+        mutation = first.edit_text("a", "x", "xxxxx")
+    elif operation == "delete":
+        mutation = first.delete("a")
+    else:
+        mutation = first.purge()
+    writer = asyncio.create_task(mutation)
+
+    async def next_write() -> None:
+        waiting.set()
+        await second.write_text("b", "y")
+
+    follower = None
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        follower = asyncio.create_task(next_write())
+        await asyncio.wait_for(waiting.wait(), timeout=5)
+        # The follower reached lock acquisition but cannot start its recount.
+        assert not follower.done()
+        release.set()
+        if operation in {"write", "edit"}:
+            with pytest.raises(ConversationScratchpadQuotaExceededError):
+                await asyncio.wait_for(follower, timeout=5)
+            assert await first.read_text("a") == "xxxxx"
+        else:
+            await asyncio.wait_for(follower, timeout=5)
+            assert await first.list() == ("b",)
+    finally:
+        release.set()
+        await asyncio.gather(
+            writer, *([follower] if follower else []), return_exceptions=True
+        )
+        await asyncio.gather(*tuple(_FILESYSTEM_WRITES), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_waiter_never_starts_a_deferred_write() -> None:
+    entered, release, waiting = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class SlowFilesystem(_MemoryFilesystem):
+        async def write(self, path: str, data: bytes | str) -> None:
+            entered.set()
+            await release.wait()
+            await super().write(path, data)
+
+    storage = SlowFilesystem()
+    namespace = ConversationFilesystemService(storage, "conversation-a").scratchpad()
+    writer = asyncio.create_task(namespace.write_text("a", "first"))
+
+    async def queued_write() -> None:
+        waiting.set()
+        await namespace.write_text("b", "cancelled")
+
+    follower = None
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        follower = asyncio.create_task(queued_write())
+        await asyncio.wait_for(waiting.wait(), timeout=5)
+        follower.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await follower
+        release.set()
+        await asyncio.wait_for(writer, timeout=5)
+        assert await namespace.list() == ("a",)
+    finally:
+        release.set()
+        await asyncio.gather(
+            writer, *([follower] if follower else []), return_exceptions=True
+        )
+        await asyncio.gather(*tuple(_FILESYSTEM_WRITES), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_uncertain_write_is_observed_and_releases_local_lock(
+    independent_namespaces: NamespacePair,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage, _, first, second = independent_namespaces
+    await first.write_bytes("a", b"x" * 40)
+    original_write = storage.write
+
+    async def uncertain_write(path: str, data: bytes | str) -> None:
+        await original_write(path, data)
+        raise TimeoutError("remote result unknown")
+
+    monkeypatch.setattr(storage, "write", uncertain_write)
+    with pytest.raises(ConversationScratchpadStorageError):
+        await first.write_bytes("b", b"x" * 40)
+    monkeypatch.setattr(storage, "write", original_write)
+
+    for namespace in (first, second):
+        with pytest.raises(ConversationScratchpadQuotaExceededError) as error:
+            await asyncio.wait_for(namespace.write_bytes("c", b"x" * 30), timeout=5)
+        assert (error.value.resource, error.value.attempted) == ("bytes", 110)
+    await first.delete("b")
+    await first.write_bytes("c", b"x" * 60)
