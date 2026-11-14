@@ -781,13 +781,26 @@ request/conversation (chosen once); this mode takes its target from the call
   is no corpus-wide noise to filter out - though dataset-pointer chunks never
   are. See `RUNTIME-EXECUTION-CONTRACT.md` §8.59.
 - Implementation is a thin orchestration over existing primitives, no new
-  search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) →
-  `rerank_documents(...)` (cross-encoder, best-first) → `top_k` → optional
-  `min_score` cutoff.
+  search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) ->
+  `rerank_documents(...)` (configured Knowledge Flow reranker, best-first) ->
+  `top_k` -> optional `min_score` cutoff. The original retrieval score is
+  retained for the cutoff.
 - Same corpus, same auth model as conversational search — no new ingestion,
   embedding, or storage. "Compare document A to document B" becomes: for
   each passage of A, call this with `anchor = passage`, `targets = [B]`,
   `top_k = 1`.
+
+Conversational `POST /vector/search` accepts an optional `rerank` flag that
+defaults to false for direct API callers. Agent document access sends its
+advanced setting, which defaults to false. Knowledge Flow reranks only visible
+authorized hits after a bounded wider retrieval, then reapplies the existing
+attachment inclusion rule and the requested result count. The model is
+configured once per Knowledge Flow deployment by optional `reranker_model`;
+when omitted, the image's local CrossEncoder is used. The existing direct
+`POST /vector/rerank` endpoint remains authenticated and checks PROCESS on
+each document. A configured remote reranker failure returns HTTP 503 rather
+than switching to local inference. See the
+[Knowledge Flow configuration guide](../../../apps/knowledge-flow-backend/config/README.md).
 - Deferred: passage-level targeting (target is document/folder only for
   now), a "best per target document" ranking knob.
 

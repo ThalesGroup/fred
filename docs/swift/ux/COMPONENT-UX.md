@@ -4306,6 +4306,11 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+The advanced Documents settings also expose a `rerank` switch, off by default
+for new configurations and stored configurations that omit the field. Turning
+it on invokes the reranker selected by Knowledge Flow. A saved value
+remains unchanged.
+
 ### Resources table — columns beside the import panel (2026-10-01)
 
 In the Documents workspace the name column is

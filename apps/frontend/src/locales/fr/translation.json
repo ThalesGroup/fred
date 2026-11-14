@@ -153,6 +153,10 @@
           "title": "Résultats par défaut",
           "description": "Nombre de résultats à récupérer lorsque le modèle omet top_k."
         },
+        "rerank": {
+          "title": "Réordonner les résultats",
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Désactivé par défaut."
+        },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",
           "description": "Un résultat doit obtenir au moins cette fraction du score du meilleur résultat de la même recherche pour apparaître comme source citée. N'affecte que le panneau Sources destiné aux utilisateurs, jamais ce que le modèle peut lire."
@@ -223,7 +227,7 @@
         },
         "rerank": {
           "title": "Réordonner les correspondances",
-          "description": "Réordonne les passages candidats avec le cross-encoder avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
+          "description": "Réordonne les passages candidats avec le modèle de Knowledge Flow avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
         },
         "min_score": {
           "title": "Pertinence minimale",

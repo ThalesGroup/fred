@@ -35,6 +35,7 @@ from langchain_core.documents import Document
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.vector_search import vector_search_service
+from knowledge_flow_backend.features.vector_search.reranker import RerankerUnavailable
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
@@ -553,6 +554,133 @@ async def test_request_cache_does_not_survive_membership_change(guarded_search):
     assert len(await run()) == 1
     current.tags["moved"] = ["b"]
     assert await run() == []
+
+
+async def test_rerank_sees_only_visible_hits_and_preserves_attachment_quota(guarded_search, monkeypatch, test_user):
+    svc, store, current, _, _ = guarded_search
+    current.tags = {"corpus-1": ["a"], "corpus-2": ["a"], "hidden": ["a"]}
+    current.denied = {"hidden"}
+    store.hits = [
+        candidate("corpus-1", "a"),
+        candidate("corpus-2", "a"),
+        candidate("hidden", "a"),
+        *[candidate(f"attach-{n}", scope="session", user_id=test_user.uid, session_id="session") for n in range(4)],
+        candidate("other-user", scope="session", user_id="other", session_id="session"),
+    ]
+    seen = []
+
+    class FakeReranker:
+        model_name = "test-reranker"
+
+        async def rank(self, query, documents, top_n):
+            seen.append((query, list(documents), top_n))
+            return list(reversed(range(len(documents))))[:top_n]
+
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_document_reranker=lambda: FakeReranker()))
+    hits = await svc.search(
+        question="needle",
+        user=test_user,
+        top_k=4,
+        document_library_tags_ids=["a"],
+        session_id="session",
+        policy_name=SearchPolicyName.semantic,
+        rerank=True,
+    )
+    assert len(hits) == 4
+    assert sum(hit.uid.startswith("attach-") for hit in hits) == 3
+    assert "attach-3" in {hit.uid for hit in hits}
+    assert {hit.uid for hit in hits}.issubset({"corpus-1", "corpus-2", "attach-0", "attach-1", "attach-2", "attach-3"})
+    assert "content-hidden" not in seen[0][1]
+    assert "content-other-user" not in seen[0][1]
+    assert seen[0][2] <= 100
+    assert all(hit.score == 0.9 for hit in hits)
+    assert any(name == "rag.rerank_total" and dims["status"] == "ok" for name, _, dims in svc.kpi.events)
+
+
+async def test_rerank_widens_capped_pool_and_disabled_search_keeps_retrieval_order(guarded_search, monkeypatch, test_user):
+    svc, store, current, _, _ = guarded_search
+    current.tags = {f"doc-{n}": ["a"] for n in range(6)}
+    store.hits = [candidate(f"doc-{n}", "a") for n in range(6)]
+    requested = []
+    original = store.ann_search
+
+    def track_pool(query, *, k, search_filter):
+        requested.append(k)
+        return original(query, k=k, search_filter=search_filter)
+
+    store.ann_search = track_pool
+
+    class FakeReranker:
+        model_name = "test-reranker"
+
+        async def rank(self, query, documents, top_n):
+            return list(reversed(range(len(documents))))[:top_n]
+
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_document_reranker=lambda: FakeReranker()))
+    kwargs = dict(question="needle", user=test_user, top_k=2, document_library_tags_ids=["a"], include_session_scope=False, policy_name=SearchPolicyName.semantic)
+    reranked = await svc.search(**kwargs, rerank=True)
+    plain = await svc.search(**kwargs, rerank=False)
+    assert requested == [10, 2]
+    assert [hit.uid for hit in reranked] == ["doc-5", "doc-4"]
+    assert [hit.uid for hit in plain] == ["doc-0", "doc-1"]
+
+
+async def test_reranker_not_invoked_when_no_visible_hits(guarded_search, test_user):
+    svc, store, current, _, _ = guarded_search
+    current.tags = {"hidden": ["a"]}
+    current.denied = {"hidden"}
+    store.hits = [candidate("hidden", "a")]
+    hits = await svc.search(question="needle", user=test_user, top_k=3, document_library_tags_ids=["a"], rerank=True)
+    assert hits == []
+
+
+async def test_reranker_failure_emits_error_count(guarded_search, monkeypatch):
+    svc, _, _, _, _ = guarded_search
+
+    class TimerKPI(DummyKPI):
+        @contextmanager
+        def timer(self, name, *, dims, actor):
+            recorded = dict(dims)
+            try:
+                yield recorded
+            finally:
+                self.events.append((name, 1, recorded))
+
+    svc.kpi = TimerKPI()
+
+    class FailedReranker:
+        model_name = "test-reranker"
+
+        async def rank(self, query, documents, top_n):
+            raise RerankerUnavailable("unavailable")
+
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_document_reranker=lambda: FailedReranker()))
+    hit = vector_search_service.VectorSearchHit(uid="doc", title="Doc", content="text", score=0.8)
+    with pytest.raises(RerankerUnavailable):
+        await svc.rerank_documents("query", [hit], 1)
+    assert ("rag.rerank_total", 1, {"policy": "rerank", "backend": "SnapshotStore", "index": None, "model": "test-reranker", "status": "error"}) in svc.kpi.events
+    assert any(name == "rag.rerank_latency_ms" and dims["status"] == "error" for name, _, dims in svc.kpi.events)
+    assert "query" not in str(svc.kpi.events)
+    assert "text" not in str(svc.kpi.events)
+
+
+async def test_targeted_similarity_reuses_reranker_and_retrieval_score_filter(guarded_search, monkeypatch, test_user):
+    svc, store, current, _, _ = guarded_search
+    current.tags = {"target": ["a"], "other": ["a"]}
+    store.hits = [candidate("target", "a"), candidate("other", "a")]
+    seen = []
+
+    class FakeReranker:
+        model_name = "test-reranker"
+
+        async def rank(self, query, documents, top_n):
+            seen.append((query, list(documents)))
+            return list(range(len(documents)))[:top_n]
+
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_document_reranker=lambda: FakeReranker()))
+    hits = await svc.similarity_search(anchor="needle", user=test_user, document_uids=["target"], top_k=2, rerank=True, min_score=0.8)
+    assert [hit.uid for hit in hits] == ["target"]
+    assert seen == [("needle", ["content-target"])]
 
 
 @pytest.mark.parametrize("policy", list(SearchPolicyName))
