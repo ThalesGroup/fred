@@ -49,6 +49,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder
 
+    from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
 from knowledge_flow_backend.common.model_api_keys import openai_api_key_for_model
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
@@ -303,6 +305,7 @@ class ApplicationContext:
     _file_store_instance: Optional[BaseFileStore] = None
     _content_store_instance: Optional[BaseContentStore] = None
     _embedder_instance: Optional[Embeddings] = None
+    _document_reranker: Optional["DocumentReranker"] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
     _filesystem_instance: Optional[BaseFilesystem] = None
@@ -316,6 +319,7 @@ class ApplicationContext:
             return
 
         self.configuration = configuration
+        self._document_reranker = None
         if isinstance(configuration.storage.vector_store, ChromaVectorStorageConfig) and importlib.util.find_spec("chromadb") is None:
             raise ImportError(
                 "Chroma vector storage is configured but the optional 'chromadb' dependency is missing. "
@@ -659,6 +663,14 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         cfg = self.configuration.vision_model
         return get_model(cfg, openai_api_key=openai_api_key_for_model(cfg, "vision"))
+
+    def get_document_reranker(self) -> "DocumentReranker":
+        """Share the configured reranker and its HTTP pool across search requests."""
+        if self._document_reranker is None:
+            from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
+            self._document_reranker = DocumentReranker(self.configuration.reranker_model, self.get_crossencoder_model)
+        return self._document_reranker
 
     def get_crossencoder_model(self) -> "CrossEncoder":
         """
@@ -1296,6 +1308,9 @@ class ApplicationContext:
         Best-effort cleanup of shared resources.
         """
         # HTTP clients
+        if self._document_reranker is not None:
+            await self._document_reranker.close()
+            self._document_reranker = None
         try:
             from fred_core.model import http_clients
 

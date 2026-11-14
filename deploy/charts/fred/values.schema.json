@@ -7950,6 +7950,61 @@
                   ],
                   "default": null
                 },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            },
+                            "api_key_env": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                              "title": "Api Key Env",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url",
+                            "api_key_env"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                },
                 "security": {
                   "properties": {
                     "m2m": {
@@ -13042,6 +13097,61 @@
                   ],
                   "default": null
                 },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            },
+                            "api_key_env": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                              "title": "Api Key Env",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url",
+                            "api_key_env"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                },
                 "security": {
                   "properties": {
                     "m2m": {
@@ -18131,6 +18241,52 @@
                   ],
                   "default": null
                 },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            },
+                            "api_key_env": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                              "title": "Api Key Env",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                },
                 "security": {
                   "properties": {
                     "m2m": {
@@ -23013,6 +23169,52 @@
                   ],
                   "default": null
                 },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            },
+                            "api_key_env": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                              "title": "Api Key Env",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                },
                 "security": {
                   "properties": {
                     "m2m": {
@@ -27894,6 +28096,52 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            },
+                            "api_key_env": {
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                              "title": "Api Key Env",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {

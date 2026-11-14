@@ -124,6 +124,7 @@ class _FakePort(DocumentSearchPort):
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -134,6 +135,7 @@ class _FakePort(DocumentSearchPort):
                 "search_policy": search_policy,
                 "include_attachments": include_attachments,
                 "include_team_documents": include_team_documents,
+                "rerank": rerank,
             }
         )
         if self._error is not None:
@@ -266,6 +268,35 @@ def test_double_registration_trips_boot_invariant() -> None:
     registry.register(DocumentAccessCapability())
     with pytest.raises(DuplicateCapabilityIdError):
         registry.register(DocumentAccessCapability())
+
+
+def test_reranking_is_default_off_in_advanced_agent_settings() -> None:
+    field = next(
+        item
+        for item in DocumentAccessCapability.manifest.config_fields
+        if item.key == "rerank"
+    )
+    assert field.default is False
+    assert field.ui is not None and field.ui.advanced is True
+    assert DocumentAccessConfig.model_validate({}).rerank is False
+    assert DocumentAccessConfig.model_validate({"rerank": True}).rerank is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored,expected", [({}, False), ({"rerank": True}, True)])
+async def test_agent_reranking_setting_reaches_document_search_port(
+    stored, expected
+) -> None:
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config=stored,
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["rerank"] is expected
 
 
 # ---------------------------------------------------------------------------

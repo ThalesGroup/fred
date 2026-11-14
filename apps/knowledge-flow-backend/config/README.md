@@ -50,6 +50,47 @@ The remote OCR extractor is not currently wired into the standard PDF ingestion 
 
 In Helm, set these variables under `applications.knowledge-flow-backend.dotenv`. The API and Knowledge Flow workers mount the resulting `knowledge-flow-backend-env` Secret, including extraction workers. Restart affected pods after changing environment credentials.
 
+## RAG reranking model
+
+Knowledge Flow owns the optional remote reranking model in its deployment
+configuration, using the `provider` / `name` / `settings` shape of `chat_model`
+and `vision_model`. With no `reranker_model`, document reranking uses the local
+CrossEncoder in the Knowledge Flow image. `crossencoder_model` continues to
+configure that local model.
+
+To use a remote indexed-results endpoint, configure the API deployment:
+
+```yaml
+reranker_model:
+  provider: rerank
+  name: remote-reranker
+  settings:
+    base_url: https://models.example/v1
+    api_key_env: RERANKER_API_KEY
+```
+
+Provide `RERANKER_API_KEY` through Knowledge Flow's environment secret, not in
+YAML. The service calls `POST {base_url}/rerank` with `model`, `query`,
+`documents` and `top_n` and expects indexed `results` with `index` and
+`relevance_score`. A missing key prevents startup. An unavailable configured
+remote model produces a 503 for reranking requests; it does not switch to the
+local model. Remove `reranker_model` and restart the API to restore local
+reranking. The agent's advanced document access setting controls whether its
+search requests rerank; the model selection applies across the Knowledge Flow
+deployment.
+
+`POST /vector/search` accepts `rerank: true` to rerank its authorized candidate
+pool; omitted `rerank` keeps the existing retrieval order for direct API
+callers. The agent's document search sends this flag from its default-off
+advanced setting. `POST /vector/similarity-search` keeps its own default-on
+`rerank` flag, and authenticated `POST /vector/rerank` remains available to
+existing direct callers as REST only; it is excluded from the Text MCP tool
+catalog. Direct requests longer than 100 passages use sequential model batches
+of at most 100 and retain global score ordering. Those endpoints use the same
+configured model choice.
+All reranking calls return HTTP 503 with `reranker_unavailable` when a selected
+model cannot produce a valid result.
+
 ---
 
 ## Tabular Data Runtime
