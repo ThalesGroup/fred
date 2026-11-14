@@ -1,10 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `49aaea6820556c63ff4e688dbfc7f8f702cad9e9`** (fusion décrite section 17 ; parents Weaver `58cc2ffe4` et Swift `49aaea682`).
-Cette borne sert à inventorier les
-prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
-restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
-validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
+**Borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36`**, vérifiée dans les parents du merge `74b5f3106` (Weaver `5052116a7`, Swift `b7bf4412a`).
+La tranche suivante vers `cf698a739` est préparée localement le 14 novembre,
+sans commit de fusion ; voir la [section 20](#20-integration-swift-du-14-novembre-2026).
+Les réceptions et comportements différés restent un inventaire distinct ; leur
+présence dans l'ascendance ne vaut pas validation produit. Les repères
+`53e39f6f7` ci-dessous concernent la tranche initiale.
 
 **Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
@@ -12,9 +13,9 @@ côté à la demande de l'utilisateur, sans validation fournisseur. Les récepti
 k3d/plateforme et les raccords arc42 correspondants restent à effectuer.
 
 La [méthode de merge](docs/SWIFT_WEAVER_MERGES.md) décrit la procédure réutilisable.
-**Pilotage du 12 novembre :** priorité au merge interactif de la tranche `222bc60ac`
-en [section 18](#18-audit-swift-et-reprise-kpi---12-novembre-2026). Aucun merge
-effectué à ce stade ; la borne intégrée ci-dessus reste inchangée.
+**Historique du 12 novembre :** merge de la tranche `222bc60ac` détaillé
+en [section 18](#18-audit-swift-et-reprise-kpi---12-novembre-2026), suivi du merge
+`b7bf4412a` le 13 novembre. La borne courante est celle de l'en-tête.
 Ce dossier conserve les sources Swift, les décisions et les preuves de la tranche
 initiale ; ce n'est pas une liste de missions à relancer intégralement.
 
@@ -2568,3 +2569,39 @@ Contrat OpenAPI et client RTK générés. Migration non appliquée, aucun servic
 redémarré, aucun commit ni push. Tests et code-quality non lancés à la demande de
 Dimi ; réception import/remplacement/rechargement/suppression et vérification des
 courses et droits à effectuer par le développeur avant validation du parcours.
+
+## 20. Integration Swift du 14 novembre 2026
+
+Préparation par Codex dans `~/Work/weaver/fred`, branche `weaver`, checkout
+initial propre. Base Weaver : `093c2f997017bb4b3a7575cf2cf94c03cb48e76c` ;
+borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36` ; cible
+vérifiée après fetch : `cf698a739afae1b4cbcd92e82439e32bc1038198`.
+Fusion locale avec `--no-commit --no-ff` ; la borne intégrée ne change pas
+avant création du commit de fusion.
+
+| Arrivée Swift | Résolution Weaver |
+| --- | --- |
+| `bdeef6baa` : préparation v3.11.1 | Outillage de publication Python avec `BASE_TAG`, ses tests et sélection CI web-research repris. Consignes adaptées dans le skill de release actuel ; versions Fred/charts 5.0.0 et bornes `<6` conservées. Annonces et guide généré Swift exclus ; aucun rétablissement de `docs/swift` ni de `platform-ops`. Notes opérateur reprises dans `deploy/release-notes/changes/`. |
+| `b58e995f8` : littéraux DuckDB | Instructions existantes de la capacité tabulaire enrichies : apostrophes doublées, distinction identifiants/valeurs et échappement JSON. Aucun second moteur SQL ni changement de contrat. |
+| `d4605cefb`, `cf698a739` : dépendances | Verrous régénérés depuis les manifestes Weaver : OpenTelemetry API/SDK 1.45.2, conventions 0.66b2 et dnspython 2.9.2 là où présents. SoupSieve 4.0 porté dans le worker Knowledge Flow, propriétaire du traitement documentaire séparé dans Weaver. Le verrou fred-knowledge était déjà à jour ; le Control Plane Python et platform-ops restent supprimés. |
+
+Les comportements antérieurement différés restent hors de ce delta. Aucun
+changement de schéma, de contrat public ou d'architecture ; pas de génération
+OpenAPI nécessaire.
+
+Validation : `make code-quality` réussi dans les treize composants dont le
+verrou change (Core, SDK, Runtime, Fred Agents, Knowledge Flow API/worker et
+sept capacités). Trois avertissements `reportUnreachable` déjà signalés lors du
+merge précédent subsistent dans des fichiers worker inchangés. `uv lock --check`
+réussi pour les treize verrous ; aucun package ajouté/supprimé ni version Fred
+modifiée. Ruff (lint, imports, format) réussi sur les deux scripts Python touchés ;
+syntaxes Python/TOML et YAML/JSON des matrices CI vérifiées.
+`scripts/migration_guides.py check-pr --base HEAD --worktree` réussi : deux
+nouvelles déclarations. `git diff --cached --check` réussi, zéro conflit restant.
+
+Code applicatif Python/TypeScript : +0/-0 ; instructions tabulaires embarquées :
++8/-0 ; outillage de publication Python : +28/-6 ; tests repris : +137/-0 ;
+configuration CI/Make, verrous et documentation comptés séparément. Les tests
+applicatifs et de publication n'ont pas été exécutés. Résolutions indexées,
+merge prêt pour validation fonctionnelle de Dimi puis commit sur autorisation ;
+aucun commit, push, déploiement, migration de base vivante ou service modifié.

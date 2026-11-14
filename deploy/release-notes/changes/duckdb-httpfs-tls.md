@@ -3,7 +3,7 @@ schema: 1
 title: "Configure TLS for DuckDB HTTP Parquet reads"
 impact: none
 configuration: production
-no_action_reason: "Existing deployments upgrade normally because both new settings default to null; activating a private CA is optional and requires deployment-specific configuration."
+no_action_reason: "Existing deployments upgrade normally because both new settings default to null. To activate private-CA reads, mount a CA bundle in the Knowledge Flow API, set duckdb_ca_cert_file and duckdb_enable_server_cert_verification in the chart values, then restart the API."
 configuration_reason: "Adds optional Knowledge Flow DuckDB CA bundle and server certificate verification settings to the production chart values."
 ---
 
