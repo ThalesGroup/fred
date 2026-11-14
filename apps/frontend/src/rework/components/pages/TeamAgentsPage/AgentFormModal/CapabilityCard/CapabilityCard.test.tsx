@@ -42,7 +42,7 @@ const FIELDS = [
   { key: "team_documents", type: "boolean", title: "t", default: true },
   { key: "bind_libraries", type: "boolean", title: "b", default: false, ui: { visible_when: "team_documents" } },
   { key: "library_tag_ids", type: "array", title: "l", ui: { visible_when: "bind_libraries" } },
-  { key: "rerank", type: "boolean", title: "r", default: true, ui: { group: "retrieval", advanced: true } },
+  { key: "rerank", type: "boolean", title: "r", default: false, ui: { group: "retrieval", advanced: true } },
 ] as NonNullable<CapabilityCatalogEntry["config_fields"]>;
 
 function render(configValues: Record<string, unknown>): string {

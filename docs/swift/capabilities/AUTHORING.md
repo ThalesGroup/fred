@@ -106,7 +106,7 @@ binding and the raw access token **never** enter `CapabilityContext`; platform a
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
 For document retrieval, `ctx.services.document_search.search(..., rerank=True)`
 requests Knowledge Flow reranking after its visibility checks. The capability's
-advanced `rerank` setting defaults to true; other port callers retain the false
+advanced `rerank` setting defaults to false; other port callers retain the false
 default. Configure the remote model in Knowledge Flow, or use its local
 CrossEncoder when no remote model is configured.
 For conversation-scoped text files, use `ctx.services.conversation_filesystem`

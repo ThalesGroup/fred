@@ -1304,7 +1304,7 @@ before updating external consumers.
 **Amendment (2026-11-13, Knowledge Flow reranking).** `search()` gains the
 additive `rerank: bool = False` keyword. The runtime adapter forwards it with
 the existing source ceilings to Knowledge Flow's `/vector/search`. The
-`document_access` advanced setting defaults to true, including for stored
+`document_access` advanced setting defaults to false, including for stored
 configurations without the field. Knowledge Flow reranks only visible hits;
 the flag does not expose a separate model-callable tool or change the port's
 identity boundary.

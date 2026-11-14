@@ -155,7 +155,7 @@
         },
         "rerank": {
           "title": "Re-rank search results",
-          "description": "Reorder search results to surface the most relevant passages. Can improve the agent's answers, but makes searches slightly slower. Enabled by default."
+          "description": "Reorder search results to surface the most relevant passages. Can improve the agent's answers, but adds noticeable search latency. Disabled by default."
         },
         "min_source_score_ratio": {
           "title": "Minimum source relevance ratio",

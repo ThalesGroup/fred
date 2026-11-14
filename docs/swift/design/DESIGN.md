@@ -792,7 +792,7 @@ request/conversation (chosen once); this mode takes its target from the call
 
 Conversational `POST /vector/search` accepts an optional `rerank` flag that
 defaults to false for direct API callers. Agent document access sends its
-advanced setting, which defaults to true. Knowledge Flow reranks only visible
+advanced setting, which defaults to false. Knowledge Flow reranks only visible
 authorized hits after a bounded wider retrieval, then reapplies the existing
 attachment inclusion rule and the requested result count. The model is
 configured once per Knowledge Flow deployment by optional `reranker_model`;

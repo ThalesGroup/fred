@@ -22,21 +22,21 @@ Knowledge Flow SHALL accept an optional `reranker_model` in the same provider, n
 - **WHEN** the configured remote reranker is unreachable or returns an invalid result
 - **THEN** Knowledge Flow returns a distinguishable reranker failure without returning a local reranking result
 
-### Requirement: Agent document search has a default-on reranking control
+### Requirement: Agent document search has a default-off reranking control
 
-The agent's advanced document access settings SHALL offer a boolean reranking control that defaults to on. Existing agent configurations without the field SHALL also read as on. Turning it off SHALL leave the search scope intact and return retrieval-ranked results without invoking a reranker.
+The agent's advanced document access settings SHALL offer a boolean reranking control that defaults to off. Existing agent configurations without the field SHALL also read as off. Turning it off SHALL leave the search scope intact and return retrieval-ranked results without invoking a reranker. An explicit on setting SHALL enable reranking.
 
 #### Scenario: Newly configured agent
 - **WHEN** a user adds document access to an agent without changing advanced settings
-- **THEN** reranking is on for that agent's RAG searches
+- **THEN** reranking is off for that agent's RAG searches
 
 #### Scenario: Existing configuration without reranking field
 - **WHEN** an existing agent configuration omits the reranking field
-- **THEN** its next document search enables reranking
+- **THEN** its next document search skips reranking
 
-#### Scenario: User disables reranking
-- **WHEN** a user turns off reranking in advanced agent settings and saves the agent
-- **THEN** its document search returns retrieval-ranked results and does not call a reranker
+#### Scenario: User enables reranking
+- **WHEN** a user turns on reranking in advanced agent settings and saves the agent
+- **THEN** its document search invokes the configured reranker for authorized hits
 
 ### Requirement: Reranking occurs inside authorized RAG search
 

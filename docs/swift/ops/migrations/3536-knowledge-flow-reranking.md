@@ -3,7 +3,7 @@ schema: 1
 title: "Configure Knowledge Flow reranking for document search"
 impact: minor
 configuration: production
-configuration_reason: "Knowledge Flow gains an optional reranker_model in deployment configuration, and document access enables reranking by default."
+configuration_reason: "Knowledge Flow gains an optional reranker_model in deployment configuration; document access can enable reranking per agent."
 ---
 ## Applicability
 
@@ -23,7 +23,9 @@ model, set `reranker_model.provider: rerank`, `name`,
 configuration. Supply the named environment variable to Knowledge Flow API
 pods. Do not put the API key in YAML. The optional chart value defaults to
 `null` for both API and worker. Document access's advanced `rerank` setting
-defaults to on for existing and new agents; turn it off per agent if needed.
+defaults to off for new agents and stored configurations that omit it. Turn it
+on per agent when the relevance gain justifies the extra search latency.
+Previously saved values remain unchanged.
 
 ## Upgrade
 
@@ -33,9 +35,9 @@ Remote inference is optional and may be configured after the normal upgrade.
 
 ## Validation
 
-Search a document through a document access agent and check that reranking
-metrics record a successful request. Turn off the agent's advanced `rerank`
-switch and check that its search skips reranking. If remote inference is
+Search a document through a default document access agent and check that its
+search skips reranking. Turn on the agent's advanced `rerank` switch and check
+that reranking metrics record a successful request. If remote inference is
 configured, check the endpoint succeeds and that an unavailable endpoint
 returns `503 reranker_unavailable`.
 

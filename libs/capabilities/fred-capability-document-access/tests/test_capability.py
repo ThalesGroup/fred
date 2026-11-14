@@ -270,20 +270,20 @@ def test_double_registration_trips_boot_invariant() -> None:
         registry.register(DocumentAccessCapability())
 
 
-def test_reranking_is_default_on_in_advanced_agent_settings() -> None:
+def test_reranking_is_default_off_in_advanced_agent_settings() -> None:
     field = next(
         item
         for item in DocumentAccessCapability.manifest.config_fields
         if item.key == "rerank"
     )
-    assert field.default is True
+    assert field.default is False
     assert field.ui is not None and field.ui.advanced is True
-    assert DocumentAccessConfig.model_validate({}).rerank is True
-    assert DocumentAccessConfig.model_validate({"rerank": False}).rerank is False
+    assert DocumentAccessConfig.model_validate({}).rerank is False
+    assert DocumentAccessConfig.model_validate({"rerank": True}).rerank is True
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("stored,expected", [({}, True), ({"rerank": False}, False)])
+@pytest.mark.parametrize("stored,expected", [({}, False), ({"rerank": True}, True)])
 async def test_agent_reranking_setting_reaches_document_search_port(
     stored, expected
 ) -> None:

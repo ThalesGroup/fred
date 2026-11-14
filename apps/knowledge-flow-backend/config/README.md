@@ -64,7 +64,7 @@ deployment.
 
 `POST /vector/search` accepts `rerank: true` to rerank its authorized candidate
 pool; omitted `rerank` keeps the existing retrieval order for direct API
-callers. The agent's document search sends this flag from its default-on
+callers. The agent's document search sends this flag from its default-off
 advanced setting. `POST /vector/similarity-search` keeps its own default-on
 `rerank` flag, and authenticated `POST /vector/rerank` remains available to
 existing direct callers as REST only; it is excluded from the Text MCP tool

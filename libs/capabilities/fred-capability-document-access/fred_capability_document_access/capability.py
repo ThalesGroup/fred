@@ -268,7 +268,7 @@ class DocumentAccessConfig(BaseModel):
     library_tag_ids: ScopePrivate[list[str]] = []
     document_uids: ScopePrivate[list[str]] = []
     default_top_k: int = 8
-    rerank: bool = True
+    rerank: bool = False
     search_policy: str | None = None
     # The switch and its list form one team-owned setting: a copy that kept the
     # switch on with an empty list would hide the library picker for nothing.
@@ -364,7 +364,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.2.2",
+        version="0.2.3",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -440,7 +440,7 @@ class DocumentAccessCapability(
                 type="boolean",
                 title="capability.document_access.fields.rerank.title",
                 description="capability.document_access.fields.rerank.description",
-                default=True,
+                default=False,
                 ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(
