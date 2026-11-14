@@ -11,6 +11,7 @@ use super::config::{
     DeclaredModel, DiscoveryAuthentication, ModelSource, Qualification, SourceInventory,
     bounded_text,
 };
+use fred_rust_sdk::inference::ModelWire;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BYTES: usize = 1024 * 1024;
@@ -111,6 +112,8 @@ pub struct ModelMetadata {
     /// Platform-attested embedding offer; such an offer is never chat.
     #[serde(default)]
     pub embedding: Option<bool>,
+    #[serde(default)]
+    pub rerank: Option<bool>,
     /// Source-reported image input; absent means unknown, not unsupported.
     #[serde(default)]
     pub vision: Option<bool>,
@@ -150,6 +153,7 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
         chat_provenance,
         reasoning: capability("reasoning"),
         embedding: None,
+        rerank: None,
         vision: capability("vision"),
         display_name: ["name", "display_name"].iter().find_map(|key| {
             item.get(key)
@@ -312,6 +316,7 @@ fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
             chat_provenance: Some(ChatProvenance::SourceGuarantee),
             reasoning: model.reasoning,
             embedding: None,
+            rerank: None,
             vision: None,
             display_name: model.display_name.clone(),
             context_window_tokens: model.context_window_tokens,
@@ -329,6 +334,9 @@ pub(super) async fn discover(
         if source.embedding_models.contains(&offer.upstream_model_id) {
             attest_embedding(&mut offer.metadata);
         }
+        if source.inference.wire == ModelWire::Rerank {
+            attest_rerank(&mut offer.metadata);
+        }
     }
     Ok(offers)
 }
@@ -339,6 +347,16 @@ fn attest_embedding(metadata: &mut ModelMetadata) {
     metadata.chat_provenance = Some(ChatProvenance::SourceGuarantee);
     metadata.reasoning = None;
     metadata.embedding = Some(true);
+    metadata.rerank = Some(false);
+    metadata.vision = Some(false);
+}
+
+fn attest_rerank(metadata: &mut ModelMetadata) {
+    metadata.chat = Some(false);
+    metadata.chat_provenance = Some(ChatProvenance::SourceGuarantee);
+    metadata.reasoning = None;
+    metadata.embedding = Some(false);
+    metadata.rerank = Some(true);
     metadata.vision = Some(false);
 }
 
@@ -388,11 +406,11 @@ mod tests {
             serde_json::json!([
                 {"upstream_model_id":"gpt-4o","metadata":{"chat":true,
                     "chat_provenance":"source_guarantee","reasoning":false,
-                    "embedding":null,"vision":null,"display_name":"GPT-4o","context_window_tokens":128000,
+                    "embedding":null,"rerank":null,"vision":null,"display_name":"GPT-4o","context_window_tokens":128000,
                     "max_input_tokens":100,"max_output_tokens":200}},
                 {"upstream_model_id":"bare","metadata":{"chat":true,
                     "chat_provenance":"source_guarantee","reasoning":null,
-                    "embedding":null,"vision":null,"display_name":null,"context_window_tokens":null,
+                    "embedding":null,"rerank":null,"vision":null,"display_name":null,"context_window_tokens":null,
                     "max_input_tokens":null,"max_output_tokens":null}},
             ])
         );
@@ -436,6 +454,25 @@ mod tests {
         assert_eq!(
             (embed.chat, embed.embedding, embed.vision),
             (Some(false), Some(true), Some(false))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_declared_rerank_source_publishes_only_rerank_offers() {
+        let source: ModelSource = serde_json::from_value(serde_json::json!({
+            "source_id":"rerank","revision":1,"enabled":true,
+            "inventory":{"kind":"declared","models":[{"id":"ranker"}]},
+            "inference":{"credential_binding":"b","api_root":"https://gateway.invalid/v1",
+                "wire":"rerank","route":"standard","dialect":"openai_compatible",
+                "auth":{"kind":"api_key"}},
+            "visibility_scope":"account"}))
+        .unwrap();
+        source.validate().unwrap();
+        let offers = discover(&source).await.unwrap();
+        let metadata = &offers[0].metadata;
+        assert_eq!(
+            (metadata.chat, metadata.embedding, metadata.rerank),
+            (Some(false), Some(false), Some(true))
         );
     }
 

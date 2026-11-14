@@ -182,6 +182,7 @@ pub(crate) async fn resolve(
         .chain(policy.fallback.iter())
         .chain(policy.embedding.iter())
         .chain(policy.vision.iter())
+        .chain(policy.reranker.iter())
         .cloned()
         .collect();
     let offers = keys
@@ -511,7 +512,7 @@ fn decide_document(
     let offer = models.offers.iter().find(|o| &o.key == key)?;
     let metadata = offer.metadata.as_ref()?;
     if !offer.permitted
-        || !use_.fits(metadata.chat, metadata.embedding, metadata.vision)
+        || !use_.fits(metadata.chat, metadata.embedding, metadata.vision, metadata.rerank)
         || offer.diagnostics.iter().any(|d| {
             !matches!(
                 d,
@@ -639,6 +640,7 @@ mod preparation_tests {
                 chat_provenance: None,
                 reasoning: Some(true),
                 embedding: None,
+                rerank: None,
                 vision: None,
                 display_name: None,
                 context_window_tokens: Some(1000),
@@ -672,6 +674,7 @@ mod preparation_tests {
                 embedding: None,
                 embedding_locked: false,
                 vision: None,
+                reranker: None,
                 created_by: None,
                 created_at: None,
                 updated_by: None,

@@ -18546,10 +18546,11 @@
                                 "type": "string"
                               },
                               "wire": {
-                                "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
+                                "description": "Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`;\na rerank offer is called at `{api_root}/rerank`.",
                                 "enum": [
                                   "openai_chat",
-                                  "openai_responses"
+                                  "openai_responses",
+                                  "rerank"
                                 ],
                                 "type": "string"
                               }
@@ -18665,7 +18666,7 @@
                                   "models": {
                                     "items": {
                                       "additionalProperties": false,
-                                      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
+                                      "description": "Chat is guaranteed by this declaration, except for embedding offers or a\nsource whose inference wire attests reranking.",
                                       "properties": {
                                         "context_window_tokens": {
                                           "format": "int64",
@@ -18866,6 +18867,29 @@
                             },
                             "maxItems": 4096,
                             "type": "array"
+                          },
+                          "reranker": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "sources": {
                             "items": {
@@ -20962,10 +20986,11 @@
                                 "type": "string"
                               },
                               "wire": {
-                                "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
+                                "description": "Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`;\na rerank offer is called at `{api_root}/rerank`.",
                                 "enum": [
                                   "openai_chat",
-                                  "openai_responses"
+                                  "openai_responses",
+                                  "rerank"
                                 ],
                                 "type": "string"
                               }
@@ -21081,7 +21106,7 @@
                                   "models": {
                                     "items": {
                                       "additionalProperties": false,
-                                      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
+                                      "description": "Chat is guaranteed by this declaration, except for embedding offers or a\nsource whose inference wire attests reranking.",
                                       "properties": {
                                         "context_window_tokens": {
                                           "format": "int64",
@@ -21282,6 +21307,29 @@
                             },
                             "maxItems": 4096,
                             "type": "array"
+                          },
+                          "reranker": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "source_id": {
+                                    "type": "string"
+                                  },
+                                  "upstream_model_id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source_id",
+                                  "upstream_model_id"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "sources": {
                             "items": {

@@ -1062,6 +1062,7 @@ class DocumentSearchPort(ABC):
         query: str,
         *,
         top_k: int = 8,
+        rerank: bool = False,
         document_scope: DocumentScope | None = None,
         library_tag_ids: Sequence[str] | None = None,
         document_uids: Sequence[str] | None = None,
@@ -1085,6 +1086,7 @@ class DocumentSearchPort(ABC):
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
+        `rerank` asks Knowledge Flow to reorder visible hits after retrieval.
         """
 
 

@@ -566,7 +566,7 @@ async def test_turn_title_and_usage_share_one_path(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", CASES)
+@pytest.mark.parametrize("name", MATRIX)
 async def test_every_shared_valid_connection_reaches_its_expected_url(name, transport):
     serve(transport, name)
     binding = admission_of(name)

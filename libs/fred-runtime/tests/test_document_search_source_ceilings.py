@@ -115,6 +115,19 @@ async def test_empty_scope_does_not_search(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_rerank_setting_reaches_knowledge_flow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        await adapter.search("q", rerank=True, include_attachments=False)
+    assert client.calls[0]["rerank"] is True
+
+
+@pytest.mark.asyncio
 async def test_closed_or_missing_turn_cannot_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

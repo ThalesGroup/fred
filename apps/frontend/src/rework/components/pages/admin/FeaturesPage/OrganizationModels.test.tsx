@@ -51,7 +51,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     currentData: {
       policy: {
         revision: 4,
-        permitted: ["chat", "withdrawn", "embed"].map((upstream_model_id) => ({ source_id: "a", upstream_model_id })),
+        permitted: ["chat", "withdrawn", "embed", "ranker"].map((upstream_model_id) => ({
+          source_id: "a",
+          upstream_model_id,
+        })),
         reasoning_enabled: [],
         default: null,
         fallback: null,
@@ -59,17 +62,22 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
         embedding: h.locked ? { source_id: "a", upstream_model_id: "embed" } : null,
         embedding_locked: h.locked,
         vision: null,
+        reranker: null,
       },
       sources: [
         {
           observation: { enabled: false },
-          offers: ["chat", "withdrawn", "not-permitted", "embed"].map((id) => ({
+          offers: ["chat", "withdrawn", "not-permitted", "embed", "ranker"].map((id) => ({
             source_id: "a",
             upstream_model_id: id,
             selectable: id !== "withdrawn",
             advertised: true,
             metadata:
-              id === "embed" ? { chat: false, embedding: true } : { chat: true, vision: id === "chat" ? null : false },
+              id === "embed"
+                ? { chat: false, embedding: true }
+                : id === "ranker"
+                  ? { chat: false, rerank: true }
+                  : { chat: true, vision: id === "chat" ? null : false },
           })),
         },
       ],
@@ -139,6 +147,7 @@ it("offers each document choice only its aptitude and keeps the corpus model loc
   expect(labels("embedding")).toEqual([none, "a / embed"]);
   // Unknown image input is offered; a source-reported refusal is not.
   expect(labels("vision")).toEqual([none, "a / chat"]);
+  expect(labels("reranker")).toEqual([none, "a / ranker"]);
   await act(async () => {
     select("embedding").selectedIndex = 1;
     select("embedding").dispatchEvent(new Event("change", { bubbles: true }));
@@ -148,7 +157,16 @@ it("offers each document choice only its aptitude and keeps the corpus model loc
     replaceModelPolicy: expect.objectContaining({
       embedding: { source_id: "a", upstream_model_id: "embed" },
       vision: null,
+      reranker: null,
     }),
+  });
+  await act(async () => {
+    select("reranker").selectedIndex = 1;
+    select("reranker").dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(h.save).toHaveBeenCalledWith({
+    organizationId: "org",
+    replaceModelPolicy: expect.objectContaining({ reranker: { source_id: "a", upstream_model_id: "ranker" } }),
   });
   h.locked = true;
   await act(async () => render());

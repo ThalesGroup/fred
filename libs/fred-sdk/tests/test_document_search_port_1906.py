@@ -47,6 +47,7 @@ class _FakePort(runtime_contract.DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
+        rerank: bool = False,
         document_scope=None,
         library_tag_ids=None,
         document_uids=None,
@@ -58,6 +59,7 @@ class _FakePort(runtime_contract.DocumentSearchPort):
             {
                 "query": query,
                 "top_k": top_k,
+                "rerank": rerank,
                 "document_scope": document_scope,
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
@@ -80,6 +82,7 @@ def test_search_signature_takes_scope_params_not_identity() -> None:
     assert {
         "query",
         "top_k",
+        "rerank",
         "document_scope",
         "library_tag_ids",
         "document_uids",

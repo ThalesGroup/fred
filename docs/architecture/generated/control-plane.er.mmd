@@ -34,6 +34,7 @@ erDiagram
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, reranker_source_id, reranker_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
@@ -362,6 +363,8 @@ erDiagram
   timestamp_with_time_zone embedding_locked_at
   text vision_source_id FK
   text vision_upstream_model_id FK
+  text reranker_source_id FK
+  text reranker_upstream_model_id FK
 }
 "control_plane.organization_model_permission" {
   uuid organization_id FK
@@ -764,4 +767,12 @@ erDiagram
   text updated_by
   timestamp_with_time_zone updated_at
   uuid space_id FK
+}
+"control_plane.user_avatar" {
+  uuid id
+  text user_id
+  text object_key
+  bigint size
+  text status
+  timestamp_with_time_zone expires_at
 }

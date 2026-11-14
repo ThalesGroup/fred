@@ -324,6 +324,7 @@ class ApplicationContext:
         Best-effort cleanup of shared resources.
         """
         # HTTP clients
+        await self._document_models.close()
         try:
             await http_clients.async_shutdown_shared_clients()
         except Exception:

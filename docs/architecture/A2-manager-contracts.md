@@ -141,8 +141,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L597) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L679) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L602) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L252) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 

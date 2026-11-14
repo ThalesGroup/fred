@@ -20,7 +20,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-ModelUse = Literal["embedding", "chat"]
+ModelUse = Literal["embedding", "chat", "rerank"]
 
 _MODEL = text(
     "SELECT organization_id, source_id, upstream_model_id, connection, source_revision,"

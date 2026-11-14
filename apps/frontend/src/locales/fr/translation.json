@@ -153,6 +153,10 @@
           "title": "Résultats par défaut",
           "description": "Nombre de résultats à récupérer lorsque le modèle omet top_k."
         },
+        "rerank": {
+          "title": "Réordonner les résultats",
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Désactivé par défaut."
+        },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",
           "description": "Un résultat doit obtenir au moins cette fraction du score du meilleur résultat de la même recherche pour apparaître comme source citée. N'affecte que le panneau Sources destiné aux utilisateurs, jamais ce que le modèle peut lire."
@@ -1754,7 +1758,7 @@
           "none": "Aucun",
           "policyHint": "Ces choix s'appliquent à votre organisation. Choisissez parmi les modèles autorisés. Le modèle par défaut sert aussi aux outils documentaires (résumé, extraction). Les réglages par pod ne sont pas disponibles dans ce catalogue.",
           "revokeTitle": "Retirer l'autorisation ?",
-          "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est choisi comme modèle par défaut, de repli, de titre de conversation, d'embedding ou de vision, ce choix sera aussi effacé.",
+          "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est choisi comme modèle par défaut, de repli, de titre de conversation, d'embedding, de vision ou de reranking, ce choix sera aussi effacé.",
           "withdrawn": "Retiré de la source",
           "chat": "Chat confirmé",
           "notChat": "Sans aptitude chat",
@@ -1767,11 +1771,14 @@
           "noModels": "Aucun modèle dans le catalogue.",
           "embedding": "Modèle d'embedding",
           "vision": "Modèle de description d'images",
+          "reranker": "Modèle de reranking",
           "documents": "Documents",
           "embeddingHint": "Requis pour traiter les documents. Tous les documents de l'organisation sont indexés avec ce modèle : la première indexation verrouille le choix.",
           "embeddingLockedHint": "Verrouillé : les documents de l'organisation sont indexés avec ce modèle. En changer exige de réindexer tous les documents.",
           "visionHint": "Facultatif. Décrit les images des documents pendant le traitement, selon le profil de traitement. Sans choix, les images ne sont pas décrites.",
-          "embeddingAptitude": "Embeddings"
+          "rerankerHint": "Facultatif. Réordonne les résultats de recherche documentaire. Sans choix, Knowledge Flow utilise son cross-encoder local.",
+          "embeddingAptitude": "Embeddings",
+          "rerankAptitude": "Reranking"
         },
         "organizationCapabilities": {
           "col": {
