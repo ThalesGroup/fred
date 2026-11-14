@@ -30,7 +30,7 @@ import inspect
 import json
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
-from contextlib import AbstractAsyncContextManager, aclosing, nullcontext
+from contextlib import aclosing
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
@@ -89,7 +89,6 @@ from fred_runtime.react.react_stream_adapter import (
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
 from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
-from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.tool_approval import ToolApproval
 
 logger = logging.getLogger(__name__)
@@ -450,29 +449,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             )
 
     async def _run(
-        self,
-        input_model: BaseModel,
-        config: ExecutionConfig,
-        outcome: _RunOutcome,
-    ) -> AsyncGenerator[RuntimeEvent, None]:
-        admission: AbstractAsyncContextManager[None] = nullcontext()
-        if config.interrupted_action == "continue":
-            if not isinstance(self._checkpointer, FredSqlCheckpointer):
-                raise RuntimeError(
-                    "Graph continuation requires a persistent SQL checkpointer "
-                    "with owner-lifetime admission."
-                )
-            admission = self._checkpointer.graph_resume_lock.acquire(
-                self.thread_id(config)
-            )
-        async with (
-            admission,
-            aclosing(self._run_admitted(input_model, config, outcome)) as events,
-        ):
-            async for event in events:
-                yield event
-
-    async def _run_admitted(
         self,
         input_model: BaseModel,
         config: ExecutionConfig,

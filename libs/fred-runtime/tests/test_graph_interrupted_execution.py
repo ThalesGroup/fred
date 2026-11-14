@@ -376,36 +376,6 @@ async def test_repeated_continuations_preserve_a_completed_tool_task(
 
 
 @pytest.mark.asyncio
-async def test_closing_a_continuation_stream_releases_admission_immediately(
-    checkpointer: FredSqlCheckpointer,
-) -> None:
-    from fred_runtime.runtime_support.graph_resume_lock import (
-        GraphResumeAlreadyRunningError,
-    )
-
-    await _lose_run_while_publishing(checkpointer)
-    event = await _interruption(checkpointer)
-    executor = await _executor(checkpointer)
-    config = ExecutionConfig(
-        session_id="s1",
-        interrupted_action="continue",
-        interruption_id=event.interruption_id,
-    )
-    stream = executor.stream(_Input(message="ignored"), config)
-    try:
-        assert isinstance(await anext(stream), FinalRuntimeEvent)
-        with pytest.raises(GraphResumeAlreadyRunningError):
-            async with checkpointer.graph_resume_lock.acquire(
-                executor.thread_id(config)
-            ):
-                pytest.fail("The continuation released ownership before stream exit")
-    finally:
-        await stream.aclose()
-    async with checkpointer.graph_resume_lock.acquire(executor.thread_id(config)):
-        pass
-
-
-@pytest.mark.asyncio
 async def test_a_stale_or_unknown_interruption_is_rejected(
     checkpointer: FredSqlCheckpointer,
 ) -> None:
@@ -629,24 +599,35 @@ def test_pod_refuses_a_continue_another_replica_already_holds(
     tmp_path: Path, _offline_model: pytest.MonkeyPatch
 ) -> None:
     from fastapi.testclient import TestClient
+    from fred_runtime.app.dependencies import get_pod_container_from_app
+    from fred_runtime.runtime_support.active_turn import ActiveTurnStore
 
-    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
-        checkpointer = _lose_run_in_pod()
+    app = _app_with(_Agent(), tmp_path, _offline_model)
+    with TestClient(app) as client:
+        _lose_run_in_pod()
         reported = _post(client, input="again")
         publishes = RUNS["publish"]
-        admission = checkpointer.graph_resume_lock.acquire(f"sess-1:{INSTANCE_ID}")
-        with asyncio.Runner() as runner:
-            runner.run(admission.__aenter__())
-            try:
-                refused = _post(
-                    client,
-                    interrupted_action="continue",
-                    interruption_id=reported["interruption_id"],
-                )
-            finally:
-                runner.run(admission.__aexit__(None, None, None))
-
-    assert refused["kind"] == "execution_error"
+        engine = get_pod_container_from_app(app).get_sql_engine()
+        assert engine is not None
+        lease = asyncio.run(ActiveTurnStore(engine).take("sess-1"))
+        assert lease is not None
+        try:
+            refused = client.post(
+                "/pod/v1/agents/execute",
+                json=managed_payload(
+                    {
+                        "agent_id": _Agent().agent_id,
+                        "session_id": "sess-1",
+                        "runtime_context": {"user_id": "alice"},
+                        "interrupted_action": "continue",
+                        "interruption_id": reported["interruption_id"],
+                    }
+                ),
+            )
+        finally:
+            asyncio.run(lease.release())
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "conversation_busy"
     assert RUNS["publish"] == publishes
 
 
@@ -687,6 +668,20 @@ def test_pod_continues_again_after_its_continuing_process_dies(
         timeout=30,
     )
     assert child.returncode == 9, child.stderr
+
+    import sqlite3
+
+    from test_agent_app import _build_test_config
+
+    config = _build_test_config(tmp_path)
+    assert config.storage.postgres.sqlite_path is not None
+    with sqlite3.connect(config.storage.postgres.sqlite_path) as sql:
+        assert (
+            sql.execute("SELECT COUNT(*) FROM session_active_turn").fetchone()[0] == 1
+        )
+        sql.execute(
+            "UPDATE session_active_turn SET expires_at = datetime('now', '-1 second')"
+        )
 
     with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
         reported = _post(client, input="again")
@@ -932,9 +927,6 @@ async def test_process_loss_after_publication_reuses_the_same_operation(
 
 @pytest.mark.asyncio
 async def test_closing_during_progress_waits_for_node_teardown(checkpointer) -> None:
-    from fred_runtime.runtime_support.graph_resume_lock import (
-        GraphResumeAlreadyRunningError,
-    )
     from fred_sdk.contracts.runtime import StatusRuntimeEvent
 
     cleaned = asyncio.Event()
@@ -972,13 +964,68 @@ async def test_closing_during_progress_waits_for_node_teardown(checkpointer) -> 
     stream = executor.stream(_Input(message="ignored"), config)
     try:
         assert isinstance(await anext(stream), StatusRuntimeEvent)
-        with pytest.raises(GraphResumeAlreadyRunningError):
-            async with checkpointer.graph_resume_lock.acquire(
-                executor.thread_id(config)
-            ):
-                pytest.fail("Admission released while the node is active")
     finally:
         await stream.aclose()
     assert cleaned.is_set()
-    async with checkpointer.graph_resume_lock.acquire(executor.thread_id(config)):
-        pass
+
+
+@pytest.mark.parametrize("action", ["continue", "restart"])
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+def test_graph_resume_without_conversation_is_refused(
+    tmp_path, _offline_model, route, action
+) -> None:
+    from fastapi.testclient import TestClient
+
+    body = managed_payload(
+        {
+            "agent_id": _Agent().agent_id,
+            "input": "" if action == "continue" else "restart",
+            "interrupted_action": action,
+            **({"interruption_id": "interrupted"} if action == "continue" else {}),
+        }
+    )
+    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
+        result = client.post(f"/pod/v1/agents/{route}", json=body)
+    assert result.status_code == 422
+    assert result.json()["detail"] == "Graph resume requires a conversation."
+    assert not RUNS
+
+
+@pytest.mark.asyncio
+async def test_lease_loss_interrupts_a_graph_node_without_waiting_for_an_event(
+    tmp_path, _offline_model, monkeypatch
+) -> None:
+    import fred_runtime.runtime_support.active_turn as leases
+    from fred_runtime.app.dependencies import get_pod_container_from_app
+    from sqlalchemy import delete
+    from test_delegated_foreground_route import _Connection, _payloads, _serving
+
+    monkeypatch.setattr(leases, "RENEW_INTERVAL_SECONDS", 0.01)
+    app = _app_with(_Agent(), tmp_path, _offline_model)
+    BEHAVIOUR["publish"] = "hang"
+    entered = asyncio.Event()
+    PUBLISH_ENTERED.append(entered)
+    body = managed_payload(
+        {
+            "agent_id": _Agent().agent_id,
+            "input": "migrate",
+            "session_id": "graph-lease-loss",
+            "runtime_context": {"user_id": "alice"},
+        }
+    )
+    async with _serving(_Connection(app)) as client:
+        request = asyncio.create_task(
+            client.post("/pod/v1/agents/execute/stream", json=body)
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        engine = get_pod_container_from_app(app).get_sql_engine()
+        assert engine is not None
+        async with engine.begin() as conn:
+            await conn.execute(delete(leases.ACTIVE_TURN))
+        # No event can wake the node. Only renewal loss can end this request.
+        result = await asyncio.wait_for(request, 5)
+        payloads = _payloads(result.content)
+        assert payloads[-1]["kind"] == "execution_error"
+        assert "expired or was lost" in payloads[-1]["message"]
+        assert not any(p["kind"] == "final" for p in payloads)
+        assert RUNS["finalize"] == 0

@@ -85,7 +85,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
-from fred_runtime.runtime_support.graph_resume_lock import GraphResumeLock
+from fred_runtime.runtime_support.run_scope import RunScope
 
 
 def _sync_checkpointer_error(method_name: str) -> RuntimeError:
@@ -323,7 +323,6 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         ]
         self._metadata = metadata
         self._ddl_lock_id = advisory_lock_key(self.checkpoints_table.name)
-        self.graph_resume_lock = GraphResumeLock(engine, self.checkpoints_table.name)
         self._tables_ready = False
         self._logger = logging.getLogger(__name__)
         self._kpi = kpi
@@ -603,6 +602,18 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ):  # type: ignore[override]
         raise _sync_checkpointer_error("put")
 
+    async def _fence_turn_write(self, conn: AsyncConnection, thread_id: str) -> None:
+        scope = RunScope.current()
+        lease = scope.active_turn if scope is not None else None
+        if lease is not None:
+            if thread_id != lease.session_id and not thread_id.startswith(
+                f"{lease.session_id}:"
+            ):
+                raise RuntimeError(
+                    "Checkpoint thread is outside its admitted conversation"
+                )
+            await lease.fence(conn)
+
     async def aput(
         self,
         config: RunnableConfig,
@@ -621,6 +632,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             metadata_json = get_checkpoint_metadata(config, metadata)
             pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                await self._fence_turn_write(conn, thread_id)
                 pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
                 sql_start = time.monotonic()
                 for channel, version in new_versions.items():
@@ -698,6 +710,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_id = str(configurable["checkpoint_id"])
             pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                await self._fence_turn_write(conn, thread_id)
                 pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
                 sql_start = time.monotonic()
                 for idx, (channel, value) in enumerate(writes):
@@ -1412,6 +1425,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             user_id = configurable.get("__fred_user_id")
             space_id = configurable.get("__fred_space_id")
             async with self.store.begin() as conn:
+                await self._fence_turn_write(conn, thread_id)
                 await self._upsert_owner(
                     conn,
                     thread_id=thread_id,

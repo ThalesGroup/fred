@@ -753,8 +753,10 @@ class PostgresHistoryStore(BaseHistoryStore):
         exchange_id: str,
         expected_content: str | None = None,
         require_pending: bool = False,
+        session: AsyncSession | None = None,
     ) -> ChatMessage | None:
-        async with self._sessions.begin() as session:
+        # The runtime owns the lease fence and commit when supplying a session.
+        async with use_session(self._sessions, session) as session:
             await self._lock_conversation(session, session_id)
             row = (
                 await session.execute(

@@ -29,6 +29,7 @@ from fred_runtime.app.web_research_activity import (
     WebResearchActivityRow,
 )
 from fred_runtime.migrations import configure_migration_logging
+from fred_runtime.runtime_support.active_turn import ACTIVE_TURN
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
@@ -42,6 +43,7 @@ if config.config_file_name is not None:
 # so we must not pass Base.metadata directly — that would make alembic check
 # report drift for tables managed by control-plane-backend.
 _runtime_metadata = MetaData()
+ACTIVE_TURN.to_metadata(_runtime_metadata)
 cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
 
@@ -89,6 +91,13 @@ if _build_url(_postgres_config).startswith("postgresql"):
             )
         )
         Index(f"{name}_conversation_idx", table.c.conversation_id)
+    _runtime_metadata.tables["session_active_turn"].c.session_id.append_foreign_key(
+        ForeignKey(
+            "control_plane.session_metadata.session_id",
+            ondelete="CASCADE",
+            name="session_active_turn_root_fk",
+        )
+    )
     _fences.to_metadata(_runtime_metadata)
     _writes.to_metadata(_runtime_metadata)
 

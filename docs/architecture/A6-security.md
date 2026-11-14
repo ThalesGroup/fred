@@ -309,7 +309,9 @@ Cancellation and closed-run checks remain effective within the turn.
 The Python SDK carries the admitted space explicitly in `RuntimeContext`,
 `PortableContext` and `CapabilityIdentity`; `team_id` is ancestry only. The in-thread update store
 checks that space against the conversation history when accepting a message or
-retrying its identity. History and
+retrying its identity. An expiring database lease admits one active turn per conversation
+and guards its checkpoint and final history writes; lease loss stops the turn,
+and steering addresses the active turn. History and
 checkpoint owner metadata record it without granting access: the existing
 `binding_json` provenance and Control Plane checks still govern conversation
 reads. Missing provenance is never inferred from retention metadata. See the
@@ -394,7 +396,7 @@ effective-person binding and the current errors independently of the SQL read.
 | GET | `/agents/checkpoints/_stats` | No turn resolution |
 | GET | `/agents/checkpoints/{session_id}` | No turn resolution |
 | DELETE | `/agents/checkpoints/{session_id}` | No turn resolution |
-| POST | `/agents/sessions/{session_id}/steer` | No new turn resolution; targets an admitted active turn |
+| POST | `/agents/sessions/{session_id}/steer` | Checks conversation ownership and execution authorization; stores an in-thread message without starting a turn |
 | GET | `/capabilities/writable_document/sessions/{session_id}/documents` | No turn resolution |
 | GET | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |
 | PUT | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |

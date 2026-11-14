@@ -225,6 +225,7 @@ class PodApplicationContext:
             engine,
             [
                 SessionHistoryRow.__tablename__,
+                "session_active_turn",
             ],
             component="fred-runtime",
             migrate_command=_MIGRATE_COMMAND,
