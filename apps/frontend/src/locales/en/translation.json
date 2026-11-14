@@ -3165,6 +3165,7 @@
         "title": "Marketplace"
       },
       "team": {
+        "accessError": "Could not verify access to this space.",
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",

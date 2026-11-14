@@ -51,11 +51,35 @@ Separate requests are live views; concurrent changes can shift offset boundaries
 
 Folder creation/rename stores labels in NFC without surrounding whitespace, then
 accepts 1..255 Unicode scalar values and rejects separators and controls. Sibling
-uniqueness compares that stored form. Placement stays fixed. Deletion removes one
-selected subtree atomically, but any published document or pending upload below
-it refuses the whole operation. Multiple roots are independent, with partial
-success reported by the UI. Space retirement likewise refuses stored documents
-and pending uploads. A waiting mutation cannot resurrect a deleted target.
+uniqueness compares that stored form among active siblings. Placement stays fixed.
+The folder deletion implementation now uses the existing lifecycle receipt:
+[`Lifecycle::accept_folder`](../../apps/control-plane/src/lifecycle/store.rs)
+retires the selected subtree atomically under the exclusive organization guard.
+Live documents or pending uploads refuse retirement; documents already retired
+keep their own receipt and deadline. `empty_only` additionally refuses live child
+folders. Multiple selected roots remain independent.
+
+`DELETE /folders/{id}` returns the durable receipt (202 accepted, 200 on replay
+after purge). Active reads and destination checks exclude retired folder IDs;
+recreating the same sibling name allocates a new UUID and UUID-based path.
+The old receipt cannot target this new folder. The
+[folder retirement migration](../../apps/control-plane/migrations/0026_folder_retirement.sql)
+extends the existing target-kind constraint and indexes all upload states by
+folder; it reuses the existing live-name uniqueness and folder/document indexes.
+
+[`cleanup::batch`](../../apps/control-plane/src/lifecycle/cleanup.rs) purges up to
+1,000 eligible leaf folders per visit, only from the operation's manifest. It
+waits for document rows, child folders and uncertain or uncleaned uploads to go.
+Failed uploads are removed only after storage cleanup is confirmed. Parent folder
+and space jobs preserve earlier folder jobs' ownership and retention; retries
+never resolve a target by name. Space retirement still refuses stored documents
+and pending uploads. Shared content guards and post-lock destination checks stop
+waiting uploads, creates, renames and moves from reviving a retired target.
+
+These are implementation contracts awaiting deployed acceptance. Regression
+sources cover [SQL lifecycle and parent/child ownership](../../apps/control-plane/tests/support/folder_deletion.rs),
+[concurrent HTTP waiters](../../apps/control-plane/tests/integration.rs) and
+[recreation followed by original-file purge](../../apps/control-plane/tests/support/document_storage.rs).
 
 ## Creating an original
 

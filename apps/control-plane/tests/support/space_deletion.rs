@@ -283,7 +283,7 @@ async fn project_receipt_lookup_is_read_only_and_bound_to_original_actor() {
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn empty_only_folder_deletion_preserves_children_and_retired_documents() {
+async fn empty_only_folder_deletion_refuses_live_children_but_accepts_retired_documents() {
     use serde_json::Value;
     let e = env().await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
@@ -327,7 +327,7 @@ async fn empty_only_folder_deletion_preserves_children_and_retired_documents() {
         )
         .await
         .0,
-        204
+        202
     );
     assert!(db::folder(&e.pool, child.id).await.is_err());
     let parent = spaces::create_folder(&e.pool, "alice", team.id, None, "document-parent".into())
@@ -364,9 +364,9 @@ async fn empty_only_folder_deletion_preserves_children_and_retired_documents() {
         )
         .await
         .0,
-        409
+        202
     );
-    assert!(db::folder(&e.pool, parent.id).await.is_ok());
+    assert!(db::folder(&e.pool, parent.id).await.is_err());
     assert!(
         sqlx::query_scalar::<_, bool>(
             "select exists(select 1 from document where id=$1 and deletion_id is not null)"
@@ -390,6 +390,6 @@ async fn empty_only_folder_deletion_preserves_children_and_retired_documents() {
         )
         .await
         .0,
-        204
+        202
     );
 }

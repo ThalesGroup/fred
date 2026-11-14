@@ -37,6 +37,7 @@ pub enum TargetKind {
     Team,
     Project,
     Document,
+    Folder,
     Session,
 }
 impl TryFrom<SpaceKind> for TargetKind {
@@ -131,6 +132,87 @@ pub(crate) async fn reserved<'e>(
     .await?)
 }
 impl Lifecycle {
+    /// Retire an empty live subtree without taking ownership of document or
+    /// child-folder deletions already in progress. Names are released at commit.
+    pub async fn accept_folder(
+        &self,
+        pool: &PgPool,
+        actor: &str,
+        id: Uuid,
+        empty_only: bool,
+    ) -> AppResult<Receipt> {
+        // Resolve by identity, including receipts after physical purge. The
+        // parent in a folder receipt is its owning space, as for documents.
+        let space_id: Uuid = sqlx::query_scalar(
+            "select space_id from folder where id=$1
+             union select target_parent_id from deletion where target_kind='folder' and target_id=$1",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+        let (mut tx, space) =
+            spaces::governance_mutation(pool, actor, space_id, Permission::Write).await?;
+        // Recheck after the exclusive organization lock: another request may
+        // have retired this folder (or its ancestor) while we were waiting.
+        if let Some(receipt) = sqlx::query_as::<_, Receipt>(
+            "select * from deletion where (target_kind='folder' and target_id=$1)
+             or id=(select deletion_id from folder where id=$1)",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        {
+            return Ok(receipt);
+        }
+        db::folder(&mut *tx, id).await?;
+        if !self.config.enabled {
+            return Err(AppError::Unavailable(
+                "folder deletion is disabled by configuration".into(),
+            ));
+        }
+        // All content writers use the shared organization guard. No upload,
+        // move or child creation can enter this subtree until retirement commits.
+        let (documents, uploads, children): (bool, bool, bool) = sqlx::query_as(
+            "with recursive subtree as (
+                select id,space_id from folder where id=$1
+                union all select f.id,f.space_id from folder f join subtree p on f.parent_id=p.id
+             ) select
+                exists(select 1 from document d join subtree f on f.id=d.folder_id and f.space_id=d.space_id where d.deletion_id is null),
+                exists(select 1 from document_upload u join subtree f on f.id=u.folder_id where u.status='pending'),
+                exists(select 1 from folder where parent_id=$1 and deletion_id is null)",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if uploads {
+            return Err(AppError::Conflict(
+                "folder has pending document uploads".into(),
+            ));
+        }
+        if documents || (empty_only && children) {
+            return Err(AppError::Conflict("folder is not empty".into()));
+        }
+        let requested_at = Utc::now();
+        let (due_at, rule) = self.deadline(&space, requested_at, false)?;
+        let operation = Uuid::new_v4();
+        let receipt = sqlx::query_as(
+            "insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id)
+             values ($1,$2,'folder',$3,$4,$5,$6,$7,$8) returning *",
+        )
+        .bind(operation).bind(id).bind(space_id).bind(space.organization).bind(actor)
+        .bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        sqlx::query(
+            "with recursive subtree as (
+                select id from folder where id=$1 and deletion_id is null
+                union all select f.id from folder f join subtree p on f.parent_id=p.id where f.deletion_id is null
+             ) update folder set deletion_id=$2 where id in (select id from subtree)",
+        )
+        .bind(id).bind(operation).execute(&mut *tx).await?;
+        tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="folder", operation_id=%operation, folder_id=%id, space_id=%space_id, actor_uid=actor, "Folder deletion accepted");
+        Ok(receipt)
+    }
+
     fn deadline(
         &self,
         space: &Space,
@@ -421,7 +503,9 @@ impl Lifecycle {
             }
         }
 
-        let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and target_kind <> 'session' and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
+        // Session and folder jobs drain their own manifests before the parent
+        // space can disappear; accepting the space must not steal those jobs.
+        let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and target_kind not in ('session','folder') and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
             .bind(root.organization).bind(match root.kind { SpaceKind::Organization => "organization", _ => "child" }).bind(id).fetch_one(&mut *tx).await?;
         if overlaps {
             return Err(AppError::Conflict("overlapping space deletion".into()));

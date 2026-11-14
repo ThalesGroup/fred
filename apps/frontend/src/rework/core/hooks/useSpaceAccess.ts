@@ -23,5 +23,5 @@ export function useSpaceAccess(spaceId: string | undefined, permission: SpacePer
   }, [outdated, isFetching, isUninitialized, refetch]);
   const settled = !context.isFetching && !context.isError && !isFetching && !isUninitialized && !outdated;
   const offered = !query.isError && query.currentData?.allowed === true;
-  return { offered, allowed: settled && offered, settled, error: query.isError ? query.error : undefined };
+  return { offered, allowed: settled && offered, settled, error: query.isError ? query.error : undefined, refetch };
 }

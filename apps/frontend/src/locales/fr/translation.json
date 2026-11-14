@@ -3165,6 +3165,7 @@
         "title": "Marketplace"
       },
       "team": {
+        "accessError": "Impossible de vérifier l'accès à cet espace.",
         "marketplace": "Marketplace",
         "menu": {
           "apps": "Apps",

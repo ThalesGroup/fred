@@ -25,6 +25,9 @@ const h = vi.hoisted(() => ({
   membershipError: false,
   canManage: false,
   canRead: true,
+  accessPending: false,
+  accessError: undefined as unknown,
+  refetchAccess: vi.fn(),
   memberships: [] as {
     id: string;
     kind: string;
@@ -83,7 +86,12 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
 }));
 
 vi.mock("@core/hooks/useSpaceAccess", () => ({
-  useSpaceAccess: (_id: string, permission: string) => ({ allowed: permission === "manage" ? h.canManage : h.canRead }),
+  useSpaceAccess: (_id: string, permission: string) => ({
+    offered: !h.accessError && (permission === "manage" ? h.canManage : h.canRead),
+    allowed: !h.accessError && !h.accessPending && (permission === "manage" ? h.canManage : h.canRead),
+    error: h.accessError,
+    refetch: () => h.refetchAccess(permission),
+  }),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -159,6 +167,9 @@ beforeEach(() => {
   h.pathname = "/team/team-1/resources";
   h.memberships = [];
   h.canRead = true;
+  h.accessPending = false;
+  h.accessError = undefined;
+  h.refetchAccess.mockClear();
   h.isPersonalTeam = false;
   h.wikiEnabled = undefined;
   h.wikiError = false;
@@ -173,6 +184,54 @@ const application = {
   icon: "extension",
   ui_prefix: "/apps/example",
 };
+
+it("keeps navigation and the mounted chat list through an access recheck, then respects a refusal", () => {
+  h.memberships = [{ id: "team-1", kind: "team", name: "Research", roles: ["editor"] }];
+  h.canManage = true;
+  h.wikiEnabled = true;
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<TeamContentNavbar />));
+    const chatList = container.querySelector("[data-chat-list]");
+    expect(chatList).not.toBeNull();
+    h.accessPending = true;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    for (const route of ["agents", "resources", "skills", "prompts", "knowledge-bases", "wiki"]) {
+      expect(container.querySelector(`a[href="/team/team-1/${route}"]`)).not.toBeNull();
+    }
+    expect(container.querySelector("[data-chat-list]")).toBe(chatList);
+    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).not.toBeNull();
+    h.accessPending = false;
+    h.canRead = h.canManage = false;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+    expect(container.querySelector("[data-chat-list]")).toBeNull();
+    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it("offers a local retry after access checks fail and restores navigation when they succeed", () => {
+  h.accessError = { status: 503 };
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("rework.sidebar.team.accessError");
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+    container.querySelector<HTMLButtonElement>('button[aria-label="common.retry"]')!.click();
+    expect(h.refetchAccess.mock.calls).toEqual([["read"], ["manage"]]);
+    h.accessError = undefined;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).not.toBeNull();
+    expect(h.navigate).not.toHaveBeenCalled();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
 
 describe("TeamContentNavbar applications entry", () => {
   beforeEach(() => {

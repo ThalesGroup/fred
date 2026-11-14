@@ -3424,6 +3424,8 @@ async fn organization_admins_name_owners_and_read_nothing() {
 }
 
 async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Router {
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
     control_plane::api::router(
         control_plane::api::AppState {
             history: None,
@@ -3431,7 +3433,7 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
             auth: std::sync::Arc::new(identity.auth().await),
             pool: e.pool.clone(),
             onboarding: Default::default(),
-            lifecycle: Default::default(),
+            lifecycle,
             directory: Some(identity.directory()),
             content: None,
             processing: None,
@@ -3825,7 +3827,7 @@ async fn folder_and_space_deletion_reject_pending_upload_before_triggers() {
             ""
         )
         .await,
-        204
+        202
     );
 }
 
@@ -3868,11 +3870,20 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
         } else {
             wait_for_advisory_waiter(&e.pool).await;
         }
-        db::delete_folder(&mut *deleting, folder.id, false)
+        let operation = Uuid::new_v4();
+        sqlx::query("insert into deletion(id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) values($1,$2,'folder',$3,$3,'alice',now(),now())")
+            .bind(operation).bind(folder.id).bind(org.id).execute(&mut *deleting).await.unwrap();
+        sqlx::query("update folder set deletion_id=$2 where id=$1")
+            .bind(folder.id)
+            .bind(operation)
+            .execute(&mut *deleting)
             .await
             .unwrap();
         deleting.commit().await.unwrap();
-        assert_eq!(pending.await.unwrap(), 404);
+        assert_eq!(
+            pending.await.unwrap(),
+            if method == "DELETE" { 202 } else { 404 }
+        );
     }
 }
 
@@ -5211,3 +5222,6 @@ mod platform_workload;
 
 #[path = "support/conversation_ownership.rs"]
 mod conversation_ownership;
+
+#[path = "support/folder_deletion.rs"]
+mod folder_deletion;

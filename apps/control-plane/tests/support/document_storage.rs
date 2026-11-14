@@ -287,6 +287,8 @@ impl Documents {
                 query.execute(&e.pool).await.unwrap();
             }
         }
+        let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+        lifecycle.config.enabled = true;
         let app = api::router(
             api::AppState {
                 history: None,
@@ -297,7 +299,7 @@ impl Documents {
                 processing: None,
                 directory: None,
                 onboarding: Default::default(),
-                lifecycle: Default::default(),
+                lifecycle,
             },
             "/v1",
             &[],
@@ -2716,4 +2718,78 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
             .as_ref(),
         b"frozen configuration original"
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn folder_recreation_keeps_new_original_when_old_document_and_folder_are_purged() {
+    use control_plane::lifecycle::{Lifecycle, Status, cleanup};
+    let mut d = Documents::start(100_000).await;
+    let mut lifecycle = Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.catalog.space_policies.purge.default.retention =
+        serde_yaml_ng::from_str("PT0S").unwrap();
+    let (status, _) = d
+        .upload("writer", "same.pdf", b"old", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201);
+    let (old_doc, old_key): (Uuid, String) =
+        sqlx::query_as("select id,object_key from document_current where folder_id=$1")
+            .bind(d.folder.id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let document = lifecycle
+        .accept_document(&d.e.pool, "writer", old_doc, None, false)
+        .await
+        .unwrap();
+    let folder = lifecycle
+        .accept_folder(&d.e.pool, "writer", d.folder.id, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        d.upload("writer", "late.pdf", b"late", Uuid::new_v4(), None)
+            .await
+            .0,
+        404
+    );
+    d.folder = control_plane::spaces::create_folder(
+        &d.e.pool,
+        "writer",
+        d.folder.space_id,
+        None,
+        d.folder.name.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        d.upload("writer", "same.pdf", b"new", Uuid::new_v4(), None)
+            .await
+            .0,
+        201
+    );
+    let (new_doc, new_key): (Uuid, String) =
+        sqlx::query_as("select id,object_key from document_current where folder_id=$1")
+            .bind(d.folder.id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_ne!(old_key, new_key);
+    for id in [folder.id, document.id, folder.id, document.id, folder.id] {
+        cleanup::batch(&d.e.pool, id, &Default::default(), Some(&d.storage))
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        lifecycle
+            .accept_folder(&d.e.pool, "writer", folder.target_id, false)
+            .await
+            .unwrap()
+            .status,
+        Status::Completed
+    );
+    assert!(d.bucket.store.get(&old_key).await.is_err());
+    assert!(d.bucket.store.get(&new_key).await.is_ok());
+    assert!(db::document(&d.e.pool, new_doc).await.is_ok());
+    assert!(db::folder(&d.e.pool, d.folder.id).await.is_ok());
 }

@@ -32,6 +32,7 @@ import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
 import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -109,9 +110,11 @@ export default function TeamContentNavbar() {
   const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
   const manage = useSpaceAccess(space?.id, "manage");
   const content = useSpaceAccess(space?.id, "read");
-  const canOpenTeamSettings = manage.allowed;
+  // Navigation uses the last successful answer while access is rechecked.
+  // This does not authorize page actions; access errors offer a retry below.
+  const canOpenTeamSettings = manage.offered;
   const canReadConsumption = canReadSpaceUsage(space, organizationId);
-  const canReadContent = content.allowed;
+  const canReadContent = content.offered;
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
   const hasAgentWorkspace = space?.kind !== "organization";
 
@@ -377,6 +380,25 @@ export default function TeamContentNavbar() {
         )}
       </div>
       <div className={styles.navigationContainer}>
+        {(content.error || manage.error) && (
+          <ServiceNotice
+            color="error"
+            title={t("rework.sidebar.team.accessError")}
+            action={
+              <IconButton
+                size="small"
+                variant="icon"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={t("common.retry")}
+                title={t("common.retry")}
+                onClick={() => {
+                  if (content.error) void content.refetch();
+                  if (manage.error) void manage.refetch();
+                }}
+              />
+            }
+          />
+        )}
         {inSettings || (inUsage && !isPersonalTeam) ? (
           <>
             {backButton}
