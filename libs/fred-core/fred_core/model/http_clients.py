@@ -19,17 +19,23 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import ipaddress
 import logging
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
+from urllib.request import getproxies
 
 import httpx
 from fred_core.common import ModelConfiguration
 from fred_core.model.diagnostics import (
     observe_async_model_response,
     observe_model_response,
+)
+from fred_core.model.streamed_tool_call_ids import (
+    AsyncToolCallIdTransport,
+    ToolCallIdTransport,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,6 +235,31 @@ def strip_transport_settings(settings: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _environment_proxy_mounts() -> dict[str, str | None]:
+    # Supplying a transport disables HTTPX's automatic environment proxy mounts.
+    proxies = getproxies()
+    bypass = [host.strip() for host in proxies.get("no", "").split(",") if host.strip()]
+    if "*" in bypass:
+        return {}
+    mounts: dict[str, str | None] = {}
+    for scheme in ("http", "https", "all"):
+        if proxy := proxies.get(scheme):
+            mounts[f"{scheme}://"] = proxy if "://" in proxy else f"http://{proxy}"
+    for host in bypass:
+        if "://" in host:
+            pattern = host
+        else:
+            try:
+                address = ipaddress.ip_address(host.split("/", 1)[0])
+            except ValueError:
+                prefix = "" if host.lower() == "localhost" else "*"
+                pattern = f"all://{prefix}{host}"
+            else:
+                pattern = f"all://[{host}]" if address.version == 6 else f"all://{host}"
+        mounts[pattern] = None
+    return mounts
+
+
 def get_shared_stack(
     cfg: ModelConfiguration,
     *,
@@ -257,17 +288,46 @@ def get_shared_stack(
 
     with _LOCK:
         if _SHARED_TUNING is None:
-            _SHARED_TUNING = requested
-            _SYNC_CLIENT = httpx.Client(
-                limits=_SHARED_TUNING.limits,
-                timeout=_SHARED_TUNING.timeout,
+            proxies = _environment_proxy_mounts()
+            sync_client = httpx.Client(
+                transport=ToolCallIdTransport(
+                    httpx.HTTPTransport(limits=requested.limits)
+                ),
+                mounts={
+                    pattern: ToolCallIdTransport(
+                        httpx.HTTPTransport(proxy=proxy, limits=requested.limits)
+                    )
+                    if proxy is not None
+                    else None
+                    for pattern, proxy in proxies.items()
+                },
+                timeout=requested.timeout,
                 event_hooks={"response": [observe_model_response]},
             )
-            _ASYNC_CLIENT = httpx.AsyncClient(
-                limits=_SHARED_TUNING.limits,
-                timeout=_SHARED_TUNING.timeout,
-                event_hooks={"response": [observe_async_model_response]},
-            )
+            try:
+                async_client = httpx.AsyncClient(
+                    transport=AsyncToolCallIdTransport(
+                        httpx.AsyncHTTPTransport(limits=requested.limits)
+                    ),
+                    mounts={
+                        pattern: AsyncToolCallIdTransport(
+                            httpx.AsyncHTTPTransport(
+                                proxy=proxy, limits=requested.limits
+                            )
+                        )
+                        if proxy is not None
+                        else None
+                        for pattern, proxy in proxies.items()
+                    },
+                    timeout=requested.timeout,
+                    event_hooks={"response": [observe_async_model_response]},
+                )
+            except Exception:
+                sync_client.close()
+                raise
+            _SHARED_TUNING = requested
+            _SYNC_CLIENT = sync_client
+            _ASYNC_CLIENT = async_client
 
             atexit.register(shutdown_shared_clients)
 
