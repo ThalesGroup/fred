@@ -1080,7 +1080,7 @@ async def test_tree_tool_clamps_render_budget_locally(
 
 def test_tree_manifest_and_model_schema_expose_only_navigation() -> None:
     cap = DocumentAccessCapability()
-    assert cap.manifest.version == "0.4.1"
+    assert cap.manifest.version == "0.4.2"
     ctx = build_capability_context(
         cap, identity=_identity(), services=_full_services(), config={}
     )
