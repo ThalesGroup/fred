@@ -155,7 +155,7 @@
         },
         "rerank": {
           "title": "Réordonner les résultats",
-          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Activé par défaut."
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Désactivé par défaut."
         },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",

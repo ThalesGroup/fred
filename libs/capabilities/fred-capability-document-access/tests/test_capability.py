@@ -332,7 +332,9 @@ def test_manifest_puts_sources_first_and_gates_corpus_fields() -> None:
     library_ui = fields["library_tag_ids"].ui
     assert library_ui is not None and library_ui.visible_when == "bind_libraries"
     assert not {"show_attach_files_control", "search_attachments_only"} & set(keys)
-    assert fields["rerank"].default is True
+    assert fields["rerank"].default is False
+    assert DocumentAccessConfig.model_validate({}).rerank is False
+    assert DocumentAccessConfig.model_validate({"rerank": True}).rerank is True
     assert fields["rerank"].ui is not None and fields["rerank"].ui.advanced is True
 
 
@@ -581,7 +583,7 @@ async def test_search_policy_enforced_only_when_picker_hidden() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "configured, expected", [({}, True), ({"rerank": False}, False)]
+    "configured, expected", [({}, False), ({"rerank": True}, True)]
 )
 async def test_reranking_setting_is_passed_to_document_search(
     configured, expected

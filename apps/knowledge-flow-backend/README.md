@@ -27,8 +27,8 @@ Optional `min_score` filters the original retrieval scores after reranking; the
 reranker does not replace those scores. With both options omitted, ordinary
 search is unchanged. Similarity callers select corpus documents through the
 trusted document-context header and exclude conversation attachments.
-The document-access agent capability enables reranking by default and lets its
-advanced settings disable it. Knowledge Flow ranks only visible hits in the
+The document-access agent capability leaves reranking off by default and lets its
+advanced settings enable it. Knowledge Flow ranks only visible hits in the
 same search request.
 
 ## Configuration
