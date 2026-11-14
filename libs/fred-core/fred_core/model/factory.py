@@ -265,11 +265,17 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def get_model(
+    cfg: Optional[ModelConfiguration], *, openai_api_key: str | None = None
+) -> BaseChatModel:
     from fred_core.model.tool_call_chunks import install_tool_fragment_guard
 
     install_tool_fragment_guard()
-    model = _create_model(cfg)
+    model = (
+        _create_model(cfg)
+        if openai_api_key is None
+        else _create_model(cfg, openai_api_key=openai_api_key)
+    )
     with suppress(Exception):
         log_model_settings(
             str(cfg.provider) if cfg else "unknown",
@@ -279,7 +285,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     return model
 
 
-def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def _create_model(
+    cfg: Optional[ModelConfiguration], *, openai_api_key: str | None = None
+) -> BaseChatModel:
     if cfg is None:
         raise ValueError("Model configuration is None")
     if not cfg.provider:
@@ -333,7 +341,11 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     # --- Provider: OpenAI ---
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if openai_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            settings.pop("openai_api_key", None)
+            settings["api_key"] = openai_api_key
         if not cfg.name:
             raise ValueError(
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."
@@ -658,7 +670,9 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 # ---------------------------------------------------------------------------
 
 
-def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
+def get_embeddings(
+    cfg: ModelConfiguration, *, openai_api_key: str | None = None
+) -> LCEmbeddings:
     if not cfg.provider:
         raise ValueError("Embedding configuration provider is required")
 
@@ -689,7 +703,11 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     name = cfg.name
 
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if openai_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            settings.pop("openai_api_key", None)
+            settings["api_key"] = openai_api_key
         if not name:
             raise ValueError(
                 "OpenAI embeddings require 'name' (e.g., text-embedding-3-large)."

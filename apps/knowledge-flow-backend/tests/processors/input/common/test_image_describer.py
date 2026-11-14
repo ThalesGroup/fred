@@ -14,6 +14,9 @@
 
 from types import SimpleNamespace
 
+from fred_core.common import ModelConfiguration
+
+from knowledge_flow_backend.core.processors.input.common import image_describer
 from knowledge_flow_backend.core.processors.input.common.image_describer import (
     VISION_DESCRIBE_PROMPT_V1,
     VisionImageDescriber,
@@ -49,3 +52,19 @@ def test_vision_image_describer_accepts_existing_data_uri():
 
     assert description == "There is an image showing a test."
     assert captured["image_url"] == data_uri
+
+
+def test_image_describer_uses_vision_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fallback-key")
+    monkeypatch.setenv("KNOWLEDGE_FLOW_VISION_API_KEY", "vision-key")
+    keys = []
+
+    def fake_get_model(_cfg, *, openai_api_key=None):
+        keys.append(openai_api_key)
+        return object()
+
+    monkeypatch.setattr(image_describer, "get_model", fake_get_model)
+
+    image_describer.build_image_describer(ModelConfiguration(provider="openai", name="vision-model"))
+
+    assert keys == ["vision-key"]

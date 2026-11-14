@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
     from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
 
+from knowledge_flow_backend.common.model_api_keys import openai_api_key_for_model
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
     ClickHouseVectorStorageConfig,
@@ -648,18 +649,20 @@ class ApplicationContext:
         if self._embedder_instance is not None:
             return self._embedder_instance
         cfg: ModelConfiguration = self.configuration.embedding_model
-        self._embedder_instance = get_embeddings(cfg)
+        self._embedder_instance = get_embeddings(cfg, openai_api_key=openai_api_key_for_model(cfg, "embeddings"))
         return self._embedder_instance
 
     def get_utility_model(self):
         if not self.configuration.chat_model:
             raise ValueError("Utility model configuration is missing.")
-        return get_model(self.configuration.chat_model)
+        cfg = self.configuration.chat_model
+        return get_model(cfg, openai_api_key=openai_api_key_for_model(cfg, "chat"))
 
     def get_vision_model(self):
         if not self.configuration.vision_model:
             raise ValueError("Vision model configuration is missing.")
-        return get_model(self.configuration.vision_model)
+        cfg = self.configuration.vision_model
+        return get_model(cfg, openai_api_key=openai_api_key_for_model(cfg, "vision"))
 
     def get_document_reranker(self) -> "DocumentReranker":
         """Share the configured reranker and its HTTP pool across search requests."""
@@ -1095,7 +1098,7 @@ class ApplicationContext:
         # Required env vars by provider
         provider = (embedding.provider or "").lower()
         if provider == ModelProvider.OPENAI.value:
-            _require_env("OPENAI_API_KEY")
+            openai_api_key_for_model(embedding, "embeddings")
         elif provider == ModelProvider.AZURE_OPENAI.value:
             _require_env("AZURE_OPENAI_API_KEY")
         elif provider == ModelProvider.AZURE_APIM.value:

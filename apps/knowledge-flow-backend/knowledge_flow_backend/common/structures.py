@@ -37,6 +37,8 @@ from fred_pod.common.structures import LogOutputFormat
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import WithJsonSchema
 
+from knowledge_flow_backend.common.model_api_keys import api_key_for_role
+
 """
 This module defines the top level data structures used by controllers, processors
 unit tests. It helps to decouple the different components of the application and allows
@@ -1111,7 +1113,6 @@ class RerankerSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     base_url: AnyHttpUrl
-    api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class RerankerModelConfiguration(BaseModel):
@@ -1136,7 +1137,7 @@ class Configuration(BaseModel):
     vision_worker_client_id: str = "agentic"
     ocr_model: Optional[ModelConfiguration] = Field(
         default=None,
-        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
+        description="Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR.",
     )
     crossencoder_model: Optional[ModelConfiguration] = None
     reranker_model: Optional[RerankerModelConfiguration] = Field(
@@ -1165,8 +1166,8 @@ class Configuration(BaseModel):
     @model_validator(mode="after")
     def require_reranker_credential(self) -> "Configuration":
         """Fail at startup if a configured remote reranker cannot authenticate."""
-        if self.reranker_model and not os.getenv(self.reranker_model.settings.api_key_env):
-            raise ValueError("Remote reranker API credential is missing")
+        if self.reranker_model:
+            api_key_for_role("reranker")
         return self
 
     @model_validator(mode="before")

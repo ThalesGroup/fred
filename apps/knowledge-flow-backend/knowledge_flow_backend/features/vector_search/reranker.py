@@ -17,13 +17,13 @@
 import asyncio
 import json
 import math
-import os
 from collections.abc import Callable, Sequence
 from threading import Lock
 from typing import Any
 
 import httpx
 
+from knowledge_flow_backend.common.model_api_keys import api_key_for_role
 from knowledge_flow_backend.common.structures import RerankerModelConfiguration
 
 MAX_RERANK_CANDIDATES = 100
@@ -135,9 +135,10 @@ class DocumentReranker:
         configuration = self._configuration
         client = self._client
         assert configuration is not None and client is not None
-        key = os.getenv(configuration.settings.api_key_env)
-        if not key:
-            raise RerankerUnavailable("Remote reranker unavailable")
+        try:
+            key = api_key_for_role("reranker")
+        except ValueError as error:
+            raise RerankerUnavailable("Remote reranker unavailable") from error
         payload = {
             "model": configuration.name,
             "query": _bounded_json_text(query),
