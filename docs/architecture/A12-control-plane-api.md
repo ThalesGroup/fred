@@ -295,33 +295,205 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 ## Consumption analytics
 
 `POST /analytics/query` replaces the two consumption GET routes. The
-[component contract](../../apps/control-plane/README.md#consumption-analytics)
-contains a request/response example, grouping rules, precision and budgets.
-[analytics/mod.rs](../../apps/control-plane/src/analytics/mod.rs) validates the
-batch, reuses the existing authorization decisions and executes compatible reads
-once inside a read-only repeatable-read transaction. The journal aggregation stays
-in [read.rs](../../apps/control-plane/src/sessions/usage/read.rs) and
-[read.sql](../../apps/control-plane/src/sessions/usage/read.sql).
+[component README](../../apps/control-plane/README.md#consumption-analytics) retains
+request/response examples and history configuration.
+[analytics/mod.rs](../../apps/control-plane/src/analytics/mod.rs) validates the batch,
+reuses the existing authorization decisions and executes compatible reads once
+inside a read-only repeatable-read transaction. The journal aggregation stays in
+[read.rs](../../apps/control-plane/src/sessions/usage/read.rs) and
+[read.sql](../../apps/control-plane/src/sessions/usage/read.sql); no frontend project
+expansion or raw-fact aggregation is required.
+
+### Scopes, measures and budgets
+
+A batch names 1..8 results. Names are distinct ASCII alphanumeric/underscore
+strings, 1..64 bytes. Scope is
+mandatory: `{"kind":"self","organization_id":"<working-organization UUID>"}`, or
+`{"kind":"space","id":"<team-or-project UUID>"}`. Self combines the verified
+subject AND that one organization. The organization must be active and the person
+must retain a live non-personal role somewhere in it, including governance roles.
+An old personal-space grant alone is insufficient; no organization or no current
+right is a refusal, never a global fallback. Within an authorized organization,
+old team/project memberships are not required to read one's own recorded facts.
+No additional consent gate is introduced for self. Service
+accounts and the `service_agent` role are refused. Collective reads retain
+admission/consent and direct `ReadUsage` (Owner/Analyst), with the existing
+outside-context, retirement and permission refusal precedence. Teams include
+active, retired and purged projects; projects include only themselves. No user,
+session or exchange identity is returned or accepted as a filter/group.
+
+Every result requires `[since, until)` with explicit offset-bearing timestamps,
+`since < until`, duration <=366 days and timezone `UTC`. Grouping is omitted/empty
+for a total, or exactly one of `time`, `agent`, `model`. Only time grouping accepts
+an optional bucket (`hour`, `day`, `week`); otherwise it is resolved automatically:
+hour through 48 hours, day through 92 days, week thereafter. Weeks start Monday.
+The first bucket may start before `since`, but facts remain clipped to the period.
+Empty time buckets contain zero. Groups with no facts are absent.
+
+Exact consumption measures are a distinct selection of `usage.input_tokens`,
+`usage.output_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens`,
+`usage.total_tokens`, `usage.recorded_exchanges`. Total tokens mean input + output,
+without adding cache counters again. All values are non-negative decimal integer
+strings, including SQL sums larger than bigint; JavaScript consumers must retain
+strings or use `BigInt`, never silently convert to `Number`. Units are `token` or
+`exchange`, and `value_type` is `integer`.
+
+Recorded exchanges are distinct `(session_id, exchange_id)` whose first recorded
+consumption belongs to the period. Previous reports are consulted even before
+`since`: HITL resumes add tokens but not an exchange. Generated titles also create
+recorded exchanges, so this measure does not count user messages. An exchange may
+appear under multiple models; model distinct counts are not additive. Agent keys
+are `(agent_instance_id, space_id)` with a nullable current/retained name; model
+keys are `(model_source_id, upstream_model_id)`.
+
+Agent/model rankings alone accept `limit` (1..100, default 100), ordered by input +
+output tokens descending and stable identity keys for ties. An additional SQL row
+detects truncation; `truncated:true` must be disclosed. Totals always include all
+facts, independent of rankings. No implicit Other row or inferred remainder is
+returned. Time series are never silently truncated.
+
+Each result selects 1..12 distinct measures. Limits are 64 KiB request,
+1000 points per series, 5000 maximum returned rows per
+batch and 2 MiB serialized response. Invalid fields/combinations return 422
+`invalid_fields`; row/byte budget failures return 422 `query_too_large`; oversized
+requests return 413 `request_too_large`. Unknown fields, additional dimensions,
+filters, comparison, multiple spaces in one scope, organization/platform scopes
+and non-UTC calendars are rejected. There is no storage selection or expression API.
+
+The service validates every query and authorizes every scope before reading data.
+All SQL result reads use one `REPEATABLE READ READ ONLY` transaction. Compatible
+scope/period requests share the full journal reader; multiple requested series
+intervals need separate reads, while totals/rankings reuse one. The output limit
+does not bound scanned facts or prior-exchange lookups: statements have a 5-second
+timeout, locks a 1-second timeout, and the whole operation (including pool waits)
+a 10-second deadline. A database/deadline failure returns 503
+`dependency_unavailable` without partial results or fabricated zeros.
+
+`calculation:exact` describes recorded facts only. Collection is best effort and
+`collection_completeness:unknown` states that no completeness watermark is measured.
+Each measure declares `calculation:exact` or `estimated`; the batch summary is
+`mixed` when both occur. Token-only consumers retain `calculation:exact`.
+
+The usage screen uses the generated RTK query client (POST remains the HTTP method).
+One SQL batch contains the five consumption results below, for one explicit period
+and either `scope:{kind:"self",organization_id:"<active UUID>"}` or
+`scope:{kind:"space",id:"<team/project UUID>"}`. Personal skills use a separate
+history batch, only in personal space:
+
+| Batch | Result name | Measures | Grouping |
+| --- | --- | --- | --- |
+| SQL | `total` | `usage.input_tokens`, `usage.output_tokens`, `usage.total_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens` | total |
+| SQL | `series` | `usage.total_tokens` | time |
+| SQL | `agents` | `usage.total_tokens` | agent, limit 100 |
+| SQL | `models` | `usage.total_tokens` | model, limit 100 |
+| SQL | `impact` | `usage.cost_eur`, `usage.co2e_grams`, `usage.energy_kwh` | total |
+| History | `skills` | `skills.user_loads`, `skills.agent_loads`, `skills.total_loads` | skill, limit 100 |
+
+SQL returns `results.total/series/agents/models/impact`; history returns `results.skills`.
+A row's `values` contains exact integer strings. Estimated decimals are instead in
+`estimates`, for example `"usage.cost_eur":{"value":null,"coverage":"unavailable","fallback":true}`.
+`coverage` is `complete`, `partial` or `unavailable`; `value:null` is not zero.
+Empty SQL consumption yields a calculated zero. Partial sums include only fully
+covered reports for that measure; they are not estimates of the uncovered portion.
+
+Estimates use every journal report before ranking truncation, with PostgreSQL numeric
+arithmetic. Rust embeds the same maintained
+[`model_impact_factors.yaml`](../../libs/fred-core/fred_core/kpi/model_impact_factors.yaml)
+that Python consumes; the Docker build includes that source. It documents the static
+Mistral LCA extrapolation and energy assumptions. Lookup uses `upstream_model_id`,
+with an explicitly flagged `default` for unlisted models. A known model's missing
+or zero coefficients are unavailable, not free. Input includes cache reads and
+creation: cost subtracts the clamped cache-read subset before charging its separate
+rate, never adds creation again; CO2e and energy use input + output. USD cost is
+converted with the catalog's static `usd_per_eur:1.12`, copied from Swift's display
+convention, not a market quote. Currently all cost coefficients are unpopulated;
+nonempty usage therefore has no cost estimate. No pricing or measurement claims
+follow from these estimates.
+
+Historical loads use `analytics/history.rs::Reader`, implemented by the OpenSearch
+adapter. The port accepts a trusted subject, server-resolved organization space IDs, validated period and ranking limit;
+its `skill_loads` and `completed_turns` operations fix the supported observations.
+The planner shares compatible scope/period/reader calls across named results.
+No engine type or DSL crosses into the service. Only self reads are supported;
+collective history is forbidden and mixed SQL/history batches fail before execution.
+Organization authorization and placement are resolved in a short SQL snapshot, released
+before HTTP. No HTTP history call runs under a SQL transaction and no common
+cross-source snapshot is claimed. A consumption-journal failure can leave skills
+available; a failure of SQL authorization itself must deny historical reads. The UI preserves the available batch when the other fails, uses session-bound
+RTK arguments including the organization and `currentData`, and explicitly refreshes fixed periods.
+Home requests one total named `usage` with tokens, CO2e and energy through the
+same generated query client and shared working organization.
+
+The adapter filters `dims.user_id`, mandatory `dims.space_id` terms from that organization,
+`metric.name`, `dims.skill_origin` and
+`@timestamp` in `[since,until)`. Counts are successful-load events, not `metric.value`
+or actor type. Like Swift, the grouping key is **skill name**, merging equal names
+across spaces and revisions within the working organization; skill ownership does
+not restrict self events. Placement follows the execution space. The Python KPI
+mapping now indexes the already-emitted `dims.space_id`; no second emitter was added.
+Old indexes missing this mapping are refused. Adding a mapping
+does not backfill old unindexed events; no shared-index repair is performed.
+
+A single composite aggregation gathers up to 10,001 names across all shards,
+then sorts exact counts by total descending/name ascending and returns the requested
+top-N with truncation. More than 10,000 names is an explicit budget error, not an
+approximate ranking. Response bytes are bounded at 8 MiB internally and 2 MiB publicly.
+Mapping incompatibility, absent index, partial shards, timeout and missing source
+are unavailable errors, never empty success. Collection completeness remains unknown.
+
+### Frontend consumption wiring and verification boundary
+
+[TeamUsagePage](../../apps/frontend/src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx)
+uses `useWorkingOrganization()` and its server-owned `memberships.currentData`.
+The route UUID must match a team/project in the working organization, with a direct
+Owner or Analyst role. Missing, loading, failed or mismatched context skips the
+collective batch. Organization ownership and technical administration do not imply
+child-space ReadUsage. Backend admission, consent and authorization remain final.
+The sidebar and usage page share the direct-membership prefilter
+[`canReadSpaceUsage`](../../apps/frontend/src/rework/core/utils/spaceUsage.ts).
+The [space navigation](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
+keeps Consumption in the existing settings navigation, reached through the header
+gear, with no entry in the main content menu. Eligible teams/projects remain
+accessible without content Read or membership Manage: the gear opens consumption
+directly for an Analyst without Manage and exposes no management links;
+the personal shortcut remains separate. The
+[navigation tests](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.test.tsx)
+cover these entry points and their context/error/revocation gates.
+The existing provider refreshes authority through its bounded membership refresh
+and window-focus handling; this screen adds no polling.
+
+The collective subscription is independent of Swift bootstrap and uses one
+`useQueryAnalyticsQuery` batch for total, time, agents, models and impact. It is
+separate from the self batch and personal skills. `sessionQueryArgs` binds the RTK
+cache to identity; the scope and explicit period form the rest of the key.
+`currentData`, current membership gating and error/fetching states prevent previous
+results being presented after a context change or revocation. Explicit refresh
+refetches collective consumption even for an unchanged fixed period.
+[ConsumptionUsage](../../apps/frontend/src/rework/components/pages/TeamUsagePage/ConsumptionUsage.tsx)
+shares precision, graphs and Rust estimates with
+[PersonalUsage](../../apps/frontend/src/rework/components/pages/TeamUsagePage/PersonalUsage.tsx).
+Totals retain `BigInt`; an unsafe chart counter becomes an exact table. Rankings
+show truncation and estimates retain coverage/fallback markers. No browser estimate
+is recomputed from total tokens.
+
+Skills, activity, resource counts and storage in this page retain their legacy
+clients and permissions, independently of collective ReadUsage. The administration
+dashboard also retains the shared legacy consumption hooks. Their presence is not
+an assertion of Weaver reception.
 
 The [usage integration fixtures](../../apps/control-plane/tests/support/usage.rs)
 cover isolation, collective rights, purge, HITL, numeric precision, refusal limits,
-source failures and concurrent snapshot reads. Planner tests cover reuse across
-named results. These checks establish backend contracts, not dashboard reception.
-Consumers include [the operator pipeline](../../apps/frontend/src/rework/features/pipeline/weaver/platformChecks.ts)
-and the [personal block](../../apps/frontend/src/rework/components/pages/TeamUsagePage/PersonalUsage.tsx).
-The personal block requires `organizationId` from the shared working-organization
-context before reading SQL/estimation and skill-history batches.
-[TeamUsagePage](../../apps/frontend/src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx)
-and the home consumption tiles read the shared `useWorkingOrganization()` hook;
-a missing, loading or failed context prevents every personal analytics read.
-No screen adds an organization selector or falls back to global consumption. The
-[historical port](../../apps/control-plane/src/analytics/history.rs) accepts self scope
-within one currently authorized organization only; its [OpenSearch adapter](../../apps/control-plane/src/analytics/opensearch.rs)
-keeps engine details outside the service and refuses incomplete source responses.
-[Adapter tests](../../apps/control-plane/tests/analytics_history.rs) cover HTTP and
-three-shard aggregation. Shared YAML factors feed journal-derived estimates, with
-per-measure precision, missing coverage and fallback markers. Collective dashboards
-retain their historical clients; this source wiring does not attest browser reception.
+source failures and concurrent snapshots. Planner tests cover compatible read reuse.
+[History adapter tests](../../apps/control-plane/tests/analytics_history.rs) cover
+HTTP and three-shard aggregation. The
+[collective UI tests](../../apps/frontend/src/rework/components/pages/TeamUsagePage/collectiveUsage.test.tsx)
+exercise the actual generated client, working-organization provider and RTK cache
+against a simulated HTTP boundary, including role, scope, revocation, late-response
+and explicit-refresh cases. The
+[shared rendering tests](../../apps/frontend/src/rework/components/pages/TeamUsagePage/personalUsage.test.tsx)
+cover exact counters, chart overflow, missing values, errors and estimate coverage.
+This consumption wiring is implemented; its new tests, code quality and browser
+reception are to be executed by Dimi, not attested by source presence.
 
 The home activity wiring also uses this service: the
 [personal activity contract](../../apps/control-plane/README.md#personal-activity-implementation-reception-pending)

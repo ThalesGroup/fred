@@ -15,15 +15,14 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.document_scope import document_access_context
-from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
+from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person
 
 
 async def published_markdown(person: AssertedUser, document_uid: str, access: DocumentAccessContext) -> str:
-    authorized_space_ids = await require_space_read(person, access.space_id)
     context = ApplicationContext.get_instance()
     try:
         async with context.get_pg_async_engine().connect() as conn:
-            scope = await resolve_scope(conn, access, user_id=person.uid, authorized_space_ids=authorized_space_ids)
+            scope = await resolve_scope(conn, access, user_id=person.uid)
             try:
                 document_id = UUID(document_uid)
             except ValueError:

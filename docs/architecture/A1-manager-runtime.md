@@ -239,8 +239,10 @@ The anchor must be accessible. Each included ancestor must independently be read
 children and siblings are excluded, and a personal space has no ancestors.
 `levels` only narrows the corpus. The explicit anchor remains available for separate
 conversation/attachment checks even when the corpus is empty.
-Knowledge Flow requests this scope once per incoming documentary operation, then
-checks actual publication, lifecycle, generation and attachment provenance locally.
+Managed turns receive this corpus in their runtime admission binding. The pod
+relays it to Knowledge Flow, which checks actual publication, lifecycle, generation
+and attachment provenance without refreshing admission rights; see
+[document access within a turn](A6-security.md#document-search-within-a-turn).
 
 ## Memberships
 

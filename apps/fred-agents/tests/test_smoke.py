@@ -128,6 +128,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
         {
             "subject_id": "smoke-user",
             "attachments": [],
+            "authorized_space_ids": [SPACE_ID],
             "run_id": request.url.params["run"],
             "conversation_id": request.url.params["conversation"],
             "space": {

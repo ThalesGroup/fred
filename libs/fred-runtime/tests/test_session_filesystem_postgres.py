@@ -9,12 +9,16 @@ from fred_runtime.conversation_filesystem import (
     _FILESYSTEM_WRITES,
     ConversationFilesystemService,
 )
+from fred_runtime.runtime_support.active_turn import ActiveTurnStore
 from fred_runtime.runtime_support.session_fence import (
     SessionFence,
     SessionPurgedError,
     SessionWritesPending,
 )
-from fred_sdk.contracts.runtime import ConversationScratchpadStorageError
+from fred_sdk.contracts.runtime import (
+    ConversationScratchpadQuotaExceededError,
+    ConversationScratchpadStorageError,
+)
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from test_conversation_filesystem import _MemoryFilesystem
@@ -128,6 +132,73 @@ async def test_uncertain_remote_result_survives_restart_and_never_expires(databa
         with pytest.raises(IntegrityError):
             await _delete_root(cp)
     assert storage.files
+
+
+@pytest.mark.parametrize("namespace_id", ("scratchpad", ".deep"))
+async def test_turn_handoff_recounts_a_late_write_without_promising_strict_quota(
+    database,
+    namespace_id: str,
+) -> None:
+    cp, runtime = database
+    await _migrate(runtime)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    class SlowFilesystem(_MemoryFilesystem):
+        async def write(self, path: str, data: bytes | str) -> None:
+            entered.set()
+            await release.wait()
+            await super().write(path, data)
+
+    storage_a, storage_b = SlowFilesystem(), _MemoryFilesystem()
+    storage_b.files = storage_a.files
+    service_a = ConversationFilesystemService(
+        storage_a, SESSION, fence=SessionFence(runtime)
+    )
+    service_b = ConversationFilesystemService(
+        storage_b, SESSION, fence=SessionFence(runtime)
+    )
+    first = service_a.namespace(namespace_id, max_bytes=100, max_files=10)
+    second = service_b.namespace(namespace_id, max_bytes=100, max_files=10)
+    # Warm the second process before the first process changes storage.
+    await second.write_text("seed", "")
+    leases = ActiveTurnStore(runtime)
+    first_turn = await leases.take(SESSION)
+    assert first_turn is not None
+    second_turn = None
+    writer = asyncio.create_task(first.write_bytes("late", b"x" * 40))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        await first_turn.release()
+        second_turn = await leases.take(SESSION)
+        assert second_turn is not None
+        # The new lease does not wait for remote PUTs from the previous turn.
+        await second.write_bytes("current", b"x" * 80)
+        with pytest.raises(IntegrityError):
+            await _delete_root(cp)
+        release.set()
+        await asyncio.gather(*tuple(_FILESYSTEM_WRITES))
+        assert sum(map(len, storage_b.files.values())) == 120
+        before = dict(storage_b.files)
+        with pytest.raises(ConversationScratchpadQuotaExceededError) as error:
+            await second.write_text("refused", "x")
+        assert (error.value.resource, error.value.attempted) == ("bytes", 121)
+        assert storage_b.files == before
+        # Refusing a quota must not register an uncertain object operation.
+        fence = SessionFence(runtime)
+        await fence.close(SESSION)
+        await service_b.purge()
+        await fence.acknowledge_purge(SESSION)
+        await _delete_root(cp)
+    finally:
+        release.set()
+        await asyncio.gather(writer, return_exceptions=True)
+        await asyncio.gather(*tuple(_FILESYSTEM_WRITES), return_exceptions=True)
+        await first_turn.release()
+        if second_turn is not None:
+            await second_turn.release()
 
 
 async def test_writer_and_close_serialize_at_first_operation(database):

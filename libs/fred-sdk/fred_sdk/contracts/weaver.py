@@ -387,9 +387,12 @@ class WeaverRuntimeResolution(ResolverFact):
     skill_files: dict[str, str] | None = None
     title: TitleAdmission | None = None
     attachments: tuple[RuntimeAttachment, ...]
+    authorized_space_ids: tuple[UUID, ...]
 
     @model_validator(mode="after")
     def owning_organization(self) -> Self:
+        if len(set(self.authorized_space_ids)) != len(self.authorized_space_ids):
+            raise ValueError("Duplicate authorized spaces")
         if self.title and not self.conversation_id:
             raise ValueError("Title requires a conversation")
         if self.attachments and not self.conversation_id:

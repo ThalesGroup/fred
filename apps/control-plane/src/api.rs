@@ -544,22 +544,24 @@ async fn rename_folder(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DeleteFolderQuery {
-    /// Check all child rows under the mutation lock; the default keeps recursive deletion.
+    /// Refuse live child folders; both modes refuse live documents and pending uploads.
     #[serde(default)]
     empty_only: bool,
 }
 
 #[utoipa::path(
     delete, path = "/folders/{id}",
-    params(("id" = Uuid, Path), ("empty_only" = Option<bool>, Query, description = "Refuse deletion if any child folder or document remains")),
+    params(("id" = Uuid, Path), ("empty_only" = Option<bool>, Query, description = "Refuse retirement if any live child folder remains; live documents and pending uploads always prevent retirement")),
     responses(
-        (status = 204, description = "Success"),
+        (status = 200, description = "Already purged", body = crate::lifecycle::Receipt),
+        (status = 202, description = "Retired; physical cleanup is asynchronous", body = crate::lifecycle::Receipt),
         (status = 400, description = "Invalid application request", body = crate::error::ErrorBody),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 409, description = "Request failed", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
+        (status = 503, description = "Deletion unavailable", body = crate::error::ErrorBody),
     )
 )]
 async fn delete_folder(
@@ -567,34 +569,12 @@ async fn delete_folder(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<DeleteFolderQuery>,
-) -> AppResult<StatusCode> {
-    let folder = db::folder(&s.pool, id).await?;
-    let (mut tx, _) =
-        spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
-    db::folder(&mut *tx, id).await?;
-    // The exclusive organization guard also excludes new uploads in descendants.
-    let pending: bool = sqlx::query_scalar(
-        "with recursive subtree as (
-            select id from folder where id=$1
-            union all
-            select f.id from folder f join subtree p on f.parent_id=p.id
-        ) select exists(select 1 from document_upload u join subtree f on f.id=u.folder_id
-            where u.space_id=$2 and u.status='pending')",
-    )
-    .bind(id)
-    .bind(folder.space_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if pending {
-        return Err(AppError::Conflict(
-            "folder has pending document uploads".into(),
-        ));
-    }
-    if !db::delete_folder(&mut *tx, id, query.empty_only).await? {
-        return Err(AppError::Conflict("folder is not empty".into()));
-    }
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
+    let receipt = s
+        .lifecycle
+        .accept_folder(&s.pool, &user, id, query.empty_only)
+        .await?;
+    Ok(crate::lifecycle::deletion_response(&s.lifecycle.config, receipt, false).await)
 }
 
 // ---------------------------------------------------------------- documents

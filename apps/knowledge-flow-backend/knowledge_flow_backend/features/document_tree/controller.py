@@ -11,7 +11,7 @@ from fred_core.security.delegation import AssertedUser
 from knowledge_flow_backend.features.document_scope import document_access_context
 from knowledge_flow_backend.features.document_tree.service import DocumentTreeService
 from knowledge_flow_backend.features.document_tree.structures import DocumentTreeResponse
-from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
+from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person
 
 
 class DocumentTreeController:
@@ -32,8 +32,7 @@ class DocumentTreeController:
             context: DocumentAccessContext = Depends(document_access_context),
             person: AssertedUser = Depends(delegated_person),
         ) -> DocumentTreeResponse:
-            authorized_space_ids = await require_space_read(person, context.space_id)
             try:
-                return await self.service.tree(context=context, user_id=person.uid, authorized_space_ids=authorized_space_ids, folder_id=folder_id, limit=limit)
+                return await self.service.tree(context=context, user_id=person.uid, folder_id=folder_id, limit=limit)
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None

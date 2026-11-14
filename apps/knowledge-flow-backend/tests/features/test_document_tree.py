@@ -36,26 +36,27 @@ PERSON = AssertedUser(uid="alice", client_id="pod", run_id="turn", agent_id="age
 
 @pytest.fixture
 def api(monkeypatch):
-    admission = AsyncMock(return_value=(ANCESTOR, SPACE))
     listing = AsyncMock(return_value=DocumentTreeResponse())
-    monkeypatch.setattr(controller, "require_space_read", admission)
     monkeypatch.setattr(controller.DocumentTreeService, "tree", listing)
     app, router = FastAPI(), APIRouter(prefix="/custom/kf", dependencies=[Depends(declare_delegation_parameters)])
     controller.DocumentTreeController(router)
     app.include_router(router)
     app.dependency_overrides[delegated_person] = lambda: PERSON
     declare_document_context_openapi(app)
-    return app, admission, listing
+    return app, listing
 
 
 def test_tree_admission_and_contract(api):
-    app, admission, listing = api
-    context = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope.from_ids([str(FOLDER)]))
+    app, listing = api
+    context = DocumentAccessContext(
+        space_id=SPACE,
+        authorized_space_ids=(ANCESTOR, SPACE),
+        document_scope=DocumentScope.from_ids([str(FOLDER)]),
+    )
     with TestClient(app) as client:
         response = client.get("/custom/kf/documents/tree", params={"folder_id": str(FOLDER), "limit": 7}, headers={DOCUMENT_CONTEXT_HEADER: context.model_dump_json()})
     assert response.json() == {"spaces": [], "folders": [], "documents": [], "truncated": False}
-    admission.assert_awaited_once_with(PERSON, SPACE)
-    listing.assert_awaited_once_with(context=context, user_id="alice", authorized_space_ids=(ANCESTOR, SPACE), folder_id=FOLDER, limit=7)
+    listing.assert_awaited_once_with(context=context, user_id="alice", folder_id=FOLDER, limit=7)
     schema = app.openapi()
     operation = schema["paths"]["/custom/kf/documents/tree"]["get"]
     assert operation["operationId"] == "list_document_tree"
@@ -74,19 +75,37 @@ def test_tree_admission_and_contract(api):
 
 @pytest.mark.parametrize("query", [{"limit": 0}, {"limit": 5001}, {"folder_id": "not-a-uuid"}])
 def test_invalid_navigation_is_422(api, query):
-    app, _, listing = api
+    app, listing = api
     with TestClient(app) as client:
-        response = client.get("/custom/kf/documents/tree", params=query, headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()).model_dump_json()})
+        response = client.get(
+            "/custom/kf/documents/tree",
+            params=query,
+            headers={
+                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
+                    space_id=SPACE,
+                    authorized_space_ids=(ANCESTOR, SPACE),
+                    document_scope=DocumentScope(),
+                ).model_dump_json()
+            },
+        )
     assert response.status_code == 422
     listing.assert_not_awaited()
 
 
 def test_folder_refusal_retains_the_shared_error_envelope(api):
-    app, _, listing = api
+    app, listing = api
     listing.side_effect = HTTPException(404, "folder_not_found")
     with TestClient(app) as client:
         response = client.get(
-            "/custom/kf/documents/tree", params={"folder_id": str(FOLDER)}, headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()).model_dump_json()}
+            "/custom/kf/documents/tree",
+            params={"folder_id": str(FOLDER)},
+            headers={
+                DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(
+                    space_id=SPACE,
+                    authorized_space_ids=(ANCESTOR, SPACE),
+                    document_scope=DocumentScope(),
+                ).model_dump_json()
+            },
         )
     assert response.status_code == 404
     assert response.json() == {"detail": "folder_not_found"}
@@ -140,9 +159,14 @@ async def corpus(monkeypatch):
 
 async def tree(corpus, scope=DocumentScope(), folder=None, limit=1000, spaces=(ANCESTOR, SPACE)):
     return await corpus.tree(
-        context=DocumentAccessContext(space_id=SPACE, document_scope=scope, conversation_id=UUID(int=100), attachment_ids=(ATTACHED,)),
+        context=DocumentAccessContext(
+            space_id=SPACE,
+            authorized_space_ids=spaces,
+            document_scope=scope,
+            conversation_id=UUID(int=100),
+            attachment_ids=(ATTACHED,),
+        ),
         user_id="alice",
-        authorized_space_ids=spaces,
         folder_id=folder,
         limit=limit,
     )

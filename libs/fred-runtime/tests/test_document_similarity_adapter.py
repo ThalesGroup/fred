@@ -136,6 +136,7 @@ async def test_forwards_a_targeted_call_and_returns_typed_hits(
         "question": "anchor text",
         "document_context": DocumentAccessContext(
             space_id=UUID(SPACE_ID),
+            authorized_space_ids=(UUID(SPACE_ID),),
             document_scope=DocumentScope.from_ids(document_ids=[DOC_A]),
         ),
         "top_k": 5,

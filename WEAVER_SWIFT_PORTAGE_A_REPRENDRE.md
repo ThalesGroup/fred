@@ -1,10 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `49aaea6820556c63ff4e688dbfc7f8f702cad9e9`** (fusion décrite section 17 ; parents Weaver `58cc2ffe4` et Swift `49aaea682`).
-Cette borne sert à inventorier les
-prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
-restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
-validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
+**Borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36`**, vérifiée dans les parents du merge `74b5f3106` (Weaver `5052116a7`, Swift `b7bf4412a`).
+La tranche suivante vers `cf698a739` est préparée localement le 14 novembre,
+sans commit de fusion ; voir la [section 20](#20-integration-swift-du-14-novembre-2026).
+Les réceptions et comportements différés restent un inventaire distinct ; leur
+présence dans l'ascendance ne vaut pas validation produit. Les repères
+`53e39f6f7` ci-dessous concernent la tranche initiale.
 
 **Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
@@ -12,9 +13,9 @@ côté à la demande de l'utilisateur, sans validation fournisseur. Les récepti
 k3d/plateforme et les raccords arc42 correspondants restent à effectuer.
 
 La [méthode de merge](docs/SWIFT_WEAVER_MERGES.md) décrit la procédure réutilisable.
-**Pilotage du 12 novembre :** priorité au merge interactif de la tranche `222bc60ac`
-en [section 18](#18-audit-swift-et-reprise-kpi---12-novembre-2026). Aucun merge
-effectué à ce stade ; la borne intégrée ci-dessus reste inchangée.
+**Historique du 12 novembre :** merge de la tranche `222bc60ac` détaillé
+en [section 18](#18-audit-swift-et-reprise-kpi---12-novembre-2026), suivi du merge
+`b7bf4412a` le 13 novembre. La borne courante est celle de l'en-tête.
 Ce dossier conserve les sources Swift, les décisions et les preuves de la tranche
 initiale ; ce n'est pas une liste de missions à relancer intégralement.
 
@@ -2004,78 +2005,130 @@ ses migrations Alembic CP ni ses équipes par défaut comme modèle métier Weav
 
 ### Socle Weaver vérifié dans le code
 
-| Contrat | Sources et consommateurs | Conclusion de l'audit |
-| --- | --- | --- |
-| Consommation modèles | `apps/control-plane/migrations/0001_schema.sql`, table `model_usage` ; `src/sessions/usage.rs` et `src/sessions/usage/read.rs` dans ce composant ; `libs/fred-runtime/fred_runtime/app/usage.py` et ses appels dans `agent_app.py` | Journal SQL, attribution serveur, rapports atomiques et idempotents ; lectures personnelles et d'espace déjà implémentées. Les tokens et le cache existent : ne pas créer une deuxième autorité dans OpenSearch. |
-| API et génération | `GET /me/usage`, `GET /spaces/{space_id}/usage` ; `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`, hooks `useMyUsageQuery` et `useSpaceUsageQuery` | Contrat déjà généré ; les contrôles du pipeline Weaver le consomment. Les dashboards historiques utilisent encore `legacyControlPlaneApiEnhancements`. |
-| Droits de consommation | `apps/control-plane/src/authorization.rs`, `SpacePermission::ReadUsage` ; `docs/architecture/A7-action-role-matrix.md`, Consumption reads | Usage personnel pour la personne authentifiée ; collectif pour Owner/Analyst directs, pas Editor. Equipe : agrégation de ses projets, même retirés/purgés ; organisation non supportée par cette route. |
-| Stockage et supervision | `apps/control-plane/migrations/0014_conversation_files.sql` ; `apps/control-plane/src/supervision/mod.rs` et ses modèles/store | Réutiliser les comptes de stockage et la supervision d'organisation ; ne pas sommer comptes locaux et total organisation qui se recouvrent. Ne pas confondre quota logique, réservations et octets physiques à purger. |
-| Evénements outils et modèles | `libs/fred-runtime/fred_runtime/runtime_support/tool_execution.py` ; `libs/fred-core/fred_core/kpi/` | Emetteurs et stockage KPI Python conservés. Le delta Swift ajoute notamment `capability_id`, `cache_read_tokens` et `tool_count` au mapping ; cela ne prouve pas un suivi complet des connexions MCP gérées dans Weaver. |
-| Dashboards | `apps/frontend/src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx` et `admin/AnalyticsPage/AnalyticsPage.tsx` ; `apps/frontend/src/common/router.tsx` | Ecrans et routes présents, lectures analytics historiques non raccordées au Rust. Présence des écrans et tests historiques ne vaut pas réception fonctionnelle. |
+**Suivi KPI consolidé le 13 novembre 2026 par Codex, maître d'œuvre à la demande
+de Dimi.** Etat relu sur `gap/kpi-2`, commit `a11652f00` (checkout propre au départ).
+Cette section et les lots KPI ci-dessous remplacent les hypothèses KPI du 12 novembre ;
+les autres comptes rendus de merge de ce fichier restent historiques et inchangés.
 
-Limite à traiter selon l'usage voulu : `report_run_usage` effectue au plus deux
-tentatives HTTP sous délai, puis peut journaliser `outcome=lost`. Le journal SQL
-déduplique les rapports reçus mais ne garantit pas une livraison durable des
-consommations. Avant facturation ou quota bloquant de tokens, décider et éprouver
-la garantie de collecte ; ne pas annoncer une comptabilité exhaustive sur cette base.
+Référence UI Swift relue : checkout `/home/dimi/Work/swift/fred`, commit `b7bf4412a`,
+notamment `HomePage`, `TeamUsagePage`, `PersonalUsage` et
+`admin/AnalyticsPage/AnalyticsView.tsx` avec ses sept composants `tabs/*`.
+Les modifications locales Swift étrangères aux KPI n'ont pas été touchées.
+`332a5a6a3` reste la référence historique de l'apport analytics différé au merge.
+
+**Règle de réception : conserver la présentation, les composants et les fonctions
+utiles de Swift, sans nouvelle disposition ni navigation non demandée.**
+Consommation se trouve derrière la roue dentée équipe/projet, pas dans le menu
+principal ; le titre retenu est « Consommation ». Le raccord partiel actuel ne
+constitue pas la réception du dashboard Swift complet ni de ses onglets.
+
+| Socle actuel | Source de vérité et chemin de lecture | Etat / limite |
+| --- | --- | --- |
+| API commune | `POST /control-plane/v1/analytics/query`, client généré ; [service Rust](apps/control-plane/src/analytics/mod.rs) | Remplace les deux anciennes routes GET de consommation. Validation, autorisation, budgets et mutualisation des lectures communs ; aucun service/preset propre à l'accueil. |
+| Consommation et estimations | Journal SQL `model_usage` -> [lecteur](apps/control-plane/src/sessions/usage/read.rs) et SQL associé ; facteurs maintenus partagés avec Python | Tokens entrée/sortie/cache, séries, agents/modèles, coût/CO2e/énergie raccordés. Calcul exact sur les rapports reçus, estimations avec couverture ; collecte non garantie exhaustive. |
+| Conversations conservées | `session_metadata.created_at` -> `read::retained_conversations` | Créations encore conservées, utilisateur ET organisation ; suppression exclue dès le marquage. Ce choix accepté diffère du compteur historique Swift. |
+| Activité et skills personnels | [service historique](apps/control-plane/src/analytics/history.rs) -> abstraction historique -> adaptateur configuré | Tours observés, agents distincts/classements et chargements de skills. Pas d'OpenSearch dans le contrat public ou l'UI ; historique incomplet possible. |
+| Historique déployé | TLS HTTPS, identité de lecture dédiée à `weaver-kpi`, mapping des quantités corrigé | Migration et contrôles opérateur réalisés ; aucune reprise des anciennes données. Les événements sans organisation identifiable ne deviennent pas comptables par ce seul changement. |
+| Stockage / supervision | Propriétaires SQL et supervision Weaver existants | Réutilisables pour les futurs raccords ; présence du socle ne prouve pas le raccord des cartes legacy. Ne pas additionner des budgets locaux et organisationnels qui se recouvrent. |
+
+Contrat détaillé, droits, précision, budgets et états : [annexe A12](docs/architecture/A12-control-plane-api.md#consumption-analytics).
+Exemples REST finaux et chemins Rust -> lecteurs : [README Control Plane](apps/control-plane/README.md#consumption-analytics)
+et [activité personnelle](apps/control-plane/README.md#personal-activity-implementation-reception-pending).
+Ce suivi ne duplique pas ces contrats. Les rapports de consommation peuvent encore
+être perdus après les tentatives bornées de livraison ; ne pas en déduire une
+comptabilité exhaustive ou un quota bloquant fiable sans traiter ce besoin séparément.
 
 ### Fonctionnalités analytics à retrouver
 
-Phare produit demandé : rester fidèle aux dashboards Swift et les compléter sur
-les ressources Weaver. La référence du nouveau tableau est
-`332a5a6a3:apps/frontend/src/rework/components/pages/admin/AnalyticsPage/AnalyticsView.tsx` ;
-les définitions détaillées restent consultables dans les presets et tests de ce
-commit, sans recopier le CP Python dans Weaver.
+Ce tableau est le point de suivi KPI unique. **Implémenté** décrit le raccord dans
+le code, **tests réussis** une exécution observée, **déployé** une livraison rapportée
+ou vérifiée, **réceptionné** un parcours et ses résultats acceptés par Dimi.
+Un écran legacy présent, un zéro affiché ou un test isolé ne valent pas réception.
+Les validations V1 à V3 sont détaillées sous le tableau ; elles ne sont pas cumulatives.
 
-| Famille | Valeur à conserver ou compléter | Base et adaptation attendue |
+| Dashboard / partie Swift | Raccord Weaver au 13 novembre | Tests / déploiement / réception | Reste à traiter |
+| --- | --- | --- | --- |
+| Accueil - Votre activité : nouvelles conversations, messages envoyés, agents utilisés, mes équipes/espaces, agents les plus utilisés | Implémenté : trois compteurs et deux classements via SQL et historique ; 7/30/90 jours et période précédente de même durée | Régressions présentes ; livré dans `gap/kpi-1`, puis intégré à la branche courante. Déploiement rapporté par Dimi ; réception chiffrée complète à consigner | Rejouer les parcours isolation/refus/révocation et les cas métier ci-dessous ; ne pas confondre avec l'activité collective. |
+| Accueil - IA responsable : tokens et impact | Implémenté via analytics SQL et estimations Rust | Livraison antérieure conservée ; réception chiffrée à consigner séparément du compteur d'activité | Vérifier couverture, modèles inconnus et absence de faux zéro. |
+| Accueil - conversations inactives / nettoyage | Encore legacy dans `ResponsibleAiSection` | Non réceptionné Weaver dans le lot KPI | Hors des lots livrés ; traiter le compteur et l'action de nettoyage dans un lot distinct autorisé. |
+| Accueil - Tendances | Catalogue des prompts publié raccordé à Weaver, métriques explicitement indisponibles | Classement/période/courbes d'usage non raccordés, donc non réceptionnés | Définir le fait d'utilisation d'un prompt, puis rétablir classement et séries ; les huit cartes de catalogue ne sont pas un top d'usage. |
+| Espace personnel - Ma consommation | Implémenté : total, entrée/sortie/cache, séries, agents/modèles et estimations, rendu partagé `ConsumptionUsage` | Inclus dans V1/V2/V3 ; déploiement rapporté, réception personnelle complète à consigner | Rejouer après changement de compte/organisation et indisponibilité. |
+| Espace personnel - Mes skills | Implémenté via batch historique séparé, chargements utilisateur/agent/total ; affiché seulement dans l'espace personnel | Code et régressions présents ; ne pas assimiler les tests de consommation à une réception réelle des événements skills | Vérifier les événements réels, attributions et troncature ; distinguer chargement et exécution. |
+| Equipe / projet - bloc Consommation | Implémenté sur `gap/kpi-2` : un batch collectif de cinq résultats ; trois lectures legacy de consommation retirées de cette page | V1/V2 puis V3 ; déploiement du correctif navigation confirmé par Dimi. Réception exhaustive Owner puis Analyst à consigner | Vérifier valeurs réelles, refus/révocation, actualisation à période fixe et navigation derrière la roue dentée. |
+| Equipe / projet - activité, skills collectifs, ressources et stockage | Restent legacy avec leurs permissions séparées dans `TeamUsagePage` | Non raccordés / non réceptionnés Weaver | Porter les lectures nécessaires sans étendre les droits à partir de `ReadUsage` et sans casser les consommateurs legacy restants. |
+| Dashboard Swift complet - Vue d'ensemble (`overview`) | Non porté comme onglet : utilisateurs actifs/nouveaux, visiteurs, rétention, volumes et coût | Equipe : à faire ; administration : à faire | Définir faits, dénominateurs et dates ; réutiliser consommation/activité sans confondre requête HTTP, visiteur et tour. |
+| Dashboard Swift complet - Adoption (`adoption`) | Non porté : entonnoir, activation sous 7 jours, délai au premier message, cohortes | Equipe : à faire ; administration : à faire | Identifier les faits persistants réellement disponibles et la collecte manquante éventuelle. |
+| Dashboard Swift complet - Usage (`usage`) | Non porté : messages dans le temps, conversations, profondeur/intensité, distributions et concentration | Equipe : à faire ; administration : à faire | Le bloc de tokens livré ne remplace pas cet onglet ; cadrer les mesures d'activité collective. |
+| Dashboard Swift complet - Equipes (`teams`) | Non porté : membres/actifs, parts et évolutions, répartition des conversations | Equipe : à faire ; administration : à faire | Cadrer équipe/projet/organisation et les agrégats autorisés, sans accès global implicite. |
+| Dashboard Swift complet - Agents et outils (`agents`) | Non porté : agents disponibles/utilisés, classements, capabilities et skills | Equipe : à faire ; administration : à faire | Réutiliser les identités stables ; distinguer configuration disponible, chargements et appels observés. Le top personnel de l'accueil n'est pas cette vue collective. |
+| Dashboard Swift complet - Qualité et coût (`cost`) | Onglet non porté ; briques consommation/estimations déjà disponibles | Equipe : à faire ; administration : à faire | Réutiliser ces briques, compléter erreurs et ratios/coûts par utilisateur autorisés ; erreurs techniques ne signifient pas qualité des réponses. |
+| Dashboard Swift complet - Technique (`tech`) | Non porté ; ancien `admin/AnalyticsPage` encore sur hooks legacy | Administration : à faire ; absent du dashboard équipe Swift | Stockage/quotas, recherche web si activée, longueur des prompts systèmes et assistant de création ; droits de supervision à cadrer. |
+| Fonctions transverses - filtres, comparaisons, actualisation, détails | Périodes et actualisation des surfaces livrées conservées ; API bornée UTC | Tests des lots livrés seulement ; pas de réception globale du tableau Swift | Inventorier presets, calendrier/personnalisation, fuseau, jours inclus/exclus et filtres utilisateurs avant chaque onglet ; ne pas promettre un filtre non supporté. |
+| Export Excel Swift | Non raccordé à l'analytics Weaver | A faire / non réceptionné | Même périmètre autorisé, données et périodes que l'écran, types exacts et FR/EN ; pas de contournement des droits par export. |
+| Extension Weaver - MCP par connexion/outil | A instruire, au-delà de la référence Swift | Aucun lot de collecte supplémentaire livré ici | Montrer le manque concret ; réutiliser l'instrumentation partagée, UUID de connexion et attribution, distinguer tentative/retry/annulation sans secrets ni arguments d'outils. |
+
+La référence Swift expose six onglets collectifs à l'équipe (tous sauf Technique),
+plus « Ma consommation », et sept onglets à l'administration. Weaver ne possède
+pas encore ce parcours complet : son dashboard administratif reste une ancienne
+page legacy. Les agents récents, le catalogue et les fonctions de marketplace
+hors métriques ne sont pas des travaux KPI de ce suivi.
+
+#### Décisions acquises et frontières encore à trancher
+
+- **Personnel** : utilisateur connecté ET organisation de travail autorisée,
+  contexte `useWorkingOrganization`, aucune sélection supplémentaire ou repli global.
+- **Consommation collective** : Owner/Analyst directs de l'équipe/projet ; Analyst
+  conserve ce droit. L'ancien arbitrage « Owner seul ? » est clos pour ce périmètre.
+  Editor, Admin technique et Owner parent seuls n'acquièrent aucun droit collectif.
+  Lire la consommation ne confère pas `Manage` ni accès aux autres cartes legacy.
+- **Organisation, plateforme et autres mesures collectives** : contrat à définir
+  par le prochain lot concerné ; les droits de consommation ne sont pas une
+  autorisation générale d'adoption, de suivi individuel ou de supervision.
+- **Messages envoyés** : compter `agent.turn_completed`, comme Swift, avec erreurs
+  et exécutions de pause/reprise HITL observées ; exclure les titres. Ne pas remplacer
+  par `usage.recorded_exchanges` ou dédupliquer silencieusement par message/retry.
+- **Suppressions** : conversations nouvellement créées et encore conservées côté
+  SQL ; observations historiques selon leur rétention. Les cas détaillés de retrait
+  des équipes et suppression d'agents restent ceux du contrat A12/README.
+- **Exactitude** : fenêtres `[since, until)`, rang calculé avant limitation, ordre
+  déterministe, UUID d'agent, compteurs exacts et troncature explicite ; aucun total
+  distinct déduit d'un top. Cache lié à l'identité et au scope, anciennes réponses
+  masquées après bascule. Zéro, vide, erreur et indisponibilité sont distincts.
+
+#### Validations réellement acquises et réception restante
+
+| Référence | Exécution observée par Codex | Portée / limite |
 | --- | --- | --- |
-| Usage personnel | Tokens entrée/sortie/cache, séries, ventilation agent/modèle et estimations d'impact | Brancher les lecteurs Rust existants. Distinguer zéro, absence de données et service indisponible. |
-| Vue d'ensemble et adoption | Visiteurs, utilisateurs actifs/nouveaux, entonnoir, rétention/cohortes, comparaison à la période précédente | Définir précisément événement et dénominateur ; un appel HTTP, un tour avec consommation et un tour terminé ne désignent pas la même activité. |
-| Usage et espaces | Conversations, tours, intensité d'usage, comparaison des équipes/projets ; vues adaptées aux rôles | Reprendre espaces et droits Weaver ; ne jamais convertir un scope vide/interdit en scope global. |
-| Agents et ressources | Agents disponibles/utilisés, popularité, capabilities équipées/utilisées, appels et échecs, skills | Joindre les identités stables et catalogues CP ; distinguer configuration disponible et usage observé. Prompts/marketplace : définir l'événement d'utilisation avant de promettre un indicateur. |
-| Qualité, coûts et impact | Echecs, tokens/cache, coûts estimés en euros, ventilations modèle/agent, estimations environnementales | Réutiliser les faits de consommation ; expliciter tarifs, change, date et limites des estimations. Ne pas assimiler erreurs techniques à qualité des réponses. |
-| Supervision technique | Stockage/quotas, réservations, état des traitements et recherche web si activée | Etendre les propriétaires actuels ; agrégats administratifs sans contenu ni identités individuelles. |
-| Filtres et tendances | Périodes glissantes/calendaires/personnalisées, fuseau, jours comptés/exclus, période précédente, détails et courbes | Même sémantique dans API, UI et export. Les filtres d'attributs d'utilisateurs Swift demandent un contrat Weaver autorisé et borné. |
-| Export Excel | Valeurs typées, explications, période/périmètre/filtres courants, FR/EN, cohérence avec les onglets autorisés | Reprendre la valeur produit de l'export Swift, pas son moteur CP Python par défaut ; aucune identité individuelle ni contenu de conversation dans l'export collectif. |
-| MCP, extension Weaver | Appels par connexion et outil, succès/échecs/durée, espace/agent/pod ; répartition des usages | Réutiliser la frontière commune d'exécution et les UUID des connexions gérées. `capability_id` seul ne distingue pas forcément plusieurs connexions ; vérifier les voies ReAct/Graph et éviter le double comptage. Aucun secret, argument ou résultat d'outil dans les dimensions. |
+| V1 - première revue KPI-2 | 95 tests ciblés réussis ; qualité d'abord en échec (BigInt / `.at(-1)`) | Constats ensuite corrigés ; ce premier passage n'était pas une validation complète. |
+| V2 - corrections KPI-2 | 109 tests ciblés dans 5 fichiers ; `make code-quality` frontend réussi | Consommation personnelle/collective, navigation, formatage exact ; ne prouve pas une réception navigateur. |
+| V3 - correction de placement UI | 103 tests ciblés dans 4 fichiers ; `make code-quality` frontend et `git diff --check` réussis | Dernier correctif intégré dans `a11652f00`, déployé selon Dimi ; clic roue dentée, accès Owner/Analyst, refus et contexte, page consommation. |
+| Historique / TLS / mapping | Migration autorisée effectuée ; contrôles certificat, accès lecteur limité, index/mapping et santé Swift/Weaver | Réception infrastructure, pas validation de tous les dashboards. Installation neuve annoncée par Dimi, résultat non consigné ici. |
+| Consolidation de ce suivi | Lecture sources Swift/Weaver, contrôle des liens locaux, diff borné à la partie KPI | Aucun nouveau test applicatif, benchmark, compilation ou déploiement ; pas d'attestation de campagne globale `make test`. |
 
-**Orientation confirmée par Dimi le 12 novembre : rester fidèle aux droits Swift,
-en réfléchissant à leur adaptation aux Owner organisation, équipe et projet.**
-Cela remplace l'hypothèse initiale d'ouvrir les analytics collectifs aux éditeurs.
-La dernière Swift réserve ces analytics à son rôle team-admin et aux observateurs
-plateforme (`kpi/scope.py` et `TeamUsagePage.tsx` au commit KPI), tandis que Weaver
-autorise actuellement Owner et Analyst pour la consommation d'espace.
-
-Proposition à instruire dans K0, pas encore un nouveau contrat d'autorisation :
-
-| Acteur Weaver | Transposition recommandée |
-| --- | --- |
-| Membre, Editor, Analyst sans rôle Owner | Usage personnel ; aucun nouveau droit collectif accordé par le raccord des dashboards. Le droit de consommation déjà détenu par Analyst demande une décision explicite, distincte du merge. |
-| Owner projet | Analytics collectifs du projet dont il est directement responsable. |
-| Owner équipe | Analytics de l'équipe et agrégats de ses projets, cohérents avec le lecteur de consommation actuel ; cela ne donne pas accès aux contenus de ces projets. |
-| Owner organisation | Pilotage agrégé de l'organisation, à définir sans héritage implicite de rôles métier sur les équipes/projets ni accès aux contenus personnels. |
-| Admin organisation/plateforme | Supervision technique agrégée dans son périmètre autorisé ; ne pas convertir le team-admin Swift en Admin technique Weaver ni lui ouvrir les contenus métier. |
-
-Arbitrages restants : maintien d'un `ReadUsage` limité pour Analyst ou alignement
-sur Owner seul ; profondeur et détail des agrégats de l'Owner organisation ;
-frontière avec la supervision Admin. Aucune permission modifiée. Le raccord
-personnel peut avancer indépendamment ; le collectif doit suivre le contrat
-tranché, côté backend comme côté UI et export.
+Réception à noter par surface avec compte/rôle, organisation/espace, période,
+valeurs attendues/observées et résultat : Acme/Globex, Owner/Analyst directs puis
+Editor/Member/Admin technique/Owner parent, refus et révocation, bascule avec
+réponse tardive, fenêtres adjacentes, HITL/retries/titres, agents homonymes,
+classement tronqué et source indisponible. Vérifier les parcours personnels et
+la comparaison seulement lorsqu'elle est calculable, sans badge « stable » indu.
+Dimi garde la réception fonctionnelle ; coordonner toute nouvelle campagne avec lui.
 
 ### Lots à distribuer et ordre recommandé
 
-Les missions ci-dessous sont préparées, pas attribuées ni exécutées. Le pilote
-maintient ce suivi et l'AGENDA ; chaque exécutant rapporte sources, décisions,
-chemins possédés, contrôles réellement exécutés et réception restante.
+Le repère M1 ci-dessous appartient à l'intégration historique, conservée hors de
+cette consolidation KPI. Les anciens numéros K0-K4 désignent des familles de travaux,
+pas les branches `gap/kpi-1` et `gap/kpi-2` : ces branches ont livré respectivement
+l'activité personnelle et la consommation collective. Les priorités suivantes
+sont proposées, sans lancer d'implémentation ni attribuer une autre mission.
 
 | Lot | Périmètre et résultat attendu | Dépendances et critère de sortie |
 | --- | --- | --- |
 | M1 - Intégration Swift | Un intégrateur possède le merge et l'index ; traite les sept commits, garde la borne et les exclusions exactes. Réconciliation PowerPoint/SDK/runtime identifiée comme sous-lot, sans reconstruire un second mécanisme. | Lecture de cette section ; résultat comparé aux deux parents, zéro conflit, pas de faux déplacement ni backend retiré réintroduit, clients régénérés depuis les sources réunies, qualité des composants touchés. Merge/commit à exécuter seulement dans la mission explicitement autorisée. |
-| K0 - Contrat produit KPI | Matrice acteur/périmètre/indicateur/source/unité, définition des absences et périodes ; transposition Swift vers les trois niveaux Owner, frontière Admin, droit Analyst existant et conservation après suppression. Pas de nouvel audit général du data model. | Peut se préparer pendant M1 en lecture seule ; chaque indicateur relié à un fait existant ou à une collecte manquante nommée. L'UI Swift sert de référence de réception. |
-| K1 - Consommation visible | Raccorder usage personnel, puis équipe/projet, aux deux endpoints et hooks Rust existants ; reprendre cartes, courbes, sélecteurs et ventilations Swift. Retirer les dépendances legacy remplacées. | Après stabilisation du merge ; vérifier données API -> écran, rechargement, bornes temporelles, refus de scope et isolation des comptes. Personnel indépendant ; collectif après arbitrage K0, sans extension implicite des droits. |
-| K2 - Supervision Admin | Compléter la vue d'organisation avec les faits de consommation et les compteurs/quota existants ; conserver séparation Admin/Owner et détail non nominatif. | Contrat K0 ; agrégats et export futurs respectent le périmètre, sans double comptage des budgets. Ne pas réutiliser la route équipe comme autorisation d'organisation. |
-| K3 - Collecte MCP/capabilities/skills | Etendre les émetteurs partagés et leur attribution de manière bornée ; prouver événements réels pour un appel réussi, échoué, annulé et repris. | Contrat K0 et runtime stabilisé par M1 ; définition appels/tentatives, source et déduplication explicites. Peut avancer hors des fichiers UI de K1/K2. |
-| K4 - Analytics étendus et Excel | Raccorder progressivement adoption, agents, qualité/coût et tendances, puis export des mêmes agrégats autorisés ; intégrer MCP après K3. | Un onglet et ses sources par incrément, pas un gros portage de presets. Affichage et export alignés, FR/EN, indisponibilité explicite ; réception par rôle avant arc42. |
+| K0 - Contrat produit KPI | Acquis pour activité personnelle, consommation personnelle/collective et skills personnels ; droits et sources décrits ci-dessus. | Compléter uniquement pour la prochaine mesure/portée non couverte : organisation, administration, adoption ou autres activités collectives. Ne pas rouvrir le droit Analyst de consommation. |
+| K1 - Consommation visible | Implémentée et déployée selon Dimi ; V2/V3 réussies. Ancienne cible des deux endpoints GET remplacée par le POST commun. | Priorité immédiate : consigner la réception des surfaces livrées et de leur navigation. Ne pas confondre ce lot avec les six onglets collectifs Swift. |
+| K2 - Supervision Admin | A faire ; dashboard legacy, aucun droit organisation/plateforme ajouté par KPI-2. | Après contrat de périmètre : réutiliser supervision, comptes/quota et lecteurs ; éviter double comptage et extension implicite des droits. |
+| K3 - Collecte MCP/capabilities/skills | Skills personnels raccordés ; collecte/lectures collectives et détail MCP à instruire. | Ne créer de collecte que pour un fait manquant démontré ; réception des appels réussis, échoués, annulés et repris, identité stable et attribution canonique. |
+| K4 - Analytics étendus et Excel | A faire : onglets du tableau ci-dessus, tendances et export ; socle de consommation réutilisable. | Proposition après réception K1 : activité collective et Vue d'ensemble/Usage, puis autres onglets selon les faits disponibles ; un incrément borné à la fois, présentation Swift conservée, droits avant raccord, export aligné. |
 
 Un seul propriétaire pour `controlPlaneOpenApi.ts`, les traductions partagées et
 les composants de graphiques à un instant donné. Pendant M1, les autres assistants
@@ -2516,3 +2569,39 @@ Contrat OpenAPI et client RTK générés. Migration non appliquée, aucun servic
 redémarré, aucun commit ni push. Tests et code-quality non lancés à la demande de
 Dimi ; réception import/remplacement/rechargement/suppression et vérification des
 courses et droits à effectuer par le développeur avant validation du parcours.
+
+## 20. Integration Swift du 14 novembre 2026
+
+Préparation par Codex dans `~/Work/weaver/fred`, branche `weaver`, checkout
+initial propre. Base Weaver : `093c2f997017bb4b3a7575cf2cf94c03cb48e76c` ;
+borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36` ; cible
+vérifiée après fetch : `cf698a739afae1b4cbcd92e82439e32bc1038198`.
+Fusion locale avec `--no-commit --no-ff` ; la borne intégrée ne change pas
+avant création du commit de fusion.
+
+| Arrivée Swift | Résolution Weaver |
+| --- | --- |
+| `bdeef6baa` : préparation v3.11.1 | Outillage de publication Python avec `BASE_TAG`, ses tests et sélection CI web-research repris. Consignes adaptées dans le skill de release actuel ; versions Fred/charts 5.0.0 et bornes `<6` conservées. Annonces et guide généré Swift exclus ; aucun rétablissement de `docs/swift` ni de `platform-ops`. Notes opérateur reprises dans `deploy/release-notes/changes/`. |
+| `b58e995f8` : littéraux DuckDB | Instructions existantes de la capacité tabulaire enrichies : apostrophes doublées, distinction identifiants/valeurs et échappement JSON. Aucun second moteur SQL ni changement de contrat. |
+| `d4605cefb`, `cf698a739` : dépendances | Verrous régénérés depuis les manifestes Weaver : OpenTelemetry API/SDK 1.45.2, conventions 0.66b2 et dnspython 2.9.2 là où présents. SoupSieve 4.0 porté dans le worker Knowledge Flow, propriétaire du traitement documentaire séparé dans Weaver. Le verrou fred-knowledge était déjà à jour ; le Control Plane Python et platform-ops restent supprimés. |
+
+Les comportements antérieurement différés restent hors de ce delta. Aucun
+changement de schéma, de contrat public ou d'architecture ; pas de génération
+OpenAPI nécessaire.
+
+Validation : `make code-quality` réussi dans les treize composants dont le
+verrou change (Core, SDK, Runtime, Fred Agents, Knowledge Flow API/worker et
+sept capacités). Trois avertissements `reportUnreachable` déjà signalés lors du
+merge précédent subsistent dans des fichiers worker inchangés. `uv lock --check`
+réussi pour les treize verrous ; aucun package ajouté/supprimé ni version Fred
+modifiée. Ruff (lint, imports, format) réussi sur les deux scripts Python touchés ;
+syntaxes Python/TOML et YAML/JSON des matrices CI vérifiées.
+`scripts/migration_guides.py check-pr --base HEAD --worktree` réussi : deux
+nouvelles déclarations. `git diff --cached --check` réussi, zéro conflit restant.
+
+Code applicatif Python/TypeScript : +0/-0 ; instructions tabulaires embarquées :
++8/-0 ; outillage de publication Python : +28/-6 ; tests repris : +137/-0 ;
+configuration CI/Make, verrous et documentation comptés séparément. Les tests
+applicatifs et de publication n'ont pas été exécutés. Résolutions indexées,
+merge prêt pour validation fonctionnelle de Dimi puis commit sur autorisation ;
+aucun commit, push, déploiement, migration de base vivante ou service modifié.

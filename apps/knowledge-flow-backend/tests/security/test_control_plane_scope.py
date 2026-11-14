@@ -1,63 +1,68 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
+"""Admitted corpus survives authority changes; publication stays live."""
+
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-import httpx
 import pytest
 from fastapi import HTTPException
-from fred_core.security.backend_to_backend_auth import M2MBearerAuth, TokenLease
+from fred_core.documents.access import SearchScope
+from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
-from knowledge_flow_backend.security import weaver_admission
+from knowledge_flow_backend.features.content import published_markdown as markdown
+from knowledge_flow_backend.features.document_scope import document_access_context
 
 PERSON = AssertedUser(uid="person", client_id="pod", run_id="run", agent_id="agent")
 
 
 @pytest.mark.asyncio
-async def test_scope_uses_knowledge_flow_credential_and_rechecks_revocation(monkeypatch):
-    anchor = uuid4()
-    seen = []
+async def test_admitted_corpus_is_reused_without_permission_refresh_but_publication_is_live(monkeypatch):
+    anchor, ancestor, document = uuid4(), uuid4(), uuid4()
+    admitted = (ancestor, anchor)
+    access = DocumentAccessContext(space_id=anchor, authorized_space_ids=admitted, document_scope=DocumentScope())
+    engine = MagicMock()
+    scope = SearchScope(space_id=anchor, space_ids=admitted)
+    resolver = AsyncMock(return_value=scope)
+    artifact = SimpleNamespace(prefix="published/", size=4, sha256="0" * 64)
+    publication = AsyncMock(side_effect=[artifact, artifact, None])
+    authorization = MagicMock(side_effect=AssertionError("No per-read authority refresh"))
+    app = SimpleNamespace(get_pg_async_engine=lambda: engine, get_authorization_client=authorization, get_published_artifact_reader=lambda: SimpleNamespace(read_bytes=lambda *_: b"text"))
+    monkeypatch.setattr(markdown.ApplicationContext, "get_instance", lambda: app)
+    monkeypatch.setattr(markdown, "resolve_scope", resolver)
+    monkeypatch.setattr(markdown, "published_artifact", publication)
+    assert await markdown.published_markdown(PERSON, str(document), access) == "text"
+    # A subsequent denial from Control Plane must not be consulted within this turn.
+    authorization.side_effect = HTTPException(403, "revoked")
+    assert await markdown.published_markdown(PERSON, str(document), access) == "text"
+    with pytest.raises(HTTPException) as error:
+        await markdown.published_markdown(PERSON, str(document), access)
+    assert error.value.status_code == 404
+    authorization.assert_not_called()
+    assert publication.await_count == 3
+    assert all(call.args[1].authorized_space_ids == admitted for call in resolver.await_args_list)
 
-    def respond(request):
-        seen.append(request)
-        assert request.headers["authorization"] == "Bearer knowledge-flow-token"
-        assert dict(request.url.params) == {"person": PERSON.uid, "run": PERSON.run_id, "agent": PERSON.agent_id}
-        assert request.url.path == "/authorize/scope"
-        return httpx.Response(200, json={"space_id": str(anchor), "space_ids": []}) if len(seen) == 1 else httpx.Response(403)
 
-    token_provider = SimpleNamespace(get_token_lease=AsyncMock(return_value=TokenLease("knowledge-flow-token", 1)))
-    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), auth=M2MBearerAuth(token_provider)) as client:
-        context = SimpleNamespace(configuration=SimpleNamespace(control_plane_url="https://authority.test"), get_authorization_client=lambda: client)
-        monkeypatch.setattr(weaver_admission, "get_app_context", lambda: context)
-        assert await weaver_admission.require_space_read(PERSON, anchor) == ()
-        with pytest.raises(HTTPException) as error:
-            await weaver_admission.require_space_read(PERSON, anchor)
-        assert error.value.status_code == 403
-        assert len(seen) == 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["wrong_anchor", "invalid_id", "missing_corpus", "duplicates", "server_error", "workload_rejected"])
-async def test_malformed_scope_never_becomes_empty_or_unrestricted(monkeypatch, kind):
-    anchor = uuid4()
-    body = {"space_id": str(anchor), "space_ids": []}
-    if kind == "wrong_anchor":
-        body["space_id"] = str(uuid4())
-    if kind == "invalid_id":
-        body["space_ids"] = ["invalid"]
+@pytest.mark.parametrize("kind", ["missing_corpus", "invalid_id", "duplicates", "null_corpus"])
+def test_malformed_admitted_scope_never_becomes_empty_or_unrestricted(kind):
+    anchor = str(uuid4())
+    body = {"space_id": anchor, "authorized_space_ids": [], "document_scope": {}}
     if kind == "missing_corpus":
-        del body["space_ids"]
-    if kind == "duplicates":
-        body["space_ids"] = [str(anchor), str(anchor)]
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(401 if kind == "workload_rejected" else 500 if kind == "server_error" else 200, json=body))) as client:
-        monkeypatch.setattr(
-            weaver_admission, "get_app_context", lambda: SimpleNamespace(configuration=SimpleNamespace(control_plane_url="https://authority.test"), get_authorization_client=lambda: client)
-        )
-        with pytest.raises(HTTPException) as error:
-            await weaver_admission.require_space_read(PERSON, anchor)
-        assert error.value.status_code == 503
+        del body["authorized_space_ids"]
+    elif kind == "invalid_id":
+        body["authorized_space_ids"] = ["invalid"]
+    elif kind == "duplicates":
+        body["authorized_space_ids"] = [anchor, anchor]
+    else:
+        body["authorized_space_ids"] = None
+    import json
+
+    with pytest.raises(HTTPException) as error:
+        document_access_context(PERSON, json.dumps(body))
+    assert error.value.status_code == 400
 
 
 @pytest.mark.parametrize("missing", ["credentials", "delegation", "control_plane_url"])

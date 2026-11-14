@@ -78,6 +78,7 @@ class TurnAuthority:
             )
             self._documents = DocumentAccessContext(
                 space_id=base.space_id,
+                authorized_space_ids=base.authorized_space_ids,
                 document_scope=base.document_scope,
                 conversation_id=UUID(self.binding.conversation_id)
                 if attachments
@@ -114,6 +115,7 @@ class TurnAuthority:
             attachments = ()
         return DocumentAccessContext(
             space_id=self.binding.space.id,
+            authorized_space_ids=self.binding.authorized_space_ids,
             document_scope=scope,
             conversation_id=conversation,
             attachment_ids=attachments,

@@ -15,6 +15,9 @@ DOCUMENT_CONTEXT_HEADER = "x-fred-document-context"
 class DocumentAccessContext(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     space_id: UUID
+    authorized_space_ids: tuple[UUID, ...] = Field(
+        description="Exact corpus authorized by Control Plane at turn admission, carried by the trusted workload. Empty grants no corpus access."
+    )
     document_scope: DocumentScope
     conversation_id: UUID | None = Field(
         default=None,
@@ -26,7 +29,9 @@ class DocumentAccessContext(BaseModel):
     )
 
     @model_validator(mode="after")
-    def require_conversation_for_attachments(self) -> Self:
+    def validate_bound_sources(self) -> Self:
+        if len(set(self.authorized_space_ids)) != len(self.authorized_space_ids):
+            raise ValueError("Duplicate authorized spaces")
         if self.attachment_ids and self.conversation_id is None:
             raise ValueError("attachment_ids requires conversation_id")
         return self

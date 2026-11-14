@@ -599,14 +599,15 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
         .unwrap();
     assert_eq!(
         content_request(app.clone(), &token, "DELETE", &path, "").await,
-        204
+        202
     );
     assert_eq!(get(&app, &token, &url).await.0, 404);
-    let remaining: i64 = sqlx::query_scalar("select count(*) from folder where space_id=$1")
-        .bind(team.id)
-        .fetch_one(&e.pool)
-        .await
-        .unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("select count(*) from folder where space_id=$1 and deletion_id is null")
+            .bind(team.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
     assert_eq!(remaining, 0);
-    assert_eq!(content_request(app, &token, "DELETE", &path, "").await, 404);
+    assert_eq!(content_request(app, &token, "DELETE", &path, "").await, 202);
 }

@@ -170,11 +170,17 @@ and [role semantics](A11-roles.md).
 
 ## Mutation ordering and revocation
 
-Mutations acquire the relevant SQL advisory locks before checking authority,
+Mutations acquire the relevant SQL advisory locks before the final authority check,
 and retain them through commit. Role changes and content writes use the same
 organization serialization; platform changes acquire the platform lock first.
 Checks and role writes use that transaction's connection. A successful revocation
 therefore precedes subsequent decisions without a second authorization service.
+
+Role grants authorize the caller before looking up the target identity, without
+retaining a SQL connection or transaction during the directory call. They recheck
+authority and business constraints under the mutation locks before writing; a
+revocation committed during the lookup prevents the grant. Identity existence
+remains an observation at lookup time, not protection against later IAM deletion.
 
 No mutation may remove the last required administrator or owner, or leave dependent
 child grants without direct parent content membership. External Keycloak operations
@@ -309,7 +315,9 @@ Cancellation and closed-run checks remain effective within the turn.
 The Python SDK carries the admitted space explicitly in `RuntimeContext`,
 `PortableContext` and `CapabilityIdentity`; `team_id` is ancestry only. The in-thread update store
 checks that space against the conversation history when accepting a message or
-retrying its identity. History and
+retrying its identity. An expiring database lease admits one active turn per conversation
+and guards its checkpoint and final history writes; lease loss stops the turn,
+and steering addresses the active turn. History and
 checkpoint owner metadata record it without granting access: the existing
 `binding_json` provenance and Control Plane checks still govern conversation
 reads. Missing provenance is never inferred from retention metadata. See the
@@ -330,15 +338,17 @@ are not connected under it.
 
 ## Document search within a turn
 
-Capabilities call Knowledge Flow API with the canonical space bound to the turn.
-The API validates the incoming workload and asserted person. It then calls Control
-Plane once for the readable scope, using its own M2M bearer and the validated
-person/run/agent triplet. It does not forward the Agent Pod's bearer.
+Control Plane resolves the exact readable corpus at turn admission, alongside the
+canonical space, person, instance and conversation. The Agent Pod retains that
+scope in its private turn authority and carries it in the existing document-context
+header over HTTP and MCP. Browser and model selections can only narrow it.
 
-Control Plane returns an explicit anchor and the exact readable subset of its
-ancestors and itself. An empty corpus remains empty. The API applies document
-selection only as a further restriction; attachments use the explicit anchor and
-separate conversation ownership checks.
+Knowledge Flow accepts this context only after verifying workload authentication
+and the asserted person/run/agent. It trusts the delegated pod to relay Control
+Plane's decision and enforce turn lifetime; it does not independently prove the
+admission or refresh the person's permissions on each document call. Revocation
+and new grants affect the next admission. An empty corpus remains empty;
+attachments retain their explicit anchor and separate conversation ownership checks.
 
 Index filters narrow candidates. Before returning content, the shared visibility
 primitive reads only Control Plane-owned `cp_read` views. The SQL `visible` fact
@@ -354,8 +364,9 @@ success. These data checks do not refresh the admitted agent turn's authority.
 
 Source references: [`weaver_admission.py`](../../apps/knowledge-flow-backend/knowledge_flow_backend/security/weaver_admission.py),
 [`access.py`](../../libs/fred-core/fred_core/documents/access.py),
-[`authorization.rs`](../../apps/control-plane/src/authorization.rs) and
-[`spaces.rs`](../../apps/control-plane/src/spaces.rs).
+[`authorization.rs`](../../apps/control-plane/src/authorization.rs),
+[`runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs) and
+[`turn.py`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py).
 
 ### Runtime CGU dependency inventory
 
@@ -394,7 +405,7 @@ effective-person binding and the current errors independently of the SQL read.
 | GET | `/agents/checkpoints/_stats` | No turn resolution |
 | GET | `/agents/checkpoints/{session_id}` | No turn resolution |
 | DELETE | `/agents/checkpoints/{session_id}` | No turn resolution |
-| POST | `/agents/sessions/{session_id}/steer` | No new turn resolution; targets an admitted active turn |
+| POST | `/agents/sessions/{session_id}/steer` | Checks conversation ownership and execution authorization; stores an in-thread message without starting a turn |
 | GET | `/capabilities/writable_document/sessions/{session_id}/documents` | No turn resolution |
 | GET | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |
 | PUT | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |

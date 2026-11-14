@@ -209,3 +209,32 @@ async def test_attachment_only_search_respects_all_source_ceilings(
         assert sent.attachment_ids == (UUID(int=401),)
     else:
         assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_calls_and_retries_keep_admitted_corpus_until_a_new_turn(monkeypatch):
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
+    admitted = authority.binding.authorized_space_ids
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        authority.bind_documents(
+            adapter._binding.runtime_context, DocumentScope(), attachments_enabled=False
+        )
+        await adapter.search("first")
+        # Neither later resolver data nor model selections replace this turn's binding.
+        later = authority.binding.model_copy(update={"authorized_space_ids": ()})
+        await adapter.search("second", document_uids=[str(UUID(int=900))])
+        assert [
+            call["document_context"].authorized_space_ids for call in client.calls
+        ] == [admitted, admitted]
+        authority.close()
+        with pytest.raises(AuthorityLostError):
+            await adapter.search("closed")
+    next_turn = TurnAuthority(later, None)
+    with RunScope.open() as scope:
+        scope.turn_authority = next_turn
+        next_turn.start(scope)
+        await adapter.search("next admission")
+        assert client.calls[-1]["document_context"].authorized_space_ids == ()

@@ -6,7 +6,6 @@ import hashlib
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import UUID
 
 import duckdb
@@ -134,18 +133,16 @@ def published(tmp_path, monkeypatch):
         get_published_artifact_reader=lambda: SimpleNamespace(read_bytes=read_bytes, bucket="derived", client=SimpleNamespace(presigned_get_object=location)),
     )
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
-    permission = AsyncMock(return_value=(SPACE,))
-    monkeypatch.setattr(module, "require_space_read", permission)
 
     def service(scope=DocumentScope(), *, attachments=(), conversation_id=None):
-        return module.TabularService(context=DocumentAccessContext(space_id=SPACE, document_scope=scope, conversation_id=conversation_id, attachment_ids=attachments))
+        return module.TabularService(context=DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope, conversation_id=conversation_id, attachment_ids=attachments))
 
     def attach(uid):
         for row in facts:
             if row["id"] == uid:
                 row.update(session_id=CONVERSATION, folder_id=None)
 
-    return SimpleNamespace(service=service, facts=facts, reads=reads, permission=permission, objects=objects, attach=attach, session=session)
+    return SimpleNamespace(service=service, facts=facts, reads=reads, objects=objects, attach=attach, session=session)
 
 
 @pytest.mark.asyncio
@@ -188,7 +185,6 @@ async def test_discovery_preserves_union_intersection_empty_and_reset(published,
     docs = await published.service(selection).list_documents(PERSON)
     assert {UUID(doc.document_uid) for doc in docs} == expected
     assert all(any(f"/{uid}/" in key for uid in expected) for key in published.reads)
-    published.permission.assert_awaited_once_with(PERSON, SPACE)
 
 
 @pytest.mark.asyncio
@@ -228,19 +224,14 @@ async def test_each_read_rechecks_publication_lifecycle_and_space(published, fie
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("inventory", ["list_documents", "list_datasets"])
-@pytest.mark.parametrize("error", [PermissionError, RuntimeError])
-async def test_each_inventory_rechecks_space_before_artifact_access(published, inventory, error):
-    list_inventory = getattr(published.service(), inventory)
-    assert len(await list_inventory(PERSON)) == 3
-    published.reads.clear()
-    published.permission.side_effect = error("space authorization unavailable")
-    with pytest.raises(error, match="space authorization unavailable"):
-        await list_inventory(PERSON)
+async def test_empty_admitted_corpus_never_falls_back_to_anchor(published, inventory):
+    service = published.service()
+    service.context = service.context.model_copy(update={"authorized_space_ids": ()})
+    assert await getattr(service, inventory)(PERSON) == []
     assert not published.reads
-    assert published.permission.await_count == 2
 
 
-@pytest.mark.parametrize("key", ["document_scope", "space_id", "owner_filter", "attachment_uids", "corpus_document_uids", "conversation_id", "attachment_ids"])
+@pytest.mark.parametrize("key", ["document_scope", "space_id", "authorized_space_ids", "owner_filter", "attachment_uids", "corpus_document_uids", "conversation_id", "attachment_ids"])
 def test_tool_arguments_cannot_supply_authority(key):
     from pydantic import ValidationError
 

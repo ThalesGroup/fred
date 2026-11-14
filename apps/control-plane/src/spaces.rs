@@ -560,11 +560,16 @@ pub async fn grant(
         return Err(AppError::Unprocessable(INVALID_SUBJECT.into()));
     }
     let space = load(pool, space_id).await?;
-    let mut tx = lock_for(pool, &space).await?;
-    may_change(&mut tx, caller, &space, role, true).await?;
+    // Authorize discovery, then release the connection before waiting on the directory.
+    {
+        let mut conn = pool.acquire().await?;
+        may_change(&mut conn, caller, &space, role, true).await?;
+    }
     if !directory.exists(target).await? {
         return Err(AppError::Unprocessable(UNKNOWN_SUBJECT.into()));
     }
+    let mut tx = lock_for(pool, &space).await?;
+    may_change(&mut tx, caller, &space, role, true).await?;
     if let Some(parent) = space.parent_id
         && !holds_parent_content(&mut tx, target, parent).await?
     {

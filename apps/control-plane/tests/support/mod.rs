@@ -23,6 +23,7 @@ pub struct Control {
     pub worker_token: Option<String>,
     pub worker_token_requests: usize,
     pub subject_delay: bool,
+    pub subject_gate: Option<Arc<Gate>>,
     pub subject_lookups: Vec<String>,
     pub subject_active: usize,
     pub subject_peak: usize,
@@ -186,14 +187,18 @@ impl IdentityServer {
                           Path(id): Path<String>| {
                         let control = subject_control.clone();
                         async move {
-                            let delayed = {
+                            let (delayed, gate) = {
                                 let mut control = control.lock().await;
                                 control.subject_lookups.push(id.clone());
                                 control.subject_active += 1;
                                 control.subject_peak =
                                     control.subject_peak.max(control.subject_active);
-                                control.subject_delay
+                                (control.subject_delay, control.subject_gate.take())
                             };
+                            if let Some(gate) = gate {
+                                gate.entered.notify_one();
+                                gate.release.notified().await;
+                            }
                             if delayed {
                                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                             }

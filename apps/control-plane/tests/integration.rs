@@ -1015,7 +1015,7 @@ async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_gran
                 )
                 .await
             } else {
-                platform::grant(&pool, None, "delegate", "target", P::PromptEditor).await
+                platform::grant(&pool, Some(&open), "delegate", "target", P::PromptEditor).await
             }
         });
         wait_for_advisory_waiter(&e.pool).await;
@@ -1029,6 +1029,225 @@ async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_gran
         .unwrap();
         tx.commit().await.unwrap();
         assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
+    }
+}
+
+// Proves: directory waits retain neither SQL connections nor governance locks,
+// and a committed revocation wins over the preliminary authorization.
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn role_grants_release_sql_during_lookup_and_recheck_revocation() {
+    use control_plane::{authorization, platform, roles::PlatformRole as P};
+    for role in [None, Some(Role::OrganizationAdmin), Some(Role::Member)] {
+        let e = env().await;
+        let (org, _) = org_and_team(&e).await;
+        bootstrap::grant_root(&e.pool, "root").await.unwrap();
+        authorization::write_platform(
+            &mut e.pool.acquire().await.unwrap(),
+            "delegate",
+            P::PlatformAdmin,
+            true,
+        )
+        .await
+        .unwrap();
+        grant(&e, org.id, Role::Member, "delegate").await;
+        grant(&e, org.id, Role::Owner, "delegate").await;
+        let identity = support::IdentityServer::start().await;
+        identity
+            .users
+            .lock()
+            .await
+            .insert("target".into(), "target".into());
+        let gate = std::sync::Arc::new(support::Gate::default());
+        identity.control.lock().await.subject_gate = Some(gate.clone());
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with((*e.pool.connect_options()).clone())
+            .await
+            .unwrap();
+        let (pending_pool, directory) = (pool.clone(), identity.directory());
+        let pending = tokio::spawn(async move {
+            match role {
+                Some(role) => {
+                    spaces::grant(
+                        &pending_pool,
+                        &control_plane::users::Directory::Keycloak(Some(&directory)),
+                        "delegate",
+                        org.id,
+                        role,
+                        "target",
+                    )
+                    .await
+                }
+                None => {
+                    platform::grant(
+                        &pending_pool,
+                        Some(&directory),
+                        "delegate",
+                        "target",
+                        P::PromptEditor,
+                    )
+                    .await
+                }
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            // The same one-connection pool must be usable while Keycloak is paused.
+            let mut tx = pool.begin().await.unwrap();
+            for key in [
+                bootstrap::LOCK_KEY,
+                i64::from_be_bytes(org.id.as_bytes()[..8].try_into().unwrap()),
+            ] {
+                let acquired: bool = sqlx::query_scalar("select pg_try_advisory_xact_lock($1)")
+                    .bind(key)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .unwrap();
+                assert!(
+                    acquired,
+                    "directory lookup must not retain governance locks"
+                );
+            }
+            tx.rollback().await.unwrap();
+            if role == Some(Role::Member) {
+                spaces::revoke(&pool, "alice", org.id, Role::Owner, "delegate")
+                    .await
+                    .unwrap();
+            } else {
+                platform::revoke(&pool, "root", "delegate", P::PlatformAdmin)
+                    .await
+                    .unwrap();
+            }
+        })
+        .await
+        .expect("directory lookup must release the connection and allow revocation");
+        gate.release.notify_one();
+        let result = tokio::time::timeout(Duration::from_secs(3), pending)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(result, Err(AppError::Forbidden)));
+        assert!(
+            authorization::direct_roles_on(&pool, "target", org.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            authorization::platform_roles(&pool, "target")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        pool.close().await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn role_grants_do_not_probe_identities_for_unauthorized_callers() {
+    use control_plane::{platform, roles::PlatformRole as P};
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    let identity = support::IdentityServer::start().await;
+    let directory = identity.directory();
+    for target in ["missing", "unavailable"] {
+        for role in [Role::OrganizationAdmin, Role::Owner, Role::Member] {
+            assert!(matches!(
+                spaces::grant(
+                    &e.pool,
+                    &control_plane::users::Directory::Keycloak(Some(&directory)),
+                    "bob",
+                    org.id,
+                    role,
+                    target,
+                )
+                .await,
+                Err(AppError::Forbidden)
+            ));
+        }
+        assert!(matches!(
+            platform::grant(&e.pool, Some(&directory), "bob", target, P::PromptEditor,).await,
+            Err(AppError::Forbidden)
+        ));
+    }
+    assert!(identity.control.lock().await.subject_lookups.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn space_grants_recheck_parent_membership_and_retirement_after_lookup() {
+    use control_plane::lifecycle::{Lifecycle, store::PENDING_DELETION};
+    for retire in [false, true] {
+        let e = env().await;
+        let (org, team) = org_and_team(&e).await;
+        bootstrap::grant_root(&e.pool, "root").await.unwrap();
+        grant(&e, org.id, Role::Member, "target").await;
+        let identity = support::IdentityServer::start().await;
+        identity
+            .users
+            .lock()
+            .await
+            .insert("target".into(), "target".into());
+        let gate = std::sync::Arc::new(support::Gate::default());
+        identity.control.lock().await.subject_gate = Some(gate.clone());
+        let (pool, directory) = (e.pool.clone(), identity.directory());
+        let pending = tokio::spawn(async move {
+            spaces::grant(
+                &pool,
+                &control_plane::users::Directory::Keycloak(Some(&directory)),
+                "alice",
+                team.id,
+                Role::Member,
+                "target",
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(3), gate.entered.notified())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            if retire {
+                let mut lifecycle = Lifecycle::default();
+                lifecycle.config.enabled = true;
+                lifecycle
+                    .accept(&e.pool, "root", team.id, false)
+                    .await
+                    .unwrap();
+            } else {
+                spaces::revoke(&e.pool, "alice", org.id, Role::Member, "target")
+                    .await
+                    .unwrap();
+            }
+        })
+        .await
+        .expect("governance must proceed while the directory is paused");
+        gate.release.notify_one();
+        let result = tokio::time::timeout(Duration::from_secs(3), pending)
+            .await
+            .unwrap()
+            .unwrap();
+        if retire {
+            assert!(matches!(
+                result,
+                Err(AppError::Problem {
+                    code: PENDING_DELETION,
+                    ..
+                })
+            ));
+        } else {
+            assert!(matches!(result, Err(AppError::Conflict(_))));
+        }
+        assert!(
+            control_plane::authorization::direct_roles_on(&e.pool, "target", team.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 }
 
@@ -3424,6 +3643,8 @@ async fn organization_admins_name_owners_and_read_nothing() {
 }
 
 async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Router {
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
     control_plane::api::router(
         control_plane::api::AppState {
             history: None,
@@ -3431,7 +3652,7 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
             auth: std::sync::Arc::new(identity.auth().await),
             pool: e.pool.clone(),
             onboarding: Default::default(),
-            lifecycle: Default::default(),
+            lifecycle,
             directory: Some(identity.directory()),
             content: None,
             processing: None,
@@ -3825,7 +4046,7 @@ async fn folder_and_space_deletion_reject_pending_upload_before_triggers() {
             ""
         )
         .await,
-        204
+        202
     );
 }
 
@@ -3868,11 +4089,20 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
         } else {
             wait_for_advisory_waiter(&e.pool).await;
         }
-        db::delete_folder(&mut *deleting, folder.id, false)
+        let operation = Uuid::new_v4();
+        sqlx::query("insert into deletion(id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) values($1,$2,'folder',$3,$3,'alice',now(),now())")
+            .bind(operation).bind(folder.id).bind(org.id).execute(&mut *deleting).await.unwrap();
+        sqlx::query("update folder set deletion_id=$2 where id=$1")
+            .bind(folder.id)
+            .bind(operation)
+            .execute(&mut *deleting)
             .await
             .unwrap();
         deleting.commit().await.unwrap();
-        assert_eq!(pending.await.unwrap(), 404);
+        assert_eq!(
+            pending.await.unwrap(),
+            if method == "DELETE" { 202 } else { 404 }
+        );
     }
 }
 
@@ -5211,3 +5441,6 @@ mod platform_workload;
 
 #[path = "support/conversation_ownership.rs"]
 mod conversation_ownership;
+
+#[path = "support/folder_deletion.rs"]
+mod folder_deletion;

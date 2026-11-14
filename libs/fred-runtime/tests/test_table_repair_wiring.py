@@ -124,7 +124,9 @@ async def test_document_search_port_repairs_table_hits(
             "document_uid": "d1",
             "limit": 40,
             "document_context": DocumentAccessContext(
-                space_id=binding.space.id, document_scope=DocumentScope()
+                space_id=binding.space.id,
+                authorized_space_ids=(binding.space.id,),
+                document_scope=DocumentScope(),
             ),
         }
     ]

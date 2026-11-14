@@ -39,3 +39,5 @@ and removes the former runtime_turn_steering mailbox; its original migrations
 remain immutable. PostgreSQL downgrade is refused because recreating the old
 mailbox without its conversation FK would break ownership. Only fresh Weaver
 installations are supported.
+
+Active conversation turns (revision e1f2a3b4c5d6) use a 60-second lease, renewed every 20 seconds and fenced with checkpoint and final history transactions; the conversation root deletion cascades to the lease.

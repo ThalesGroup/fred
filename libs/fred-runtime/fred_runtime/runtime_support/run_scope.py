@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeVar, cast
 
 if TYPE_CHECKING:
     from fred_runtime.model_routing.turn import TurnAuthority
+    from fred_runtime.runtime_support.active_turn import ActiveTurn
 
 import anyio
 from fred_sdk.contracts.runtime import RuntimeErrorEvent, RuntimeStopReason
@@ -112,6 +113,7 @@ class RunScope:
         self._stop_error: RunStopError | None = None
         self._closed = False
         self.turn_authority: TurnAuthority | None = None
+        self.active_turn: ActiveTurn | None = None
         self._end_owner_authority: Callable[[], None] | None = None
         self._delegated_credentials = False
         self._event_receipts: dict[str, asyncio.Future[dict[str, Any]]] = {}

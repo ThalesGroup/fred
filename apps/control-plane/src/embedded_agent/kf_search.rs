@@ -52,6 +52,7 @@ impl Search {
         person: &str,
         agent: Uuid,
         space: Uuid,
+        authorized_space_ids: &[Uuid],
     ) -> Result<Self, InferenceError> {
         let mut url = endpoint(base)?;
         url.query_pairs_mut()
@@ -65,6 +66,7 @@ impl Search {
             // remain excluded, independently of the session's published uploads.
             context: serde_json::json!({
                 "space_id":space,
+                "authorized_space_ids":authorized_space_ids,
                 "document_scope":{"selections":[]}, "attachment_ids":[]
             })
             .to_string(),
@@ -110,6 +112,42 @@ impl Search {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn search_retains_the_exact_admitted_corpus_including_empty() {
+        let space = Uuid::new_v4();
+        let ancestor = Uuid::new_v4();
+        for mut admitted in [vec![ancestor, space], vec![]] {
+            let expected = admitted.clone();
+            let search = Search::new(
+                "https://kf.example/knowledge-flow/v2",
+                Some(
+                    Directory::new(
+                        "https://identity.example/realms/fred",
+                        "workload",
+                        String::new(),
+                    )
+                    .unwrap(),
+                ),
+                "alice",
+                Uuid::new_v4(),
+                space,
+                &admitted,
+            )
+            .unwrap();
+            admitted.push(Uuid::new_v4());
+            let context: serde_json::Value = serde_json::from_str(&search.context).unwrap();
+            assert_eq!(
+                context,
+                serde_json::json!({
+                    "space_id":space,
+                    "authorized_space_ids":expected,
+                    "document_scope":{"selections":[]},
+                    "attachment_ids":[]
+                })
+            );
+        }
+    }
 
     #[test]
     fn search_endpoint_stays_under_the_configured_base() {

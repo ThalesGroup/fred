@@ -502,6 +502,7 @@ fn upload_and_empty_responses_match_the_http_contract() {
                             Some(
                                 "delete_space"
                                     | "delete_document"
+                                    | "delete_folder"
                                     | "delete_session"
                                     | "delete_attachment"
                             )
@@ -662,7 +663,10 @@ fn configuration_schema_is_generated_offline_and_matches_the_chart_input() {
     assert_eq!(actual, committed);
     let history = &actual["$defs"]["StorageConfig"]["properties"]["history"]["oneOf"][0];
     for field in ["url", "index", "username", "password_env_var"] {
-        assert!(history["properties"].get(field).is_some(), "missing {field}");
+        assert!(
+            history["properties"].get(field).is_some(),
+            "missing {field}"
+        );
     }
     assert!(history["properties"].get("workers").is_none());
     assert_eq!(
@@ -1091,6 +1095,14 @@ fn usage_report_identifies_a_bounded_set_of_catalogue_offers() {
 #[test]
 fn folder_deletion_exposes_an_optional_empty_only_precondition() {
     let api = schema();
+    let responses = &api["paths"]["/control-plane/v1/folders/{id}"]["delete"]["responses"];
+    for status in ["200", "202"] {
+        assert_eq!(
+            responses[status]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/Receipt"
+        );
+    }
+    assert!(responses.get("204").is_none());
     let parameters = api["paths"]["/control-plane/v1/folders/{id}"]["delete"]["parameters"]
         .as_array()
         .unwrap();

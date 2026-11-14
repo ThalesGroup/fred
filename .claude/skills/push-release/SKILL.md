@@ -51,8 +51,10 @@ Use the current Make targets rather than manually drifting package versions:
 - Check stored configuration compatibility for bumped manifests and any necessary
   upgrade path. Review dependency floors, chart appVersions and lockfile churn.
 - `make publish-libs-dry-run BASE_TAG=<reported-stable-tag>` builds and validates
-  package artifacts without uploading. Actual `publish-libs` needs separate
-  publication authorization and its own checks against PyPI.
+  package artifacts without uploading. Actual `make publish-libs BASE_TAG=<reported-stable-tag>` needs separate
+  publication authorization and its own checks against PyPI. Pass the previous
+  stable code tag to both checks so pending packages from earlier releases keep
+  compatible dependency floors while newly prepared packages require current ones.
 
 Prepend the verified release entry to `apps/frontend/public/release.md`, preserving
 its current shape and using the actual date/version. Write concise user outcomes;

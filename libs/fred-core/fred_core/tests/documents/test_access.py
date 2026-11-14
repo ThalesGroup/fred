@@ -297,10 +297,10 @@ async def test_folder_resolution_is_one_batched_query_without_document_enumerati
         conn,
         DocumentAccessContext(
             space_id=TEAM,
+            authorized_space_ids=(ORG, TEAM),
             document_scope=DocumentScope.from_ids([str(id) for id in folders]),
         ),
         user_id="alice",
-        authorized_space_ids=(ORG, TEAM),
     )
     assert conn.execute.await_count == 2
     _, params = conn.execute.call_args.args
@@ -406,6 +406,7 @@ async def test_resolver_checks_conversation_and_prefilters_all_attachment_ids(
     ids = tuple(row["id"] for row in rows)
     context = DocumentAccessContext(
         space_id=TEAM,
+        authorized_space_ids=(ORG, TEAM),
         document_scope=DocumentScope(),
         conversation_id=CONVERSATION,
         attachment_ids=ids,
@@ -424,9 +425,7 @@ async def test_resolver_checks_conversation_and_prefilters_all_attachment_ids(
     conn.execute = AsyncMock(
         side_effect=[space_result, session_result, documents_result]
     )
-    scope = await access.resolve_scope(
-        conn, context, user_id="alice", authorized_space_ids=(ORG, TEAM)
-    )
+    scope = await access.resolve_scope(conn, context, user_id="alice")
     assert set(scope.attachment_ids) == (set(ids) if authorized else set())
     _, params = conn.execute.call_args_list[1].args
     assert params == {
@@ -454,11 +453,11 @@ async def test_conversation_check_failure_never_falls_back_to_corpus() -> None:
             conn,
             DocumentAccessContext(
                 space_id=TEAM,
+                authorized_space_ids=(ORG, TEAM),
                 document_scope=DocumentScope(),
                 conversation_id=CONVERSATION,
             ),
             user_id="alice",
-            authorized_space_ids=(ORG, TEAM),
         )
 
 
@@ -486,9 +485,12 @@ async def test_scope_uses_only_authorized_corpus_without_rebuilding_ancestors():
     conn.execute = AsyncMock(return_value=result)
     scope = await resolve_scope(
         conn,
-        DocumentAccessContext(space_id=PROJECT, document_scope=DocumentScope()),
+        DocumentAccessContext(
+            space_id=PROJECT,
+            authorized_space_ids=(PROJECT,),
+            document_scope=DocumentScope(),
+        ),
         user_id="alice",
-        authorized_space_ids=(PROJECT,),
     )
     assert scope.space_id == PROJECT
     assert scope.space_ids == (PROJECT,)
@@ -509,8 +511,11 @@ async def test_scope_distinguishes_missing_and_retired_space(row, error):
     with pytest.raises(getattr(access, error)):
         await access.resolve_scope(
             conn,
-            DocumentAccessContext(space_id=TEAM, document_scope=DocumentScope()),
+            DocumentAccessContext(
+                space_id=TEAM,
+                authorized_space_ids=(ORG, TEAM),
+                document_scope=DocumentScope(),
+            ),
             user_id="alice",
-            authorized_space_ids=(TEAM,),
         )
     conn.execute.assert_awaited_once()

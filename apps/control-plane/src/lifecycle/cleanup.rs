@@ -66,6 +66,25 @@ pub async fn batch(
     });
     spaces::lock_organization(&mut tx, &organization).await?;
     sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
+    if receipt.target_kind == TargetKind::Folder {
+        purge_folders(&mut tx, id, None).await?;
+        let remaining: bool =
+            sqlx::query_scalar("select exists(select 1 from folder where deletion_id=$1)")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !remaining {
+            sqlx::query("update deletion set status='completed',completed_at=now() where id=$1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        if !remaining {
+            tracing::info!(target: "fred.security.audit", audit_event="deletion.completed", target_kind="folder", operation_id=%id, folder_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Folder deletion completed");
+        }
+        return Ok(());
+    }
     if receipt.target_kind != TargetKind::Document
         && crate::wiki::lifecycle::purge(
             &mut tx,
@@ -314,21 +333,16 @@ pub async fn batch(
             .fetch_one(&mut *tx)
             .await?;
     let mut completed = false;
-    let deleted = sqlx::query("delete from folder where id in (select f.id from folder f where f.space_id = $1 and not exists(select 1 from folder child where child.parent_id = f.id) order by f.id limit 1000)").bind(space).execute(&mut *tx).await?.rows_affected();
-    if deleted > 0 {
-        sqlx::query("update deletion set folders_deleted = folders_deleted + $2 where id = $1")
-            .bind(id)
-            .bind(deleted as i64)
-            .execute(&mut *tx)
-            .await?;
-    } else {
+    if purge_folders(&mut tx, id, Some(space)).await? == 0 {
         let folders: bool =
             sqlx::query_scalar("select exists(select 1 from folder where space_id = $1)")
                 .bind(space)
                 .fetch_one(&mut *tx)
                 .await?;
         if folders {
-            return Err(anyhow::anyhow!("folder tree has no leaf").into());
+            // Independent folder receipts retain their ownership and deadline.
+            tx.commit().await?;
+            return Ok(());
         }
         if kind == SpaceKind::Organization && manifest_count != 1 {
             return Err(anyhow::anyhow!("organization is not last").into());
@@ -374,6 +388,44 @@ pub async fn batch(
         tracing::info!(target:"fred.security.audit", audit_event="deletion.completed", operation_id=%id, space_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Space deletion completed");
     }
     Ok(())
+}
+
+/// Physical deletion follows dependencies, never names or display paths. A space
+/// only owns folders without an earlier receipt; folder jobs own their manifest.
+async fn purge_folders(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    operation: Uuid,
+    space: Option<Uuid>,
+) -> AppResult<u64> {
+    // The storage sweeper confirms failed PUT cleanup before their receipts go.
+    sqlx::query(
+        "delete from document_upload where id in (
+            select u.id from document_upload u join folder f on f.id=u.folder_id
+            where (f.deletion_id=$1 or (f.deletion_id is null and f.space_id=$2))
+              and u.status='failed' and not u.put_pending and u.cleaned_at is not null
+            order by u.id limit 1000)",
+    )
+    .bind(operation)
+    .bind(space)
+    .execute(&mut **tx)
+    .await?;
+    let deleted = sqlx::query(
+        "delete from folder where id in (
+            select f.id from folder f
+            where (f.deletion_id=$1 or (f.deletion_id is null and f.space_id=$2))
+              and not exists(select 1 from folder child where child.parent_id=f.id)
+              and not exists(select 1 from document d where d.space_id=f.space_id and d.folder_id=f.id)
+              and not exists(select 1 from document_upload u where u.folder_id=f.id)
+            order by f.id limit 1000)",
+    ).bind(operation).bind(space).execute(&mut **tx).await?.rows_affected();
+    if deleted > 0 {
+        sqlx::query("update deletion set folders_deleted=folders_deleted+$2 where id=$1")
+            .bind(operation)
+            .bind(deleted as i64)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(deleted)
 }
 
 async fn complete_session(

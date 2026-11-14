@@ -52,22 +52,27 @@ _SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:
 _LOGGER = logging.getLogger(__name__)
 _LOCK_REGISTRY_GUARD = threading.Lock()
 _FILESYSTEM_WRITES: set[asyncio.Task[Any]] = set()
-_STATES_BY_FILESYSTEM: weakref.WeakKeyDictionary[
-    object, dict[str, _NamespaceAccounting]
-] = weakref.WeakKeyDictionary()
+_LOCKS_BY_FILESYSTEM: weakref.WeakKeyDictionary[object, dict[str, asyncio.Lock]] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 async def _run_filesystem_operation[T](
-    session_id: str,
-    fence: SessionFence | None,
     operation: Callable[[], Awaitable[T]],
+    *,
+    lock: asyncio.Lock | None = None,
 ) -> T:
+    # Waiting callers remain cancellable. Once admitted, the task owns the lock
+    # until the real operation ends, even if its caller disconnects.
+    if lock is not None:
+        await lock.acquire()
+
     async def persist() -> T:
-        token = await fence.begin_filesystem_write(session_id) if fence else None
-        result = await operation()
-        if token is not None and fence is not None:
-            await fence.end_filesystem_write(token)
-        return result
+        try:
+            return await operation()
+        finally:
+            if lock is not None:
+                lock.release()
 
     # Keep the task alive after caller cancellation. A to_thread SDK operation or
     # converter must really finish before its intent can be acknowledged.
@@ -75,6 +80,20 @@ async def _run_filesystem_operation[T](
     _FILESYSTEM_WRITES.add(task)
     task.add_done_callback(_finish_filesystem_write)
     return await asyncio.shield(task)
+
+
+async def _record_filesystem_write[T](
+    session_id: str,
+    fence: SessionFence | None,
+    operation: Callable[[], Awaitable[T]],
+) -> T:
+    # Called inside a protected operation, after validation. A failure leaves
+    # the intent pending: an uncertain object write cannot be acknowledged.
+    token = await fence.begin_filesystem_write(session_id) if fence else None
+    result = await operation()
+    if token is not None and fence is not None:
+        await fence.end_filesystem_write(token)
+    return result
 
 
 class ConversationFilesystemQuotaSettings(Protocol):
@@ -177,21 +196,15 @@ class _NamespaceQuota:
     max_files: int
 
 
-@dataclass
-class _NamespaceAccounting:
-    lock: asyncio.Lock
-    sizes: dict[str, int] | None = None
-
-
 _DEFAULT_QUOTAS = _DefaultQuotas()
 
 
 class ConversationFilesystemService:
     """Bind one pod-wide object filesystem to one trusted conversation id.
 
-    Quota accounting is serialized and shared inside this process. It recounts
-    durable storage before the first mutation, but intentionally provides no
-    cross-replica transaction; concurrent replicas may briefly overshoot.
+    Each mutation observes durable storage without retaining accounting state.
+    Local mutations are serialized through actual completion, but these soft
+    limits provide no cross-replica reservation; overlapping writes may overshoot.
     """
 
     def __init__(
@@ -257,7 +270,9 @@ class ConversationFilesystemService:
                 content, suffix=suffix, strict_cleanup=True
             )
 
-        return await _run_filesystem_operation(self._session_id, self._fence, convert)
+        return await _run_filesystem_operation(
+            lambda: _record_filesystem_write(self._session_id, self._fence, convert)
+        )
 
     @property
     def quotas(self) -> ConversationFilesystemQuotaSettings:
@@ -296,8 +311,7 @@ class _ConversationTextNamespace:
         self._prefix = f"conversations/{session_id}/{namespace}/"
         self._quota = quota
         self._kpi = kpi
-        self._accounting = _namespace_accounting(filesystem, self._prefix)
-        self._lock = self._accounting.lock
+        self._lock = _namespace_lock(filesystem, self._prefix)
 
     async def read_text(self, path: str) -> str:
         relative_path = _normalize_path(path)
@@ -329,13 +343,15 @@ class _ConversationTextNamespace:
     async def write_bytes(self, path: str, content: bytes) -> None:
         encoded = content
         relative_path = _normalize_path(path)
-        async with self._lock:
-            await self._ensure_accounting()
-            self._check_write_quota(relative_path, len(encoded))
+
+        async def write() -> None:
+            sizes = await self._recount()
+            self._check_write_quota(sizes, relative_path, len(encoded))
             await self._write_encoded(relative_path, encoded, operation="write")
-            assert self._accounting.sizes is not None
-            self._accounting.sizes[relative_path] = len(encoded)
-            self._emit_usage()
+            sizes[relative_path] = len(encoded)
+            self._emit_usage(sizes)
+
+        await _run_filesystem_operation(write, lock=self._lock)
 
     async def _write_encoded(
         self, relative_path: str, encoded: bytes, *, operation: str
@@ -347,7 +363,7 @@ class _ConversationTextNamespace:
             await self._filesystem.write(physical_path, encoded)
 
         try:
-            await _run_filesystem_operation(self._conversation_id, self._fence, persist)
+            await _record_filesystem_write(self._conversation_id, self._fence, persist)
         except Exception as exc:
             raise self._storage_error(operation, exc) from exc
 
@@ -362,8 +378,9 @@ class _ConversationTextNamespace:
         relative_path = _normalize_path(path)
         _encode_text(old_text)
         _encode_text(new_text)  # validation precedes any storage operation
-        async with self._lock:
-            await self._ensure_accounting()
+
+        async def edit() -> int:
+            sizes = await self._recount()
             current = await self._read_text(relative_path)
             match_count = current.count(old_text)
             if match_count == 0 or (match_count > 1 and not replace_all):
@@ -372,12 +389,13 @@ class _ConversationTextNamespace:
                 )
             updated = current.replace(old_text, new_text, -1 if replace_all else 1)
             encoded = _encode_text(updated)
-            self._check_write_quota(relative_path, len(encoded))
+            self._check_write_quota(sizes, relative_path, len(encoded))
             await self._write_encoded(relative_path, encoded, operation="edit")
-            assert self._accounting.sizes is not None
-            self._accounting.sizes[relative_path] = len(encoded)
-            self._emit_usage()
+            sizes[relative_path] = len(encoded)
+            self._emit_usage(sizes)
             return match_count
+
+        return await _run_filesystem_operation(edit, lock=self._lock)
 
     async def list(self, path: str = "") -> tuple[str, ...]:
         return tuple(metadata.path for metadata in await self.list_metadata(path))
@@ -421,47 +439,44 @@ class _ConversationTextNamespace:
 
     async def delete(self, path: str) -> None:
         relative_path = _normalize_path(path)
-        async with self._lock:
-            await self._ensure_accounting()
+
+        async def remove() -> None:
+            sizes = await self._recount()
             try:
                 await self._filesystem.delete(self._physical_path(relative_path))
             except FileNotFoundError:
-                self._forget_path(relative_path)
-                return
+                pass
             except Exception as exc:
                 raise self._storage_error("delete", exc) from exc
-            self._forget_path(relative_path)
+            prefix = f"{relative_path}/"
+            self._emit_usage(
+                {
+                    candidate: size
+                    for candidate, size in sizes.items()
+                    if candidate != relative_path and not candidate.startswith(prefix)
+                }
+            )
+
+        await _run_filesystem_operation(remove, lock=self._lock)
 
     async def purge(self) -> None:
         """Idempotently remove this entire code-owned namespace."""
-        async with self._lock:
+
+        async def remove() -> None:
             try:
                 await self._filesystem.delete(self._prefix.rstrip("/"))
             except FileNotFoundError:
-                self._accounting.sizes = {}
-                self._emit_usage()
-                return
+                pass
             except Exception as exc:
                 raise self._storage_error("purge", exc) from exc
-            self._accounting.sizes = {}
-            self._emit_usage()
+            self._emit_usage({})
+
+        await _run_filesystem_operation(remove, lock=self._lock)
 
     def _physical_path(self, relative_path: str) -> str:
         return f"{self._prefix}{relative_path}"
 
-    def _forget_path(self, relative_path: str) -> None:
-        assert self._accounting.sizes is not None
-        prefix = f"{relative_path.rstrip('/')}/"
-        self._accounting.sizes = {
-            candidate: size
-            for candidate, size in self._accounting.sizes.items()
-            if candidate != relative_path and not candidate.startswith(prefix)
-        }
-        self._emit_usage()
-
-    async def _ensure_accounting(self) -> None:
-        if self._accounting.sizes is not None:
-            return
+    async def _recount(self) -> dict[str, int]:
         try:
             entries = await self._filesystem.list(self._prefix)
             sizes: dict[str, int] = {}
@@ -477,16 +492,15 @@ class _ConversationTextNamespace:
                 sizes[entry.path.removeprefix(self._prefix)] = size
         except Exception as exc:
             raise self._storage_error("recount", exc) from exc
-        self._accounting.sizes = sizes
-        self._emit_usage()
+        self._emit_usage(sizes)
+        return sizes
 
-    def _check_write_quota(self, relative_path: str, new_size: int) -> None:
-        assert self._accounting.sizes is not None
-        old_size = self._accounting.sizes.get(relative_path)
-        attempted_files = len(self._accounting.sizes) + (old_size is None)
-        attempted_bytes = (
-            sum(self._accounting.sizes.values()) - (old_size or 0) + new_size
-        )
+    def _check_write_quota(
+        self, sizes: dict[str, int], relative_path: str, new_size: int
+    ) -> None:
+        old_size = sizes.get(relative_path)
+        attempted_files = len(sizes) + (old_size is None)
+        attempted_bytes = sum(sizes.values()) - (old_size or 0) + new_size
         if attempted_files > self._quota.max_files:
             self._reject_quota("files", self._quota.max_files, attempted_files)
         if attempted_bytes > self._quota.max_bytes:
@@ -523,17 +537,15 @@ class _ConversationTextNamespace:
             attempted=attempted,
         )
 
-    def _emit_usage(self) -> None:
-        if self._accounting.sizes is None:
-            return
+    def _emit_usage(self, sizes: dict[str, int]) -> None:
         _LOGGER.info(
             "Conversation filesystem namespace usage",
             extra={
                 "conversation_filesystem": {
                     "conversation_id": self._conversation_id,
                     "namespace": self._namespace,
-                    "usage_bytes": sum(self._accounting.sizes.values()),
-                    "usage_files": len(self._accounting.sizes),
+                    "usage_bytes": sum(sizes.values()),
+                    "usage_files": len(sizes),
                 }
             },
         )
@@ -611,12 +623,12 @@ def _is_safe_namespace_id(namespace: str) -> bool:
     )
 
 
-def _namespace_accounting(
+def _namespace_lock(
     filesystem: _ConversationFilesystemStorage, prefix: str
-) -> _NamespaceAccounting:
+) -> asyncio.Lock:
     with _LOCK_REGISTRY_GUARD:
-        states = _STATES_BY_FILESYSTEM.setdefault(filesystem, {})
-        return states.setdefault(prefix, _NamespaceAccounting(lock=asyncio.Lock()))
+        locks = _LOCKS_BY_FILESYSTEM.setdefault(filesystem, {})
+        return locks.setdefault(prefix, asyncio.Lock())
 
 
 def _finish_filesystem_write(task: asyncio.Task[Any]) -> None:

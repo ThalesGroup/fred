@@ -1446,10 +1446,12 @@ export type CreateFolderApiResponse = /** status 201 Success */ Folder;
 export type CreateFolderApiArg = {
   createFolder: CreateFolder;
 };
-export type DeleteFolderApiResponse = unknown;
+export type DeleteFolderApiResponse = /** status 200 Already purged */
+  | Receipt
+  | /** status 202 Retired; physical cleanup is asynchronous */ Receipt;
 export type DeleteFolderApiArg = {
   id: string;
-  /** Refuse deletion if any child folder or document remains */
+  /** Refuse retirement if any live child folder remains; live documents and pending uploads always prevent retirement */
   emptyOnly?: boolean;
 };
 export type RenameFolderApiResponse = unknown;
@@ -2611,7 +2613,7 @@ export type ResultConfirmation = {
   reference?: string | null;
 };
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
-export type TargetKind = "organization" | "team" | "project" | "document" | "session";
+export type TargetKind = "organization" | "team" | "project" | "document" | "folder" | "session";
 export type Receipt = {
   actor_subject: string;
   completed_at?: string | null;
@@ -3838,6 +3840,8 @@ export type TitleAdmission = {
 export type RuntimeBinding = {
   agent: RuntimeAgent;
   attachments: RuntimeAttachment[];
+  /** Readable corpus fixed at admission; document publication/lifecycle stays live. */
+  authorized_space_ids: string[];
   conversation_id: string | null;
   inference?: InferenceAdmission | null;
   mcp_bindings: McpBinding[];

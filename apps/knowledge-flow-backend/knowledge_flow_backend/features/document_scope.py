@@ -36,9 +36,9 @@ def declare_document_context_openapi(app: FastAPI) -> None:
     selection["folder_ids"]["description"] = "Union of direct folder contents; not recursive. Omitted means no folders in this clause."
     selection["document_ids"]["description"] = "Explicit document UUIDs, unioned with this clause's folder contents. Omitted means no explicit documents. A clause with neither selects nothing."
     context_schema["description"] = (
-        "Server-bound space, corpus selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments."
+        "Server-bound space, admitted corpus, selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments."
     )
-    context_schema["properties"]["space_id"]["description"] = "Admitted turn's space UUID; KF checks the represented person's read permission."
+    context_schema["properties"]["space_id"]["description"] = "Admitted turn's space UUID; SQL checks its current lifecycle, not the person's admission rights."
     context_schema["properties"]["document_scope"]["description"] = (
         "Corpus-only intersection of selection clauses. Zero clauses add no filter; one empty clause selects no corpus documents. Attachments are selected separately."
     )
@@ -82,7 +82,7 @@ def declare_document_context_openapi(app: FastAPI) -> None:
                         content={
                             "application/json": {
                                 "schema": {"$ref": "#/components/schemas/DocumentAccessContext"},
-                                "example": {"space_id": "00000000-0000-0000-0000-000000000001", "document_scope": {"selections": []}},
+                                "example": {"space_id": "00000000-0000-0000-0000-000000000001", "authorized_space_ids": ["00000000-0000-0000-0000-000000000001"], "document_scope": {"selections": []}},
                             }
                         },
                     )
@@ -97,11 +97,11 @@ def _describe_document_responses(operation: dict) -> None:
     descriptions = {
         "400": "Invalid JSON document context (invalid_document_context).",
         "401": "Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.",
-        "403": "Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.",
+        "403": "Missing document context (document_context_required) or rejected delegation.",
         "404": "Space not found (space_not_found).",
         "409": "Space pending deletion (space_pending_deletion).",
         "500": "Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.",
-        "503": "Account status could not be checked. This is an unavailable decision, not a permission grant.",
+        "503": "A required data dependency is unavailable; this never grants access.",
     }
     if operation_id in {"get_document_markdown", "summarize_document", "extract_document"}:
         descriptions["404"] += " Document not visible, unpublished, retired, or published markdown unavailable (document_not_found); not a document-existence oracle."

@@ -54,7 +54,6 @@ def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch, cap
 
     context = SimpleNamespace(get_pg_async_engine=lambda: SimpleNamespace(connect=connect), get_published_artifact_reader=lambda: reader)
     monkeypatch.setattr(markdown_module.ApplicationContext, "get_instance", lambda: context)
-    monkeypatch.setattr(markdown_module, "require_space_read", AsyncMock(return_value=(SPACE,)))
     monkeypatch.setattr(markdown_module, "resolve_scope", AsyncMock(return_value=object()))
     monkeypatch.setattr(markdown_module, "published_artifact", AsyncMock(return_value=SimpleNamespace(prefix="attempt/", size=10, sha256="0" * 64)))
 
@@ -65,7 +64,9 @@ def test_a_refused_access_key_answers_502_with_the_setting_only(monkeypatch, cap
     app.include_router(router)
     app.dependency_overrides[delegated_person] = lambda: SimpleNamespace(uid="alice")
     with caplog.at_level(logging.ERROR), TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get(f"/documents/{DOC}/markdown", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()).model_dump_json()})
+        response = client.get(
+            f"/documents/{DOC}/markdown", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope()).model_dump_json()}
+        )
 
     assert response.status_code == 502
     assert response.json() == {

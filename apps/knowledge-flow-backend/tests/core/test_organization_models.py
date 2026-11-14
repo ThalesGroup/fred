@@ -61,7 +61,7 @@ async def test_document_tools_require_the_organization_default_model(monkeypatch
     engine.connect.return_value.__aenter__.return_value = connection_returning(None)
     application = SimpleNamespace(get_pg_async_engine=lambda: engine)
     monkeypatch.setattr("knowledge_flow_backend.application_context.ApplicationContext.get_instance", lambda: application)
-    context = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope())
+    context = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope())
     with pytest.raises(HTTPException) as failure:
         await module.organization_chat_model(context)
     assert (failure.value.status_code, failure.value.detail) == (409, "organization_default_model_required")

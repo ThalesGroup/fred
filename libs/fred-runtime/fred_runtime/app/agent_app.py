@@ -53,7 +53,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
@@ -263,6 +263,11 @@ from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.turn import TurnAuthority, current_turn
 from fred_runtime.react.react_runtime import ReActRuntime
+from fred_runtime.runtime_support.active_turn import (
+    ActiveTurn,
+    ActiveTurnLost,
+    ActiveTurnStore,
+)
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
@@ -1252,6 +1257,7 @@ class _AgentExecuteRequest(BaseModel):
     _document_scope: DocumentScope = PrivateAttr(default_factory=DocumentScope)
 
     _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
+    _active_turn: ActiveTurn | None = PrivateAttr(default=None)
     _title_task: asyncio.Task[str | None] | None = PrivateAttr(default=None)
     # Stamp only after the resume claim starts; HTTP admission alone is not an answer.
     _hitl_resume_started: bool = PrivateAttr(default=False)
@@ -3036,15 +3042,20 @@ async def _rank_runtime_event(
             raise RuntimeError("Steered message has no session")
         scope = RunScope.current()
         receipt_key = f"steered-user:{payload['message_id']}"
+        lease = scope.active_turn if scope is not None else None
         try:
-            delivered = await turn_messages.require_history().deliver_steered_message(
-                session_id=session_id,
-                user_id=user_id,
-                message_id=payload["message_id"],
-                rank=positions.require_row(),
-                exchange_id=exchange_id,
-                expected_content=payload["content"],
-            )
+            async with lease.writing() if lease is not None else nullcontext() as sql:
+                delivered = (
+                    await turn_messages.require_history().deliver_steered_message(
+                        session_id=session_id,
+                        user_id=user_id,
+                        message_id=payload["message_id"],
+                        rank=positions.require_row(),
+                        exchange_id=exchange_id,
+                        expected_content=payload["content"],
+                        session=sql,
+                    )
+                )
             if delivered is None:
                 raise RuntimeError("Steered message disappeared before delivery")
             payload["rank"] = delivered.rank
@@ -3053,6 +3064,10 @@ async def _rank_runtime_event(
         except Exception as exc:
             if scope is not None:
                 scope.fail_event_receipt(receipt_key, exc)
+            if isinstance(exc, ActiveTurnLost):
+                return RuntimeErrorEvent(message=exc.user_message).model_dump(
+                    mode="json"
+                )
             raise
     return payload
 
@@ -3107,6 +3122,7 @@ async def _write_turn_history(
     base_rank: int | None = None,
     pending_message_id: str | None = None,
     prewritten_initial: bool = False,
+    active_turn: ActiveTurn | None = None,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -3579,13 +3595,29 @@ async def _write_turn_history(
         return
 
     try:
-        await history_store.save(
-            session_id=session_id,
-            messages=messages,
-            user_id=user_id,
-            space_id=space_id,
-            agent_instance_id=agent_instance_id,
-        )
+        if active_turn is not None:
+            if not isinstance(history_store, PostgresHistoryStore):
+                raise RuntimeError("Active turns require transactional history")
+            async with active_turn.writing() as sql:
+                await history_store.save(
+                    session_id=session_id,
+                    messages=messages,
+                    user_id=user_id,
+                    space_id=space_id,
+                    agent_instance_id=agent_instance_id,
+                    session=sql,
+                )
+        else:
+            await history_store.save(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                space_id=space_id,
+                agent_instance_id=agent_instance_id,
+            )
+    except ActiveTurnLost:
+        logger.error("event=turn_history outcome=refused reason=active_turn_lost")
+        raise
     except Exception:
         if delegation_enabled():
             logger.error("event=turn_history outcome=failed reason=write_failed")
@@ -3835,6 +3867,38 @@ def _emit_turn_completed(
             logger.exception("Failed to emit agent.turn_completed")
 
 
+async def _take_active_turn(
+    request: _AgentExecuteRequest,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    container: PodApplicationContext,
+) -> None:
+    session_id = (request.context or {}).get("session_id")
+    if not session_id:
+        if isinstance(definition, GraphAgentDefinition) and (
+            request.resume_payload is not None or request.interrupted_action is not None
+        ):
+            raise HTTPException(
+                status_code=422, detail="Graph resume requires a conversation."
+            )
+        return
+    engine = container.get_sql_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Conversation storage unavailable.")
+    lease = await ActiveTurnStore(engine).take(session_id)
+    if lease is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "conversation_busy",
+                "message": "A response is already in progress in this conversation "
+                "(in another tab or on another device). Wait for it to finish or stop "
+                "it there, then send your message again.",
+            },
+        )
+    request._active_turn = lease
+    lease.start()
+
+
 async def _resolve_exchange_id(
     *,
     resume_payload: Any | None,
@@ -3893,46 +3957,48 @@ async def _stream(
 
     History write:
     - events are collected while yielding
-    - history is committed before the stream closes so a follow-up turn sees its ranks
+    - final is emitted only after history commits; a lease loss emits an error instead
 
     Execution scope and team ancestry come from the admitted request context.
     """
-    ctx = request.context or {}
-    session_id: str | None = ctx.get("session_id")
-    user_id: str = ctx.get("user_id") or "unknown"
-    exchange_id = exchange_id or await _resolve_exchange_id(
-        resume_payload=request.resume_payload,
-        session_id=session_id,
-        history_store=get_runtime_context().config.history_store,
-    )
-    history_store = get_runtime_context().config.history_store
-    base_rank, ranker = await _initial_history_ranker(
-        history_store, session_id, request, 0 if prewritten_initial else None
-    )
-    turn_start = time.monotonic()
-
-    resolved_team_id: str | None = ctx.get("team_id")
-    space_id = ctx.get("space_id")
-    if request.agent_instance_id and not space_id:
-        raise AuthorityLostError()
-
-    collected: list[dict[str, Any]] = []
-    expander = _TurnEventExpander(definition, request)
-    payloads = _iterate_runtime_event_payloads(
-        definition,
-        request,
-        access_token=access_token,
-        registry=registry,
-        exchange_id=exchange_id,
-        tuning=tuning,
-        capability_registry=capability_registry,
-        team_settings=team_settings,
-        platform_prompt=platform_prompt,
-        credential_provider=credential_provider,
-        owns_run_record=True,
-        steering_enabled=bool(request.agent_instance_id),
-    )
+    terminal: dict[str, Any] | None = None
+    exchange_id = exchange_id or ""
     try:
+        ctx = request.context or {}
+        session_id: str | None = ctx.get("session_id")
+        user_id: str = ctx.get("user_id") or "unknown"
+        exchange_id = exchange_id or await _resolve_exchange_id(
+            resume_payload=request.resume_payload,
+            session_id=session_id,
+            history_store=get_runtime_context().config.history_store,
+        )
+        history_store = get_runtime_context().config.history_store
+        base_rank, ranker = await _initial_history_ranker(
+            history_store, session_id, request, 0 if prewritten_initial else None
+        )
+        turn_start = time.monotonic()
+
+        resolved_team_id: str | None = ctx.get("team_id")
+        space_id = ctx.get("space_id")
+        if request.agent_instance_id and not space_id:
+            raise AuthorityLostError()
+
+        collected: list[dict[str, Any]] = []
+        expander = _TurnEventExpander(definition, request)
+        payloads = _iterate_runtime_event_payloads(
+            definition,
+            request,
+            access_token=access_token,
+            registry=registry,
+            exchange_id=exchange_id,
+            tuning=tuning,
+            capability_registry=capability_registry,
+            team_settings=team_settings,
+            platform_prompt=platform_prompt,
+            credential_provider=credential_provider,
+            owns_run_record=True,
+            steering_enabled=bool(request.agent_instance_id),
+        )
         try:
             if on_start is not None:
                 on_start()
@@ -3946,33 +4012,46 @@ async def _stream(
                         exchange_id=exchange_id,
                     )
                     collected.append(payload)
-                    yield _sse(json.dumps(payload, ensure_ascii=False))
+                    if payload.get("kind") in {"final", "execution_error"}:
+                        terminal = payload
+                    else:
+                        yield _sse(json.dumps(payload, ensure_ascii=False))
         finally:
             await complete_cleanup(payloads.aclose())
             if session_id and history_store is not None:
-                await complete_cleanup(
-                    _write_turn_history(
-                        session_id=session_id,
-                        user_id=user_id,
-                        request_message=request.message,
-                        turn_command=_turn_command(ctx),
-                        skill_invocation=ctx.get("skill"),
-                        skill_invocations=ctx.get("skills"),
-                        payloads=collected,
-                        history_store=history_store,
-                        space_id=space_id,
-                        agent_instance_id=request.agent_instance_id,
-                        exchange_id=exchange_id,
-                        resume_payload=request.resume_payload,
-                        occurrence_id=request.occurrence_id,
-                        previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
-                        resume_started=request._hitl_resume_started,
-                        base_rank=base_rank,
-                        pending_message_id=request.pending_message_id,
-                        prewritten_initial=prewritten_initial,
+                try:
+                    await complete_cleanup(
+                        _write_turn_history(
+                            session_id=session_id,
+                            user_id=user_id,
+                            request_message=request.message,
+                            turn_command=_turn_command(ctx),
+                            skill_invocation=ctx.get("skill"),
+                            skill_invocations=ctx.get("skills"),
+                            payloads=collected,
+                            history_store=history_store,
+                            space_id=space_id,
+                            agent_instance_id=request.agent_instance_id,
+                            exchange_id=exchange_id,
+                            resume_payload=request.resume_payload,
+                            occurrence_id=request.occurrence_id,
+                            previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                            resume_started=request._hitl_resume_started,
+                            base_rank=base_rank,
+                            pending_message_id=request.pending_message_id,
+                            prewritten_initial=prewritten_initial,
+                            active_turn=request._active_turn,
+                        )
                     )
-                )
+                except ActiveTurnLost as exc:
+                    terminal = RuntimeErrorEvent(message=exc.user_message).model_dump(
+                        mode="json"
+                    )
+                    collected.append(terminal)
+
     finally:
+        if request._active_turn is not None:
+            await complete_cleanup(request._active_turn.release())
         # Detached reporting uses the workload identity, even after run teardown.
         # Loss is possible beyond the deadline or if this pod stops: the key
         # prevents duplicates, not loss. A durable outbox can later use this route.
@@ -3984,6 +4063,9 @@ async def _stream(
                 occurred_at=datetime.now(timezone.utc),
             )
         )
+
+    if terminal is not None:
+        yield _sse(json.dumps(terminal, ensure_ascii=False))
 
     _emit_turn_completed(
         container,
@@ -4617,7 +4699,20 @@ async def _iterate_runtime_event_payloads(
                     _mark_run_terminal(credential_provider)
 
                 scope.set_owner_authority_end(end_turn_authority)
-            async for payload in iterator:
+                scope.active_turn = request._active_turn
+                if request._active_turn is not None:
+                    request._active_turn.on_lost = scope.close
+            if request._active_turn is not None:
+                request._active_turn.check()
+            while True:
+                try:
+                    payload = (
+                        await request._active_turn.next_event(iterator)
+                        if request._active_turn is not None
+                        else await anext(iterator)
+                    )
+                except StopAsyncIteration:
+                    break
                 title_task = request._title_task
                 if title_task is not None and (
                     title_task.done() or payload.get("kind") == "final"
@@ -4639,6 +4734,12 @@ async def _iterate_runtime_event_payloads(
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
                     outcome = "awaiting_human"
                 yield payload
+            if request._active_turn is not None:
+                request._active_turn.check()
+        except ActiveTurnLost as exc:
+            outcome = "failed"
+            logger.error("event=active_turn outcome=stopped reason=lease_lost")
+            yield RuntimeErrorEvent(message=exc.user_message).model_dump(mode="json")
         except asyncio.CancelledError:
             outcome = "cancelled"
             if owns_run_record:
@@ -5133,7 +5234,7 @@ def _terminal_execute_payload(
         return _RuntimeErrorPayload(error="Agent execution produced no runtime events.")
     adapter = _execute_response_adapter()
     for payload in reversed(payloads):
-        if payload.get("kind") == "final":
+        if payload.get("kind") in {"final", "execution_error"}:
             return adapter.validate_python(payload)
     return adapter.validate_python(payloads[-1])
 
@@ -6454,113 +6555,133 @@ def _build_agent_router(
             access_token=access_token,
         )
         try:
-            exchange_id = await _resolve_exchange_id(
-                resume_payload=request.resume_payload,
-                session_id=request.effective_session_id(),
-                history_store=get_runtime_context().config.history_store,
-            )
-            _enforce_turn_options(
-                request, target, _capability_registry_of(http_request)
-            )
-            await _require_pending_opening_message(
-                internal_req,
-                request.effective_session_id(),
-                request.effective_user_id() or "unknown",
-            )
-            prewritten_initial = await _claim_initial_opening(
-                get_runtime_context().config.history_store,
-                internal_req,
-                request.effective_session_id(),
-                request.effective_user_id() or "unknown",
-                (internal_req.context or {}).get("space_id"),
-                exchange_id,
-            )
-        except BaseException:
-            if internal_req._turn_authority is not None:
-                internal_req._turn_authority.close()
-            _discard_run_record(target.credential_provider)
-            raise
-        session_id = request.effective_session_id()
-        user_id_str = request.effective_user_id() or "unknown"
-        history_store = get_runtime_context().config.history_store
-        base_rank, ranker = await _initial_history_ranker(
-            history_store, session_id, internal_req, 0 if prewritten_initial else None
-        )
-        payloads: list[dict[str, Any]] = []
-        expander = _TurnEventExpander(target.definition, internal_req)
-        try:
-            async for runtime_payload in _iterate_runtime_event_payloads(
-                target.definition,
-                internal_req,
-                access_token=None
-                if target.credential_provider and target.credential_provider.delegated
-                else access_token,
-                registry=registry,
-                exchange_id=exchange_id,
-                tuning=target.tuning,
-                capability_registry=_capability_registry_of(http_request),
-                team_settings=target.team_settings,
-                platform_prompt=target.platform_prompt,
-                credential_provider=target.credential_provider,
-                owns_run_record=True,
-                steering_enabled=bool(internal_req.agent_instance_id),
-            ):
-                for payload in expander.expand(runtime_payload):
-                    payloads.append(
-                        await _rank_runtime_event(
-                            payload,
-                            ranker,
+            try:
+                await _take_active_turn(internal_req, target.definition, container)
+                exchange_id = await _resolve_exchange_id(
+                    resume_payload=request.resume_payload,
+                    session_id=request.effective_session_id(),
+                    history_store=get_runtime_context().config.history_store,
+                )
+                _enforce_turn_options(
+                    request, target, _capability_registry_of(http_request)
+                )
+                await _require_pending_opening_message(
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                )
+                prewritten_initial = await _claim_initial_opening(
+                    get_runtime_context().config.history_store,
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                    (internal_req.context or {}).get("space_id"),
+                    exchange_id,
+                )
+                session_id = request.effective_session_id()
+                user_id_str = request.effective_user_id() or "unknown"
+                history_store = get_runtime_context().config.history_store
+                base_rank, ranker = await _initial_history_ranker(
+                    history_store,
+                    session_id,
+                    internal_req,
+                    0 if prewritten_initial else None,
+                )
+                payloads: list[dict[str, Any]] = []
+                expander = _TurnEventExpander(target.definition, internal_req)
+            except BaseException:
+                if internal_req._turn_authority is not None:
+                    internal_req._turn_authority.close()
+                _discard_run_record(target.credential_provider)
+                raise
+            try:
+                async for runtime_payload in _iterate_runtime_event_payloads(
+                    target.definition,
+                    internal_req,
+                    access_token=None
+                    if target.credential_provider
+                    and target.credential_provider.delegated
+                    else access_token,
+                    registry=registry,
+                    exchange_id=exchange_id,
+                    tuning=target.tuning,
+                    capability_registry=_capability_registry_of(http_request),
+                    team_settings=target.team_settings,
+                    platform_prompt=target.platform_prompt,
+                    credential_provider=target.credential_provider,
+                    owns_run_record=True,
+                    steering_enabled=bool(internal_req.agent_instance_id),
+                ):
+                    for payload in expander.expand(runtime_payload):
+                        payloads.append(
+                            await _rank_runtime_event(
+                                payload,
+                                ranker,
+                                session_id=session_id,
+                                user_id=user_id_str,
+                                exchange_id=exchange_id,
+                            )
+                        )
+            finally:
+                spawn(
+                    report_run_usage(
+                        internal_req._turn_authority,
+                        exchange_id=exchange_id,
+                        occurred_at=datetime.now(timezone.utc),
+                    )
+                )
+            # Write history after generator is fully consumed.
+            # Can await here — no SSE response to block.
+            if session_id:
+                if history_store is not None:
+                    try:
+                        await _write_turn_history(
                             session_id=session_id,
                             user_id=user_id_str,
+                            request_message=request.input,
+                            turn_command=_turn_command(internal_req.context or {}),
+                            skill_invocation=(internal_req.context or {}).get("skill"),
+                            skill_invocations=(internal_req.context or {}).get(
+                                "skills"
+                            ),
+                            payloads=payloads,
+                            history_store=history_store,
+                            space_id=(internal_req.context or {}).get("space_id"),
+                            agent_instance_id=request.agent_instance_id,
                             exchange_id=exchange_id,
+                            resume_payload=request.resume_payload,
+                            occurrence_id=request.occurrence_id,
+                            previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                            resume_started=internal_req._hitl_resume_started,
+                            base_rank=base_rank,
+                            pending_message_id=request.pending_message_id,
+                            prewritten_initial=prewritten_initial,
+                            active_turn=internal_req._active_turn,
                         )
-                    )
-        finally:
-            spawn(
-                report_run_usage(
-                    internal_req._turn_authority,
-                    exchange_id=exchange_id,
-                    occurred_at=datetime.now(timezone.utc),
-                )
+                    except ActiveTurnLost as exc:
+                        payloads.append(
+                            RuntimeErrorEvent(message=exc.user_message).model_dump(
+                                mode="json"
+                            )
+                        )
+            _emit_turn_completed(
+                container,
+                session_id=session_id,
+                exchange_id=exchange_id,
+                user_id=user_id_str,
+                team_id=target.team_id,
+                space_id=(internal_req.context or {}).get("space_id"),
+                agent_instance_id=request.agent_instance_id,
+                agent_instance_name=target.agent_instance_name,
+                template_agent_id=target.definition.agent_id,
+                payloads=payloads,
+                turn_start=turn_start,
             )
-        _emit_turn_completed(
-            container,
-            session_id=session_id,
-            exchange_id=exchange_id,
-            user_id=user_id_str,
-            team_id=target.team_id,
-            space_id=(internal_req.context or {}).get("space_id"),
-            agent_instance_id=request.agent_instance_id,
-            agent_instance_name=target.agent_instance_name,
-            template_agent_id=target.definition.agent_id,
-            payloads=payloads,
-            turn_start=turn_start,
-        )
-        # Write history after generator is fully consumed.
-        # Can await here — no SSE response to block.
-        if session_id:
-            if history_store is not None:
-                await _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id_str,
-                    request_message=request.input,
-                    turn_command=_turn_command(internal_req.context or {}),
-                    skill_invocation=(internal_req.context or {}).get("skill"),
-                    skill_invocations=(internal_req.context or {}).get("skills"),
-                    payloads=payloads,
-                    history_store=history_store,
-                    space_id=(internal_req.context or {}).get("space_id"),
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
-                    resume_started=internal_req._hitl_resume_started,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
-                )
-        return _terminal_execute_payload(payloads)
+
+            return _terminal_execute_payload(payloads)
+        finally:
+            if internal_req._active_turn is not None:
+                await complete_cleanup(internal_req._active_turn.release())
 
     @router.post(
         "/evaluate",
@@ -6600,120 +6721,140 @@ def _build_agent_router(
             access_token=access_token,
         )
         try:
-            exchange_id = await _resolve_exchange_id(
-                resume_payload=request.resume_payload,
-                session_id=request.effective_session_id(),
-                history_store=get_runtime_context().config.history_store,
-            )
-            _enforce_turn_options(
-                request, target, _capability_registry_of(http_request)
-            )
-            await _require_pending_opening_message(
-                internal_req,
-                request.effective_session_id(),
-                request.effective_user_id() or "unknown",
-            )
-            prewritten_initial = await _claim_initial_opening(
-                get_runtime_context().config.history_store,
-                internal_req,
-                request.effective_session_id(),
-                request.effective_user_id() or "unknown",
-                (internal_req.context or {}).get("space_id"),
-                exchange_id,
-            )
-        except BaseException:
-            if internal_req._turn_authority is not None:
-                internal_req._turn_authority.close()
-            _discard_run_record(target.credential_provider)
-            raise
-        session_id = request.effective_session_id()
-        eval_session_id = session_id or str(uuid4())
-        user_id_str = request.effective_user_id() or "unknown"
-        history_store = get_runtime_context().config.history_store
-        base_rank, ranker = await _initial_history_ranker(
-            history_store, session_id, internal_req, 0 if prewritten_initial else None
-        )
-        payloads: list[dict[str, Any]] = []
-        expander = _TurnEventExpander(target.definition, internal_req)
-        try:
-            async for runtime_payload in _iterate_runtime_event_payloads(
-                target.definition,
-                internal_req,
-                access_token=None
-                if target.credential_provider and target.credential_provider.delegated
-                else access_token,
-                registry=registry,
-                exchange_id=exchange_id,
-                tuning=target.tuning,
-                capability_registry=_capability_registry_of(http_request),
-                team_settings=target.team_settings,
-                platform_prompt=target.platform_prompt,
-                credential_provider=target.credential_provider,
-                owns_run_record=True,
-                steering_enabled=bool(internal_req.agent_instance_id),
-            ):
-                for payload in expander.expand(runtime_payload):
-                    payloads.append(
-                        await _rank_runtime_event(
-                            payload,
-                            ranker,
+            try:
+                await _take_active_turn(internal_req, target.definition, container)
+                exchange_id = await _resolve_exchange_id(
+                    resume_payload=request.resume_payload,
+                    session_id=request.effective_session_id(),
+                    history_store=get_runtime_context().config.history_store,
+                )
+                _enforce_turn_options(
+                    request, target, _capability_registry_of(http_request)
+                )
+                await _require_pending_opening_message(
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                )
+                prewritten_initial = await _claim_initial_opening(
+                    get_runtime_context().config.history_store,
+                    internal_req,
+                    request.effective_session_id(),
+                    request.effective_user_id() or "unknown",
+                    (internal_req.context or {}).get("space_id"),
+                    exchange_id,
+                )
+                session_id = request.effective_session_id()
+                eval_session_id = session_id or str(uuid4())
+                user_id_str = request.effective_user_id() or "unknown"
+                history_store = get_runtime_context().config.history_store
+                base_rank, ranker = await _initial_history_ranker(
+                    history_store,
+                    session_id,
+                    internal_req,
+                    0 if prewritten_initial else None,
+                )
+                payloads: list[dict[str, Any]] = []
+                expander = _TurnEventExpander(target.definition, internal_req)
+            except BaseException:
+                if internal_req._turn_authority is not None:
+                    internal_req._turn_authority.close()
+                _discard_run_record(target.credential_provider)
+                raise
+            try:
+                async for runtime_payload in _iterate_runtime_event_payloads(
+                    target.definition,
+                    internal_req,
+                    access_token=None
+                    if target.credential_provider
+                    and target.credential_provider.delegated
+                    else access_token,
+                    registry=registry,
+                    exchange_id=exchange_id,
+                    tuning=target.tuning,
+                    capability_registry=_capability_registry_of(http_request),
+                    team_settings=target.team_settings,
+                    platform_prompt=target.platform_prompt,
+                    credential_provider=target.credential_provider,
+                    owns_run_record=True,
+                    steering_enabled=bool(internal_req.agent_instance_id),
+                ):
+                    for payload in expander.expand(runtime_payload):
+                        payloads.append(
+                            await _rank_runtime_event(
+                                payload,
+                                ranker,
+                                session_id=session_id,
+                                user_id=user_id_str,
+                                exchange_id=exchange_id,
+                            )
+                        )
+                eval_session_id = session_id or str(uuid4())
+            finally:
+                spawn(
+                    report_run_usage(
+                        internal_req._turn_authority,
+                        exchange_id=exchange_id,
+                        occurred_at=datetime.now(timezone.utc),
+                    )
+                )
+            if session_id:
+                if history_store is not None:
+                    try:
+                        await _write_turn_history(
                             session_id=session_id,
                             user_id=user_id_str,
+                            request_message=request.input,
+                            turn_command=_turn_command(internal_req.context or {}),
+                            skill_invocation=(internal_req.context or {}).get("skill"),
+                            skill_invocations=(internal_req.context or {}).get(
+                                "skills"
+                            ),
+                            payloads=payloads,
+                            history_store=history_store,
+                            space_id=(internal_req.context or {}).get("space_id"),
+                            agent_instance_id=request.agent_instance_id,
                             exchange_id=exchange_id,
+                            resume_payload=request.resume_payload,
+                            occurrence_id=request.occurrence_id,
+                            previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                            resume_started=internal_req._hitl_resume_started,
+                            base_rank=base_rank,
+                            pending_message_id=request.pending_message_id,
+                            prewritten_initial=prewritten_initial,
+                            active_turn=internal_req._active_turn,
                         )
-                    )
-            eval_session_id = session_id or str(uuid4())
-        finally:
-            spawn(
-                report_run_usage(
-                    internal_req._turn_authority,
-                    exchange_id=exchange_id,
-                    occurred_at=datetime.now(timezone.utc),
-                )
+                    except ActiveTurnLost as exc:
+                        payloads.append(
+                            RuntimeErrorEvent(message=exc.user_message).model_dump(
+                                mode="json"
+                            )
+                        )
+            _emit_turn_completed(
+                container,
+                session_id=session_id,
+                exchange_id=exchange_id,
+                user_id=user_id_str,
+                team_id=target.team_id,
+                space_id=(internal_req.context or {}).get("space_id"),
+                agent_instance_id=request.agent_instance_id,
+                agent_instance_name=target.agent_instance_name,
+                template_agent_id=target.definition.agent_id,
+                payloads=payloads,
+                turn_start=turn_start,
             )
-        _emit_turn_completed(
-            container,
-            session_id=session_id,
-            exchange_id=exchange_id,
-            user_id=user_id_str,
-            team_id=target.team_id,
-            space_id=(internal_req.context or {}).get("space_id"),
-            agent_instance_id=request.agent_instance_id,
-            agent_instance_name=target.agent_instance_name,
-            template_agent_id=target.definition.agent_id,
-            payloads=payloads,
-            turn_start=turn_start,
-        )
-        if session_id:
-            if history_store is not None:
-                await _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id_str,
-                    request_message=request.input,
-                    turn_command=_turn_command(internal_req.context or {}),
-                    skill_invocation=(internal_req.context or {}).get("skill"),
-                    skill_invocations=(internal_req.context or {}).get("skills"),
-                    payloads=payloads,
-                    history_store=history_store,
-                    space_id=(internal_req.context or {}).get("space_id"),
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
-                    resume_started=internal_req._hitl_resume_started,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
-                )
-        return _build_eval_trace(
-            payloads=payloads,
-            input_text=request.input or "",
-            agent_id=target.definition.agent_id,
-            agent_tags=target.definition.tags,
-            session_id=eval_session_id,
-            turn_start=turn_start,
-        )
+
+            return _build_eval_trace(
+                payloads=payloads,
+                input_text=request.input or "",
+                agent_id=target.definition.agent_id,
+                agent_tags=target.definition.tags,
+                session_id=eval_session_id,
+                turn_start=turn_start,
+            )
+        finally:
+            if internal_req._active_turn is not None:
+                await complete_cleanup(internal_req._active_turn.release())
 
     @router.post("/sessions/{session_id}/steer", status_code=status.HTTP_202_ACCEPTED)
     async def steer_active_turn(
@@ -6831,6 +6972,7 @@ def _build_agent_router(
             access_token=access_token,
         )
         try:
+            await _take_active_turn(internal_req, target.definition, container)
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
@@ -6860,6 +7002,8 @@ def _build_agent_router(
             if internal_req._turn_authority is not None:
                 internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
+            if internal_req._active_turn is not None:
+                await complete_cleanup(internal_req._active_turn.release())
             raise
         provider = target.credential_provider
         stream_started = False
@@ -6869,14 +7013,20 @@ def _build_agent_router(
             stream_started = True
 
         async def cleanup_unstarted() -> None:
-            if not stream_started and prewritten_initial:
-                history = get_runtime_context().config.history_store
-                if isinstance(history, PostgresHistoryStore):
-                    await history.release_initial_user_message(
-                        request.effective_session_id() or "",
-                        request.effective_user_id() or "unknown",
-                        exchange_id,
-                    )
+            if stream_started:
+                return
+            try:
+                if prewritten_initial:
+                    history = get_runtime_context().config.history_store
+                    if isinstance(history, PostgresHistoryStore):
+                        await history.release_initial_user_message(
+                            request.effective_session_id() or "",
+                            request.effective_user_id() or "unknown",
+                            exchange_id,
+                        )
+            finally:
+                if internal_req._active_turn is not None:
+                    await internal_req._active_turn.release()
 
         stream = _stream(
             target.definition,

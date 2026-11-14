@@ -829,3 +829,299 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
     assert streamed_run_ids[0] != streamed_run_ids[1]
     assert len(runtime.records) == 0
     assert len(control_plane_requests) == 2
+
+
+async def _active_turn_tokens(app: FastAPI) -> list[str]:
+    from fred_runtime.app.dependencies import get_pod_container_from_app
+    from fred_runtime.runtime_support.active_turn import ACTIVE_TURN
+    from sqlalchemy import select
+
+    engine = get_pod_container_from_app(app).get_sql_engine()
+    assert engine is not None
+    async with engine.connect() as sql:
+        return list((await sql.scalars(select(ACTIVE_TURN.c.owner_token))).all())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+async def test_concurrent_turn_is_busy_without_history_write_and_disconnect_releases(
+    monkeypatch, tmp_path, route
+) -> None:
+    started = asyncio.Event()
+
+    async def stream() -> AsyncGenerator[RuntimeEvent, None]:
+        started.set()
+        yield StatusRuntimeEvent(status="working")
+        await asyncio.Event().wait()
+
+    app = _person_pod(monkeypatch, tmp_path)
+    _executor_runtime(monkeypatch, stream)
+    connection = _Connection(app)
+    body = {**_MANAGED_TURN, "session_id": "shared-conversation"}
+    async with _serving(connection) as client:
+        runtime = _install_delegation()
+        first = asyncio.ensure_future(_post(client, body))
+        try:
+            await asyncio.wait_for(started.wait(), TIMEOUT)
+            assert len(await _active_turn_tokens(app)) == 1
+            history = get_runtime_context().config.history_store
+            assert history is not None
+            before = await history.get("shared-conversation")
+            refused = await client.post(
+                f"/pod/v1/agents/{route}",
+                headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+                json=body,
+            )
+            assert refused.status_code == 409
+            assert refused.json()["detail"]["code"] == "conversation_busy"
+            assert await history.get("shared-conversation") == before
+            assert len(runtime.records) == 1
+        finally:
+            connection.drop()
+            await asyncio.wait_for(first, TIMEOUT)
+        assert await _active_turn_tokens(app) == []
+        assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+async def test_unstarted_response_releases_active_turn(monkeypatch, tmp_path) -> None:
+    from fred_runtime.app.agent_app import _RunStreamingResponse
+
+    async def fails_before_iteration(self, send):
+        assert len(await _active_turn_tokens(app)) == 1
+        raise RuntimeError("synthetic response startup failure")
+
+    monkeypatch.setattr(
+        _RunStreamingResponse, "stream_response", fails_before_iteration
+    )
+    app = _person_pod(monkeypatch, tmp_path)
+    async with _serving(_Connection(app)) as client:
+        runtime = _install_delegation()
+        with pytest.raises(RuntimeError, match="synthetic response startup failure"):
+            await _post(client, {**_MANAGED_TURN, "session_id": "unstarted"})
+        assert await _active_turn_tokens(app) == []
+        assert len(runtime.records) == 0
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        assert await history.get("unstarted") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+async def test_early_turn_refusal_releases_lease(monkeypatch, tmp_path, route) -> None:
+    app = _person_pod(monkeypatch, tmp_path)
+
+    async def refuse(**kwargs):
+        assert len(await _active_turn_tokens(app)) == 1
+        raise HTTPException(422, "synthetic refusal")
+
+    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", refuse)
+    async with _serving(_Connection(app)) as client:
+        runtime = _install_delegation()
+        result = await client.post(
+            f"/pod/v1/agents/{route}",
+            headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+            json={**_MANAGED_TURN, "session_id": "refused"},
+        )
+        assert result.status_code == 422
+        assert await _active_turn_tokens(app) == []
+        assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+async def test_lost_lease_stops_the_stream_with_explicit_error(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_runtime.runtime_support.active_turn import ActiveTurn
+    from fred_sdk.contracts.runtime import FinalRuntimeEvent
+
+    leases: list[ActiveTurn] = []
+    start = ActiveTurn.start
+
+    def remember(lease):
+        leases.append(lease)
+        start(lease)
+
+    monkeypatch.setattr(ActiveTurn, "start", remember)
+
+    async def stream() -> AsyncGenerator[RuntimeEvent, None]:
+        yield StatusRuntimeEvent(status="working")
+        leases[0].lost = True
+        yield FinalRuntimeEvent(content="must not be emitted or saved")
+
+    app = _person_pod(monkeypatch, tmp_path)
+    _executor_runtime(monkeypatch, stream)
+    async with _serving(_Connection(app)) as client:
+        _install_delegation()
+        result = await _post(client, {**_MANAGED_TURN, "session_id": "lost"})
+        payloads = _payloads(result.content)
+        assert payloads[-1]["kind"] == "execution_error"
+        assert "expired or was lost" in payloads[-1]["message"]
+        assert not any(p["kind"] == "final" for p in payloads)
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        rows = await history.get("lost")
+        assert len(rows) == 1 and rows[0].role == "user"
+        assert await _active_turn_tokens(app) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+async def test_lease_is_held_until_history_is_written(
+    monkeypatch, tmp_path, route
+) -> None:
+    from fred_sdk.contracts.runtime import FinalRuntimeEvent
+
+    async def stream() -> AsyncGenerator[RuntimeEvent, None]:
+        yield FinalRuntimeEvent(content="answer")
+
+    app = _person_pod(monkeypatch, tmp_path)
+    _executor_runtime(monkeypatch, stream)
+    written = False
+
+    async def write(**kwargs):
+        nonlocal written
+        assert len(await _active_turn_tokens(app)) == 1
+        await _write_turn_history(**kwargs)
+        assert len(await _active_turn_tokens(app)) == 1
+        written = True
+
+    monkeypatch.setattr(agent_app_module, "_write_turn_history", write)
+    async with _serving(_Connection(app)) as client:
+        _install_delegation()
+        result = await client.post(
+            f"/pod/v1/agents/{route}",
+            headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+            json={**_MANAGED_TURN, "session_id": "complete"},
+        )
+        assert result.status_code == 200
+        assert written
+        assert await _active_turn_tokens(app) == []
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        assert len(await history.get("complete")) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate"])
+async def test_rank_lookup_failure_releases_lease_and_record(
+    monkeypatch, tmp_path, route
+) -> None:
+    app = _person_pod(monkeypatch, tmp_path)
+
+    async def fail(*args):
+        assert len(await _active_turn_tokens(app)) == 1
+        raise RuntimeError("synthetic rank failure")
+
+    monkeypatch.setattr(agent_app_module, "_initial_history_ranker", fail)
+    async with _serving(_Connection(app)) as client:
+        runtime = _install_delegation()
+        with pytest.raises(RuntimeError, match="synthetic rank failure"):
+            await client.post(
+                f"/pod/v1/agents/{route}",
+                headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+                json={**_MANAGED_TURN, "session_id": "rank-failure"},
+            )
+        assert await _active_turn_tokens(app) == []
+        assert len(runtime.records) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+async def test_lease_lost_at_final_save_is_visible(
+    monkeypatch, tmp_path, route
+) -> None:
+    from fred_sdk.contracts.runtime import FinalRuntimeEvent
+
+    async def stream() -> AsyncGenerator[RuntimeEvent, None]:
+        yield FinalRuntimeEvent(content="unsaved answer")
+
+    app = _person_pod(monkeypatch, tmp_path)
+    _executor_runtime(monkeypatch, stream)
+
+    async def lose_before_save(**kwargs):
+        lease = kwargs["active_turn"]
+        await lease.store.release(lease.session_id, lease.token)
+        # No in-memory flag: the real final transaction must detect this loss.
+        assert not lease.lost
+        await _write_turn_history(**kwargs)
+
+    monkeypatch.setattr(agent_app_module, "_write_turn_history", lose_before_save)
+    async with _serving(_Connection(app)) as client:
+        _install_delegation()
+        result = await client.post(
+            f"/pod/v1/agents/{route}",
+            headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+            json={**_MANAGED_TURN, "session_id": "final-save-loss"},
+        )
+        assert result.status_code == 200
+        if route == "execute/stream":
+            payloads = _payloads(result.content)
+            assert payloads[-1]["kind"] == "execution_error"
+            assert not any(p["kind"] == "final" for p in payloads)
+        elif route == "evaluate":
+            assert "expired or was lost" in result.json()["error"]
+        else:
+            assert result.json()["kind"] == "execution_error"
+            assert "expired or was lost" in result.json()["message"]
+        history = get_runtime_context().config.history_store
+        assert history is not None
+        assert len(await history.get("final-save-loss")) == 1
+        assert await _active_turn_tokens(app) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "evaluate", "execute/stream"])
+async def test_steering_delivery_lease_loss_is_visible(
+    monkeypatch, tmp_path, route
+) -> None:
+    from fred_runtime.runtime_support.run_scope import RunScope
+    from fred_sdk.contracts.runtime import SteeredUserMessageRuntimeEvent
+    from weaver_fixtures import INSTANCE_ID, SPACE_ID
+
+    async def stream() -> AsyncGenerator[RuntimeEvent, None]:
+        scope = RunScope.current()
+        assert scope is not None and scope.active_turn is not None
+        history = get_runtime_context().config.history_store
+        assert isinstance(history, agent_app_module.PostgresHistoryStore)
+        await history.submit_steered_message(
+            session_id="steering-loss",
+            user_id="owner-a",
+            space_id=SPACE_ID,
+            agent_instance_id=INSTANCE_ID,
+            message_id="m",
+            content="pending instruction",
+        )
+        lease = scope.active_turn
+        await lease.store.release(lease.session_id, lease.token)
+        assert not lease.lost  # Only the delivery transaction can detect the loss.
+        yield SteeredUserMessageRuntimeEvent(
+            message_id="m", content="pending instruction"
+        )
+        pytest.fail("A refused delivery must not resume the executor")
+
+    app = _person_pod(monkeypatch, tmp_path)
+    _executor_runtime(monkeypatch, stream)
+    async with _serving(_Connection(app)) as client:
+        _install_delegation()
+        result = await client.post(
+            f"/pod/v1/agents/{route}",
+            headers={"Authorization": f"Bearer {PERSON_TOKEN}"},
+            json={**_MANAGED_TURN, "session_id": "steering-loss"},
+        )
+        assert result.status_code == 200
+        if route == "execute/stream":
+            events = _payloads(result.content)
+            assert events[-1]["kind"] == "execution_error"
+            assert not any(
+                e["kind"] in {"steered_user_message", "final"} for e in events
+            )
+        elif route == "evaluate":
+            assert "expired or was lost" in result.json()["error"]
+        else:
+            assert result.json()["kind"] == "execution_error"
+        history = get_runtime_context().config.history_store
+        assert isinstance(history, agent_app_module.PostgresHistoryStore)
+        pending = await history.pending_steered_messages("steering-loss")
+        assert len(pending) == 1
+        assert pending[0].rank == -1 and pending[0].exchange_id == "pending:m"

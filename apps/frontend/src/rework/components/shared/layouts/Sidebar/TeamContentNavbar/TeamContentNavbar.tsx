@@ -1,4 +1,3 @@
-import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,8 @@ import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import { canReadSpaceUsage } from "@core/utils/spaceUsage";
 import { sessionQueryArgs } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
@@ -31,6 +32,7 @@ import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
 import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -65,7 +67,9 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
-  const { organizationId } = useWorkingOrganization();
+  const workingOrganization = useWorkingOrganization();
+  const organizationId =
+    workingOrganization.loading || workingOrganization.error ? undefined : workingOrganization.organizationId;
   const agentManagement = isWeaverContentRoute(pathname);
   const navigate = useNavigate();
 
@@ -106,8 +110,11 @@ export default function TeamContentNavbar() {
   const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
   const manage = useSpaceAccess(space?.id, "manage");
   const content = useSpaceAccess(space?.id, "read");
-  const canOpenTeamSettings = manage.allowed;
-  const canReadContent = content.allowed;
+  // Navigation uses the last successful answer while access is rechecked.
+  // This does not authorize page actions; access errors offer a retry below.
+  const canOpenTeamSettings = manage.offered;
+  const canReadConsumption = canReadSpaceUsage(space, organizationId);
+  const canReadContent = content.offered;
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
   const hasAgentWorkspace = space?.kind !== "organization";
 
@@ -132,11 +139,7 @@ export default function TeamContentNavbar() {
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
 
-  // The personal space has no team-admin permission to gate a settings icon on
-  // (`canOpenTeamSettings` is always false there — OBSERV-02 / BACKLOG.md §7b),
-  // so it reuses the same banner icon slot to open the personal usage
-  // dashboard instead. The two conditions are mutually exclusive by
-  // construction: a personal space is never `canOpenTeamSettings`.
+  // Consumption stays in settings navigation; personal usage keeps its header shortcut.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
@@ -275,6 +278,17 @@ export default function TeamContentNavbar() {
     });
   }
 
+  const usageItems: NavigationMenuItemProps[] = canReadConsumption
+    ? [
+        {
+          type: "link",
+          label: t("rework.teamSettings.navigation.usage"),
+          icon: { category: "outlined", type: "analytics", filled: false },
+          linkProps: { to: usageBase },
+        },
+      ]
+    : [];
+
   // Membership management is the Weaver Manage surface, independent of Read.
   const settingsItems: NavigationMenuItemProps[] = [
     {
@@ -342,13 +356,13 @@ export default function TeamContentNavbar() {
             </span>
           )}
         </div>
-        {!isPersonalTeam && canOpenTeamSettings && !inSettings && (
+        {!isPersonalTeam && (canOpenTeamSettings || canReadConsumption) && !inSettings && !inUsage && (
           <span className={styles.teamPanelSettingsButton}>
             <IconButton
               size={"small"}
               variant={"icon"}
               icon={{ category: "outlined", type: "settings", filled: true }}
-              onClick={() => navigate(settingsBase)}
+              onClick={() => navigate(canOpenTeamSettings ? settingsBase : usageBase)}
               title={t("rework.teamSettings.navigation.settings")}
             />
           </span>
@@ -366,15 +380,32 @@ export default function TeamContentNavbar() {
         )}
       </div>
       <div className={styles.navigationContainer}>
+        {(content.error || manage.error) && (
+          <ServiceNotice
+            color="error"
+            title={t("rework.sidebar.team.accessError")}
+            action={
+              <IconButton
+                size="small"
+                variant="icon"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={t("common.retry")}
+                title={t("common.retry")}
+                onClick={() => {
+                  if (content.error) void content.refetch();
+                  if (manage.error) void manage.refetch();
+                }}
+              />
+            }
+          />
+        )}
         {inSettings || (inUsage && !isPersonalTeam) ? (
           <>
             {backButton}
-            <NavigationMenu items={settingsItems} />
+            <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...usageItems]} />
           </>
         ) : inUsage ? (
-          // Personal space's Usage page has no sibling tabs to switch between —
-          // it's the only settings-equivalent surface a personal team has
-          // (OBSERV-02 / BACKLOG.md §7b) — so Back alone is still correct here.
+          // Personal usage has no membership-management tabs.
           backButton
         ) : (
           <>

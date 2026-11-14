@@ -3550,7 +3550,9 @@ def _make_counting_fake_iterate():
     return _fake, calls
 
 
-def _make_counting_react_runtime():
+def _make_counting_react_runtime(
+    *, started: asyncio.Event | None = None, release: asyncio.Event | None = None
+):
     """
     Controllable `ReActRuntime`/`Executor` double that lets the REAL claim
     acquisition code in `_iterate_runtime_event_payloads` run (unlike
@@ -3570,6 +3572,10 @@ def _make_counting_react_runtime():
 
         async def stream(self, input_model, config):  # noqa: ANN001
             calls.append(len(calls) + 1)
+            if started is not None:
+                started.set()
+            if release is not None:
+                await release.wait()
             yield FinalRuntimeEvent(content=f"resumed-{len(calls)}")
 
     class _RecordingReActRuntime(
@@ -3958,6 +3964,9 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
     primitive: two GENUINELY concurrent `/agents/execute` requests
     resuming the SAME pending interrupt must result in
     `executor.stream(...)` — the tool loop itself — running at most once.
+    The conversation lease refuses the overlapping request with HTTP 409,
+    before the single-use HITL claim. Hold the first execution until that
+    refusal so scheduler timing cannot turn this into a sequential replay.
 
     Uses `httpx.AsyncClient` over `ASGITransport` (real concurrent
     coroutines racing the same running app), not two `TestClient` calls
@@ -3968,7 +3977,10 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
     the layer that constraint actually allows testing).
     """
 
-    RecordingReActRuntime, calls = _make_counting_react_runtime()
+    started, release = asyncio.Event(), asyncio.Event()
+    RecordingReActRuntime, calls = _make_counting_react_runtime(
+        started=started, release=release
+    )
     monkeypatch.setattr(agent_app_module, "ReActRuntime", RecordingReActRuntime)
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
     monkeypatch.setattr(
@@ -4008,14 +4020,25 @@ async def test_concurrent_duplicate_resumes_execute_the_tool_at_most_once(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://test"
         ) as async_client:
-            responses = await asyncio.gather(
-                async_client.post("/pod/v1/agents/execute", json=payload),
-                async_client.post("/pod/v1/agents/execute", json=payload),
+            first = asyncio.create_task(
+                async_client.post("/pod/v1/agents/execute", json=payload)
             )
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5)
+                refused = await asyncio.wait_for(
+                    async_client.post("/pod/v1/agents/execute", json=payload),
+                    timeout=5,
+                )
+                assert not first.done()
+                assert refused.status_code == 409
+                assert refused.json()["detail"]["code"] == "conversation_busy"
+                assert calls == [1]
+            finally:
+                release.set()
+                accepted = await asyncio.wait_for(first, timeout=5)
 
-    kinds = sorted(r.json().get("kind") for r in responses)
-    assert [r.status_code for r in responses] == [200, 200]
-    assert kinds == ["execution_error", "final"]
+    assert accepted.status_code == 200
+    assert accepted.json()["kind"] == "final"
     assert calls == [1]  # the tool loop ran exactly once
 
 

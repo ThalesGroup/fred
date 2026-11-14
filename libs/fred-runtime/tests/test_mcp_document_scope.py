@@ -82,7 +82,13 @@ async def test_refresh_and_rebind_do_not_widen_server_agent_scope():
             await client.post(
                 "https://kf.invalid/mcp",
                 headers={DOCUMENT_CONTEXT_HEADER: "spoofed"},
-                json={"arguments": {"document_scope": {}, "space_id": OUTSIDE}},
+                json={
+                    "arguments": {
+                        "document_scope": {},
+                        "space_id": OUTSIDE,
+                        "authorized_space_ids": [OUTSIDE],
+                    }
+                },
             )
             assert len(seen) == 2
             assert seen[0] == seen[1]
@@ -91,6 +97,9 @@ async def test_refresh_and_rebind_do_not_widen_server_agent_scope():
             )
             assert seen[0].document_scope == expected
             assert str(seen[0].space_id) == SPACE_ID
+            assert (
+                seen[0].authorized_space_ids == authority.binding.authorized_space_ids
+            )
             shim.rebind(binding([]))
             await client.post("https://kf.invalid/mcp")
             assert seen[-1].document_scope.is_empty

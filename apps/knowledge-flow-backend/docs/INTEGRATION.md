@@ -22,8 +22,14 @@ URL encoding or second JSON serialization. Send `Content-Type: application/json`
 for a JSON body; it does not replace the context header.
 
 ```json
-{"space_id":"00000000-0000-0000-0000-000000000001","document_scope":{"selections":[]}}
+{"space_id":"00000000-0000-0000-0000-000000000001","authorized_space_ids":["00000000-0000-0000-0000-000000000001"],"document_scope":{"selections":[]}}
 ```
+
+`authorized_space_ids` is required: copy the exact corpus from Control Plane's
+runtime admission binding. Keep it fixed for that turn; an empty array authorizes
+no corpus documents. KF trusts the authenticated delegated workload to relay this
+decision and enforce the turn lifetime. Publication, lifecycle, selection and
+conversation attachment ownership are still checked on reads.
 
 The identifiers here are placeholders, not provisioned resources. `space_id` and
 scope identifiers use UUID syntax. The grant identifiers `person`, `run`, `agent`
@@ -31,7 +37,7 @@ follow their own existing identifier contract; do not infer they must be UUIDs.
 
 | Scope value, inside an explicitly supplied context | Meaning |
 | --- | --- |
-| `{}` or `{"selections":[]}` | No additional selection filter within the admitted space; permissions, publication and lifecycle still apply |
+| `{}` or `{"selections":[]}` | No additional selection filter within the admitted corpus; publication and lifecycle still apply |
 | `{"selections":[{}]}` | Selects no documents; never falls back to the corpus |
 | `{"selections":[{"folder_ids":["00000000-0000-0000-0000-000000000002"]}]}` | Direct contents of that folder, without recursive expansion |
 | Multiple selections | Intersection of clauses; within each clause, folders and explicit documents form a union |

@@ -188,6 +188,8 @@ jobs:
               - 'libs/capabilities/fred-capability-ppt-filler/**'
             team-wiki:
               - 'libs/capabilities/fred-capability-team-wiki/**'
+            web-research:
+              - 'libs/capabilities/fred-capability-web-research/**'
             writable-document:
               - 'libs/capabilities/fred-capability-writable-document/**'
             # Shared CI and Python tooling: a change runs every matrix entry.
@@ -252,6 +254,8 @@ jobs:
              "triggers": ["ppt-filler", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-team-wiki", "directory": "libs/capabilities/fred-capability-team-wiki", "needs-pandoc": false, "integration-target": "",
              "triggers": ["team-wiki", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-web-research", "directory": "libs/capabilities/fred-capability-web-research", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["web-research", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-writable-document", "directory": "libs/capabilities/fred-capability-writable-document", "needs-pandoc": false, "integration-target": "",
              "triggers": ["writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
           ]

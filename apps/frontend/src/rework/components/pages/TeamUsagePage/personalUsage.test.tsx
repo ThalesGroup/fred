@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import type { AnalyticsResponse } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import PersonalUsage from "./PersonalUsage";
-import { chartInteger, chartRows, personalQueries } from "./personalUsage";
+import ConsumptionUsage from "./ConsumptionUsage";
+import { chartInteger, chartRows, consumptionQueries, personalQueries } from "./personalUsage";
 import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact";
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart", () => ({
@@ -158,4 +159,73 @@ it("requires the shared working organization and never shows cached global data 
   expect(html).toContain("rework.personalAnalytics.organizationRequired");
   expect(html).not.toContain("Same name");
   expect(html).not.toContain("value&quot;:123");
+});
+
+it("uses the same bounded consumption results for self and exact team/project scopes", () => {
+  const personal = personalQueries(range, "Acme", false);
+  for (const id of ["team-a", "project-a"]) {
+    const collective = consumptionQueries(range, { kind: "space", id });
+    expect(collective).toEqual(personal.map((query) => ({ ...query, scope: { kind: "space", id } })));
+  }
+});
+
+it("shows exact collective totals and input/output/cache without unsafe number conversion", () => {
+  const total = {
+    ...ready,
+    currentData: {
+      ...response,
+      results: {
+        ...response.results,
+        total: {
+          ...response.results.total,
+          rows: [
+            {
+              dimensions: { kind: "total" as const },
+              values: {
+                "usage.total_tokens": "9007199254740993",
+                "usage.input_tokens": "9007199254740990",
+                "usage.output_tokens": "3",
+                "usage.cache_read_tokens": "11",
+                "usage.cache_creation_tokens": "7",
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+  const html = renderToStaticMarkup(<ConsumptionUsage title="Collective consumption" usage={total} />);
+  expect(html).toContain(BigInt("9007199254740993").toLocaleString());
+  expect(html).toContain(BigInt("9007199254740990").toLocaleString());
+  for (const key of ["input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens"])
+    expect(html).toContain(`rework.consumption.${key}`);
+  expect(html).toContain("rework.consumption.recorded");
+  expect(html).toContain("rework.personalAnalytics.truncated");
+});
+
+it("distinguishes zero, absent, fetching and failed collective totals, hiding cached values", () => {
+  const zero = {
+    ...ready,
+    currentData: {
+      ...response,
+      results: {
+        total: {
+          ...response.results.total,
+          rows: [{ dimensions: { kind: "total" as const }, values: { "usage.total_tokens": "0" } }],
+        },
+      },
+    },
+  };
+  expect(renderToStaticMarkup(<ConsumptionUsage title="Collective" usage={zero} />)).toContain(">0</span>");
+  const absent = renderToStaticMarkup(
+    <ConsumptionUsage title="Collective" usage={{ ...ready, currentData: undefined }} />,
+  );
+  expect(absent).toContain("common.noData");
+  expect(absent).not.toContain(">0</span>");
+  for (const state of [{ isFetching: true }, { isError: true }]) {
+    const html = renderToStaticMarkup(<ConsumptionUsage title="Collective" usage={{ ...ready, ...state }} />);
+    expect(html).not.toContain("Same name");
+    expect(html).not.toContain(">123</span>");
+    expect(html).toContain("isError" in state ? "common.loadingError" : "common.loading");
+  }
 });

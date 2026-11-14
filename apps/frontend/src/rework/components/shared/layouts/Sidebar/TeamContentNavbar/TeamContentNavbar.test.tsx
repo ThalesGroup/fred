@@ -1,4 +1,3 @@
-vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => ({ organizationId: "org" }) }));
 // @vitest-environment happy-dom
 // Copyright Thales 2026
 //
@@ -15,12 +14,20 @@ vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: (
 // limitations under the License.
 
 import { type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+  working: { organizationId: "org" as string | undefined, loading: false, error: undefined as unknown },
+  navigate: vi.fn(),
+  membershipError: false,
   canManage: false,
   canRead: true,
+  accessPending: false,
+  accessError: undefined as unknown,
+  refetchAccess: vi.fn(),
   memberships: [] as {
     id: string;
     kind: string;
@@ -57,13 +64,15 @@ const h = vi.hoisted(() => ({
   userPictureUrl: undefined as string | undefined,
 }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => h.working }));
+
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
     h.avatarQuery(skip);
     return { currentData: skip ? undefined : h.userPictureUrl };
   },
-  useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
+  useMySpacesQuery: () => ({ currentData: h.memberships, isError: h.membershipError }),
   useWikiAvailabilityQuery: (
     args: { spaceId: string },
     options: { skip: boolean; refetchOnMountOrArgChange: boolean },
@@ -77,7 +86,12 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
 }));
 
 vi.mock("@core/hooks/useSpaceAccess", () => ({
-  useSpaceAccess: (_id: string, permission: string) => ({ allowed: permission === "manage" ? h.canManage : h.canRead }),
+  useSpaceAccess: (_id: string, permission: string) => ({
+    offered: !h.accessError && (permission === "manage" ? h.canManage : h.canRead),
+    allowed: !h.accessError && !h.accessPending && (permission === "manage" ? h.canManage : h.canRead),
+    error: h.accessError,
+    refetch: () => h.refetchAccess(permission),
+  }),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -86,7 +100,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: h.pathname }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => h.navigate,
   NavLink: ({ to, children }: { to: string; children: ReactNode | ((args: { isActive: boolean }) => ReactNode) }) => (
     <a href={to}>{typeof children === "function" ? children({ isActive: false }) : children}</a>
   ),
@@ -145,9 +159,17 @@ vi.mock("@shared/organisms/ChatList/ChatList.tsx", () => ({ default: () => <div 
 import TeamContentNavbar from "./TeamContentNavbar.tsx";
 
 beforeEach(() => {
+  h.working = { organizationId: "org", loading: false, error: undefined };
+  h.navigate.mockClear();
+  h.membershipError = false;
+  h.relations = ["team_member"];
+  h.canManage = false;
   h.pathname = "/team/team-1/resources";
   h.memberships = [];
   h.canRead = true;
+  h.accessPending = false;
+  h.accessError = undefined;
+  h.refetchAccess.mockClear();
   h.isPersonalTeam = false;
   h.wikiEnabled = undefined;
   h.wikiError = false;
@@ -162,6 +184,54 @@ const application = {
   icon: "extension",
   ui_prefix: "/apps/example",
 };
+
+it("keeps navigation and the mounted chat list through an access recheck, then respects a refusal", () => {
+  h.memberships = [{ id: "team-1", kind: "team", name: "Research", roles: ["editor"] }];
+  h.canManage = true;
+  h.wikiEnabled = true;
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<TeamContentNavbar />));
+    const chatList = container.querySelector("[data-chat-list]");
+    expect(chatList).not.toBeNull();
+    h.accessPending = true;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    for (const route of ["agents", "resources", "skills", "prompts", "knowledge-bases", "wiki"]) {
+      expect(container.querySelector(`a[href="/team/team-1/${route}"]`)).not.toBeNull();
+    }
+    expect(container.querySelector("[data-chat-list]")).toBe(chatList);
+    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).not.toBeNull();
+    h.accessPending = false;
+    h.canRead = h.canManage = false;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+    expect(container.querySelector("[data-chat-list]")).toBeNull();
+    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it("offers a local retry after access checks fail and restores navigation when they succeed", () => {
+  h.accessError = { status: 503 };
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("rework.sidebar.team.accessError");
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+    container.querySelector<HTMLButtonElement>('button[aria-label="common.retry"]')!.click();
+    expect(h.refetchAccess.mock.calls).toEqual([["read"], ["manage"]]);
+    h.accessError = undefined;
+    flushSync(() => root.render(<TeamContentNavbar />));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('a[href="/team/team-1/agents"]')).not.toBeNull();
+    expect(h.navigate).not.toHaveBeenCalled();
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
 
 describe("TeamContentNavbar applications entry", () => {
   beforeEach(() => {
@@ -484,4 +554,106 @@ it("offers only member projects of the current team", () => {
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(html).toContain('href="/team/atlas"');
   expect(html).not.toContain('href="/team/other"');
+});
+
+describe("TeamContentNavbar collective usage", () => {
+  beforeEach(() => {
+    h.pathname = "/team/team-1/agents";
+    h.canRead = false;
+    h.canManage = false;
+    h.memberships = [{ id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["analyst"] }];
+  });
+
+  it.each([
+    { kind: "team", role: "owner", manage: true },
+    { kind: "team", role: "owner", manage: false },
+    { kind: "team", role: "analyst", manage: false },
+    { kind: "project", role: "owner", manage: true },
+    { kind: "project", role: "analyst", manage: false },
+  ])("opens $kind consumption through settings for $role (Manage: $manage)", ({ kind, role, manage }) => {
+    h.memberships[0] = { ...h.memberships[0], kind, roles: [role] };
+    h.canManage = manage;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<TeamContentNavbar />));
+      expect(container.querySelector('a[href="/team/team-1/usage"]')).toBeNull();
+      expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+      expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+      container.querySelector<HTMLButtonElement>('button[title="rework.teamSettings.navigation.settings"]')!.click();
+      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings" : "usage"}`);
+      h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";
+      flushSync(() => root.render(<TeamContentNavbar />));
+      const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
+      expect(links).toHaveLength(1);
+      expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
+      expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+      expect(!!container.querySelector('a[href="/team/team-1/settings/members"]')).toBe(manage);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it.each(["member", "editor", "organization_admin"])("does not infer usage from %s or legacy roles", (role) => {
+    h.memberships[0].roles = [role];
+    h.canRead = h.canManage = true;
+    h.relations = ["team_admin", "team_analyst"];
+    h.pathname = "/team/team-1/settings/members";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
+
+  it.each(["owner", "organization_admin"])("does not inherit the parent %s role", (role) => {
+    h.memberships[0].roles = ["member"];
+    h.memberships.push({ id: "org", kind: "organization", name: "Acme", organization_id: "org", roles: [role] });
+    h.pathname = "/team/team-1/usage";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
+
+  it.each(["loading", "error", "missing", "other-organization", "membership-error", "revoked"])(
+    "hides the entry for %s context despite previously available roles",
+    (state) => {
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('title="rework.teamSettings.navigation.settings"');
+      h.pathname = "/team/team-1/usage";
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/usage"');
+      if (state === "loading") h.working.loading = true;
+      if (state === "error") h.working.error = new Error("unavailable");
+      if (state === "missing") h.working.organizationId = undefined;
+      if (state === "other-organization") h.working.organizationId = "other";
+      if (state === "membership-error") h.membershipError = true;
+      if (state === "revoked") h.memberships[0].roles = ["member"];
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+      h.pathname = "/team/team-1/agents";
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain(
+        'title="rework.teamSettings.navigation.settings"',
+      );
+    },
+  );
+
+  it.each(["usage", "settings/members"])("keeps Analyst out of management links on %s", (route) => {
+    h.pathname = `/team/team-1/${route}`;
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/usage"');
+    expect(html).not.toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain('href="/team/team-1/settings/offers"');
+  });
+
+  it("keeps management and usage navigation together for an authorized Owner", () => {
+    h.memberships[0].roles = ["owner"];
+    h.canManage = true;
+    h.pathname = "/team/team-1/settings/members";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/usage"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).toContain('href="/team/team-1/settings/offers"');
+  });
+
+  it("preserves the personal shortcut without a collective link and excludes organizations", () => {
+    h.memberships[0].kind = "personal";
+    h.memberships[0].roles = ["owner"];
+    const personal = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(personal).toContain('title="rework.teamUsage.title"');
+    expect(personal).not.toContain('href="/team/team-1/usage"');
+    h.memberships[0].kind = "organization";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
+  });
 });

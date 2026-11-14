@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { canReadSpaceUsage } from "@core/utils/spaceUsage";
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useParams } from "react-router-dom";
@@ -24,9 +25,6 @@ import {
   useDocumentsTotalQuery,
   useSessionsOverTimeQuery,
   useStorageByTeamQuery,
-  useTokenUsageByAgentQuery,
-  useTokenUsageByModelQuery,
-  useTokenUsageOverTimeQuery,
   useTopAgentsByConversationsQuery,
 } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import SkillUsageTable from "@shared/molecules/SkillUsageTable/SkillUsageTable";
@@ -36,29 +34,21 @@ import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSele
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
-import { agentUsageRows } from "@rework/utils/agentUsageRows";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import PersonalUsage from "./PersonalUsage";
-import { personalQueries } from "./personalUsage";
+import ConsumptionUsage from "./ConsumptionUsage";
+import { consumptionQueries, personalQueries } from "./personalUsage";
 import { useQueryAnalyticsQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import TokenUsageImpact from "@shared/molecules/TokenUsageImpact/TokenUsageImpact.tsx";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 
-/**
- * Personal usage dashboard — OBSERV-02 / BACKLOG.md §7b — extended in
- * place (v3, §2.5 Page 2) with capability-conditional team sections prepended
- * above it. In-page gating only, no route guard (`FRONTEND-AUTHZ-PATTERN.md`):
- * a plain `team_member` (or anyone on a personal team, which has no elevated
- * roles at all) sees their personal token sections below. Skill usage always
- * appears in personal space with self events within the working organization; collective skills keep their scope.
- */
+/** Weaver consumption and personal usage; other collective indicators retain their legacy gates. */
 export default function TeamUsagePage() {
   const workingOrganization = useWorkingOrganization();
   const organizationId =
@@ -67,27 +57,24 @@ export default function TeamUsagePage() {
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
 
   const { teamId } = useParams<{ teamId: string }>();
-  const space = workingOrganization.memberships.currentData?.find(
-    (item) => item.id === teamId && item.organization_id === organizationId,
-  );
+  const space = workingOrganization.memberships.isError
+    ? undefined
+    : workingOrganization.memberships.currentData?.find(
+        (item) => item.id === teamId && item.organization_id === organizationId,
+      );
   const isPersonalTeam = space?.kind === "personal";
   // Personal UUIDs and their placement come from Weaver, never Swift's ID convention/bootstrap.
-  const { selectedTeam } = useSelectedTeam(isPersonalTeam || !organizationId);
+  const { selectedTeam } = useSelectedTeam(!space || isPersonalTeam);
   const capabilities = useTeamCapabilities(selectedTeam);
-  // The personal team is granted `can_update_resources`/`can_update_agents`
-  // unconditionally (`teams/system.py::build_personal_team`) so its owner can
-  // manage their own docs/agents — that's a real permission, not an elevated
-  // *team* role. Without excluding it here, every user would see the
-  // collaborative-team sections below while sitting in personal space, since
-  // those flags would read exactly as they do for a real team_editor/admin.
-  const elevated = hasElevatedTeamRole(capabilities) && !isPersonalTeam;
-  // This page is majority team-scoped content for an elevated viewer (KPIs,
-  // charts, storage quota below) with personal consumption at the
-  // bottom — calling it "My token usage" for that viewer was misleading (a
-  // team_admin reported it read as a personal-usage page while looking at
-  // team-wide data). Plain members/personal-team viewers only ever see the
-  // personal sections, so the personal usage title stays correct for them.
-  const pageTitle = elevated ? t("rework.teamUsage.team.pageTitle") : t("rework.teamUsage.title");
+  const collective = space?.kind === "team" || space?.kind === "project";
+  const canReadConsumption = canReadSpaceUsage(space, organizationId);
+  const collectiveSpaceId = canReadConsumption ? space.id : undefined;
+  // Legacy sections keep their own permissions; Weaver ReadUsage never opens them.
+  const elevated = collective && selectedTeam?.id === teamId && hasElevatedTeamRole(capabilities);
+  const pageTitle =
+    elevated || canReadConsumption
+      ? t(space.kind === "project" ? "rework.teamUsage.projectPageTitle" : "rework.teamUsage.team.pageTitle")
+      : t("rework.teamUsage.title");
 
   const identity = KeyCloakService.GetSessionIdentity();
   const args = useMemo(
@@ -96,20 +83,22 @@ export default function TeamUsagePage() {
         usage: organizationId
           ? sessionQueryArgs({ analyticsRequest: { queries: personalQueries(timeRange, organizationId, false) } })
           : skipToken,
+        collective: collectiveSpaceId
+          ? sessionQueryArgs({
+              analyticsRequest: { queries: consumptionQueries(timeRange, { kind: "space", id: collectiveSpaceId }) },
+            })
+          : skipToken,
         skills: organizationId
           ? sessionQueryArgs({ analyticsRequest: { queries: personalQueries(timeRange, organizationId, true) } })
           : skipToken,
         // Identity changes must bind fresh arguments even for an unchanged period.
       }) as const,
-    [timeRange, identity, organizationId],
+    [timeRange, identity, organizationId, collectiveSpaceId],
   );
   const usage = useQueryAnalyticsQuery(args.usage, { refetchOnMountOrArgChange: 300 });
   const personalSkills = useQueryAnalyticsQuery(args.skills, { skip: !isPersonalTeam, refetchOnMountOrArgChange: 300 });
 
-  // Team-scoped shared section (§2.5 Page 2) — skipped entirely for anyone
-  // without an elevated role, both to avoid the wasted/rejected call and
-  // because `hasElevatedTeamRole` is this frontend's single source of truth
-  // for the distinction.
+  const collectiveUsage = useQueryAnalyticsQuery(args.collective, { refetchOnMountOrArgChange: true });
   const teamArgs = { since: timeRange.since, until: timeRange.until, teamId };
   const teamQueryOpts = { skip: !elevated || !teamId, refetchOnMountOrArgChange: 300 };
 
@@ -141,22 +130,6 @@ export default function TeamUsagePage() {
     isError: teamSessionsIsError,
   } = useSessionsOverTimeQuery(teamArgs, teamQueryOpts);
   const {
-    data: teamTokenOverTimeData,
-    isLoading: teamTokenOverTimeIsLoading,
-    isFetching: teamTokenOverTimeIsFetching,
-    isError: teamTokenOverTimeIsError,
-  } = useTokenUsageOverTimeQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamTokenByAgentData,
-    isLoading: teamTokenByAgentIsLoading,
-    isError: teamTokenByAgentIsError,
-  } = useTokenUsageByAgentQuery(teamArgs, teamQueryOpts);
-  const {
-    data: teamTokenByModelData,
-    isLoading: teamTokenByModelIsLoading,
-    isError: teamTokenByModelIsError,
-  } = useTokenUsageByModelQuery(teamArgs, teamQueryOpts);
-  const {
     data: teamStorageData,
     isLoading: teamStorageIsLoading,
     isError: teamStorageIsError,
@@ -178,6 +151,7 @@ export default function TeamUsagePage() {
     const next = refreshTimeRange(timeRange);
     if (next.since === timeRange.since && next.until === timeRange.until) {
       void usage.refetch();
+      if (canReadConsumption) void collectiveUsage.refetch();
       if (isPersonalTeam) void personalSkills.refetch();
     } else setTimeRange(next);
   };
@@ -196,12 +170,25 @@ export default function TeamUsagePage() {
               size="small"
               icon={{ category: "outlined", type: "refresh" }}
               onClick={handleRefresh}
-              disabled={!organizationId || usage.isFetching || (isPersonalTeam && personalSkills.isFetching)}
+              disabled={
+                !organizationId ||
+                usage.isFetching ||
+                (canReadConsumption && collectiveUsage.isFetching) ||
+                (isPersonalTeam && personalSkills.isFetching)
+              }
               title={t("common.refresh")}
+              aria-label={t("common.refresh")}
             />
           </>
         }
       />
+
+      {canReadConsumption && (
+        <ConsumptionUsage
+          title={t(space.kind === "project" ? "rework.consumption.projectTitle" : "rework.consumption.teamTitle")}
+          usage={collectiveUsage}
+        />
+      )}
 
       {elevated && teamId && (
         <Disclosure title={t("rework.teamUsage.team.sectionTitle")} defaultOpen>
@@ -231,34 +218,6 @@ export default function TeamUsagePage() {
           </div>
 
           <div className={styles.chartGrid}>
-            <div className={styles.cellFull}>
-              <TimeSeriesLineChart
-                title={t("rework.analytics.tokenUsage.overTime.title")}
-                rows={teamTokenOverTimeData?.rows ?? []}
-                interval={teamTokenOverTimeData?.interval}
-                valueLabel={t("rework.analytics.tokenUsage.overTime.valueLabel")}
-                isFetching={teamTokenOverTimeIsFetching}
-                isLoading={teamTokenOverTimeIsLoading}
-                isError={teamTokenOverTimeIsError}
-              />
-              <TokenUsageImpact rows={teamTokenOverTimeData?.rows} isLoading={teamTokenOverTimeIsLoading} />
-            </div>
-            <BarChart
-              title={t("rework.analytics.tokenUsage.byAgent.title")}
-              rows={agentUsageRows(teamTokenByAgentData?.rows, t)}
-              valueLabel={t("rework.analytics.tokenUsage.byAgent.valueLabel")}
-              emptyMessage={t("rework.analytics.tokenUsage.byAgent.empty")}
-              isLoading={teamTokenByAgentIsLoading}
-              isError={teamTokenByAgentIsError}
-            />
-            <BarChart
-              title={t("rework.analytics.tokenUsage.byModel.title")}
-              rows={teamTokenByModelData?.rows ?? []}
-              valueLabel={t("rework.analytics.tokenUsage.byModel.valueLabel")}
-              emptyMessage={t("rework.analytics.tokenUsage.byModel.empty")}
-              isLoading={teamTokenByModelIsLoading}
-              isError={teamTokenByModelIsError}
-            />
             <BarChart
               title={t("rework.teamUsage.team.quota.title")}
               rows={teamStorageRows}

@@ -38,6 +38,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     assert (RUNTIME_ALEMBIC_DIR / "script.py.mako").is_file()
     assert {path.name for path in (RUNTIME_ALEMBIC_DIR / "versions").glob("*.py")} == {
         "__init__.py",
+        "e1f2a3b4c5d6_session_active_turn.py",  # pragma: allowlist secret
         "a1e2f3c4d5b6_create_session_history.py",  # pragma: allowlist secret
         "b2f3a4e5c6d7_add_exchange_id.py",  # pragma: allowlist secret
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
@@ -55,6 +56,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("e1f2a3b4c5d6", "d0e1f2a3b4c5"),  # pragma: allowlist secret
         ("d0e1f2a3b4c5", "c9d0e1f2a3b4"),  # pragma: allowlist secret
         ("c9d0e1f2a3b4", "b8c9d0e1f2a3"),  # pragma: allowlist secret
         ("b8c9d0e1f2a3", "a7b8c9d0e1f2"),  # pragma: allowlist secret
@@ -76,6 +78,14 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
     upgrade_sqlite_database(database_path)
 
     with sqlite3.connect(database_path) as connection:
+        assert {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(session_active_turn)")
+        } == {"session_id", "owner_token", "expires_at"}
+        assert (
+            len(connection.execute("PRAGMA index_list(session_active_turn)").fetchall())
+            == 1
+        )
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(session_history)")
         }
@@ -109,7 +119,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "message_id",
         "delivery_state",
     }
-    assert revision == ("d0e1f2a3b4c5",)  # pragma: allowlist secret
+    assert revision == ("e1f2a3b4c5d6",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:

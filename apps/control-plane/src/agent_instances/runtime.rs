@@ -105,6 +105,8 @@ pub struct RuntimeBinding {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<TitleAdmission>,
     pub attachments: Vec<RuntimeAttachment>,
+    /// Readable corpus fixed at admission; document publication/lifecycle stays live.
+    pub authorized_space_ids: Vec<Uuid>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -317,6 +319,9 @@ async fn resolve_runtime_binding(
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
+    let space = authorization::authorize(&mut *tx, subject, space_id, Permission::Read).await?;
+    let authorized_space_ids =
+        authorization::readable_path(&mut *tx, subject, &space.path, None).await?;
     let mut record = super::get_for_space(&mut *tx, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -478,6 +483,7 @@ async fn resolve_runtime_binding(
         models,
         inference,
         attachments,
+        authorized_space_ids,
         subject_id: subject.to_owned(),
         run_id: query.run.clone(),
         conversation_id: query.conversation.clone(),
