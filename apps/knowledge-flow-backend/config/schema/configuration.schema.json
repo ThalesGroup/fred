@@ -2150,14 +2150,21 @@
           "type": "string"
         },
         "api_key_env": {
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Env"
         }
       },
       "required": [
-        "base_url",
-        "api_key_env"
+        "base_url"
       ],
       "title": "RerankerSettings",
       "type": "object"
@@ -2998,7 +3005,7 @@
         }
       ],
       "default": null,
-      "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+      "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
     },
     "crossencoder_model": {
       "anyOf": [

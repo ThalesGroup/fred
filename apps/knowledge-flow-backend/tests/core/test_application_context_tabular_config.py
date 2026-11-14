@@ -74,7 +74,8 @@ def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, ove
 
 
 def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch):
-    monkeypatch.delenv(RERANKER_CREDENTIAL_ENV, raising=False)
+    for variable in (RERANKER_CREDENTIAL_ENV, "KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
@@ -82,8 +83,26 @@ def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch)
         "name": "remote-reranker",
         "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
     }
-    with pytest.raises(ValueError, match="Remote reranker API credential is missing"):
+    with pytest.raises(ValueError, match="Missing API key for reranker model"):
         Configuration.model_validate(payload)
+
+
+@pytest.mark.parametrize("variable", ["KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"])
+def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable):
+    for candidate in (RERANKER_CREDENTIAL_ENV, "KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(candidate, raising=False)
+    monkeypatch.setenv(variable, str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model is not None
+    assert parsed.reranker_model.settings.api_key_env is None
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:

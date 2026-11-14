@@ -19,12 +19,15 @@ RERANKER_CREDENTIAL_ENV = f"RERANKER_TEST_{uuid.uuid4().hex.upper()}"
 RERANKER_CREDENTIAL = str(uuid.uuid4())
 
 
-def _remote() -> RerankerModelConfiguration:
+def _remote(*, api_key_env: str | None = RERANKER_CREDENTIAL_ENV) -> RerankerModelConfiguration:
+    settings = {"base_url": "https://models.example/v1"}
+    if api_key_env is not None:
+        settings["api_key_env"] = api_key_env
     return RerankerModelConfiguration.model_validate(
         {
             "provider": "rerank",
             "name": "remote-reranker",
-            "settings": {"base_url": "https://models.example/v1", "api_key_env": RERANKER_CREDENTIAL_ENV},
+            "settings": settings,
         }
     )
 
@@ -32,6 +35,8 @@ def _remote() -> RerankerModelConfiguration:
 @pytest.mark.asyncio
 async def test_remote_rerank_uses_indexed_results_and_auth(monkeypatch):
     monkeypatch.setenv(RERANKER_CREDENTIAL_ENV, RERANKER_CREDENTIAL)
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    monkeypatch.setenv("OPENAI_API_KEY", str(uuid.uuid4()))
     seen = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -50,6 +55,45 @@ async def test_remote_rerank_uses_indexed_results_and_auth(monkeypatch):
         "documents": ["first", "second"],
         "top_n": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_remote_rerank_uses_dedicated_key_then_global_fallback(monkeypatch):
+    dedicated_key = str(uuid.uuid4())
+    global_key = str(uuid.uuid4())
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", dedicated_key)
+    monkeypatch.setenv("OPENAI_API_KEY", global_key)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.9}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        ranker = DocumentReranker(_remote(api_key_env=None), lambda: None, client=client)
+        assert await ranker.rank("query", ["first"], 1) == [0]
+        monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", "  ")
+        assert await ranker.rank("query", ["first"], 1) == [0]
+
+    assert [request.headers["authorization"] for request in seen] == [f"Bearer {dedicated_key}", f"Bearer {global_key}"]
+
+
+@pytest.mark.asyncio
+async def test_remote_rerank_missing_keys_sends_no_request(monkeypatch):
+    for variable in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.9}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        ranker = DocumentReranker(_remote(api_key_env=None), lambda: None, client=client)
+        with pytest.raises(RerankerUnavailable):
+            await ranker.rank("query", ["first"], 1)
+
+    assert seen == []
 
 
 @pytest.mark.asyncio

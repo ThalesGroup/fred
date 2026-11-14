@@ -403,7 +403,7 @@ crossencoder_model:
 #   name: remote-reranker
 #   settings:
 #     base_url: https://models.example/v1
-#     api_key_env: RERANKER_API_KEY
+#     api_key_env: CUSTOM_RERANKER_API_KEY  # Optional custom variable name
 
 storage:
   postgres:

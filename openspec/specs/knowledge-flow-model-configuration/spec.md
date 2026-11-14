@@ -6,25 +6,31 @@ Defines how Knowledge Flow selects environment-provided credentials for its conf
 
 ## Requirements
 
-### Requirement: Knowledge Flow selects an API key for each OpenAI-compatible model use
+### Requirement: Knowledge Flow selects an API key for each external model use
 
-Knowledge Flow SHALL use `KNOWLEDGE_FLOW_CHAT_API_KEY` for its chat model, `KNOWLEDGE_FLOW_VISION_API_KEY` for its vision model, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` for its embedding model, and `KNOWLEDGE_FLOW_OCR_API_KEY` for its remote OCR model when the corresponding variable contains a nonblank value. For each configured OpenAI-compatible chat, vision, or embedding use and the remote Mistral OCR extractor, an absent or blank dedicated variable SHALL cause Knowledge Flow to use `OPENAI_API_KEY`. If both values are absent or blank, Knowledge Flow SHALL fail that use with a credential configuration error before sending a request. A key selected for one use SHALL NOT be substituted for another use. Existing credential behavior for other chat, vision, and embedding providers SHALL remain unchanged.
+Knowledge Flow SHALL use `KNOWLEDGE_FLOW_CHAT_API_KEY` for its chat model, `KNOWLEDGE_FLOW_VISION_API_KEY` for its vision model, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` for its embedding model, `KNOWLEDGE_FLOW_OCR_API_KEY` for its remote OCR model, and `KNOWLEDGE_FLOW_RERANKER_API_KEY` for its remote reranker when the corresponding variable contains a nonblank value. For each configured OpenAI-compatible chat, vision, or embedding use and the remote OCR and reranker uses, an absent or blank dedicated variable SHALL cause Knowledge Flow to use `OPENAI_API_KEY`. If no applicable key is available, Knowledge Flow SHALL fail that use with a credential configuration error before sending a request. A key selected for one use SHALL NOT be substituted for another use. Existing credential behavior for other chat, vision, and embedding providers SHALL remain unchanged.
 
 #### Scenario: Four distinct keys
 
-- **GIVEN** all four OpenAI-compatible model uses are configured with nonblank dedicated variables
+- **GIVEN** the chat, vision, embeddings, and remote OCR uses are configured with nonblank dedicated variables
 - **WHEN** Knowledge Flow constructs or invokes those models
-- **THEN** each use authenticates with its corresponding key, including remote OCR
+- **THEN** each use authenticates with its corresponding key
+
+#### Scenario: Five distinct keys
+
+- **GIVEN** the five external model uses are configured with nonblank dedicated variables
+- **WHEN** Knowledge Flow constructs or invokes those models
+- **THEN** each use authenticates with its corresponding key
 
 #### Scenario: Legacy key fallback
 
 - **GIVEN** `OPENAI_API_KEY` is nonblank and one or more dedicated variables are absent or blank
-- **WHEN** Knowledge Flow constructs or invokes the corresponding OpenAI-compatible model uses
+- **WHEN** Knowledge Flow constructs or invokes the corresponding external model uses
 - **THEN** those uses authenticate with `OPENAI_API_KEY`, while uses with dedicated keys retain their own keys
 
 #### Scenario: No available key
 
-- **GIVEN** a configured OpenAI-compatible model use has neither a nonblank dedicated key nor a nonblank `OPENAI_API_KEY`
+- **GIVEN** a configured external model use has neither a nonblank dedicated key nor a nonblank `OPENAI_API_KEY`
 - **WHEN** Knowledge Flow prepares that use
 - **THEN** it reports a credential configuration error before contacting the model endpoint
 
@@ -33,6 +39,24 @@ Knowledge Flow SHALL use `KNOWLEDGE_FLOW_CHAT_API_KEY` for its chat model, `KNOW
 - **GIVEN** a configured model uses a provider other than `openai`
 - **WHEN** Knowledge Flow constructs the model
 - **THEN** that provider retains its existing credential rules
+
+#### Scenario: Explicit reranker variable
+
+- **GIVEN** the remote reranker configures `settings.api_key_env` and its named variable is nonblank
+- **WHEN** Knowledge Flow validates the model or sends a reranking request
+- **THEN** that variable takes precedence over `KNOWLEDGE_FLOW_RERANKER_API_KEY` and `OPENAI_API_KEY`
+
+#### Scenario: Missing explicit reranker variable
+
+- **GIVEN** the remote reranker configures `settings.api_key_env` but that variable is absent or blank
+- **WHEN** Knowledge Flow validates the model or sends a reranking request
+- **THEN** it uses `KNOWLEDGE_FLOW_RERANKER_API_KEY`, or `OPENAI_API_KEY` when the dedicated variable is also absent or blank
+
+#### Scenario: Local reranker
+
+- **GIVEN** no remote `reranker_model` is configured
+- **WHEN** Knowledge Flow uses its local CrossEncoder
+- **THEN** no reranker API key is required
 
 ### Requirement: Model credentials remain isolated across concurrent uses and processes
 

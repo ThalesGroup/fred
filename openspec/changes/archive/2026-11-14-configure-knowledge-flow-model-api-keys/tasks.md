@@ -5,13 +5,15 @@
 
 ## 2. Knowledge Flow credential selection
 
-- [x] 2.1 Add one Knowledge Flow resolver for the four role-specific variables and `OPENAI_API_KEY` fallback; verify focused tests cover nonblank dedicated keys, absent and blank dedicated keys, and the no-key error without exposing values.
+- [x] 2.1 Add one Knowledge Flow resolver for the five role-specific variables and `OPENAI_API_KEY` fallback; verify focused tests cover nonblank dedicated keys, absent and blank dedicated keys, optional reranker override, and the no-key error without exposing values.
 - [x] 2.2 Wire chat, both vision construction paths, and embedding model construction plus embedding startup validation to that resolver; verify focused tests show each role uses its own key, a dedicated embedding key permits startup without `OPENAI_API_KEY`, and concurrent model construction leaves `os.environ` unchanged.
 - [x] 2.3 Wire remote OCR to `KNOWLEDGE_FLOW_OCR_API_KEY` with the same fallback; verify the offline OCR tests inspect its outgoing authorization header for dedicated and fallback keys and reject the no-key case before any request.
+- [x] 2.4 Wire the remote reranker's startup validation and HTTP authorization to the shared resolver, preserving optional `settings.api_key_env` as first priority; verify dedicated, override, fallback, missing-key, and local CrossEncoder cases.
 
 ## 3. Deployment and documentation
 
-- [x] 3.1 Add optional Knowledge Flow `dotenv` entries and operator documentation for all four variables and fallback; verify a rendered chart shows the API and extraction workers using the same Secret, and examples contain no real key values.
+- [x] 3.1 Add optional Knowledge Flow `dotenv` entries and operator documentation for all five variables and fallback; verify a rendered chart shows the API and extraction workers using the same Secret, and examples contain no real key values.
+- [x] 3.2 Regenerate the backend and chart configuration schemas after making reranker's `api_key_env` optional; verify schema drift and the migration note describe the compatible default.
 
 ## 4. Integration and close-out
 

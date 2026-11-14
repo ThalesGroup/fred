@@ -33,7 +33,7 @@ You'll need to provide values for:
 - LLM API keys / tokens
 - Access credentials for PostgreSQL (and optionally MinIO, OpenSearch, Temporal, etc.)
 
-### OpenAI-compatible model API keys
+### External model API keys
 
 Each Knowledge Flow model use can have its own key in `config/.env` or the process environment:
 
@@ -43,8 +43,11 @@ Each Knowledge Flow model use can have its own key in `config/.env` or the proce
 | Vision (`vision_model`) | `KNOWLEDGE_FLOW_VISION_API_KEY` |
 | Embeddings (`embedding_model`) | `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` |
 | Remote OCR (`ocr_model`) | `KNOWLEDGE_FLOW_OCR_API_KEY` |
+| Remote reranker (`reranker_model`) | `KNOWLEDGE_FLOW_RERANKER_API_KEY` |
 
-For chat, vision, and embeddings configured with `provider: openai`, and for the remote Mistral OCR extractor, a nonempty dedicated key takes precedence. If it is unset or blank, Knowledge Flow uses `OPENAI_API_KEY`. Setting only `OPENAI_API_KEY` therefore works for all four model uses. If neither key is available for a configured use, that use fails before sending a model request. Other chat, vision, and embedding providers retain their existing authentication settings.
+For chat, vision, and embeddings configured with `provider: openai`, the remote Mistral OCR extractor, and the remote reranker, a nonempty dedicated key takes precedence. If it is unset or blank, Knowledge Flow uses `OPENAI_API_KEY`. Setting only `OPENAI_API_KEY` therefore works for all five model uses. If neither key is available for a configured use, that use fails before sending a model request. Other chat, vision, and embedding providers retain their existing authentication settings. The local CrossEncoder needs no API key.
+
+An explicitly configured `reranker_model.settings.api_key_env` takes precedence over `KNOWLEDGE_FLOW_RERANKER_API_KEY`. If that variable is unset or blank, the reranker uses its dedicated key and then `OPENAI_API_KEY`. Existing custom reranker variable names remain supported.
 
 The remote OCR extractor is not currently wired into the standard PDF ingestion pipeline, which uses local OCR. Setting `KNOWLEDGE_FLOW_OCR_API_KEY` configures the remote extractor when it is invoked; it does not switch PDF ingestion to remote OCR.
 
@@ -66,11 +69,9 @@ reranker_model:
   name: remote-reranker
   settings:
     base_url: https://models.example/v1
-    api_key_env: RERANKER_API_KEY
 ```
 
-Provide `RERANKER_API_KEY` through Knowledge Flow's environment secret, not in
-YAML. The service calls `POST {base_url}/rerank` with `model`, `query`,
+Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge Flow's environment secret, not in YAML. You may also set `settings.api_key_env` to an existing custom variable name. The service calls `POST {base_url}/rerank` with `model`, `query`,
 `documents` and `top_n` and expects indexed `results` with `index` and
 `relevance_score`. A missing key prevents startup. An unavailable configured
 remote model produces a 503 for reranking requests; it does not switch to the
