@@ -66,6 +66,7 @@ const space = (id: string, kind: MySpace["kind"], roles: MySpace["roles"], org =
   name: id,
   parent_id: kind === "organization" ? null : org,
   path: [org, id],
+  description: null,
   personal_owner: kind === "personal" ? "alice" : null,
 });
 let memberships: MySpace[];

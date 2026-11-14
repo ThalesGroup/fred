@@ -134,7 +134,7 @@ async fn dependents(tx: &mut Transaction<'_, Postgres>, space: &Space) -> AppRes
     .fetch_all(&mut **tx)
     .await?;
     let mut rows = db::spaces(&mut **tx, &ids).await?;
-    let pending: Vec<SpaceRow> = sqlx::query_as(concat!("select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where ", space_target!(), " and d.status <> 'completed' and d.target_parent_id = $1"))
+    let pending: Vec<SpaceRow> = sqlx::query_as(concat!("select s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where ", space_target!(), " and d.status <> 'completed' and d.target_parent_id = $1"))
         .bind(space.id).fetch_all(&mut **tx).await?;
     for row in pending {
         if !rows.iter().any(|r| r.id == row.id) {
@@ -329,6 +329,7 @@ pub async fn create_managed_organization(
         id,
         kind: SpaceKind::Organization,
         name: name.to_string(),
+        description: None,
         personal_owner: None,
         parent_id: None,
         organization_id: id,
@@ -487,6 +488,7 @@ pub async fn create_space(
         id,
         kind,
         name,
+        description: None,
         personal_owner: None,
         parent_id: Some(parent.id),
         organization_id: parent.organization,
@@ -502,6 +504,34 @@ pub async fn create_space(
         Some(caller),
     )
     .await?;
+    Ok(space)
+}
+
+/// Update team purpose under the existing mutation guard: revocation and retirement
+/// cannot pass between authorization and commit. Concurrent saves use SQL row locking.
+pub async fn update_team_description(
+    pool: &PgPool,
+    caller: &str,
+    id: Uuid,
+    description: &str,
+) -> AppResult<Space> {
+    let (mut tx, mut space) = authorized_mutation(pool, caller, id, Permission::Manage).await?;
+    if space.kind != SpaceKind::Team {
+        return Err(AppError::NotFound);
+    }
+    let description = description.trim();
+    if !(20..=500).contains(&description.chars().count()) {
+        return Err(AppError::BadRequest(
+            "team description must contain 20..500 characters".into(),
+        ));
+    }
+    sqlx::query("update space set description=$2 where id=$1")
+        .bind(id)
+        .bind(description)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    space.description = Some(description.to_owned());
     Ok(space)
 }
 
@@ -526,6 +556,7 @@ pub async fn create_personal_space(
         id,
         kind: SpaceKind::Personal,
         name: caller.to_string(),
+        description: None,
         personal_owner: Some(caller.to_string()),
         parent_id: None,
         organization_id: org.id,

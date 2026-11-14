@@ -5,6 +5,24 @@ and coding assistants. It preserves context resolution, placement, membership,
 provisioning and retirement contracts for the Control Plane organization model.
 See [Security](03-security.md) for the reader-facing explanation of roles and rights.
 
+## Team purpose contract
+
+The [space model](../../apps/control-plane/src/domain.rs) carries a nullable
+`description`, returned with memberships. Absence is the reminder state; no
+placeholder text or separate boolean is persisted. The
+[migration](../../apps/control-plane/migrations/0027_team_description.sql) limits a
+present value to teams and 20..500 characters. The
+[mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, then
+updates under the existing organization guard with direct `Manage` permission;
+revocation and retirement remain ordered with the write. Concurrent saves use
+last committed write semantics, without a separate revision mechanism.
+
+The [parameters panel](../../apps/frontend/src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx)
+uses the generated client and refreshes `/me/spaces` after saving. The Agents page
+shows the purpose to its readers, or offers the existing reminder to a team manager
+when it is absent. Projects, organizations and personal spaces are excluded.
+These are implementation contracts; deployed journey acceptance remains separate.
+
 ## People and organizations
 
 A Fred instance can host several organizations. A person belongs to every

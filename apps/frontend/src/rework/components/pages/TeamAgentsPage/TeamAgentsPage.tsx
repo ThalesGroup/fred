@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useParams, useSearchParams } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import Select from "@shared/molecules/Select/Select";
@@ -229,8 +230,10 @@ function SpaceAgents({ space }: { space: MySpace }) {
   const names = new Set([...takenAgentNames(managedInstances, editingId), ...refusedNames]);
   return (
     <div className={styles.teamAgentContainer}>
+      <TeamDescriptionReminder space={space} />
       <PageHeader
         title={t(space.kind === "personal" ? "rework.teams.agents.titlePersonal" : "rework.teams.agents.title")}
+        subtitle={space.description ?? undefined}
         actions={
           <>
             {offersManagement && (

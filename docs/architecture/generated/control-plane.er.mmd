@@ -113,6 +113,7 @@ erDiagram
   uuid deletion_id FK
   uuid organization_id FK
   uuid parent_id FK
+  text description
 }
 "control_plane.folder" {
   uuid id
@@ -764,4 +765,12 @@ erDiagram
   text updated_by
   timestamp_with_time_zone updated_at
   uuid space_id FK
+}
+"control_plane.user_avatar" {
+  uuid id
+  text user_id
+  text object_key
+  bigint size
+  text status
+  timestamp_with_time_zone expires_at
 }

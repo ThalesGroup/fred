@@ -156,8 +156,10 @@ replace visual acceptance on a deployed instance.
 
 Control Plane evaluates its fixed role matrix from PostgreSQL direct grants and
 immutable placement. Corpus authorization uses a coherent SQL snapshot and filters
-each candidate ancestor by actual read authority. Knowledge Flow makes one scope
-request per documentary operation. Agent turn authority is resolved once per turn.
+each candidate ancestor by actual read authority. The corpus is fixed at turn
+admission. Publication, generation, selection and attachment checks remain
+separate from turn authorization; see
+[Document search within a turn](A6-security.md#document-search-within-a-turn).
 
 Authorization mutations share transaction-local checks and SQL advisory locks with
 role changes. The removed remote protocol's request counts do not describe this
@@ -195,68 +197,16 @@ offsets still examine work proportional to the directory; limiting returned rows
 does not make that work constant. Recursive deletion scales with the removed
 subtree and its foreign-key checks, under the organization lock.
 
-For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
-`G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
-and `B = sum_s ceil((role_tuples(s) + new(s)) / 96)` over all declared spaces, where `new(s)` is 1 only for a new team or project. `Z`
-counts organization subtrees with no declared role tuples. `H` counts child/subject
-pairs lacking a declared parent content role and therefore requiring an existing
-direct-parent-role Read; siblings with the same subject each contribute a Read. `E`
-counts existing parents whose children resolve declared names. `X` is the sum of actual `Q(subject)` Reads at the three attachment checkpoints:
-known declared subjects in preflight, all declared subjects in reconciliation, and
-each subtree's declared subjects after guard capture. A subject counts only when
-assigned at least one space role. Let `J` count creator declarations without declared content, each needing an existing
-organization-content Read at all three dependency checkpoints. With one page per
-tree Read, on a successful attempt:
+The ZIP importer holds the platform lock per identity dispatch, then the platform
+and declared organization locks through reconciliation commit. Organizations are
+locked in UUID order before child name resolution. Competing mutations needing
+these locks must wait; preflight directory lookups hold no mutation lock. Archive
+and expanded-content limits bound parser input. Reconciliation work depends on
+the declared identities, spaces and grants, not on document count.
 
-The [importer](../../apps/control-plane/src/provisioning.rs) holds the platform lock
-per identity dispatch, then platform plus all declared organization locks through
-reconciliation commit. Mutations needing those locks wait at most five seconds and
-then answer 503, so reconciliation length bounds their unavailability; the initiating platform admin's
-bearer lifetime does not bound the import. Organizations are locked in UUID order; child name resolution
-follows locking. Preflight directory lookups hold no lock. Parser memory is bounded
-by compressed/expanded bytes plus decoded declarations; ordered reference/name
-indexes require `O((U + S) log(U + S))` operations for `S` declarations, in addition
-to decoding and role traversal. Reconciliation scans declarations for each organization,
-so its application work includes `O(O * (S + D))`; it retains `O(U + S + D)` data.
-Documents do not contribute to these cardinalities.
-
-Creator grants add a paginated direct-role Read on the target organization to the
-ordinary grant budget. A one-organization/two-person fixture measures 1 Check,
-5 Reads and 1 Write for this grant. Revocation adds no request: existing role inventory checks
-the same-scope dependency. Import adds that Read at each dependency checkpoint only
-when content is not declared. Batches publish content before eligibility. The
-96-user existing-organization fixture fails its second role batch after 96 identity
-fences, verifies content without dangling eligibility, then successfully replays.
-
-Personal opening holds its organization SQL lock from guard capture through context,
-permission reads, the personal-space lookup and creation commit. With forced page size 1,
-creation expects 2 Checks, 3 Reads and 1 Write (5 tuple operations); reuse expects
-2 Checks, 6 Reads and zero Writes, whether two or five other members have personal
-spaces. Exact guard: one Read; roles: 2 then 4 pages; reuse reads its own link: one
-page. The other members' personal spaces never enter the budget. Production
-page size stays unset; all continuation pages are read with higher consistency.
-The two-open race is concurrency 2, not a throughput measurement. Document count
-does not affect lookup. The UI waits for one membership refresh after success.
-
-The batch-boundary fixture (105 users, 107 organization grants, 210 team grants, one new
-organization and team, no platform grants, `H=J=Z=E=0`) checks 114 Checks, 422 Reads
-(`X=3*105=315`, known identities, initially empty roles) and 111 Writes: 550 tuple operations and at most 100 per Write. The demo project variant
-(`U=2`, `H=2`, `E=2`) expects 9 Checks and 20 Reads: two subjects with
-organization/team roles each cost one Read at each of three checkpoints. The hierarchy fixture (one
-organization, team and project, an organization owner/analyst with a personal space)
-expects 3 Reads for `/me/spaces`, and `1 C + 1 Read` for both project
-and team scopes. These are wire-count assertions in disposable
-integration environments, not latency, throughput or scalability measurements.
-The pagination fixture has four business roles
-on one organization, a separate organization admin, and forces page size 2:
-context takes three Reads. Adding a first member costs six Reads (two guards, three
-caller pages, one empty target page), one Check and one Write with five operations.
-Concurrent grants in two organizations use concurrency 2; other wire budgets use
-one active request/import. No document cardinality contributes to these lookups.
-
-Startup with a published binding uses the discovery GET plus the pinned-model GET.
-An empty installation adds one full tuple Read, two POSTs (store and model) and the
-platform guard initialization Write; existing state without a binding is refused.
+Opening a personal space holds its organization SQL lock through authorization,
+the existing-space lookup and any creation commit. The lookup uses the organization
+and owner, without enumerating other members' personal spaces or documents.
 
 ## Directory and content verification costs
 
@@ -274,9 +224,12 @@ held. Each distinct declared owner subject is checked once in that operation.
 Local candidate search is one SQL query: the four prefix indexes are combined by a
 bitmap OR (checked by `EXPLAIN` on 20 000 profiles), then at most 20 rows are sorted;
 the statement is planned with its pattern so that the indexes stay usable.
-Each platform grant also checks its subject. Every direct space-role grant adds one
-subject lookup after authorization, under its locks: a Keycloak GET, or one indexed
-SQL query in the local directory. Organization creation adds one subject GET. Every directory request has a
+Direct platform and space-role grants first authorize the caller, then look up
+the subject in the directory without retaining the authorization's SQL connection
+or holding a mutation lock. Platform grants use a Keycloak GET; space-role grants
+use a Keycloak GET or one indexed SQL query in the local directory. Both perform
+final authorization under their existing mutation locks before writing.
+Organization creation adds one subject GET. Every directory request has a
 five-second timeout and can refresh/retry once on 401; a missing cached service
 token adds its token request. These are existence checks, not permission caches or
 leases across operations. Concurrent external IAM deletion can follow a check.

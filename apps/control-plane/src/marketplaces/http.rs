@@ -79,7 +79,7 @@ async fn marketplace_proposal_spaces(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<super::PageQuery>,
 ) -> AppResult<Json<ProposalSpacePage>> {
-    let mut rows: Vec<SpaceRow> = sqlx::query_as(concat!(subject_spaces!(), "select s.id,s.kind,s.name,s.personal_owner,s.parent_id,s.organization_id
+    let mut rows: Vec<SpaceRow> = sqlx::query_as(concat!(subject_spaces!(), "select s.id,s.kind,s.name,s.description,s.personal_owner,s.parent_id,s.organization_id
         from subject_spaces s where s.active and s.direct_roles && $3::text[]
         and exists(select 1 from organization_participants p where p.organization_id=s.organization_id)
         and s.id > $4 order by s.id limit 101"))

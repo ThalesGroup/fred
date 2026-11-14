@@ -43,6 +43,7 @@ const space = (id: string, org = id, kind: MySpace["kind"] = "organization"): My
   kind,
   roles: ["member"],
   parent_id: null,
+  description: null,
   personal_owner: null,
   path: [org, id],
 });

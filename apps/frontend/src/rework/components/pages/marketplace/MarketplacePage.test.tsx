@@ -168,6 +168,7 @@ beforeEach(() => {
             kind: "personal",
             parent_id: null,
             path: ["destination"],
+            description: null,
             personal_owner: "viewer",
             marketplace_space_ids: [catalogue],
             resource_kinds: ["prompt", "skill", "agent"],

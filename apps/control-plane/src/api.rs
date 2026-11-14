@@ -368,6 +368,38 @@ async fn create_space(
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct TeamDescription {
+    #[schema(min_length = 20, max_length = 500)]
+    description: String,
+}
+
+#[utoipa::path(
+    put, path = "/spaces/{id}/description",
+    params(("id" = Uuid, Path)), request_body = TeamDescription,
+    responses(
+        (status = 200, body = Space),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+    )
+)]
+async fn update_team_description(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(req): ApiJson<TeamDescription>,
+) -> AppResult<Json<Space>> {
+    Ok(Json(
+        spaces::update_team_description(&s.pool, &user.uid, id, &req.description).await?,
+    ))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreatePersonalSpace {
     organization_id: Uuid,
 }
@@ -908,7 +940,7 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and role memberships.
-    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'team' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, description, personal_owner, parent_id, organization_id from space where kind = 'team' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
         .bind(query.after).fetch_all(&s.pool).await?;
     Ok(Json(teams.into_iter().map(Space::from).collect()))
 }
@@ -936,7 +968,7 @@ async fn organization_registry(
     ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
     authorization::require_platform(&s.pool, &user.uid, PlatformPermission::ManagePlatform).await?;
-    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
+    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, description, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
         .bind(query.after).fetch_all(&s.pool).await?;
     let next_cursor = (rows.len() > 100).then(|| rows[99].id);
     rows.truncate(100);
@@ -1184,6 +1216,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())
         .routes(routes!(create_space))
+        .routes(routes!(update_team_description))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(authorize_document))

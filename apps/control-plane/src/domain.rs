@@ -67,6 +67,7 @@ pub struct SpaceRow {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
+    pub description: Option<String>,
     pub personal_owner: Option<String>,
     pub parent_id: Option<Uuid>,
     pub organization_id: Uuid,
@@ -78,6 +79,9 @@ pub struct Space {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
+    /// Team purpose, absent until its owner describes it.
+    #[schema(required = true)]
+    pub description: Option<String>,
     #[schema(required = true)]
     pub parent_id: Option<Uuid>,
     #[schema(required = true)]
@@ -106,6 +110,7 @@ impl From<SpaceRow> for Space {
             id: row.id,
             kind: row.kind,
             name: row.name,
+            description: row.description,
             personal_owner: row.personal_owner,
         }
     }
@@ -257,6 +262,7 @@ mod tests {
             id,
             kind,
             name: "x".into(),
+            description: None,
             personal_owner: personal.then(|| "bob".into()),
             parent_id: parent.filter(|_| !personal).map(|p| p.id),
             organization_id: parent.map_or(id, |p| p.organization),

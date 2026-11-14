@@ -82,6 +82,7 @@
   margin: var(--spacing-2xs) 0 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+  overflow-wrap: anywhere;
 }
 
 /* May shrink below its content so a narrow page wraps the controls instead of overflowing. */

@@ -477,6 +477,13 @@ const injectedRtkApi = api.injectEndpoints({
     projectDeletionStatus: build.query<ProjectDeletionStatusApiResponse, ProjectDeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/deletion` }),
     }),
+    updateTeamDescription: build.mutation<UpdateTeamDescriptionApiResponse, UpdateTeamDescriptionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/description`,
+        method: "PUT",
+        body: queryArg.teamDescription,
+      }),
+    }),
     receipts: build.query<ReceiptsApiResponse, ReceiptsApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/document-uploads`,
@@ -1595,6 +1602,11 @@ export type ProjectDeletionStatusApiResponse = /** status 200 undefined */ Recei
 export type ProjectDeletionStatusApiArg = {
   id: string;
 };
+export type UpdateTeamDescriptionApiResponse = /** status 200 undefined */ Space;
+export type UpdateTeamDescriptionApiArg = {
+  id: string;
+  teamDescription: TeamDescription;
+};
 export type ReceiptsApiResponse = /** status 200 undefined */ UploadReceipt[];
 export type ReceiptsApiArg = {
   id: string;
@@ -2235,6 +2247,8 @@ export type RevokePlatformRoleApiArg = {
 };
 export type SpaceKind = "organization" | "team" | "project" | "personal";
 export type Space = {
+  /** Team purpose, absent until its owner describes it. */
+  description: string | null;
   id: string;
   kind: SpaceKind;
   name: string;
@@ -3323,6 +3337,9 @@ export type CreateSpace = {
   owner: string;
   parent_id: string;
 };
+export type TeamDescription = {
+  description: string;
+};
 export type Entry =
   | {
       data: Folder;
@@ -4398,6 +4415,7 @@ export const {
   useDeleteSpaceMutation,
   useProjectDeletionStatusQuery,
   useLazyProjectDeletionStatusQuery,
+  useUpdateTeamDescriptionMutation,
   useReceiptsQuery,
   useLazyReceiptsQuery,
   useEntriesQuery,

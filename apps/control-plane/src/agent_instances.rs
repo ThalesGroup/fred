@@ -160,7 +160,7 @@ pub async fn selecting_in_organization<'e>(
     let rows: Vec<SelectingRow> = sqlx::query_as(
         "select a.agent_instance_id, a.display_name, a.source_runtime_id,
             a.tuning -> 'selected_capability_ids' as selected,
-            s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id
+            s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id
         from space s join agent_instance a on a.space_id = s.id
         where s.organization_id = $1 and s.deletion_id is null
             and a.tuning -> 'selected_capability_ids' <> '[]'::jsonb

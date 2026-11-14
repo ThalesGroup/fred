@@ -235,6 +235,7 @@ impl Importer<'_> {
                     SpaceRow {
                         id,
                         name: declaration.name.clone(),
+                        description: None,
                         kind: declaration.kind,
                         personal_owner: None,
                         parent_id: parent.map(|p| p.id),

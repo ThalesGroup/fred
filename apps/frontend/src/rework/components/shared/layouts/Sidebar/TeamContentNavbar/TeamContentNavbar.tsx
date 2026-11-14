@@ -305,6 +305,15 @@ export default function TeamContentNavbar() {
     },
   ];
 
+  if (space?.kind === "team") {
+    settingsItems.unshift({
+      type: "link",
+      label: t("rework.teamSettings.navigation.parameters"),
+      icon: { category: "outlined", type: "info" },
+      linkProps: { to: `${settingsBase}/parameters` },
+    });
+  }
+
   const backButton = (
     <span className={styles["settings-back-container"]}>
       <Button

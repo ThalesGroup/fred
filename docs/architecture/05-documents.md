@@ -42,9 +42,10 @@ The drive lists the stored documents and their processing state. Users can
 download the original and, after successful processing, view the available file
 preview and extracted text. Current access rights are checked when reading.
 
-In this document path, storage and processing do not expose the document to
-agent search. The [document journey](02.2-document-journey.md) illustrates import
-and preview with a PDF.
+Published results included in search can be used by agents within the corpus
+authorized at the start of their turn. An upload alone, or the presence of indexed
+vectors, does not make a document available to agent search. The
+[document journey](02.2-document-journey.md) illustrates import and preview with a PDF.
 
 ## 5.4. Remove folders and clean up failures
 

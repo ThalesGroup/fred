@@ -76,8 +76,7 @@ export default function MarketplaceTeams() {
   //
   // #2433: require `=== "public"` rather than `!== "private"` — private is
   // now the platform default, so a payload missing the field (version-skew
-  // backend) must err on non-disclosure, matching the `?? "private"`
-  // fallback in TeamSettingsParameters.
+  // backend) must err on non-disclosure.
   const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
   const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
 

@@ -59,6 +59,7 @@ export const SPACES: MySpace[] = [SPACE_A, SPACE_B].map((id, index) => ({
   kind: index ? "personal" : "team",
   parent_id: null,
   path: [id],
+  description: null,
   personal_owner: index ? "reader" : null,
   organization_id: "org",
   roles: ["member"],

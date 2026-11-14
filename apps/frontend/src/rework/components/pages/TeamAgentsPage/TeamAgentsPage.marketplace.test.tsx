@@ -266,7 +266,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
   it("reads canonical space routes, asks Write rather than inferring roles, and keeps unsupported actions disabled", async () => {
     await mount();
     expect(host.textContent).toContain("Saved Agent");
-    expect(calls.find((call) => call.path.endsWith("/authorize/space"))?.body).toEqual({
+    expect(calls.filter((call) => call.path.endsWith("/authorize/space")).map((call) => call.body)).toContainEqual({
       space_id: SPACE_A,
       permission: "write",
     });
@@ -616,4 +616,11 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(host.textContent).toContain("rework.weaverAgents.scopeUnavailable");
     expect(calls).toHaveLength(1);
   });
+});
+
+it.each([false, true])("offers the description reminder independently of an empty agent list (%s)", async (empty) => {
+  if (empty) rows = [];
+  await mount();
+  expect(document.querySelector(`a[href="/team/${SPACE_A}/settings/parameters"]`)).not.toBeNull();
+  expect(calls.some((call) => call.body?.permission === "manage")).toBe(true);
 });

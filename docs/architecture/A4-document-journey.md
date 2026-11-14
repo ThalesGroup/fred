@@ -150,13 +150,19 @@ rechecks Bob's current write authority and CGU before committing `succeeded`,
 perform current read checks. Reload recovers progress from SQL.
 
 Temporal completion alone is not processing success. Conversely, staged S3
-objects or vectors can exist before SQL publication. Manager outputs remain
-separate from the legacy KF catalog and search/chat retrieval. No new per-document
-individual authorization grant, legacy tag, legacy metadata-catalog row or legacy task is created.
+objects or vectors can exist before SQL publication. Published results included
+in search can be used within the corpus authorized at turn admission. Index
+candidates are checked against current publication and lifecycle facts, the
+admitted corpus, explicit selection and published chunk generation, as described
+in [Document search within a turn](A6-security.md#document-search-within-a-turn).
+No per-document individual authorization grant or legacy catalog entry is needed.
 
 Read [publication](../../apps/control-plane/src/processing/publication.rs) and
-[preview](../../apps/control-plane/src/processing/preview.rs). The exact bucket/key
-comparison with `swift` is in [physical object layout](A9-documents.md#physical-object-layout).
+[preview](../../apps/control-plane/src/processing/preview.rs), the embedded agent's
+[search call](../../apps/control-plane/src/embedded_agent/kf_search.rs) and Knowledge Flow's
+[candidate filtering](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/vector_search/vector_search_service.py).
+The exact bucket/key comparison with `swift` is in
+[physical object layout](A9-documents.md#physical-object-layout).
 
 ## Observe the same identities in every store
 

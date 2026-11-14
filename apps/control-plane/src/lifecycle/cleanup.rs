@@ -60,6 +60,7 @@ pub async fn batch(
         id: receipt.organization_id,
         kind: SpaceKind::Organization,
         name: String::new(),
+        description: None,
         personal_owner: None,
         parent_id: None,
         organization_id: receipt.organization_id,

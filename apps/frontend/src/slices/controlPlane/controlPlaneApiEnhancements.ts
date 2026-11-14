@@ -253,6 +253,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     publishWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     mySpaces: { providesTags: ["MySpaces"] },
+    updateTeamDescription: { invalidatesTags: ["MySpaces"], extraOptions: { retryUnauthorized: false } },
     spaceMembers: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
@@ -777,6 +778,7 @@ export const {
   usePutMyAvatarMutation,
   useDeleteMyAvatarMutation,
   useMySpacesQuery,
+  useUpdateTeamDescriptionMutation,
   useCreatePersonalSpaceMutation,
   useOnboardingStatusQuery,
   useAcceptTermsMutation,

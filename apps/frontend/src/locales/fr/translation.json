@@ -3587,13 +3587,14 @@
       "memberCount": "{{count}} membres"
     },
     "teamDescription": {
+      "length": "Saisissez entre {{min}} et {{max}} caractères.",
       "label": "Description de l'équipe",
-      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA. Tous les utilisateurs de la marketplace la voient.",
+      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA.",
       "tooShort": "Saisissez au moins {{min}} caractères.",
       "placeholderDisplay": "Description à compléter par le responsable de l'équipe.",
       "reminder": {
         "title": "Décrivez votre équipe",
-        "description": "Votre équipe a encore une description par défaut. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
+        "description": "Votre équipe n'a pas encore de description. Indiquez ses objectifs dans son usage de l'IA pour que chacun sache à quoi elle utilise la plateforme.",
         "action": "Ouvrir les paramètres de l'équipe"
       },
       "maxReached": "{{max}} caractères maximum"

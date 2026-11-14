@@ -5444,3 +5444,108 @@ mod conversation_ownership;
 
 #[path = "support/folder_deletion.rs"]
 mod folder_deletion;
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn team_description_is_owned_bounded_and_returned_by_memberships() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    assert!(team.description.is_none());
+    spaces::grant(&e.pool, &e.subjects(), "alice", org.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    spaces::grant(
+        &e.pool,
+        &e.subjects(),
+        "alice",
+        team.id,
+        Role::Editor,
+        "bob",
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        spaces::update_team_description(
+            &e.pool,
+            "bob",
+            team.id,
+            "An editor cannot describe this team."
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(
+        spaces::update_team_description(
+            &e.pool,
+            "outsider",
+            team.id,
+            "No cross-organization description writes."
+        )
+        .await
+        .is_err()
+    );
+    assert!(matches!(
+        spaces::update_team_description(
+            &e.pool,
+            "alice",
+            org.id,
+            "This is an organization, not a team."
+        )
+        .await,
+        Err(AppError::NotFound)
+    ));
+    for invalid in ["".to_owned(), "short".to_owned(), "x".repeat(501)] {
+        assert!(matches!(
+            spaces::update_team_description(&e.pool, "alice", team.id, &invalid).await,
+            Err(AppError::BadRequest(_))
+        ));
+    }
+    // Manage does not require a content role.
+    delete_tuple(&e, "alice", "member", &format!("space:{}", team.id)).await;
+    let description = "😀".repeat(500);
+    let updated =
+        spaces::update_team_description(&e.pool, "alice", team.id, &format!("  {description}\n"))
+            .await
+            .unwrap();
+    assert_eq!(updated.description.as_deref(), Some(description.as_str()));
+    let memberships = spaces::memberships(&e.pool, "bob").await.unwrap();
+    assert_eq!(
+        memberships
+            .iter()
+            .find(|m| m.space.id == team.id)
+            .unwrap()
+            .space
+            .description,
+        updated.description
+    );
+    assert_eq!(
+        spaces::load(&e.pool, team.id).await.unwrap().description,
+        updated.description
+    );
+    for (id, value) in [
+        (team.id, "short".to_owned()),
+        (team.id, "x".repeat(501)),
+        (org.id, description.clone()),
+    ] {
+        assert!(
+            sqlx::query("update space set description=$2 where id=$1")
+                .bind(id)
+                .bind(value)
+                .execute(&e.pool)
+                .await
+                .is_err()
+        );
+    }
+    // Once rights have been revoked, the same edit path must reject the previous owner.
+    delete_tuple(&e, "alice", "owner", &format!("space:{}", team.id)).await;
+    assert!(matches!(
+        spaces::update_team_description(
+            &e.pool,
+            "alice",
+            team.id,
+            "A former owner cannot change the purpose."
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
+}

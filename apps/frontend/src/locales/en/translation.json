@@ -3587,13 +3587,14 @@
       "memberCount": "{{count}} members"
     },
     "teamDescription": {
+      "length": "Enter between {{min}} and {{max}} characters.",
       "label": "Team description",
-      "helper": "State your team's objectives regarding its use of AI. Everyone browsing the marketplace sees it.",
+      "helper": "State your team's objectives regarding its use of AI.",
       "tooShort": "Write at least {{min}} characters.",
       "placeholderDisplay": "Description to be completed by the team owner.",
       "reminder": {
         "title": "Describe your team",
-        "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
+        "description": "Your team has no description yet. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
         "action": "Open team settings"
       },
       "maxReached": "{{max}} characters maximum"

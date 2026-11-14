@@ -1,347 +1,92 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-import styles from "./TeamSettingsParameters.module.scss";
-import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import Button from "@shared/atoms/Button/Button.tsx";
-import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
-import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import Button from "@shared/atoms/Button/Button";
+import TextArea from "@shared/atoms/TextArea/TextArea";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import {
-  JoiningMode,
-  TeamVisibility,
-  TeamWithPermissions,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import {
-  useUpdateTeamMutation,
-  useUploadTeamAvatarMutation,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
-import TeamSettingsRetention from "@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx";
-import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import {
-  MAX_TEAM_NAME_LENGTH,
+  isValidTeamDescription,
   TEAM_DESCRIPTION_MAX_LENGTH,
   TEAM_DESCRIPTION_MIN_LENGTH,
-  isValidTeamDescription,
-} from "@core/utils/teamFields.ts";
+} from "@core/utils/teamFields";
+import {
+  useMySpacesQuery,
+  useUpdateTeamDescriptionMutation,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import styles from "./TeamSettingsParameters.module.scss";
 
-interface TeamSettingsParametersProps {
-  team: TeamWithPermissions;
-}
-
-interface TeamSettingsParametersForm {
-  name: string;
-  description: string;
-}
-
-// TEAM-09: order drives the button group's left-to-right layout and index
-// mapping — keep in sync with the labels below.
-const JOINING_MODES: JoiningMode[] = ["open", "invite_only"];
-
-// TEAM-10: same left-to-right/index convention as JOINING_MODES above.
-const VISIBILITIES: TeamVisibility[] = ["public", "private"];
-
-export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
-  const { defaultTeamAvatarFile } = useFrontendProperties();
+export default function TeamSettingsParameters({ spaceId }: { spaceId: string }) {
   const { t } = useTranslation();
-  const [updateTeam] = useUpdateTeamMutation();
-  const { showSuccess } = useToast();
-  const [uploadAvatar, { isLoading: isUploadingAvatar }] = useUploadTeamAvatarMutation();
-
-  // Set by a failed rename only; the field's own value is form state.
-  const [renameError, setRenameError] = useState<string | null>(null);
-  const [descriptionError, setDescriptionError] = useState<string | null>(null);
-  const savingDescription = useRef(false);
-  // A different value left while a save is in flight: sent once that save settles.
-  const descriptionQueued = useRef(false);
-  // The default description is not something the admin wrote: the field
-  // starts empty, so a leftover of that text can never be saved as theirs.
-  const storedDescription = team.description_is_placeholder ? "" : (team.description ?? "");
-  const [isRenaming, setIsRenaming] = useState(false);
-
-  const { register, getValues, watch, setValue } = useForm<TeamSettingsParametersForm>({
-    defaultValues: {
-      name: team.name,
-      description: storedDescription,
-    },
-  });
-
-  // Each field re-syncs on its own value, never through a shared `reset`:
-  // saving the description refetches the whole team, and a reset would wipe a
-  // rename the user had typed but not submitted yet.
-  useEffect(() => {
-    // The refetch of an earlier save must not overwrite a newer value still being sent.
-    if (savingDescription.current) return;
-    setValue("description", storedDescription);
-    setDescriptionError(null);
-  }, [storedDescription, setValue]);
-
-  useEffect(() => {
-    setValue("name", team.name);
-    setRenameError(null);
-  }, [team.name, setValue]);
-
-  const handleSaveDescription = () => {
-    const newDescription = getValues().description.trim();
-    if (newDescription === storedDescription.trim()) {
-      // Left empty on a team that still has the default description: nothing
-      // to send, but the field says it is still to be filled.
-      setDescriptionError(
-        team.description_is_placeholder
-          ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })
-          : null,
-      );
-      return;
-    }
-    // An invalid value stays in the field with its error; nothing is sent.
-    if (!isValidTeamDescription(newDescription)) {
-      setDescriptionError(t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH }));
-      return;
-    }
-    // Never two writes at once: they could land out of order.
-    if (savingDescription.current) {
-      descriptionQueued.current = true;
-      return;
-    }
-    savingDescription.current = true;
-    setDescriptionError(null);
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: { description: newDescription },
-    })
-      .unwrap()
-      .then(() => showSuccess({ summary: t("rework.teamSettings.parameters.description.saved") }))
-      .catch(() => setDescriptionError(t("rework.teamSettings.parameters.description.saveError")))
-      .finally(() => {
-        savingDescription.current = false;
-        if (descriptionQueued.current) {
-          descriptionQueued.current = false;
-          handleSaveDescription();
-        }
-      });
-  };
-  const descriptionValue = watch("description");
-
-  // A rename is committed by an explicit button rather than on blur like the
-  // description: it renames the team everywhere, and it can be refused (team
-  // names are globally unique), so it needs a deliberate action and somewhere
-  // to put the refusal.
-  const nameValue = watch("name");
-  const trimmedName = nameValue.trim();
-  const canRename = trimmedName.length > 0 && trimmedName !== team.name;
-
-  const handleSaveName = async () => {
-    // The in-flight guard is not just double-click hygiene: a second PATCH
-    // would let a late 409 pin "name already taken" onto a name the user has
-    // since changed.
-    if (!canRename || isRenaming) return;
-    setRenameError(null);
-    setIsRenaming(true);
+  const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
+  const space = context.currentData?.find((item) => item.id === spaceId);
+  const access = useSpaceAccess(spaceId, "manage");
+  const [save, saving] = useUpdateTeamDescriptionMutation();
+  // Background refreshes update pristine fields, never overwrite the user's draft.
+  const [draft, setDraft] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState(false);
+  const description = draft ?? space?.description ?? "";
+  const trimmed = description.trim();
+  const valid = isValidTeamDescription(description);
+  const busy = saving.isLoading || context.isFetching;
+  const handleSave = async () => {
+    if (!access.allowed || busy || !valid || space?.kind !== "team") return;
+    setError(undefined);
+    setSaved(false);
     try {
-      await updateTeam({
-        teamId: team.id,
-        updateTeamRequest: { name: trimmedName },
-      }).unwrap();
-    } catch (error) {
-      // 409 is the one failure the user can act on: another team holds the name.
-      const status = (error as { status?: number } | undefined)?.status;
-      setRenameError(
-        status === 409
-          ? t("rework.teamSettings.parameters.name.alreadyTaken")
-          : t("rework.teamSettings.parameters.name.saveError"),
-      );
-    } finally {
-      setIsRenaming(false);
+      await save({ id: spaceId, teamDescription: { description: trimmed } }).unwrap();
+      await context.refetch().unwrap();
+      setDraft(undefined);
+      setSaved(true);
+    } catch {
+      setError(t("rework.teamSettings.parameters.description.saveError"));
     }
   };
-  const defaultAvatarUrl = defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined;
-  const avatarImageUrl = team.avatar_image_url ?? defaultAvatarUrl;
 
-  const joiningMode = team.joining_mode ?? "invite_only";
-  const handleSelectJoiningMode = (index: number) => {
-    const newMode = JOINING_MODES[index];
-    if (newMode === joiningMode) {
-      return;
-    }
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: { joining_mode: newMode },
-    });
-  };
-
-  // A PRIVATE team can never be OPEN: people join it only when a team admin adds
-  // them or shares an invite link (Members tab). So while private, the
-  // joining-mode toggle is replaced by a single disabled "manual only" button, an
-  // inert state that reads as a fact rather than a refused choice.
-  // #2433: private is the platform default — mirror it when the field is absent.
-  const visibility = team.visibility ?? "private";
-  const isPrivate = visibility === "private";
-  const applyVisibility = (newVisibility: TeamVisibility) => {
-    updateTeam({
-      teamId: team.id,
-      updateTeamRequest: { visibility: newVisibility },
-    });
-  };
-  const handleSelectVisibility = (index: number) => {
-    const newVisibility = VISIBILITIES[index];
-    if (newVisibility === visibility) {
-      return;
-    }
-    applyVisibility(newVisibility);
-  };
-
-  const handleAvatarUpload = async (file: File) => {
-    await uploadAvatar({
-      teamId: team.id,
-      // The generated client types the multipart file field as `string`
-      // (OpenAPI 3.1 contentMediaType binary → string); the enhanced endpoint
-      // sends the real File via FormData at runtime.
-      bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: { file: file as never },
-    }).unwrap();
-  };
-
+  if (context.isError || access.error) return <ServiceNotice title={t("rework.manager.unavailable")} />;
+  if (!context.currentData || (!access.settled && !access.offered)) return <p role="status">{t("common.loading")}</p>;
+  if (space?.kind !== "team" || !access.offered) return <ServiceNotice title={t("rework.spaceMembers.forbidden")} />;
   return (
-    <div className={styles["team-settings-parameters-container"]}>
+    <div className={styles.parameters}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
-      <div className={`${styles["form-section"]} ${styles["team-name-section"]}`}>
-        <TextInput
-          label={t("rework.teamSettings.parameters.name.label")}
-          explanation={t("rework.teamSettings.parameters.name.support")}
-          maxLength={MAX_TEAM_NAME_LENGTH}
-          value={nameValue}
-          error={renameError ?? undefined}
-          {...register("name", { onChange: () => setRenameError(null) })}
-        />
-        <div className={styles["team-name-actions"]}>
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            disabled={!canRename || isRenaming}
-            onClick={handleSaveName}
-          >
-            {t("rework.teamSettings.parameters.name.save")}
-          </Button>
-        </div>
-      </div>
-      <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
-        <AvatarUploadCard
-          title={t("rework.teamSettings.parameters.teamAvatar.title")}
-          hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
-          importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
-          emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
-          imageUrl={avatarImageUrl}
-          onUpload={handleAvatarUpload}
-          uploading={isUploadingAvatar}
-        />
-      </div>
-      <div className={`${styles["form-section"]} ${styles["team-description-section"]}`}>
-        <TeamDescriptionReminder team={team} />
-        <TextArea
-          label={t("rework.teamSettings.parameters.description.label")}
-          placeholder={t("rework.teamSettings.parameters.description.placeholder")}
-          description={t("rework.teamDescription.helper")}
-          error={descriptionError ?? undefined}
-          explanation={
-            (descriptionValue ?? "").length >= TEAM_DESCRIPTION_MAX_LENGTH
-              ? t("rework.teamDescription.maxReached", { max: TEAM_DESCRIPTION_MAX_LENGTH })
-              : undefined
-          }
-          maxLength={TEAM_DESCRIPTION_MAX_LENGTH}
-          value={descriptionValue}
-          rows={7}
-          required
-          {...register("description", { onBlur: handleSaveDescription })}
-        />
-      </div>
-      <div className={`${styles["form-section"]} ${styles["team-settings-toggles"]}`}>
-        <div className={styles["team-settings-toggle-row"]}>
-          <div className={styles["team-settings-toggle-label"]}>
-            <span>{t("rework.teamSettings.parameters.visibility.label")}</span>
-            <span className={styles["team-settings-toggle-support"]}>
-              {t("rework.teamSettings.parameters.visibility.support")}
-            </span>
-          </div>
-          <ButtonGroup
-            variant="radio"
-            size="small"
-            color="secondary"
-            surface="surface-container-lowest"
-            aria-label={t("rework.teamSettings.parameters.visibility.label")}
-            selectedIndex={VISIBILITIES.indexOf(visibility)}
-            onSelectedIndexChange={handleSelectVisibility}
-            items={[
-              { label: t("rework.teamSettings.parameters.visibility.public") },
-              { label: t("rework.teamSettings.parameters.visibility.private") },
-            ]}
-          />
-        </div>
-        <div className={styles["team-settings-toggle-row"]}>
-          <div className={styles["team-settings-toggle-label"]}>
-            <span>{t("rework.teamSettings.parameters.joiningMode.label")}</span>
-            <span className={styles["team-settings-toggle-support"]}>
-              {isPrivate
-                ? t("rework.teamSettings.parameters.joiningMode.privateSupport")
-                : t("rework.teamSettings.parameters.joiningMode.support")}
-            </span>
-          </div>
-          {isPrivate ? (
-            <Button
-              className={styles["team-settings-toggle-action"]}
-              color="secondary"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "lock" }}
-              disabled
-            >
-              {t("rework.teamSettings.parameters.joiningMode.manual")}
-            </Button>
-          ) : (
-            <ButtonGroup
-              variant="radio"
-              size="small"
-              color="secondary"
-              surface="surface-container-lowest"
-              aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
-              selectedIndex={JOINING_MODES.indexOf(joiningMode)}
-              onSelectedIndexChange={handleSelectJoiningMode}
-              items={[
-                { label: t("rework.teamSettings.parameters.joiningMode.open") },
-                { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly") },
-              ]}
-            />
-          )}
-        </div>
-      </div>
-      {/* Data & Retention (CTRLP-12 B6): lives here rather than a dedicated tab. */}
-      <TeamSettingsRetention team={team} />
-      {/*
-      <div className={styles["form-section"]}>
-        <TextArea
-          label={t("rework.teamSettings.parameters.teamPrompt.label")}
-          maxLength={180}
-          placeholder={t("rework.teamSettings.parameters.teamPrompt.placeholder", { agentsNicknamePlural })}
-          disabled={true}
-        />
-      </div>
-*/}
+      <TextArea
+        label={t("rework.teamDescription.label")}
+        placeholder={t("rework.teamSettings.parameters.description.placeholder")}
+        description={t("rework.teamDescription.helper")}
+        explanation={t("rework.teamDescription.length", {
+          min: TEAM_DESCRIPTION_MIN_LENGTH,
+          max: TEAM_DESCRIPTION_MAX_LENGTH,
+        })}
+        value={description}
+        rows={7}
+        required
+        disabled={busy}
+        error={
+          draft !== undefined && !valid
+            ? t("rework.teamDescription.length", { min: TEAM_DESCRIPTION_MIN_LENGTH, max: TEAM_DESCRIPTION_MAX_LENGTH })
+            : undefined
+        }
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setSaved(false);
+          setError(undefined);
+        }}
+      />
+      {error && <p role="alert">{error}</p>}
+      {saved && <p role="status">{t("rework.teamSettings.parameters.description.saved")}</p>}
+      <Button
+        color="primary"
+        variant="filled"
+        size="small"
+        disabled={busy || !access.allowed || !valid || trimmed === space.description}
+        onClick={() => void handleSave()}
+      >
+        {t("common.save")}
+      </Button>
     </div>
   );
 }

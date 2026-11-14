@@ -22,7 +22,7 @@ use crate::domain::{Document, Folder, Space, SpaceRow};
 // Macros rather than consts: sqlx only accepts compile-time SQL strings.
 macro_rules! space {
     () => {
-        "select id, kind, name, personal_owner, parent_id, organization_id from space"
+        "select id, kind, name, description, personal_owner, parent_id, organization_id from space"
     };
 }
 macro_rules! folder {
@@ -116,13 +116,14 @@ pub async fn spaces<'e>(
 }
 
 pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx::Result<()> {
-    sqlx::query("insert into space (id, kind, name, personal_owner, parent_id, organization_id) values ($1, $2, $3, $4, $5, $6)")
+    sqlx::query("insert into space (id, kind, name, personal_owner, parent_id, organization_id, description) values ($1, $2, $3, $4, $5, $6, $7)")
         .bind(s.id)
         .bind(s.kind)
         .bind(&s.name)
         .bind(&s.personal_owner)
         .bind(s.parent_id)
         .bind(s.organization)
+        .bind(&s.description)
         .execute(&mut **tx)
         .await?;
     Ok(())

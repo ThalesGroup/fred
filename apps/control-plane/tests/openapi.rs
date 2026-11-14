@@ -179,6 +179,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /me/personal-space",
         "post /spaces",
         "delete /spaces/{id}",
+        "put /spaces/{id}/description",
         "get /deletions/{operation_id}",
         "get /spaces/{space_id}/powerpoint-template",
         "put /spaces/{space_id}/powerpoint-template",
@@ -419,6 +420,7 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
         id: Uuid::nil(),
         kind: SpaceKind::Organization,
         name: "Demo".into(),
+        description: None,
         parent_id: None,
         personal_owner: None,
         path: vec![Uuid::nil()],
@@ -1113,4 +1115,24 @@ fn folder_deletion_exposes_an_optional_empty_only_precondition() {
     assert_eq!(empty["in"], "query");
     assert_eq!(empty["required"], false);
     assert_eq!(empty["schema"]["type"], "boolean");
+}
+
+#[test]
+fn team_description_contract_uses_the_space_model() {
+    let api = schema();
+    let route = &api["paths"]["/control-plane/v1/spaces/{id}/description"]["put"];
+    assert_eq!(route["operationId"], "update_team_description");
+    assert_eq!(
+        route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/Space"
+    );
+    assert_eq!(
+        api["components"]["schemas"]["TeamDescription"]["properties"]["description"]["maxLength"],
+        500
+    );
+    assert!(
+        api["components"]["schemas"]["Space"]["properties"]
+            .get("description_is_placeholder")
+            .is_none()
+    );
 }

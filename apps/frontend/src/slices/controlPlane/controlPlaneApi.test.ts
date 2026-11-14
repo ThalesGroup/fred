@@ -172,6 +172,7 @@ describe("generated control-plane client", () => {
         organization_id: "org",
         name: "Demo",
         parent_id: null,
+        description: null,
         personal_owner: null,
         path: ["org-id"],
         roles: ["owner", "analyst"],
@@ -749,5 +750,27 @@ it("keeps Globex currentData after a late Acme reply for the same user", async (
   });
   expect(fetch).toHaveBeenCalledTimes(2);
   await act(async () => root.unmount());
+  store.dispatch(api.util.resetApiState());
+});
+
+it("saves team purpose through Weaver and refreshes subscribed memberships", async () => {
+  const { store, fetch } = setup([]);
+  const context = store.dispatch(api.endpoints.mySpaces.initiate());
+  await context.unwrap();
+  fetch.mockClear();
+  const team = { id: "team", description: "Research into safer AI systems." };
+  fetch.mockImplementation(async (request) => new Response(JSON.stringify(request.method === "PUT" ? team : [team])));
+  await store
+    .dispatch(
+      api.endpoints.updateTeamDescription.initiate({ id: "team", teamDescription: { description: team.description } }),
+    )
+    .unwrap();
+  await vi.waitFor(() => expect(api.endpoints.mySpaces.select()(store.getState()).data).toEqual([team]));
+  expect(fetch.mock.calls.map(([request]) => [request.method, new URL(request.url).pathname])).toEqual([
+    ["PUT", "/control-plane/v1/spaces/team/description"],
+    ["GET", "/control-plane/v1/me/spaces"],
+  ]);
+  expect(await fetch.mock.calls[0][0].clone().json()).toEqual({ description: team.description });
+  context.unsubscribe();
   store.dispatch(api.util.resetApiState());
 });

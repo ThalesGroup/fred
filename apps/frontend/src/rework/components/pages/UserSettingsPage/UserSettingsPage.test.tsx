@@ -288,6 +288,7 @@ it.each(["member", "owner", "organization_admin"] as const)(
         organization_id: "org",
         path: ["org"],
         parent_id: null,
+        description: null,
         personal_owner: null,
         roles: [role],
       },

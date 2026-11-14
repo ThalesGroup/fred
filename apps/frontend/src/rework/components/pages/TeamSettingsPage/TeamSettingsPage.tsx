@@ -19,6 +19,7 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./TeamSettingsPage.module.scss";
+import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters";
 import { SpaceOffers } from "./SpaceOffers";
 
 const ROLES: Role[] = ["owner", "member", "editor", "analyst"];
@@ -31,6 +32,7 @@ const userLabel = ({ user }: SpaceMember) => {
 export default function TeamSettingsPage() {
   const { teamId, section } = useParams();
   if (!teamId) return null;
+  if (section === "parameters") return <TeamSettingsParameters key={teamId} spaceId={teamId} />;
   if (section === "offers") return <SpaceOffers key={teamId} spaceId={teamId} />;
   if (section !== "members") return <Navigate to={`/team/${teamId}/settings/members`} replace />;
   return <TeamMembers key={teamId} spaceId={teamId} />;

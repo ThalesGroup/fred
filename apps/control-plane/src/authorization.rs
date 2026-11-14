@@ -97,7 +97,7 @@ pub async fn load_facts<'e>(
     id: Uuid,
 ) -> AppResult<SpaceFacts> {
     Ok(sqlx::query_as(concat!(subject_spaces!(), "
-        select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id,
+        select s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id,
             s.deletion_id is null and o.deletion_id is null
                 and (p.id is null or p.deletion_id is null) as active,
             exists(select 1 from subject_spaces a where a.organization_id=s.organization_id) as in_organization,
