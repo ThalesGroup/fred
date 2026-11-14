@@ -335,6 +335,7 @@ async def test_a_retried_call_asks_again_and_keeps_the_same_grant(monkeypatch):
             question="anchor",
             document_context=DocumentAccessContext(
                 space_id=UUID(int=1),
+                authorized_space_ids=(UUID(int=1),),
                 document_scope=DocumentScope.from_ids(
                     document_ids=["00000000-0000-0000-0000-000000000002"]
                 ),

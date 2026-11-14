@@ -245,7 +245,9 @@ async def test_truncated_table_is_refetched_whole_with_a_bounded_limit(
             "document_uid": "d1",
             "limit": table_hits.TABLE_EXPANSION_MAX_CHUNKS,
             "document_context": DocumentAccessContext(
-                space_id=UUID(SPACE_ID), document_scope=DocumentScope()
+                space_id=UUID(SPACE_ID),
+                authorized_space_ids=(UUID(SPACE_ID),),
+                document_scope=DocumentScope(),
             ),
         }
     ]

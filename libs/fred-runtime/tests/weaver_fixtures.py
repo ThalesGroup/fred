@@ -57,6 +57,7 @@ def resolved_binding(
             run_id="run",
             conversation_id=None,
             attachments=[],
+            authorized_space_ids=["00000000-0000-0000-0000-000000000002"],
             space=dict(
                 id="00000000-0000-0000-0000-000000000002",
                 kind="team",

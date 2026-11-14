@@ -38,9 +38,11 @@ def test_markdown_get_transports_scope_and_delegated_person(monkeypatch, scope):
     app.include_router(router)
     app.dependency_overrides[delegated_person] = lambda: person
     with TestClient(app) as client:
-        response = client.get(f"/documents/{DOC}/markdown", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=scope).model_dump_json()})
+        response = client.get(
+            f"/documents/{DOC}/markdown", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope).model_dump_json()}
+        )
     assert response.status_code == 200
-    reader.assert_awaited_once_with(person, str(DOC), DocumentAccessContext(space_id=SPACE, document_scope=scope))
+    reader.assert_awaited_once_with(person, str(DOC), DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope))
 
 
 @pytest.mark.parametrize("value", ["", "null", "{}garbage", '{"selections":[{"document_ids":["old-id"]}]}'])
@@ -72,19 +74,9 @@ async def test_summary_and_extraction_cannot_bypass_the_published_scope(monkeypa
         request = extract_module.ExtractDocumentRequest(instruction="all")
         call = service.extract_document
     with pytest.raises(HTTPException) as failure:
-        await call(person, str(DOC), request, DocumentAccessContext(space_id=SPACE, document_scope=SCOPE, conversation_id=CONVERSATION, attachment_ids=(DOC,)))
+        await call(person, str(DOC), request, DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=SCOPE, conversation_id=CONVERSATION, attachment_ids=(DOC,)))
     assert failure.value.status_code == 404
-    reader.assert_awaited_once_with(person, str(DOC), DocumentAccessContext(space_id=SPACE, document_scope=SCOPE, conversation_id=CONVERSATION, attachment_ids=(DOC,)))
-
-
-@pytest.mark.asyncio
-async def test_selection_does_not_replace_space_authorization(monkeypatch):
-    admission = AsyncMock(side_effect=HTTPException(status_code=403))
-    monkeypatch.setattr(markdown_module, "require_space_read", admission)
-    with pytest.raises(HTTPException) as failure:
-        await markdown_module.published_markdown(PERSON, str(DOC), DocumentAccessContext(space_id=SPACE, document_scope=SCOPE))
-    assert failure.value.status_code == 403
-    admission.assert_awaited_once()
+    reader.assert_awaited_once_with(person, str(DOC), DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=SCOPE, conversation_id=CONVERSATION, attachment_ids=(DOC,)))
 
 
 def test_index_filters_preserve_union_intersection_and_direct_folder_semantics():
@@ -124,9 +116,13 @@ async def test_search_prefilters_before_top_k_and_retains_sql_verification(monke
     request = SearchRequest(question="q", search_policy=policy)
     person = PERSON
     await service.search(
-        question=request.question, user=person, top_k=8, policy_name=request.search_policy, context=DocumentAccessContext(space_id=SPACE, document_scope=SCOPE), authorized_space_ids=(SPACE,)
+        question=request.question,
+        user=person,
+        top_k=8,
+        policy_name=request.search_policy,
+        context=DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=SCOPE),
     )
-    resolver.assert_awaited_once_with(conn, DocumentAccessContext(space_id=SPACE, document_scope=SCOPE), user_id=PERSON.uid, authorized_space_ids=(SPACE,))
+    resolver.assert_awaited_once_with(conn, DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=SCOPE), user_id=PERSON.uid)
     strategy = getattr(service, f"_{policy}")
     assert strategy.call_args.kwargs["metadata_any"] == scope.selection_terms
     assert strategy.call_args.kwargs["metadata_terms_extra"] == {"space_id": [str(SPACE)], "session_id": [""]}
@@ -192,11 +188,12 @@ def document_app(monkeypatch):
         (None, 403, "document_context_required"),
         ("", 400, "invalid_document_context"),
         ("null", 400, "invalid_document_context"),
-        (f'{{"space_id":"{SPACE}","document_scope":{{}},"attachment_ids":["{DOC}"]}}', 400, "invalid_document_context"),
-        (f'{{"space_id":"{SPACE}","document_scope":{{}},"conversation_id":"bad"}}', 400, "invalid_document_context"),
+        (f'{{"space_id":"{SPACE}","document_scope":{{}}}}', 400, "invalid_document_context"),
+        (f'{{"space_id":"{SPACE}","authorized_space_ids":["{SPACE}"],"document_scope":{{}},"attachment_ids":["{DOC}"]}}', 400, "invalid_document_context"),
+        (f'{{"space_id":"{SPACE}","authorized_space_ids":["{SPACE}"],"document_scope":{{}},"conversation_id":"bad"}}', 400, "invalid_document_context"),
         ('{"space_id":"bad","document_scope":{}}', 400, "invalid_document_context"),
         (f'{{"space_id":"{SPACE}"}}', 400, "invalid_document_context"),
-        (f'{{"space_id":"{SPACE}","document_scope":{{}},"extra":true}}', 400, "invalid_document_context"),
+        (f'{{"space_id":"{SPACE}","authorized_space_ids":["{SPACE}"],"document_scope":{{}},"extra":true}}', 400, "invalid_document_context"),
     ],
 )
 def test_all_operations_require_the_same_context(document_app, method, path, body, query, raw, status, detail):
@@ -218,19 +215,21 @@ def test_document_context_is_documented_on_exactly_ten_operations(document_app):
         assert len(headers) == 1
         assert headers[0]["required"] is True
         assert headers[0]["content"]["application/json"]["schema"] == {"$ref": "#/components/schemas/DocumentAccessContext"}
-        assert not any(p["name"] in ("space_id", "document_scope", "conversation_id", "attachment_ids") for p in operation["parameters"])
-    assert set(schema["components"]["schemas"]["DocumentAccessContext"]["required"]) == {"space_id", "document_scope"}
+        assert not any(p["name"] in ("space_id", "authorized_space_ids", "document_scope", "conversation_id", "attachment_ids") for p in operation["parameters"])
+    assert set(schema["components"]["schemas"]["DocumentAccessContext"]["required"]) == {"space_id", "authorized_space_ids", "document_scope"}
     assert "DocumentScope" in schema["components"]["schemas"]
     assert "DocumentSelection" in schema["components"]["schemas"]
 
 
 @pytest.mark.parametrize("method,path,body,query", [item for item in OPERATIONS if item[0] == "POST"])
-@pytest.mark.parametrize("field,value", [("space_id", str(SPACE)), ("document_scope", {}), ("conversation_id", str(CONVERSATION)), ("attachment_ids", [str(DOC)])])
+@pytest.mark.parametrize(
+    "field,value", [("space_id", str(SPACE)), ("authorized_space_ids", [str(SPACE)]), ("document_scope", {}), ("conversation_id", str(CONVERSATION)), ("attachment_ids", [str(DOC)])]
+)
 def test_business_bodies_cannot_supply_authority(document_app, monkeypatch, method, path, body, query, field, value):
     from knowledge_flow_backend.features.tabular.controller import tabular_service
 
     document_app.dependency_overrides[tabular_service] = lambda: object()
-    header = DocumentAccessContext(space_id=SPACE, document_scope=SCOPE).model_dump_json()
+    header = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=SCOPE).model_dump_json()
     with TestClient(document_app) as client:
         response = client.request(method, "/custom/kf" + path, json={**body, field: value}, headers={DOCUMENT_CONTEXT_HEADER: header})
     assert response.status_code == 422
@@ -257,7 +256,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     from langchain_core.documents import Document
 
     attachment_id, generation = UUID(int=8), UUID(int=9)
-    context = DocumentAccessContext(space_id=SPACE, document_scope=corpus, conversation_id=CONVERSATION, attachment_ids=(attachment_id,))
+    context = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=corpus, conversation_id=CONVERSATION, attachment_ids=(attachment_id,))
     scope = SearchScope(SPACE, (SPACE,), corpus, {FOLDER: f"/{FOLDER}/"}, CONVERSATION, (attachment_id,), PERSON.uid)
     engine = MagicMock()
     conn = engine.connect.return_value.__aenter__.return_value
@@ -296,7 +295,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
         return [hit(attachment_id, 5, 1.0, "stale"), hit(attachment_id, 1, 0.25, "attachment")]
 
     service._semantic = strategy
-    hits = await service.search(question="q", user=PERSON, top_k=2, policy_name=search_module.SearchPolicyName.semantic, context=context, authorized_space_ids=(SPACE,))
+    hits = await service.search(question="q", user=PERSON, top_k=2, policy_name=search_module.SearchPolicyName.semantic, context=context)
     assert [hit.content for hit in hits] == (["attachment"] if corpus.is_empty else ["corpus", "attachment"])
     assert len(hits) <= 2
     assert hits[-1].score == (0.25 if corpus.is_empty else 1 / 62)
@@ -350,5 +349,5 @@ async def test_direct_attachment_chunks_require_sql_publication_and_requested_do
     rows = [dict(text=str(i), metadata={"document_uid": str(DOC), "chunk_uid": str(uuid5(generation, str(i))), "chunk_index": i}) for i in (0, 2)]
     rows.append(dict(text="injected", metadata={"document_uid": str(FOLDER), "chunk_uid": str(uuid5(generation, "0")), "chunk_index": 0}))
     service._corpus = AsyncMock(return_value=SimpleNamespace(get_chunks_for_document=lambda _: rows))
-    context = DocumentAccessContext(space_id=SPACE, document_scope=scope.document_scope, conversation_id=CONVERSATION, attachment_ids=(DOC,))
-    assert await service.get_document_chunks_ordered(user=PERSON, document_uid=str(DOC), context=context, limit=10, authorized_space_ids=(SPACE,)) == ["0"]
+    context = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope.document_scope, conversation_id=CONVERSATION, attachment_ids=(DOC,))
+    assert await service.get_document_chunks_ordered(user=PERSON, document_uid=str(DOC), context=context, limit=10) == ["0"]

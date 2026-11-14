@@ -1369,8 +1369,8 @@ class DocumentSearchAdapter(DocumentSearchPort):
     """Corpus search through Knowledge Flow, in the space of the admitted turn.
 
     The binding and token stay private (`_VectorSearchAgentShim`); the capability
-    passes scope parameters, never identity. Knowledge Flow checks the person's
-    read on that space and returns published documents only.
+    passes scope parameters, never identity. Knowledge Flow applies the admitted
+    corpus and returns published documents only.
     """
 
     def __init__(

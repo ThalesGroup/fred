@@ -10,7 +10,12 @@ from pydantic import ValidationError
 
 
 def test_corpus_context_defaults_do_not_admit_attachments() -> None:
-    context = DocumentAccessContext(space_id=uuid4(), document_scope=DocumentScope())
+    space = uuid4()
+    context = DocumentAccessContext(
+        space_id=space,
+        authorized_space_ids=(space,),
+        document_scope=DocumentScope(),
+    )
     assert context.conversation_id is None and context.attachment_ids == ()
     assert (
         DocumentAccessContext.model_validate_json(context.model_dump_json()) == context
@@ -19,12 +24,17 @@ def test_corpus_context_defaults_do_not_admit_attachments() -> None:
 
 def test_attachment_ids_need_a_conversation_but_have_no_fixed_count_limit() -> None:
     ids = tuple(uuid4() for _ in range(125))
+    space = uuid4()
     with pytest.raises(ValidationError, match="requires conversation_id"):
         DocumentAccessContext(
-            space_id=uuid4(), document_scope=DocumentScope(), attachment_ids=ids
+            space_id=space,
+            authorized_space_ids=(space,),
+            document_scope=DocumentScope(),
+            attachment_ids=ids,
         )
     context = DocumentAccessContext(
-        space_id=uuid4(),
+        space_id=space,
+        authorized_space_ids=(space,),
         document_scope=DocumentScope(),
         conversation_id=uuid4(),
         attachment_ids=ids,
@@ -35,3 +45,21 @@ def test_attachment_ids_need_a_conversation_but_have_no_fixed_count_limit() -> N
         ).attachment_ids
         == ids
     )
+
+
+@pytest.mark.parametrize(
+    "corpus", [None, ["invalid"], ["00000000-0000-0000-0000-000000000001"] * 2]
+)
+def test_invalid_corpus_is_rejected(corpus) -> None:
+    with pytest.raises(ValidationError):
+        DocumentAccessContext.model_validate(
+            dict(space_id=str(uuid4()), document_scope={}, authorized_space_ids=corpus)
+        )
+
+
+def test_explicit_empty_corpus_is_distinct_from_missing_authority() -> None:
+    body = dict(space_id=str(uuid4()), document_scope={})
+    with pytest.raises(ValidationError, match="authorized_space_ids"):
+        DocumentAccessContext.model_validate(body)
+    context = DocumentAccessContext.model_validate({**body, "authorized_space_ids": []})
+    assert context.authorized_space_ids == ()

@@ -62,12 +62,12 @@ Request: [`SearchRequest`](#searchrequest).
 - 200: array of [`VectorSearchHit`](#vectorsearchhit) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant. The document index may also be unavailable (corpus_not_ready).
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access. The document index may also be unavailable (corpus_not_ready).
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -107,12 +107,12 @@ Operation `list_document_tree`.
 - 200: [`DocumentTreeResponse`](#documenttreeresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Folder unavailable or outside the authorized selection (folder_not_found); not an existence oracle.
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access.
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -152,12 +152,12 @@ Operation `get_document_chunks`.
 - 200: array of [`VectorSearchHit`](#vectorsearchhit) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant. The document index may also be unavailable (corpus_not_ready).
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access. The document index may also be unavailable (corpus_not_ready).
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -198,12 +198,12 @@ Request: [`ExtractDocumentRequest`](#extractdocumentrequest).
 - 200: [`ExtractDocumentResponse`](#extractdocumentresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Document not visible, unpublished, retired, or published markdown unavailable (document_not_found); not a document-existence oracle.
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access.
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -242,12 +242,12 @@ Operation `get_document_markdown`.
 - 200: [`MarkdownResponse`](#markdownresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Document not visible, unpublished, retired, or published markdown unavailable (document_not_found); not a document-existence oracle.
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access.
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -288,12 +288,12 @@ Request: [`SummarizeDocumentRequest`](#summarizedocumentrequest).
 - 200: [`SummarizeDocumentResponse`](#summarizedocumentresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Document not visible, unpublished, retired, or published markdown unavailable (document_not_found); not a document-existence oracle.
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access.
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -340,12 +340,12 @@ Operation `list_tabular_documents`.
 - 200: array of [`TabularDocumentListResponse`](#tabulardocumentlistresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space. A requested document/dataset is outside the authorized selection.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation. A requested document/dataset is outside the authorized selection.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Required published dataset/catalog missing (dataset_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access.
 
 Response 400 example `invalid_context` (`application/json`):
 
@@ -385,12 +385,12 @@ Operation `describe_tabular_documents`.
 - 200: array of [`TabularDocumentDescriptionResponse`](#tabulardocumentdescriptionresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space. A requested document/dataset is outside the authorized selection.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation. A requested document/dataset is outside the authorized selection.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Required published dataset/catalog missing (dataset_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
 - 504: [`KnowledgeFlowError`](#knowledgeflowerror) — Tabular execution budget exceeded. Narrow datasets or query before retrying; cancellation of blocked I/O is best effort.
 
 Response 400 example `invalid_context` (`application/json`):
@@ -431,12 +431,12 @@ Request: [`TabularQueryRequest`](#tabularqueryrequest).
 - 200: [`RawSQLResponse`](#rawsqlresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space. A requested document/dataset is outside the authorized selection.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation. A requested document/dataset is outside the authorized selection.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Required published dataset/catalog missing (dataset_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
 - 504: [`KnowledgeFlowError`](#knowledgeflowerror) — Tabular execution budget exceeded. Narrow datasets or query before retrying; cancellation of blocked I/O is best effort.
 
 Response 400 example `invalid_context` (`application/json`):
@@ -477,12 +477,12 @@ Request: [`TabularSearchRequest`](#tabularsearchrequest).
 - 200: [`TabularSearchResponse`](#tabularsearchresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
 - 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
-- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space. A requested document/dataset is outside the authorized selection.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required) or rejected delegation. A requested document/dataset is outside the authorized selection.
 - 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Required published dataset/catalog missing (dataset_not_found).
 - 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
 - 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
 - 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
-- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — A required data dependency is unavailable; this never grants access. Tabular execution capacity or queue budget exhausted. Retry with bounded backoff; persistent refusal is not success.
 - 504: [`KnowledgeFlowError`](#knowledgeflowerror) — Tabular execution budget exceeded. Narrow datasets or query before retrying; cancellation of blocked I/O is best effort.
 
 Response 400 example `invalid_context` (`application/json`):
@@ -509,14 +509,15 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### DocumentAccessContext
 
-Server-bound space, corpus selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments. Additional fields are rejected.
+Server-bound space, admitted corpus, selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments. Additional fields are rejected.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `attachment_ids` | array of string (uuid) |  | Explicit attachment UUIDs, independently of corpus selection. Empty grants no attachment access; requires conversation_id. SQL verifies every document. Default: `[]`. |
+| `authorized_space_ids` | array of string (uuid) | yes | Exact corpus authorized by Control Plane at turn admission, carried by the trusted workload. Empty grants no corpus access. |
 | `conversation_id` | string (uuid) or null |  | Server-bound conversation UUID; SQL verifies its owner, exact space and live state. Default: `null`. |
 | `document_scope` | [`DocumentScope`](#documentscope) | yes | Corpus-only intersection of selection clauses. Zero clauses add no filter; one empty clause selects no corpus documents. Attachments are selected separately. |
-| `space_id` | string (uuid) | yes | Admitted turn's space UUID; KF checks the represented person's read permission. |
+| `space_id` | string (uuid) | yes | Admitted turn's space UUID; SQL checks its current lifecycle, not the person's admission rights. |
 
 ### DocumentScope
 

@@ -78,7 +78,6 @@ class DocumentTreeService:
         *,
         context: DocumentAccessContext,
         user_id: str,
-        authorized_space_ids: tuple[UUID, ...],
         folder_id: UUID | None,
         limit: int,
     ) -> DocumentTreeResponse:
@@ -86,7 +85,7 @@ class DocumentTreeService:
         async with engine.connect() as conn:
             # Attachments do not participate in this operation, even if supplied.
             corpus_context = context.model_copy(update={"conversation_id": None, "attachment_ids": ()})
-            scope = await resolve_scope(conn, corpus_context, user_id=user_id, authorized_space_ids=authorized_space_ids)
+            scope = await resolve_scope(conn, corpus_context, user_id=user_id)
             params = {"space_ids": list(scope.space_ids), "selections": scope.document_scope.model_dump(mode="json")["selections"]}
             anchor = None
             if folder_id is not None:

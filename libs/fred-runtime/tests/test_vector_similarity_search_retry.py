@@ -157,6 +157,7 @@ async def test_search_similarity_options_retain_the_retry_contract(
     calls = []
     context = DocumentAccessContext(
         space_id=UUID(int=1),
+        authorized_space_ids=(UUID(int=1),),
         document_scope=DocumentScope.from_ids(
             document_ids=["00000000-0000-0000-0000-000000000002"]
         ),
@@ -218,6 +219,7 @@ async def test_ordinary_search_does_not_opt_into_similarity_transport(
             question="q",
             document_context=DocumentAccessContext(
                 space_id=UUID(int=1),
+                authorized_space_ids=(UUID(int=1),),
                 document_scope=DocumentScope(),
             ),
         )
@@ -256,7 +258,9 @@ async def test_tree_get_wire_context_and_transient_policy(
         ),
     )
     context = DocumentAccessContext(
-        space_id=UUID(int=1), document_scope=DocumentScope.from_ids([str(UUID(int=2))])
+        space_id=UUID(int=1),
+        authorized_space_ids=(UUID(int=1),),
+        document_scope=DocumentScope.from_ids([str(UUID(int=2))]),
     )
     calls = []
 

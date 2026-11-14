@@ -53,5 +53,5 @@ async def test_get_document_chunks_ordered_propagates_a_lookup_failure() -> None
     space = uuid4()
     with pytest.raises(RuntimeError, match="simulated backend outage"):
         await service.get_document_chunks_ordered(
-            user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=space, document_scope=DocumentScope()), authorized_space_ids=(space,), limit=200
+            user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=space, authorized_space_ids=(space,), document_scope=DocumentScope()), limit=200
         )

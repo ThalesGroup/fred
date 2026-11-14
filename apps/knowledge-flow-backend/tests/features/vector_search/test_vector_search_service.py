@@ -59,8 +59,7 @@ def search(monkeypatch):
         user=AssertedUser(uid="alice", client_id="pod", run_id="turn", agent_id="agent"),
         top_k=2,
         policy_name=None,
-        context=DocumentAccessContext(space_id=SPACE, document_scope=scope.document_scope),
-        authorized_space_ids=(SPACE,),
+        context=DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope.document_scope),
     )
     return SimpleNamespace(service=service, args=args, candidates=candidates, hit=hit, strategy=strategy, conn=conn, scope=scope)
 
@@ -136,8 +135,6 @@ def test_documents_search_transports_options_and_serializes_original_scores(monk
     monkeypatch.setattr(controller, "VectorSearchService", lambda: search.service)
     monkeypatch.setattr(controller, "get_kpi_writer", MagicMock)
     monkeypatch.setattr(controller, "phase_timer", lambda *_args: nullcontext())
-    admission = AsyncMock(return_value=(SPACE,))
-    monkeypatch.setattr(controller, "require_space_read", admission)
     app, router = FastAPI(), APIRouter()
     controller.VectorSearchController(router)
     app.include_router(router)
@@ -145,7 +142,6 @@ def test_documents_search_transports_options_and_serializes_original_scores(monk
     with TestClient(app) as client:
         response = client.post("/documents/search", json={"question": "anchor", "top_k": 2, **options}, headers={DOCUMENT_CONTEXT_HEADER: search.args["context"].model_dump_json()})
     assert response.status_code == 200
-    admission.assert_awaited_once_with(search.args["user"], SPACE)
     assert [(hit["content"], hit["score"]) for hit in response.json()] == [(f"{DOC}:{i}", score) for i, score in expected]
 
 
@@ -199,7 +195,7 @@ async def test_unreachable_vector_store_is_reported_as_not_ready(monkeypatch):
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
     monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=SimpleNamespace(organization_id=UUID(int=7), admission=object())))
     with pytest.raises(HTTPException) as failure:
-        await module.VectorSearchService()._corpus(DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()))
+        await module.VectorSearchService()._corpus(DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope()))
     assert failure.value.detail == "corpus_not_ready"
 
 
@@ -208,7 +204,7 @@ async def test_the_question_is_embedded_only_with_the_locked_corpus_model(monkey
     """No locked model or no index yet: an empty result, never another model or index."""
     context = MagicMock()
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
-    scope = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope())
+    scope = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope())
     service = module.VectorSearchService()
     monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=None))
     assert await service._corpus(scope) is None

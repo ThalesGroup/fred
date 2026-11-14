@@ -60,12 +60,13 @@ async def test_tabular_mcp_initializes_and_forwards_only_outer_document_scope(mo
                 assert DOCUMENT_CONTEXT_HEADER not in tool["inputSchema"].get("properties", {})
                 assert DOCUMENT_CONTEXT_HEADER not in tool["inputSchema"].get("required", [])
                 assert "space_id" not in tool["inputSchema"].get("properties", {})
+                assert "authorized_space_ids" not in tool["inputSchema"].get("properties", {})
                 assert "document_scope" not in tool["inputSchema"].get("properties", {})
                 assert "conversation_id" not in tool["inputSchema"].get("properties", {})
                 assert "attachment_ids" not in tool["inputSchema"].get("properties", {})
             assert not seen  # Greeting initialization needs neither datasets nor a database read.
             for scope in (DocumentScope.from_ids([str(FOLDER)]), DocumentScope.from_ids([], [])):
-                payload = DocumentAccessContext(space_id=SPACE, document_scope=scope, conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,)).model_dump_json()
+                payload = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope, conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,)).model_dump_json()
                 response = await client.post(
                     "/mcp/tabular",
                     headers={**headers, "Mcp-Method": "tools/call", "Mcp-Name": "list_tabular_documents", DOCUMENT_CONTEXT_HEADER: payload},
@@ -94,7 +95,9 @@ def test_person_token_cannot_assert_the_document_envelope():
     app.include_router(router)
     app.dependency_overrides[oidc.authenticate_request] = lambda: KeycloakUser(uid="alice", username="alice", roles=[])
     with TestClient(app) as client:
-        response = client.get("/tabular/documents", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope()).model_dump_json()})
+        response = client.get(
+            "/tabular/documents", headers={DOCUMENT_CONTEXT_HEADER: DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope()).model_dump_json()}
+        )
     assert response.status_code == 403
 
 
@@ -116,7 +119,7 @@ async def test_inner_tool_request_cannot_replace_the_verified_header(monkeypatch
 async def test_mcp_forwarding_discards_model_header_and_uses_only_verified_outer_context(monkeypatch, delegated):
     from fastmcp.server import dependencies
 
-    context = DocumentAccessContext(space_id=SPACE, document_scope=DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,))
+    context = DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachment_ids=(ATTACHMENT,))
     outer = SimpleNamespace(headers={DOCUMENT_CONTEXT_HEADER: context.model_dump_json()})
     monkeypatch.setattr(dependencies, "get_http_request", lambda: outer)
     grant = DelegationGrant(person="alice", run="turn", agent="agent") if delegated else None

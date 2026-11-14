@@ -332,15 +332,17 @@ are not connected under it.
 
 ## Document search within a turn
 
-Capabilities call Knowledge Flow API with the canonical space bound to the turn.
-The API validates the incoming workload and asserted person. It then calls Control
-Plane once for the readable scope, using its own M2M bearer and the validated
-person/run/agent triplet. It does not forward the Agent Pod's bearer.
+Control Plane resolves the exact readable corpus at turn admission, alongside the
+canonical space, person, instance and conversation. The Agent Pod retains that
+scope in its private turn authority and carries it in the existing document-context
+header over HTTP and MCP. Browser and model selections can only narrow it.
 
-Control Plane returns an explicit anchor and the exact readable subset of its
-ancestors and itself. An empty corpus remains empty. The API applies document
-selection only as a further restriction; attachments use the explicit anchor and
-separate conversation ownership checks.
+Knowledge Flow accepts this context only after verifying workload authentication
+and the asserted person/run/agent. It trusts the delegated pod to relay Control
+Plane's decision and enforce turn lifetime; it does not independently prove the
+admission or refresh the person's permissions on each document call. Revocation
+and new grants affect the next admission. An empty corpus remains empty;
+attachments retain their explicit anchor and separate conversation ownership checks.
 
 Index filters narrow candidates. Before returning content, the shared visibility
 primitive reads only Control Plane-owned `cp_read` views. The SQL `visible` fact
@@ -356,8 +358,9 @@ success. These data checks do not refresh the admitted agent turn's authority.
 
 Source references: [`weaver_admission.py`](../../apps/knowledge-flow-backend/knowledge_flow_backend/security/weaver_admission.py),
 [`access.py`](../../libs/fred-core/fred_core/documents/access.py),
-[`authorization.rs`](../../apps/control-plane/src/authorization.rs) and
-[`spaces.rs`](../../apps/control-plane/src/spaces.rs).
+[`authorization.rs`](../../apps/control-plane/src/authorization.rs),
+[`runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs) and
+[`turn.py`](../../libs/fred-runtime/fred_runtime/model_routing/turn.py).
 
 ### Runtime CGU dependency inventory
 

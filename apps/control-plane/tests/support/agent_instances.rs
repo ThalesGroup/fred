@@ -2521,3 +2521,30 @@ async fn marketplace_agents_install_frozen_configuration_with_current_offers() {
 
 #[path = "managed_mcp.rs"]
 mod managed_mcp;
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn runtime_corpus_uses_direct_read_roles_and_new_admissions_observe_revocation() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Corpus")).await;
+    let path = format!("{}/runtime", item(team.id, &instance));
+    let admitted = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
+    assert_eq!(admitted.0, 200, "{admitted:?}");
+    assert_eq!(admitted.1["authorized_space_ids"], json!([org.id, team.id]));
+    spaces::revoke(&e.pool, "alice", team.id, Role::Editor, "alice")
+        .await
+        .unwrap();
+    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "alice")
+        .await
+        .unwrap();
+    let next = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
+    assert_eq!(next.0, 403, "{next:?}");
+    // The previous response is a snapshot, not a route to refresh its permissions.
+    assert_eq!(admitted.1["authorized_space_ids"], json!([org.id, team.id]));
+}

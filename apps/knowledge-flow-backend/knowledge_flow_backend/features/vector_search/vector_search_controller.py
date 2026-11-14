@@ -26,7 +26,7 @@ from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.document_scope import document_access_context
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
-from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
+from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,6 @@ class VectorSearchController:
             context: DocumentAccessContext = Depends(document_access_context),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            authorized_space_ids = await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_search"):
                     return await self.service.search(
@@ -62,7 +61,6 @@ class VectorSearchController:
                         min_score=request.min_score,
                         policy_name=request.search_policy,
                         context=context,
-                        authorized_space_ids=authorized_space_ids,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None
@@ -81,14 +79,12 @@ class VectorSearchController:
             limit: int = Query(default=200, ge=1, le=1000),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            authorized_space_ids = await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_document_chunks"):
                     return await self.service.get_document_chunks_ordered(
                         user=person,
                         document_uid=document_uid,
                         context=context,
-                        authorized_space_ids=authorized_space_ids,
                         limit=limit,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:

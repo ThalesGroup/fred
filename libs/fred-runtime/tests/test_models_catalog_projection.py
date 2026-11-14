@@ -79,3 +79,24 @@ def test_browser_runtime_contract_has_no_attachment_authority():
         not {"attachments_markdown", "attachment_ids", "attachments"}
         & context.model_dump().keys()
     )
+
+
+@pytest.mark.parametrize(
+    "value", [None, ["invalid"], ["00000000-0000-0000-0000-000000000002"] * 2]
+)
+def test_invalid_admitted_corpus_is_rejected(value):
+    data = resolved_binding().model_dump(mode="json")
+    data["authorized_space_ids"] = value
+    with pytest.raises(ValidationError):
+        WeaverRuntimeBinding.model_validate(data)
+
+
+def test_corpus_authority_is_required_and_cannot_come_from_browser_context():
+    from fred_sdk.contracts.context import RuntimeContext
+
+    data = resolved_binding().model_dump(mode="json")
+    del data["authorized_space_ids"]
+    with pytest.raises(ValidationError, match="authorized_space_ids"):
+        WeaverRuntimeBinding.model_validate(data)
+    browser = RuntimeContext.model_validate({"authorized_space_ids": ["forged"]})
+    assert "authorized_space_ids" not in browser.model_dump()

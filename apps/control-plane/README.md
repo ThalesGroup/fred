@@ -937,7 +937,9 @@ check permission under the same platform/organization locks and SQL transaction 
 their writes. Discovery, inference and streaming stay outside SQL transactions.
 
 `POST /authorize/scope` returns the requested `space_id` anchor and the exact readable
-`space_ids` subset of its ancestor path. Knowledge Flow applies that corpus directly.
+`space_ids` subset of its ancestor path. Managed runtime admission uses the same
+permission primitives to return `authorized_space_ids` in its binding; the Agent Pod
+relays that fixed corpus to Knowledge Flow for all document access within the turn.
 Decision endpoints accept authenticated people or trusted person/run/agent delegation,
 evaluate the person's admission and rights, and return `Cache-Control: no-store`.
 

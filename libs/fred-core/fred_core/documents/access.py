@@ -222,7 +222,6 @@ async def resolve_scope(
     context: DocumentAccessContext,
     *,
     user_id: str,
-    authorized_space_ids: tuple[UUID, ...],
 ) -> SearchScope:
     space_id = context.space_id
     row = (await conn.execute(_SPACE, {"space_id": space_id})).mappings().first()
@@ -230,7 +229,7 @@ async def resolve_scope(
         raise SpaceNotFoundError(str(space_id))
     if row["retired"]:
         raise SpacePendingDeletionError(str(space_id))
-    scope = SearchScope(space_id=space_id, space_ids=authorized_space_ids)
+    scope = SearchScope(space_id=space_id, space_ids=context.authorized_space_ids)
     selection = context.document_scope
     folder_ids = list({id for item in selection.selections for id in item.folder_ids})
     paths = {}

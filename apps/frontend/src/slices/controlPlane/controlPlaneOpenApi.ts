@@ -3837,6 +3837,8 @@ export type TitleAdmission = {
 export type RuntimeBinding = {
   agent: RuntimeAgent;
   attachments: RuntimeAttachment[];
+  /** Readable corpus fixed at admission; document publication/lifecycle stays live. */
+  authorized_space_ids: string[];
   conversation_id: string | null;
   inference?: InferenceAdmission | null;
   mcp_bindings: McpBinding[];

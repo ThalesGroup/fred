@@ -54,7 +54,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularTableSummary,
 )
 from knowledge_flow_backend.features.tabular.utils import dataframe_to_records, quote_identifier, quote_string_literal, validate_read_query
-from knowledge_flow_backend.security.weaver_admission import _space_error, require_space_read
+from knowledge_flow_backend.security.weaver_admission import _space_error
 
 logger = logging.getLogger(__name__)
 
@@ -855,14 +855,13 @@ class TabularService:
         *,
         document_uids: list[str] | None = None,
     ) -> list[ResolvedDataset]:
-        authorized_space_ids = await require_space_read(user, self.context.space_id)
         try:
             ids = [UUID(uid) for uid in document_uids] if document_uids is not None else None
         except ValueError:
             raise PermissionError(forbidden_datasets_message(document_uids or [])) from None
         try:
             async with self.engine.connect() as conn:
-                scope = await resolve_scope(conn, self.context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
+                scope = await resolve_scope(conn, self.context, user_id=user.uid)
             cursor = UUID(int=0)
             resolved = []
             published_count = 0

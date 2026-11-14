@@ -1339,7 +1339,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         Uuid::parse_str(call["grant"]["run"].as_str().unwrap()).unwrap();
         assert_eq!(
             call["context"],
-            json!({"space_id":team.id,"document_scope":{"selections":[]},"attachment_ids":[]})
+            json!({"space_id":team.id,"authorized_space_ids":[org.id,team.id],"document_scope":{"selections":[]},"attachment_ids":[]})
         );
         assert_eq!(
             call["body"],

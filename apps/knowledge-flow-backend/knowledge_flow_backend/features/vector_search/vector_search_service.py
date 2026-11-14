@@ -20,7 +20,6 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
-from uuid import UUID
 
 from fastapi import HTTPException
 from fred_core import KeycloakUser
@@ -518,18 +517,17 @@ class VectorSearchService:
         top_k: int,
         policy_name: Optional[SearchPolicyName],
         context: DocumentAccessContext,
-        authorized_space_ids: tuple[UUID, ...],
         rerank: bool = False,
         min_score: float | None = None,
     ) -> List[VectorSearchHit]:
-        """Search one Weaver space and its ancestors; the caller checked the space read.
+        """Search the admitted corpus and attachments, with current data visibility.
 
         The index only proposes candidates. A chunk is returned only if the Control
         Plane facts keep it: live document in scope, retrievable, published generation.
         """
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
+            scope = await resolve_scope(conn, context, user_id=user.uid)
         if (not scope.space_ids or scope.document_scope.is_empty) and not scope.attachment_ids:
             return []
         store = await self._corpus(context)
@@ -652,7 +650,6 @@ class VectorSearchService:
         user: AssertedUser,
         document_uid: str,
         context: DocumentAccessContext,
-        authorized_space_ids: tuple[UUID, ...],
         limit: int,
     ) -> List[VectorSearchHit]:
         """Return a document's published chunks in chunk_index order, capped at `limit`.
@@ -680,7 +677,7 @@ class VectorSearchService:
         raw_chunks.sort(key=_order)
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
+            scope = await resolve_scope(conn, context, user_id=user.uid)
         documents = [
             (Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0)
             for entry in raw_chunks

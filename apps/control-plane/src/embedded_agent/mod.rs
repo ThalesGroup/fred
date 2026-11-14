@@ -117,6 +117,7 @@ async fn execute_stream(
                     &binding.subject_id,
                     binding.agent.instance_id,
                     binding.space.id,
+                    &binding.authorized_space_ids,
                 )
             })
             .transpose()
