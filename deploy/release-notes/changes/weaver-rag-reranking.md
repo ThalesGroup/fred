@@ -16,7 +16,7 @@ Deploy the matching Control Plane, Knowledge Flow, agent runtime and capability 
 
 ## Configuration
 
-Reranking is enabled by default in the agent's advanced document access settings. To use a remote model, declare its offer in the Control Plane model source, permit it for the organization and select it as that organization's reranker. Without a remote selection, Knowledge Flow uses its packaged CrossEncoder.
+Reranking is enabled by default in the agent's advanced document access settings. It can improve relevance but adds noticeable search latency, so an agent can disable it. To use a remote model, declare its offer in the Control Plane model source, permit it for the organization and select it as that organization's reranker. Without a remote selection, Knowledge Flow uses its packaged CrossEncoder.
 
 ## Upgrade
 
@@ -24,7 +24,7 @@ Apply the normal Control Plane SQL migrations before starting the updated servic
 
 ## Validation
 
-Run an authorized document search with reranking enabled. Confirm that the selected remote offer is used when configured, that local reranking works without a selection, and that disabling the advanced setting leaves the original search order.
+Run an authorized document search with the default agent setting. Confirm that the selected remote offer is used when configured, or that local reranking works without a selection. Disable reranking for the agent and confirm that search keeps the original retrieval order.
 
 ## Rollback
 
