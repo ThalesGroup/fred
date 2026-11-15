@@ -24,28 +24,60 @@ const h = vi.hoisted(() => ({
   fetching: false,
   error: false,
   save: vi.fn(),
+  upload: vi.fn(() => ({ unwrap: async () => undefined })),
+  removeAvatar: vi.fn(() => ({ unwrap: async () => undefined })),
   refetch: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@core/hooks/useSpaceAccess", () => ({ useSpaceAccess: () => h.access }));
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetTeamAvatarQuery: () => ({ currentData: "data:image/png;base64,photo" }),
+  usePutTeamAvatarMutation: () => [h.upload, { isLoading: false }],
+  useDeleteTeamAvatarMutation: () => [h.removeAvatar, { isLoading: false }],
   useMySpacesQuery: () => ({ currentData: [h.space], isFetching: h.fetching, isError: h.error, refetch: h.refetch }),
-  useUpdateTeamDescriptionMutation: () => [h.save, { isLoading: false }],
+  useUpdateTeamParametersMutation: () => [h.save, { isLoading: false }],
+}));
+vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard", () => ({
+  default: ({
+    onUpload,
+    onDelete,
+    uploading,
+    deleting,
+  }: {
+    onUpload: (file: File) => Promise<void>;
+    onDelete: () => void;
+    uploading: boolean;
+    deleting: boolean;
+  }) => (
+    <>
+      <button
+        disabled={uploading}
+        onClick={() => void onUpload(new File(["photo"], "avatar.png", { type: "image/png" }))}
+      >
+        upload-avatar
+      </button>
+      <button disabled={uploading || deleting} onClick={onDelete}>
+        delete-avatar
+      </button>
+    </>
+  ),
 }));
 import TeamSettingsParameters from "./TeamSettingsParameters";
 let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   h.space.id = "team";
+  h.space.name = "Research";
   h.space.kind = "team";
   h.space.description = null;
   h.access = { offered: true, allowed: true, settled: true };
   h.fetching = false;
   h.error = false;
   vi.clearAllMocks();
-  h.save.mockImplementation(({ teamDescription }) => ({
+  h.save.mockImplementation(({ teamParameters }) => ({
     unwrap: async () => {
-      h.space.description = teamDescription.description;
+      if (teamParameters.description !== undefined) h.space.description = teamParameters.description;
+      if (teamParameters.name !== undefined) h.space.name = teamParameters.name;
     },
   }));
   h.refetch.mockReturnValue({ unwrap: async () => [h.space] });
@@ -61,7 +93,8 @@ const render = async (id = "team") => {
   await act(async () => root.render(<TeamSettingsParameters key={id} spaceId={id} />));
 };
 const field = () => container.querySelector("textarea")!;
-const button = () => container.querySelector("button")!;
+const button = () =>
+  Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "common.save")!;
 const type = async (value: string) => {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), value);
@@ -76,7 +109,7 @@ it("saves a trimmed description and refreshes the canonical spaces", async () =>
   await act(async () => button().click());
   expect(h.save).toHaveBeenCalledWith({
     id: "team",
-    teamDescription: { description: "Research into safer AI systems." },
+    teamParameters: { description: "Research into safer AI systems." },
   });
   expect(h.refetch).toHaveBeenCalled();
   expect(container.textContent).toContain("rework.teamSettings.parameters.description.saved");
@@ -133,4 +166,33 @@ it("does not carry a draft to a different space", async () => {
   h.space = { ...h.space, id: "next" };
   await render("next");
   expect(field().value).toBe("");
+});
+
+it("renames without discarding an unsaved description", async () => {
+  await render();
+  await type("An unsaved research description.");
+  const input = container.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "  New research  ");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => container.querySelector("button")!.click());
+  expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { name: "New research" } });
+  expect(field().value).toBe("An unsaved research description.");
+});
+
+it("uploads and deletes the team photo through the shared avatar transport", async () => {
+  await render();
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent === "upload-avatar")!
+      .click(),
+  );
+  expect(h.upload).toHaveBeenCalledWith({ id: "team", fileUpload: { file: expect.any(File) } });
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent === "delete-avatar")!
+      .click(),
+  );
+  expect(h.removeAvatar).toHaveBeenCalledWith({ id: "team" });
 });

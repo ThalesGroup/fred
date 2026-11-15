@@ -179,7 +179,16 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /me/personal-space",
         "post /spaces",
         "delete /spaces/{id}",
-        "put /spaces/{id}/description",
+        "patch /spaces/{id}",
+        "get /spaces/{id}/avatar",
+        "put /spaces/{id}/avatar",
+        "delete /spaces/{id}/avatar",
+        "delete /spaces/{id}/members/{user}",
+        "get /spaces/{id}/join-link",
+        "post /spaces/{id}/join-link",
+        "delete /spaces/{id}/join-link",
+        "get /team-join-links/{token}",
+        "post /team-join-links/{token}",
         "get /deletions/{operation_id}",
         "get /spaces/{space_id}/powerpoint-template",
         "put /spaces/{space_id}/powerpoint-template",
@@ -208,6 +217,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{id}/entries",
         "get /spaces/{id}/storage",
         "get /spaces/{id}/document-uploads",
+        "get /spaces/{id}/document-activity",
         "get /document-uploads/{id}",
         "put /document-uploads/{id}/acknowledgment",
         "get /documents/{id}/content",
@@ -256,6 +266,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/model-policy",
         "put /organizations/{organization_id}/model-policy",
         "post /organizations/{organization_id}/model-sources/{source_id}/refresh",
+        "get /spaces/{space_id}/models",
+        "put /spaces/{space_id}/model-policy",
         "get /spaces/{space_id}/agent-templates",
         "get /spaces/{space_id}/capability-policies",
         "put /spaces/{space_id}/capability-policies/{source_id}",
@@ -1120,14 +1132,14 @@ fn folder_deletion_exposes_an_optional_empty_only_precondition() {
 #[test]
 fn team_description_contract_uses_the_space_model() {
     let api = schema();
-    let route = &api["paths"]["/control-plane/v1/spaces/{id}/description"]["put"];
-    assert_eq!(route["operationId"], "update_team_description");
+    let route = &api["paths"]["/control-plane/v1/spaces/{id}"]["patch"];
+    assert_eq!(route["operationId"], "update_team_parameters");
     assert_eq!(
         route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
         "#/components/schemas/Space"
     );
     assert_eq!(
-        api["components"]["schemas"]["TeamDescription"]["properties"]["description"]["maxLength"],
+        api["components"]["schemas"]["TeamParameters"]["properties"]["description"]["maxLength"],
         500
     );
     assert!(
@@ -1135,4 +1147,52 @@ fn team_description_contract_uses_the_space_model() {
             .get("description_is_placeholder")
             .is_none()
     );
+}
+
+#[test]
+fn team_settings_wire_contracts_keep_binary_avatars_and_atomic_removal() {
+    let api = schema();
+    let paths = &api["paths"];
+    let avatar = &paths["/control-plane/v1/spaces/{id}/avatar"];
+    assert!(
+        avatar["get"]["responses"]["200"]["content"]
+            .get("image/png")
+            .is_some()
+    );
+    assert!(
+        avatar["put"]["requestBody"]["content"]
+            .get("multipart/form-data")
+            .is_some()
+    );
+    assert_eq!(
+        paths["/control-plane/v1/spaces/{id}/members/{user}"]["delete"]["operationId"],
+        "remove_space_member"
+    );
+    for path in [
+        "/control-plane/v1/spaces/{id}/members",
+        "/control-plane/v1/spaces/{id}/member-candidates",
+    ] {
+        assert!(
+            paths[path]["get"]["parameters"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["name"] == "search")
+        );
+    }
+}
+
+#[test]
+fn team_activity_is_a_bounded_read_without_legacy_mutations() {
+    let api = schema();
+    let route = &api["paths"]["/control-plane/v1/spaces/{id}/document-activity"];
+    assert_eq!(route.as_object().unwrap().len(), 1);
+    assert_eq!(route["get"]["operationId"], "team_document_activity");
+    for status in ["401", "403", "404", "422", "503"] {
+        assert!(route["get"]["responses"].get(status).is_some());
+    }
+    let parameters = route["get"]["parameters"].as_array().unwrap();
+    for name in ["before", "until", "kind", "status"] {
+        assert!(parameters.iter().any(|p| p["name"] == name));
+    }
 }

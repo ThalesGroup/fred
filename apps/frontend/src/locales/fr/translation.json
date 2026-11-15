@@ -1430,6 +1430,62 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "teamAnalytics": {
+      "unavailableValue": "Indisponible",
+      "export": "Exporter cet onglet (Excel)",
+      "exportSheet": "Agrégats",
+      "exportColumns": {
+        "space": "Espace",
+        "result": "Résultat",
+        "since": "Début inclus",
+        "until": "Fin exclue",
+        "timezone": "Fuseau",
+        "bucket": "Intervalle",
+        "dimension": "Dimension",
+        "identity": "Identité agrégée",
+        "label": "Libellé",
+        "measure": "Mesure",
+        "unit": "Unité",
+        "calculation": "Calcul",
+        "value": "Valeur exacte (texte)",
+        "coverage": "Couverture estimation",
+        "fallback": "Facteurs par défaut",
+        "truncated": "Classement tronqué",
+        "collection": "Complétude collecte"
+      },
+      "active_users": "Utilisateurs actifs observés",
+      "active_usersHint": "Identités distinctes parmi les tours terminés de la période, sans liste nominative. Indisponible si une identité a été effacée ou manque.",
+      "observed_conversations": "Conversations avec des tours observés",
+      "observed_conversationsHint": "Identités distinctes parmi les tours de la période, indépendamment de leur date de création. Indisponible si une identité a été effacée ou manque.",
+      "failed_turns": "Tours en erreur observés",
+      "failed_turnsHint": "Tours terminés avec une erreur d’exécution. Ce n’est pas une mesure de qualité des réponses. Indisponible si une issue de tour manque.",
+      "single_turn_conversations": "Conversations avec un seul tour observé",
+      "single_turn_conversationsHint": "Un seul événement de fin de tour dans la période sélectionnée, pas sur la durée de vie de la conversation. Indisponible si une identité de conversation manque.",
+      "tabs": "Analytiques de l’équipe",
+      "consumption": "Consommation",
+      "usage": "Usage observé",
+      "agents": "Agents et skills",
+      "teamScope": "Équipe et ses projets, y compris les projets retirés ou supprimés. Les agrégats portent sur les actions dans ces espaces, y compris celles d’anciens membres. Ils ne donnent pas accès aux conversations.",
+      "projectScope": "Ce projet uniquement, sans les autres projets ni l’équipe parente. Les agrégats ne donnent pas accès aux conversations.",
+      "period": "Du {{since}} inclus au {{until}} exclu. Séries en UTC ; tous les jours sont comptés. Maximum : 366 jours.",
+      "denied": "Accès aux analytiques refusé ou espace non accessible. Un rôle direct Responsable ou Analyste est requis.",
+      "unavailable": "Les analytiques sont indisponibles. Aucun chiffre ne peut être présenté pour cette lecture.",
+      "tooLarge": "Période ou volume non pris en charge. Réduisez la période (366 jours maximum) et réessayez.",
+      "observed": "Ces chiffres comptent les événements reçus ; la collecte peut être incomplète. Les comparaisons utilisent la période immédiatement précédente, de même durée.",
+      "completed_turns": "Tours terminés observés",
+      "completed_turnsHint": "Un événement de fin de tour compte une fois, même en erreur. Une reprise HITL peut compter un tour supplémentaire. Les titres générés ne sont pas des tours.",
+      "agents_used": "Agents utilisés",
+      "agents_usedHint": "Nombre d’identités d’agent distinctes parmi les tours observés, avant la limite du classement.",
+      "previous": "Période précédente : {{value}}",
+      "conversations": "Nouvelles conversations conservées",
+      "conversationsHint": "Créées pendant la période et encore conservées au moment de la lecture. Une suppression fait baisser ce compteur. Ce n’est pas le nombre de conversations actives.",
+      "turnSeries": "Tours terminés dans le temps (UTC)",
+      "agentRanking": "Agents classés par tours terminés",
+      "skillsHint": "Chargements réussis observés, distinguant l’origine utilisateur et agent. Ce ne sont pas des exécutions d’outils. Les skills de même nom sont regroupés, toutes versions et provenances confondues.",
+      "cost_eur": "Coût estimé (EUR)",
+      "co2e_grams": "Empreinte estimée (g CO2e)",
+      "energy_kwh": "Énergie estimée (kWh)"
+    },
     "weaverPrompts": {
       "retry": "Réessayer",
       "actions": "Actions pour {{name}}",
@@ -2082,6 +2138,8 @@
         "valueLabel": "Tours"
       },
       "presets": {
+        "last3Months": "3 derniers mois",
+        "last12Months": "12 derniers mois",
         "last24h": "24 dernières heures",
         "last30d": "30 derniers jours",
         "last7d": "7 derniers jours",
@@ -3442,6 +3500,8 @@
         "pending": "En attente",
         "running": "En cours",
         "succeeded": "Terminé",
+        "retrying": "En reprise",
+        "blocked": "Bloquée",
         "untracked": "Plus suivi"
       },
       "time": {
@@ -3649,13 +3709,15 @@
           "updateRoleSummary": "Échec de la mise à jour du rôle"
         },
         "inviteLink": {
+          "forbidden": "Ce lien est réservé aux membres de l'organisation et doit être proposé par un responsable actuel de l'équipe.",
+          "expires": "Expiration : {{date}}",
           "buttonLabel": "Lien d'invitation",
           "copied": "Copié",
           "copy": "Copier",
           "copyFailed": "Le lien n'a pas pu être copié automatiquement. Il est sélectionné : copiez-le avec votre clavier.",
           "enable": "Activer l'invitation par lien",
           "failed": "Le lien d'invitation n'a pas pu être mis à jour. Réessayez.",
-          "hint": "Toute personne ayant déjà accès à la plateforme peut rejoindre l'équipe en tant que membre avec ce lien.",
+          "hint": "Ce lien est valable 7 jours. Il permet aux membres de votre organisation de rejoindre l'équipe avec le rôle Membre. Il ne donne aucun accès aux projets ou aux autres équipes. Le renouveler invalide l’ancien lien ; le désactiver bloque les nouvelles adhésions sans retirer les membres déjà entrés.",
           "regenerate": "Générer un nouveau lien",
           "title": "Lien d'invitation",
           "urlLabel": "Lien"
@@ -3677,6 +3739,7 @@
         "title": "Membres de l'équipe"
       },
       "navigation": {
+        "parameters": "Paramètres",
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
         "settings": "Paramètres",
@@ -3721,9 +3784,9 @@
         "title": "Paramètres",
         "name": {
           "label": "Nom de l'équipe",
-          "support": "Ce nom identifie votre équipe partout dans la plateforme. Il doit être unique.",
+          "support": "Ce nom identifie votre équipe. Il doit être unique dans son organisation.",
           "save": "Renommer l'équipe",
-          "alreadyTaken": "Ce nom est déjà utilisé par une autre équipe.",
+          "alreadyTaken": "Ce nom est déjà utilisé ou réservé dans cette organisation.",
           "saveError": "Impossible de renommer l'équipe."
         },
         "description": {
@@ -3747,6 +3810,7 @@
           "private": "Privée"
         },
         "teamAvatar": {
+          "failed": "L’avatar n’a pas pu être chargé ou supprimé. Réessayez.",
           "title": "Avatar de l'équipe",
           "import": "Importer",
           "hint": "JPEG, PNG ou WebP · 5 Mo maximum",
@@ -4971,6 +5035,44 @@
       "hierarchy": "Hiérarchie",
       "roleLabel": "Rôles"
     },
+    "teamActivity": {
+      "stale": "Dernier état connu affiché ; actualisation interrompue.",
+      "title": "Activité de l'équipe",
+      "subtitle": "Historique des opérations documentaires, distinct des statistiques de consommation.",
+      "scope": "Cette équipe uniquement. Les projets et les conversations privées sont exclus.",
+      "forbidden": "La lecture du contenu de l'équipe est nécessaire. La gestion de l'équipe seule ne donne pas cet accès.",
+      "missing": "Cette équipe est indisponible ou en cours de suppression.",
+      "kind": "Opération",
+      "status": "État",
+      "all": "Tous",
+      "newest": "Inclure les nouvelles opérations",
+      "polling": "Les états sont actualisés toutes les 5 secondes. Un filtre d'état ne montre que les opérations qui lui correspondent actuellement.",
+      "window": "Opérations créées jusqu'au {{when}}. Incluez les nouvelles opérations pour actualiser cette période.",
+      "finishedAt": "Terminée le {{when}}",
+      "operationError": "L'opération a rencontré un problème. Ouvrez ses détails pour consulter le code d'erreur.",
+      "details": "Détails de l'opération",
+      "reference": "Référence de l'opération",
+      "target": "Référence de la ressource",
+      "profile": "Profil de traitement",
+      "retryOf": "Nouvelle tentative de",
+      "errorCode": "Code d'erreur",
+      "firstPage": "Première page",
+      "coverageTitle": "Périmètre de cet historique",
+      "coverage": "Imports, chaque tentative de traitement conservée et suppressions de documents ou de dossiers. Un original stocké n'est pas encore indexé. Les suppressions peuvent être prévues, en reprise ou bloquées ; bloquée ne signifie pas annulée. L'historique des imports et traitements suit la conservation des documents et peut être retiré lors de la purge. Les reçus de suppression restent conservés. Préparations des agents, évaluations et provisionnement ne sont pas inclus. La relance d'un traitement se fait depuis Ressources lorsqu'elle est disponible.",
+      "kinds": {
+        "upload": "Stockage de l'original",
+        "processing": "Traitement documentaire",
+        "document_deletion": "Suppression de document",
+        "folder_deletion": "Suppression de dossier"
+      },
+      "stages": {
+        "queued": "File d'attente",
+        "preparation": "Préparation",
+        "extraction": "Extraction",
+        "indexing": "Indexation",
+        "done": "Terminé"
+      }
+    },
     "documentStorage": {
       "batchLimit": "Sélectionnez au maximum 200 fichiers.",
       "fileLimit": "Chaque original est limité à 100 Mio.",
@@ -5089,6 +5191,15 @@
       "usageUnavailable": "Usage indisponible"
     },
     "spaceMembers": {
+      "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
+      "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
+      "search": "Rechercher",
+      "searchPages": "La recherche parcourt les personnes autorisées. Utilisez Suivant pour poursuivre, y compris après une page sans résultat.",
+      "actions": "Actions",
+      "remove": "Retirer",
+      "removeConfirm": "Retirer tous les rôles de {{name}} dans cet espace ? Les ressources de l’espace sont conservées.",
+      "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez ces rôles avant de la retirer de l’équipe.",
+      "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
       "title": "Gérer {{name}}",
       "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque case ajoute ou retire immédiatement un rôle.",
       "roster": "Membres actuels",
@@ -5100,6 +5211,30 @@
       "forbidden": "La gestion de cet espace nécessite son rôle Responsable.",
       "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
       "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
+    },
+    "spaceModels": {
+      "impactRestricted": "Le rôle Responsable permet de modifier cette politique, pas de lire les agents. Leur liste nécessite aussi un rôle de lecture dans cet espace.",
+      "title": "Modèles",
+      "ceiling": "Les modèles et le raisonnement doivent être autorisés par l'organisation. Les restrictions de l'équipe s'appliquent aussi à ses projets. Ces réglages ne donnent aucun droit sur les espaces ou leurs contenus.",
+      "effects": "Un modèle désactivé ne peut plus être utilisé aux prochains tours. Les recommandations des agents sont conservées et doivent être corrigées ; le chat peut abandonner un ancien choix avec une notification. Les tours déjà admis peuvent se terminer.",
+      "noDefault": "Aucun modèle par défaut",
+      "currentDefault": "Modèle par défaut effectif : {{model}}",
+      "defaultUnavailable": "Le modèle par défaut est indisponible ou interdit. Choisissez un autre défaut ou rétablissez son autorisation.",
+      "followParent": "Suivre le défaut du parent",
+      "empty": "Aucun modèle autorisé par l'organisation. Contactez son responsable.",
+      "enabledLabel": "Autoriser localement {{model}}",
+      "protectedDefault": "Choisissez un autre défaut avant de désactiver ce modèle.",
+      "denied": "Interdit",
+      "unavailable": "Indisponible",
+      "allowed": "Autorisé",
+      "reasoning": "Raisonnement par défaut",
+      "reasoningLabel": "Raisonnement par défaut pour {{model}}",
+      "reasoningRestricted": "Raisonnement non autorisé par l'organisation ou non pris en charge par le modèle.",
+      "default": "Modèle par défaut",
+      "disableTitle": "Désactiver ce modèle ?",
+      "affected": "Agents de la page courante qui recommandent ce modèle. Parcourez les pages pour examiner les autres agents ; les projets et les choix des conversations peuvent aussi être concernés.",
+      "noAgents": "Aucun agent de cette page ne recommande ce modèle.",
+      "agentHint": "Le choix doit respecter les autorisations de l'organisation et les restrictions de l'espace. Sans recommandation, l'agent suit le défaut de l'espace, puis celui de l'organisation."
     },
     "toolGovernance": {
       "title": "Outils",

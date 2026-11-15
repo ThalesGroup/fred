@@ -40,7 +40,7 @@ struct PreparationQuery {
     model_source_id: Option<String>,
     model_upstream_id: Option<String>,
     #[serde(default)]
-    reasoning: bool,
+    reasoning: Option<bool>,
 }
 
 impl PreparationQuery {
@@ -65,6 +65,7 @@ pub struct PreparationModelOffer {
     pub candidate: bool,
     pub selectable: bool,
     pub reasoning_enabled: bool,
+    pub reasoning_default_on: bool,
     pub diagnostics: Vec<ModelDiagnostic>,
     #[schema(required = true)]
     pub metadata: Option<ModelMetadata>,
@@ -90,7 +91,7 @@ impl From<RuntimeModels> for PreparationModels {
     fn from(models: RuntimeModels) -> Self {
         Self {
             recommendation: models.recommendation,
-            default: models.policy.default,
+            default: models.default,
             fallback: models.policy.fallback,
             options: models.options,
             legacy_profile_id: models.legacy_profile_id,
@@ -100,6 +101,13 @@ impl From<RuntimeModels> for PreparationModels {
                 .into_iter()
                 .map(|offer| PreparationModelOffer {
                     reasoning_enabled: offer.candidate
+                        && models.policy.reasoning_enabled.contains(&offer.key)
+                        && offer
+                            .metadata
+                            .as_ref()
+                            .is_some_and(|m| m.reasoning == Some(true)),
+                    reasoning_default_on: offer.candidate
+                        && models.reasoning_default_on.contains(&offer.key)
                         && models.policy.reasoning_enabled.contains(&offer.key)
                         && offer
                             .metadata
@@ -300,7 +308,7 @@ async fn prepare_execution(
         None
     };
     let model_choice = query.model_choice()?;
-    let models = models::resolve(&mut tx, space.organization, &current.tuning.0).await?;
+    let models = models::resolve_for_space(&mut tx, &space, &current.tuning.0).await?;
     let decision = models::decide(&models, model_choice.as_ref(), query.reasoning);
     let (inference, model_error) = match decision {
         Ok(selection) => (Some(selection), None),
@@ -327,7 +335,10 @@ async fn prepare_execution(
             widget: "reasoning_toggle".into(),
             params: Some(std::collections::BTreeMap::from([(
                 "default".into(),
-                serde_json::json!(false),
+                serde_json::json!(models.offers.iter().any(|offer| {
+                    Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
+                        && offer.reasoning_default_on
+                })),
             )])),
         });
     }

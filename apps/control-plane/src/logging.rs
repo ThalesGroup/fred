@@ -52,6 +52,16 @@ pub async fn expose_route(request: Request, next: Next) -> Response {
     response
 }
 
+// Invitation tokens authorize membership: never keep them in HTTP completion or
+// cancellation logs, including requests rejected before route matching.
+fn logged_path(path: &str) -> &str {
+    if path.starts_with("/control-plane/v1/team-join-links/") {
+        "/control-plane/v1/team-join-links/{token}"
+    } else {
+        path
+    }
+}
+
 /// fred-core `RequestLoggingMiddleware`: request and correlation ids on every log line of
 /// the request and in the response headers, then one completion event on `http`.
 pub async fn request_logging(request: Request, next: Next) -> Response {
@@ -64,7 +74,7 @@ pub async fn request_logging(request: Request, next: Next) -> Response {
     );
     let mut completion = Completion {
         method: request.method().to_string(),
-        path: request.uri().path().to_string(),
+        path: logged_path(request.uri().path()).to_string(),
         started: Instant::now(),
         span: span.clone(),
         done: false,
@@ -234,6 +244,18 @@ mod tests {
     }
 
     // Proves: I13
+    #[test]
+    fn invitation_tokens_never_enter_request_paths() {
+        assert_eq!(
+            super::logged_path("/control-plane/v1/team-join-links/private-token"),
+            "/control-plane/v1/team-join-links/{token}"
+        );
+        assert_eq!(
+            super::logged_path("/control-plane/v1/spaces/id"),
+            "/control-plane/v1/spaces/id"
+        );
+    }
+
     #[tokio::test]
     async fn requests_carry_ids_and_end_with_one_http_event() {
         use axum::{Router, body::Body, routing::get};

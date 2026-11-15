@@ -37,6 +37,7 @@ vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
     <button onClick={() => onSelect(TEMPLATE.template_id)}>choose</button>
   ),
 }));
+vi.mock("./RecommendedModelField/RecommendedModelField", () => ({ RecommendedModelField: () => null }));
 vi.mock("./TuningFieldRenderer.tsx", () => ({ TuningFieldRenderer: () => null }));
 vi.mock("../../../../features/capabilities/configWidgetRegistry.ts", () => ({ configWidgetFor: () => undefined }));
 

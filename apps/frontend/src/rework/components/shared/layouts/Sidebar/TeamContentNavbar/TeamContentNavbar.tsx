@@ -21,6 +21,7 @@ import { useEffect } from "react";
 import {
   useMySpacesQuery,
   useGetMyAvatarQuery,
+  useGetTeamAvatarQuery,
   useMarketplaceProposalSpacesQuery,
   useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -112,7 +113,8 @@ export default function TeamContentNavbar() {
   const content = useSpaceAccess(space?.id, "read");
   // Navigation uses the last successful answer while access is rechecked.
   // This does not authorize page actions; access errors offer a retry below.
-  const canOpenTeamSettings = manage.offered;
+  const canOpenTeamSettings =
+    manage.offered || ((space?.kind === "team" || space?.kind === "project") && content.offered);
   const canReadConsumption = canReadSpaceUsage(space, organizationId);
   const canReadContent = content.offered;
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
@@ -122,6 +124,15 @@ export default function TeamContentNavbar() {
     skip: !isPersonalTeam,
     refetchOnMountOrArgChange: 60,
   });
+
+  const teamPicture = useGetTeamAvatarQuery(
+    { id: space?.id ?? "" },
+    {
+      skip: space?.kind !== "team" || (!manage.allowed && !content.allowed),
+      refetchOnMountOrArgChange: 60,
+    },
+  );
+  const teamPictureUrl = !teamPicture.isError ? teamPicture.currentData : undefined;
 
   // Record every entry into a team so the Home nav-panel switcher can offer a
   // "recently viewed" sort. Client-only (localStorage), best-effort.
@@ -190,10 +201,10 @@ export default function TeamContentNavbar() {
     : (space?.name ?? publicationTeam?.name ?? selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
     <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" imageUrl={pictureUrl || undefined} />
-  ) : selectedTeam?.avatar_image_url ? (
+  ) : (space ? teamPictureUrl : selectedTeam?.avatar_image_url) ? (
     <img
       className={styles.teamPanelAvatar}
-      src={selectedTeam.avatar_image_url}
+      src={(space ? teamPictureUrl : selectedTeam?.avatar_image_url) ?? undefined}
       alt=""
       aria-hidden="true"
       width={28}
@@ -278,6 +289,18 @@ export default function TeamContentNavbar() {
     });
   }
 
+  const activityItems: NavigationMenuItemProps[] =
+    canReadContent && space?.kind === "team"
+      ? [
+          {
+            type: "link",
+            label: t("rework.teamSettings.navigation.activity"),
+            icon: { category: "outlined", type: "history" },
+            linkProps: { to: `${settingsBase}/activity` },
+          },
+        ]
+      : [];
+
   const usageItems: NavigationMenuItemProps[] = canReadConsumption
     ? [
         {
@@ -293,10 +316,20 @@ export default function TeamContentNavbar() {
   const settingsItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: t("rework.toolGovernance.title"),
+      label: t("rework.spaceModels.title"),
       icon: { category: "outlined", type: "tune" },
-      linkProps: { to: `${settingsBase}/offers` },
+      linkProps: { to: `${settingsBase}/models` },
     },
+    ...(manage.offered
+      ? ([
+          {
+            type: "link",
+            label: t("rework.toolGovernance.title"),
+            icon: { category: "outlined", type: "tune" },
+            linkProps: { to: `${settingsBase}/offers` },
+          },
+        ] satisfies NavigationMenuItemProps[])
+      : []),
     {
       type: "link",
       label: t("rework.teamSettings.navigation.members"),
@@ -305,11 +338,11 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  if (space?.kind === "team") {
+  if (space?.kind === "team" && manage.offered) {
     settingsItems.unshift({
       type: "link",
       label: t("rework.teamSettings.navigation.parameters"),
-      icon: { category: "outlined", type: "info" },
+      icon: { category: "outlined", type: "settings" },
       linkProps: { to: `${settingsBase}/parameters` },
     });
   }
@@ -365,17 +398,24 @@ export default function TeamContentNavbar() {
             </span>
           )}
         </div>
-        {!isPersonalTeam && (canOpenTeamSettings || canReadConsumption) && !inSettings && !inUsage && (
-          <span className={styles.teamPanelSettingsButton}>
-            <IconButton
-              size={"small"}
-              variant={"icon"}
-              icon={{ category: "outlined", type: "settings", filled: true }}
-              onClick={() => navigate(canOpenTeamSettings ? settingsBase : usageBase)}
-              title={t("rework.teamSettings.navigation.settings")}
-            />
-          </span>
-        )}
+        {!isPersonalTeam &&
+          (canOpenTeamSettings || canReadConsumption || activityItems.length > 0) &&
+          !inSettings &&
+          !inUsage && (
+            <span className={styles.teamPanelSettingsButton}>
+              <IconButton
+                size={"small"}
+                variant={"icon"}
+                icon={{ category: "outlined", type: "settings", filled: true }}
+                onClick={() =>
+                  navigate(
+                    canOpenTeamSettings ? settingsBase : canReadConsumption ? usageBase : `${settingsBase}/activity`,
+                  )
+                }
+                title={t("rework.teamSettings.navigation.settings")}
+              />
+            </span>
+          )}
         {isPersonalTeam && !inUsage && (
           <span className={styles.teamPanelSettingsButton}>
             <IconButton
@@ -411,7 +451,7 @@ export default function TeamContentNavbar() {
         {inSettings || (inUsage && !isPersonalTeam) ? (
           <>
             {backButton}
-            <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...usageItems]} />
+            <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems]} />
           </>
         ) : inUsage ? (
           // Personal usage has no membership-management tabs.

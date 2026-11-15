@@ -759,18 +759,46 @@ it("saves team purpose through Weaver and refreshes subscribed memberships", asy
   await context.unwrap();
   fetch.mockClear();
   const team = { id: "team", description: "Research into safer AI systems." };
-  fetch.mockImplementation(async (request) => new Response(JSON.stringify(request.method === "PUT" ? team : [team])));
+  fetch.mockImplementation(async (request) => new Response(JSON.stringify(request.method === "PATCH" ? team : [team])));
   await store
     .dispatch(
-      api.endpoints.updateTeamDescription.initiate({ id: "team", teamDescription: { description: team.description } }),
+      api.endpoints.updateTeamParameters.initiate({ id: "team", teamParameters: { description: team.description } }),
     )
     .unwrap();
   await vi.waitFor(() => expect(api.endpoints.mySpaces.select()(store.getState()).data).toEqual([team]));
   expect(fetch.mock.calls.map(([request]) => [request.method, new URL(request.url).pathname])).toEqual([
-    ["PUT", "/control-plane/v1/spaces/team/description"],
+    ["PATCH", "/control-plane/v1/spaces/team"],
     ["GET", "/control-plane/v1/me/spaces"],
   ]);
   expect(await fetch.mock.calls[0][0].clone().json()).toEqual({ description: team.description });
   context.unsubscribe();
+  store.dispatch(api.util.resetApiState());
+});
+
+it("sends team avatars as authenticated multipart and removal as one request", async () => {
+  const { store, fetch } = setup(null);
+  fetch.mockImplementation(async () => new Response(null, { status: 204 }));
+  await store
+    .dispatch(
+      api.endpoints.putTeamAvatar.initiate({
+        id: "team",
+        fileUpload: { file: new File(["image"], "avatar.png", { type: "image/png" }) },
+      }),
+    )
+    .unwrap();
+  const upload = fetch.mock.calls[0][0];
+  expect(upload.url).toBe("http://localhost/control-plane/v1/spaces/team/avatar");
+  expect(upload.headers.get("authorization")).toBe("Bearer operator-token");
+  expect([...(await upload.formData()).keys()]).toEqual(["file"]);
+  await store.dispatch(api.endpoints.removeSpaceMember.initiate({ id: "team", user: "member" })).unwrap();
+  expect(fetch.mock.calls[1][0].url).toBe("http://localhost/control-plane/v1/spaces/team/members/member");
+  expect(fetch.mock.calls[1][0].method).toBe("DELETE");
+  store.dispatch(api.util.resetApiState());
+});
+
+it("never replays team link creation after an uncertain unauthorized response", async () => {
+  const { store, fetch } = setup({ detail: "expired" }, 401);
+  await store.dispatch(api.endpoints.createTeamJoinLink.initiate({ id: "team" }));
+  expect(fetch).toHaveBeenCalledTimes(1);
   store.dispatch(api.util.resetApiState());
 });

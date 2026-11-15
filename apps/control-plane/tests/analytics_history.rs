@@ -23,7 +23,9 @@ fn mapping() -> Value {
 }
 fn query(subject: &str) -> ReadScope<'_> {
     ReadScope {
-        subject,
+        subject: Some(subject),
+        bucket: None,
+        attribution: false,
         spaces: &ACME,
         since: "2026-01-01T00:00:00Z".parse().unwrap(),
         until: "2026-01-03T00:00:00Z".parse().unwrap(),
@@ -39,7 +41,7 @@ fn config(url: String, index: String) -> Config {
     }
 }
 fn response() -> Value {
-    json!({"timed_out":false,"_shards":{"total":3,"successful":3,"failed":0},"aggregations":{"skills":{"buckets":[
+    json!({"hits":{"total":{"relation":"eq","value":7}},"timed_out":false,"_shards":{"total":3,"successful":3,"failed":0},"aggregations":{"skills":{"buckets":[
         {"key":{"skill":"read"},"doc_count":7,"origins":{"buckets":{"user":{"doc_count":5},"agent":{"doc_count":2}}}}
     ]}}})
 }
@@ -231,7 +233,7 @@ async fn stalled_historical_http_is_unavailable_within_the_deadline() {
 }
 
 fn turn_response() -> Value {
-    json!({"timed_out":false,"_shards":{"total":3,"successful":3,"failed":0},
+    json!({"hits":{"total":{"relation":"eq","value":7}},"timed_out":false,"_shards":{"total":3,"successful":3,"failed":0},
         "hits":{"total":{"value":9007199254740995u64,"relation":"eq"}},
         "aggregations":{"turns":{"buckets":[
             {"key":{"space":ACME[0],"agent":uuid::Uuid::from_u128(10)},"doc_count":9007199254740993u64,

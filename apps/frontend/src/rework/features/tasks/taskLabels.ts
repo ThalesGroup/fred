@@ -20,7 +20,7 @@ import type { TaskState, TaskViewModel } from "./taskTypes";
 /** What a task shows: the server's state, or `untracked` once the server no
  *  longer knows it — a state the backend never sends, so it is kept out of
  *  `TaskState`. */
-export type TaskDisplayState = TaskState | "untracked";
+export type TaskDisplayState = TaskState | "untracked" | "retrying" | "blocked";
 
 export const displayState = (task: Pick<TaskViewModel, "state" | "untracked">): TaskDisplayState =>
   task.untracked ? "untracked" : task.state;
@@ -34,6 +34,8 @@ export const STATE_COLOR: Record<TaskDisplayState, string> = {
   failed: "var(--error)",
   cancelled: "var(--on-surface-retreat)",
   untracked: "var(--warning)",
+  retrying: "var(--warning)",
+  blocked: "var(--error)",
 };
 
 /** Localized task-state label (e.g. "Pending" / "En attente"). */

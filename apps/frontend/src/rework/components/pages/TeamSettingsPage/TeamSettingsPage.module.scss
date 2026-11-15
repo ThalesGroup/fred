@@ -42,3 +42,12 @@
 .offerName {
   overflow-wrap: anywhere;
 }
+
+.activityDetails {
+  margin: 0;
+  overflow-wrap: anywhere;
+
+  dd {
+    margin: 0 0 var(--spacing-xs);
+  }
+}

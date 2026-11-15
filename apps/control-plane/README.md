@@ -1655,6 +1655,96 @@ Control Plane, then import, replace, reload and remove a photo from Settings.
 Check the personal navigation avatar and a platform-only account. The new unit and
 OpenAPI fixtures and existing frontend tests have not been executed for this port.
 
+### Team settings and members (implementation; reception pending)
+
+The lot on `gap/team-settings` extends Weaver's existing space governance, using
+Swift `cf698a739afae1b4cbcd92e82439e32bc1038198` only as a functional reference.
+`PATCH /spaces/{id}` accepts name and/or description for a team under direct
+Manage permission. Names reuse creation's NFC normalization, bounds and sibling
+uniqueness; both fields commit together. No visibility or catalogue self-join
+option is introduced. The existing offers and usage navigation entries remain.
+
+Roster reads now allow direct Read or Manage; candidate discovery and role changes
+still require Manage. The optional `search` matches subject, username, name or email
+among scoped people only. It scans at most 200 profiles per request (50 per batch,
+eight concurrent directory lookups, each batch bounded to 15 seconds); a sparse or
+empty result may have a continuation cursor. It never filters a truncated global
+identity search. `DELETE /spaces/{id}/members/{user}` removes all direct roles in
+one transaction, by a responsible person or the person leaving. Individual role
+revocation uses the same checks. Last-owner and dependent-project refusals leave
+all roles intact, including during concurrent departures. Resources remain owned
+by the space.
+
+Migration `0028_team_join_link.sql` stores one revocable token per team. The owner
+creates or rotates it through `/spaces/{id}/join-link`; rotation invalidates the
+previous token. Dimi confirmed **7 days** in the lot 1 chat. `/team-join-links/{token}`
+previews or redeems it after ordinary authentication, admission and consent. The
+recipient must already hold a direct content role in the parent organization,
+matching Weaver's existing child-membership prerequisite. Redemption adds Member
+only on that team, preserves other roles and grants nothing on projects or other
+teams. Expiration/revocation block future joins without removing existing grants;
+a former owner's link cannot continue granting access. SQL governance guards order
+redemption, rotation, revocation and retirement. Application HTTP logs redact the
+token. No catalogue self-enrollment or account provisioning is activated.
+
+Migration `0029_team_avatar.sql` extends the existing avatar table (renamed from
+`user_avatar` to `avatar`) with a team owner. `/spaces/{id}/avatar` uses the personal
+photo's exact multipart parser, crop/normalization, content storage, transfer limits
+and durable sweeper. Read or Manage allows reading; Manage allows upload/removal.
+Publication rechecks current authority after S3 I/O. Space purge retires both active
+and pending photos while preserving their cleanup journal and pending-write deadline.
+There is no second bucket, worker or quota account. The shared frontend crop card
+and authenticated binary client feed settings and sidebar photos; personal photos
+retain their existing endpoints. Published migrations 0001-0027 are unchanged.
+
+Reception scenarios for Dimi, after the normal migration/deployment process:
+
+1. As an owner without a content role, follow the description banner or Settings;
+   rename the team, save its description, navigate back and reload. Try a duplicate
+   sibling name, whitespace/Unicode normalization and invalid lengths. Keep one
+   field's unsaved draft while saving the other. Check offers and usage entries.
+2. Upload, replace, reload and remove a JPEG/PNG/WebP avatar; compare settings, team
+   navigation and the Home team list. Try an invalid file and a file over 5 MiB.
+   Verify personal photos still work and failed uploads leave the current photo intact.
+3. Search current members and eligible candidates by name/email, including a result
+   beyond the first page. Navigate sparse search pages; verify another organization
+   never appears. Add and remove each explicit role and reload.
+4. As a Member, read roles and leave; attempt to modify another member's roles.
+   As an owner, remove a multi-role member. Try the last owner's departure and a
+   person with project roles: refusal must leave every role unchanged. Hand over
+   responsibility/remove project roles, then retry. Resources must remain.
+5. Create, copy and open the link using another admitted person in the organization;
+   verify consent precedes entry if necessary. Join explicitly and reload. Verify
+   only the team's Member role was added, with no project or other-team access.
+6. Rotate/revoke a link, retry its old URL, and retry a link past its displayed
+   expiry. People already joined stay members. A person in another organization,
+   a user without the parent's content role, and an issuer losing Manage must
+   be refused. Keep a preview open while revoking, then try redemption.
+7. In two browser sessions, compete to remove the two owners; at least one must
+   remain. Revoke management while editing or uploading; confirm refusal on save.
+   Exercise photo cleanup and team deletion through the existing lifecycle.
+
+Regression sources cover these contracts, including atomic removal, concurrent
+owners, cross-organization joins, HTTP search/revocation, avatar cleanup and the
+new enrollment UI. No tests or deployed/browser reception were run by this lot's
+assistant. SQL/S3 lifecycle and user journeys still require Dimi's validation.
+Reconcile these shared files with the other lots during integration (paths from the
+repository root); regenerate the client after combining the Rust contract changes:
+
+- `apps/control-plane/src/api.rs`, `src/lib.rs`, `tests/integration.rs`, `tests/openapi.rs`.
+- `apps/frontend/src/slices/controlPlane/controlPlaneApiEnhancements.ts`,
+  `controlPlaneOpenApi.ts`, `controlPlaneApi.test.ts`.
+- `apps/frontend/src/locales/{fr,en}/translation.json`.
+- `apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`.
+- `apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
+  `HomeNavPanel/HomeNavPanel.tsx`, and their regression files.
+- `apps/frontend/src/rework/core/utils/weaverContentRoute.ts`,
+  `apps/frontend/src/common/router.test.tsx`.
+- Reserve migration numbers `0028` and `0029` with the coordinator before integration.
+  The shared avatar lifecycle also touches `src/user_avatar.rs`,
+  `src/documents/cleanup.rs`, `src/documents/mod.rs`; roster enrichment touches
+  `src/users.rs`, and token redaction touches `src/logging.rs` in Control Plane.
+
 ## Consumption analytics
 
 Use `POST /control-plane/v1/analytics/query` for consumption reads. The canonical
@@ -1686,6 +1776,37 @@ redirects, bounds connection time at 2s and each HTTP call at 5s, with 4s search
 three-shard disposable OpenSearch via `CONTROL_PLANE_IT_OPENSEARCH`. Frontend tests
 exercise rendering and real RTK cache/identity isolation. Production capacity and
 functional browser reception remain separate.
+
+### Team analytics (implementation; reception pending)
+
+`TeamUsagePage` now uses only the common analytics POST for its collective cards.
+Direct Owner/Analyst `ReadUsage`, organization participation, admission and current
+consent gate consumption, retained creations, completed turns and skill loads.
+The established team perimeter includes its projects, including retained deletion
+receipts; a project stays local. The SQL predicate is shared by all these readers.
+No user/session identity or conversation content is returned by aggregate reads.
+
+`activity.active_users`, `activity.observed_conversations`, `activity.failed_turns`
+and `activity.single_turn_conversations` extend completed-turn totals. Distinct
+identities are exact over the bounded aggregation, not approximate cardinalities.
+Missing/erased attribution omits affected values; missing outcome omits failed turns.
+Empty valid history returns zero. Turns remain completion events, not unique messages;
+conversation counts here mean observed conversations, not SQL creation counts.
+`activity.retained_conversations` also supports collective scope, with the same
+retained-catalogue definition as below. None of these counts grants content access.
+
+Time grouping of turns supports UTC hour/day/week buckets, filled only after a valid
+read. Attribution uses at most 10,000 composite groups across space, agent, user,
+session and optional bucket. Exceeding this budget fails the batch rather than
+silently dropping identities. Historical and SQL batches remain independent.
+Consumption by agent/model now displays the existing estimates and their coverage;
+comparison windows have equal elapsed duration. The collective Excel export rereads
+the selected tab through the same authorized endpoint, preserves values as text,
+and drops late results after context changes. It contains no personal dashboards.
+
+The [lot 5 coverage matrix and acceptance scenarios](../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#21-lot-5---analytiques-déquipe-et-consommation-15-novembre-2026)
+record the remaining Swift gaps, exact counting examples and unexecuted regressions.
+No migration, index mutation, backfill or deployed validation accompanies this code.
 
 ### Personal activity (implementation; reception pending)
 

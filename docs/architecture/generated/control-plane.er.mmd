@@ -83,6 +83,12 @@ erDiagram
 "control_plane.marketplace_installation" }o--o| "control_plane.skill" : "skill_id, live_space_id"
 "control_plane.capability_source" |o--o| "control_plane.runtime_catalog" : "runtime_id"
 "control_plane.mcp_connection" }o--|| "control_plane.space" : "space_id"
+"control_plane.avatar" }o--o| "control_plane.space" : "space_id"
+"control_plane.team_join_link" |o--|| "control_plane.space" : "space_id"
+"control_plane.space_model_policy" |o--|| "control_plane.space" : "space_id"
+"control_plane.space_model_policy" }o--o| "control_plane.model_offer" : "default_source_id, default_upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.space_model_policy" : "space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -103,6 +109,7 @@ erDiagram
   bigint documents_deleted
   text session_user_id
   uuid session_agent_instance_id
+  uuid document_session_id
 }
 "control_plane.space" {
   uuid id
@@ -766,11 +773,34 @@ erDiagram
   timestamp_with_time_zone updated_at
   uuid space_id FK
 }
-"control_plane.user_avatar" {
+"control_plane.avatar" {
   uuid id
   text user_id
   text object_key
   bigint size
   text status
   timestamp_with_time_zone expires_at
+  uuid space_id FK
+}
+"control_plane.team_join_link" {
+  uuid space_id FK
+  uuid token
+  text created_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+}
+"control_plane.space_model_policy" {
+  uuid space_id FK
+  bigint revision
+  text default_source_id FK
+  text default_upstream_model_id FK
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.space_model_setting" {
+  uuid space_id FK
+  text source_id FK
+  text upstream_model_id FK
+  boolean disabled
+  boolean reasoning_default_on
 }

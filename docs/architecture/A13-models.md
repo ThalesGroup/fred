@@ -68,6 +68,7 @@ it does not certify every deletion, replacement or in-flight execution scenario.
 | --- | --- | --- |
 | Approved destinations and inventory | [`ModelSource`](../../apps/control-plane/src/model_catalog/config.rs), platform configuration | [`discovery.rs`](../../apps/control-plane/src/model_catalog/discovery.rs), retained SQL observations; discovery grants no permission |
 | Organization policy | [`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs), organization model tables | Organization Owner through [`http.rs`](../../apps/control-plane/src/model_catalog/http.rs); technical Admin alone cannot administer the policy |
+| Team/project policy | [`local_policy.rs`](../../apps/control-plane/src/model_catalog/local_policy.rs), `space_model_policy` and `space_model_setting` | Local Owner writes a revision-checked policy under the organization governance lock; the shared projection narrows parent permissions for configuration, preparation and admission |
 | UI choices | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), public `InferenceSelection` | [`OrganizationModels`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx), generated frontend client; preparation is not admission |
 | Turn decision | [`resolve_runtime_binding`](../../apps/control-plane/src/agent_instances/runtime.rs), [`decide` / `admit`](../../apps/control-plane/src/model_catalog/instance.rs) | Space-derived organization, saved instance tuning and requested choice in a consistent snapshot |
 | Shared wire contract | [`InferenceAdmission`](../../libs/fred-rust-sdk/src/inference.rs), Python [`contracts.weaver`](../../libs/fred-sdk/fred_sdk/contracts/weaver.py) | [Generated API types](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts); connection only on the trusted execution path |
@@ -133,8 +134,16 @@ without an embedding model on both backends.
 
 [Automatic conversation titles](../../apps/control-plane/README.md#automatic-conversation-titles)
 receive their own Control Plane admission through `decide_title`, under the same
-organization policy. This optional title model does not create a runtime-local
+organization policy and local model restrictions. This optional title model does not create a runtime-local
 selection rule.
+
+Local policies keep restrictions separate from preferences. A policy header owns
+the revision and optional default; sparse settings identify disabled offers or
+reasoning defaults. Restrictions accumulate along the organization/team/project
+path. The nearest saved policy replaces inherited reasoning preferences, while an
+omitted model default inherits the parent's. Retained recommendations are not
+erased when forbidden: admission refuses them. These source-level contracts do
+not establish functional reception of the team settings journey.
 
 ## SQL view
 
@@ -148,7 +157,7 @@ in `agent_instance.tuning`. These external relationships remain in the
 The ER format shows columns and foreign keys, not every check, index or transaction:
 consult the [migrations](../../apps/control-plane/migrations) for exact constraints.
 
-<!-- generated: mermaid docs/architecture/generated/control-plane.er.mmd control_plane.model_source control_plane.model_offer control_plane.organization_model_source control_plane.organization_model_policy control_plane.organization_model_permission control_plane.organization_model_initialization -->
+<!-- generated: mermaid docs/architecture/generated/control-plane.er.mmd control_plane.model_source control_plane.model_offer control_plane.organization_model_source control_plane.organization_model_policy control_plane.organization_model_permission control_plane.organization_model_initialization control_plane.space_model_policy control_plane.space_model_setting -->
 ```mermaid
 erDiagram
 
@@ -162,6 +171,9 @@ erDiagram
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
 "control_plane.organization_model_source" }o--|| "control_plane.model_source" : "source_id"
+"control_plane.space_model_policy" }o--o| "control_plane.model_offer" : "default_source_id, default_upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.space_model_policy" : "space_id"
 
 "control_plane.model_source" {
   text source_id
@@ -222,8 +234,25 @@ erDiagram
   timestamp_with_time_zone completed_at
 }
 
+"control_plane.space_model_policy" {
+  uuid space_id FK
+  bigint revision
+  text default_source_id FK
+  text default_upstream_model_id FK
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+
+"control_plane.space_model_setting" {
+  uuid space_id FK
+  text source_id FK
+  text upstream_model_id FK
+  boolean disabled
+  boolean reasoning_default_on
+}
+
 classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
-class control_plane.model_source,control_plane.model_offer,control_plane.organization_model_source,control_plane.organization_model_policy,control_plane.organization_model_permission,control_plane.organization_model_initialization fred
+class control_plane.model_source,control_plane.model_offer,control_plane.organization_model_source,control_plane.organization_model_policy,control_plane.organization_model_permission,control_plane.organization_model_initialization,control_plane.space_model_policy,control_plane.space_model_setting fred
 ```
 <!-- end generated -->
 

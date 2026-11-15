@@ -12,7 +12,7 @@ provides a versioned view. Regenerate this inventory with `make -C docs/architec
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
@@ -183,13 +183,21 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
 | POST | `/spaces` | `create_space` | Required |
+| PATCH | `/spaces/{id}` | `update_team_parameters` | Required |
 | DELETE | `/spaces/{id}` | `delete_space` | Required |
+| GET | `/spaces/{id}/avatar` | `get_team_avatar` | Required |
+| PUT | `/spaces/{id}/avatar` | `put_team_avatar` | Required |
+| DELETE | `/spaces/{id}/avatar` | `delete_team_avatar` | Required |
 | GET | `/spaces/{id}/deletion` | `project_deletion_status` | Required |
-| PUT | `/spaces/{id}/description` | `update_team_description` | Required |
+| GET | `/spaces/{id}/document-activity` | `team_document_activity` | Required |
 | GET | `/spaces/{id}/document-uploads` | `receipts` | Required |
 | GET | `/spaces/{id}/entries` | `entries` | Required |
+| GET | `/spaces/{id}/join-link` | `team_join_link` | Required |
+| POST | `/spaces/{id}/join-link` | `create_team_join_link` | Required |
+| DELETE | `/spaces/{id}/join-link` | `revoke_team_join_link` | Required |
 | GET | `/spaces/{id}/member-candidates` | `space_member_candidates` | Required |
 | GET | `/spaces/{id}/members` | `space_members` | Required |
+| DELETE | `/spaces/{id}/members/{user}` | `remove_space_member` | Required |
 | PUT | `/spaces/{id}/roles/{role}/{user}` | `grant` | Required |
 | DELETE | `/spaces/{id}/roles/{role}/{user}` | `revoke` | Required |
 | GET | `/spaces/{id}/storage` | `summary` | Required |
@@ -220,6 +228,8 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/mcp-connections/{id}/publish` | `publish_mcp_connection` | Required |
 | POST | `/spaces/{space_id}/mcp-connections/{id}/test` | `test_mcp_connection` | Required |
 | GET | `/spaces/{space_id}/mcp-credentials` | `mcp_credentials` | Required |
+| PUT | `/spaces/{space_id}/model-policy` | `replace_space_model_policy` | Required |
+| GET | `/spaces/{space_id}/models` | `space_models` | Required |
 | GET | `/spaces/{space_id}/powerpoint-template` | `resolve_powerpoint_template` | Required |
 | PUT | `/spaces/{space_id}/powerpoint-template` | `upload_powerpoint_template` | Required |
 | DELETE | `/spaces/{space_id}/powerpoint-template` | `remove_powerpoint_template` | Required |
@@ -278,6 +288,13 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/publish` | `publish_wiki_proposal` | Required |
 | GET | `/spaces/{space_id}/wiki/rules` | `wiki_rules` | Required |
 | PUT | `/spaces/{space_id}/wiki/rules` | `write_wiki_rules` | Required |
+
+## /team-join-links routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/team-join-links/{token}` | `preview_team_join_link` | Required |
+| POST | `/team-join-links/{token}` | `redeem_team_join_link` | Required |
 
 ## /users routes
 

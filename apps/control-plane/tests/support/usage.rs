@@ -1702,7 +1702,7 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn analytics_historical_is_self_only_and_unavailable_is_not_empty() {
+async fn analytics_history_requires_direct_usage_and_unavailable_is_not_empty() {
     let f = Fixture::new().await;
     let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
     let q = json!({"name":"skills","scope":{"kind":"self"},"time":request["queries"][0]["time"],"measures":["skills.user_loads","skills.agent_loads","skills.total_loads"],"group_by":["skill"]});
@@ -1711,7 +1711,10 @@ async fn analytics_historical_is_self_only_and_unavailable_is_not_empty() {
     assert_eq!(f.analytics(None, request.clone()).await.0, 401);
     let mut collective = request.clone();
     collective["queries"][0]["scope"] = json!({"kind":"space","id":f.space});
-    assert_eq!(f.analytics(Some("alice"), collective).await.0, 403);
+    f.admit("alice").await;
+    assert_eq!(f.analytics(Some("alice"), collective.clone()).await.0, 503);
+    f.admit("bob").await;
+    assert_eq!(f.analytics(Some("bob"), collective).await.0, 403);
     let mut forged = request.clone();
     forged["queries"][0]["scope"]["user_id"] = json!("bob");
     assert_eq!(f.analytics(Some("alice"), forged).await.0, 422);
@@ -1742,7 +1745,7 @@ async fn analytics_historical_route_injects_identity_and_never_needs_a_sql_trans
             capture.lock().unwrap().push(body["query"]["bool"]["filter"][2]["terms"]["dims.space_id"].clone());
             let subject=&body["query"]["bool"]["filter"][1]["term"]["dims.user_id"];
             let count=if subject == "alice" { 3 } else if subject == "bob" { 7 } else { panic!("unexpected subject") };
-            Json(json!({"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
+            Json(json!({"hits":{"total":{"relation":"eq","value":count}},"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
                 "key":{"skill":"read"},"doc_count":count,"origins":{"buckets":{"user":{"doc_count":count},"agent":{"doc_count":0}}}
             }]}}}))
         }}));
@@ -2049,11 +2052,15 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
             self.calls
                 .lock()
                 .unwrap()
-                .push((q.subject.into(), q.spaces.to_vec()));
+                .push((q.subject.unwrap_or("collective").into(), q.spaces.to_vec()));
             Box::pin(async move {
                 Ok(q.spaces
                     .iter()
                     .map(|id| TurnCount {
+                        start: q.bucket.map(|_| q.since),
+                        user_id: Some("alice".into()),
+                        session_id: Some(id.to_string()),
+                        failed: Some(0),
                         space_id: *id,
                         agent_instance_id: *id,
                         display_name: Some("Same name".into()),
@@ -2095,6 +2102,55 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
             .iter()
             .any(|row| row["dimensions"]["space_id"] == json!(f.space))
     );
+    f.admit("alice").await;
+    f.admit("bob").await;
+    let project = f.project("Analytics project").await;
+    let collective = json!({"queries":[{
+        "name":"total", "scope":{"kind":"space","id":f.space},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.completed_turns","activity.active_users","activity.observed_conversations","activity.failed_turns"]
+    }]});
+    let (status, body) = f.analytics(Some("alice"), collective.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(calls.lock().unwrap().last().unwrap().0, "collective");
+    assert!(!calls.lock().unwrap().last().unwrap().1.contains(&globex.id));
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .contains(&project.id)
+    );
+    assert_eq!(
+        body["results"]["total"]["rows"][0]["values"]["activity.active_users"],
+        "1"
+    );
+    assert!(body.to_string().find("alice").is_none());
+    let before_denied = calls.lock().unwrap().len();
+    assert_eq!(f.analytics(Some("bob"), collective.clone()).await.0, 403);
+    assert_eq!(calls.lock().unwrap().len(), before_denied);
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','analyst')")
+        .bind(f.space)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(f.analytics(Some("bob"), collective.clone()).await.0, 200);
+    let mut child = collective.clone();
+    child["queries"][0]["scope"]["id"] = json!(project.id);
+    assert_eq!(f.analytics(Some("bob"), child.clone()).await.0, 403);
+    assert_eq!(f.analytics(Some("alice"), child).await.0, 200);
+    assert_eq!(calls.lock().unwrap().last().unwrap().1, vec![project.id]);
+    sqlx::query(
+        "delete from space_role_grant where subject='bob' and space_id=$1 and role='analyst'",
+    )
+    .bind(f.space)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(f.analytics(Some("bob"), collective).await.0, 403);
+    let collective_calls = calls.lock().unwrap().len() - 1;
     // Withdrawal removes the team before limiting, while personal historical totals remain.
     sqlx::query("delete from space_role_grant where subject='alice' and space_id=$1")
         .bind(f.space)
@@ -2118,5 +2174,43 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
     sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
         .bind(f.organization).execute(&f.pool).await.unwrap();
     assert_eq!(f.analytics(Some("alice"), request).await.0, 404);
-    assert_eq!(calls.lock().unwrap().len(), 2);
+    assert_eq!(calls.lock().unwrap().len(), 2 + collective_calls);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn collective_retained_creations_have_the_same_team_perimeter_and_exclude_deleted_sessions() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    f.admit("bob").await;
+    let project = f.project("Analytics project").await;
+    let (_, child_session) = f.agent_session(project.id, "alice", "Child").await;
+    sqlx::query(
+        "update session_metadata set created_at='2026-01-01T00:00:00Z' where session_id=any($1)",
+    )
+    .bind(vec![f.session, child_session])
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let query = |id| {
+        json!({"queries":[{"name":"creations","scope":{"kind":"space","id":id},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.retained_conversations"]}]})
+    };
+    for (id, count) in [(f.space, "2"), (project.id, "1")] {
+        let (status, body) = f.analytics(Some("alice"), query(id)).await;
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(
+            body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+            count
+        );
+    }
+    assert_eq!(f.analytics(Some("bob"), query(f.space)).await.0, 403);
+    f.retire().await;
+    let (status, body) = f.analytics(Some("alice"), query(f.space)).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+        "1"
+    );
 }

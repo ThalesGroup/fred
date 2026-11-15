@@ -9,6 +9,7 @@ mod discovery;
 pub(crate) mod http;
 pub mod initialization;
 pub(crate) mod instance;
+mod local_policy;
 mod policy;
 mod store;
 

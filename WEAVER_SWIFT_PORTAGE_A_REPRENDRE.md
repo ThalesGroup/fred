@@ -2605,3 +2605,518 @@ configuration CI/Make, verrous et documentation comptés séparément. Les tests
 applicatifs et de publication n'ont pas été exécutés. Résolutions indexées,
 merge prêt pour validation fonctionnelle de Dimi puis commit sur autorisation ;
 aucun commit, push, déploiement, migration de base vivante ou service modifié.
+
+## 21. Intégration des lots équipes 1, 3, 4 et 5 - 15 novembre 2026
+
+Reprise sur `gap/team-settings`, base commune
+`01779781d36560ffec53bf431f7724a490dbfc25`. Le lot 1 provient du checkout
+local ; les lots archivés ont été récupérés depuis leurs instantanés Git :
+
+| Lot | Instantané source |
+| --- | --- |
+| 3 - Modèles/outils | `ae43aa4a1525115825a33c29a0912e32ac2619a0` |
+| 4 - Activité documentaire | `00eec764f8ae853878af1e32f60a6c042ad98ba3` |
+| 5 - Analytiques | `6de873c3f87f1a32cee2baa78563d371d4dc10be` |
+
+Les rapports ci-dessous conservent les preuves et limites des implémentations
+initiales. Leurs anciens chemins de worktrees et commandes exécutées ne décrivent
+pas l'état courant. Le rapport du lot 1 reste dans
+[`apps/control-plane/README.md`](apps/control-plane/README.md#team-settings-and-members-implementation-reception-pending).
+
+Les conflits de navigation, routes, hooks, inventaire OpenAPI et rapports sont
+réconciliés. Le client RTK est régénéré depuis les sources réunies. Ordre SQL :
+`0028_team_join_link`, `0029_team_avatar`, `0030_team_document_activity`,
+`0031_space_model_policy` (anciennement 0029 dans le rapport du lot 3).
+Les commentaires de triggers suivent la classification arc42 ; les références
+SQL et API sont régénérées. Aucun comportement métier nouveau n'est ajouté par
+cette intégration.
+
+Contrôles exécutés sur les sources réunies : `make -C apps/control-plane
+generate-openapi`, génération du client avec `rtk-query-codegen-openapi`,
+`make -C apps/control-plane code-quality` et `make -C apps/frontend code-quality`
+réussis. Deux déréférencements Rust redondants et une expression conditionnelle
+signalée par ESLint ont été corrigés sans changement de comportement.
+`make -C docs/architecture er` a appliqué toute la chaîne SQL dans un PostgreSQL
+jetable puis régénéré le catalogue et le diagramme ; le conteneur a été supprimé.
+Les commandes `docs.py generate`, `check` et `links` ont réussi sur A2/A12/A13,
+avec vérification des liens d'A8 et de ce suivi ; `git diff --check` est propre.
+Aucun test fonctionnel, benchmark, push ou déploiement n'a été exécuté ; aucune
+base existante n'a été modifiée.
+
+La reprise du lot 5 part de sa parité partielle conservée : agrégats collectifs,
+comparaisons, agents/skills, coûts et export Excel sont raccordés. Adoption/cohortes,
+outils, distributions et jours ouvrés restent différés ; G001 reste ouvert.
+Les décisions du lot 3 et les recettes fonctionnelles restent à réceptionner.
+Les volumes cibles, la sélectivité de l'activité documentaire et la capacité des
+agrégats historiques ne sont pas validés par les contrôles de compilation.
+
+### Lot 3 - Modeles et outils d'equipe (15 novembre 2026)
+
+Base Weaver `01779781d36560ffec53bf431f7724a490dbfc25`, reference Swift
+`cf698a739afae1b4cbcd92e82439e32bc1038198`. Travail isole sur
+`codex/team-models-tools`, sans reprise du diff du lot 1. Implementation locale,
+non recue en deploiement ; les tests et la qualite restent pilotes par Dimi.
+
+| Usage Swift (`TeamSettingsRouting`, `routing_policy/service.py`) | Classement sur la base Weaver | Adaptation de ce lot |
+| --- | --- | --- |
+| Voir les modeles disponibles | Deja couvert au niveau organisation ; raccordement equipe manquant | Projection des offres existantes par espace, sans catalogue de profils ni appel Swift. Source + identifiant fournisseur restent l'identite. |
+| Defaut de l'equipe, puis recommandation d'un agent | Adaptation metier necessaire | Defaut local sous le plafond organisation, avec priorite choix de conversation > recommandation > defaut du projet/equipe > organisation. Selecteur d'agent existant raccorde aux cles Weaver. |
+| Desactiver un modele pour l'equipe | Adaptation metier necessaire | Restrictions locales cumulatives dans les projets ; jamais une autorisation au-dela du parent. Le defaut effectif ne peut etre desactive sans choisir un autre defaut. |
+| Raisonnement par defaut pour chaque modele | Raccordement manquant | Preference locale distincte du plafond organisation et de l'aptitude du modele ; un choix explicite par question reste prioritaire. En absence de politique locale, le comportement Weaver reste desactive par defaut. |
+| Voir l'effet d'une desactivation | Adaptation metier necessaire | Confirmation avec agents visibles de l'espace, pagines via le catalogue existant. Aucun nom d'agent d'un projet sans droit direct. Les recommandations sont conservees : le serveur refuse leur modele interdit, au lieu de les effacer comme Swift. |
+| Restrictions et selection des outils/MCP | Deja couvert | `SpaceOffers`, `enablement::usable`, validation des instances et admission existantes ; aucune connexion externe ni autorisation ajoutee. |
+| Choix de modele et controles a l'execution | Organisation deja couverte, raccordement local manquant | `resolve_for_space` commun aux choix UI, ecritures d'instances, preparation et admission. Repli existant uniquement sur retrait fournisseur confirme, meme source, modele encore autorise. |
+
+Proprietaires : `model_catalog/local_policy.rs`, `instance.rs`, `agent_instances`
+et leurs composants UI existants. La mutation utilise le verrou de gouvernance de
+l'organisation et une revision optimiste locale ; les controles d'acces restent
+sur l'espace demande. Les lectures d'admission utilisent le snapshot coherent du
+tour. Aucun role d'organisation ne donne un role d'equipe. Un tour admis conserve
+son contexte ; les nouveaux tours relisent les restrictions. Les modeles
+embedding/vision documentaires restent gouvernes par l'organisation.
+
+Migration `0029_space_model_policy.sql` : depend des tables espace/offres de
+`0001`, aucune dependance SQL a `0028` (numero reserve au lot 1). Deux tables
+locales avec references aux espaces/offres, suppression en cascade avec l'espace,
+unicite par espace et modele ; pas de migration appliquee. Installation neuve
+uniquement. Les preferences ne sont pas des permissions et aucune ligne
+organisation n'est recopiee comme droit d'equipe.
+
+Recette a executer par Dimi :
+
+1. Responsable d'equipe : ouvrir Modeles, choisir un defaut autorise, recharger ;
+   un agent sans recommandation suit ce defaut. Creer puis modifier un agent avec
+   une recommandation explicite ; une modification descriptive seule la conserve.
+2. Desactiver un modele non defaut apres consultation des agents concernes et des
+   pages suivantes. Il disparait des nouveaux choix ; une recommandation conservee
+   affiche son indisponibilite. Forcer ce modele par l'API de creation/configuration
+   ou d'admission doit echouer. Verifier aussi un agent installe depuis le catalogue.
+3. Depuis un projet, tenter de contourner l'interdiction de son equipe, puis retirer
+   l'autorisation organisation : aucune preference locale ne reautorise le modele.
+   Une equipe soeur reste independante. Un responsable uniquement organisation ne
+   peut pas modifier la politique equipe ; lecteur/editeur local ne peut pas l'ecrire.
+4. Activer le raisonnement par defaut pour un modele apte et autorise, ouvrir une
+   nouvelle conversation puis changer de modele. Verifier le choix explicite off,
+   le choix on et la suppression du plafond organisation. Un appel omettant ce
+   parametre utilise la preference ; les clients envoyant false font un choix explicite.
+5. Deux responsables ecrivent depuis la meme revision : le second obtient 409,
+   l'UI recharge sans ecraser. Tester erreur de lecture, offre retiree et defaut devenu
+   interdit. Un tour deja admis peut finir ; le suivant observe le changement.
+6. Outils : retirer une offre dans l'equipe, verifier selection/configuration et
+   nouveau tour, puis essayer de la retablir alors que l'organisation l'interdit.
+   Conserver les contrats existants de publication et d'activation MCP.
+
+Points d'integration partages : `model_catalog/http.rs` et `mod.rs`, inventaire
+`tests/openapi.rs`, OpenAPI et client RTK generes, `TeamSettingsPage.tsx`,
+`TeamContentNavbar.tsx`, traductions FR/EN et ce suivi. Regenerer le client depuis
+les sources reunies des lots, sans reprendre en bloc un fichier genere concurrent.
+Les references arc42 de gouvernance ont ete lues ; aucun nouveau parcours n'y est
+presente comme recu. Le raccord des chapitres de parcours attend la recette.
+
+Decisions de ce lot a confirmer en recette : conservation des recommandations
+interdites (refus explicite du serveur, sans effacement Swift), raisonnement initial
+inchange tant qu'aucune preference locale n'est enregistree, et consultation d'impact
+limitee aux agents visibles de l'espace. Le compositeur existant peut abandonner
+avec notification un ancien choix de conversation devenu interdit ; cela ne modifie
+pas la recommandation de l'agent et ne contourne pas les controles d'admission.
+
+Verifications effectivement realisees : `make -C apps/control-plane generate-openapi`
+(compilation Rust et export sans service), generation RTK par le binaire local
+`rtk-query-codegen-openapi`, `tsc --project tsconfig.build.json --noEmit`, regeneration
+statique puis verification de `A12-control-plane-api.md`, lecture des deux nouvelles
+routes dans OpenAPI, parsing des locales FR/EN et `git diff --check` : reussis.
+Formatage limite aux fichiers touches. Regressions preparees (restrictions et
+raisonnement dans la decision commune, selecteur de recommandation et payloads,
+inventaire REST et fixtures), **non executees**. Aucun test, code-quality, service,
+modification de donnees, commit, push ou deploiement.
+
+Le responsable sans droit de lecture peut administrer les modeles ; la confirmation
+explique alors pourquoi elle ne montre pas les agents. Le lecteur/editeur peut lire
+la projection et la page en lecture seule, jamais ecrire la politique. Le menu
+Parametres reste celui de la gouvernance existante. Ajouter a la recette un
+responsable local sans role de contenu et un editeur sans role Responsable.
+
+Delta de code (lignes, tests Rust internes comptes separement) : production +830/-101,
+tests +183/-197, client genere +46/-0. L'ajout porte sur la politique locale absente,
+son ecran et son application dans les proprietaires existants ; le selecteur Swift
+est remplace, sans second catalogue. Les references SQL generees arc42 restent a
+regenerer avec Dimi : `make -C docs/architecture er` demarre un PostgreSQL jetable,
+non lance sous la consigne de ne changer aucun service. La migration n'a donc pas
+ete appliquee ni verifiee sur PostgreSQL. L'inventaire REST A12, lui, est regenere.
+
+### Lot 4 - Activité de l'équipe - 15 novembre 2026
+
+Implémentation locale à valider dans le worktree `team-activity`, branche
+`codex/team-activity`, base `01779781d36560ffec53bf431f7724a490dbfc25`.
+Référence Swift lue avec `git show`/`git grep` au commit
+`cf698a739afae1b4cbcd92e82439e32bc1038198`. Le checkout du lot 1, les données,
+les services et le suivi central de recette ne sont pas modifiés.
+
+#### Inventaire Swift et périmètre porté
+
+Le parcours Swift `team/:teamId/settings/activity` ouvre `TaskActivity(scope=team)`
+après contrôle d'un rôle élevé dans `TeamSettingsPage`. Les deux listes `/tasks`
+(Control Plane et Knowledge Flow) contrôlent `CAN_READ_MEMBERS` ou la gestion de
+plateforme, puis filtrent `team_id`. La liste inclut les états terminaux et n'est
+pas paginée (`fred_core/tasks/store.py::list_tasks`). Ce contrat n'est pas réutilisé.
+
+| Fonction Swift réellement raccordée | Weaver dans ce lot |
+| --- | --- |
+| Ingestions de l'équipe, y compris celles d'un collègue | Imports persistés et chaque tentative de traitement, y compris les échecs suivis d'une relance, avec leurs identités distinctes. |
+| Effacements de conversations prévus, en cours, terminés ; titre/cible transmis par `sessions/erasure_tasks.py::schedule_erasure_task` | Non porté dans la liste collective : les conversations Weaver sont privées. Les contrats existants de suppression sont ceux du propriétaire de la conversation ou de l'administrateur de plateforme, pas un droit de lecture collective des reçus. Une éventuelle vue de gouvernance anonymisée reste à cadrer. |
+| Groupes prévus (échéance croissante), en cours (progression, alerte `stalled`), terminés (date, succès/échec/annulation explicites) | Liste chronologique paginée avec filtres type/état, échéance de purge et dates. `blocked` et `retrying` restent des états non terminaux distincts, jamais transformés en échec définitif. Aucun pourcentage inventé. |
+| Message d'échec et acquittement des échecs/annulations non acquittés | Code d'erreur et message public ; aucun acquittement collectif inventé. L'acquittement personnel d'un import n'efface pas sa ligne d'activité. |
+| Détail des résultats de migration (compteurs et avertissements) dans le composant partagé | Ce rendu générique n'établit pas une migration accessible dans l'équipe : le lancement import/export Swift ne fournit pas de `team_id`. Aucun portage de migration plateforme vers cette page. |
+| Filtre `kind` fourni comme prop au composant ; paramètres `state/kind` de l'API | Pas de sélecteur utilisateur dans la page Swift examinée. Weaver ajoute deux sélecteurs côté serveur, conservés dans l'URL. |
+| Polling toutes les 30 secondes | Polling de la page courante toutes les 5 secondes, reprise au focus et à `online` via le hook partagé. Ce n'est pas un flux temps réel. |
+| Annulation/relance | Aucun bouton dans cette page Swift, malgré l'existence d'autres API/actions. Aucun bouton ajouté sans contrat Weaver ; la relance documentaire existante reste dans Ressources. |
+
+Opérations **couvertes** : `document_upload` (envoi/stockage durable, succès,
+échec), `document_processing` (attente, préparation, extraction, indexation,
+succès/échec et lien `retry_of`), `deletion` de document du drive ou de dossier
+(prévue, en cours, reprise, blocage, terminée). Les fichiers encore uniquement
+dans la file locale du navigateur ne sont pas des opérations durables.
+
+Opérations **absentes ou hors périmètre** : effacements de conversations et pièces
+jointes privées ; suppression d'organisation/équipe/projet ; préparation des
+capacités des agents (`capability_preparation`, contrat de configuration distinct,
+pas un historique documentaire) ; provisionnement/migration ; exécutions de tours
+et évaluations des pods/applications ; modifications synchrones de membres,
+modèles, dossiers et noms ; activation de recherche (`retrieval_id`, état courant
+sans journal historique autonome). KPI, dashboards et consommation restent au lot 5.
+Les projets, parents et autres équipes ne sont jamais agrégés implicitement.
+
+#### Sources, droits et conservation
+
+`documents/activity.rs` est une projection de lecture des trois propriétaires
+existants, sans service de tâches, événement supplémentaire ni stockage d'historique.
+L'autorisation `Read` et la projection SQL utilisent une transaction courte
+`REPEATABLE READ READ ONLY`. `owner` seul, `ReadUsage`, rôle sur un parent ou rôle
+technique ne donnent pas lecture du contenu. Les lecteurs directs (member, editor,
+analyst) lisent seulement le drive de l'équipe active ; l'API refuse les autres
+sortes d'espace. Les détails utilisent la même réponse autorisée que la liste.
+Aucun contenu de conversation, payload worker, token ou auteur privé n'est exposé.
+
+Une page contient au plus 50 lignes (requête limitée à 51), curseur composite
+`created_at/id/kind`, et une borne serveur `until`. Le polling actualise les états
+dans cette fenêtre ; le bouton « Inclure les nouvelles opérations » l'avance.
+Cela évite qu'une nouvelle rafale d'imports chasse le résultat qui vient de finir.
+Un filtre d'état peut naturellement faire sortir une opération devenue terminale ;
+retirer le filtre la retrouve. Lors d'une panne réseau, la dernière page connue reste visible avec un avertissement ;
+un refus d'accès la masque. Les pages ne sont ni concaténées ni conservées
+indéfiniment dans le cache. Délai SQL 10 s et délai HTTP par tentative 15 s.
+Les index et la pagination bornent la restitution ; leur coût sur gros corpus
+reste à mesurer par Dimi, aucune campagne ni plan SQL n'a été exécuté.
+
+La conservation est celle des sources : les imports acquittés restent visibles,
+les échecs nettoyés peuvent expirer, et la purge d'un document retire ses imports
+et tentatives. Le reçu de suppression survit au document/dossier sans garder son
+nom. Ce n'est pas un journal d'audit permanent. Aucune rétention n'est changée.
+
+#### Revue asynchrone ciblée
+
+Constats traités : la présence de `TaskActivity` ne raccordait pas Weaver ; le
+polling actif legacy ne pouvait pas découvrir les traitements d'un collègue ;
+les reçus de suppression n'avaient pas de marqueur conservant la confidentialité
+des pièces jointes après leur purge ; les options RTK de reconnexion/focus étaient
+inopérantes sans `setupListeners`. La page lit directement les sources durables,
+et étend le hook de focus existant avec une option de reconnexion.
+
+Chemin vérifié dans les sources :
+
+```text
+Import HTTP -> document_upload -> publication + intention document_processing
+              -> outbox SQL / Temporal -> callbacks KF -> état SQL terminal
+Suppression HTTP -> deletion + retrait logique -> worker lifecycle -> reçu terminé
+Lecteur -> autorisation CP + projection SQL -> client RTK -> badges/détails
+        -> même lecture après polling, focus, reconnexion ou rechargement
+```
+
+Pas de bus navigateur, replay SSE, `Last-Event-ID` ni reducer de tâches dans ce
+parcours : le polling remplace la lecture de flux, pas le moteur d'exécution.
+`processing/store.rs`, `processing/publication.rs` et les triggers existants
+protègent les états terminaux ; `processing/dispatch.rs` réconcilie livraison et
+délais, `lifecycle/cleanup.rs` conserve le blocage/retry observable. Une seule
+requête RTK par clé de page évite de fusionner une ancienne liste active avec un
+historique plus récent. `currentData`, l'identité de session du cache et la clé
+React d'équipe empêchent la reprise de données d'une autre portée.
+
+| Invariant | Conclusion de lecture ; validation restante |
+| --- | --- |
+| Convergence après coupure/rechargement | Lecture SQL réémise, même si aucune tâche n'a été démarrée dans ce navigateur ; régression préparée, recette réseau non exécutée. |
+| Terminal conservé face au polling et aux nouvelles insertions | Fenêtre de création stable, SQL terminal existant et absence de fusion concurrente ; régressions préparées, pas une validation déployée. |
+| Droits liste/détail et isolation | Même réponse et même autorisation ; exclusion explicite des conversations et descendants ; tests SQL/UI préparés. |
+| Ordre, doublons, métadonnées clairsemées | Curseur stable avec départage UUID/type ; pas d'événements clairsemés ni de mélange de deux producteurs dans Redux. |
+| Reprise serveur / worker indisponible | Réutilisation du dispatcher, des délais et du lifecycle existants ; aucune modification d'exécution. Campagne de panne non réalisée. |
+| Exhaustivité | Toutes les pages des opérations retenues des quatre types couverts sont consultables ; aucune promesse d'historique après purge ni de couverture des opérations absentes ci-dessus. |
+
+#### Intégration et migration
+
+- Migration **0030_team_document_activity.sql**, non appliquée :
+  `deletion.document_session_id` sans FK vers une conversation supprimable,
+  contrainte de type, et trois index pour les listes incluant les terminaux.
+  `lifecycle/store.rs::accept_document` renseigne le marqueur lors de l'acceptation.
+  Installation neuve uniquement, aucun backfill. Ne pas réutiliser 0028 ou 0029
+  des autres lots ; réconcilier les numéros au regroupement.
+- Backend : `src/documents/activity.rs`, `activity.sql`, `documents/mod.rs`,
+  `src/api.rs`, `src/lifecycle/store.rs`. Nouvelle lecture
+  `GET /spaces/{id}/document-activity`, opération `team_document_activity`.
+- Navigation : `TeamContentNavbar.tsx` ajoute Activité pour les lecteurs d'équipe,
+  séparément des liens de gestion et consommation. `TeamSettingsPage.tsx`
+  raccorde `section=activity`, composant `TeamActivity.tsx` et styles de la page.
+  Pas de changement de `common/router.tsx` : sa route `settings/:section` couvre
+  déjà ce chemin et reste sous les gardes Weaver/organisation existantes.
+- Traductions : `locales/en/translation.json`, `locales/fr/translation.json`
+  (`rework.teamActivity`, états partagés `retrying/blocked`) ; réutilisation du
+  libellé de navigation Activité existant. `taskLabels.ts` étend le badge commun.
+- Rafraîchissement/client : `core/hooks/crossSessionRefresh.ts` (option online),
+  `slices/controlPlane/controlPlaneApiEnhancements.ts` (timeout et durée de cache),
+  `controlPlaneOpenApi.ts` **régénéré**, pas édité à la main. Export OpenAPI local
+  dans `apps/control-plane/openapi.json` (fichier ignoré par Git).
+  Régénérer le client sur les sources réunies avec les lots 1/3/5 ; après
+  réception, actualiser les références API/SQL arc42 à partir de ce même ensemble.
+- Régressions : inventaire et contrat OpenAPI, module SQL
+  `tests/support/team_activity.rs`, cas de suppression privée dans
+  `tests/support/session_deletion.rs`, `TeamActivity.test.tsx` et navigation.
+  Aucune suite n'a été exécutée. Les chapitres arc42 sécurité, espaces et documents
+  ont été consultés ; aucun parcours non réceptionné n'y est déclaré validé.
+
+#### Recette à piloter par Dimi
+
+1. Base neuve avec les migrations réunies : deux organisations, deux équipes et
+   un projet, lecteurs/éditeur/analyste et responsable sans rôle de contenu.
+   Vérifier entrée Activité, URL directe, refus 403/404, changement d'organisation
+   et absence de droits implicites depuis le parent ou la gestion.
+2. Importer depuis deux comptes : original seul, profil de traitement, échec,
+   relance. Chaque tentative doit rester distincte, avec code d'erreur et lien
+   vers la tentative précédente ; acquitter dans le panneau personnel ne doit
+   pas retirer l'historique collectif.
+3. Créer plus de 50 opérations, parcourir les pages et filtres, ouvrir un détail,
+   recharger puis utiliser le retour navigateur. Vérifier les égalités de dates,
+   les URL copiées et le changement d'équipe pendant une réponse retardée.
+4. Laisser une opération finir pendant le polling et créer de nouveaux imports
+   ailleurs : résultat terminal conservé dans la fenêtre, nouvelles opérations
+   ajoutées seulement via le bouton explicite. Tester le filtre « en cours »
+   puis « tous », sans confondre la sortie du filtre et une perte d'historique.
+5. Couper le réseau, reconnecter, reprendre le focus ; simuler une réponse lente,
+   une erreur 503, une liste vide et une révocation. Vérifier que l'erreur ne
+   ressemble jamais à un succès vide et que les données refusées sont masquées.
+6. Programmer puis achever une suppression de document/dossier. Distinguer
+   attente/reprise/blocage/fin, conserver l'échéance et la référence ; contrôler
+   le reçu terminé après purge. Une suppression de pièce jointe privée ne doit
+   apparaître à aucun moment dans cette liste, même après disparition de sa cible.
+7. Vérifier FR/EN, clavier, écran étroit, noms longs, puis l'absence d'appels aux
+   anciennes routes Swift et de boutons annulation/acquittement/relance collective.
+
+Validation locale autorisée : export OpenAPI par `cargo run --locked -p
+control-plane -- generate-openapi`, génération RTK depuis sa configuration,
+compilation des sources/régressions Rust par `cargo check --locked -p
+control-plane --tests`, et TypeScript `tsc --noEmit`. Aucun test, `make
+code-quality`, accès à une base, lancement de service, commit, push ou déploiement.
+La réception SQL, réseau et navigateur reste à effectuer.
+
+Bilan du diff du lot : production +530/-19 lignes (projection SQL incluse),
+traductions +80/-0, migration +16/-0, client généré +46/-0, régressions
++467/-0 ; documentation comptée séparément. Le surcroît correspond à la lecture
+collective paginée et à son parcours manquant ; aucun service, store Redux ou
+moteur de tâches parallèle ajouté. Les compilations ci-dessus ont réussi ;
+`git diff --check` est sans erreur. Tests et recette restent non exécutés.
+
+### Lot 5 - analytiques d'équipe et Consommation (15 novembre 2026)
+
+Implémentation locale à valider, **parité complète non acquise, G001 non clos**.
+Base Weaver `01779781d36560ffec53bf431f7724a490dbfc25`, branche
+`codex/team-analytics`, worktree isolé `~/.codex/worktrees/team-analytics/fred`.
+Swift lu par `git show` au commit `cf698a739afae1b4cbcd92e82439e32bc1038198` ;
+aucune copie du diff local du lot 1. Aucun test, benchmark, contrôle qualité global,
+service, donnée, commit, push ou déploiement lancé. Le suivi central JSON n'est pas modifié.
+
+#### Comparaison vérifiée dans les sources
+
+Swift : `TeamUsagePage` monte `AnalyticsView` avec `mode="team"`, `teamIds=[teamId]`
+et un onglet personnel. `AnalyticsView` exclut Technique et les filtres de comptes
+réservés à la plateforme. Les six onglets et leurs hooks ont été relus au SHA figé,
+ainsi que `analytics_common.py`, `analytics_adoption.py`, `user_lifecycle.py` et
+`analytics_usage.py` du Control Plane Python historique. Les termes ci-dessous
+reflètent les sources, pas une réception navigateur.
+
+Droit Weaver commun ci-dessous : rôle **Responsable ou Analyste direct** sur
+l'équipe/projet, participation autorisée dans l'organisation, espace actif,
+admission et CGU. Ni Admin technique, ni Responsable parent, ni Éditeur seuls.
+Un agrégat n'ouvre aucune conversation, aucun message, aucun contenu ni liste de personnes.
+
+| Présent dans Swift équipe | Équivalent Weaver après ce lot | Source / droit | Écart restant |
+| --- | --- | --- | --- |
+| Vue d'ensemble : actifs, nouveaux, retour le mois suivant, conversations, messages, coût, courbe | Usage observé : actifs, conversations utilisées, tours, courbe ; Consommation : coût | `agent.turn_completed` pour activité ; `model_usage` pour tokens/coût ; droit commun | Nouveaux et rétention non portés. Les conversations utilisées ne remplacent pas les créations Swift `session.created_total`. Créations conservées SQL affichées séparément. |
+| Adoption : accès → visiteurs → actifs, taux, activation <7j, délai médian, cohortes mensuelles M+1/2/3 | Actifs seulement, sans onglet Adoption vide | Swift utilise les visites HTTP humaines et le premier événement humain historique ; Weaver n'a pas de lecteur/collecte CP équivalent raccordé | Collecte et définition du premier accès/premier usage, population d'accès et rétention à établir. Ne pas utiliser la date de création de compte ou les memberships actuels comme première visite. |
+| Usage : volumes, médianes jours/semaine, conversations/utilisateur, messages/conversation, usage quotidien, distribution et concentration décile | Tours, utilisateurs/conversations distincts, conversations à un seul tour, série UTC, comparaison précédente | Historique canonique `space_id`, horodatage de fin de tour ; droit commun | Médianes, fréquence, distribution et décile non portés ; un seul tour est compté sur la période, pas sur la vie de la conversation. |
+| Équipes : en mode équipe, membres/actifs/part active de l'équipe seule | Actifs des espaces d'exécution, sans quotient sur les membres actuels | Historique ; droit commun | Dénominateur des membres et population historique à cadrer, notamment projets et anciens membres. Pas de comparaison interéquipes à porter depuis l'onglet plateforme. |
+| Agents et outils : disponibles/créés/publiés/utilisés, top conversations/utilisateurs, capabilities configurées/utilisées/appels/échecs, skills, documents ajoutés | Agents utilisés distincts et top par tours ; chargements de skills utilisateur/agent ; tokens/coût par agent | Historique tours/skills et journal SQL ; droit commun | Inventaire, créations, capabilities/outils et documents non portés. Le classement par tours est nommé comme tel, pas « conversations ». Les traces d'outils existantes nécessitent un agrégat dédié avec attribution et sémantique d'appel vérifiées. |
+| Qualité et coût : taux d'erreurs, part conversations à un échange, coût/tokens/impact, par utilisateur/modèle/agent | Erreurs d'exécution et conversations à un tour (compteurs) ; tokens entrée/sortie/cache, coût/CO2e/énergie totaux et par modèle/agent | Tours pour erreurs ; rapports `model_usage` et catalogue de facteurs pour estimations ; droit commun | Pas de taux ni coût/utilisateur mélangeant les populations. Pas de jugement sur la qualité des réponses. Le coût reste une estimation, couverture et facteurs par défaut affichés. |
+| Ma consommation (onglet supplémentaire) | Section personnelle conservée, même organisation de travail | `scope=self`, identité serveur | Présentation en section ; aucun élargissement de droits personnels. |
+| Périodes 7/30 jours, 3/12 mois, aujourd'hui/semaine/mois ; calendrier et navigation précédente/suivante | Mêmes sept presets pour le collectif, calendrier partagé ; actualisation explicite et précédent de durée égale | Instants `[since,until)`, maximum 366 jours, bucket UTC automatique | Buckets UTC, pas le fuseau local Swift. Des périodes personnalisées trop longues sont refusées explicitement. |
+| Exclusion weekends/fériés français (active par défaut dans Swift) | Tous les jours, indiqué à l'écran | Pas de filtre implicite | Non porté. Pour comparer les chiffres Swift/Weaver, désactiver ces exclusions dans Swift. |
+| Clic sur certaines tuiles : dialogue de tendance, détails, tables triables | Courbe tours et tokens, tables d'agents/skills/coûts, pagination, valeurs précédentes | Résultats bornés, max 100 éléments par classement | Pas de dialogue de tendance ni de filtre utilisateur collectif. |
+| Export Excel de l'ensemble des onglets accessibles | Excel de l'onglet collectif choisi, données relues via le même POST et mêmes bornes | Nouvelle autorisation à chaque export ; aucune route parallèle | Export tabulaire, non copie du classeur Swift ; valeurs en texte pour préserver leur précision Excel. Absences restent vides ; contexte, unité, précision, couverture et troncature conservés. |
+
+#### Implémentation et cohérence
+
+- Un seul POST `/control-plane/v1/analytics/query`, aucun nouvel endpoint. Extension
+  des lecteurs `analytics/history.rs`, `analytics/opensearch.rs`,
+  `sessions/usage/read.rs` et du plan commun ; pas de nouveau service ni stockage.
+- Le périmètre équipe **incluait déjà** ses projets actifs, retirés et purgés.
+  Le prédicat SQL est maintenant partagé par consommation, créations conservées et
+  résolution des espaces historiques. L'écran le dit explicitement ; le projet reste
+  limité à lui-même. Pas de consolidation interéquipes/organisations.
+- Les agrégats ne filtrent pas sur les membres actuels : ils comptent les actions
+  attribuées aux espaces pendant la période, y compris celles des anciens membres.
+  Les personnes/conversations servent seulement à des décomptes internes ; leurs
+  identifiants et contenus ne figurent ni dans l'API publique ni dans Excel.
+- Une fin de tour = un événement reçu, erreurs comprises ; reprise HITL = autre
+  événement si émis. Les titres ne sont pas des tours. Le journal de consommation
+  peut les compter ; tokens et tours sont donc volontairement deux faits distincts.
+  Aucune division de coût/tokens par un compteur d'une autre population.
+- `activity.active_users`, `activity.observed_conversations`,
+  `activity.failed_turns`, `activity.single_turn_conversations` sont des compteurs
+  exacts sur la lecture bornée. Une identité effacée/manquante rend les décomptes
+  distincts concernés absents, jamais zéro ; une issue manquante rend les erreurs
+  indisponibles. Les tours et agents restent comptables. Zéro signifie zéro événement
+  observé, pas une preuve d'exhaustivité de collecte.
+- La série UTC est complétée par des zéros seulement après une lecture historique
+  valide. Les agrégats composite sont contrôlés contre le nombre exact de documents,
+  pour les tours et désormais aussi pour les skills. Source/mapping incompatible,
+  shard manquant ou timeout : indisponibilité ; dépassement : erreur, pas top tronqué
+  silencieusement. Maximum interne 10 000 groupes (espace/agent[/utilisateur/session/bucket]),
+  8 MiB par réponse source ; 50 000 espaces résolus ; limites API existantes
+  8 requêtes, 1 000 points/série, 5 000 lignes, 2 MiB, 10 secondes.
+- SQL partage un snapshot en lecture seule ; historique et SQL sont des lectures
+  distinctes, pas un snapshot intersources. Les périodes précédentes ont exactement
+  la même durée écoulée et se terminent à `since`. Collecte tardive et rétention
+  peuvent changer un chiffre lors d'une actualisation à période fixe.
+- `TeamUsagePage` ne fait plus de requêtes KPI legacy : les cartes non raccordées
+  membres/stockage/documents/sessions legacy sont retirées de cette surface, sans
+  modifier les pages personnelles ou administratives ni le parcours opérationnel du lot 4.
+  Trois onglets ont une source effective : Consommation, Usage observé, Agents et skills.
+- Les 3/12 mois reprennent le calcul Swift borné au dernier jour du mois cible ; les
+  autres consommateurs du sélecteur gardent leurs six presets par défaut.
+
+#### Recette chiffrée à faire par Dimi
+
+**Scénario proposé, non exécuté.** Utiliser un environnement de recette et un petit
+jeu d'actions dont les rapports de tokens sont connus. Les valeurs ci-dessous sont
+un oracle de fixture, pas une promesse sur les tokens d'un modèle réel. Si le modèle
+renvoie d'autres valeurs, prendre ses rapports réels et refaire les sommes, sans
+injecter de valeurs de repli dans l'UI. Ne pas toucher aux données partagées pour
+exécuter cette recette sans décision de Dimi.
+
+Choisir `[2026-01-01T00:00:00Z,2026-01-04T00:00:00Z)` (ou translater toutes les dates
+ensemble), équipe T d'Acme, projet P de T, agents distincts G et H, Alice/Bob.
+S1 est créée le 1er janvier dans T ; S2 existe depuis décembre dans P.
+
+| Action / événement attendu | Espace, utilisateur, session, agent | Entrée / sortie / cache lu / cache créé |
+| --- | --- | --- |
+| 1er janvier : un tour réussi | T, Alice, S1, G | 100 / 20 / 40 / 10 |
+| 1er janvier : génération du titre, aucun `agent.turn_completed` | T, Alice, S1, G | 10 / 5 / 0 / 0 |
+| 2 janvier : reprise HITL, événement de fin de tour | T, Alice, S1, G | 30 / 10 / 0 / 0 |
+| 2 janvier : un tour terminé en erreur | P, Bob, S2, H | 50 / 0 / 5 / 0 |
+| 30 décembre : un tour réussi, conversation S0 | T, Alice, S0, G | 20 / 5 / 0 / 0 |
+| Contrôle hors périmètre | Autre équipe d'Acme puis Globex | Valeurs reconnaissables, à exclure intégralement |
+
+Résultats T : **3 tours, 2 utilisateurs actifs, 2 conversations utilisées,
+1 conversation à un seul tour, 1 erreur, 2 agents, 1 nouvelle conversation conservée**.
+Classement G=2/H=1 ; série de tours 1,2,0 pour les 1er/2/3 janvier.
+Consommation **190 entrée + 35 sortie = 225 tokens**, cache lu 45, cache créé 10
+(non ajoutés à nouveau). Série tokens 135,90,0. Agents G=175/H=50 ; somme modèles=225
+si le classement n'est pas tronqué. P seul : 1 tour, 1 actif, 1 conversation utilisée,
+1 erreur, 1 agent, 50 tokens et **0 nouvelle création** dans la période.
+Période précédente T : 1 tour, 1 actif, 1 conversation utilisée, 0 erreur, 25 tokens.
+
+Pour les estimations, relever les coefficients du catalogue embarqué du modèle choisi :
+coût = `((entrée-cache_lu)*prix_entrée + cache_lu*prix_cache + sortie*prix_sortie)
+/1000/usd_par_eur` ; CO2e = `225/1000*facteur_CO2e` et énergie =
+`225/1000*facteur_kWh` si un même modèle couvre tous les rapports. La création de cache
+reste incluse dans l'entrée. Vérifier la somme des estimations par agent/modèle et
+les mentions de couverture/facteurs par défaut ; avec un coefficient manquant,
+attendre partiel/indisponible, pas une estimation complète ni zéro.
+
+Charger le skill « lecture » une fois à l'initiative utilisateur et deux fois par
+l'agent dans T/P : attendre utilisateur=1, agent=2, total=3 ; un skill de même nom
+chargé hors de T/P ne s'ajoute pas. Ce test ne compte pas des appels d'outils.
+
+Cas complémentaires :
+
+1. Responsable puis Analyste directs : mêmes agrégats. Membre, Éditeur, Admin seul,
+   rôle d'organisation ou parent seul : refus avant source. Analyste de T sans rôle
+   sur P voit le total consolidé de T mais ne peut pas ouvrir P directement, ni les
+   conversations de Bob. Révoquer Analyste puis actualiser/exporter : aucun chiffre
+   périmé ni téléchargement autorisé par le seul cache.
+2. Changer d'organisation/compte/période pendant une réponse tardive et pendant
+   l'export : aucun résultat ni fichier du contexte précédent. Modifier une borne :
+   `since` inclus, `until` exclu. Vérifier DST, fin de mois, 3/12 mois et période fixe.
+3. Supprimer S1 : créations conservées T passe à 0 ; les tokens restent au journal.
+   Les tours suivent la rétention historique. Si l'effacement anonymise les identités,
+   actifs/conversations deviennent indisponibles plutôt que sous-comptés ; les tours
+   encore attribués à T restent comptés. Retirer/purger P : total T conserve les faits
+   encore retenus, lien direct P refusé ; ne pas additionner T et P pour un total global.
+4. Source vide valide : compteurs zéro, classements sans données. Source absente,
+   mapping ancien ou lecture partielle : indisponible. HTTP 403/404 : accès refusé.
+   Plus de 100 agents : signal de troncature, total complet ; plus de 10 000 groupes
+   internes ou trop longue période : erreur explicite invitant à réduire la période.
+5. Excel FR puis EN : mêmes périodes, unités, périmètre et compteurs que l'onglet
+   relu, pas de contenu de conversation. Ouvrir dans Excel/LibreOffice ; vérifier les
+   chaînes >2^53, les cellules vides et un nom commençant par `=` (texte, jamais formule).
+   Les valeurs sont volontairement du texte exact, à convertir explicitement si calcul
+   Excel souhaité. L'ouverture réelle du classeur reste à réceptionner.
+
+#### Régressions préparées et intégration
+
+Régressions écrites/adaptées, **non exécutées** : `analytics/history.rs` (totaux,
+identités manquantes, jours zéro), `analytics/opensearch.rs` (attribution, source
+partielle, duplication), `tests/analytics_history.rs`, `tests/support/usage.rs`
+(droits, projets, hors organisation, révocation, créations conservées),
+`TeamUsagePage.test.tsx`, `collectiveUsage.test.tsx` (RTK réel, cache, contexte,
+chargement des onglets et actualisation), `exportTeamAnalytics.test.ts`,
+`TimeRangeSelector/timeRange.types.test.ts`. Les tests d'affichage des cartes legacy
+retirées sont remplacés ; les tests personnels existants restent en place.
+
+Fichiers communs à réconcilier à l'intégration :
+
+- Routes : chemin analytics existant seulement, aucune nouvelle route frontend/HTTP.
+- Contrat : `apps/control-plane/src/analytics/{mod,models,history,opensearch}.rs`,
+  `apps/control-plane/src/sessions/usage/read.rs`. Quatre mesures publiques ajoutées,
+  unité `user`, groupement temporel des tours, portée collective des lecteurs existants.
+- Client : `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`, régénéré
+  depuis `make -C apps/control-plane generate-openapi` puis
+  `rtk-query-codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`.
+  Régénérer après réunion des contrats des autres lots, ne pas fusionner les types à la main.
+- Traductions : `apps/frontend/src/locales/{fr,en}/translation.json`, nouveau bloc
+  `rework.teamAnalytics` et deux presets ; composants partagés `TimeRangeSelector`
+  et `timeRange.types.ts`. Autres changements UI limités au dossier `TeamUsagePage`.
+- Documentation : cette section et README Control Plane. Arc42 a été lu mais n'est
+  pas étendu à un parcours non réceptionné ; synchroniser ses annexes après validation.
+- **Aucune migration SQL, aucun changement du mapping déployé, aucune collecte ajoutée,
+  aucun backfill.** Aucun numéro 0028/0029 utilisé. Le mapping doit déjà indexer
+  `space_id`, `user_id`, `session_id`, `agent_instance_id`, `agent_instance_name`,
+  `finish_reason`, `skill_name`, `skill_origin` ; l'adaptateur vérifie les champs
+  nécessaires et refuse les projections incompatibles.
+
+Limites explicites : producteurs sans `agent.turn_completed` (dont le runtime Rust
+embarqué) absents des compteurs historiques ; complétude inconnue ; pas de snapshot
+commun SQL/historique ; limites de cardinalité pouvant refuser les grandes équipes.
+Adoption/cohortes, dénominateurs de membres, médianes/distributions, outils/capabilities,
+créations agents/documents, jours ouvrés/fériés et dialogues de tendance restent à porter.
+Ce lot ne doit donc pas être présenté comme la clôture du dashboard Swift complet.
+
+Vérifications effectuées par Codex : `cargo check --locked -p control-plane --tests`
+réussi (compilation des régressions, **pas leur exécution**), `tsc --noEmit` réussi,
+génération OpenAPI/RTK réussie, `git diff --check` et lecture JSON FR/EN sans erreur.
+Formatage limité aux fichiers touchés. Pas de lint, `make code-quality`, test,
+benchmark, navigateur, service ou validation du classeur lancé.
+
+Bilan du diff local, fichiers nouveaux inclus et tests Rust internes séparés :
+code de production **+1005/-283 lignes** (net +722), tests **+434/-411**,
+traductions **+116/-0**, client généré **+11/-4** ; documentation séparée.
+L'augmentation couvre les nouveaux compteurs, séries, états et export demandés ;
+le retrait porte sur le branchement KPI legacy de cette page, pas sur les droits
+ou la précision. Prochaine étape : tests/qualité et recette de Dimi, puis intégration
+ciblée des fichiers communs ; les écarts restants ci-dessus exigent un lot complémentaire.

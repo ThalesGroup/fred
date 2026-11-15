@@ -225,11 +225,12 @@ impl Directory<'_> {
         let known: Vec<UserSummary> = match self {
             // Governance rosters are a few accounts: one lookup each, in order.
             Self::Keycloak(Some(directory)) => {
-                let mut found = Vec::with_capacity(subjects.len());
-                for subject in subjects {
-                    found.extend(directory.user(subject).await?);
-                }
-                found
+                let found: Vec<Option<UserSummary>> = futures::stream::iter(subjects.to_vec())
+                    .map(|subject| async move { directory.user(&subject).await })
+                    .buffered(PROFILE_CONCURRENCY)
+                    .try_collect()
+                    .await?;
+                found.into_iter().flatten().collect()
             }
             Self::Keycloak(None) => Vec::new(),
             Self::Local(pool) => {

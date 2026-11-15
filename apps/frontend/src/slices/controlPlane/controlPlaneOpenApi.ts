@@ -474,14 +474,38 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    updateTeamParameters: build.mutation<UpdateTeamParametersApiResponse, UpdateTeamParametersApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}`,
+        method: "PATCH",
+        body: queryArg.teamParameters,
+      }),
+    }),
+    getTeamAvatar: build.query<GetTeamAvatarApiResponse, GetTeamAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/avatar` }),
+    }),
+    putTeamAvatar: build.mutation<PutTeamAvatarApiResponse, PutTeamAvatarApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/avatar`,
+        method: "PUT",
+        body: queryArg.fileUpload,
+      }),
+    }),
+    deleteTeamAvatar: build.mutation<DeleteTeamAvatarApiResponse, DeleteTeamAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/avatar`, method: "DELETE" }),
+    }),
     projectDeletionStatus: build.query<ProjectDeletionStatusApiResponse, ProjectDeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/deletion` }),
     }),
-    updateTeamDescription: build.mutation<UpdateTeamDescriptionApiResponse, UpdateTeamDescriptionApiArg>({
+    teamDocumentActivity: build.query<TeamDocumentActivityApiResponse, TeamDocumentActivityApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.id}/description`,
-        method: "PUT",
-        body: queryArg.teamDescription,
+        url: `/control-plane/v1/spaces/${queryArg.id}/document-activity`,
+        params: {
+          kind: queryArg.kind,
+          status: queryArg.status,
+          before: queryArg.before,
+          until: queryArg.until,
+        },
       }),
     }),
     receipts: build.query<ReceiptsApiResponse, ReceiptsApiArg>({
@@ -506,11 +530,21 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    teamJoinLink: build.query<TeamJoinLinkApiResponse, TeamJoinLinkApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/join-link` }),
+    }),
+    createTeamJoinLink: build.mutation<CreateTeamJoinLinkApiResponse, CreateTeamJoinLinkApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/join-link`, method: "POST" }),
+    }),
+    revokeTeamJoinLink: build.mutation<RevokeTeamJoinLinkApiResponse, RevokeTeamJoinLinkApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/join-link`, method: "DELETE" }),
+    }),
     spaceMemberCandidates: build.query<SpaceMemberCandidatesApiResponse, SpaceMemberCandidatesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/member-candidates`,
         params: {
           after: queryArg.after,
+          search: queryArg.search,
         },
       }),
     }),
@@ -519,7 +553,14 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.id}/members`,
         params: {
           after: queryArg.after,
+          search: queryArg.search,
         },
+      }),
+    }),
+    removeSpaceMember: build.mutation<RemoveSpaceMemberApiResponse, RemoveSpaceMemberApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/members/${queryArg.user}`,
+        method: "DELETE",
       }),
     }),
     grant: build.mutation<GrantApiResponse, GrantApiArg>({
@@ -736,6 +777,16 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     mcpCredentials: build.query<McpCredentialsApiResponse, McpCredentialsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/mcp-credentials` }),
+    }),
+    replaceSpaceModelPolicy: build.mutation<ReplaceSpaceModelPolicyApiResponse, ReplaceSpaceModelPolicyApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/model-policy`,
+        method: "PUT",
+        body: queryArg.replaceSpaceModelPolicy,
+      }),
+    }),
+    spaceModels: build.query<SpaceModelsApiResponse, SpaceModelsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/models` }),
     }),
     resolvePowerpointTemplate: build.query<ResolvePowerpointTemplateApiResponse, ResolvePowerpointTemplateApiArg>({
       query: (queryArg) => ({
@@ -1207,6 +1258,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
+    previewTeamJoinLink: build.query<PreviewTeamJoinLinkApiResponse, PreviewTeamJoinLinkApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/team-join-links/${queryArg.token}` }),
+    }),
+    redeemTeamJoinLink: build.mutation<RedeemTeamJoinLinkApiResponse, RedeemTeamJoinLinkApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/team-join-links/${queryArg.token}`, method: "POST" }),
+    }),
     getMyAvatar: build.query<GetMyAvatarApiResponse, GetMyAvatarApiArg>({
       query: () => ({ url: `/control-plane/v1/users/me/avatar` }),
     }),
@@ -1598,14 +1655,38 @@ export type DeleteSpaceApiArg = {
   /** Request immediate purge for an eligible resource as a platform administrator. */
   immediate?: boolean;
 };
+export type UpdateTeamParametersApiResponse = /** status 200 undefined */ Space;
+export type UpdateTeamParametersApiArg = {
+  id: string;
+  teamParameters: TeamParameters;
+};
+export type GetTeamAvatarApiResponse = /** status 200 undefined */ string;
+export type GetTeamAvatarApiArg = {
+  id: string;
+};
+export type PutTeamAvatarApiResponse = unknown;
+export type PutTeamAvatarApiArg = {
+  id: string;
+  fileUpload: FileUpload;
+};
+export type DeleteTeamAvatarApiResponse = unknown;
+export type DeleteTeamAvatarApiArg = {
+  id: string;
+};
 export type ProjectDeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type ProjectDeletionStatusApiArg = {
   id: string;
 };
-export type UpdateTeamDescriptionApiResponse = /** status 200 undefined */ Space;
-export type UpdateTeamDescriptionApiArg = {
+export type TeamDocumentActivityApiResponse = /** status 200 undefined */ DocumentActivityPage;
+export type TeamDocumentActivityApiArg = {
   id: string;
-  teamDescription: TeamDescription;
+  kind?: ActivityKind;
+  status?: ActivityStatus;
+  /** Opaque keyset cursor, never an offset. Keep `until` and filters when paging. */
+  before?: string;
+  /** Fixed upper creation bound. Polling updates outcomes without new rows pushing
+    a terminal outcome off the page. Omit to start a new view including newer work. */
+  until?: string;
 };
 export type ReceiptsApiResponse = /** status 200 undefined */ UploadReceipt[];
 export type ReceiptsApiArg = {
@@ -1627,15 +1708,34 @@ export type EntriesApiArg = {
   offset?: number;
   limit?: number;
 };
+export type TeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinLink | null;
+export type TeamJoinLinkApiArg = {
+  id: string;
+};
+export type CreateTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinLink;
+export type CreateTeamJoinLinkApiArg = {
+  id: string;
+};
+export type RevokeTeamJoinLinkApiResponse = unknown;
+export type RevokeTeamJoinLinkApiArg = {
+  id: string;
+};
 export type SpaceMemberCandidatesApiResponse = /** status 200 undefined */ SpaceMembers;
 export type SpaceMemberCandidatesApiArg = {
   id: string;
   after?: string;
+  search?: string;
 };
 export type SpaceMembersApiResponse = /** status 200 undefined */ SpaceMembers;
 export type SpaceMembersApiArg = {
   id: string;
   after?: string;
+  search?: string;
+};
+export type RemoveSpaceMemberApiResponse = unknown;
+export type RemoveSpaceMemberApiArg = {
+  id: string;
+  user: string;
 };
 export type GrantApiResponse = unknown;
 export type GrantApiArg = {
@@ -1827,6 +1927,15 @@ export type TestMcpConnectionApiArg = {
 };
 export type McpCredentialsApiResponse = /** status 200 undefined */ McpCredentialReference[];
 export type McpCredentialsApiArg = {
+  spaceId: string;
+};
+export type ReplaceSpaceModelPolicyApiResponse = unknown;
+export type ReplaceSpaceModelPolicyApiArg = {
+  spaceId: string;
+  replaceSpaceModelPolicy: ReplaceSpaceModelPolicy;
+};
+export type SpaceModelsApiResponse = /** status 200 undefined */ SpaceModels;
+export type SpaceModelsApiArg = {
   spaceId: string;
 };
 export type ResolvePowerpointTemplateApiResponse = /** status 200 undefined */ PowerPointResolution;
@@ -2219,6 +2328,14 @@ export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
 };
+export type PreviewTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinPreview;
+export type PreviewTeamJoinLinkApiArg = {
+  token: string;
+};
+export type RedeemTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinPreview;
+export type RedeemTeamJoinLinkApiArg = {
+  token: string;
+};
 export type GetMyAvatarApiResponse = /** status 200 undefined */ string;
 export type GetMyAvatarApiArg = void;
 export type PutMyAvatarApiResponse = unknown;
@@ -2431,7 +2548,11 @@ export type ConsumptionMeasure =
   | "skills.total_loads"
   | "activity.retained_conversations"
   | "activity.completed_turns"
-  | "activity.agents_used";
+  | "activity.agents_used"
+  | "activity.active_users"
+  | "activity.observed_conversations"
+  | "activity.failed_turns"
+  | "activity.single_turn_conversations";
 export type AnalyticsUnit =
   | "token"
   | "exchange"
@@ -2441,7 +2562,8 @@ export type AnalyticsUnit =
   | "load"
   | "conversation"
   | "turn"
-  | "agent";
+  | "agent"
+  | "user";
 export type AnalyticsValueType = "integer" | "decimal";
 export type AnalyticsMeasure = {
   calculation: CalculationPrecision;
@@ -2491,7 +2613,9 @@ export type AnalyticsRow = {
   estimates?: {
     [key: string]: AnalyticsEstimate;
   };
-  /** Exact decimal integer strings for matching facts; collection completeness is declared separately. */
+  /** Exact decimal integer strings for matching facts; collection completeness is declared separately.
+    A requested attribution counter is absent when erased/missing identities or outcomes prevent an exact count.
+    Absence is unavailable, never zero. No user or conversation identities are returned. */
   values: {
     [key: string]: string;
   };
@@ -2535,7 +2659,7 @@ export type AnalyticsPeriod = {
   until: string;
 };
 export type AnalyticsQuery = {
-  /** Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill. */
+  /** Consumption: total/time/agent/model; retained sessions: total; turns: total/time/agent (self also space); skills: skill. */
   group_by?: AnalyticsGrouping[];
   /** Rankings only, default 100. Descending tokens, loads or turns, then stable identity. */
   limit?: number | null;
@@ -3337,8 +3461,31 @@ export type CreateSpace = {
   owner: string;
   parent_id: string;
 };
-export type TeamDescription = {
-  description: string;
+export type TeamParameters = {
+  description?: string | null;
+  name?: string | null;
+};
+export type ActivityKind = "upload" | "processing" | "document_deletion" | "folder_deletion";
+export type ActivityStatus = "pending" | "running" | "succeeded" | "failed" | "retrying" | "blocked";
+export type DocumentActivity = {
+  completed_at?: string | null;
+  created_at: string;
+  due_at?: string | null;
+  error_code?: string | null;
+  id: string;
+  kind: ActivityKind;
+  /** Current name where retained; deletion receipts deliberately retain only identity. */
+  name?: string | null;
+  profile?: string | null;
+  retry_of?: string | null;
+  stage?: string | null;
+  status: ActivityStatus;
+  target_id?: string | null;
+};
+export type DocumentActivityPage = {
+  items: DocumentActivity[];
+  next_cursor?: string | null;
+  until: string;
 };
 export type Entry =
   | {
@@ -3366,6 +3513,10 @@ export type Directory = {
   };
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
+export type TeamJoinLink = {
+  expires_at: string;
+  token: string;
+};
 export type SpaceMember = {
   /** Roles on the managed space, also for candidates from its parent. */
   roles: Role[];
@@ -3709,6 +3860,7 @@ export type PreparationModelOffer = {
   key: ModelOfferKey;
   metadata: ModelMetadata | null;
   permitted: boolean;
+  reasoning_default_on: boolean;
   reasoning_enabled: boolean;
   selectable: boolean;
 };
@@ -3830,12 +3982,15 @@ export type RuntimeModelOffer = {
   selectable: boolean;
 };
 export type RuntimeModels = {
+  default: ModelOfferKey | null;
   /** Diagnostic only. Never an alternative resolution key. */
   legacy_profile_id?: string | null;
   /** Union of permitted keys and retained recommendation/default/fallback references. */
   offers: RuntimeModelOffer[];
   options: ModelOptions;
   policy: OrganizationModelPolicy;
+  /** Local preference; never exceeds the organization reasoning ceiling. */
+  reasoning_default_on: ModelOfferKey[];
   recommendation?: ModelOfferKey | null;
   requires_reselection: boolean;
 };
@@ -3984,6 +4139,26 @@ export type McpCredentialReference = {
   available: boolean;
   credential_binding: string;
   url: string;
+};
+export type ReplaceSpaceModelPolicy = {
+  default: ModelOfferKey | null;
+  disabled: ModelOfferKey[];
+  expected_revision: number;
+  reasoning_default_on: ModelOfferKey[];
+};
+export type SpaceModelPolicy = {
+  default: ModelOfferKey | null;
+  disabled: ModelOfferKey[];
+  /** Preference only; organization permission and reported aptitude still apply. */
+  reasoning_default_on: ModelOfferKey[];
+  revision: number;
+};
+export type SpaceModels = {
+  inherited_default: ModelOfferKey | null;
+  /** Public catalogue projection: no connection, credential or ancestor role. */
+  models: RuntimeModels;
+  parent_permitted: ModelOfferKey[];
+  policy: SpaceModelPolicy;
 };
 export type PowerPointSource = "agent" | "organization" | "builtin";
 export type PowerPointResolution = {
@@ -4281,6 +4456,10 @@ export type ProposeWikiPageRequest = {
   parent_slug?: string | null;
   title: string;
 };
+export type TeamJoinPreview = {
+  team_id: string;
+  team_name: string;
+};
 export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
 export type Language = "en" | "fr";
 export type TeamSortMode = "recent" | "alpha";
@@ -4413,17 +4592,28 @@ export const {
   useLazyDefaultSkillsQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
+  useUpdateTeamParametersMutation,
+  useGetTeamAvatarQuery,
+  useLazyGetTeamAvatarQuery,
+  usePutTeamAvatarMutation,
+  useDeleteTeamAvatarMutation,
   useProjectDeletionStatusQuery,
   useLazyProjectDeletionStatusQuery,
-  useUpdateTeamDescriptionMutation,
+  useTeamDocumentActivityQuery,
+  useLazyTeamDocumentActivityQuery,
   useReceiptsQuery,
   useLazyReceiptsQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
+  useTeamJoinLinkQuery,
+  useLazyTeamJoinLinkQuery,
+  useCreateTeamJoinLinkMutation,
+  useRevokeTeamJoinLinkMutation,
   useSpaceMemberCandidatesQuery,
   useLazySpaceMemberCandidatesQuery,
   useSpaceMembersQuery,
   useLazySpaceMembersQuery,
+  useRemoveSpaceMemberMutation,
   useGrantMutation,
   useRevokeMutation,
   useSummaryQuery,
@@ -4467,6 +4657,9 @@ export const {
   useTestMcpConnectionMutation,
   useMcpCredentialsQuery,
   useLazyMcpCredentialsQuery,
+  useReplaceSpaceModelPolicyMutation,
+  useSpaceModelsQuery,
+  useLazySpaceModelsQuery,
   useResolvePowerpointTemplateQuery,
   useLazyResolvePowerpointTemplateQuery,
   useUploadPowerpointTemplateMutation,
@@ -4549,6 +4742,9 @@ export const {
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  usePreviewTeamJoinLinkQuery,
+  useLazyPreviewTeamJoinLinkQuery,
+  useRedeemTeamJoinLinkMutation,
   useGetMyAvatarQuery,
   useLazyGetMyAvatarQuery,
   usePutMyAvatarMutation,

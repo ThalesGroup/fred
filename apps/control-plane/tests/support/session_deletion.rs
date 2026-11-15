@@ -710,3 +710,40 @@ async fn python_purge_resumes_after_cancelled_call_and_unblocks_parent_deletion(
     assert_eq!(pod.calls.load(Ordering::SeqCst), 2);
     assert!(db::space(&e.pool, org.id).await.is_err());
 }
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn attachment_deletion_retains_its_private_scope_outside_team_activity() {
+    use control_plane::documents::activity::{self, ActivityQuery};
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    let session_id = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    let document_id = Uuid::new_v4();
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'private.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>$4,p_created_by=>'alice',p_object_key=>$5,p_quota_owner=>$2)")
+        .bind(document_id).bind(team.id).bind(session_id).bind("a".repeat(64)).bind(format!("private/{document_id}"))
+        .execute(&e.pool).await.unwrap();
+    let receipt = lifecycle("P7D")
+        .accept_document(
+            &e.pool,
+            "alice",
+            document_id,
+            Some((team.id, session_id)),
+            false,
+        )
+        .await
+        .unwrap();
+    let retained: Option<Uuid> =
+        sqlx::query_scalar("select document_session_id from deletion where id=$1")
+            .bind(receipt.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(retained, Some(session_id));
+    assert!(
+        activity::list(&e.pool, "alice", team.id, ActivityQuery::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty()
+    );
+}

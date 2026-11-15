@@ -1430,6 +1430,62 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "teamAnalytics": {
+      "unavailableValue": "Unavailable",
+      "export": "Export this tab (Excel)",
+      "exportSheet": "Aggregates",
+      "exportColumns": {
+        "space": "Space",
+        "result": "Result",
+        "since": "Start inclusive",
+        "until": "End exclusive",
+        "timezone": "Timezone",
+        "bucket": "Bucket",
+        "dimension": "Dimension",
+        "identity": "Aggregate identity",
+        "label": "Label",
+        "measure": "Measure",
+        "unit": "Unit",
+        "calculation": "Calculation",
+        "value": "Exact value (text)",
+        "coverage": "Estimate coverage",
+        "fallback": "Default factors",
+        "truncated": "Ranking truncated",
+        "collection": "Collection completeness"
+      },
+      "active_users": "Observed active users",
+      "active_usersHint": "Distinct identities among completed turns in the period, without identifying users. Unavailable if an identity is erased or missing.",
+      "observed_conversations": "Conversations with observed turns",
+      "observed_conversationsHint": "Distinct conversations among turns in the period, regardless of creation date. Unavailable if an identity is erased or missing.",
+      "failed_turns": "Observed failed turns",
+      "failed_turnsHint": "Turns ending in an execution error. This does not measure answer quality. Unavailable if any turn outcome is missing.",
+      "single_turn_conversations": "Conversations with one observed turn",
+      "single_turn_conversationsHint": "Exactly one completion event within the selected period, not over the conversation lifetime. Unavailable if a conversation identity is missing.",
+      "tabs": "Team analytics",
+      "consumption": "Consumption",
+      "usage": "Observed usage",
+      "agents": "Agents and skills",
+      "teamScope": "Team and its projects, including retired or deleted projects. Aggregates cover actions in these spaces, including former members’ actions. They do not grant conversation access.",
+      "projectScope": "This project only, excluding sibling projects and its parent team. Aggregates do not grant conversation access.",
+      "period": "From {{since}} inclusive to {{until}} exclusive. UTC series; all days are counted. Maximum: 366 days.",
+      "denied": "Analytics access denied or space inaccessible. A direct Owner or Analyst role is required.",
+      "unavailable": "Analytics are unavailable. No figures can be presented for this read.",
+      "tooLarge": "Unsupported period or volume. Shorten the period (maximum 366 days) and retry.",
+      "observed": "These figures count received events; collection may be incomplete. Comparisons use the immediately preceding period of equal duration.",
+      "completed_turns": "Observed completed turns",
+      "completed_turnsHint": "Each completion event counts once, including errors. HITL resumes may count another turn. Generated titles are not turns.",
+      "agents_used": "Agents used",
+      "agents_usedHint": "Distinct agent identities among observed turns, before the ranking limit.",
+      "previous": "Previous period: {{value}}",
+      "conversations": "New retained conversations",
+      "conversationsHint": "Created in the period and still retained at read time. Deletion reduces this count. This is not a count of active conversations.",
+      "turnSeries": "Completed turns over time (UTC)",
+      "agentRanking": "Agents ranked by completed turns",
+      "skillsHint": "Observed successful loads, split by user and agent origin. These are not tool executions. Same-named skills are merged across versions and source spaces.",
+      "cost_eur": "Estimated cost (EUR)",
+      "co2e_grams": "Estimated footprint (g CO2e)",
+      "energy_kwh": "Estimated energy (kWh)"
+    },
     "weaverPrompts": {
       "retry": "Retry",
       "actions": "Actions for {{name}}",
@@ -2082,6 +2138,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
+        "last3Months": "Last 3 months",
+        "last12Months": "Last 12 months",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
         "last7d": "Last 7 days",
@@ -3442,6 +3500,8 @@
         "pending": "Pending",
         "running": "Running",
         "succeeded": "Done",
+        "retrying": "Retrying",
+        "blocked": "Blocked",
         "untracked": "No longer followed"
       },
       "time": {
@@ -3649,13 +3709,15 @@
           "updateRoleSummary": "Failed to update role"
         },
         "inviteLink": {
+          "forbidden": "This link is limited to organization members and must be issued by a current team owner.",
+          "expires": "Expires: {{date}}",
           "buttonLabel": "Invite link",
           "copied": "Copied",
           "copy": "Copy",
           "copyFailed": "The link could not be copied automatically. It is selected: copy it with your keyboard.",
           "enable": "Enable invitation by link",
           "failed": "The invite link could not be updated. Try again.",
-          "hint": "Anyone who already has access to the platform can join the team as a member with this link.",
+          "hint": "This link is valid for 7 days. Organization members can join the team with the Member role. It grants no access to projects or other teams. Renewing invalidates the previous link; disabling prevents new joins without removing existing members.",
           "regenerate": "Generate a new link",
           "title": "Invite link",
           "urlLabel": "Link"
@@ -3677,6 +3739,7 @@
         "title": "Team members"
       },
       "navigation": {
+        "parameters": "Settings",
         "leaveTeam": "Leave team",
         "members": "Members",
         "settings": "Settings",
@@ -3721,9 +3784,9 @@
         "title": "Settings",
         "name": {
           "label": "Team name",
-          "support": "This name identifies your team everywhere on the platform. It must be unique.",
+          "support": "This name identifies your team. It must be unique within its organization.",
           "save": "Rename team",
-          "alreadyTaken": "Another team already uses this name.",
+          "alreadyTaken": "This name is already used or reserved in this organization.",
           "saveError": "Could not rename the team."
         },
         "description": {
@@ -3747,6 +3810,7 @@
           "private": "Private"
         },
         "teamAvatar": {
+          "failed": "The avatar could not be loaded or removed. Try again.",
           "title": "Team avatar",
           "import": "Import",
           "hint": "JPEG, PNG, or WebP · 5 MB maximum",
@@ -4971,6 +5035,44 @@
       "hierarchy": "Hierarchy",
       "roleLabel": "Roles"
     },
+    "teamActivity": {
+      "stale": "Showing the last known state; refresh is interrupted.",
+      "title": "Team activity",
+      "subtitle": "History of document operations, separate from consumption statistics.",
+      "scope": "This team only. Projects and private conversations are excluded.",
+      "forbidden": "Reading team content is required. Managing the team alone does not grant this access.",
+      "missing": "This team is unavailable or has been retired.",
+      "kind": "Operation",
+      "status": "Status",
+      "all": "All",
+      "newest": "Include newer operations",
+      "polling": "Statuses refresh every 5 seconds. A status filter only shows operations that currently match it.",
+      "window": "Operations created up to {{when}}. Include newer operations to update this window.",
+      "finishedAt": "Finished on {{when}}",
+      "operationError": "The operation encountered a problem. Open its details for the error reference.",
+      "details": "Operation details",
+      "reference": "Operation reference",
+      "target": "Resource reference",
+      "profile": "Processing profile",
+      "retryOf": "Retry of",
+      "errorCode": "Error code",
+      "firstPage": "First page",
+      "coverageTitle": "What this history covers",
+      "coverage": "Imports, every retained processing attempt, and document or folder deletions. A stored original is not yet indexed. Deletions may be scheduled, retrying or blocked; blocked does not mean cancelled. Upload and processing history follows document retention and may be removed on purge. Deletion receipts remain. Agent preparation, evaluations and provisioning are not included. Retry processing from Resources when available.",
+      "kinds": {
+        "upload": "Store original",
+        "processing": "Document processing",
+        "document_deletion": "Document deletion",
+        "folder_deletion": "Folder deletion"
+      },
+      "stages": {
+        "queued": "Queued",
+        "preparation": "Preparation",
+        "extraction": "Extraction",
+        "indexing": "Indexing",
+        "done": "Done"
+      }
+    },
     "documentStorage": {
       "batchLimit": "Select at most 200 files.",
       "fileLimit": "Each original is limited to 100 MiB.",
@@ -5089,6 +5191,15 @@
       "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
+      "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
+      "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
+      "search": "Search",
+      "searchPages": "Search scans eligible people. Use Next to continue, including after a page with no matches.",
+      "actions": "Actions",
+      "remove": "Remove",
+      "removeConfirm": "Remove all roles for {{name}} in this space? The space’s resources are retained.",
+      "dependentProjects": "This person still has roles in projects in this team. Remove those roles before removing them from the team.",
+      "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
       "title": "Manage {{name}}",
       "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each checkbox immediately adds or removes one role.",
       "roster": "Current members",
@@ -5100,6 +5211,30 @@
       "forbidden": "Managing this space requires its Owner role.",
       "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
       "failed": "The change could not be confirmed. Refresh the list before retrying."
+    },
+    "spaceModels": {
+      "impactRestricted": "The Owner role can change this policy but cannot read agents. Listing them also requires a content role in this space.",
+      "title": "Models",
+      "ceiling": "Models and reasoning require organization permission. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",
+      "effects": "A disabled model cannot be used on subsequent turns. Agent recommendations are retained and must be corrected; chat may drop an old choice with a notification. Already admitted turns may finish.",
+      "noDefault": "No default model",
+      "currentDefault": "Effective default model: {{model}}",
+      "defaultUnavailable": "The default model is unavailable or forbidden. Choose another default or restore its permission.",
+      "followParent": "Follow the parent default",
+      "empty": "No models permitted by the organization. Contact its owner.",
+      "enabledLabel": "Locally allow {{model}}",
+      "protectedDefault": "Choose another default before disabling this model.",
+      "denied": "Forbidden",
+      "unavailable": "Unavailable",
+      "allowed": "Allowed",
+      "reasoning": "Reasoning by default",
+      "reasoningLabel": "Reasoning by default for {{model}}",
+      "reasoningRestricted": "Reasoning is not permitted by the organization or not supported by the model.",
+      "default": "Default model",
+      "disableTitle": "Disable this model?",
+      "affected": "Agents on the current page recommending this model. Browse the pages to inspect other agents; projects and conversation choices may also be affected.",
+      "noAgents": "No agent on this page recommends this model.",
+      "agentHint": "The choice must respect organization permissions and space restrictions. Without a recommendation, the agent follows the space default, then the organization default."
     },
     "toolGovernance": {
       "title": "Tools",

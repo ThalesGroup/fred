@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Historical read port. Only validated self observations reach this boundary.
+//! Historical read port. Only authorized aggregate observations reach this boundary.
 //! No engine client, DSL, index name or raw response belongs to this service.
 use super::models::*;
 use crate::error::{AppError, AppResult};
@@ -10,7 +10,10 @@ use futures::future::BoxFuture;
 use std::collections::BTreeMap;
 
 pub struct ReadScope<'a> {
-    pub subject: &'a str,
+    /// None is collective, only after direct ReadUsage on the explicit space.
+    pub subject: Option<&'a str>,
+    pub bucket: Option<&'a str>,
+    pub attribution: bool,
     pub spaces: &'a [uuid::Uuid],
     pub since: DateTime<Utc>,
     pub until: DateTime<Utc>,
@@ -30,6 +33,10 @@ pub struct SkillResult {
 
 /// Complete bounded set, before any public ranking limit.
 pub struct TurnCount {
+    pub start: Option<DateTime<Utc>>,
+    pub user_id: Option<String>,
+    pub session_id: Option<String>,
+    pub failed: Option<u64>,
     pub space_id: uuid::Uuid,
     pub agent_instance_id: uuid::Uuid,
     pub display_name: Option<String>,
@@ -59,11 +66,12 @@ pub trait Reader: Send + Sync {
 pub(super) async fn execute(
     pool: &sqlx::PgPool,
     reader: Option<&dyn Reader>,
-    subject: &str,
+    user: &crate::auth::CurrentUser,
     request: &AnalyticsRequest,
     plans: &[super::ReadPlan],
 ) -> AppResult<AnalyticsResponse> {
     // Resolve and authorize the complete batch before any external read, then release SQL.
+    let subject = user.uid.as_str();
     let mut scopes = Vec::with_capacity(plans.len());
     let mut tx = pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
@@ -74,17 +82,28 @@ pub(super) async fn execute(
         .await?;
     for plan in plans {
         let q = &request.queries[plan.query];
-        let AnalyticsScope::Personal { organization_id } = q.scope else {
-            return Err(AppError::Forbidden);
+        let scope = super::authorize(&mut tx, user, &q.scope).await?;
+        let spaces: Vec<uuid::Uuid> = match scope {
+            crate::sessions::usage::read::UsageScope::Person { organization, .. } => {
+                sqlx::query_scalar(concat!(
+                    crate::sessions::usage::read::organization_spaces!("$1"),
+                    " limit 50001"
+                ))
+                .bind(organization)
+                .fetch_all(&mut *tx)
+                .await?
+            }
+            crate::sessions::usage::read::UsageScope::Space { id, team } => {
+                sqlx::query_scalar(concat!(
+                    crate::sessions::usage::read::collective_spaces!("$1", "$2"),
+                    " limit 50001"
+                ))
+                .bind(id)
+                .bind(team)
+                .fetch_all(&mut *tx)
+                .await?
+            }
         };
-        super::authorize_personal_organization(&mut tx, subject, organization_id).await?;
-        let spaces: Vec<uuid::Uuid> = sqlx::query_scalar(concat!(
-            crate::sessions::usage::read::organization_spaces!("$1"),
-            " limit 50001"
-        ))
-        .bind(organization_id)
-        .fetch_all(&mut *tx)
-        .await?;
         if spaces.is_empty() || spaces.len() > 50000 {
             return Err(super::too_large());
         }
@@ -110,7 +129,18 @@ pub(super) async fn execute(
         if q.measures[0].reader() == ReaderKind::Turns {
             let data = reader
                 .completed_turns(ReadScope {
-                    subject,
+                    subject: matches!(q.scope, AnalyticsScope::Personal { .. }).then_some(subject),
+                    attribution: plan.consumers.iter().any(|&i| {
+                        request.queries[i]
+                            .measures
+                            .iter()
+                            .any(|m| m.needs_attribution())
+                    }),
+                    bucket: plan
+                        .consumers
+                        .iter()
+                        .any(|&i| request.queries[i].group_by == [AnalyticsGrouping::Time])
+                        .then_some(plan.interval.as_str()),
                     spaces,
                     since: q.time.since,
                     until: q.time.until,
@@ -118,13 +148,10 @@ pub(super) async fn execute(
                 })
                 .await
                 .map_err(read_error)?;
-            let AnalyticsScope::Personal { organization_id } = q.scope else {
-                return Err(AppError::Forbidden);
-            };
             let member_spaces: Vec<_> = memberships
                 .iter()
                 .filter(|(space, _)| {
-                    space.organization_id == organization_id
+                    matches!(q.scope, AnalyticsScope::Personal { organization_id } if space.organization_id == organization_id)
                         && space.kind != crate::domain::SpaceKind::Organization
                 })
                 .map(|(space, _)| space.id)
@@ -137,7 +164,9 @@ pub(super) async fn execute(
         }
         let data = reader
             .skill_loads(ReadScope {
-                subject,
+                subject: matches!(q.scope, AnalyticsScope::Personal { .. }).then_some(subject),
+                bucket: None,
+                attribution: false,
                 spaces,
                 since: q.time.since,
                 until: q.time.until,
@@ -219,7 +248,61 @@ fn turn_result(
     let mut agents = BTreeMap::<uuid::Uuid, (&TurnCount, u128)>::new();
     let mut spaces: BTreeMap<_, u128> = member_spaces.iter().map(|id| (*id, 0)).collect();
     let mut total = 0u128;
+    let mut users = std::collections::BTreeSet::new();
+    let mut conversations = BTreeMap::<&str, u128>::new();
+    let mut users_complete = true;
+    let mut conversations_complete = true;
+    let mut failures = Some(0u128);
+    let mut buckets = BTreeMap::<DateTime<Utc>, u128>::new();
+    if q.group_by == [AnalyticsGrouping::Time] {
+        use chrono::{Datelike, Duration, Timelike};
+        let interval = super::interval(&q.time);
+        let offset = match interval {
+            AnalyticsInterval::Hour => {
+                i64::from(q.time.since.minute() * 60 + q.time.since.second())
+            }
+            AnalyticsInterval::Day => i64::from(q.time.since.num_seconds_from_midnight()),
+            AnalyticsInterval::Week => {
+                i64::from(q.time.since.weekday().num_days_from_monday()) * 86400
+                    + i64::from(q.time.since.num_seconds_from_midnight())
+            }
+        };
+        let step = match interval {
+            AnalyticsInterval::Hour => Duration::hours(1),
+            AnalyticsInterval::Day => Duration::days(1),
+            AnalyticsInterval::Week => Duration::weeks(1),
+        };
+        let mut start = q.time.since
+            - Duration::seconds(offset)
+            - Duration::nanoseconds(i64::from(q.time.since.nanosecond()));
+        while start < q.time.until {
+            buckets.insert(start, 0);
+            start += step;
+        }
+    }
     for row in data {
+        if let Some(user) = &row.user_id {
+            users.insert(user);
+        } else {
+            users_complete = false;
+        }
+        if let Some(session) = &row.session_id {
+            *conversations.entry(session).or_default() += u128::from(row.count);
+        } else {
+            conversations_complete = false;
+        }
+        failures = failures
+            .zip(row.failed)
+            .map(|(sum, count)| sum + u128::from(count));
+        if let Some(start) = row.start {
+            if let Some(value) = buckets.get_mut(&start) {
+                *value += u128::from(row.count);
+            } else if q.group_by == [AnalyticsGrouping::Time] {
+                return Err(read_error(ReadError::Unavailable));
+            }
+        } else if q.group_by == [AnalyticsGrouping::Time] {
+            return Err(read_error(ReadError::Unavailable));
+        }
         let count = u128::from(row.count);
         total += count;
         let agent = agents.entry(row.agent_instance_id).or_insert((row, 0));
@@ -233,6 +316,10 @@ fn turn_result(
     }
     let mut ranked: Vec<(AnalyticsDimensions, u128)> = match q.group_by.first() {
         None => vec![],
+        Some(AnalyticsGrouping::Time) => buckets
+            .into_iter()
+            .map(|(start, count)| (AnalyticsDimensions::Time { start }, count))
+            .collect(),
         Some(AnalyticsGrouping::Agent) => agents
             .iter()
             .map(|(id, (row, count))| {
@@ -253,26 +340,43 @@ fn turn_result(
         _ => return Err(super::invalid("unsupported turn grouping")),
     };
     // Stable identity ordering comes from BTreeMap; stable sort preserves it for ties.
-    ranked.sort_by_key(|row| std::cmp::Reverse(row.1));
-    let truncated = ranked.len() > q.limit.unwrap_or(100);
-    ranked.truncate(q.limit.unwrap_or(100));
+    let time_series = q.group_by == [AnalyticsGrouping::Time];
+    let truncated = !time_series && ranked.len() > q.limit.unwrap_or(100);
+    if !time_series {
+        ranked.sort_by_key(|row| std::cmp::Reverse(row.1));
+        ranked.truncate(q.limit.unwrap_or(100));
+    }
     let rows = if q.group_by.is_empty() {
         vec![AnalyticsRow {
             dimensions: AnalyticsDimensions::Total,
             values: q
                 .measures
                 .iter()
-                .map(|&m| {
-                    Ok((
-                        m,
-                        match m {
-                            ConsumptionMeasure::CompletedTurns => total.to_string(),
-                            ConsumptionMeasure::AgentsUsed => agents.len().to_string(),
-                            _ => return Err(super::invalid("unsupported turn measure")),
-                        },
-                    ))
+                .filter_map(|&m| {
+                    let value = match m {
+                        ConsumptionMeasure::CompletedTurns => Some(total.to_string()),
+                        ConsumptionMeasure::AgentsUsed => Some(agents.len().to_string()),
+                        ConsumptionMeasure::ActiveUsers => {
+                            users_complete.then(|| users.len().to_string())
+                        }
+                        ConsumptionMeasure::ObservedConversations => {
+                            conversations_complete.then(|| conversations.len().to_string())
+                        }
+                        ConsumptionMeasure::SingleTurnConversations => {
+                            conversations_complete.then(|| {
+                                conversations
+                                    .values()
+                                    .filter(|&&n| n == 1)
+                                    .count()
+                                    .to_string()
+                            })
+                        }
+                        ConsumptionMeasure::FailedTurns => failures.map(|n| n.to_string()),
+                        _ => None,
+                    };
+                    value.map(|v| (m, v))
                 })
-                .collect::<AppResult<_>>()?,
+                .collect(),
             estimates: BTreeMap::new(),
         }]
     } else {
@@ -289,7 +393,7 @@ fn turn_result(
         since: q.time.since,
         until: q.time.until,
         timezone: q.time.timezone,
-        bucket: None,
+        bucket: time_series.then(|| super::interval(&q.time)),
         measures: q.measures.iter().map(|m| m.metadata()).collect(),
         rows,
         truncated,
@@ -312,6 +416,10 @@ mod tests {
         let latest = "2026-01-02T00:00:00Z".parse().unwrap();
         let rows = vec![
             TurnCount {
+                start: None,
+                user_id: None,
+                session_id: None,
+                failed: None,
                 space_id: left,
                 agent_instance_id: a,
                 display_name: Some("Same name".into()),
@@ -319,6 +427,10 @@ mod tests {
                 count: 9_007_199_254_740_993,
             },
             TurnCount {
+                start: None,
+                user_id: None,
+                session_id: None,
+                failed: None,
                 space_id: right,
                 agent_instance_id: a,
                 display_name: Some("Same name".into()),
@@ -326,6 +438,10 @@ mod tests {
                 count: 7,
             },
             TurnCount {
+                start: None,
+                user_id: None,
+                session_id: None,
+                failed: None,
                 space_id: right,
                 agent_instance_id: b,
                 display_name: Some("Same name".into()),
@@ -375,5 +491,73 @@ mod tests {
             "0"
         );
         assert!(turn_result(&q, &rows, &[]).unwrap().rows.is_empty());
+    }
+    #[test]
+    fn team_counts_preserve_population_zero_buckets_and_missing_attribution() {
+        let q: AnalyticsQuery = serde_json::from_value(json!({
+            "name":"total", "scope":{"kind":"space","id":Uuid::from_u128(1)},
+            "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-04T00:00:00Z","timezone":"UTC","bucket":null},
+            "measures":["activity.completed_turns","activity.active_users","activity.observed_conversations","activity.failed_turns","activity.single_turn_conversations"]
+        })).unwrap();
+        let mut rows: Vec<_> = [("alice", "first", 2, 1), ("bob", "second", 1, 0)]
+            .into_iter()
+            .map(|(user, session, count, failed)| TurnCount {
+                start: Some(q.time.since),
+                user_id: Some(user.into()),
+                session_id: Some(session.into()),
+                failed: Some(failed),
+                space_id: Uuid::from_u128(1),
+                agent_instance_id: Uuid::from_u128(2),
+                display_name: None,
+                latest: q.time.since,
+                count,
+            })
+            .collect();
+        let total = turn_result(&q, &rows, &[]).unwrap();
+        let v = &total.rows[0].values;
+        assert_eq!(v[&ConsumptionMeasure::CompletedTurns], "3");
+        assert_eq!(v[&ConsumptionMeasure::ActiveUsers], "2");
+        assert_eq!(v[&ConsumptionMeasure::ObservedConversations], "2");
+        assert_eq!(v[&ConsumptionMeasure::FailedTurns], "1");
+        assert_eq!(v[&ConsumptionMeasure::SingleTurnConversations], "1");
+        rows[0].user_id = None;
+        rows[0].session_id = None;
+        rows[0].failed = None;
+        let missing = turn_result(&q, &rows, &[]).unwrap();
+        assert_eq!(
+            missing.rows[0].values[&ConsumptionMeasure::CompletedTurns],
+            "3"
+        );
+        assert!(
+            !missing.rows[0]
+                .values
+                .contains_key(&ConsumptionMeasure::ActiveUsers)
+        );
+        assert!(
+            !missing.rows[0]
+                .values
+                .contains_key(&ConsumptionMeasure::ObservedConversations)
+        );
+        assert!(
+            !missing.rows[0]
+                .values
+                .contains_key(&ConsumptionMeasure::FailedTurns)
+        );
+        let empty = turn_result(&q, &[], &[]).unwrap();
+        assert!(empty.rows[0].values.values().all(|v| v == "0"));
+        let mut series_q = q;
+        series_q.group_by = vec![AnalyticsGrouping::Time];
+        series_q.measures = vec![ConsumptionMeasure::CompletedTurns];
+        let series = turn_result(&series_q, &rows, &[]).unwrap();
+        assert_eq!(series.rows.len(), 3);
+        assert_eq!(
+            series.rows[0].values[&ConsumptionMeasure::CompletedTurns],
+            "3"
+        );
+        assert_eq!(
+            series.rows[1].values[&ConsumptionMeasure::CompletedTurns],
+            "0"
+        );
+        assert!(!series.truncated);
     }
 }

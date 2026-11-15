@@ -73,17 +73,23 @@ impl SavedModelSettings {
 /// The shared M2 selection guard locks the source/offer through the instance commit.
 pub(crate) async fn validate_write(
     conn: &mut PgConnection,
-    organization: Uuid,
+    space: &crate::domain::Space,
     tuning: &Value,
     new_recommendation: bool,
 ) -> AppResult<()> {
     let settings = SavedModelSettings::read(tuning)?;
     settings.model_options.validate()?;
-    let policy = policy::read(conn, organization).await?;
+    let organization = space.organization;
+    let effective = resolve_for_space(conn, space, tuning).await?;
     if new_recommendation && let Some(key) = &settings.recommended_model {
-        if !policy.permitted.contains(key) {
+        if !effective
+            .offers
+            .iter()
+            .any(|offer| &offer.key == key && offer.permitted)
+        {
             return Err(AppError::Unprocessable(
-                "The recommended model must be permitted by the owning organization.".into(),
+                "The recommended model must be permitted by the organization and owning space."
+                    .into(),
             ));
         }
         policy::require_selectable(
@@ -100,7 +106,7 @@ pub(crate) async fn validate_write(
         settings
             .recommended_chat_profile_id
             .is_none()
-            .then_some(policy.default.as_ref())
+            .then_some(effective.default.as_ref())
             .flatten()
     });
     if let Some(key) = selected {
@@ -152,6 +158,9 @@ use fred_rust_sdk::inference::{
 #[derive(Serialize, ToSchema)]
 pub struct RuntimeModels {
     pub policy: OrganizationModelPolicy,
+    /// Nearest space default, otherwise the organization default. Never a grant.
+    #[schema(required = true)]
+    pub default: Option<ModelOfferKey>,
     pub recommendation: Option<ModelOfferKey>,
     pub options: ModelOptions,
     /// Diagnostic only. Never an alternative resolution key.
@@ -159,6 +168,8 @@ pub struct RuntimeModels {
     pub requires_reselection: bool,
     /// Union of permitted keys and retained recommendation/default/fallback references.
     pub offers: Vec<RuntimeModelOffer>,
+    /// Local preference; never exceeds the organization reasoning ceiling.
+    pub reasoning_default_on: Vec<ModelOfferKey>,
 }
 
 /// Catalog facts use the caller's repeatable-read snapshot. No private connections here.
@@ -195,12 +206,25 @@ pub(crate) async fn resolve(
     Ok(RuntimeModels {
         requires_reselection: settings.recommended_model.is_none()
             && settings.recommended_chat_profile_id.is_some(),
+        default: policy.default.clone(),
         policy,
         recommendation: settings.recommended_model,
         options: settings.model_options,
         legacy_profile_id: settings.recommended_chat_profile_id,
         offers,
+        reasoning_default_on: Vec::new(),
     })
+}
+
+/// Shared projection for local pickers, instance writes, preparation and admission.
+pub(crate) async fn resolve_for_space(
+    conn: &mut PgConnection,
+    space: &crate::domain::Space,
+    tuning: &Value,
+) -> AppResult<RuntimeModels> {
+    let mut models = resolve(conn, space.organization, tuning).await?;
+    super::local_policy::apply(conn, space, &mut models).await?;
+    Ok(models)
 }
 
 fn describe_offer(
@@ -297,7 +321,7 @@ impl ModelPreparationErrorCode {
     fn diagnostic(self) -> ModelPreparationError {
         let message = match self {
             Self::SelectionMissing => {
-                "No model is selected and neither the agent nor the organization defines a default. Choose a model in the chat, or ask an organization owner to set a default."
+                "No model is selected and neither the agent nor its space defines a default. Choose a model in the chat, or ask a space owner to set a default."
             }
             Self::ReselectionRequired => {
                 "This agent retains an old model profile. Choose an available model in the chat."
@@ -306,7 +330,7 @@ impl ModelPreparationErrorCode {
                 "The selected model is not in this agent's available model catalog. Choose another model or ask an organization owner to check the model policy."
             }
             Self::OfferForbidden => {
-                "The selected model is no longer permitted by the organization. Choose a permitted model or ask an organization owner to review the model policy."
+                "The selected model is no longer permitted by the organization or space. Choose a permitted model or ask a space owner to review the model policy."
             }
             Self::OfferUnavailable => {
                 "The selected model is currently unavailable for this agent. Choose an available model or ask an organization owner to check the model source and configuration."
@@ -327,7 +351,7 @@ impl ModelPreparationErrorCode {
 pub(crate) fn decide(
     models: &RuntimeModels,
     choice: Option<&ModelOfferKey>,
-    reasoning: bool,
+    reasoning: impl Into<Option<bool>>,
 ) -> Result<InferenceSelection, ModelPreparationError> {
     use ModelPreparationErrorCode as Error;
     if models.requires_reselection && choice.is_none() {
@@ -335,7 +359,7 @@ pub(crate) fn decide(
     }
     let key = choice
         .or(models.recommendation.as_ref())
-        .or(models.policy.default.as_ref())
+        .or(models.default.as_ref())
         .ok_or_else(|| Error::SelectionMissing.diagnostic())?;
     let mut source = if choice.is_some() {
         ModelSelectionSource::UserChoice
@@ -414,6 +438,8 @@ pub(crate) fn decide(
             max_tokens,
             top_p: models.options.top_p,
             reasoning_effort: (reasoning
+                .into()
+                .unwrap_or_else(|| models.reasoning_default_on.contains(&offer.key))
                 && models.policy.reasoning_enabled.contains(&offer.key)
                 && metadata.reasoning == Some(true))
             .then_some(ReasoningEffort::High),
@@ -677,11 +703,13 @@ mod preparation_tests {
                 updated_by: None,
                 updated_at: None,
             },
+            default: None,
             recommendation: None,
             options: ModelOptions::default(),
             legacy_profile_id: None,
             requires_reselection: false,
             offers: vec![candidate("model"), candidate("fallback")],
+            reasoning_default_on: Vec::new(),
         }
     }
 
@@ -690,6 +718,63 @@ mod preparation_tests {
         choice: Option<&ModelOfferKey>,
     ) -> Option<ModelPreparationErrorCode> {
         decide(models, choice, false).err().map(|error| error.code)
+    }
+
+    #[test]
+    fn local_policy_restricts_without_grants_and_keeps_explicit_reasoning_overrides() {
+        use super::super::local_policy::{SpaceModelPolicy, apply_policy};
+        let mut models = models();
+        models.default = Some(key("fallback"));
+        models.policy.reasoning_enabled = vec![key("model")];
+        apply_policy(
+            &mut models,
+            SpaceModelPolicy {
+                revision: 1,
+                default: Some(key("model")),
+                disabled: vec![key("fallback")],
+                reasoning_default_on: vec![key("model")],
+            },
+        );
+        assert_eq!(decide(&models, None, None).unwrap().key, key("model"));
+        assert!(
+            decide(&models, None, None)
+                .unwrap()
+                .options
+                .reasoning_effort
+                .is_some()
+        );
+        assert!(
+            decide(&models, None, false)
+                .unwrap()
+                .options
+                .reasoning_effort
+                .is_none()
+        );
+        assert_eq!(
+            error(&models, Some(&key("fallback"))),
+            Some(ModelPreparationErrorCode::OfferForbidden)
+        );
+        // A project's default cannot reauthorize a team-disabled model.
+        apply_policy(
+            &mut models,
+            SpaceModelPolicy {
+                revision: 1,
+                default: Some(key("fallback")),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::OfferForbidden)
+        );
+        models.policy.reasoning_enabled.clear();
+        assert!(
+            decide(&models, Some(&key("model")), true)
+                .unwrap()
+                .options
+                .reasoning_effort
+                .is_none()
+        );
     }
 
     #[test]
@@ -709,7 +794,7 @@ mod preparation_tests {
     #[test]
     fn explicit_choice_then_recommendation_then_default_without_silent_substitution() {
         let mut models = models();
-        models.policy.default = Some(key("model"));
+        models.default = Some(key("model"));
         assert_eq!(error(&models, None), None);
         models.recommendation = Some(key("unknown"));
         assert_eq!(
@@ -728,7 +813,7 @@ mod preparation_tests {
     #[test]
     fn fallback_is_only_for_withdrawal_never_revocation_or_other_unavailability() {
         let mut models = models();
-        models.policy.default = Some(key("model"));
+        models.default = Some(key("model"));
         models.offers[0].candidate = false;
         models.offers[0].diagnostics = vec![
             ModelDiagnostic::Withdrawn,
@@ -805,7 +890,7 @@ mod preparation_tests {
             for enabled in [false, true] {
                 for capable in [None, Some(false), Some(true)] {
                     let mut models = models();
-                    models.policy.default = Some(key("model"));
+                    models.default = Some(key("model"));
                     if enabled {
                         models.policy.reasoning_enabled.push(key("model"));
                     }
@@ -824,7 +909,7 @@ mod preparation_tests {
     #[test]
     fn withdrawal_never_changes_source_or_provisioning() {
         let mut models = models();
-        models.policy.default = Some(key("model"));
+        models.default = Some(key("model"));
         models.offers[0].candidate = false;
         models.offers[0].diagnostics = vec![ModelDiagnostic::Withdrawn];
         assert_eq!(

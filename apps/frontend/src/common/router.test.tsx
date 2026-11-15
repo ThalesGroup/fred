@@ -14,6 +14,7 @@
 
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { PageError } from "@components/pages/PageError/PageError";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
@@ -112,4 +113,8 @@ describe("Fred UI parity during manager reconstruction", () => {
     }
     expect(main?.children?.find((route) => route.path === "*")?.element).toEqual(<PageError />);
   });
+});
+
+it("keeps invitation entry behind Weaver admission without legacy announcement or charter queries", () => {
+  expect(isWeaverContentRoute("/join/invitation-token")).toBe(true);
 });

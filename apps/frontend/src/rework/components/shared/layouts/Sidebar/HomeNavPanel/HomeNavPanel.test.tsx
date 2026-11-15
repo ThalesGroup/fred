@@ -45,6 +45,7 @@ vi.mock("../../../../../../security/KeycloakService", () => ({
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetMyAvatarQuery: () => ({ currentData: undefined }),
   useMeQuery: () => ({ data: { user_id: state.user } }),
+  useGetTeamAvatarQuery: () => ({ currentData: undefined }),
   useMySpacesQuery: () => {
     const data = [
       ...(state.otherOrganization

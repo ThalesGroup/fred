@@ -16,11 +16,14 @@ const h = vi.hoisted(() => ({
   section: "members",
   grant: vi.fn(),
   revoke: vi.fn(),
+  remove: vi.fn(),
+  navigate: vi.fn(),
   roster: vi.fn(),
   candidates: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
+  useNavigate: () => h.navigate,
   useParams: () => ({ teamId: "pilote", section: h.section }),
   Navigate: ({ to }: { to: string }) => <p>{`navigate:${to}`}</p>,
 }));
@@ -53,8 +56,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     return { currentData: { items: [], next_cursor: null }, refetch: vi.fn() };
   },
   useGrantMutation: () => [h.grant, { isLoading: false }],
+  useRemoveSpaceMemberMutation: () => [h.remove, { isLoading: false }],
   useRevokeMutation: () => [h.revoke, { isLoading: false }],
 }));
+vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { GetUserId: () => "bob" } }));
 import TeamSettingsPage from "./TeamSettingsPage";
 import TeamLandingPage from "./TeamLandingPage";
 let container: HTMLDivElement;
@@ -65,10 +70,12 @@ beforeEach(() => {
   h.spacesError = false;
   h.manage = true;
   h.read = false;
+  h.read = false;
   h.settled = true;
   h.section = "members";
   vi.clearAllMocks();
   h.grant.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.remove.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.revoke.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -113,7 +120,7 @@ it("blocks direct access and stops roster reads when management is revoked", asy
   expect(container.querySelector('input[type="checkbox"]')).toBeNull();
   expect(container.textContent).toContain("rework.spaceMembers.forbidden");
   expect(h.roster).toHaveBeenLastCalledWith(
-    { id: "pilote", after: undefined },
+    { id: "pilote", after: undefined, search: undefined },
     expect.objectContaining({ skip: true }),
   );
 });
@@ -171,4 +178,36 @@ it("preserves management-only and forbidden organization landings", async () => 
   await render(true);
   expect(container.textContent).toBe("rework.spaceMembers.forbidden");
   expect(h.grant).not.toHaveBeenCalled();
+});
+
+it("lets a reader view explicit roles and leave without granting management", async () => {
+  h.manage = false;
+  h.read = true;
+  await render();
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.textContent).toContain("rework.manager.roles.editor");
+  const leave = Array.from(container.querySelectorAll("button")).find((b) =>
+    b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
+  )!;
+  await act(async () => leave.click());
+  const confirm = Array.from(document.querySelectorAll("button")).find(
+    (b) => b.textContent === "rework.spaceMembers.remove",
+  )!;
+  await act(async () => confirm.click());
+  expect(h.remove).toHaveBeenCalledWith({ id: "pilote", user: "bob" });
+  expect(h.navigate).toHaveBeenCalledWith("/home", { replace: true });
+});
+it("submits a scoped search and resets pagination", async () => {
+  await render();
+  const input =
+    container.querySelector<HTMLInputElement>('input[type="search"]') ??
+    container.querySelector<HTMLInputElement>('input[type="text"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Bob");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(h.roster).toHaveBeenLastCalledWith({ id: "pilote", after: undefined, search: "Bob" }, expect.anything());
 });

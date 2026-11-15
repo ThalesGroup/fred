@@ -24,7 +24,7 @@ pub struct AnalyticsQuery {
     pub time: AnalyticsPeriod,
     #[schema(min_items = 1, max_items = 12)]
     pub measures: Vec<ConsumptionMeasure>,
-    /// Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill.
+    /// Consumption: total/time/agent/model; retained sessions: total; turns: total/time/agent (self also space); skills: skill.
     #[serde(default)]
     #[schema(max_items = 1)]
     pub group_by: Vec<AnalyticsGrouping>,
@@ -38,7 +38,9 @@ pub struct AnalyticsQuery {
 pub enum AnalyticsScope {
     #[serde(rename = "self")]
     Personal { organization_id: Uuid },
-    /// Direct ReadUsage on a team/project. Teams include retired/purged projects.
+    /// Direct ReadUsage for collective consumption, retained creations, turns and skill loads.
+    /// Teams include their projects (also retired/purged); projects never expand.
+    /// Aggregates grant no conversation content or individual-user access.
     Space { id: Uuid },
 }
 
@@ -127,6 +129,19 @@ pub enum ConsumptionMeasure {
     /// Exact distinct stable instance UUIDs over all observed completed turns, before ranking limits.
     #[serde(rename = "activity.agents_used")]
     AgentsUsed,
+    /// Distinct attributed users in observed completed turns. Absent if identities were erased/missing.
+    #[serde(rename = "activity.active_users")]
+    ActiveUsers,
+    /// Distinct attributed conversations with a completed turn in the period, not new creations.
+    /// Absent if conversation identities were erased/missing. Never exposes identities or content.
+    #[serde(rename = "activity.observed_conversations")]
+    ObservedConversations,
+    /// Completed turns with finish_reason=error; absent if any finish_reason is missing.
+    #[serde(rename = "activity.failed_turns")]
+    FailedTurns,
+    /// Conversations with exactly one observed completed turn within the period (not lifetime).
+    #[serde(rename = "activity.single_turn_conversations")]
+    SingleTurnConversations,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -146,6 +161,10 @@ impl ConsumptionMeasure {
                 | Self::TotalSkillLoads
                 | Self::CompletedTurns
                 | Self::AgentsUsed
+                | Self::ActiveUsers
+                | Self::ObservedConversations
+                | Self::FailedTurns
+                | Self::SingleTurnConversations
         )
     }
     /// Fixed reader families, not an extensible query language.
@@ -154,10 +173,24 @@ impl ConsumptionMeasure {
             Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
                 ReaderKind::Skills
             }
-            Self::CompletedTurns | Self::AgentsUsed => ReaderKind::Turns,
+            Self::CompletedTurns
+            | Self::AgentsUsed
+            | Self::ActiveUsers
+            | Self::ObservedConversations
+            | Self::FailedTurns
+            | Self::SingleTurnConversations => ReaderKind::Turns,
             Self::RetainedConversations => ReaderKind::Conversations,
             _ => ReaderKind::Consumption,
         }
+    }
+    pub(crate) fn needs_attribution(self) -> bool {
+        matches!(
+            self,
+            Self::ActiveUsers
+                | Self::ObservedConversations
+                | Self::FailedTurns
+                | Self::SingleTurnConversations
+        )
     }
     pub(crate) fn estimated(self) -> bool {
         matches!(self, Self::CostEur | Self::Co2eGrams | Self::EnergyKwh)
@@ -175,8 +208,11 @@ impl ConsumptionMeasure {
                 Self::Co2eGrams => AnalyticsUnit::GramCo2e,
                 Self::EnergyKwh => AnalyticsUnit::Kwh,
                 Self::RecordedExchanges => AnalyticsUnit::Exchange,
-                Self::RetainedConversations => AnalyticsUnit::Conversation,
-                Self::CompletedTurns => AnalyticsUnit::Turn,
+                Self::RetainedConversations
+                | Self::ObservedConversations
+                | Self::SingleTurnConversations => AnalyticsUnit::Conversation,
+                Self::CompletedTurns | Self::FailedTurns => AnalyticsUnit::Turn,
+                Self::ActiveUsers => AnalyticsUnit::User,
                 Self::AgentsUsed => AnalyticsUnit::Agent,
                 Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
                     AnalyticsUnit::Load
@@ -249,6 +285,7 @@ pub enum AnalyticsUnit {
     Conversation,
     Turn,
     Agent,
+    User,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -280,6 +317,8 @@ pub enum EstimateCoverage {
 pub struct AnalyticsRow {
     pub dimensions: AnalyticsDimensions,
     /// Exact decimal integer strings for matching facts; collection completeness is declared separately.
+    /// A requested attribution counter is absent when erased/missing identities or outcomes prevent an exact count.
+    /// Absence is unavailable, never zero. No user or conversation identities are returned.
     pub values: BTreeMap<ConsumptionMeasure, String>,
     /// Estimated decimal values are separate from exact counters. Null is never zero.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

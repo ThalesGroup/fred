@@ -147,6 +147,27 @@ beforeEach(() => {
           analysis_reference: null,
           activation_ready: true,
         });
+      if (path.endsWith("/models"))
+        return json({
+          policy: { revision: 0, default: null, disabled: [], reasoning_default_on: [] },
+          inherited_default: null,
+          parent_permitted: [],
+          models: {
+            default: null,
+            recommendation: null,
+            requires_reselection: false,
+            offers: [],
+            options: {},
+            reasoning_default_on: [],
+            policy: {
+              organization_id: SPACE_A,
+              revision: 0,
+              permitted: [],
+              reasoning_enabled: [],
+              embedding_locked: false,
+            },
+          },
+        });
       if (path.endsWith("/me/spaces")) return json(emptyContext ? [] : SPACES);
       if (target === "authorize") return json({ allowed: writable });
       if (target === "catalog") return json(catalogEmpty ? [] : [TEMPLATE]);

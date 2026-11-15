@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// The team's single invite link: a switch pauses or resumes the same URL, and
-// "Generate a new link" replaces it for good. Joining requires platform access.
-import { useId, useRef, useState } from "react";
+// A team link grants Member only within its organization. Disabling revokes it.
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Switch from "@shared/atoms/Switch/Switch";
@@ -10,10 +9,10 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { platformPath } from "../../../../../../../common/platformAccess";
 import {
-  useRegenerateTeamJoinLinkMutation,
-  useSetTeamJoinLinkMutation,
+  useCreateTeamJoinLinkMutation,
+  useRevokeTeamJoinLinkMutation,
   useTeamJoinLinkQuery,
-} from "../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamInviteLinkDialog.module.scss";
 
 interface TeamInviteLinkDialogProps {
@@ -23,19 +22,29 @@ interface TeamInviteLinkDialogProps {
 
 export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLinkDialogProps) {
   const { t } = useTranslation();
-  const link = useTeamJoinLinkQuery({ teamId }, { refetchOnMountOrArgChange: true });
-  const [setEnabled, setting] = useSetTeamJoinLinkMutation();
-  const [regenerate, regenerating] = useRegenerateTeamJoinLinkMutation();
+  const link = useTeamJoinLinkQuery({ id: teamId }, { refetchOnMountOrArgChange: true });
+  const [revoke, setting] = useRevokeTeamJoinLinkMutation();
+  const [regenerate, regenerating] = useCreateTeamJoinLinkMutation();
   const { copied, confirmCopied } = useCopyConfirmation();
   const [failed, setFailed] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const urlRef = useRef<HTMLInputElement>(null);
   const labelId = useId();
   const busy = link.isFetching || setting.isLoading || regenerating.isLoading;
-  const enabled = link.data?.enabled ?? false;
-  const url = link.data?.token
-    ? new URL(platformPath(`join/${link.data.token}`), window.location.origin).toString()
-    : "";
+  const enabled =
+    !link.isError && !!link.currentData?.token && new Date(link.currentData.expires_at).getTime() > Date.now();
+  const { refetch } = link;
+  useEffect(() => {
+    if (!link.currentData) return;
+    const delay = new Date(link.currentData.expires_at).getTime() - Date.now();
+    if (delay <= 0) return;
+    const timer = setTimeout(() => void refetch(), Math.min(delay + 100, 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [link.currentData, refetch]);
+  const url =
+    enabled && link.currentData?.token
+      ? new URL(platformPath(`join/${link.currentData.token}`), window.location.origin).toString()
+      : "";
 
   const run = async (action: () => Promise<unknown>) => {
     setFailed(false);
@@ -48,7 +57,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
   };
   const toggleDisabled = busy || link.isError;
   const toggle = (next: boolean) => {
-    if (!toggleDisabled) void run(() => setEnabled({ teamId, setTeamJoinLink: { enabled: next } }).unwrap());
+    if (!toggleDisabled) void run(() => (next ? regenerate({ id: teamId }) : revoke({ id: teamId })).unwrap());
   };
   const copy = async () => {
     setCopyFailed(false);
@@ -96,6 +105,13 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
             />
           </span>
         </div>
+        {enabled && link.currentData && (
+          <p className={styles.hint}>
+            {t("rework.teamSettings.members.inviteLink.expires", {
+              date: new Date(link.currentData.expires_at).toLocaleString(),
+            })}
+          </p>
+        )}
         <div className={styles.link} data-disabled={!enabled}>
           {url && (
             <div className={styles.urlRow}>
@@ -135,7 +151,7 @@ export default function TeamInviteLinkDialog({ teamId, onClose }: TeamInviteLink
                 size="small"
                 disabled={!enabled || busy}
                 icon={{ category: "outlined", type: "refresh" }}
-                onClick={() => void run(() => regenerate({ teamId }).unwrap())}
+                onClick={() => void run(() => regenerate({ id: teamId }).unwrap())}
               >
                 {t("rework.teamSettings.members.inviteLink.regenerate")}
               </Button>

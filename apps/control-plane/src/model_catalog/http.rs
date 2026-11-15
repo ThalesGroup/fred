@@ -26,6 +26,7 @@ use crate::{
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .merge(super::local_policy::routes())
         .routes(routes!(organization_models))
         .routes(routes!(refresh_model_source))
         .routes(routes!(

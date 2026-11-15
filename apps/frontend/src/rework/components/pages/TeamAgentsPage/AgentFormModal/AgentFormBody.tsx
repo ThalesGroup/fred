@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField";
+import type { ModelOfferKey } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -116,7 +118,8 @@ type AgentFormBodyProps = {
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
-  onRecommendedChatProfileIdChange: (v: string | null) => void;
+  recommendedModel: ModelOfferKey | null;
+  onRecommendedModelChange: (value: ModelOfferKey | null) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   /** Atomic replacement of the whole capability selection (ids + config) —
@@ -138,6 +141,8 @@ export function AgentFormBody({
   description,
   usageStatement,
   recommendedChatProfileId,
+  recommendedModel,
+  onRecommendedModelChange,
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
@@ -440,20 +445,15 @@ export function AgentFormBody({
                   maxLength={500}
                   disabled={isSubmitting}
                 />
-                <TextInput
-                  label={t("rework.weaverAgents.modelProfile")}
-                  value={
-                    editInstance?.recommended_model
-                      ? `${editInstance.recommended_model.source_id} / ${editInstance.recommended_model.upstream_model_id}`
-                      : (recommendedChatProfileId ?? "")
-                  }
-                  disabled
-                  explanation={t(
-                    recommendedChatProfileId && !editInstance?.recommended_model
-                      ? "rework.weaverAgents.legacyModelReselection"
-                      : "rework.weaverAgents.modelUnavailable",
-                  )}
+                <RecommendedModelField
+                  teamId={teamId}
+                  value={recommendedModel}
+                  onChange={onRecommendedModelChange}
+                  disabled={isSubmitting}
                 />
+                {recommendedChatProfileId && !recommendedModel && (
+                  <p role="status">{t("rework.weaverAgents.legacyModelReselection")}</p>
+                )}
                 {renderFieldList(generalFields)}
               </>
             )}

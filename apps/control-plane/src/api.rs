@@ -369,14 +369,16 @@ async fn create_space(
 
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
-struct TeamDescription {
+struct TeamParameters {
+    #[schema(min_length = 1, max_length = 180)]
+    name: Option<String>,
     #[schema(min_length = 20, max_length = 500)]
-    description: String,
+    description: Option<String>,
 }
 
 #[utoipa::path(
-    put, path = "/spaces/{id}/description",
-    params(("id" = Uuid, Path)), request_body = TeamDescription,
+    patch, path = "/spaces/{id}",
+    params(("id" = Uuid, Path)), request_body = TeamParameters,
     responses(
         (status = 200, body = Space),
         (status = 400, body = crate::error::ErrorBody),
@@ -388,14 +390,21 @@ struct TeamDescription {
         (status = 500, body = crate::error::ErrorBody),
     )
 )]
-async fn update_team_description(
+async fn update_team_parameters(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
-    ApiJson(req): ApiJson<TeamDescription>,
+    ApiJson(req): ApiJson<TeamParameters>,
 ) -> AppResult<Json<Space>> {
     Ok(Json(
-        spaces::update_team_description(&s.pool, &user.uid, id, &req.description).await?,
+        spaces::update_team_parameters(
+            &s.pool,
+            &user.uid,
+            id,
+            req.name.as_deref(),
+            req.description.as_deref(),
+        )
+        .await?,
     ))
 }
 
@@ -1215,8 +1224,9 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::analytics::routes())
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())
+        .merge(crate::team_join_links::routes())
         .routes(routes!(create_space))
-        .routes(routes!(update_team_description))
+        .routes(routes!(update_team_parameters))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(authorize_document))
@@ -1225,6 +1235,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::documents::conversation::routes())
         .merge(crate::documents::powerpoint::routes())
         .merge(crate::processing::http::routes())
+        .merge(crate::documents::activity::routes())
         .routes(routes!(frontend_config))
         .routes(routes!(onboarding_status))
         .routes(routes!(accept_terms))

@@ -24,6 +24,18 @@ import {
 
 import { KeyCloakService } from "../../security/KeycloakService";
 
+async function readAvatar(response: Response) {
+  if (!response.ok) return response.json();
+  if (response.status === 204) return "";
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.QueryDefinition;
 type CatalogPage<Item> = { items: Item[]; next_cursor: string | null };
 
@@ -158,6 +170,7 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
     "MyAvatar",
+    "TeamAvatar",
     "SpaceMembers",
     "MySpaces",
     "SpaceAccess",
@@ -181,6 +194,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    teamDocumentActivity(endpoint) {
+      // A hung poll must not prevent reconnect convergence; retain no old pages
+      // once their team/view is left. URL and contract remain generated.
+      endpoint.keepUnusedDataFor = 0;
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        return { ...(typeof request === "string" ? { url: request } : request), timeout: 15_000 };
+      };
+    },
     getMyAvatar(endpoint) {
       endpoint.providesTags = ["MyAvatar"];
       endpoint.keepUnusedDataFor = 0;
@@ -191,17 +214,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
           ...(typeof request === "string" ? { url: request } : request),
           // Authenticated binary transport, cached as a serializable image source.
           // No bearer in an image URL and no object URL lifetime to manage.
-          responseHandler: async (response: Response) => {
-            if (!response.ok) return response.json();
-            if (response.status === 204) return "";
-            const blob = await response.blob();
-            return new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(blob);
-            });
-          },
+          responseHandler: readAvatar,
         };
       };
     },
@@ -217,6 +230,35 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       };
     },
     deleteMyAvatar: { invalidatesTags: ["MyAvatar"], extraOptions: { retryUnauthorized: false } },
+    getTeamAvatar(endpoint) {
+      endpoint.providesTags = (_result, _error, { id }) => [{ type: "TeamAvatar", id }];
+      endpoint.keepUnusedDataFor = 0;
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        return {
+          ...(typeof request === "string" ? { url: request } : request),
+          // Authenticated binary transport, cached as a serializable image source.
+          // No bearer in an image URL and no object URL lifetime to manage.
+          responseHandler: readAvatar,
+        };
+      };
+    },
+    putTeamAvatar(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      endpoint.invalidatesTags = (_result, _error, { id }) => [{ type: "TeamAvatar", id }];
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
+    deleteTeamAvatar: {
+      invalidatesTags: (_result, _error, { id }) => [{ type: "TeamAvatar", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
     spaceCapabilityPolicies: {
       providesTags: (_result, _error, { spaceId }) => [{ type: "SpaceCapabilityPolicies", id: spaceId }],
     },
@@ -253,7 +295,21 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     publishWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     mySpaces: { providesTags: ["MySpaces"] },
-    updateTeamDescription: { invalidatesTags: ["MySpaces"], extraOptions: { retryUnauthorized: false } },
+    teamJoinLink: { keepUnusedDataFor: 0, providesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }] },
+    createTeamJoinLink: {
+      invalidatesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
+    revokeTeamJoinLink: {
+      invalidatesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
+    previewTeamJoinLink: { keepUnusedDataFor: 0 },
+    redeemTeamJoinLink: {
+      invalidatesTags: ["MySpaces", "SpaceMembers", "SpaceAccess"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    updateTeamParameters: { invalidatesTags: ["MySpaces"], extraOptions: { retryUnauthorized: false } },
     spaceMembers: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
@@ -264,11 +320,15 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     grant: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
+    },
+    removeSpaceMember: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
     },
     revoke: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
     },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
@@ -774,11 +834,22 @@ export const {
   useDeleteFolderMutation,
   useDeleteDocumentMutation,
   useMeQuery,
+  useGetTeamAvatarQuery,
+  usePutTeamAvatarMutation,
+  useDeleteTeamAvatarMutation,
+  useRemoveSpaceMemberMutation,
+
+  useTeamDocumentActivityQuery,
   useGetMyAvatarQuery,
   usePutMyAvatarMutation,
   useDeleteMyAvatarMutation,
   useMySpacesQuery,
-  useUpdateTeamDescriptionMutation,
+  useUpdateTeamParametersMutation,
+  useTeamJoinLinkQuery,
+  useCreateTeamJoinLinkMutation,
+  useRevokeTeamJoinLinkMutation,
+  usePreviewTeamJoinLinkQuery,
+  useRedeemTeamJoinLinkMutation,
   useCreatePersonalSpaceMutation,
   useOnboardingStatusQuery,
   useAcceptTermsMutation,

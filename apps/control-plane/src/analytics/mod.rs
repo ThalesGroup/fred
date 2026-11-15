@@ -197,9 +197,6 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
             ));
         }
         if q.measures[0].reader() != ReaderKind::Consumption {
-            if !matches!(q.scope, AnalyticsScope::Personal { .. }) {
-                return Err(AppError::Forbidden);
-            }
             match q.measures[0].reader() {
                 ReaderKind::Skills if grouping != Some(&AnalyticsGrouping::Skill) => {
                     return Err(invalid("Historical loads require skill grouping"));
@@ -207,16 +204,26 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
                 ReaderKind::Turns
                     if !matches!(
                         grouping,
-                        None | Some(AnalyticsGrouping::Agent | AnalyticsGrouping::Space)
+                        None | Some(
+                            AnalyticsGrouping::Agent
+                                | AnalyticsGrouping::Space
+                                | AnalyticsGrouping::Time
+                        )
                     ) =>
                 {
-                    return Err(invalid("Turns support total, agent or space grouping"));
+                    return Err(invalid(
+                        "Turns support total, time, agent or space grouping",
+                    ));
                 }
                 ReaderKind::Turns
                     if grouping.is_some()
-                        && q.measures.contains(&ConsumptionMeasure::AgentsUsed) =>
+                        && q.measures.iter().any(|m| {
+                            *m == ConsumptionMeasure::AgentsUsed || m.needs_attribution()
+                        }) =>
                 {
-                    return Err(invalid("Distinct agents require a total"));
+                    return Err(invalid(
+                        "Distinct identities and outcome counters require a total",
+                    ));
                 }
                 ReaderKind::Conversations if grouping.is_some() => {
                     return Err(invalid("Retained conversations require a total"));
@@ -228,6 +235,11 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
             Some(AnalyticsGrouping::Skill | AnalyticsGrouping::Space)
         ) {
             return Err(invalid("This grouping requires historical measures"));
+        }
+        if matches!(q.scope, AnalyticsScope::Space { .. })
+            && grouping == Some(&AnalyticsGrouping::Space)
+        {
+            return Err(invalid("Space rankings are personal only"));
         }
         if q.time.bucket.is_some() && grouping != Some(&AnalyticsGrouping::Time) {
             return Err(invalid("A bucket requires time grouping"));
@@ -346,16 +358,6 @@ async fn execute(
     request: &AnalyticsRequest,
     plans: &[ReadPlan],
 ) -> AppResult<AnalyticsResponse> {
-    if request.queries[0].measures[0].historical() {
-        return history::execute(
-            &state.pool,
-            state.history.as_deref(),
-            &user.uid,
-            request,
-            plans,
-        )
-        .await;
-    }
     if request
         .queries
         .iter()
@@ -370,6 +372,9 @@ async fn execute(
             )
             .await?;
         }
+    }
+    if request.queries[0].measures[0].historical() {
+        return history::execute(&state.pool, state.history.as_deref(), user, request, plans).await;
     }
     let mut tx = state.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
@@ -580,7 +585,6 @@ mod tests {
             ("activity.retained_conversations", "agent"),
             ("activity.agents_used", "agent"),
             ("usage.total_tokens", "space"),
-            ("activity.completed_turns", "time"),
         ] {
             agents["measures"] = json!([measure]);
             agents["group_by"] = json!([grouping]);

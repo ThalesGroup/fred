@@ -408,7 +408,7 @@ pub(crate) async fn save_created(
     if !authorization::can_use_agent(&mut **tx, instance.template_id, space).await? {
         return Err(AppError::NotFound);
     }
-    models::validate_write(tx, space.organization, &instance.tuning, true).await?;
+    models::validate_write(tx, space, &instance.tuning, true).await?;
 
     let record = super::create(&mut **tx, instance)
         .await
@@ -672,13 +672,7 @@ async fn update_agent_instance(
     tuning::apply_update(&mut current, &body, template.as_ref(), capabilities)?;
     // Descriptive edits and explicit clears never depend on discovery health.
     if new_recommendation || matches!(body.model_options, Some(Some(_))) {
-        models::validate_write(
-            &mut tx,
-            space.organization,
-            &current.tuning.0,
-            new_recommendation,
-        )
-        .await?;
+        models::validate_write(&mut tx, &space, &current.tuning.0, new_recommendation).await?;
     }
 
     if body.powerpoint.is_some() {

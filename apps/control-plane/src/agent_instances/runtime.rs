@@ -40,7 +40,7 @@ struct RuntimeQuery {
     model_source_id: Option<String>,
     model_upstream_id: Option<String>,
     #[serde(default)]
-    reasoning: bool,
+    reasoning: Option<bool>,
     #[serde(default)]
     resume: bool,
 }
@@ -251,7 +251,7 @@ pub(crate) async fn resolve_person_runtime_binding(
         conversation: session_id.map(|id| id.to_string()),
         model_source_id: choice.map(|k| k.source_id.clone()),
         model_upstream_id: choice.map(|k| k.upstream_model_id.clone()),
-        reasoning,
+        reasoning: Some(reasoning),
         resume: false,
     };
     resolve_runtime_binding(
@@ -377,7 +377,7 @@ async fn resolve_runtime_binding(
         .as_object()
         .context("invalid saved agent tuning")?;
     crate::capability_preparation::bind_result(&mut tx, &mut record, space.organization).await?;
-    let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
+    let models = models::resolve_for_space(&mut tx, &space, &record.tuning.0).await?;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
         (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {

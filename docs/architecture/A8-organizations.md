@@ -5,17 +5,18 @@ and coding assistants. It preserves context resolution, placement, membership,
 provisioning and retirement contracts for the Control Plane organization model.
 See [Security](03-security.md) for the reader-facing explanation of roles and rights.
 
-## Team purpose contract
+## Team parameters contract
 
 The [space model](../../apps/control-plane/src/domain.rs) carries a nullable
-`description`, returned with memberships. Absence is the reminder state; no
-placeholder text or separate boolean is persisted. The
+`description`, returned with memberships alongside the current name. Absence is the
+reminder state; no placeholder text or separate boolean is persisted. The
 [migration](../../apps/control-plane/migrations/0027_team_description.sql) limits a
 present value to teams and 20..500 characters. The
 [mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, then
 updates under the existing organization guard with direct `Manage` permission;
-revocation and retirement remain ordered with the write. Concurrent saves use
-last committed write semantics, without a separate revision mechanism.
+revocation and retirement remain ordered with the write. The same PATCH accepts the
+team name, reusing creation validation and sibling uniqueness. Both fields commit atomically under the organization governance lock;
+concurrent saves use last committed write semantics.
 
 The [parameters panel](../../apps/frontend/src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx)
 uses the generated client and refreshes `/me/spaces` after saving. The Agents page
@@ -160,29 +161,34 @@ space's authority; read and scope probes use immutable space identifiers.
 The Nova exercise uses `owner` + `member` on Nova and only `owner` on Pilote.
 Management and content reads are separate Control Plane decisions. The UI's neutral
 `/team/:teamId` entry opens agents when `read` is allowed, otherwise the membership
-page when `manage` is allowed. The team sidebar exposes settings through the same
-`manage` decision and does not mount the conversation list without current `read`.
+page when `manage` is allowed. The team sidebar offers the roster with Read or Manage,
+and management settings with Manage. It does not mount conversations without Read.
 Direct URLs remain subject to the page and API checks.
 
 `TeamSettingsPage` now uses Weaver's generated client for membership management,
-replacing its legacy Swift capability/charter gate. Its first integrated scope is
-listing members, listing eligible parent members, and adding/removing individual
-roles. Checkboxes are independent and apply immediately; no role is synthesized
-on entry or after granting owner. Renaming, project creation, invitations, retention
-and model routing are not added to this membership screen. Former settings
-subsection URLs resolve to the membership page rather than legacy Swift controls.
+replacing its legacy Swift capability/charter gate. Its roster uses independent role
+checkboxes; no role is synthesized on entry or after granting owner. Read-only rosters are available with direct Read;
+candidates and role writes still require Manage. Atomic member removal and voluntary
+departure reuse individual revocation's last-owner and dependent-child checks.
+The parameters and offer routes retain separate owners; unsupported subsections
+resolve to members rather than legacy Swift controls. The additional team-settings
+implementation and its pending reception scenarios are recorded in the
+[component README](../../apps/control-plane/README.md#team-settings-and-members-implementation-reception-pending),
+not as deployed acceptance.
 
 | API (prefix `/control-plane/v1`) | Contract |
 | --- | --- |
-| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Manage`; 50 people per page with an exclusive subject cursor. |
-| `GET /spaces/{id}/member-candidates` | Same authority; candidates hold a direct content role on the managed space's parent. Returned roles are on the managed space, not the parent. No global SSO directory search. |
+| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Read` or `Manage`; 50 people per page with an exclusive subject cursor. |
+| `GET /spaces/{id}/member-candidates` | Current `Manage`; candidates hold a direct content role on the managed space's parent. Returned roles are on the managed space, not the parent. No global SSO directory search. |
+| `DELETE /spaces/{id}/members/{user}` | Atomic removal of all direct roles by the responsible person or the departing person, with the same ownership and dependent-child safeguards. |
 | `PUT` / `DELETE /spaces/{id}/roles/{role}/{user}` | Existing grant/revoke authority and transactions. Parent eligibility, known identity, last-owner protection and dependent-child safeguards remain enforced. |
 
 [space_members.rs](../../apps/control-plane/src/space_members.rs) reads grants and
 candidate eligibility in a read-only repeatable-read transaction. It releases SQL
-before bounded directory enrichment (15 seconds), then rechecks current Manage and
-lifecycle before returning. Display profiles confer no authority. There is no new
-table, migration, identity provisioning or change to the permission matrix.
+before bounded directory enrichment (15 seconds), then rechecks the required
+Read/Manage authority and lifecycle before returning. Search scans bounded scoped
+pages and retains their cursor. Display profiles confer no authority. Membership
+listing/removal adds no identity provisioning or inherited permissions.
 [spaces.rs](../../apps/control-plane/src/spaces.rs) remains the mutation owner.
 The generated-client cache invalidates rosters, memberships and access decisions
 after grant/revoke attempts, including refusals; cached permission alone cannot

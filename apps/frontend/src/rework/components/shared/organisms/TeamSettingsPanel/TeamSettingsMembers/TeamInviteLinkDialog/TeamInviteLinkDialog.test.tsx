@@ -21,10 +21,17 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("../../../../../../../common/platformAccess", () => ({
   platformPath: (path: string) => `/${path.replace(/^\//, "")}`,
 }));
-vi.mock("../../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useTeamJoinLinkQuery: () => ({ data: h.state, isFetching: false, isError: false }),
-  useSetTeamJoinLinkMutation: () => [h.setEnabled, { isLoading: false }],
-  useRegenerateTeamJoinLinkMutation: () => [h.regenerate, { isLoading: false }],
+vi.mock("../../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useTeamJoinLinkQuery: () => ({
+    currentData: h.state.enabled
+      ? { token: h.state.token, expires_at: new Date(Date.now() + 7 * 86400_000).toISOString() }
+      : null,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useRevokeTeamJoinLinkMutation: () => [h.setEnabled, { isLoading: false }],
+  useCreateTeamJoinLinkMutation: () => [h.regenerate, { isLoading: false }],
 }));
 
 import TeamInviteLinkDialog from "./TeamInviteLinkDialog";
@@ -59,16 +66,13 @@ it("turns the invitation on through the switch, with nothing to copy before", as
   expect(urlInput()).toBeNull();
   expect(button("regenerate")).toBeUndefined();
   await act(async () => toggle().click());
-  expect(h.setEnabled).toHaveBeenCalledWith({ teamId: "demo", setTeamJoinLink: { enabled: true } });
+  expect(h.regenerate).toHaveBeenCalledWith({ id: "demo" });
 });
 
-it("shows the full link greyed out while the invitation is paused", async () => {
-  h.state = { enabled: false, token: "opaque" };
+it("does not expose a revoked or expired link", () => {
   render();
-  expect(urlInput()!.value).toBe("http://localhost:5173/join/opaque");
-  expect(urlInput()!.disabled).toBe(true);
-  expect(button("copy")!.disabled).toBe(true);
-  expect(button("regenerate")!.disabled).toBe(true);
+  expect(urlInput()).toBeNull();
+  expect(button("copy")).toBeUndefined();
 });
 
 it("copies the link and replaces it on request", async () => {
@@ -80,9 +84,9 @@ it("copies the link and replaces it on request", async () => {
   expect(writeText).toHaveBeenCalledWith("http://localhost:5173/join/opaque");
   expect(button("copied")).toBeDefined();
   await act(async () => button("regenerate")!.click());
-  expect(h.regenerate).toHaveBeenCalledWith({ teamId: "demo" });
+  expect(h.regenerate).toHaveBeenCalledWith({ id: "demo" });
   await act(async () => toggle().click());
-  expect(h.setEnabled).toHaveBeenCalledWith({ teamId: "demo", setTeamJoinLink: { enabled: false } });
+  expect(h.setEnabled).toHaveBeenCalledWith({ id: "demo" });
 });
 
 it("selects the link when the clipboard refuses", async () => {
@@ -99,7 +103,7 @@ it("selects the link when the clipboard refuses", async () => {
 });
 
 it("reports a failed update", async () => {
-  h.setEnabled.mockReturnValue({
+  h.regenerate.mockReturnValue({
     unwrap: async () => {
       throw new Error("boom");
     },
@@ -115,9 +119,9 @@ it("toggles once from anywhere on the card, and once from the switch itself", as
     (node) => node.textContent === "rework.teamSettings.members.inviteLink.enable",
   )!;
   await act(async () => label.click());
-  expect(h.setEnabled).toHaveBeenCalledTimes(1);
-  expect(h.setEnabled).toHaveBeenLastCalledWith({ teamId: "demo", setTeamJoinLink: { enabled: true } });
+  expect(h.regenerate).toHaveBeenCalledTimes(1);
+  expect(h.regenerate).toHaveBeenLastCalledWith({ id: "demo" });
   await act(async () => toggle().click());
-  expect(h.setEnabled).toHaveBeenCalledTimes(2);
+  expect(h.regenerate).toHaveBeenCalledTimes(2);
   expect(toggle().getAttribute("aria-labelledby")).toBe(label.id);
 });

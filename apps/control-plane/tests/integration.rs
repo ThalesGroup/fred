@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 use control_plane::{
-    bootstrap, db,
+    authorization, bootstrap, db,
     domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
     error::AppError,
     spaces,
@@ -5329,7 +5329,7 @@ async fn owner_only_team_membership_governance() {
         [Role::Owner]
     );
     assert!(!reads(&e, "alice", team.id).await);
-    for caller in ["bob", "governor", "outsider", "root"] {
+    for caller in ["governor", "outsider", "root"] {
         for candidates in [false, true] {
             assert!(
                 control_plane::space_members::list(
@@ -5340,6 +5340,16 @@ async fn owner_only_team_membership_governance() {
             );
         }
     }
+    assert!(
+        control_plane::space_members::list(&e.pool, &directory, "bob", team.id, None, false)
+            .await
+            .is_ok()
+    );
+    assert!(
+        control_plane::space_members::list(&e.pool, &directory, "bob", team.id, None, true)
+            .await
+            .is_err()
+    );
     let eligible =
         control_plane::space_members::list(&e.pool, &directory, "alice", team.id, None, true)
             .await
@@ -5465,48 +5475,56 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     .await
     .unwrap();
     assert!(matches!(
-        spaces::update_team_description(
+        spaces::update_team_parameters(
             &e.pool,
             "bob",
             team.id,
-            "An editor cannot describe this team."
+            None,
+            Some("An editor cannot describe this team.")
         )
         .await,
         Err(AppError::Forbidden)
     ));
     assert!(
-        spaces::update_team_description(
+        spaces::update_team_parameters(
             &e.pool,
             "outsider",
             team.id,
-            "No cross-organization description writes."
+            None,
+            Some("No cross-organization description writes.")
         )
         .await
         .is_err()
     );
     assert!(matches!(
-        spaces::update_team_description(
+        spaces::update_team_parameters(
             &e.pool,
             "alice",
             org.id,
-            "This is an organization, not a team."
+            None,
+            Some("This is an organization, not a team.")
         )
         .await,
         Err(AppError::NotFound)
     ));
     for invalid in ["".to_owned(), "short".to_owned(), "x".repeat(501)] {
         assert!(matches!(
-            spaces::update_team_description(&e.pool, "alice", team.id, &invalid).await,
+            spaces::update_team_parameters(&e.pool, "alice", team.id, None, Some(&invalid)).await,
             Err(AppError::BadRequest(_))
         ));
     }
     // Manage does not require a content role.
     delete_tuple(&e, "alice", "member", &format!("space:{}", team.id)).await;
     let description = "😀".repeat(500);
-    let updated =
-        spaces::update_team_description(&e.pool, "alice", team.id, &format!("  {description}\n"))
-            .await
-            .unwrap();
+    let updated = spaces::update_team_parameters(
+        &e.pool,
+        "alice",
+        team.id,
+        None,
+        Some(&format!("  {description}\n")),
+    )
+    .await
+    .unwrap();
     assert_eq!(updated.description.as_deref(), Some(description.as_str()));
     let memberships = spaces::memberships(&e.pool, "bob").await.unwrap();
     assert_eq!(
@@ -5536,16 +5554,376 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
                 .is_err()
         );
     }
-    // Once rights have been revoked, the same edit path must reject the previous owner.
-    delete_tuple(&e, "alice", "owner", &format!("space:{}", team.id)).await;
+    let renamed =
+        spaces::update_team_parameters(&e.pool, "alice", team.id, Some("  Renamed  "), None)
+            .await
+            .unwrap();
+    assert_eq!(renamed.name, "Renamed");
+    assert_eq!(renamed.description, updated.description);
     assert!(matches!(
-        spaces::update_team_description(
+        spaces::update_team_parameters(&e.pool, "bob", team.id, Some("Forbidden"), None).await,
+        Err(AppError::Forbidden)
+    ));
+    let sibling = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Team,
+        org.id,
+        "Reserved name".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(&sibling.name), None).await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(
+        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(""), None)
+            .await
+            .is_err()
+    );
+    // A rejected combined edit must not commit its valid name.
+    assert!(
+        spaces::update_team_parameters(
             &e.pool,
             "alice",
             team.id,
-            "A former owner cannot change the purpose."
+            Some("Not committed"),
+            Some("short")
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        spaces::load(&e.pool, team.id).await.unwrap().name,
+        "Renamed"
+    );
+    // Once rights have been revoked, the same edit path must reject the previous owner.
+    delete_tuple(&e, "alice", "owner", &format!("space:{}", team.id)).await;
+    assert!(matches!(
+        spaces::update_team_parameters(
+            &e.pool,
+            "alice",
+            team.id,
+            None,
+            Some("A former owner cannot change the purpose.")
         )
         .await,
         Err(AppError::Forbidden)
     ));
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn team_links_grant_only_membership_within_the_organization() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    spaces::grant(&e.pool, &e.subjects(), "alice", org.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Unshared".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let foreign = support::member_organization(&e.pool, "Foreign", "foreign-member")
+        .await
+        .unwrap();
+    let link = control_plane::team_join_links::create(&e.pool, "alice", team.id)
+        .await
+        .unwrap();
+    assert!(
+        control_plane::team_join_links::create(&e.pool, "bob", team.id)
+            .await
+            .is_err()
+    );
+    assert!(
+        control_plane::team_join_links::join(&e.pool, "outsider", link.token, true)
+            .await
+            .is_err()
+    );
+    control_plane::team_join_links::join(&e.pool, "bob", link.token, false)
+        .await
+        .unwrap();
+    assert!(
+        !authorization::authorize(&e.pool, "bob", team.id, Permission::Read)
+            .await
+            .is_ok()
+    );
+    control_plane::team_join_links::join(&e.pool, "bob", link.token, true)
+        .await
+        .unwrap();
+    control_plane::team_join_links::join(&e.pool, "bob", link.token, true)
+        .await
+        .unwrap();
+    let roles: Vec<String> =
+        sqlx::query_scalar("select role from space_role_grant where space_id=$1 and subject='bob'")
+            .bind(team.id)
+            .fetch_all(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(roles, ["member"]);
+    assert!(!reads(&e, "bob", project.id).await);
+    assert!(!reads(&e, "bob", foreign.id).await);
+    assert!(
+        control_plane::team_join_links::join(&e.pool, "foreign-member", link.token, true)
+            .await
+            .is_err()
+    );
+    let next = control_plane::team_join_links::create(&e.pool, "alice", team.id)
+        .await
+        .unwrap();
+    assert_ne!(link.token, next.token);
+    assert!(
+        control_plane::team_join_links::join(&e.pool, "bob", link.token, true)
+            .await
+            .is_err()
+    );
+    sqlx::query("update team_join_link set created_at=now()-interval '2 days', expires_at=now()-interval '1 day' where space_id=$1").bind(team.id).execute(&e.pool).await.unwrap();
+    assert!(
+        control_plane::team_join_links::join(&e.pool, "bob", next.token, true)
+            .await
+            .is_err()
+    );
+    assert!(
+        authorization::authorize(&e.pool, "bob", team.id, Permission::Read)
+            .await
+            .is_ok()
+    );
+    let next = control_plane::team_join_links::create(&e.pool, "alice", team.id)
+        .await
+        .unwrap();
+    delete_tuple(&e, "alice", "owner", &format!("space:{}", team.id)).await;
+    assert!(
+        control_plane::team_join_links::join(&e.pool, "bob", next.token, true)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "alice").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Editor, "bob").await;
+    assert!(
+        spaces::remove_member(&e.pool, "bob", team.id, "alice")
+            .await
+            .is_err()
+    );
+    assert!(matches!(
+        spaces::remove_member(&e.pool, "alice", team.id, "alice").await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(reads(&e, "alice", team.id).await);
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Dependency".into(),
+        "bob",
+    )
+    .await
+    .unwrap();
+    grant(&e, team.id, Role::Owner, "bob").await;
+    let before = authorization::roles_of(&e.pool, "bob").await.unwrap();
+    for caller in ["alice", "bob"] {
+        assert!(matches!(
+            spaces::remove_member(&e.pool, caller, team.id, "bob").await,
+            Err(AppError::Conflict(_))
+        ));
+        assert_eq!(
+            authorization::roles_of(&e.pool, "bob").await.unwrap(),
+            before
+        );
+    }
+    // Hand the project to another responsible person before departure.
+    grant(&e, project.id, Role::Owner, "alice").await;
+    spaces::remove_member(&e.pool, "bob", project.id, "bob")
+        .await
+        .unwrap();
+    spaces::remove_member(&e.pool, "bob", team.id, "bob")
+        .await
+        .unwrap();
+    assert!(
+        !authorization::roles_of(&e.pool, "bob")
+            .await
+            .unwrap()
+            .iter()
+            .any(|(id, _)| *id == team.id)
+    );
+    assert!(reads(&e, "bob", org.id).await);
+    assert!(spaces::load(&e.pool, project.id).await.is_ok());
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn team_avatar_uses_the_shared_durable_cleanup_journal() {
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    let id = Uuid::new_v4();
+    sqlx::query("insert into avatar(id,space_id,object_key,size,status,expires_at) values($1,$2,'avatar-active',100,'active',now()+interval '1 hour')")
+        .bind(id).bind(team.id).execute(&e.pool).await.unwrap();
+    assert!(sqlx::query("insert into avatar(id,space_id,object_key,size,status,expires_at) values($1,$2,'duplicate',100,'active',now()+interval '1 hour')")
+        .bind(Uuid::new_v4()).bind(team.id).execute(&e.pool).await.is_err());
+    let pending = Uuid::new_v4();
+    sqlx::query("insert into avatar(id,space_id,object_key,size,status,expires_at) values($1,$2,'avatar-pending',100,'pending',now()+interval '1 hour')")
+        .bind(pending).bind(team.id).execute(&e.pool).await.unwrap();
+    sqlx::query("delete from space where id=$1")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let rows: Vec<(String, Option<Uuid>, bool)> =
+        sqlx::query_as("select status,space_id,expires_at>now() from avatar where id=any($1)")
+            .bind(vec![id, pending])
+            .fetch_all(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .all(|(state, space, protected)| state == "retired" && space.is_none() && *protected)
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn team_settings_http_scopes_search_avatars_and_link_revocation() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::Value;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    let identity = support::IdentityServer::start().await;
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(e.open_directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let members = format!("/spaces/{}/members?search=BoB", team.id);
+    let (status, found) =
+        support::request(&app, &identity, Some("bob"), "GET", &members, Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(found["items"].as_array().unwrap().len(), 1);
+    assert_eq!(found["items"][0]["user"]["id"], "bob");
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "GET",
+            &format!("/spaces/{}/member-candidates?search=alice", team.id),
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    let avatar = format!("/spaces/{}/avatar", team.id);
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &avatar, Value::Null)
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "DELETE", &avatar, Value::Null)
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("alice"),
+            "DELETE",
+            &avatar,
+            Value::Null
+        )
+        .await
+        .0,
+        204
+    );
+    let link_path = format!("/spaces/{}/join-link", team.id);
+    let (status, link) = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &link_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let entry = format!("/team-join-links/{}", link["token"].as_str().unwrap());
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &entry, Value::Null)
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("alice"),
+            "DELETE",
+            &link_path,
+            Value::Null
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "POST", &entry, Value::Null)
+            .await
+            .0,
+        404
+    );
+    assert!(reads(&e, "bob", team.id).await);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn concurrent_departures_cannot_remove_both_team_owners() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Owner, "bob").await;
+    let (alice, bob) = tokio::join!(
+        spaces::remove_member(&e.pool, "alice", team.id, "alice"),
+        spaces::remove_member(&e.pool, "bob", team.id, "bob"),
+    );
+    assert_ne!(alice.is_ok(), bob.is_ok());
+    assert_eq!(
+        authorization::space_holders(&e.pool, team.id, Role::Owner)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[path = "support/team_activity.rs"]
+mod team_activity;

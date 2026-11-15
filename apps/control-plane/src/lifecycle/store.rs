@@ -360,8 +360,8 @@ impl Lifecycle {
         let requested_at = Utc::now();
         let (due_at, rule) = self.deadline(&space, requested_at, immediate)?;
         let operation = Uuid::new_v4();
-        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
-            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id,document_session_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *")
+            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).bind(session).fetch_one(&mut *tx).await?;
         // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query(
             "update document set deletion_id = $2, purge_after = clock_timestamp() where id = $1",

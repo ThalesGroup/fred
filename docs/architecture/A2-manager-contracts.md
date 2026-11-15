@@ -28,6 +28,8 @@ are outside this catalogue.
 | SQL group | Authority and lifecycle |
 | --- | --- |
 | `space`, `space_role_grant` | Placement and direct business roles; grants disappear with their space. |
+| `team_join_link` | One rotating, expiring link per team; redemption writes the existing Member grant. Revoking the link does not revoke acquired membership. |
+| `avatar` | Personal or team image and durable object-cleanup receipt; retired objects survive owner deletion until cleanup. |
 | `prompt`, `prompt_category`, `prompt_favorite` | Space-owned definitions and categories; caller preferences. |
 | `marketplace_entry`, `marketplace_proposal`, `marketplace_installation` | Frozen packages, catalogue decisions and independent-installation receipts; see the [backend contract](../../apps/control-plane/README.md#local-marketplace-api). |
 | `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
@@ -38,7 +40,7 @@ are outside this catalogue.
 | `document_upload`, `document_processing`, `document_storage` | Upload receipts, processing attempts and installation storage inventory. |
 | `powerpoint_file`, `capability_preparation` | [Managed PowerPoint originals and prepared data](A9-documents.md#powerpoint-builder-data). |
 | `wiki_page`, `wiki_revision` | Space-owned editorial content, separate from the file catalogue; published provenance survives conversation deletion. |
-| `deletion` | Durable cleanup receipt, deliberately surviving removal of its target. |
+| `deletion` | Durable cleanup receipt, deliberately surviving removal of its target. `document_session_id` retains attachment provenance so team activity excludes private documents even after purge. |
 | `platform_bootstrap`, `platform_role_grant` | Bootstrap receipt and canonical direct platform grants. |
 | `user_identity`, `terms_acceptance` | Observed directory profile and personal consent; neither grants content access. |
 
@@ -86,6 +88,7 @@ application path writes it yet.
 | 1. Immutability | `space` | `space_immutable` / `forbid_space_move` | BEFORE UPDATE / ROW | space identity and hierarchy |
 | 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE UPDATE / ROW | wiki revision content and provenance |
 | 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
+| 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams; personal avatars belong to subjects |
 | 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | published owned current content and fixed source identity |
 | 2. Cross-row consistency | `document_content` | `document_preview_valid` / `protect_document_preview` | BEFORE INSERT / ROW | preview belongs to its primary content |
 | 2. Cross-row consistency | `document_move` | `document_move_identity` / `protect_document_move` | BEFORE INSERT OR UPDATE / ROW | live same-organization move endpoints, frozen request and valid transitions |
@@ -104,8 +107,10 @@ application path writes it yet.
 | 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
 | 2. Cross-row consistency | `space_capability_permission` | `local_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | local MCP permission stays in its owning organization |
 | 2. Cross-row consistency | `space_capability_policy` | `space_capability_policy_kind` / `require_local_capability_space` | BEFORE INSERT OR UPDATE / ROW | local capability policy belongs to a team or project |
+| 2. Cross-row consistency | `space_model_policy` | `space_model_policy_kind` / `require_local_model_policy` | BEFORE INSERT OR UPDATE / ROW | local model policy belongs to a team or project |
 | 2. Cross-row consistency | `space_role_grant` | `space_role_scope` / `require_space_role_scope` | BEFORE INSERT OR UPDATE / ROW | personal owner and organization admin scope |
 | 2. Cross-row consistency | `storage_budget` | `storage_budget_scope` / `require_storage_budget_scope` | BEFORE INSERT OR UPDATE / ROW | immutable budget owner and valid local or organization scope |
+| 2. Cross-row consistency | `team_join_link` | `team_join_link_space` / `require_team_join_link` | BEFORE INSERT OR UPDATE / ROW | shareable membership links belong only to teams |
 | 3. Effects | `agent_instance` | `capability_agent_retirement` / `invalidate_capability_preparation` | BEFORE DELETE / ROW | mark agent capability preparations obsolete |
 | 3. Effects | `agent_instance` | `powerpoint_agent_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the agent PowerPoint files and schedule cleanup |
 | 3. Effects | `document` | `document_account` / `account_document` | BEFORE INSERT OR DELETE / ROW | adjust local and organization used storage bytes |
@@ -118,6 +123,7 @@ application path writes it yet.
 | 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |
 | 3. Effects | `runtime_catalog` | `runtime_catalog_source` / `register_pod_capability_source` | AFTER INSERT / ROW | register the pod capability source |
 | 3. Effects | `space` | `powerpoint_space_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the space PowerPoint files and schedule cleanup |
+| 3. Effects | `space` | `space_avatar_retirement` / `retire_space_avatar` | BEFORE DELETE / ROW | retire team avatars while retaining their durable object cleanup journal |
 <!-- end generated -->
 
 ### Resource identity and conversation placement
@@ -141,8 +147,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L674) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L597) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L765) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L655) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L252) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 
@@ -179,7 +185,8 @@ stay on the trusted execution path; the browser receives public choices.
 
 | Selection | Rule |
 | --- | --- |
-| Precedence | Explicit chat choice, otherwise instance recommendation, otherwise organization default. No choice means refusal. |
+| Precedence | Explicit chat choice, otherwise instance recommendation, otherwise nearest project/team default, otherwise organization default. No choice means refusal. |
+| Local policy | Team/project restrictions only narrow the parent ceiling. The nearest saved policy supplies reasoning defaults; an explicit question choice overrides this preference within the model's aptitude and organization ceiling. |
 | Eligibility | A model is identified by source and upstream ID; observation does not grant permission. An unknown, forbidden or unusable choice produces a diagnostic, never an arbitrary substitute. |
 | Fallback | Only confirmed withdrawal can use the approved fallback, within the same source and provisioning account, and only when still permitted and usable. Failed discovery alone is not withdrawal. |
 | Administrative writes | A new selection requires successful observation at the current source revision; a retained legacy profile requires explicit reselection unless a recommendation exists. |

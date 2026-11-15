@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type {
   AgentTemplateSummary,
+  ModelOfferKey,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import type { FieldSpec as ManagedAgentFieldSpec } from "../../../../../slices/runtime/runtimeOpenApi";
@@ -41,6 +42,7 @@ export type AgentFormPayload = {
   usageStatement: string;
   /** Chat profile new conversations start on; null follows the team default. */
   recommendedChatProfileId: string | null;
+  recommendedModel: ModelOfferKey | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -85,6 +87,7 @@ type FormState = {
   description: string;
   usageStatement: string;
   recommendedChatProfileId: string | null;
+  recommendedModel: ModelOfferKey | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
@@ -129,6 +132,7 @@ export function buildAgentFormSubmitPayload(
     description: form.description,
     usageStatement: form.usageStatement,
     recommendedChatProfileId: form.recommendedChatProfileId,
+    recommendedModel: form.recommendedModel,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: form.selectedCapabilityIds,
     capabilityConfigValues: form.capabilityConfigValues,
@@ -183,6 +187,7 @@ export default function AgentFormModal({
     description: "",
     usageStatement: "",
     recommendedChatProfileId: null,
+    recommendedModel: null,
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -216,6 +221,7 @@ export default function AgentFormModal({
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
         recommendedChatProfileId: editInstance.recommended_chat_profile_id ?? null,
+        recommendedModel: editInstance.recommended_model ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -233,6 +239,7 @@ export default function AgentFormModal({
         description: "",
         usageStatement: "",
         recommendedChatProfileId: null,
+        recommendedModel: null,
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -253,6 +260,7 @@ export default function AgentFormModal({
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
       recommendedChatProfileId: null,
+      recommendedModel: null,
       tuningValues: defaultTuningValues(tpl, lang),
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
@@ -440,6 +448,10 @@ export default function AgentFormModal({
           description={form.description}
           usageStatement={form.usageStatement}
           recommendedChatProfileId={recommendedChatProfileId}
+          recommendedModel={form.recommendedModel}
+          onRecommendedModelChange={(value) =>
+            setForm((prev) => ({ ...prev, recommendedModel: value, recommendedChatProfileId: null }))
+          }
           tuningFieldValues={form.tuningValues}
           selectedCapabilityIds={form.selectedCapabilityIds}
           capabilityConfigValues={form.capabilityConfigValues}
@@ -460,7 +472,6 @@ export default function AgentFormModal({
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
           onTuningChange={handleTuningChange}
           onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
           onCapabilitySelectionReplace={(next) =>

@@ -68,6 +68,7 @@ vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: (
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
+  useGetTeamAvatarQuery: () => ({ currentData: h.teamAvatarImageUrl }),
   useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
     h.avatarQuery(skip);
     return { currentData: skip ? undefined : h.userPictureUrl };
@@ -629,13 +630,17 @@ describe("TeamContentNavbar collective usage", () => {
     },
   );
 
-  it.each(["usage", "settings/members"])("keeps Analyst out of management links on %s", (route) => {
-    h.pathname = `/team/team-1/${route}`;
-    const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain('href="/team/team-1/usage"');
-    expect(html).not.toContain('href="/team/team-1/settings/members"');
-    expect(html).not.toContain('href="/team/team-1/settings/offers"');
-  });
+  it.each(["usage", "settings/members"])(
+    "offers the roster but keeps Analyst out of management links on %s",
+    (route) => {
+      h.canRead = true;
+      h.pathname = `/team/team-1/${route}`;
+      const html = renderToStaticMarkup(<TeamContentNavbar />);
+      expect(html).toContain('href="/team/team-1/usage"');
+      expect(html).toContain('href="/team/team-1/settings/members"');
+      expect(html).not.toContain('href="/team/team-1/settings/offers"');
+    },
+  );
 
   it("keeps management and usage navigation together for an authorized Owner", () => {
     h.memberships[0].roles = ["owner"];
@@ -656,4 +661,25 @@ describe("TeamContentNavbar collective usage", () => {
     h.memberships[0].kind = "organization";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
   });
+});
+
+it("offers team activity to content readers separately from management and consumption", () => {
+  h.pathname = "/team/team-1/settings/activity";
+  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member"] }];
+  h.canManage = false;
+  h.canRead = true;
+  try {
+    let html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/settings/activity"');
+    expect(html).not.toContain('href="/team/team-1/settings/members"');
+    h.canManage = true;
+    h.canRead = false;
+    html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).not.toContain('href="/team/team-1/settings/activity"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+  } finally {
+    h.memberships = [];
+    h.canManage = false;
+    h.canRead = true;
+  }
 });
