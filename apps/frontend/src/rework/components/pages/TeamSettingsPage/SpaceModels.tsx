@@ -39,6 +39,19 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
   );
   const data = query.currentData;
   const busy = !access.allowed || saving.isLoading || query.isFetching || query.isError;
+  // A first local policy must not copy parent preferences which are no longer admissible.
+  // Already-local references remain saved even after their permission is revoked.
+  const reasoningDefaults = data?.policy.revision
+    ? data.policy.reasoning_default_on
+    : (data?.models.reasoning_default_on ?? []).filter((key) =>
+        data?.models.offers.some(
+          (offer) =>
+            same(offer.key, key) &&
+            offer.selectable &&
+            offer.metadata?.reasoning === true &&
+            includes(data.models.policy.reasoning_enabled, key),
+        ),
+      );
   const save = async (patch: Partial<ReplaceSpaceModelPolicy>) => {
     if (!data || busy || !access.allowed) return;
     setError(undefined);
@@ -49,7 +62,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
           expected_revision: data.policy.revision,
           default: data.policy.default,
           disabled: data.policy.disabled,
-          reasoning_default_on: data.models.reasoning_default_on,
+          reasoning_default_on: reasoningDefaults,
           ...patch,
         },
       }).unwrap();
@@ -174,8 +187,8 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
                         onChange={(event) =>
                           void save({
                             reasoning_default_on: event.target.checked
-                              ? [...data.models.reasoning_default_on, offer.key]
-                              : data.models.reasoning_default_on.filter((key) => !same(key, offer.key)),
+                              ? [...reasoningDefaults, offer.key]
+                              : reasoningDefaults.filter((key) => !same(key, offer.key)),
                           })
                         }
                       />
@@ -229,7 +242,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
             return;
           void save({
             disabled: [...data.policy.disabled, pending],
-            reasoning_default_on: data.models.reasoning_default_on.filter((key) => !same(key, pending)),
+            reasoning_default_on: reasoningDefaults.filter((key) => !same(key, pending)),
           });
           setPending(null);
         }}

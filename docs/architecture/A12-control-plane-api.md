@@ -165,6 +165,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
+| GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
 
 ## /powerpoint-uploads routes
 
@@ -188,10 +189,14 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{id}/avatar` | `get_team_avatar` | Required |
 | PUT | `/spaces/{id}/avatar` | `put_team_avatar` | Required |
 | DELETE | `/spaces/{id}/avatar` | `delete_team_avatar` | Required |
+| GET | `/spaces/{id}/conversation-retention` | `team_conversation_retention` | Required |
+| PUT | `/spaces/{id}/conversation-retention` | `replace_team_conversation_retention` | Required |
 | GET | `/spaces/{id}/deletion` | `project_deletion_status` | Required |
+| GET | `/spaces/{id}/discovery` | `team_metadata` | Required |
 | GET | `/spaces/{id}/document-activity` | `team_document_activity` | Required |
 | GET | `/spaces/{id}/document-uploads` | `receipts` | Required |
 | GET | `/spaces/{id}/entries` | `entries` | Required |
+| POST | `/spaces/{id}/join` | `join_team` | Required |
 | GET | `/spaces/{id}/join-link` | `team_join_link` | Required |
 | POST | `/spaces/{id}/join-link` | `create_team_join_link` | Required |
 | DELETE | `/spaces/{id}/join-link` | `revoke_team_join_link` | Required |
@@ -346,7 +351,10 @@ for a total, or exactly one of `time`, `agent`, `model`. Only time grouping acce
 an optional bucket (`hour`, `day`, `week`); otherwise it is resolved automatically:
 hour through 48 hours, day through 92 days, week thereafter. Weeks start Monday.
 The first bucket may start before `since`, but facts remain clipped to the period.
-Empty time buckets contain zero. Groups with no facts are absent.
+Empty time buckets contain zero. Groups with no facts are absent. The bounded
+`time.calendar` options and other unreceived team measure extensions are specified
+in the [component contract](../../apps/control-plane/README.md#additional-team-measures-implementation-acceptance-pending);
+they use the same UTC convention and never change current stock into past stock.
 
 Exact consumption measures are a distinct selection of `usage.input_tokens`,
 `usage.output_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens`,
@@ -375,7 +383,7 @@ Each result selects 1..12 distinct measures. Limits are 64 KiB request,
 batch and 2 MiB serialized response. Invalid fields/combinations return 422
 `invalid_fields`; row/byte budget failures return 422 `query_too_large`; oversized
 requests return 413 `request_too_large`. Unknown fields, additional dimensions,
-filters, comparison, multiple spaces in one scope, organization/platform scopes
+arbitrary filters, implicit comparison, multiple spaces in one scope, organization/platform scopes
 and non-UTC calendars are rejected. There is no storage selection or expression API.
 
 The service validates every query and authorizes every scope before reading data.
@@ -494,10 +502,13 @@ Totals retain `BigInt`; an unsafe chart counter becomes an exact table. Rankings
 show truncation and estimates retain coverage/fallback markers. No browser estimate
 is recomputed from total tokens.
 
-Skills, activity, resource counts and storage in this page retain their legacy
-clients and permissions, independently of collective ReadUsage. The administration
-dashboard also retains the shared legacy consumption hooks. Their presence is not
-an assertion of Weaver reception.
+The collective team page uses the common POST for consumption and observations;
+it no longer uses the legacy resource-count hooks. The
+[component contract](../../apps/control-plane/README.md#additional-team-measures-implementation-acceptance-pending)
+records the unreceived inventory, frequency, calendar and tool-attempt extensions,
+including absent publication data and retention limits. Personal and administration
+surfaces retain their own existing scope. This source wiring is not an assertion
+of browser or deployment reception.
 
 The [usage integration fixtures](../../apps/control-plane/tests/support/usage.rs)
 cover isolation, collective rights, purge, HITL, numeric precision, refusal limits,

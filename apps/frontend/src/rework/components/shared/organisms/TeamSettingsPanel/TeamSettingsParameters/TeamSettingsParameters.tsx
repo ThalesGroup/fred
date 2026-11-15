@@ -7,6 +7,9 @@ import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCar
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
+import Select from "@shared/molecules/Select/Select";
+import type { TeamVisibility, TeamJoiningMode } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -19,11 +22,13 @@ import {
 } from "@core/utils/teamFields";
 import {
   useMySpacesQuery,
+  useTeamMetadataQuery,
   useGetTeamAvatarQuery,
   usePutTeamAvatarMutation,
   useDeleteTeamAvatarMutation,
   useUpdateTeamParametersMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import TeamConversationRetention from "./TeamConversationRetention";
 import styles from "./TeamSettingsParameters.module.scss";
 
 export default function TeamSettingsParameters({ spaceId }: { spaceId: string }) {
@@ -35,6 +40,16 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
     { id: spaceId },
     { skip: !access.allowed || space?.kind !== "team", refetchOnMountOrArgChange: true },
   );
+  const discovery = useTeamMetadataQuery(
+    { id: spaceId },
+    crossSessionRefreshOptions(!access.allowed || space?.kind !== "team"),
+  );
+  useRefetchOnWindowFocus(discovery.refetch, !access.allowed || space?.kind !== "team", true);
+  const [visibilityDraft, setVisibilityDraft] = useState<TeamVisibility>();
+  const [joiningDraft, setJoiningDraft] = useState<TeamJoiningMode>();
+  const [discoveryError, setDiscoveryError] = useState(false);
+  const visibility = visibilityDraft ?? discovery.currentData?.visibility;
+  const joiningMode = joiningDraft ?? discovery.currentData?.joining_mode;
   const [uploadAvatar, uploading] = usePutTeamAvatarMutation();
   const [deleteAvatar, deleting] = useDeleteTeamAvatarMutation();
   const [avatarError, setAvatarError] = useState(false);
@@ -88,6 +103,72 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
   return (
     <div className={styles.parameters}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
+      <section className={styles.section}>
+        <h2>{t("rework.teamDiscovery.settingsTitle")}</h2>
+        <p>{t("rework.teamDiscovery.settingsHint")}</p>
+        {discovery.isError ? (
+          <p role="alert">{t("rework.manager.unavailable")}</p>
+        ) : !discovery.currentData ? (
+          <p role="status">{t("common.loading")}</p>
+        ) : (
+          <>
+            <Select<TeamVisibility>
+              size="medium"
+              label={t("rework.teamDiscovery.visibility")}
+              value={visibility}
+              disabled={!access.allowed || busy || discovery.isFetching}
+              options={["hidden", "visible"].map((value) => ({
+                key: value,
+                value: value as TeamVisibility,
+                label: t(`rework.teamDiscovery.${value}`),
+              }))}
+              onChange={setVisibilityDraft}
+            />
+            <Select<TeamJoiningMode>
+              size="medium"
+              label={t("rework.teamDiscovery.joiningMode")}
+              value={joiningMode}
+              disabled={!access.allowed || busy || discovery.isFetching}
+              options={["invite_only", "open"].map((value) => ({
+                key: value,
+                value: value as TeamJoiningMode,
+                label: t(`rework.teamDiscovery.${value}`),
+              }))}
+              onChange={setJoiningDraft}
+            />
+            {visibility === "hidden" && joiningMode === "open" && <p>{t("rework.teamDiscovery.hiddenOpenHint")}</p>}
+            <Button
+              color="primary"
+              variant="filled"
+              size="small"
+              disabled={
+                !access.allowed ||
+                busy ||
+                discovery.isFetching ||
+                (visibilityDraft === undefined && joiningDraft === undefined)
+              }
+              onClick={async () => {
+                if (!access.allowed) return;
+                setDiscoveryError(false);
+                try {
+                  await save({
+                    id: spaceId,
+                    teamParameters: { visibility: visibilityDraft, joining_mode: joiningDraft },
+                  }).unwrap();
+                  await discovery.refetch().unwrap();
+                  setVisibilityDraft(undefined);
+                  setJoiningDraft(undefined);
+                } catch {
+                  setDiscoveryError(true);
+                }
+              }}
+            >
+              {t("common.save")}
+            </Button>
+          </>
+        )}
+        {discoveryError && <p role="alert">{t("rework.teamDiscovery.saveFailed")}</p>}
+      </section>
       <section className={styles.section}>
         <TextInput
           label={t("rework.teamSettings.parameters.name.label")}
@@ -174,6 +255,7 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
           {t("common.save")}
         </Button>
       </section>
+      <TeamConversationRetention key={spaceId} spaceId={spaceId} allowed={access.allowed} />
     </div>
   );
 }

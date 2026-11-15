@@ -1322,7 +1322,20 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         let body = String::from_utf8_lossy(&body);
         // The model answers a failed search, as with a Python agent's failed tool.
         assert!(body.contains("\"kind\":\"final\""));
-        assert_eq!(body.contains("\"is_error\":true"), status != 200);
+        let tool_result = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .map(|data| serde_json::from_str::<Value>(data).unwrap())
+            .find(|event| event["kind"] == "tool_result")
+            .expect("search must emit its tool result");
+        assert_eq!(
+            tool_result["failure"],
+            if status == 200 {
+                Value::Null
+            } else {
+                json!({"code":"unexpected"})
+            }
+        );
         assert!(!body.contains("private KF failure") && !body.contains("service-token"));
         let rows = reports(4 + index).await;
         let row = rows.last().unwrap();
@@ -1689,4 +1702,154 @@ async fn document_models_need_their_aptitude_and_the_indexed_corpus_keeps_its_em
     sqlx::query("update model_offer set advertised=false, withdrawn_at=now() where upstream_model_id='embed'")
         .execute(&e.pool).await.unwrap();
     assert_eq!(projected("embedding").await, Some(("embed".into(), false)));
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn local_model_policy_preserves_roles_parent_ceiling_and_retained_recommendation() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Owner, "bob").await;
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Models".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let provider = Provider::start().await;
+    let catalog = Catalog::start().await;
+    let mut platform = catalog.config();
+    platform.model_sources = vec![provider.source("a"), provider.source("b")];
+    platform.organization_models = vec![declaration("TSN", &["a", "b"])];
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform).await;
+    let policy_path = format!("/spaces/{}/model-policy", team.id);
+    let view_path = format!("/spaces/{}/models", team.id);
+    let policy = |revision, default: Value, disabled: Value| {
+        json!({
+            "expected_revision":revision, "default":default, "disabled":disabled,
+            "reasoning_default_on":[]
+        })
+    };
+    // Owner-only governance exposes the public model catalogue, without content Read.
+    assert!(!reads(&e, "bob", team.id).await);
+    assert_eq!(
+        request(&app, &identity, Some("bob"), "GET", &view_path, Value::Null)
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("outsider"),
+            "GET",
+            &view_path,
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    let template = enable(&e, org.id, "custom", true).await;
+    let mut body = creation(template, "Retained recommendation");
+    body["recommended_model"] = key("a");
+    let agent = create(&app, &identity, team.id, body).await;
+    let response = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "PUT",
+        &policy_path,
+        policy(0, key("b"), json!([key("a")])),
+    )
+    .await;
+    assert_eq!(response.0, 204, "{response:?}");
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &policy_path,
+            policy(0, key("b"), json!([]))
+        )
+        .await
+        .0,
+        409
+    );
+    // A project owner cannot re-enable a model disabled by its team.
+    let response = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &format!("/spaces/{}/model-policy", project.id),
+        policy(0, key("a"), json!([])),
+    )
+    .await;
+    assert_eq!(response.0, 422, "{response:?}");
+    let response = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("/spaces/{}/models", project.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response.0, 200, "{response:?}");
+    assert_eq!(response.1["models"]["default"], key("b"));
+    assert_eq!(response.1["parent_permitted"], json!([key("b")]));
+    // The saved recommendation remains visible and refuses use instead of choosing b.
+    let base = item(team.id, &agent);
+    let response = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("{base}/runtime"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response.0, 200, "{response:?}");
+    assert_eq!(response.1["models"]["recommendation"], key("a"));
+    assert_eq!(response.1["models"]["default"], key("b"));
+    let response = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &format!("{base}/prepare-execution"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response.0, 200, "{response:?}");
+    assert_eq!(response.1["model_error"]["code"], "offer_forbidden");
+    // Revocation is observed by a fresh governance request.
+    delete_tuple(&e, "bob", "owner", &format!("space:{}", team.id)).await;
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &policy_path,
+            policy(1, key("b"), json!([]))
+        )
+        .await
+        .0,
+        403
+    );
 }

@@ -23,6 +23,13 @@ uses the generated client and refreshes `/me/spaces` after saving. The Agents pa
 shows the purpose to its readers, or offers the existing reminder to a team manager
 when it is absent. Projects, organizations and personal spaces are excluded.
 These are implementation contracts; deployed journey acceptance remains separate.
+The additional discovery settings, metadata/avatar boundary and optional enrollment
+are documented in the [component contract](../../apps/control-plane/README.md#team-discovery-and-optional-enrollment-implementation-reception-pending);
+their deployed reception remains pending. No catalogue read extends content authority.
+
+Team conversation purge settings and their admission boundary are specified in
+the [conversation lifecycle contract](../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a). The policy catalog owns the optional organization ceiling;
+this does not grant content access or establish deployed UI acceptance.
 
 ## People and organizations
 

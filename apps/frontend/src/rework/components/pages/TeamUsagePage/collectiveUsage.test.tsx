@@ -180,9 +180,11 @@ function collectiveRequests() {
   return requests.filter(({ body }) => body.queries[0].scope.kind === "space");
 }
 function click(label: string) {
-  const button = [...host.querySelectorAll("button")].find(
-    (item) => item.title === label || item.textContent === label,
-  );
+  const button = [...host.querySelectorAll("button")].find((item) => {
+    const content = item.cloneNode(true) as HTMLButtonElement;
+    content.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+    return item.title === label || content.textContent === label;
+  });
   expect(button).toBeDefined();
   act(() => button!.click());
 }
@@ -450,4 +452,27 @@ it("discards an export that completes after changing team", async () => {
   release!();
   await flush();
   expect(h.download).not.toHaveBeenCalled();
+});
+
+it("keeps calendar filters identical across tab reads, comparison windows and a fresh export", async () => {
+  render();
+  await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
+  click("rework.teamAnalytics.agents");
+  await until(() => expect(requests.some(({ body }) => body.queries[0].name === "tools")).toBe(true));
+  await flush();
+  act(() => host.querySelector<HTMLInputElement>("#analytics-exclude_weekends")!.click());
+  act(() => host.querySelector<HTMLInputElement>("#analytics-exclude_holidays")!.click());
+  await until(() =>
+    expect(collectiveRequests().filter(({ body }) => body.queries[0].time.calendar?.exclude_holidays)).toHaveLength(4),
+  );
+  await flush();
+  const before = collectiveRequests().length;
+  click("rework.teamAnalytics.export");
+  await until(() => expect(h.download).toHaveBeenCalledOnce());
+  const exported = collectiveRequests().slice(before);
+  expect(exported).toHaveLength(4);
+  for (const { body } of exported)
+    for (const query of body.queries) {
+      expect(query.time.calendar).toEqual({ exclude_weekends: true, exclude_holidays: true });
+    }
 });

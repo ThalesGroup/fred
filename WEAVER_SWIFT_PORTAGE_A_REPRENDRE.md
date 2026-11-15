@@ -2606,49 +2606,43 @@ applicatifs et de publication n'ont pas été exécutés. Résolutions indexées
 merge prêt pour validation fonctionnelle de Dimi puis commit sur autorisation ;
 aucun commit, push, déploiement, migration de base vivante ou service modifié.
 
-## 21. Intégration des lots équipes 1, 3, 4 et 5 - 15 novembre 2026
+## 21. Intégration des lots équipes 1 à 6 - 15 novembre 2026
 
-Reprise sur `gap/team-settings`, base commune
-`01779781d36560ffec53bf431f7724a490dbfc25`. Le lot 1 provient du checkout
-local ; les lots archivés ont été récupérés depuis leurs instantanés Git :
+Sur `gap/team-settings`, le socle `8d949b009` réunit les lots 1/3/4 et la première
+partie du lot 5. Les livraisons gelées `team-discovery`,
+`team-analytics-completion` et `team-retention-final`, issues de ce même socle,
+sont intégrées sans modifier leurs worktrees sources. Les rapports initiaux
+ci-dessous restent historiques ; les contrats et recettes actuels se trouvent
+dans le [README Control Plane](apps/control-plane/README.md#team-settings-and-members-implementation-reception-pending).
 
-| Lot | Instantané source |
-| --- | --- |
-| 3 - Modèles/outils | `ae43aa4a1525115825a33c29a0912e32ac2619a0` |
-| 4 - Activité documentaire | `00eec764f8ae853878af1e32f60a6c042ad98ba3` |
-| 5 - Analytiques | `6de873c3f87f1a32cee2baa78563d371d4dc10be` |
+La découverte visible/cachée et l'adhésion facultative réutilisent les rôles
+existants. Les statistiques complétées incluent outils, distributions, jours
+ouvrés et inventaire ; adoption/cohortes restent différées et les publications
+sont explicitement non collectées. La rétention concerne uniquement la purge des
+conversations supprimées : les réglages s'appliquent aux futures demandes,
+sans modifier les échéances déjà figées ni supprimer par inactivité. Les modèles
+recommandés devenus interdits restent conservés, avec refus d'usage sans substitution.
+Les rôles sont explicites ; Responsable n'accorde aucune lecture implicite.
 
-Les rapports ci-dessous conservent les preuves et limites des implémentations
-initiales. Leurs anciens chemins de worktrees et commandes exécutées ne décrivent
-pas l'état courant. Le rapport du lot 1 reste dans
-[`apps/control-plane/README.md`](apps/control-plane/README.md#team-settings-and-members-implementation-reception-pending).
+Les migrations `0032_team_discovery` et `0033_team_conversation_retention`
+complètent la chaîne d'initialisation vide ; aucun upgrade, backfill, transfert
+Swift ou service partagé n'est impliqué. Client API, inventaires et diagramme SQL
+sont régénérés depuis l'assemblage. La revue a corrigé l'export d'un stock courant
+dans la période précédente et la copie d'une préférence héritée interdite lors
+du premier réglage de modèle d'un projet ; les références déjà locales sont conservées.
 
-Les conflits de navigation, routes, hooks, inventaire OpenAPI et rapports sont
-réconciliés. Le client RTK est régénéré depuis les sources réunies. Ordre SQL :
-`0028_team_join_link`, `0029_team_avatar`, `0030_team_document_activity`,
-`0031_space_model_policy` (anciennement 0029 dans le rapport du lot 3).
-Les commentaires de triggers suivent la classification arc42 ; les références
-SQL et API sont régénérées. Aucun comportement métier nouveau n'est ajouté par
-cette intégration.
+Vérifications exécutées : 33 scénarios SQL ciblés passent après correction de
+fixtures anciennes (émetteur d'annuaire, acteur Responsable du projet, erreur outil
+structurée) ; les 29 et 210 tests UI des anciens lots passent, ainsi que les 83
+régressions ciblées de l'assemblage et des deux corrections de revue. Les preuves
+des livraisons couvrent aussi 30 tests SQL analytics, 4 HTTP, un OpenSearch jetable
+à trois shards, 10 suppressions/rétention, 68 core et 75 runtime. La qualité complète
+Control Plane/core/runtime/frontend et `check-models` passent ; 109 tests unitaires
+Control Plane passent (un ignoré), ainsi que les 24 contrats OpenAPI assemblés.
 
-Contrôles exécutés sur les sources réunies : `make -C apps/control-plane
-generate-openapi`, génération du client avec `rtk-query-codegen-openapi`,
-`make -C apps/control-plane code-quality` et `make -C apps/frontend code-quality`
-réussis. Deux déréférencements Rust redondants et une expression conditionnelle
-signalée par ESLint ont été corrigés sans changement de comportement.
-`make -C docs/architecture er` a appliqué toute la chaîne SQL dans un PostgreSQL
-jetable puis régénéré le catalogue et le diagramme ; le conteneur a été supprimé.
-Les commandes `docs.py generate`, `check` et `links` ont réussi sur A2/A12/A13,
-avec vérification des liens d'A8 et de ce suivi ; `git diff --check` est propre.
-Aucun test fonctionnel, benchmark, push ou déploiement n'a été exécuté ; aucune
-base existante n'a été modifiée.
-
-La reprise du lot 5 part de sa parité partielle conservée : agrégats collectifs,
-comparaisons, agents/skills, coûts et export Excel sont raccordés. Adoption/cohortes,
-outils, distributions et jours ouvrés restent différés ; G001 reste ouvert.
-Les décisions du lot 3 et les recettes fonctionnelles restent à réceptionner.
-Les volumes cibles, la sélectivité de l'activité documentaire et la capacité des
-agrégats historiques ne sont pas validés par les contrôles de compilation.
+La réception navigateur, la lecture du fichier Excel et la validation du dossier
+arc42 restent à Dimi. Aucun push, déploiement ou changement d'une base existante ;
+les contrôles automatisés ne démontrent ni capacité de production ni réception UI.
 
 ### Lot 3 - Modeles et outils d'equipe (15 novembre 2026)
 

@@ -671,7 +671,8 @@ it("offers team activity to content readers separately from management and consu
   try {
     let html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).toContain('href="/team/team-1/settings/activity"');
-    expect(html).not.toContain('href="/team/team-1/settings/members"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain('href="/team/team-1/settings/parameters"');
     h.canManage = true;
     h.canRead = false;
     html = renderToStaticMarkup(<TeamContentNavbar />);

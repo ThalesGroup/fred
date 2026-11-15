@@ -35,6 +35,10 @@ export async function teamAnalyticsWorkbook(
     "fallback",
     "truncated",
     "collection",
+    "exclude_weekends",
+    "exclude_holidays",
+    "calendar_reference",
+    "definition",
   ];
   const rows: string[][] = [columns.map((key) => t(`rework.teamAnalytics.exportColumns.${key}`))];
   for (const dataset of datasets)
@@ -63,6 +67,10 @@ export async function teamAnalyticsWorkbook(
             estimate ? String(estimate.fallback) : "",
             String(result.truncated),
             dataset.collection_completeness,
+            String(result.calendar?.exclude_weekends ?? false),
+            String(result.calendar?.exclude_holidays ?? false),
+            "FR national / UTC / L3133-1",
+            t(`rework.teamAnalytics.metricHints.${measure.id}`, { defaultValue: "" }),
           ]);
         }
     }
@@ -88,7 +96,7 @@ export async function teamAnalyticsWorkbook(
   );
   zip.file(
     "xl/worksheets/sheet1.xml",
-    `<worksheet xmlns="${ns}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => `<c r="${String.fromCharCode(65 + c)}${r + 1}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`).join("")}</row>`).join("")}</sheetData><autoFilter ref="A1:Q${rows.length}"/></worksheet>`,
+    `<worksheet xmlns="${ns}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => `<c r="${String.fromCharCode(65 + c)}${r + 1}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`).join("")}</row>`).join("")}</sheetData><autoFilter ref="A1:U${rows.length}"/></worksheet>`,
   );
   return zip.generateAsync({
     type: "blob",

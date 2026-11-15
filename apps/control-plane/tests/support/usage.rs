@@ -575,6 +575,25 @@ async fn hitl_turns_stay_at_first_consumption_while_tokens_follow_each_report() 
             all["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
             "2"
         );
+        let mut filtered = analytics_request(space, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+        for q in filtered["queries"].as_array_mut().unwrap() {
+            q["time"]["calendar"] = json!({"exclude_holidays":true});
+        }
+        let (status, included) = f.analytics(Some("alice"), filtered).await;
+        assert_eq!(status, 200, "{included}");
+        let values = &included["results"]["total"]["rows"][0]["values"];
+        assert_eq!(values["usage.input_tokens"], "250");
+        assert_eq!(values["usage.output_tokens"], "60");
+        // The excluded first report must not promote its included HITL resume to a new exchange.
+        assert_eq!(values["usage.recorded_exchanges"], "1");
+        assert_eq!(
+            included["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "1"
+        );
+        assert_eq!(
+            included["results"]["series"]["rows"][23]["values"]["usage.input_tokens"],
+            "0"
+        );
         let (status, resumed) = f
             .analytics(
                 Some("alice"),
@@ -1567,7 +1586,7 @@ async fn analytics_documented_request_and_response() {
     assert_eq!(status, 200, "{response}");
     assert_eq!(
         response,
-        json!({"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}})
+        json!({"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","calendar":{"exclude_weekends":false,"exclude_holidays":false},"measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}})
     );
 }
 
@@ -1635,7 +1654,7 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
         "co2e_grams_per_1k_tokens":3,"kwh_per_1k_tokens":0.001
     }}});
     let sql = concat!(
-        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1) ",
+        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1 and $7::boolean) ",
         include_str!("../../src/sessions/usage/read.sql"),
         ") result where start is null and agent_instance_id is null and model_source_id is null"
     );
@@ -1660,6 +1679,8 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
             .bind("day")
             .bind(101_i64)
             .bind(catalog)
+            .bind(true)
+            .bind(Vec::<chrono::NaiveDate>::new())
             .fetch_one(&f.pool)
             .await
             .unwrap();
@@ -1685,6 +1706,8 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
         .bind("day")
         .bind(101_i64)
         .bind(partial)
+        .bind(true)
+        .bind(Vec::<chrono::NaiveDate>::new())
         .fetch_one(&f.pool)
         .await
         .unwrap();
@@ -1742,7 +1765,9 @@ async fn analytics_historical_route_injects_identity_and_never_needs_a_sql_trans
             "dims":{"properties":{"space_id":{"type":"keyword"},"user_id":{"type":"keyword"},"skill_name":{"type":"keyword"},"skill_origin":{"type":"keyword"}}}
         }}}})) }))
         .route("/fixture/_search", post(move |Json(body): Json<Value>| { let capture = capture.clone(); async move {
-            capture.lock().unwrap().push(body["query"]["bool"]["filter"][2]["terms"]["dims.space_id"].clone());
+            let spaces = body["query"]["bool"]["filter"].as_array().unwrap().iter()
+                .find_map(|filter| filter["terms"].get("dims.space_id")).unwrap();
+            capture.lock().unwrap().push(spaces.clone());
             let subject=&body["query"]["bool"]["filter"][1]["term"]["dims.user_id"];
             let count=if subject == "alice" { 3 } else if subject == "bob" { 7 } else { panic!("unexpected subject") };
             Json(json!({"hits":{"total":{"relation":"eq","value":count}},"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
@@ -2205,6 +2230,50 @@ async fn collective_retained_creations_have_the_same_team_perimeter_and_exclude_
             count
         );
     }
+    let mut statistics = query(f.space);
+    statistics["queries"][0]["measures"] = json!([
+        "activity.retained_conversations",
+        "activity.retained_conversations_per_creator_median",
+        "activity.retained_conversations_top_decile_share",
+        "activity.creators_2_3"
+    ]);
+    let (status, body) = f.analytics(Some("alice"), statistics.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    let values = &body["results"]["creations"]["rows"][0]["values"];
+    assert_eq!(
+        values["activity.retained_conversations_per_creator_median"],
+        "2"
+    );
+    assert_eq!(
+        values["activity.retained_conversations_top_decile_share"],
+        "1"
+    );
+    assert_eq!(values["activity.creators_2_3"], "1");
+    statistics["queries"][0]["time"]["calendar"] = json!({"exclude_holidays":true});
+    let (status, body) = f.analytics(Some("alice"), statistics).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+        "0"
+    );
+    assert!(
+        body["results"]["creations"]["rows"][0]["values"]
+            .get("activity.retained_conversations_per_creator_median")
+            .is_none()
+    );
+    let mut inventory = query(f.space);
+    inventory["queries"][0]["measures"] = json!([
+        "inventory.enabled_agents",
+        "inventory.agents_published",
+        "inventory.documents_added"
+    ]);
+    let (status, body) = f.analytics(Some("alice"), inventory.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    let values = &body["results"]["creations"]["rows"][0]["values"];
+    assert_eq!(values["inventory.enabled_agents"], "2");
+    assert!(values.get("inventory.agents_published").is_none());
+    assert_eq!(values["inventory.documents_added"], "0");
+    assert_eq!(f.analytics(Some("bob"), inventory).await.0, 403);
     assert_eq!(f.analytics(Some("bob"), query(f.space)).await.0, 403);
     f.retire().await;
     let (status, body) = f.analytics(Some("alice"), query(f.space)).await;
@@ -2213,4 +2282,82 @@ async fn collective_retained_creations_have_the_same_team_perimeter_and_exclude_
         body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
         "1"
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_inventory_calendar_counts_retained_imports_and_keeps_stock_independent() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    let project = f.project("Inventory project").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','editor')")
+        .bind(project.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("update agent_instance set enabled=false where agent_instance_id=$1")
+        .bind(f.agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    for (space, date) in [(f.space, "2026-01-01"), (project.id, "2026-01-02")] {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name,created_at) values($1,$2,$1,'native','assistant','Dated agent','{}','alice',$3,$4::date)")
+            .bind(id).bind(space).bind(id.to_string())
+            .bind(date.parse::<chrono::NaiveDate>().unwrap()).execute(&f.pool).await.unwrap();
+    }
+    let folder = spaces::create_folder(&f.pool, "alice", project.id, None, "Imports".into())
+        .await
+        .unwrap();
+    // Four successful drive receipts, plus a failed upload and a conversation attachment.
+    // Receipt dates, rather than document creation or acknowledgment, define imports.
+    for (index, date, status, session) in [
+        (0, "2026-01-01", "stored", None),
+        (1, "2026-01-02", "stored", None),
+        (2, "2026-01-02", "stored", None),
+        (3, "2026-01-03", "stored", None),
+        (4, "2026-01-02", "failed", None),
+        (5, "2026-01-02", "stored", Some(f.session)),
+    ] {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at) values($1,$1,'alice',$2,$3,$4,$5,$6,$7,'text/plain',1,repeat('a',64),$8,$9,now(),$10::date)")
+            .bind(id).bind(f.organization)
+            .bind(if session.is_some() { f.space } else { project.id })
+            .bind(if session.is_some() { None } else { Some(folder.id) })
+            .bind(session).bind(f.space).bind(format!("import-{index}.txt"))
+            .bind(format!("fixture/{id}")).bind(status)
+            .bind(date.parse::<chrono::NaiveDate>().unwrap())
+            .execute(&f.pool).await.unwrap();
+    }
+    for (weekends, holidays, imports, created) in [
+        (false, false, "4", "2"),
+        (true, false, "3", "2"),
+        (false, true, "3", "1"),
+        (true, true, "2", "1"),
+    ] {
+        let queries: Vec<_> = [
+            ("current", "2026-01-01T00:00:00Z", "2026-01-04T00:00:00Z"),
+            ("previous", "2025-12-29T00:00:00Z", "2026-01-01T00:00:00Z"),
+        ]
+        .into_iter()
+        .map(|(name, since, until)| {
+            json!({
+                "name":name,"scope":{"kind":"space","id":f.space},
+                "time":{"since":since,"until":until,"timezone":"UTC",
+                    "calendar":{"exclude_weekends":weekends,"exclude_holidays":holidays}},
+                "measures":["inventory.enabled_agents","inventory.retained_agents_created",
+                    "inventory.documents_added","inventory.agents_published"]
+            })
+        })
+        .collect();
+        let (status, body) = f.analytics(Some("alice"), json!({"queries":queries})).await;
+        assert_eq!(status, 200, "{body}");
+        for (name, imports, created) in [("current", imports, created), ("previous", "0", "0")] {
+            let values = &body["results"][name]["rows"][0]["values"];
+            assert_eq!(values["inventory.enabled_agents"], "2");
+            assert_eq!(values["inventory.retained_agents_created"], created);
+            assert_eq!(values["inventory.documents_added"], imports);
+            assert!(values.get("inventory.agents_published").is_none());
+        }
+    }
 }

@@ -370,6 +370,8 @@ async fn create_space(
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct TeamParameters {
+    visibility: Option<crate::team_discovery::TeamVisibility>,
+    joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
     #[schema(min_length = 1, max_length = 180)]
     name: Option<String>,
     #[schema(min_length = 20, max_length = 500)]
@@ -403,6 +405,8 @@ async fn update_team_parameters(
             id,
             req.name.as_deref(),
             req.description.as_deref(),
+            req.visibility,
+            req.joining_mode,
         )
         .await?,
     ))
@@ -1224,9 +1228,11 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::analytics::routes())
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())
+        .merge(crate::team_discovery::routes())
         .merge(crate::team_join_links::routes())
         .routes(routes!(create_space))
         .routes(routes!(update_team_parameters))
+        .merge(crate::lifecycle::conversation_retention::routes())
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(authorize_document))

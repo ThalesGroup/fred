@@ -854,6 +854,20 @@ Embedded Ralph instead uses the Control Plane's configured mount for its history
 URL, without an external runtime source. Unknown, foreign and retired sessions
 return the same 404; an authorized conversation with no completed turn returns `[]`.
 
+Team Owners can read/replace `/spaces/{id}/conversation-retention` without content
+Read. `configured_seconds: null` inherits the team's existing lifecycle retention;
+zero makes purge immediately eligible, positive integers choose a duration. The
+response includes inherited, configured, organization ceiling and effective seconds.
+The existing policy catalog accepts optional `conversation_retention_ceiling` in
+purge defaults/rule actions, resolved against the organization; configuration owns
+this ceiling, with no organization UI added. Absent a ceiling or team setting,
+existing deadlines are unchanged. The effective team conversation delay is bounded
+by that ceiling; writes above it are refused. Project/personal conversations,
+documents and space deletions retain their existing policy. Settings and deletion
+admission use the same organization guard: only newly accepted deletions snapshot
+the current delay; existing receipts are never rescheduled. There is no inactivity
+expiry or restoration. These component contracts do not certify browser acceptance.
+
 The lifecycle worker removes attachments before conversation storage. Ralph's log
 is removed with its session row; its foreign key prevents a late admitted turn
 from recreating it after purge. The usage journal is retained. One audit helper
@@ -1661,8 +1675,8 @@ The lot on `gap/team-settings` extends Weaver's existing space governance, using
 Swift `cf698a739afae1b4cbcd92e82439e32bc1038198` only as a functional reference.
 `PATCH /spaces/{id}` accepts name and/or description for a team under direct
 Manage permission. Names reuse creation's NFC normalization, bounds and sibling
-uniqueness; both fields commit together. No visibility or catalogue self-join
-option is introduced. The existing offers and usage navigation entries remain.
+uniqueness; supplied fields commit together. Visibility and optional self-enrollment
+are described below. The existing offers and usage navigation entries remain.
 
 Roster reads now allow direct Read or Manage; candidate discovery and role changes
 still require Manage. The optional `search` matches subject, username, name or email
@@ -1685,12 +1699,12 @@ only on that team, preserves other roles and grants nothing on projects or other
 teams. Expiration/revocation block future joins without removing existing grants;
 a former owner's link cannot continue granting access. SQL governance guards order
 redemption, rotation, revocation and retirement. Application HTTP logs redact the
-token. No catalogue self-enrollment or account provisioning is activated.
+token. Account provisioning is not part of enrollment.
 
 Migration `0029_team_avatar.sql` extends the existing avatar table (renamed from
 `user_avatar` to `avatar`) with a team owner. `/spaces/{id}/avatar` uses the personal
 photo's exact multipart parser, crop/normalization, content storage, transfer limits
-and durable sweeper. Read or Manage allows reading; Manage allows upload/removal.
+and durable sweeper. Team discovery (described below) allows reading; Manage allows upload/removal.
 Publication rechecks current authority after S3 I/O. Space purge retires both active
 and pending photos while preserving their cleanup journal and pending-write deadline.
 There is no second bucket, worker or quota account. The shared frontend crop card
@@ -1724,26 +1738,109 @@ Reception scenarios for Dimi, after the normal migration/deployment process:
    remain. Revoke management while editing or uploading; confirm refusal on save.
    Exercise photo cleanup and team deletion through the existing lifecycle.
 
-Regression sources cover these contracts, including atomic removal, concurrent
-owners, cross-organization joins, HTTP search/revocation, avatar cleanup and the
-new enrollment UI. No tests or deployed/browser reception were run by this lot's
-assistant. SQL/S3 lifecycle and user journeys still require Dimi's validation.
-Reconcile these shared files with the other lots during integration (paths from the
-repository root); regenerate the client after combining the Rust contract changes:
+Focused checks (from the repository root) use disposable PostgreSQL and the real
+HTTP/SQL contracts. They cover settings, membership, invitation links, discovery,
+model restrictions and document activity; they do not establish deployed or browser
+reception:
 
-- `apps/control-plane/src/api.rs`, `src/lib.rs`, `tests/integration.rs`, `tests/openapi.rs`.
-- `apps/frontend/src/slices/controlPlane/controlPlaneApiEnhancements.ts`,
-  `controlPlaneOpenApi.ts`, `controlPlaneApi.test.ts`.
-- `apps/frontend/src/locales/{fr,en}/translation.json`.
-- `apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamSettingsPage.tsx`.
-- `apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx`,
-  `HomeNavPanel/HomeNavPanel.tsx`, and their regression files.
-- `apps/frontend/src/rework/core/utils/weaverContentRoute.ts`,
-  `apps/frontend/src/common/router.test.tsx`.
-- Reserve migration numbers `0028` and `0029` with the coordinator before integration.
-  The shared avatar lifecycle also touches `src/user_avatar.rs`,
-  `src/documents/cleanup.rs`, `src/documents/mod.rs`; roster enrichment touches
-  `src/users.rs`, and token redaction touches `src/logging.rs` in Control Plane.
+```sh
+make -C apps/control-plane test-integration CARGO_TEST_OPTS=team_
+make -C apps/control-plane test-integration CARGO_TEST_OPTS=membership_removal
+make -C apps/control-plane test-integration CARGO_TEST_OPTS=model_catalog
+make -C apps/control-plane test-integration CARGO_TEST_OPTS=session_deletion
+make -C apps/frontend update-control-plane-api
+make -C apps/control-plane code-quality
+make -C apps/frontend code-quality
+make -C docs/architecture generate-models
+make -C docs/architecture check-models
+```
+
+### Team discovery and optional enrollment (implementation; reception pending)
+
+The lot 2 increment extends `space` with `visibility` (`hidden`/`visible`) and
+`joining_mode` (`invite_only`/`open`), through schema step
+`0032_team_discovery.sql` in the existing SQLx initialization chain. This chain
+constructs the final schema on an empty installation; it does not define support
+for upgrading an existing Swift or Weaver. This increment includes no data
+conversion, backfill, compatibility path or upgrade tests. Hidden and invite-only
+are the defaults for newly created teams. These are settings of the team's own lifecycle, removed
+with its space, not publication or role facts. Non-team spaces must retain the
+neutral defaults; projects and personal spaces cannot enter the directory. There
+is no new table, invitation mechanism, permission matrix or background projection.
+
+`GET /organizations/{organization_id}/teams` returns 20 cards per zero-based `page`,
+a filtered `total`, and optional `search` (at most 180 characters). Every search
+word must occur literally in the name or description, ignoring case. SQL filters
+before counting/paging and orders by name then ID; changes between pages can move
+rows, so this is a current directory rather than a durable snapshot. The existing
+organization and subject-role indexes bound the reads; no additional index is
+justified for the current target of up to 100 teams per organization.
+
+Organization eligibility reuses `authorization::load_facts` and its canonical
+`in_organization` fact, including governance and isolated child roles. Within an
+active organization, a card is available if the team is active and visible, or the
+caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
+`GET /spaces/{id}/avatar` use that same boundary. The avatar reader checks it again
+after object-store I/O and returns no public object URL. Cards expose only team
+identity, description, discovery settings, the caller's own membership and join
+affordance. They expose no roster, member count or content. Reading cards grants
+no document, conversation, member-list, management or project authority.
+
+`PATCH /spaces/{id}` accepts either setting alongside name/description, with the
+existing current Manage decision and exclusive organization guard. Hiding or
+closing a team neither removes existing roles nor changes any agent publication.
+A hidden team can retain an open preference, but neither the card nor a direct
+`POST /spaces/{id}/join` allows enrollment while hidden. Existing invitation links
+remain the route for new members of hidden teams, with their existing expiry,
+revocation and parent-role prerequisite.
+
+Self-enrollment requires the same direct content role on the parent organization
+as invitation redemption and ordinary team role assignment. The POST acquires the
+existing platform-then-organization governance locks and rechecks attachment,
+lifecycle, visibility, mode and parent eligibility before writing. A newcomer
+receives only the normal direct Member grant; a caller already holding any direct
+team role is left unchanged, including an owner without content access. Repeated
+or concurrent open/invited joins converge on the existing role uniqueness key.
+Changing settings and revoking roles serialize with enrollment; no SQL transaction
+is held across directory or object-store calls. Joins inherit the existing global
+governance contention boundary, while directory reads share the organization guard.
+
+The existing marketplace Teams route and TeamCard now use the generated Weaver
+client. Search and pagination are server-side; working-organization changes reset
+the page. Cache invalidation refreshes membership/navigation and access after join,
+with focus/reconnect refresh and bounded polling for changes from another session.
+Failed/refetching directory requests withhold old cards; failed avatar requests
+withhold the old photo. The neutral team landing preserves owner-only access.
+Parameters use shared Select/Button controls and both locales. Swift's roster
+previews, global enumeration and legacy team client are removed from these views.
+
+Discovery regressions are in `tests/support/team_discovery.rs`; API contracts are
+in `tests/openapi.rs` and UI regressions accompany marketplace cards and parameters.
+The generated REST inventory and SQL diagram describe the assembled contract,
+without establishing deployed acceptance.
+
+Reception scenarios after integration and the normal fresh-schema deployment:
+
+1. In Acme, search by name and description and traverse more than 20 teams. Switch
+   to Globex: no previous organization card, avatar or search page may remain.
+   Verify personal/project spaces are absent, including via guessed metadata IDs.
+2. As an organization member outside a visible team, read its name/description/photo;
+   direct documents, conversations, roster, settings and project URLs remain denied.
+   Repeat as a foreign user and a platform-only admin: metadata and avatars are denied.
+3. As the Responsible person, switch visible/hidden and invitation/open. Check a
+   hidden team remains in its members' directory/navigation; its non-members lose
+   metadata and avatar access. Its published agent remains published and usable by
+   the publication audience. Changing one setting preserves unsaved name/description.
+4. Join a visible open team twice and from two tabs, concurrently with an invitation:
+   exactly one direct Member grant, no additional role/project grant. An owner-only
+   caller must not gain content access by POSTing join. A child-only organization
+   participant can discover cards but cannot self-enroll without the parent role.
+5. Keep a card open while another session hides/closes/deletes the team or revokes
+   the parent role. A subsequent or queued join must refuse; refreshing drops stale
+   cards. Restore eligibility and retry a lost-response join without duplicate grants.
+6. Join a hidden team by its valid invitation link. Expire/revoke the link and close
+   enrollment: existing members remain. Revoke management during a settings save;
+   check refusal and that no partial name/description/settings change committed.
 
 ## Consumption analytics
 
@@ -1761,7 +1858,7 @@ Example request:
 For one recorded report containing 100 input tokens, the response is:
 
 ```json
-{"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}}
+{"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","calendar":{"exclude_weekends":false,"exclude_holidays":false},"measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}}
 ```
 
 Configure optional `storage.history` with `url`, one concrete `index`, and paired
@@ -1804,9 +1901,183 @@ comparison windows have equal elapsed duration. The collective Excel export rere
 the selected tab through the same authorized endpoint, preserves values as text,
 and drops late results after context changes. It contains no personal dashboards.
 
-The [lot 5 coverage matrix and acceptance scenarios](../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#21-lot-5---analytiques-déquipe-et-consommation-15-novembre-2026)
-record the remaining Swift gaps, exact counting examples and unexecuted regressions.
+The [lot 5 coverage matrix and acceptance scenarios](../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#lot-5---analytiques-déquipe-et-consommation-15-novembre-2026)
+record the remaining Swift gaps and exact counting examples. Automated checks and
+manual reception are distinct; the latter remains pending.
 No migration, index mutation, backfill or deployed validation accompanies this code.
+
+#### Additional team measures (implementation; acceptance pending)
+
+The common POST and its existing authorization remain the only read/export path.
+There is no new table, migration, historical journal, endpoint, backfill or upgrade
+path. Installation assumes an empty Weaver database. SQL catalogue and receipt
+reads share the existing read-only snapshot; historical observations are separate
+reads. Targeted automated regressions have passed, including disposable SQL and
+OpenSearch fixtures. The complete numerical/browser/Excel acceptance below remains pending.
+
+All period measures use `[since,until)`, UTC completion/creation instants, and the
+same server-side `time.calendar` object, echoed in each result. Its optional
+`exclude_weekends` and `exclude_holidays` flags default to false. Dates are UTC,
+not Europe/Paris; an offset-bearing input is converted to UTC before counting.
+The holiday reference is the eleven national French holidays in
+[article L3133-1](https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000033020901/),
+as listed by [Service Public](https://www.service-public.gouv.fr/entreprendre/vosdroits/F2405):
+eight fixed dates plus Easter Monday, Ascension and Whit Monday. Local additions
+(Alsace-Moselle, overseas territories), bridges and individual work schedules are
+excluded from this calendar. Years 1970..9999 and maximum 366 elapsed days are
+accepted. Partial UTC days touched by the half-open window count as one day.
+Current stocks do not acquire a historical meaning from the selected period.
+
+The preceding period has the same elapsed duration, ending at `since`; its own
+excluded dates and denominators are computed from the same flags. Excluded facts
+are removed before totals, rankings, ratios and estimates. Continuous time series
+retain zero buckets on excluded days; the result and export announce the filter.
+For recorded exchanges, the first consumption remains the first unfiltered fact:
+a later included resume never turns an excluded first report into a new exchange.
+
+The collective population is the authorized team and its projects, or the selected
+project alone, including historical space references under the existing contract.
+Current membership lists never supply analytic denominators. No person/conversation
+identity is returned. The following definitions describe source observations, not
+complete collection; `collection_completeness` remains unknown.
+
+| Measures | Canonical fact and population | Calculation / absence | Deletion and retention |
+| --- | --- | --- | --- |
+| `inventory.enabled_agents` | Current `agent_instance.enabled`, instances owned by non-deleting scoped spaces | Current stock, independent of period/calendar. Not a guarantee that a pod/model is executable. Zero when the valid catalogue has none. | Agent removal or space retirement removes it. No past-stock comparison. |
+| `inventory.retained_agents_created` | Retained instances by immutable `agent_instance.created_at`, enabled or disabled | Count created in the filtered period, not an immutable creation-event journal. | Removing an instance or retiring its space changes both period comparisons. |
+| `inventory.agents_published` | **No agent publication field, relation, producer or operation exists in Weaver**; prompt publication is a different fact | Always absent: explicitly "not collected", never zero or inferred from `enabled`. | No historical reconstruction. Publication belongs to the agent catalogue owner, outside this increment. |
+| `inventory.documents_added` | `document_upload` source receipts, `stored`, no `session_id`, by `completed_at` | Count retained successful drive imports in the filtered period. Failed/pending uploads, attachments, previews, output files and reprocessing do not count. | Document purge deletes its successful receipts; the count is therefore not a permanent import history. |
+| `activity.retained_conversations_per_creator_median` | `session_metadata.created_at`, sessions/spaces not marked for deletion; only creators with at least one retained creation in the filtered window | Median retained creations per creator. Empty population: absent. This is **not** conversations per active user or all historical creations. | Deletion changes population, distribution and both comparisons. |
+| `activity.creators_1`, `_2_3`, `_4_10`, `_11_30`, `_31_plus` | The same retained-creation population | Number of creators in each inclusive range; zeros on an empty valid catalogue. No identities exposed. | Same as retained creations. |
+| `activity.retained_conversations_top_decile_share` | The same retained-creation population | Sum of creations of the top `ceil(creators/10)` creators / all retained creations. Empty denominator: absent. | Same as retained creations. |
+| `activity.median_usage_days` | Observed `agent.turn_completed`, distinct `(user_id, UTC date)` in filtered period | Median active dates among users with at least one observed completion. Missing user attribution or empty population: absent. | History retention/erasure applies, independently of current membership or session deletion. |
+| `activity.median_days_per_week` | Same users and dates; `D` = retained UTC dates touched by window | Median days / `max(1,D/5)` when weekends excluded, otherwise / `max(1,D/7)`. Holiday-only filtering still uses seven-day weeks. | Same history rule. |
+| `activity.mean_daily_active`, `activity.daily_usage_share` | Same users/dates; `P` = distinct user/date pairs; `U` = observed users | `P/D` and `P/(D*U)` respectively. Zero users permits mean 0 if D>0; any zero denominator is absent. Missing user attribution: absent. | Same history rule. |
+| `activity.median_turns_per_conversation`, `activity.single_turn_rate` | Observed completions grouped by conversation within the filtered window | Median completions; conversations with exactly one completion / observed conversations. Missing conversation attribution or empty population: absent. Not lifetime length. | Same history rule. |
+| `activity.failure_rate` | All observed completions; `finish_reason=error` | Error completions / all completions, including paused/resumed executions. Any missing outcome or empty denominator: absent. | Same history rule. |
+| `tools.attempts`, `.successes`, `.failures`, `.cancelled`, `.awaiting_human`, `.failure_rate` | One `agent.tool_latency_ms` observation per shared `ToolExecution` boundary, attributed from the admitted binding's space and instance | Attempts include local authorization failure; outcomes are `ok/error/cancelled/awaiting_human`. Failure rate = error/(ok+error). A pause and resume are two attempts; provider-internal retries are not separately observed. | History retention applies. Missing tool/agent attribution rejects the read; missing/unknown outcome preserves attempts but omits all outcome counters/rate for that group. |
+
+Tool timers already exist in ReAct/Deep middleware and Graph execution. A trace
+span, `tool_count`, skill-load event or the separate `agent.tool_failed_total`
+counter is not added to these attempts. Same-named tools are grouped across
+providers and agents, explicitly labelled as such; this does not claim capability
+usage attribution. The shared timer now preserves the explicit `awaiting_human`
+state when Graph interruption unwinds it; cancellation remains separate and an
+ordinary exception remains an error. No new telemetry event is introduced.
+Runtimes not emitting these canonical observations (including embedded Rust) are
+outside historical counts; a valid empty source does not prove zero real activity.
+
+Counts and medians remain exact decimal strings. Ratios/normalized frequencies
+use integer long division truncated to six fractional digits and declare
+`calculation=rounded`, `value_type=decimal`; no JavaScript floating conversion is
+required. Missing values are absent, stocks have no previous value, and publication
+is explicitly non-collected. Excel preserves the same definitions, units,
+precision, filters, collection uncertainty and truncation flags as text cells.
+
+Bounds remain 8 queries/batch, 12 measures/query, 366 days, 1,000 series points,
+5,000 returned rows, 2 MiB response, 10 seconds overall and 5 seconds/SQL statement.
+Creator statistics refuse more than 10,000 creators. Historical composite reads
+refuse more than 10,000 groups rather than approximating medians/tails. Tool
+rankings return at most 100 names; totals cover all bounded groups before ranking.
+Daily frequency reads share existing turn reads except hourly series, which need
+a separate resolution. The SQL first-consumption search remains unfiltered;
+calendar exclusions apply to resulting facts. No production capacity is inferred
+from compilation, and SQL plans have not been exercised.
+
+Missing historical facts are not manufactured: permanent agent creation history
+would require the agent create/delete owner to emit future observations through an
+agreed existing observation mechanism; publication first needs a catalogue lifecycle
+contract and its producer. Permanent document-import history would require the
+upload completion owner to retain/emit that fact beyond receipt purge. These are
+explicit gaps, not an invitation to add a second journal in this analytics lot.
+Adoption, visits, retention cohorts and membership-based adoption rates remain deferred.
+
+#### Additional numerical acceptance scenario (Dimi; not executed)
+
+On an explicitly authorized disposable fixture, use `[2026-01-01T00:00:00Z,
+2026-01-04T00:00:00Z)` and the preceding three days. Team T includes project P.
+Retain the earlier lot's three-turn/token fixture: Alice/S1/G on Jan 1 and Jan 2,
+Bob/S2/H on Jan 2 with error; S2 was created before the window. The title on Jan 1
+has consumption but no completed turn. Total token reports are 135 on Jan 1 and
+90 on Jan 2 (190 input, 35 output, 45 cache read, 10 cache created overall).
+A single prior-period turn on Dec 30 consumes 25 tokens. Include conspicuous
+out-of-team and out-of-organization facts which must never contribute.
+
+Also retain S3 created by Alice and S4 by Bob on Jan 2, with no turns. Thus S1/S3/S4
+are the three current creations, while observed conversations remain S1/S2 only.
+Create enabled G on Jan 1 and H on Jan 2. Keep four successful source drive import
+receipts (one Jan 1, two Jan 2, one Jan 3), plus an attachment and a failed upload.
+Observe five tool timers: one `ok` Jan 1; `error`, `awaiting_human`, `cancelled` and
+resumed `ok` Jan 2. The separate error counter must not add another attempt.
+Observe one user skill load Jan 1 and two agent skill loads Jan 2.
+
+| Expected team result | All days | Weekends and holidays excluded |
+| --- | ---: | ---: |
+| Counted UTC dates | 3 | 1 (Jan 2) |
+| Completed turns / active users / observed conversations | 3 / 2 / 2 | 2 / 2 / 2 |
+| Failed turns / single-turn conversations | 1 / 1 | 1 / 2 |
+| Failure rate / single-turn share | 0.333333 / 0.5 | 0.5 / 1 |
+| Median usage days / normalized days per week | 1.5 / 1.5 | 1 / 1 |
+| Mean daily active / daily usage share | 1 / 0.5 | 2 / 1 |
+| Median turns per observed conversation | 1.5 | 1 |
+| Retained creations / median per creator | 3 / 1.5 | 2 / 1 |
+| Creator buckets 1, 2-3, 4-10, 11-30, 31+ | 1,1,0,0,0 | 2,0,0,0,0 |
+| Top creator decile share | 0.666666 | 0.5 |
+| Enabled agent stock / retained agents created | 2 / 2 | 2 / 1 |
+| Agent publications | Not collected | Not collected |
+| Imports with retained receipt | 4 | 2 |
+| Tool attempts / success / failure / cancelled / waiting | 5 / 2 / 1 / 1 / 1 | 4 / 1 / 1 / 1 / 1 |
+| Tool failure rate | 0.333333 | 0.5 |
+| Skill loads user / agent | 1 / 2 | 0 / 2 |
+| Input / output / total tokens | 190 / 35 / 225 | 80 / 10 / 90 |
+| Cache read / cache created (not added again) | 45 / 10 | 5 / 0 |
+| Daily token series | 135,90,0 | 0,90,0 |
+| Daily completed-turn series | 1,2,0 | 0,2,0 |
+| Previous tokens / completed turns | 25 / 1 | 25 / 1 |
+
+Recompute costs/CO2e/energy from the included reports and existing factor catalogue;
+compare per-agent/model sums where rankings are not truncated. The fixture's
+selected agent created dates and SQL receipts are input facts, not permission for
+this assistant to edit a database. These figures are an oracle, not executed results.
+
+Additional acceptance obligations:
+
+- Direct Owner/Analyst, editor/member/admin-only refusal, project-only scope,
+  former members included, outside-organization refusal; revoke access before
+  refresh/export and check no cached file or retained aggregate is shown as authorized.
+- Pause/resume, thrown error, typed error, cancellation, local authority refusal,
+  internal provider retry, similarly named tools, and absence of canonical placement.
+  Verify one timer per boundary in ReAct/Deep/Graph; no trace/skill double-counting.
+- Four calendar combinations, holiday/weekend overlap (Nov 1 2026), Easter Monday
+  Apr 6, Ascension May 14, Whit Monday May 25, Dec 26 and Good Friday not excluded
+  as national holidays; offset-bearing boundaries, UTC midnight, DST, partial days,
+  leap day, previous window with a different holiday count, all days excluded.
+- Title/first consumption on an excluded day and included HITL resume: include
+  resume tokens but do not count a new recorded exchange. Export must match the same
+  filters on each selected tab and announce stocks independently of the period.
+- Delete S1: retained creations/distribution change, historical turns follow their
+  own retention. Purge an imported document: its successful receipt and count go
+  away. Remove G: current stock/retained creation change, historical usage follows
+  its retained observations. No inference about a missing publication.
+- Empty valid source vs missing source/mapping, missing user/session/outcome,
+  failed shards/timeouts, >10,000 groups/creators, >100 ranked tools/agents and
+  absent denominators. Exact totals must not be silently reduced to a top-N tail.
+- FR/EN, keyboard/labels, narrow viewport; change account/organization/team/calendar
+  during an in-flight read/export, decline after revocation, open Excel/LibreOffice,
+  exact strings >2^53, blank missing values and formula-like labels stored as text.
+
+Regression coverage: `analytics/{calendar,statistics,history,opensearch,mod}.rs`,
+`tests/analytics_history.rs`, `tests/support/usage.rs`,
+`TeamUsagePage/{teamAnalytics.test.ts,TeamUsagePage.test.tsx,collectiveUsage.test.tsx,exportTeamAnalytics.test.ts}`,
+and `fred-runtime/tests/test_tool_observability_middleware.py`. Targeted validation
+passed 12 Rust unit tests, four historical HTTP tests, one real three-shard
+OpenSearch test (skills and tool attempts), 30 SQL usage regressions across the
+initial run and corrective reruns, 35 frontend tests, 68 core KPI tests and 75 runtime
+observability tests. PostgreSQL/pgvector and OpenSearch were disposable dedicated
+containers, removed afterwards; the local OpenSearch fixture disabled disk allocation
+thresholds because the host disk exceeded 90% usage. Full component quality and
+browser/Excel reception remain with integration and Dimi. These checks establish
+neither deployed reception nor exhaustive Swift parity.
 
 ### Personal activity (implementation; reception pending)
 

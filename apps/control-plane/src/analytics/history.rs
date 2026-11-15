@@ -14,6 +14,7 @@ pub struct ReadScope<'a> {
     pub subject: Option<&'a str>,
     pub bucket: Option<&'a str>,
     pub attribution: bool,
+    pub excluded_dates: Vec<chrono::NaiveDate>,
     pub spaces: &'a [uuid::Uuid],
     pub since: DateTime<Utc>,
     pub until: DateTime<Utc>,
@@ -52,7 +53,20 @@ pub enum ReadError {
     TooLarge,
 }
 
+pub struct ToolCount {
+    pub name: String,
+    pub attempts: u64,
+    /// None means at least one missing/unrecognized outcome, never zero.
+    pub outcomes: Option<[u64; 4]>, // success, failure, cancelled, awaiting human
+}
+
 pub trait Reader: Send + Sync {
+    fn tools<'a>(
+        &'a self,
+        _query: ReadScope<'a>,
+    ) -> BoxFuture<'a, Result<Vec<ToolCount>, ReadError>> {
+        Box::pin(async { Err(ReadError::Unavailable) })
+    }
     fn skill_loads<'a>(
         &'a self,
         query: ReadScope<'a>,
@@ -130,17 +144,25 @@ pub(super) async fn execute(
             let data = reader
                 .completed_turns(ReadScope {
                     subject: matches!(q.scope, AnalyticsScope::Personal { .. }).then_some(subject),
+                    excluded_dates: q.time.excluded_dates(),
                     attribution: plan.consumers.iter().any(|&i| {
                         request.queries[i]
                             .measures
                             .iter()
                             .any(|m| m.needs_attribution())
                     }),
-                    bucket: plan
+                    bucket: if plan
                         .consumers
                         .iter()
-                        .any(|&i| request.queries[i].group_by == [AnalyticsGrouping::Time])
-                        .then_some(plan.interval.as_str()),
+                        .any(|&i| request.queries[i].measures.iter().any(|m| m.needs_days()))
+                    {
+                        Some("day")
+                    } else {
+                        plan.consumers
+                            .iter()
+                            .any(|&i| request.queries[i].group_by == [AnalyticsGrouping::Time])
+                            .then_some(plan.interval.as_str())
+                    },
                     spaces,
                     since: q.time.since,
                     until: q.time.until,
@@ -162,11 +184,32 @@ pub(super) async fn execute(
             }
             continue;
         }
+        if q.measures[0].reader() == ReaderKind::Tools {
+            let data = reader
+                .tools(ReadScope {
+                    subject: matches!(q.scope, AnalyticsScope::Personal { .. }).then_some(subject),
+                    bucket: None,
+                    attribution: false,
+                    excluded_dates: q.time.excluded_dates(),
+                    spaces,
+                    since: q.time.since,
+                    until: q.time.until,
+                    limit: plan.limit,
+                })
+                .await
+                .map_err(read_error)?;
+            for &i in &plan.consumers {
+                let q = &request.queries[i];
+                results.insert(q.name.clone(), tool_result(q, &data));
+            }
+            continue;
+        }
         let data = reader
             .skill_loads(ReadScope {
                 subject: matches!(q.scope, AnalyticsScope::Personal { .. }).then_some(subject),
                 bucket: None,
                 attribution: false,
+                excluded_dates: q.time.excluded_dates(),
                 spaces,
                 since: q.time.since,
                 until: q.time.until,
@@ -182,6 +225,7 @@ pub(super) async fn execute(
                     since: q.time.since,
                     until: q.time.until,
                     timezone: q.time.timezone,
+                    calendar: q.time.calendar,
                     bucket: None,
                     measures: q.measures.iter().map(|m| m.metadata()).collect(),
                     truncated: data.truncated || data.rows.len() > q.limit.unwrap_or(100),
@@ -219,7 +263,7 @@ pub(super) async fn execute(
         }
     }
     let response = AnalyticsResponse {
-        calculation: CalculationPrecision::Exact,
+        calculation: request.calculation(),
         collection_completeness: CollectionCompleteness::Unknown,
         results,
     };
@@ -249,6 +293,8 @@ fn turn_result(
     let mut spaces: BTreeMap<_, u128> = member_spaces.iter().map(|id| (*id, 0)).collect();
     let mut total = 0u128;
     let mut users = std::collections::BTreeSet::new();
+    let mut user_days = BTreeMap::<&str, std::collections::BTreeSet<chrono::NaiveDate>>::new();
+    let mut days_complete = true;
     let mut conversations = BTreeMap::<&str, u128>::new();
     let mut users_complete = true;
     let mut conversations_complete = true;
@@ -283,6 +329,14 @@ fn turn_result(
     for row in data {
         if let Some(user) = &row.user_id {
             users.insert(user);
+            if let Some(start) = row.start {
+                user_days
+                    .entry(user)
+                    .or_default()
+                    .insert(start.date_naive());
+            } else {
+                days_complete = false;
+            }
         } else {
             users_complete = false;
         }
@@ -294,7 +348,13 @@ fn turn_result(
         failures = failures
             .zip(row.failed)
             .map(|(sum, count)| sum + u128::from(count));
-        if let Some(start) = row.start {
+        if let Some(mut start) = row.start {
+            if q.group_by == [AnalyticsGrouping::Time]
+                && super::interval(&q.time) == AnalyticsInterval::Week
+            {
+                use chrono::Datelike;
+                start -= chrono::Duration::days(i64::from(start.weekday().num_days_from_monday()));
+            }
             if let Some(value) = buckets.get_mut(&start) {
                 *value += u128::from(row.count);
             } else if q.group_by == [AnalyticsGrouping::Time] {
@@ -346,6 +406,57 @@ fn turn_result(
         ranked.sort_by_key(|row| std::cmp::Reverse(row.1));
         ranked.truncate(q.limit.unwrap_or(100));
     }
+    let mut stats = BTreeMap::new();
+    use super::statistics::{median, ratio};
+    let mut put = |m, value: Option<String>| {
+        if let Some(v) = value {
+            stats.insert(m, v);
+        }
+    };
+    if users_complete && days_complete {
+        let counts: Vec<u128> = user_days.values().map(|d| d.len() as u128).collect();
+        let days = q.time.counted_days() as u128;
+        let sum: u128 = counts.iter().sum();
+        put(ConsumptionMeasure::MedianUsageDays, median(counts.clone()));
+        // Median of normalized days: exact twice-median avoids rounding before division.
+        let mut ordered = counts;
+        ordered.sort_unstable();
+        if !ordered.is_empty() && days > 0 {
+            let n = ordered.len();
+            let twice = ordered[(n - 1) / 2] + ordered[n / 2];
+            let week = if q.time.calendar.exclude_weekends {
+                5
+            } else {
+                7
+            };
+            put(
+                ConsumptionMeasure::MedianDaysPerWeek,
+                ratio(twice * week, 2 * days.max(week)),
+            );
+        }
+        put(ConsumptionMeasure::MeanDailyActive, ratio(sum, days));
+        put(
+            ConsumptionMeasure::DailyUsageShare,
+            ratio(sum, days * users.len() as u128),
+        );
+    }
+    if conversations_complete {
+        put(
+            ConsumptionMeasure::MedianTurns,
+            median(conversations.values().copied().collect()),
+        );
+        put(
+            ConsumptionMeasure::SingleTurnRate,
+            ratio(
+                conversations.values().filter(|&&n| n == 1).count() as u128,
+                conversations.len() as u128,
+            ),
+        );
+    }
+    put(
+        ConsumptionMeasure::FailureRate,
+        failures.and_then(|n| ratio(n, total)),
+    );
     let rows = if q.group_by.is_empty() {
         vec![AnalyticsRow {
             dimensions: AnalyticsDimensions::Total,
@@ -372,7 +483,7 @@ fn turn_result(
                             })
                         }
                         ConsumptionMeasure::FailedTurns => failures.map(|n| n.to_string()),
-                        _ => None,
+                        _ => stats.get(&m).cloned(),
                     };
                     value.map(|v| (m, v))
                 })
@@ -393,6 +504,7 @@ fn turn_result(
         since: q.time.since,
         until: q.time.until,
         timezone: q.time.timezone,
+        calendar: q.time.calendar,
         bucket: time_series.then(|| super::interval(&q.time)),
         measures: q.measures.iter().map(|m| m.metadata()).collect(),
         rows,
@@ -400,11 +512,167 @@ fn turn_result(
     })
 }
 
+fn tool_result(q: &AnalyticsQuery, data: &[ToolCount]) -> AnalyticsResult {
+    use ConsumptionMeasure::*;
+    let values = |rows: &[&ToolCount]| {
+        let attempts: u128 = rows.iter().map(|r| u128::from(r.attempts)).sum();
+        let outcomes = rows.iter().try_fold([0u128; 4], |mut total, row| {
+            let values = row.outcomes?;
+            for (sum, value) in total.iter_mut().zip(values) {
+                *sum += u128::from(value);
+            }
+            Some(total)
+        });
+        q.measures
+            .iter()
+            .filter_map(|&m| {
+                let value = match m {
+                    ToolAttempts => Some(attempts.to_string()),
+                    ToolSuccesses => outcomes.map(|o| o[0].to_string()),
+                    ToolFailures => outcomes.map(|o| o[1].to_string()),
+                    ToolCancelled => outcomes.map(|o| o[2].to_string()),
+                    ToolWaiting => outcomes.map(|o| o[3].to_string()),
+                    ToolFailureRate => {
+                        outcomes.and_then(|o| super::statistics::ratio(o[1], o[0] + o[1]))
+                    }
+                    _ => None,
+                };
+                value.map(|v| (m, v))
+            })
+            .collect()
+    };
+    let mut rows: Vec<_> = data.iter().collect();
+    rows.sort_by(|a, b| {
+        b.attempts
+            .cmp(&a.attempts)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    let total = q.group_by.is_empty();
+    AnalyticsResult {
+        since: q.time.since,
+        until: q.time.until,
+        timezone: q.time.timezone,
+        calendar: q.time.calendar,
+        bucket: None,
+        measures: q.measures.iter().map(|m| m.metadata()).collect(),
+        truncated: !total && rows.len() > q.limit.unwrap_or(100),
+        rows: if total {
+            vec![AnalyticsRow {
+                dimensions: AnalyticsDimensions::Total,
+                values: values(&rows),
+                estimates: BTreeMap::new(),
+            }]
+        } else {
+            rows.into_iter()
+                .take(q.limit.unwrap_or(100))
+                .map(|r| AnalyticsRow {
+                    dimensions: AnalyticsDimensions::Tool {
+                        name: r.name.clone(),
+                    },
+                    values: values(&[r]),
+                    estimates: BTreeMap::new(),
+                })
+                .collect()
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     use uuid::Uuid;
+
+    #[test]
+    fn frequencies_keep_user_days_conversations_and_outcomes_distinct() {
+        let q: AnalyticsQuery = serde_json::from_value(json!({
+            "name":"stats","scope":{"kind":"space","id":Uuid::from_u128(1)},
+            "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-04T00:00:00Z","timezone":"UTC"},
+            "measures":["activity.median_usage_days","activity.median_days_per_week","activity.mean_daily_active",
+                "activity.daily_usage_share","activity.median_turns_per_conversation","activity.failure_rate","activity.single_turn_rate"]
+        })).unwrap();
+        let mut rows: Vec<_> = [
+            ("alice", "s1", "2026-01-01T00:00:00Z", 0),
+            ("alice", "s1", "2026-01-02T00:00:00Z", 0),
+            ("bob", "s2", "2026-01-02T00:00:00Z", 1),
+        ]
+        .into_iter()
+        .map(|(user, session, at, failed)| TurnCount {
+            start: Some(at.parse().unwrap()),
+            user_id: Some(user.into()),
+            session_id: Some(session.into()),
+            failed: Some(failed),
+            space_id: Uuid::from_u128(1),
+            agent_instance_id: Uuid::from_u128(2),
+            display_name: None,
+            latest: at.parse().unwrap(),
+            count: 1,
+        })
+        .collect();
+        let result = turn_result(&q, &rows, &[]).unwrap();
+        let v = &result.rows[0].values;
+        use ConsumptionMeasure::*;
+        for (metric, value) in [
+            (MedianUsageDays, "1.5"),
+            (MedianDaysPerWeek, "1.5"),
+            (MeanDailyActive, "1"),
+            (DailyUsageShare, "0.5"),
+            (MedianTurns, "1.5"),
+            (FailureRate, "0.333333"),
+            (SingleTurnRate, "0.5"),
+        ] {
+            assert_eq!(v[&metric], value);
+        }
+        rows[0].user_id = None;
+        rows[1].failed = None;
+        let result = turn_result(&q, &rows, &[]).unwrap();
+        assert!(!result.rows[0].values.contains_key(&DailyUsageShare));
+        assert!(!result.rows[0].values.contains_key(&FailureRate));
+        assert_eq!(result.rows[0].values[&MedianTurns], "1.5");
+        let empty = turn_result(&q, &[], &[]).unwrap();
+        assert_eq!(empty.rows[0].values[&MeanDailyActive], "0");
+        assert!(!empty.rows[0].values.contains_key(&MedianUsageDays));
+        assert!(!empty.rows[0].values.contains_key(&FailureRate));
+    }
+
+    #[test]
+    fn tool_outcomes_share_a_population_and_totals_precede_ranking() {
+        let mut q: AnalyticsQuery=serde_json::from_value(json!({
+            "name":"tools","scope":{"kind":"space","id":Uuid::from_u128(1)},
+            "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-04T00:00:00Z","timezone":"UTC"},
+            "measures":["tools.attempts","tools.successes","tools.failures","tools.cancelled","tools.awaiting_human","tools.failure_rate"]
+        })).unwrap();
+        let mut rows = vec![
+            ToolCount {
+                name: "search".into(),
+                attempts: 4,
+                outcomes: Some([1, 1, 1, 1]),
+            },
+            ToolCount {
+                name: "read".into(),
+                attempts: 1,
+                outcomes: Some([1, 0, 0, 0]),
+            },
+        ];
+        let result = tool_result(&q, &rows);
+        assert_eq!(
+            result.rows[0].values[&ConsumptionMeasure::ToolAttempts],
+            "5"
+        );
+        assert_eq!(
+            result.rows[0].values[&ConsumptionMeasure::ToolFailureRate],
+            "0.333333"
+        );
+        rows[0].outcomes = None;
+        assert!(
+            !tool_result(&q, &rows).rows[0]
+                .values
+                .contains_key(&ConsumptionMeasure::ToolFailures)
+        );
+        q.group_by = vec![AnalyticsGrouping::Tool];
+        q.limit = Some(1);
+        assert!(tool_result(&q, &rows).truncated);
+    }
 
     #[test]
     fn exact_distinct_agents_and_membership_rankings_precede_limits() {

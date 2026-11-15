@@ -515,12 +515,14 @@ pub async fn update_team_parameters(
     id: Uuid,
     name: Option<&str>,
     description: Option<&str>,
+    visibility: Option<crate::team_discovery::TeamVisibility>,
+    joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
 ) -> AppResult<Space> {
     let (mut tx, mut space) = governance_mutation(pool, caller, id, Permission::Manage).await?;
     if space.kind != SpaceKind::Team {
         return Err(AppError::NotFound);
     }
-    if name.is_none() && description.is_none() {
+    if name.is_none() && description.is_none() && visibility.is_none() && joining_mode.is_none() {
         return Err(AppError::BadRequest("no team parameters supplied".into()));
     }
     if let Some(name) = name {
@@ -547,10 +549,12 @@ pub async fn update_team_parameters(
         }
         space.description = Some(description.to_owned());
     }
-    sqlx::query("update space set name=$2, description=$3 where id=$1")
+    sqlx::query("update space set name=$2, description=$3, visibility=coalesce($4,visibility), joining_mode=coalesce($5,joining_mode) where id=$1")
         .bind(id)
         .bind(&space.name)
         .bind(&space.description)
+        .bind(visibility)
+        .bind(joining_mode)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;

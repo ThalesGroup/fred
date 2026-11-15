@@ -180,6 +180,11 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /spaces",
         "delete /spaces/{id}",
         "patch /spaces/{id}",
+        "get /organizations/{organization_id}/teams",
+        "get /spaces/{id}/discovery",
+        "post /spaces/{id}/join",
+        "get /spaces/{id}/conversation-retention",
+        "put /spaces/{id}/conversation-retention",
         "get /spaces/{id}/avatar",
         "put /spaces/{id}/avatar",
         "delete /spaces/{id}/avatar",
@@ -1195,4 +1200,32 @@ fn team_activity_is_a_bounded_read_without_legacy_mutations() {
     for name in ["before", "until", "kind", "status"] {
         assert!(parameters.iter().any(|p| p["name"] == name));
     }
+}
+
+#[test]
+fn discovery_contract_never_embeds_content_or_members() {
+    let api = schema();
+    let properties = api["components"]["schemas"]["DiscoverableTeam"]["properties"]
+        .as_object()
+        .unwrap();
+    assert_eq!(
+        properties
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        [
+            "id",
+            "name",
+            "description",
+            "visibility",
+            "joining_mode",
+            "is_member",
+            "can_join"
+        ]
+        .into_iter()
+        .collect()
+    );
+    let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
+    assert!(parameters.get("visibility").is_some());
+    assert!(parameters.get("joining_mode").is_some());
 }

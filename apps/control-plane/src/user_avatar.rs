@@ -157,17 +157,7 @@ impl<'a> Owner<'a> {
     }
     async fn require_read(self, s: &AppState, caller: &str) -> AppResult<()> {
         if let Self::Team(id) = self {
-            let facts = crate::authorization::load_facts(&s.pool, caller, id).await?;
-            if facts.space.kind != SpaceKind::Team {
-                return Err(AppError::NotFound);
-            }
-            // A responsible person can manage the photo without a content role.
-            match crate::authorization::decide(&facts, Permission::Read.into()) {
-                Err(AppError::Forbidden) => {
-                    crate::authorization::decide(&facts, Permission::Manage.into())?
-                }
-                result => result?,
-            }
+            crate::team_discovery::metadata(&s.pool, caller, id).await?;
         }
         Ok(())
     }

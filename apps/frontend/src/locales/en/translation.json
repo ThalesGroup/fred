@@ -1430,6 +1430,22 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "teamDiscovery": {
+      "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
+      "openTeam": "Open team",
+      "notEligible": "A content role in the organization is required to join this team.",
+      "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
+      "settingsTitle": "Visibility and membership",
+      "settingsHint": "These settings change neither existing member rights nor agent publication. Seeing a team grants no access to its content.",
+      "visibility": "Visibility in the organization",
+      "hidden": "Hidden",
+      "visible": "Visible",
+      "joiningMode": "Membership",
+      "invite_only": "By invitation",
+      "open": "Open (Member role)",
+      "hiddenOpenHint": "A hidden team remains accessible to members and by invitation. Open membership will only be available when it becomes visible.",
+      "saveFailed": "Unable to save the settings. Check your access and try again."
+    },
     "teamAnalytics": {
       "unavailableValue": "Unavailable",
       "export": "Export this tab (Excel)",
@@ -1451,7 +1467,11 @@
         "coverage": "Estimate coverage",
         "fallback": "Default factors",
         "truncated": "Ranking truncated",
-        "collection": "Collection completeness"
+        "collection": "Collection completeness",
+        "exclude_weekends": "Exclude weekends (UTC)",
+        "exclude_holidays": "Exclude French national holidays (UTC)",
+        "calendar_reference": "Calendar reference",
+        "definition": "Definition"
       },
       "active_users": "Observed active users",
       "active_usersHint": "Distinct identities among completed turns in the period, without identifying users. Unavailable if an identity is erased or missing.",
@@ -1467,7 +1487,7 @@
       "agents": "Agents and skills",
       "teamScope": "Team and its projects, including retired or deleted projects. Aggregates cover actions in these spaces, including former members’ actions. They do not grant conversation access.",
       "projectScope": "This project only, excluding sibling projects and its parent team. Aggregates do not grant conversation access.",
-      "period": "From {{since}} inclusive to {{until}} exclusive. UTC series; all days are counted. Maximum: 366 days.",
+      "period": "From {{since}} inclusive to {{until}} exclusive. UTC days and series. Maximum: 366 days.",
       "denied": "Analytics access denied or space inaccessible. A direct Owner or Analyst role is required.",
       "unavailable": "Analytics are unavailable. No figures can be presented for this read.",
       "tooLarge": "Unsupported period or volume. Shorten the period (maximum 366 days) and retry.",
@@ -1484,7 +1504,91 @@
       "skillsHint": "Observed successful loads, split by user and agent origin. These are not tool executions. Same-named skills are merged across versions and source spaces.",
       "cost_eur": "Estimated cost (EUR)",
       "co2e_grams": "Estimated footprint (g CO2e)",
-      "energy_kwh": "Estimated energy (kWh)"
+      "energy_kwh": "Estimated energy (kWh)",
+      "exclude_weekends": "Exclude weekends (UTC)",
+      "exclude_holidays": "Exclude French national holidays (UTC)",
+      "calendarHint": "French national calendar: 11 public holidays, excluding local additions. The same exclusions apply to period measures, comparisons and exports; current stocks remain independent.",
+      "measure": "Measure",
+      "currentValue": "Selected period / current stock",
+      "previousValue": "Previous period",
+      "inventoryTitle": "Agents and documents",
+      "inventoryHint": "Stocks and retained creations are distinguished. Agent publication is not collected.",
+      "creatorsTitle": "Created, retained conversations",
+      "creatorsHint": "Population: creators of at least one retained conversation. Deletion changes these figures, including the previous period; this is distinct from the active-user population.",
+      "statisticsTitle": "Observed frequencies and rates",
+      "statisticsHint": "Population: observed completed turns. Ratios range from 0 to 1; decimals are truncated to six digits. A zero denominator remains unavailable.",
+      "toolsTitle": "Tool invocation attempts",
+      "toolsHint": "Each instrumented execution counts one attempt. Resumption after human approval counts again; internal provider retries are not separate. Attribution uses the admitted space and instance.",
+      "tool_rankingTitle": "Attempts by tool name",
+      "tool_rankingHint": "Same-named tools are grouped even across different providers. This ranking does not measure configured capabilities.",
+      "metrics": {
+        "activity": {
+          "median_usage_days": "Median usage days",
+          "median_days_per_week": "Usage days per week",
+          "mean_daily_active": "Mean active users per counted day",
+          "daily_usage_share": "Daily usage share (0–1)",
+          "median_turns_per_conversation": "Median turns per observed conversation",
+          "failure_rate": "Turn failure rate (0–1)",
+          "single_turn_rate": "Single-turn conversation share (0–1)",
+          "retained_conversations": "Created, retained conversations",
+          "retained_conversations_per_creator_median": "Retained creations per creator: median",
+          "retained_conversations_top_decile_share": "Top creator decile share (0–1)",
+          "creators_1": "Creators of 1 retained conversations",
+          "creators_2_3": "Creators of 2–3 retained conversations",
+          "creators_4_10": "Creators of 4–10 retained conversations",
+          "creators_11_30": "Creators of 11–30 retained conversations",
+          "creators_31_plus": "Creators of 31+ retained conversations"
+        },
+        "inventory": {
+          "enabled_agents": "Currently enabled agents",
+          "retained_agents_created": "Created, retained agents",
+          "agents_published": "Agent publication: not collected",
+          "documents_added": "Imports with retained receipt"
+        },
+        "tools": {
+          "attempts": "Invocation attempts",
+          "successes": "Successful attempts",
+          "failures": "Failed attempts",
+          "cancelled": "Cancelled attempts",
+          "awaiting_human": "Human-approval suspensions",
+          "failure_rate": "Tool failure rate (0–1)"
+        }
+      },
+      "metricHints": {
+        "activity": {
+          "median_usage_days": "Median distinct UTC dates with a completed turn, per active user.",
+          "median_days_per_week": "Median usage days / max(1, counted days / 5 when weekends are excluded, otherwise / 7).",
+          "mean_daily_active": "Sum of user/UTC-date pairs / counted dates, including empty days.",
+          "daily_usage_share": "User/day pairs / (active users × counted days).",
+          "median_turns_per_conversation": "Median completed turns per observed conversation in the filtered period, not its lifetime.",
+          "failure_rate": "Completions with error outcome / all completions. Unavailable if an outcome is missing.",
+          "single_turn_rate": "Conversations with one observed turn / observed conversations in the filtered period.",
+          "retained_conversations": "SQL creations in the period, with conversation and space not marked for deletion at read time.",
+          "retained_conversations_per_creator_median": "Among people who created at least one still-retained conversation in the filtered period.",
+          "retained_conversations_top_decile_share": "Share of retained creations belonging to the top ceil(10% × creators) creators.",
+          "creators_1": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_2_3": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_4_10": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_11_30": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_31_plus": "Retained-creation distribution per creator; no identities exposed."
+        },
+        "inventory": {
+          "enabled_agents": "Stock of enabled instances owned by the team and its non-deleting projects. Independent of period/calendar; does not guarantee pod/model executability.",
+          "retained_agents_created": "Instances created in the filtered period and retained in a non-deleting space. Deletion removes them.",
+          "agents_published": "Weaver has no agent publication state or event. Missing value, never zero.",
+          "documents_added": "Stored source document_upload receipts completed in the filtered period; drive only. Document purge removes the receipt and changes the count."
+        },
+        "tools": {
+          "attempts": "All execution timer observations, including local checks; not trace spans or skill loads.",
+          "successes": "The same timer with outcome ok.",
+          "failures": "The same timer with outcome error; the separate failure counter is not added.",
+          "cancelled": "Outcome cancelled, excluded from the failure-rate denominator.",
+          "awaiting_human": "Outcome awaiting_human; resumption is another attempt.",
+          "failure_rate": "Failures / (successes + failures). Waiting/cancelled excluded; zero denominator = unavailable."
+        }
+      },
+      "notCollected": "Not collected",
+      "notApplicable": "Not applicable (current stock)"
     },
     "weaverPrompts": {
       "retry": "Retry",
@@ -5474,6 +5578,21 @@
       "chartOverflow": "These exact counters exceed the chart precision. Values are shown in the table.",
       "dimension": "Series",
       "truncated": "Ranking truncated to 100 entries. Totals and estimates cover all recorded usage."
+    },
+    "teamRetention": {
+      "title": "Purge of deleted conversations",
+      "explanation": "Deleted conversations disappear immediately. This delay controls when durable purge can remove their content and attachments. Changes apply only to future deletion requests; existing requests keep their deadlines.",
+      "effective": "Effective delay: {{seconds}} seconds.",
+      "noCeiling": "No additional organization ceiling is configured.",
+      "ceiling": "Organization ceiling: {{seconds}} seconds.",
+      "mode": "Purge delay",
+      "inherit": "Inherit lifecycle policy",
+      "immediate": "Immediate",
+      "duration": "Explicit duration",
+      "seconds": "Duration in seconds",
+      "invalid": "Enter a positive whole number within the organization ceiling.",
+      "failed": "Could not save the purge delay.",
+      "saved": "Purge delay saved."
     }
   },
   "runtime": {

@@ -227,7 +227,7 @@ afterEach(() => {
   host.remove();
   expect(
     calls.every(({ path }) =>
-      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|prompts|prompt-categories|powerpoint-template))/.test(
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|models|prompts|prompt-categories|powerpoint-template))/.test(
         path,
       ),
     ),

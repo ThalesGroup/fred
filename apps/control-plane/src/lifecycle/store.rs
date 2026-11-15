@@ -413,7 +413,30 @@ impl Lifecycle {
             ));
         }
         let requested_at = Utc::now();
-        let (due_at, rule) = self.deadline(&space, requested_at, immediate)?;
+        let (due_at, rule) = if !immediate && space.kind == SpaceKind::Team {
+            let retention =
+                super::conversation_retention::read(&mut *tx, &self.catalog, &space).await?;
+            let selected = retention
+                .configured_seconds
+                .map(|v| v as u64)
+                .unwrap_or(retention.inherited_seconds);
+            let rule = if retention.effective_seconds < selected {
+                self.catalog
+                    .resolve(space.organization, SpaceKind::Organization)
+                    .1
+            } else if retention.configured_seconds.is_some() {
+                None // Local setting, not a matched catalog rule.
+            } else {
+                self.catalog.resolve(space.id, space.kind).1
+            };
+            (
+                super::policy::Retention::from_seconds(retention.effective_seconds)?
+                    .after(requested_at)?,
+                rule,
+            )
+        } else {
+            self.deadline(&space, requested_at, immediate)?
+        };
         let operation = Uuid::new_v4();
         let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
             .bind(operation).bind(session_id).bind(TargetKind::Session).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;

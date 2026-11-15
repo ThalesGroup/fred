@@ -45,7 +45,7 @@ describe("Team analytics contracts", () => {
     const sql = collectiveConsumptionQueries(range, "team");
     const history = collectiveHistoryQueries(range, "team");
     expect(sql).toHaveLength(8);
-    expect(history).toHaveLength(5);
+    expect(history).toHaveLength(7);
     for (const queries of [sql, history])
       for (const q of queries) {
         expect(q.scope).toEqual({ kind: "space", id: "team" });
@@ -65,7 +65,13 @@ describe("Team analytics contracts", () => {
   });
   it("keeps exact integers and hides cached figures on a failed or refreshing read", () => {
     const ready = renderToStaticMarkup(
-      <TeamAnalytics history={{ ...state, currentData: data }} consumption={state} agents={false} />,
+      <TeamAnalytics
+        history={{ ...state, currentData: data }}
+        consumption={state}
+        inventory={state}
+        tools={state}
+        agents={false}
+      />,
     );
     expect(ready).toContain(BigInt("9007199254740993").toLocaleString());
     for (const error of [{ status: 403 }, { status: 503 }]) {
@@ -73,6 +79,8 @@ describe("Team analytics contracts", () => {
         <TeamAnalytics
           history={{ ...state, currentData: data, isError: true, error }}
           consumption={state}
+          inventory={state}
+          tools={state}
           agents={false}
         />,
       );
@@ -80,7 +88,13 @@ describe("Team analytics contracts", () => {
       expect(denied).not.toContain(BigInt("9007199254740993").toLocaleString());
     }
     const refreshing = renderToStaticMarkup(
-      <TeamAnalytics history={{ ...state, currentData: data, isFetching: true }} consumption={state} agents={false} />,
+      <TeamAnalytics
+        history={{ ...state, currentData: data, isFetching: true }}
+        consumption={state}
+        inventory={state}
+        tools={state}
+        agents={false}
+      />,
     );
     expect(refreshing).toContain("common.loading");
     expect(refreshing).not.toContain(BigInt("9007199254740993").toLocaleString());
@@ -88,7 +102,13 @@ describe("Team analytics contracts", () => {
   it("shows missing attribution as unavailable and retains the completed-turn count", () => {
     const currentData = { ...data, results: { turns: result({ "activity.completed_turns": "17" }) } };
     const html = renderToStaticMarkup(
-      <TeamAnalytics history={{ ...state, currentData }} consumption={state} agents={false} />,
+      <TeamAnalytics
+        history={{ ...state, currentData }}
+        consumption={state}
+        inventory={state}
+        tools={state}
+        agents={false}
+      />,
     );
     expect(html).toContain("17");
     expect(html).toContain("rework.teamAnalytics.unavailableValue");

@@ -5480,7 +5480,9 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             "bob",
             team.id,
             None,
-            Some("An editor cannot describe this team.")
+            Some("An editor cannot describe this team."),
+            None,
+            None
         )
         .await,
         Err(AppError::Forbidden)
@@ -5491,7 +5493,9 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             "outsider",
             team.id,
             None,
-            Some("No cross-organization description writes.")
+            Some("No cross-organization description writes."),
+            None,
+            None
         )
         .await
         .is_err()
@@ -5502,14 +5506,25 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             "alice",
             org.id,
             None,
-            Some("This is an organization, not a team.")
+            Some("This is an organization, not a team."),
+            None,
+            None
         )
         .await,
         Err(AppError::NotFound)
     ));
     for invalid in ["".to_owned(), "short".to_owned(), "x".repeat(501)] {
         assert!(matches!(
-            spaces::update_team_parameters(&e.pool, "alice", team.id, None, Some(&invalid)).await,
+            spaces::update_team_parameters(
+                &e.pool,
+                "alice",
+                team.id,
+                None,
+                Some(&invalid),
+                None,
+                None
+            )
+            .await,
             Err(AppError::BadRequest(_))
         ));
     }
@@ -5522,6 +5537,8 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
         team.id,
         None,
         Some(&format!("  {description}\n")),
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -5554,14 +5571,30 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
                 .is_err()
         );
     }
-    let renamed =
-        spaces::update_team_parameters(&e.pool, "alice", team.id, Some("  Renamed  "), None)
-            .await
-            .unwrap();
+    let renamed = spaces::update_team_parameters(
+        &e.pool,
+        "alice",
+        team.id,
+        Some("  Renamed  "),
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(renamed.name, "Renamed");
     assert_eq!(renamed.description, updated.description);
     assert!(matches!(
-        spaces::update_team_parameters(&e.pool, "bob", team.id, Some("Forbidden"), None).await,
+        spaces::update_team_parameters(
+            &e.pool,
+            "bob",
+            team.id,
+            Some("Forbidden"),
+            None,
+            None,
+            None
+        )
+        .await,
         Err(AppError::Forbidden)
     ));
     let sibling = spaces::create_space(
@@ -5575,11 +5608,20 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     .await
     .unwrap();
     assert!(matches!(
-        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(&sibling.name), None).await,
+        spaces::update_team_parameters(
+            &e.pool,
+            "alice",
+            team.id,
+            Some(&sibling.name),
+            None,
+            None,
+            None
+        )
+        .await,
         Err(AppError::Conflict(_))
     ));
     assert!(
-        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(""), None)
+        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(""), None, None, None)
             .await
             .is_err()
     );
@@ -5590,7 +5632,9 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             "alice",
             team.id,
             Some("Not committed"),
-            Some("short")
+            Some("short"),
+            None,
+            None
         )
         .await
         .is_err()
@@ -5607,7 +5651,9 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             "alice",
             team.id,
             None,
-            Some("A former owner cannot change the purpose.")
+            Some("A former owner cannot change the purpose."),
+            None,
+            None
         )
         .await,
         Err(AppError::Forbidden)
@@ -5749,7 +5795,16 @@ async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
         );
     }
     // Hand the project to another responsible person before departure.
-    grant(&e, project.id, Role::Owner, "alice").await;
+    spaces::grant(
+        &e.pool,
+        &e.subjects(),
+        "bob",
+        project.id,
+        Role::Owner,
+        "alice",
+    )
+    .await
+    .unwrap();
     spaces::remove_member(&e.pool, "bob", project.id, "bob")
         .await
         .unwrap();
@@ -5808,12 +5863,16 @@ async fn team_settings_http_scopes_search_avatars_and_link_revocation() {
     grant(&e, org.id, Role::Member, "bob").await;
     grant(&e, team.id, Role::Member, "bob").await;
     let identity = support::IdentityServer::start().await;
+    identity.users.lock().await.extend([
+        ("alice".into(), "alice".into()),
+        ("bob".into(), "bob".into()),
+    ]);
     let app = routes(AppState {
         history: None,
         agent_catalog: Default::default(),
         pool: e.pool.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
-        directory: Some(e.open_directory()),
+        directory: Some(identity.directory()),
         content: None,
         processing: None,
         onboarding: Default::default(),
@@ -5927,3 +5986,6 @@ async fn concurrent_departures_cannot_remove_both_team_owners() {
 
 #[path = "support/team_activity.rs"]
 mod team_activity;
+
+#[path = "support/team_discovery.rs"]
+mod team_discovery;

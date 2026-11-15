@@ -86,6 +86,7 @@ pub(crate) async fn read(
     until: DateTime<Utc>,
     interval: AnalyticsInterval,
     group_limit: usize,
+    excluded: &[chrono::NaiveDate],
 ) -> AppResult<Vec<AggregateRow>> {
     // Keep the subject/space predicates indexable, including with generic plans.
     // A limit bounds returned rows, not scans: the caller also sets a SQL timeout.
@@ -115,41 +116,5 @@ pub(crate) async fn read(
         .bind(crate::analytics::factors::catalog()?)
         .bind(team),
     };
-    Ok(query.fetch_all(conn).await?)
-}
-
-/// A creation count of the retained catalogue, not an immutable creation journal.
-pub(crate) async fn retained_conversations(
-    conn: &mut PgConnection,
-    scope: &UsageScope<'_>,
-    since: DateTime<Utc>,
-    until: DateTime<Utc>,
-) -> AppResult<String> {
-    let query = match scope {
-        UsageScope::Person {
-            subject,
-            organization,
-        } => sqlx::query_scalar(concat!(
-            "select count(*)::text from session_metadata s join space p on p.id=s.space_id ",
-            "where s.user_id=$1 and p.organization_id=$2 and p.deletion_id is null ",
-            "and s.deletion_id is null and s.created_at >= $3 and s.created_at < $4"
-        ))
-        .bind(subject)
-        .bind(organization)
-        .bind(since)
-        .bind(until),
-        UsageScope::Space { id, team } => sqlx::query_scalar(concat!(
-            "select count(*)::text from session_metadata s join space p on p.id=s.space_id ",
-            "where s.space_id in (",
-            collective_spaces!("$1", "$2"),
-            ") ",
-            "and p.deletion_id is null and s.deletion_id is null ",
-            "and s.created_at >= $3 and s.created_at < $4"
-        ))
-        .bind(id)
-        .bind(team)
-        .bind(since)
-        .bind(until),
-    };
-    Ok(query.fetch_one(conn).await?)
+    Ok(query.bind(excluded).fetch_all(conn).await?)
 }

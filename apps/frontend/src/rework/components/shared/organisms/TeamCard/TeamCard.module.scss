@@ -21,14 +21,13 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 290px;
+  max-width: 100%;
   /* No explicit height: as a flex item the card stretches to the row's tallest
    * (the list sets `align-items: stretch`, and the navigable-card Link wrapper
    * is itself a stretching flex box), so cards in a row share a height and
    * their footers line up regardless of description length. An explicit
    * `height: 100%` would opt out of that stretch and fall back to content
    * height — the cause of the uneven rows it was meant to prevent. */
-  /* No overflow: hidden here — an admin-avatar tooltip in the footer must be
-   * able to escape the card bounds. */
 }
 
 .teamCardDetails {
@@ -39,8 +38,7 @@
   padding: var(--spacing-m);
 }
 
-/* Card header: the square team avatar next to the name + member count
- * (#2300 — replaces the former wide banner + overlapping avatar). */
+/* Team identity, without disclosing roster information. */
 .teamCardHeader {
   display: flex;
   align-items: center;
@@ -72,19 +70,6 @@
   white-space: nowrap;
 }
 
-.teamMemberCount {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  color: var(--on-surface);
-
-  font: var(--font-body-medium);
-}
-
-.teamMemberCountIcon {
-  font-size: 1.125rem;
-}
-
 .teamCardDescription {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -106,26 +91,9 @@
   margin-top: auto;
 }
 
-/* The avatars are the elastic half of the footer: the button keeps its whole
- * label, the row clips instead. AvatarGroup's `max` collapses the tail
- * first, so this only bites on an unusually long translation - and the row runs
- * right-to-left, so what falls off the left is never the "+N" badge. */
-.teamCardAdmins {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.teamCardJoinAction {
-  flex-shrink: 0;
-}
-
 .teamJoiningLabel {
-  flex-shrink: 0;
-  /* Escape-hatch margin (see design system guidance): this offset applies
-   * only to the label-only (invite-only) state — the sibling join button in
-   * the same footer slot must stay flush with the card's padding edge, so
-   * it can't be solved with footer padding/gap. */
-  margin-right: var(--spacing-xs);
+  min-width: 0;
   color: var(--on-surface-muted);
   font: var(--font-body-small);
+  overflow-wrap: anywhere;
 }

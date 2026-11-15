@@ -456,6 +456,15 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
     }),
+    organizationTeams: build.query<OrganizationTeamsApiResponse, OrganizationTeamsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/teams`,
+        params: {
+          search: queryArg.search,
+          page: queryArg.page,
+        },
+      }),
+    }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
     }),
@@ -494,8 +503,24 @@ const injectedRtkApi = api.injectEndpoints({
     deleteTeamAvatar: build.mutation<DeleteTeamAvatarApiResponse, DeleteTeamAvatarApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/avatar`, method: "DELETE" }),
     }),
+    teamConversationRetention: build.query<TeamConversationRetentionApiResponse, TeamConversationRetentionApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/conversation-retention` }),
+    }),
+    replaceTeamConversationRetention: build.mutation<
+      ReplaceTeamConversationRetentionApiResponse,
+      ReplaceTeamConversationRetentionApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/conversation-retention`,
+        method: "PUT",
+        body: queryArg.replaceConversationRetention,
+      }),
+    }),
     projectDeletionStatus: build.query<ProjectDeletionStatusApiResponse, ProjectDeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/deletion` }),
+    }),
+    teamMetadata: build.query<TeamMetadataApiResponse, TeamMetadataApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/discovery` }),
     }),
     teamDocumentActivity: build.query<TeamDocumentActivityApiResponse, TeamDocumentActivityApiArg>({
       query: (queryArg) => ({
@@ -529,6 +554,9 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
         },
       }),
+    }),
+    joinTeam: build.mutation<JoinTeamApiResponse, JoinTeamApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/join`, method: "POST" }),
     }),
     teamJoinLink: build.query<TeamJoinLinkApiResponse, TeamJoinLinkApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/join-link` }),
@@ -1637,6 +1665,12 @@ export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
 };
+export type OrganizationTeamsApiResponse = /** status 200 undefined */ TeamDirectoryPage;
+export type OrganizationTeamsApiArg = {
+  organizationId: string;
+  search?: string;
+  page?: number;
+};
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
@@ -1673,8 +1707,21 @@ export type DeleteTeamAvatarApiResponse = unknown;
 export type DeleteTeamAvatarApiArg = {
   id: string;
 };
+export type TeamConversationRetentionApiResponse = /** status 200 undefined */ ConversationRetention;
+export type TeamConversationRetentionApiArg = {
+  id: string;
+};
+export type ReplaceTeamConversationRetentionApiResponse = /** status 200 undefined */ ConversationRetention;
+export type ReplaceTeamConversationRetentionApiArg = {
+  id: string;
+  replaceConversationRetention: ReplaceConversationRetention;
+};
 export type ProjectDeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type ProjectDeletionStatusApiArg = {
+  id: string;
+};
+export type TeamMetadataApiResponse = /** status 200 undefined */ DiscoverableTeam;
+export type TeamMetadataApiArg = {
   id: string;
 };
 export type TeamDocumentActivityApiResponse = /** status 200 undefined */ DocumentActivityPage;
@@ -1707,6 +1754,10 @@ export type EntriesApiArg = {
   order?: EntryOrder;
   offset?: number;
   limit?: number;
+};
+export type JoinTeamApiResponse = unknown;
+export type JoinTeamApiArg = {
+  id: string;
 };
 export type TeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinLink | null;
 export type TeamJoinLinkApiArg = {
@@ -2530,10 +2581,38 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
-export type CalculationPrecision = "exact" | "estimated" | "mixed";
+export type CalculationPrecision = "exact" | "rounded" | "estimated" | "mixed";
 export type CollectionCompleteness = "unknown";
 export type AnalyticsInterval = "hour" | "day" | "week";
+export type AnalyticsCalendar = {
+  exclude_holidays?: boolean;
+  exclude_weekends?: boolean;
+};
 export type ConsumptionMeasure =
+  | "activity.median_usage_days"
+  | "activity.median_days_per_week"
+  | "activity.mean_daily_active"
+  | "activity.daily_usage_share"
+  | "activity.median_turns_per_conversation"
+  | "activity.failure_rate"
+  | "activity.single_turn_rate"
+  | "activity.retained_conversations_per_creator_median"
+  | "activity.retained_conversations_top_decile_share"
+  | "activity.creators_1"
+  | "activity.creators_2_3"
+  | "activity.creators_4_10"
+  | "activity.creators_11_30"
+  | "activity.creators_31_plus"
+  | "inventory.enabled_agents"
+  | "inventory.retained_agents_created"
+  | "inventory.agents_published"
+  | "inventory.documents_added"
+  | "tools.attempts"
+  | "tools.successes"
+  | "tools.failures"
+  | "tools.cancelled"
+  | "tools.awaiting_human"
+  | "tools.failure_rate"
   | "usage.input_tokens"
   | "usage.output_tokens"
   | "usage.cache_read_tokens"
@@ -2554,6 +2633,10 @@ export type ConsumptionMeasure =
   | "activity.failed_turns"
   | "activity.single_turn_conversations";
 export type AnalyticsUnit =
+  | "day"
+  | "ratio"
+  | "document"
+  | "attempt"
   | "token"
   | "exchange"
   | "eur"
@@ -2574,6 +2657,10 @@ export type AnalyticsMeasure = {
 export type AnalyticsDimensions =
   | {
       kind: "total";
+    }
+  | {
+      kind: "tool";
+      name: string;
     }
   | {
       kind: "skill";
@@ -2613,7 +2700,8 @@ export type AnalyticsRow = {
   estimates?: {
     [key: string]: AnalyticsEstimate;
   };
-  /** Exact decimal integer strings for matching facts; collection completeness is declared separately.
+  /** Decimal strings for matching facts; per-measure metadata distinguishes exact integers/medians
+    from ratios truncated to six fractional digits. Collection completeness is separate.
     A requested attribution counter is absent when erased/missing identities or outcomes prevent an exact count.
     Absence is unavailable, never zero. No user or conversation identities are returned. */
   values: {
@@ -2623,6 +2711,8 @@ export type AnalyticsRow = {
 export type AnalyticsTimezone = "UTC";
 export type AnalyticsResult = {
   bucket?: AnalyticsInterval | null;
+  /** UTC dates, French national holidays (metropole, excluding local additions). */
+  calendar?: AnalyticsCalendar;
   measures: AnalyticsMeasure[];
   rows: AnalyticsRow[];
   since: string;
@@ -2640,7 +2730,7 @@ export type AnalyticsResponse = {
     [key: string]: AnalyticsResult;
   };
 };
-export type AnalyticsGrouping = "time" | "agent" | "model" | "skill" | "space";
+export type AnalyticsGrouping = "time" | "agent" | "model" | "skill" | "space" | "tool";
 export type AnalyticsScope =
   | {
       kind: "self";
@@ -2652,6 +2742,8 @@ export type AnalyticsScope =
     };
 export type AnalyticsPeriod = {
   bucket?: AnalyticsInterval | null;
+  /** UTC dates, French national holidays (metropole, excluding local additions). */
+  calendar?: AnalyticsCalendar;
   /** Inclusive instant with offset. Maximum duration: 366 days. */
   since: string;
   timezone: AnalyticsTimezone;
@@ -2659,7 +2751,7 @@ export type AnalyticsPeriod = {
   until: string;
 };
 export type AnalyticsQuery = {
-  /** Consumption: total/time/agent/model; retained sessions: total; turns: total/time/agent (self also space); skills: skill. */
+  /** Consumption: total/time/agent/model; catalogues: total; turns: total/time/agent (self also space); skills: skill; tools: total/tool. */
   group_by?: AnalyticsGrouping[];
   /** Rankings only, default 100. Descending tokens, loads or turns, then stable identity. */
   limit?: number | null;
@@ -3429,6 +3521,22 @@ export type TeamSupervisionDetail = {
   organization_id: string;
   team: TeamSupervision;
 };
+export type TeamJoiningMode = "invite_only" | "open";
+export type TeamVisibility = "hidden" | "visible";
+export type DiscoverableTeam = {
+  can_join: boolean;
+  description?: string | null;
+  id: string;
+  /** Any direct role, including an owner without content access. */
+  is_member: boolean;
+  joining_mode: TeamJoiningMode;
+  name: string;
+  visibility: TeamVisibility;
+};
+export type TeamDirectoryPage = {
+  items: DiscoverableTeam[];
+  total: number;
+};
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
   agent_instance_id: string | null;
@@ -3463,7 +3571,20 @@ export type CreateSpace = {
 };
 export type TeamParameters = {
   description?: string | null;
+  joining_mode?: TeamJoiningMode | null;
   name?: string | null;
+  visibility?: TeamVisibility | null;
+};
+export type ConversationRetention = {
+  /** NULL inherits policy; zero is immediate purge eligibility. */
+  configured_seconds: number | null;
+  effective_seconds: number;
+  inherited_seconds: number;
+  organization_ceiling_seconds: number | null;
+};
+export type ReplaceConversationRetention = {
+  /** NULL restores inheritance; zero requests immediate eligibility. */
+  configured_seconds: number | null;
 };
 export type ActivityKind = "upload" | "processing" | "document_deletion" | "folder_deletion";
 export type ActivityStatus = "pending" | "running" | "succeeded" | "failed" | "retrying" | "blocked";
@@ -4586,6 +4707,8 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
+  useOrganizationTeamsQuery,
+  useLazyOrganizationTeamsQuery,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useDefaultSkillsQuery,
@@ -4597,14 +4720,20 @@ export const {
   useLazyGetTeamAvatarQuery,
   usePutTeamAvatarMutation,
   useDeleteTeamAvatarMutation,
+  useTeamConversationRetentionQuery,
+  useLazyTeamConversationRetentionQuery,
+  useReplaceTeamConversationRetentionMutation,
   useProjectDeletionStatusQuery,
   useLazyProjectDeletionStatusQuery,
+  useTeamMetadataQuery,
+  useLazyTeamMetadataQuery,
   useTeamDocumentActivityQuery,
   useLazyTeamDocumentActivityQuery,
   useReceiptsQuery,
   useLazyReceiptsQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
+  useJoinTeamMutation,
   useTeamJoinLinkQuery,
   useLazyTeamJoinLinkQuery,
   useCreateTeamJoinLinkMutation,

@@ -15,10 +15,14 @@ export default function TeamAnalytics({
   history,
   consumption,
   agents,
+  inventory,
+  tools,
 }: {
   history: ConsumptionQuery;
   consumption: ConsumptionQuery;
   agents: boolean;
+  inventory: ConsumptionQuery;
+  tools: ConsumptionQuery;
 }) {
   const { t, i18n } = useTranslation();
   const results = history.isError || history.isFetching ? undefined : history.currentData?.results;
@@ -108,6 +112,10 @@ export default function TeamAnalytics({
             isError={false}
           />
         ))}
+      <MetricTable query={inventory} name={agents ? "inventory" : "creators"} />
+      {!agents && <MetricTable query={history} name="statistics" />}
+      {agents && <MetricTable query={tools} name="tools" />}
+      {agents && <MetricTable query={tools} name="tool_ranking" />}
       {agents && (
         <>
           <h2>{t("rework.teamAnalytics.agentRanking")}</h2>
@@ -162,6 +170,68 @@ export default function TeamAnalytics({
           <p>{t("rework.teamAnalytics.skillsHint")}</p>
         </>
       )}
+    </>
+  );
+}
+
+/** Exact decimal strings are rendered as returned; missing values never become zero. */
+function MetricTable({ query, name }: { query: ConsumptionQuery; name: string }) {
+  const { t } = useTranslation();
+  if (query.isError) return <p role="alert">{t(analyticsErrorKey(query.error))}</p>;
+  if (query.isFetching || query.isLoading) return <p role="status">{t("common.loading")}</p>;
+  const result = query.currentData?.results[name];
+  const previous = query.currentData?.results[`previous_${name}`];
+  const rows =
+    result?.rows.flatMap((row) =>
+      result.measures.map((measure) => ({
+        id: `${dimension(row).id}/${measure.id}`,
+        stock: measure.id === "inventory.enabled_agents",
+        notCollected: measure.id === "inventory.agents_published",
+        label: t(`rework.teamAnalytics.metrics.${measure.id}`),
+        hint: t(`rework.teamAnalytics.metricHints.${measure.id}`),
+        tool: row.dimensions.kind === "tool" ? row.dimensions.name : undefined,
+        value: row.values[measure.id],
+        previous: measure.id === "inventory.enabled_agents" ? undefined : previous?.rows[0]?.values[measure.id],
+      })),
+    ) ?? [];
+  return (
+    <>
+      <h2>{t(`rework.teamAnalytics.${name}Title`)}</h2>
+      <p>{t(`rework.teamAnalytics.${name}Hint`)}</p>
+      <DataTable
+        data={rows}
+        rowKey={(row) => row.id}
+        pageSize={20}
+        columns={[
+          {
+            label: t("rework.teamAnalytics.measure"),
+            cellRenderer: (row) => (
+              <span title={row.hint}>
+                {row.tool ? `${row.tool} · ` : ""}
+                {row.label}
+              </span>
+            ),
+          },
+          {
+            label: t("rework.teamAnalytics.currentValue"),
+            cellRenderer: (row) =>
+              row.notCollected
+                ? t("rework.teamAnalytics.notCollected")
+                : (row.value ?? t("rework.teamAnalytics.unavailableValue")),
+          },
+          {
+            label: t("rework.teamAnalytics.previousValue"),
+            cellRenderer: (row) =>
+              row.stock
+                ? t("rework.teamAnalytics.notApplicable")
+                : row.notCollected
+                  ? t("rework.teamAnalytics.notCollected")
+                  : (row.previous ?? t("rework.teamAnalytics.unavailableValue")),
+          },
+        ]}
+      />
+      {!result && <p role="status">{t("rework.teamAnalytics.unavailable")}</p>}
+      {result?.truncated && <p role="status">{t("rework.personalAnalytics.truncated")}</p>}
     </>
   );
 }

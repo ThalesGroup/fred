@@ -121,6 +121,9 @@ erDiagram
   uuid organization_id FK
   uuid parent_id FK
   text description
+  text visibility
+  text joining_mode
+  bigint conversation_retention_seconds
 }
 "control_plane.folder" {
   uuid id

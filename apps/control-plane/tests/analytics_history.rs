@@ -23,6 +23,7 @@ fn mapping() -> Value {
 }
 fn query(subject: &str) -> ReadScope<'_> {
     ReadScope {
+        excluded_dates: vec![],
         subject: Some(subject),
         bucket: None,
         attribution: false,
@@ -65,7 +66,7 @@ async fn adapter_sends_verified_subject_time_and_origin_and_rejects_partial_resp
         let app = Router::new().route("/fixture/_mapping",get(|| async { Json(json!({"fixture":mapping()})) }))
             .route("/fixture/_search",post(move |Json(body): Json<Value>| { let reply=reply.clone(); async move {
                 assert_eq!(body["query"]["bool"]["filter"],json!([
-                    {"term":{"metric.name":"agent.skill_loaded_total"}}, {"term":{"dims.user_id":"alice"}},
+                    {"term":{"metric.name":"agent.skill_loaded_total"}}, {"term":{"dims.user_id":"alice"}}, {"match_all":{}},
                     {"terms":{"dims.space_id":[ACME[0]]}},
                     {"terms":{"dims.skill_origin":["user","agent"]}},
                     {"range":{"@timestamp":{"gte":"2026-01-01T00:00:00Z","lt":"2026-01-03T00:00:00Z"}}}
@@ -134,6 +135,14 @@ async fn real_multishard_skill_counts_are_exact_self_scoped_and_truncated() {
     let index = format!("analytics-fixture-{}", uuid::Uuid::new_v4());
     let client = reqwest::Client::new();
     let mut map = mapping();
+    for name in [
+        "tool_name",
+        "status",
+        "agent_instance_id",
+        "agent_instance_name",
+    ] {
+        map["mappings"]["properties"]["dims"]["properties"][name] = json!({"type":"keyword"});
+    }
     map["settings"] = json!({"number_of_shards":3,"number_of_replicas":0});
     client
         .put(format!("{url}/{index}"))
@@ -159,6 +168,62 @@ async fn real_multishard_skill_counts_are_exact_self_scoped_and_truncated() {
     for _ in 0..20 {
         bulk.push_str(&format!("{{\"index\":{{}}}}\n{}\n", json!({"@timestamp":"2026-01-01T12:00:00Z","metric":{"name":"agent.skill_loaded_total"},"dims":{"user_id":"alice","skill_name":"globex-only","skill_origin":"agent","space_id":GLOBEX[0]}})));
     }
+    for (metric, status, at, space) in [
+        (
+            "agent.tool_latency_ms",
+            "ok",
+            "2026-01-01T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "ok",
+            "2026-01-02T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "error",
+            "2026-01-02T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "cancelled",
+            "2026-01-02T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "awaiting_human",
+            "2026-01-02T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_failed_total",
+            "error",
+            "2026-01-02T00:00:00Z",
+            ACME[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "error",
+            "2026-01-02T00:00:00Z",
+            GLOBEX[0],
+        ),
+        (
+            "agent.tool_latency_ms",
+            "error",
+            "2026-01-03T00:00:00Z",
+            ACME[0],
+        ),
+    ] {
+        bulk.push_str(&format!("{{\"index\":{{}}}}\n{}\n", json!({
+            "@timestamp":at,"metric":{"name":metric},
+            "dims":{"space_id":space,"user_id":"alice","agent_instance_id":uuid::Uuid::from_u128(10),
+                "agent_instance_name":"Assistant","tool_name":"search","status":status}
+        })));
+    }
     let uploaded: Value = client
         .post(format!("{url}/{index}/_bulk?refresh=true"))
         .header("content-type", "application/x-ndjson")
@@ -173,6 +238,18 @@ async fn real_multishard_skill_counts_are_exact_self_scoped_and_truncated() {
         .unwrap();
     assert_eq!(uploaded["errors"], false);
     let reader = OpenSearch::configured(&config(url.clone(), index.clone())).unwrap();
+    let mut tools_query = query("alice");
+    tools_query.subject = None;
+    let tools = reader.tools(tools_query).await.unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0].attempts, 5);
+    assert_eq!(tools[0].outcomes, Some([2, 1, 1, 1]));
+    let mut tools_query = query("alice");
+    tools_query.subject = None;
+    tools_query.excluded_dates = vec!["2026-01-01".parse().unwrap()];
+    let tools = reader.tools(tools_query).await.unwrap();
+    assert_eq!(tools[0].attempts, 4);
+    assert_eq!(tools[0].outcomes, Some([1, 1, 1, 1]));
     let alice = reader.skill_loads(query("alice")).await.unwrap();
     assert!(alice.truncated);
     assert_eq!(alice.rows.len(), 100);
@@ -277,7 +354,7 @@ async fn turn_adapter_requires_canonical_scope_complete_counts_and_half_open_win
                 async move {
                     assert_eq!(body["query"]["bool"]["filter"], json!([
                         {"term":{"metric.name":"agent.turn_completed"}},
-                        {"term":{"dims.user_id":"alice"}},
+                        {"term":{"dims.user_id":"alice"}}, {"match_all":{}},
                         {"terms":{"dims.space_id":[ACME[0]]}},
                         {"range":{"@timestamp":{"gte":"2026-01-01T00:00:00Z","lt":"2026-01-03T00:00:00Z"}}}
                     ]));

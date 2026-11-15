@@ -1,6 +1,7 @@
 -- The authorized caller supplies scoped ($1); $2/$3 bound [since, until), $4 is hour/day/week.
 -- $5 bounds each ranking including its truncation sentinel; $6 is the maintained factor catalog.
--- $7 is the working organization for self, or the team-expansion flag for collective reads. Scans are bounded by statement_timeout.
+-- $7 is the working organization for self, or the team-expansion flag for collective reads.
+-- $8 contains excluded UTC dates. Scans are bounded by statement_timeout.
 , windowed as materialized (
     select * from scoped where occurred_at >= $2 and occurred_at < $3
 ), turn_starts as (
@@ -14,13 +15,14 @@
     where s.occurred_at < $2
 ), token_facts as (
     select w.*, date_trunc($4, w.occurred_at, 'UTC') as start,
-        case when p.session_id is null then t.first_at end as first_at
+        case when p.session_id is null and (t.first_at at time zone 'UTC')::date <> all($8::date[]) then t.first_at end as first_at
     from windowed w join turn_starts t using (session_id, exchange_id)
     left join prior_turns p using (session_id, exchange_id)
 ), factors as (
     select t.*, coalesce($6::jsonb->'models'->upstream_model_id, $6::jsonb->'models'->'default') as factor,
         not ($6::jsonb->'models' ? upstream_model_id) as fallback
     from token_facts t
+    where (occurred_at at time zone 'UTC')::date <> all($8::date[])
 ), facts as (
     -- Cache reads are a subset of input; creation tokens remain fresh input, never added again.
     -- A missing/zero required coefficient makes this report unavailable for that measure.

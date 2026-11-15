@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Bounded named consumption and skill reads. Domain SQL remains in sessions::usage.
+pub(crate) mod calendar;
 pub(crate) mod factors;
 pub mod history;
+pub(crate) mod inventory;
 pub(crate) mod models;
 pub mod opensearch;
+pub(crate) mod statistics;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -169,7 +172,11 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
             ));
         }
         let duration = q.time.until - q.time.since;
-        if duration <= Duration::zero() || duration > Duration::days(366) {
+        if duration <= Duration::zero()
+            || duration > Duration::days(366)
+            || q.time.since.year() < 1970
+            || q.time.until.year() > 9999
+        {
             return Err(invalid(
                 "Expected since < until and a period of at most 366 days",
             ));
@@ -225,14 +232,17 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
                         "Distinct identities and outcome counters require a total",
                     ));
                 }
-                ReaderKind::Conversations if grouping.is_some() => {
-                    return Err(invalid("Retained conversations require a total"));
+                ReaderKind::Tools if !matches!(grouping, None | Some(AnalyticsGrouping::Tool)) => {
+                    return Err(invalid("Tools support total or tool grouping"));
+                }
+                ReaderKind::Inventory | ReaderKind::Conversations if grouping.is_some() => {
+                    return Err(invalid("Catalogue measures require a total"));
                 }
                 _ => {}
             }
         } else if matches!(
             grouping,
-            Some(AnalyticsGrouping::Skill | AnalyticsGrouping::Space)
+            Some(AnalyticsGrouping::Skill | AnalyticsGrouping::Space | AnalyticsGrouping::Tool)
         ) {
             return Err(invalid("This grouping requires historical measures"));
         }
@@ -251,6 +261,7 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
                     | AnalyticsGrouping::Model
                     | AnalyticsGrouping::Skill
                     | AnalyticsGrouping::Space
+                    | AnalyticsGrouping::Tool
             )
         );
         if q.limit.is_some() && !ranked || !(1..=100).contains(&q.limit.unwrap_or(100)) {
@@ -289,6 +300,14 @@ fn plan(request: &AnalyticsRequest) -> AppResult<Vec<ReadPlan>> {
                 && other.scope == q.scope
                 && other.time.since == q.time.since
                 && other.time.until == q.time.until
+                && other.time.calendar == q.time.calendar
+                && !(p.interval == AnalyticsInterval::Hour
+                    && (other.group_by == [AnalyticsGrouping::Time]
+                        || q.group_by == [AnalyticsGrouping::Time])
+                    && (q.measures.iter().any(|m| m.needs_days())
+                        || p.consumers
+                            .iter()
+                            .any(|&i| request.queries[i].measures.iter().any(|m| m.needs_days()))))
                 && (q.group_by != [AnalyticsGrouping::Time] || p.interval == bucket)
         });
         if let Some(p) = compatible {
@@ -394,9 +413,17 @@ async fn execute(
     let mut results = BTreeMap::new();
     for (p, scope) in plans.iter().zip(&scopes) {
         let q = &request.queries[p.query];
-        if q.measures[0] == ConsumptionMeasure::RetainedConversations {
-            let value =
-                read::retained_conversations(&mut tx, scope, q.time.since, q.time.until).await?;
+        if matches!(
+            q.measures[0].reader(),
+            ReaderKind::Conversations | ReaderKind::Inventory
+        ) {
+            let creator_statistics = p.consumers.iter().any(|&i| {
+                request.queries[i].measures.iter().any(|m| {
+                    m.reader() == ReaderKind::Conversations
+                        && *m != ConsumptionMeasure::RetainedConversations
+                })
+            });
+            let values = inventory::read(&mut tx, scope, q, creator_statistics).await?;
             for &i in &p.consumers {
                 let q = &request.queries[i];
                 results.insert(
@@ -405,14 +432,16 @@ async fn execute(
                         since: q.time.since,
                         until: q.time.until,
                         timezone: q.time.timezone,
+                        calendar: q.time.calendar,
                         bucket: None,
                         measures: q.measures.iter().map(|m| m.metadata()).collect(),
                         rows: vec![AnalyticsRow {
                             dimensions: AnalyticsDimensions::Total,
-                            values: BTreeMap::from([(
-                                ConsumptionMeasure::RetainedConversations,
-                                value.clone(),
-                            )]),
+                            values: values
+                                .iter()
+                                .filter(|(m, _)| q.measures.contains(m))
+                                .map(|(m, v)| (*m, v.clone()))
+                                .collect(),
                             estimates: BTreeMap::new(),
                         }],
                         truncated: false,
@@ -428,6 +457,7 @@ async fn execute(
             q.time.until,
             p.interval,
             p.limit,
+            &q.time.excluded_dates(),
         )
         .await?;
         for &i in &p.consumers {
@@ -437,16 +467,7 @@ async fn execute(
     }
     tx.commit().await?;
     let response = AnalyticsResponse {
-        calculation: {
-            let mut measures = request.queries.iter().flat_map(|q| &q.measures);
-            if measures.clone().all(|m| m.estimated()) {
-                CalculationPrecision::Estimated
-            } else if measures.any(|m| m.estimated()) {
-                CalculationPrecision::Mixed
-            } else {
-                CalculationPrecision::Exact
-            }
-        },
+        calculation: request.calculation(),
         collection_completeness: CollectionCompleteness::Unknown,
         results,
     };
@@ -508,6 +529,7 @@ fn result(
                     | AnalyticsGrouping::Model
                     | AnalyticsGrouping::Skill
                     | AnalyticsGrouping::Space
+                    | AnalyticsGrouping::Tool
             )
         ) && rows.len() == q.limit.unwrap_or(100)
         {
@@ -550,6 +572,7 @@ fn result(
         since: q.time.since,
         until: q.time.until,
         timezone: q.time.timezone,
+        calendar: q.time.calendar,
         bucket: (grouping == Some(&AnalyticsGrouping::Time)).then_some(interval),
         measures: q.measures.iter().map(|&id| id.metadata()).collect(),
         rows,
@@ -564,6 +587,25 @@ mod tests {
 
     fn query(name: &str, grouping: Vec<&str>) -> Value {
         json!({"name":name,"scope":{"kind":"self","organization_id":"00000000-0000-0000-0000-000000000001"},"time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},"measures":["usage.input_tokens"],"group_by":grouping})
+    }
+
+    #[test]
+    fn calendars_and_hourly_series_never_share_an_incompatible_read() {
+        let mut first = query("total", vec![]);
+        let mut other = query("filtered", vec![]);
+        other["time"]["calendar"] = json!({"exclude_holidays":true});
+        let req: AnalyticsRequest =
+            serde_json::from_value(json!({"queries":[first.clone(),other]})).unwrap();
+        assert_eq!(plan(&req).unwrap().len(), 2);
+        first["measures"] = json!(["activity.median_usage_days"]);
+        let mut series = query("series", vec!["time"]);
+        series["measures"] = json!(["activity.completed_turns"]);
+        let req = serde_json::from_value(json!({"queries":[first,series]})).unwrap();
+        assert_eq!(plan(&req).unwrap().len(), 2);
+        let mut invalid_tools = query("tools", vec!["agent"]);
+        invalid_tools["measures"] = json!(["tools.attempts"]);
+        let req = serde_json::from_value(json!({"queries":[invalid_tools]})).unwrap();
+        assert!(plan(&req).is_err());
     }
 
     #[test]

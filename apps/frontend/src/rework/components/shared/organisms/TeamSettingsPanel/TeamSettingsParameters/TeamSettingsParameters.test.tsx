@@ -31,6 +31,10 @@ const h = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@core/hooks/useSpaceAccess", () => ({ useSpaceAccess: () => h.access }));
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useTeamMetadataQuery: () => ({
+    currentData: { visibility: "hidden", joining_mode: "invite_only" },
+    refetch: h.refetch,
+  }),
   useGetTeamAvatarQuery: () => ({ currentData: "data:image/png;base64,photo" }),
   usePutTeamAvatarMutation: () => [h.upload, { isLoading: false }],
   useDeleteTeamAvatarMutation: () => [h.removeAvatar, { isLoading: false }],
@@ -62,6 +66,30 @@ vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard", () => ({
     </>
   ),
 }));
+vi.mock("@shared/molecules/Select/Select", () => ({
+  default: ({
+    label,
+    value,
+    options,
+    onChange,
+    disabled,
+  }: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+    disabled: boolean;
+  }) => (
+    <select aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+vi.mock("./TeamConversationRetention", () => ({ default: () => null }));
 import TeamSettingsParameters from "./TeamSettingsParameters";
 let root: Root;
 let container: HTMLDivElement;
@@ -94,7 +122,9 @@ const render = async (id = "team") => {
 };
 const field = () => container.querySelector("textarea")!;
 const button = () =>
-  Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "common.save")!;
+  Array.from(container.querySelectorAll("button"))
+    .reverse()
+    .find((item) => item.textContent === "common.save")!;
 const type = async (value: string) => {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), value);
@@ -176,7 +206,11 @@ it("renames without discarding an unsaved description", async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "  New research  ");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => container.querySelector("button")!.click());
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((item) => item.textContent === "rework.teamSettings.parameters.name.save")!
+      .click(),
+  );
   expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { name: "New research" } });
   expect(field().value).toBe("An unsaved research description.");
 });
@@ -195,4 +229,23 @@ it("uploads and deletes the team photo through the shared avatar transport", asy
       .click(),
   );
   expect(h.removeAvatar).toHaveBeenCalledWith({ id: "team" });
+});
+
+it("saves discovery settings atomically without altering name or description drafts", async () => {
+  await render();
+  await type("Keep this draft while changing visibility.");
+  const visibility = container.querySelector<HTMLSelectElement>('[aria-label="rework.teamDiscovery.visibility"]')!;
+  const joining = container.querySelector<HTMLSelectElement>('[aria-label="rework.teamDiscovery.joiningMode"]')!;
+  await act(async () => {
+    visibility.value = "visible";
+    visibility.dispatchEvent(new Event("change", { bubbles: true }));
+    joining.value = "open";
+    joining.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const saveSettings = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent === "common.save",
+  )!;
+  await act(async () => saveSettings.click());
+  expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { visibility: "visible", joining_mode: "open" } });
+  expect(field().value).toBe("Keep this draft while changing visibility.");
 });

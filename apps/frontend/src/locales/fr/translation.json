@@ -1430,6 +1430,22 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "teamDiscovery": {
+      "catalogueHint": "Équipes visibles de votre organisation et équipes dont vous êtes membre. Le catalogue ne donne aucun accès à leur contenu.",
+      "openTeam": "Ouvrir l’équipe",
+      "notEligible": "Un rôle de contenu dans l’organisation est requis pour rejoindre cette équipe.",
+      "joinFailed": "Impossible de rejoindre l’équipe. Actualisez le catalogue pour vérifier son accès actuel.",
+      "settingsTitle": "Visibilité et adhésion",
+      "settingsHint": "Ces réglages ne modifient ni les droits des membres existants ni la publication des agents. Voir une équipe ne donne aucun accès à son contenu.",
+      "visibility": "Visibilité dans l’organisation",
+      "hidden": "Masquée",
+      "visible": "Visible",
+      "joiningMode": "Adhésion",
+      "invite_only": "Sur invitation",
+      "open": "Libre (rôle Membre)",
+      "hiddenOpenHint": "Une équipe masquée reste accessible aux membres et par invitation. L’adhésion libre ne sera disponible que si elle devient visible.",
+      "saveFailed": "Impossible d’enregistrer les réglages. Vérifiez votre accès et réessayez."
+    },
     "teamAnalytics": {
       "unavailableValue": "Indisponible",
       "export": "Exporter cet onglet (Excel)",
@@ -1451,7 +1467,11 @@
         "coverage": "Couverture estimation",
         "fallback": "Facteurs par défaut",
         "truncated": "Classement tronqué",
-        "collection": "Complétude collecte"
+        "collection": "Complétude collecte",
+        "exclude_weekends": "Exclure les weekends (UTC)",
+        "exclude_holidays": "Exclure les jours fériés nationaux français (UTC)",
+        "calendar_reference": "Référence du calendrier",
+        "definition": "Définition"
       },
       "active_users": "Utilisateurs actifs observés",
       "active_usersHint": "Identités distinctes parmi les tours terminés de la période, sans liste nominative. Indisponible si une identité a été effacée ou manque.",
@@ -1467,7 +1487,7 @@
       "agents": "Agents et skills",
       "teamScope": "Équipe et ses projets, y compris les projets retirés ou supprimés. Les agrégats portent sur les actions dans ces espaces, y compris celles d’anciens membres. Ils ne donnent pas accès aux conversations.",
       "projectScope": "Ce projet uniquement, sans les autres projets ni l’équipe parente. Les agrégats ne donnent pas accès aux conversations.",
-      "period": "Du {{since}} inclus au {{until}} exclu. Séries en UTC ; tous les jours sont comptés. Maximum : 366 jours.",
+      "period": "Du {{since}} inclus au {{until}} exclu. Jours et séries en UTC. Maximum : 366 jours.",
       "denied": "Accès aux analytiques refusé ou espace non accessible. Un rôle direct Responsable ou Analyste est requis.",
       "unavailable": "Les analytiques sont indisponibles. Aucun chiffre ne peut être présenté pour cette lecture.",
       "tooLarge": "Période ou volume non pris en charge. Réduisez la période (366 jours maximum) et réessayez.",
@@ -1484,7 +1504,91 @@
       "skillsHint": "Chargements réussis observés, distinguant l’origine utilisateur et agent. Ce ne sont pas des exécutions d’outils. Les skills de même nom sont regroupés, toutes versions et provenances confondues.",
       "cost_eur": "Coût estimé (EUR)",
       "co2e_grams": "Empreinte estimée (g CO2e)",
-      "energy_kwh": "Énergie estimée (kWh)"
+      "energy_kwh": "Énergie estimée (kWh)",
+      "exclude_weekends": "Exclure les weekends (UTC)",
+      "exclude_holidays": "Exclure les jours fériés nationaux français (UTC)",
+      "calendarHint": "Calendrier national français : 11 fêtes légales, hors spécificités locales. Mêmes exclusions pour les mesures de période, comparaisons et exports ; les stocks actuels restent indépendants.",
+      "measure": "Mesure",
+      "currentValue": "Période sélectionnée / stock actuel",
+      "previousValue": "Période précédente",
+      "inventoryTitle": "Agents et documents",
+      "inventoryHint": "Stocks et créations conservées sont distingués. La publication d’agents n’est pas collectée.",
+      "creatorsTitle": "Conversations créées, encore conservées",
+      "creatorsHint": "Population : créateurs d’au moins une conversation encore conservée. La suppression change ces chiffres, y compris la comparaison précédente ; ce n’est pas la population des utilisateurs actifs.",
+      "statisticsTitle": "Fréquences et taux observés",
+      "statisticsHint": "Population : fins de tour observées. Les ratios sont compris entre 0 et 1 ; les décimales sont tronquées à six chiffres. Un dénominateur nul reste indisponible.",
+      "toolsTitle": "Tentatives d’outils",
+      "toolsHint": "Chaque passage par l’exécution instrumentée compte une tentative. Une reprise après validation humaine compte à nouveau ; les reprises internes au fournisseur ne sont pas séparées. Attribution à l’espace et à l’instance admis.",
+      "tool_rankingTitle": "Tentatives par nom d’outil",
+      "tool_rankingHint": "Les outils de même nom sont regroupés, même si leurs fournisseurs diffèrent. Ce classement ne mesure pas les capabilities configurées.",
+      "metrics": {
+        "activity": {
+          "median_usage_days": "Jours d’usage médians",
+          "median_days_per_week": "Jours d’usage par semaine",
+          "mean_daily_active": "Actifs moyens par jour retenu",
+          "daily_usage_share": "Part d’usage quotidien (0–1)",
+          "median_turns_per_conversation": "Tours médians par conversation utilisée",
+          "failure_rate": "Taux d’erreur des tours (0–1)",
+          "single_turn_rate": "Part des conversations à un tour (0–1)",
+          "retained_conversations": "Conversations créées, conservées",
+          "retained_conversations_per_creator_median": "Créations conservées par créateur : médiane",
+          "retained_conversations_top_decile_share": "Part du décile des créateurs (0–1)",
+          "creators_1": "Créateurs de 1 conversations conservées",
+          "creators_2_3": "Créateurs de 2–3 conversations conservées",
+          "creators_4_10": "Créateurs de 4–10 conversations conservées",
+          "creators_11_30": "Créateurs de 11–30 conversations conservées",
+          "creators_31_plus": "Créateurs de 31+ conversations conservées"
+        },
+        "inventory": {
+          "enabled_agents": "Agents activés actuellement",
+          "retained_agents_created": "Agents créés, encore conservés",
+          "agents_published": "Publication d’agents : non collectée",
+          "documents_added": "Imports avec reçu conservé"
+        },
+        "tools": {
+          "attempts": "Tentatives d’appel",
+          "successes": "Tentatives réussies",
+          "failures": "Tentatives en erreur",
+          "cancelled": "Tentatives annulées",
+          "awaiting_human": "Suspensions pour validation humaine",
+          "failure_rate": "Taux d’erreur outils (0–1)"
+        }
+      },
+      "metricHints": {
+        "activity": {
+          "median_usage_days": "Médiane des dates UTC distinctes avec au moins une fin de tour, par utilisateur actif.",
+          "median_days_per_week": "Médiane des jours d’usage / max(1, jours retenus / 5 si weekends exclus, sinon / 7).",
+          "mean_daily_active": "Somme des couples utilisateur/date UTC / nombre de dates retenues, jours vides inclus.",
+          "daily_usage_share": "Couples utilisateur/jour / (utilisateurs actifs × jours retenus).",
+          "median_turns_per_conversation": "Médiane des fins de tour par conversation observée dans la période filtrée, pas sur sa durée de vie.",
+          "failure_rate": "Fins de tour avec issue error / toutes les fins de tour. Indisponible si une issue manque.",
+          "single_turn_rate": "Conversations ayant un seul tour observé / conversations observées dans la période filtrée.",
+          "retained_conversations": "Créations SQL dans la période, conversations et espaces non en suppression au moment de la lecture.",
+          "retained_conversations_per_creator_median": "Parmi les personnes ayant créé au moins une conversation encore conservée pendant la période filtrée.",
+          "retained_conversations_top_decile_share": "Part des créations conservées attribuées aux ceil(10 % × créateurs) créateurs les plus prolifiques.",
+          "creators_1": "Distribution des créations conservées, par créateur ; aucune identité exposée.",
+          "creators_2_3": "Distribution des créations conservées, par créateur ; aucune identité exposée.",
+          "creators_4_10": "Distribution des créations conservées, par créateur ; aucune identité exposée.",
+          "creators_11_30": "Distribution des créations conservées, par créateur ; aucune identité exposée.",
+          "creators_31_plus": "Distribution des créations conservées, par créateur ; aucune identité exposée."
+        },
+        "inventory": {
+          "enabled_agents": "Stock des instances activées appartenant à l’équipe et ses projets non supprimés. Hors période/calendrier ; ne garantit pas l’exécutabilité du pod/modèle.",
+          "retained_agents_created": "Instances créées dans la période filtrée et encore conservées dans un espace actif. Une suppression les retire.",
+          "agents_published": "Weaver ne possède aucun état ni événement de publication d’agent. Valeur absente, jamais zéro.",
+          "documents_added": "Reçus source document_upload stored terminés dans la période filtrée ; drive uniquement. La purge du document retire le reçu et modifie le compteur."
+        },
+        "tools": {
+          "attempts": "Toutes les observations du timer d’exécution, contrôles locaux inclus ; pas des traces ni des chargements de skill.",
+          "successes": "Issue ok du même timer.",
+          "failures": "Issue error du même timer ; le compteur séparé d’erreurs n’est pas additionné.",
+          "cancelled": "Issue cancelled, exclue du dénominateur du taux d’erreur.",
+          "awaiting_human": "Issue awaiting_human ; la reprise constitue une autre tentative.",
+          "failure_rate": "Erreurs / (succès + erreurs). Attentes et annulations exclues ; zéro dénominateur = indisponible."
+        }
+      },
+      "notCollected": "Non collectée",
+      "notApplicable": "Sans objet (stock actuel)"
     },
     "weaverPrompts": {
       "retry": "Réessayer",
@@ -5474,6 +5578,21 @@
       "chartOverflow": "Ces compteurs exacts dépassent la précision du graphique. Les valeurs sont affichées dans le tableau.",
       "dimension": "Série",
       "truncated": "Classement limité à 100 entrées. Les totaux et estimations couvrent toute la consommation enregistrée."
+    },
+    "teamRetention": {
+      "title": "Purge des conversations supprimées",
+      "explanation": "Les conversations supprimées disparaissent immédiatement. Ce délai détermine quand la purge durable peut effacer leur contenu et leurs pièces jointes. Les changements concernent uniquement les prochaines demandes de suppression ; les demandes existantes conservent leur échéance.",
+      "effective": "Délai effectif : {{seconds}} secondes.",
+      "noCeiling": "Aucun plafond supplémentaire configuré pour l’organisation.",
+      "ceiling": "Plafond de l’organisation : {{seconds}} secondes.",
+      "mode": "Délai de purge",
+      "inherit": "Hériter de la politique de cycle de vie",
+      "immediate": "Immédiat",
+      "duration": "Durée explicite",
+      "seconds": "Durée en secondes",
+      "invalid": "Saisissez un entier positif respectant le plafond de l’organisation.",
+      "failed": "Impossible d’enregistrer le délai de purge.",
+      "saved": "Délai de purge enregistré."
     }
   },
   "runtime": {

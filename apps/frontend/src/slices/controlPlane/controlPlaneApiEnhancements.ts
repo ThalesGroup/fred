@@ -171,6 +171,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
     "MyAvatar",
     "TeamAvatar",
+    "TeamDirectory",
     "SpaceMembers",
     "MySpaces",
     "SpaceAccess",
@@ -294,6 +295,12 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     setWikiReviewMark: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     publishWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    organizationTeams: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
+    teamMetadata: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
+    joinTeam: {
+      invalidatesTags: ["TeamDirectory", "MySpaces", "SpaceMembers", "SpaceAccess", "Marketplaces"],
+      extraOptions: { retryUnauthorized: false },
+    },
     mySpaces: { providesTags: ["MySpaces"] },
     teamJoinLink: { keepUnusedDataFor: 0, providesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }] },
     createTeamJoinLink: {
@@ -306,10 +313,13 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     previewTeamJoinLink: { keepUnusedDataFor: 0 },
     redeemTeamJoinLink: {
-      invalidatesTags: ["MySpaces", "SpaceMembers", "SpaceAccess"],
+      invalidatesTags: ["MySpaces", "SpaceMembers", "SpaceAccess", "TeamDirectory"],
       extraOptions: { retryUnauthorized: false },
     },
-    updateTeamParameters: { invalidatesTags: ["MySpaces"], extraOptions: { retryUnauthorized: false } },
+    updateTeamParameters: {
+      invalidatesTags: ["MySpaces", "TeamDirectory", "TeamAvatar"],
+      extraOptions: { retryUnauthorized: false },
+    },
     spaceMembers: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
@@ -320,15 +330,39 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     grant: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
     },
     removeSpaceMember: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
     },
     revoke: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent", "TeamAvatar"],
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
     },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
@@ -843,6 +877,9 @@ export const {
   useGetMyAvatarQuery,
   usePutMyAvatarMutation,
   useDeleteMyAvatarMutation,
+  useOrganizationTeamsQuery,
+  useTeamMetadataQuery,
+  useJoinTeamMutation,
   useMySpacesQuery,
   useUpdateTeamParametersMutation,
   useTeamJoinLinkQuery,
