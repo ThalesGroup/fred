@@ -166,7 +166,13 @@ remain separate from the source prompt's ownership. The
 [marketplace transactions](../../apps/control-plane/src/marketplaces/store.rs)
 implement snapshot approval, withdrawal and installation receipts; the
 [audience policy](../../apps/control-plane/src/marketplaces.rs) limits publication
-to the source's organization.
+to the source's organization. The [catalogue reader](../../apps/frontend/src/rework/components/pages/marketplace/MarketplacePage.tsx)
+filters the complete loaded catalogue before display pagination; the
+[package reader](../../apps/frontend/src/rework/components/pages/marketplace/MarketplacePackageView.tsx)
+presents the submitted content without reading the source library. Their
+[UI checks](../../apps/frontend/src/rework/components/pages/marketplace/MarketplacePage.test.tsx)
+and [package checks](../../apps/frontend/src/rework/components/pages/marketplace/MarketplacePackageView.test.tsx)
+use simulated responses, not deployed acceptance.
 
 ### Pod capability offers
 

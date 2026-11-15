@@ -16,6 +16,7 @@ import type {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+const workingOrganization = vi.hoisted(() => ({ id: "catalogue" }));
 const identity = vi.hoisted(() => ({ current: "viewer-session" as string | null }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
@@ -57,7 +58,7 @@ vi.mock("@core/hooks/useWorkingOrganization", async () => {
   return {
     useWorkingOrganization: () => {
       const marketplaces = useMarketplacesQuery(sessionQueryArgs({}), { refetchOnMountOrArgChange: true });
-      return { organizationId: "catalogue", marketplaces, loading: marketplaces.isLoading };
+      return { organizationId: workingOrganization.id, marketplaces, loading: marketplaces.isLoading };
     },
   };
 });
@@ -133,6 +134,7 @@ const page = (items: unknown[]) => json({ items, next_cursor: null });
 
 beforeEach(() => {
   sessionStorage.clear();
+  workingOrganization.id = catalogue;
   identity.current = "viewer-session";
   proposal = proposalFixture();
   deleted = false;
@@ -265,6 +267,125 @@ it("admits an organization participant without source-library requests and keeps
   await vi.waitFor(() => expect(calls.some((call) => call.url.endsWith("/entries/entry-2"))).toBe(true));
   expect(calls.every((call) => !/\/prompts|\/me\/spaces|authorize/.test(new URL(call.url).pathname))).toBe(true);
   expect(calls.some((call) => new URL(call.url).searchParams.get("after") === "entry-1")).toBe(true);
+});
+
+it("filters all catalogue pages by origin before paginating and searches without accents", async () => {
+  const entries = Array.from({ length: 42 }, (_, index) => ({
+    ...snapshot,
+    entry_id: `entry-${index}`,
+    display_name: `Report ${index}`,
+    origin_name: index < 21 ? "Équipe Recherche" : "Équipe Développement",
+  }));
+  override = async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname === `${base}/entries`)
+      return json(
+        url.searchParams.has("after")
+          ? { items: entries.slice(21), next_cursor: null }
+          : { items: entries.slice(0, 21), next_cursor: "next-page" },
+      );
+  };
+  await mount(<MarketplacePage kind="agent" />);
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelectorAll("article")).toHaveLength(20);
+  });
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
+  expect([...select.options].map((item) => item.value)).toContain("Équipe Développement");
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 20");
+  const requests = calls.length;
+  await choose("origin", "Équipe Développement");
+  expect(host.querySelectorAll("article")).toHaveLength(20);
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 21");
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
+  expect(host.querySelectorAll("article")).toHaveLength(1);
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 41");
+  const search = host.querySelector<HTMLInputElement>('input[aria-label="rework.localMarketplace.search"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "equipe developpement");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(host.querySelectorAll("article")).toHaveLength(20);
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 21");
+  expect(calls).toHaveLength(requests);
+  await choose("origin", "Équipe Recherche");
+  expect(host.querySelectorAll("article")).toHaveLength(0);
+  expect(host.textContent).toContain("rework.localMarketplace.empty");
+});
+
+it.each(["decision filter", "refresh"] as const)(
+  "keeps the selected origin visible when it loses all results after a %s",
+  async (trigger) => {
+    const approved = { ...proposal, proposal_id: "approved", state: "approved", origin_name: "Source A" };
+    const pending = { ...proposal, proposal_id: "pending", origin_name: "Source B" };
+    let removed = false;
+    override = async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname === `${base}/proposals`)
+        return page(removed || url.searchParams.get("state") === "pending" ? [pending] : [approved, pending]);
+    };
+    await mount(<MarketplacePage kind="agent" />);
+    await choose("view", "proposals");
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(host.querySelectorAll("article")).toHaveLength(2);
+    });
+    await choose("origin", "Source A");
+    expect(host.querySelectorAll("article")).toHaveLength(1);
+    if (trigger === "decision filter") await choose("state", "pending");
+    else {
+      removed = true;
+      await click("refresh");
+    }
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(host.textContent).toContain("rework.localMarketplace.empty");
+    });
+    expect(host.querySelectorAll("article")).toHaveLength(0);
+    const origins = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
+    expect(origins.value).toBe("Source A");
+    expect(origins.selectedOptions[0]?.textContent).toBe("Source A");
+    await choose("origin", "");
+    expect(host.querySelectorAll("article")).toHaveLength(1);
+    expect(host.querySelector("article")?.textContent).toContain("Source B");
+  },
+);
+
+it("resets origin and pagination when the working organization changes", async () => {
+  const entries = Array.from({ length: 21 }, (_, index) => ({
+    ...snapshot,
+    entry_id: `entry-${index}`,
+    display_name: `Report ${index}`,
+  }));
+  override = async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/me/marketplaces"))
+      return page([
+        { space_id: catalogue, name: "Organization" },
+        { space_id: "other", name: "Other" },
+      ]);
+    if (path === `${base}/entries`) return page(entries);
+    if (path === "/control-plane/v1/spaces/other/marketplace/entries")
+      return page(entries.map((entry) => ({ ...entry, marketplace_space_id: "other", origin_name: "Other source" })));
+  };
+  await mount(<MarketplacePage kind="agent" />);
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelectorAll("article")).toHaveLength(20);
+  });
+  await choose("origin", "Private source");
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 20");
+  workingOrganization.id = "other";
+  await mount(<MarketplacePage kind="agent" />);
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelectorAll("article")).toHaveLength(20);
+  });
+  expect(host.querySelector("article h2")?.textContent).toBe("Report 0");
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')?.value).toBe("");
+  expect(host.textContent).not.toContain("Private source");
 });
 
 it("examines only the frozen package and takes decision/cancellation actions from the backend", async () => {
@@ -422,6 +543,9 @@ it("does not present a partial catalogue when a later page fails", async () => {
   });
   expect(host.querySelectorAll("article")).toHaveLength(0);
   expect(host.textContent).not.toContain("Same name");
+  const origins = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
+  expect(origins.disabled).toBe(true);
+  expect([...origins.options].map((item) => item.value)).not.toContain("Private source");
 });
 
 it("surfaces name conflicts without overwriting, silently renaming or retrying", async () => {
@@ -451,7 +575,7 @@ it("surfaces name conflicts without overwriting, silently renaming or retrying",
 });
 
 it.each(["skill", "agent"] as const)(
-  "inspects the submitted %s files and configuration without a source read",
+  "inspects the submitted %s content and files without a source read",
   async (kind) => {
     proposal.kind = kind;
     proposal.package =
@@ -469,7 +593,7 @@ it.each(["skill", "agent"] as const)(
               template_agent_id: "ralph",
               role: "Assist",
               usage_statement: "Use it",
-              tuning_field_values: { prompt: "Frozen tuning" },
+              tuning_field_values: { "prompts.system": "Frozen tuning" },
               capabilities: {
                 ppt_builder: { schema_version: "1", config: { mode: "frozen" }, files: { "template.pptx": "YWJj" } },
               },
@@ -483,7 +607,14 @@ it.each(["skill", "agent"] as const)(
       expect(document.body.textContent).toContain("reference.txt");
     } else {
       expect(document.body.textContent).toContain("Frozen tuning");
-      expect(document.body.textContent).toContain('"mode": "frozen"');
+      expect(document.body.textContent).toContain("Assist");
+      expect(document.body.textContent).toContain("Use it");
+      expect(document.body.textContent).not.toContain('"mode": "frozen"');
+      await act(async () => {
+        [...document.querySelectorAll<HTMLButtonElement>("button")]
+          .find((item) => item.textContent?.startsWith("rework.localMarketplace.files"))!
+          .click();
+      });
       expect(document.querySelector('a[download="template.pptx"]')?.getAttribute("href")).toBe(
         "data:application/octet-stream;base64,YWJj",
       );

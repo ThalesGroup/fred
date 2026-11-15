@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { stripDiacritics } from "@rework/utils/stripDiacritics";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import ResourceCard from "@shared/organisms/PromptCard/ResourceCard";
 import cardStyles from "@shared/organisms/PromptCard/PromptCard.module.scss";
@@ -51,6 +52,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState(params.has("proposal") ? "proposals" : "publications");
   const [state, setState] = useState<ProposalState | "">("");
+  const [origin, setOrigin] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const proposals = view === "proposals";
@@ -65,13 +67,18 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
   useRefetchOnWindowFocus(entriesQuery.refetch, proposals);
   useRefetchOnWindowFocus(proposalsQuery.refetch, !proposals);
   const query = proposals ? proposalsQuery : entriesQuery;
-  const rows = query.isError
-    ? []
-    : (query.currentData?.items ?? []).filter((item) =>
-        [item.display_name, item.description, item.origin_name, item.entry_id].some((text) =>
-          text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-        ),
-      );
+  const items = query.isError ? [] : (query.currentData?.items ?? []);
+  const origins = [...new Set([origin, ...items.map((item) => item.origin_name)])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const searchText = stripDiacritics(search).toLocaleLowerCase();
+  const rows = items.filter(
+    (item) =>
+      (!origin || item.origin_name === origin) &&
+      [item.display_name, item.description, item.origin_name, item.entry_id].some((text) =>
+        stripDiacritics(text).toLocaleLowerCase().includes(searchText),
+      ),
+  );
   const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / 20) - 1));
   const open = (id: string) => setParams({ catalogue: marketplaceSpaceId, [proposals ? "proposal" : "entry"]: id });
   const close = () => setParams({ catalogue: marketplaceSpaceId });
@@ -86,6 +93,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           value={view}
           onChange={(value) => {
             setView(value);
+            setOrigin("");
             setPage(0);
             close();
           }}
@@ -111,6 +119,20 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
             }))}
           />
         )}
+        <Select
+          size="small"
+          label={t("rework.localMarketplace.origin")}
+          value={origin}
+          disabled={query.isFetching || query.isError || !query.currentData}
+          onChange={(value) => {
+            setOrigin(value);
+            setPage(0);
+          }}
+          options={[
+            { key: "", value: "", label: t("rework.localMarketplace.allOrigins") },
+            ...origins.map((name) => ({ key: name, value: name, label: name })),
+          ]}
+        />
         <SearchInput
           size="small"
           value={search}
@@ -172,7 +194,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
         <PageEmptyState
           icon="storefront"
           message={t(
-            search || state
+            search || state || origin
               ? "rework.localMarketplace.empty"
               : `rework.localMarketplace.${proposals ? "noProposals" : "noPublications"}`,
           )}
