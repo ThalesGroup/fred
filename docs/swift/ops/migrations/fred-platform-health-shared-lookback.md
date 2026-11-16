@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "Only the standalone Grafana dashboard export changes. It uses the existing Prometheus data source and metrics."
 no_action_reason: "The Fred upgrade does not manage imported Grafana dashboards or change telemetry. Operators can re-import the dashboard independently."
+after: [fred-platform-health-dashboard]
 ---
 ## Applicability
 
