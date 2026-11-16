@@ -15,12 +15,21 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fred_core import KeycloakUser, get_current_user
 
 from control_plane_backend.platform_ui_settings.schemas import (
+    PlatformHomeSettings,
     PlatformUiSettings,
+    SetPlatformHomeRequest,
     SetPlatformUiSettingsRequest,
+    UnknownFeaturedAgentError,
+)
+from control_plane_backend.platform_ui_settings.service import (
+    get_platform_home as get_platform_home_from_service,
+)
+from control_plane_backend.platform_ui_settings.service import (
+    set_platform_home as set_platform_home_from_service,
 )
 from control_plane_backend.platform_ui_settings.service import (
     get_platform_ui_settings as get_platform_ui_settings_from_service,
@@ -65,3 +74,33 @@ async def put_platform_ui_settings(
     return await set_platform_ui_settings_from_service(
         user=user, request=request, deps=deps
     )
+
+
+@router.get(
+    "/admin/platform/home",
+    response_model=PlatformHomeSettings,
+    summary="Get the home page mode and featured agents (platform admin).",
+)
+async def get_platform_home(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformHomeSettings:
+    return await get_platform_home_from_service(user=user, deps=deps)
+
+
+@router.put(
+    "/admin/platform/home",
+    response_model=PlatformHomeSettings,
+    summary="Replace the home page mode and featured agents (platform admin).",
+)
+async def put_platform_home(
+    request: SetPlatformHomeRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PlatformHomeSettings:
+    try:
+        return await set_platform_home_from_service(
+            user=user, request=request, deps=deps
+        )
+    except UnknownFeaturedAgentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

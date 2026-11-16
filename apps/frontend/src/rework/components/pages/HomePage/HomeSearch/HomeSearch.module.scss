@@ -167,3 +167,24 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+/* Advanced home: a header field on the right of the tabs. The menu is wider
+ * than the field so result rows keep their room. */
+.wrap[data-compact] {
+  width: 22rem;
+  max-width: 100%;
+
+  .field {
+    height: 2.75rem;
+  }
+
+  .input {
+    font: var(--font-body-medium);
+  }
+
+  .menu {
+    top: calc(2.75rem + var(--spacing-2xs));
+    left: auto;
+    width: min(32rem, 90vw);
+  }
+}

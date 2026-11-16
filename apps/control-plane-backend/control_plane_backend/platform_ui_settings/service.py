@@ -13,15 +13,30 @@
 # limitations under the License.
 from __future__ import annotations
 
+import asyncio
+from typing import cast, get_args
+
 from fred_core import KeycloakUser, OrganizationPermission
+from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 
+from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.platform_ui_settings.schemas import (
+    AdminFeaturedAgent,
+    HomeAgentChoice,
+    HomeLayout,
+    PlatformHomeSettings,
     PlatformUiSettings,
+    SetPlatformHomeRequest,
     SetPlatformUiSettingsRequest,
+    UnknownFeaturedAgentError,
 )
-from control_plane_backend.platform_ui_settings.store import StoredPlatformUiSettings
+from control_plane_backend.platform_ui_settings.store import (
+    StoredFeaturedAgent,
+    StoredPlatformHome,
+    StoredPlatformUiSettings,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 
 
@@ -71,3 +86,115 @@ async def set_platform_ui_settings(
         hidden_themes=request.hidden_themes,
     )
     return _to_settings(stored)
+
+
+def home_layout_or_classic(stored: str) -> HomeLayout:
+    """A mode this backend does not know (written by a newer one) reads as classic."""
+    return cast(HomeLayout, stored) if stored in get_args(HomeLayout) else "classic"
+
+
+def is_featurable(record: AgentInstanceRecord, default_team_ids: set[str]) -> bool:
+    """Enabled, not suspended, and in a default team: what users may see in the carousel."""
+    return (
+        record.enabled
+        and record.suspension_reason is None
+        and str(record.team_id) in default_team_ids
+    )
+
+
+async def _home_settings(
+    deps: ProductServiceDependencies, stored: StoredPlatformHome
+) -> PlatformHomeSettings:
+    teams = deps.team_dependencies
+    agent_store = deps.get_agent_instance_store()
+    default_ids = await teams.get_default_team_store().list_team_ids()
+    per_team, saved = await asyncio.gather(
+        asyncio.gather(*(agent_store.list_by_team(TeamId(t)) for t in default_ids)),
+        agent_store.get_many([entry.agent_instance_id for entry in stored.featured]),
+    )
+    defaults = set(default_ids)
+    candidates = sorted(
+        (r for records in per_team for r in records if is_featurable(r, defaults)),
+        key=lambda r: (r.display_name.casefold(), r.agent_instance_id),
+    )
+    team_ids = {str(r.team_id) for r in candidates} | {
+        str(r.team_id) for r in saved.values()
+    }
+    names = await teams.get_team_metadata_store().get_by_team_ids(
+        [TeamId(t) for t in team_ids]
+    )
+
+    def team_name(team_id: str) -> str | None:
+        metadata = names.get(TeamId(team_id))
+        return metadata.name if metadata is not None else None
+
+    featured = [
+        AdminFeaturedAgent(
+            agent_instance_id=entry.agent_instance_id,
+            display_name=record.display_name,
+            team_id=str(record.team_id),
+            team_name=team_name(str(record.team_id)),
+            badge=entry.badge,
+            highlights=entry.highlights,
+            available=is_featurable(record, defaults),
+        )
+        for entry in stored.featured
+        if (record := saved.get(entry.agent_instance_id)) is not None
+    ]
+    return PlatformHomeSettings(
+        layout=home_layout_or_classic(stored.layout),
+        featured=featured,
+        candidates=[
+            HomeAgentChoice(
+                agent_instance_id=r.agent_instance_id,
+                display_name=r.display_name,
+                team_id=str(r.team_id),
+                team_name=team_name(str(r.team_id)),
+            )
+            for r in candidates
+        ],
+        updated_by=stored.updated_by,
+        updated_at=stored.updated_at,
+    )
+
+
+async def get_platform_home(
+    *, user: KeycloakUser, deps: ProductServiceDependencies
+) -> PlatformHomeSettings:
+    await _require_manage_platform(deps, user)
+    stored = await deps.get_platform_ui_settings_store().get_home()
+    return await _home_settings(deps, stored)
+
+
+async def set_platform_home(
+    *,
+    user: KeycloakUser,
+    request: SetPlatformHomeRequest,
+    deps: ProductServiceDependencies,
+) -> PlatformHomeSettings:
+    """Unknown agents are refused; unavailable ones may stay so other edits can be saved."""
+    await _require_manage_platform(deps, user)
+    ids = [entry.agent_instance_id for entry in request.featured]
+    found = await deps.get_agent_instance_store().get_many(ids)
+    missing = next((agent_id for agent_id in ids if agent_id not in found), None)
+    if missing is not None:
+        raise UnknownFeaturedAgentError(missing)
+    stored = await deps.get_platform_ui_settings_store().set_home(
+        layout=request.layout,
+        featured=[
+            StoredFeaturedAgent(
+                agent_instance_id=entry.agent_instance_id,
+                badge=entry.badge,
+                highlights=list(entry.highlights),
+            )
+            for entry in request.featured
+        ],
+        updated_by=user.uid,
+    )
+    emit_audit_log(
+        "platform.home.updated",
+        actor_uid=user.uid,
+        layout=request.layout,
+        featured=ids,
+    )
+    return await _home_settings(deps, stored)

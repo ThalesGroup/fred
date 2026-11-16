@@ -274,8 +274,9 @@ Pebble, Cobalt or Cloud, including colors, fonts and radii. The JSON may set
 these branding keys: `siteDisplayName`, `siteTitle`, `siteSubtitle`,
 `agentsNicknameSingular`, `agentsNicknamePlural`, `logoName`, `logoNameDark`,
 `faviconName`, `faviconNameDark`, `defaultTeamAvatarFile`,
-`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand` and
-`contactSupportLink`. It cannot change authentication, feature flags or the
+`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand`,
+`contactSupportLink` and `homeBannerImageFile` (decorative image of the
+advanced home banner, a file of `shared/images/`). It cannot change authentication, feature flags or the
 frontend base path. See `theme/` for a working example. Symlinks are dropped and
 an archive with entries escaping its root is refused. A zip made from a folder
 (`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
@@ -320,6 +321,15 @@ the ZIP are shared assets; CSS can select different assets for each theme.
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
+The advanced home's section marks (a diamond by default) read
+`--home-marker-color`, `--home-marker-secondary-color`, `--home-marker-size`,
+`--home-marker-rotate`, `--home-marker-radius` and `--home-marker-display`
+(`none` hides them); set them under the same `html[data-ui-theme="<id>"]` scope.
+Its featured banner reads `--home-banner-background` (any background: color,
+gradient or image), `--home-banner-color` (text, icons, dots),
+`--home-banner-accent` (chat button text and icon tile) and
+`--home-banner-panel-background` (the "what it does" panel); all default to the
+theme's `--primary` / `--on-primary`.
 
 To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
 into `theme-translations/fr.json`, for example:

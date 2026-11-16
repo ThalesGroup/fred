@@ -89,6 +89,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
+    "ControlPlanePlatformHome",
     "ControlPlaneMarketplaceSettings",
     "ControlPlaneAgentMarketplace",
     "ControlPlanePlatformDefaultTeams",
@@ -936,6 +937,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
     },
+    // Home mode and featured agents: one LIST tag shared by the admin page and the
+    // user home; agent edits also refresh the user home (availability may change).
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: {
+      providesTags: [{ type: "ControlPlanePlatformHome" as const, id: "LIST" }],
+    },
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformHome", id: "LIST" }],
+    },
+    getMyHomeControlPlaneV1MeHomeGet: {
+      providesTags: [
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+        { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+      ],
+    },
     // Agents marketplace settings: a switch-off removes published agents (listing
     // and card states) and changes every team's effective settings.
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: {
@@ -1166,6 +1181,10 @@ export const {
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
+  // Home mode and featured agents (admin "Interface" page, user home).
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery: usePlatformHomeQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation: useSetPlatformHomeMutation,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery: useMyHomeQuery,
   // Agents marketplace settings (admin "Marketplaces" page).
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery: useMarketplaceSettingsQuery,
   useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery:

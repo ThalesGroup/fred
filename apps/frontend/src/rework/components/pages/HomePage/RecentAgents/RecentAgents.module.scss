@@ -61,3 +61,24 @@
     --cols: 2;
   }
 }
+
+/* Advanced home: heading on the left, full cards on a responsive grid. */
+.section[data-variant="detailed"] {
+  align-items: stretch;
+
+  .head {
+    color: var(--on-surface);
+  }
+
+  .title {
+    color: var(--on-surface);
+    font: var(--font-title-medium);
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--spacing-s);
+  width: 100%;
+}

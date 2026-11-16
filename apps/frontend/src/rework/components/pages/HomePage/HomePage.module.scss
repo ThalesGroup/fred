@@ -13,6 +13,18 @@
  * limitations under the License.
  */
 
+/* Scrolls the whole panel width: the scrollbar sits at the far right edge.
+ * The track is always reserved so switching to a shorter tab doesn't shift
+ * the right-aligned header slot sideways. */
+.scroller {
+  /* Takes over the shell card's inset, inside the scrolling box. */
+  padding: var(--spacing-m);
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -20,12 +32,11 @@
   margin: 0 auto;
   width: 100%;
   max-width: 1160px;
-  height: 100%;
-  overflow-y: auto;
-  /* Always reserve the scrollbar track so switching to a tab with less content
-   * (no scrollbar) doesn't widen the page and shift the right-aligned header
-   * period selector sideways. */
-  scrollbar-gutter: stable;
+}
+
+/* Advanced home: room above the tabs and at the bottom of the page. */
+.page[data-layout="advanced"] {
+  padding: var(--spacing-l) 0 var(--spacing-2xl);
 }
 
 /* Tabs sit dead-center of the page; the period selector floats at the right
@@ -42,6 +53,20 @@
   top: 50%;
   right: 0;
   transform: translateY(-50%);
+}
+
+/* Not enough room to keep the tabs centered: the right slot (period or the
+ * advanced home's search) wraps under them. */
+@media (max-width: 1100px) {
+  .header {
+    flex-wrap: wrap;
+    gap: var(--spacing-s);
+  }
+
+  .periodSlot {
+    position: static;
+    transform: none;
+  }
 }
 
 /* "Accès rapide" tab: content centered horizontally and anchored to the top,

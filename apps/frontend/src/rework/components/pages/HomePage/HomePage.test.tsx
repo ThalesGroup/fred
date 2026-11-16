@@ -33,12 +33,20 @@ vi.mock("./ResponsibleAiSection/ResponsibleAiSection.tsx", () => ({ default: () 
 vi.mock("./TopAgents/TopAgents.tsx", () => ({ default: () => null }));
 vi.mock("./TopTeams/TopTeams.tsx", () => ({ default: () => null }));
 vi.mock("./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx", () => ({ default: () => null }));
+vi.mock("./AdvancedQuickAccess/AdvancedQuickAccess.tsx", () => ({
+  default: ({ featured }: { featured: unknown[] }) => `advanced:${featured.length}`,
+}));
+const homeQuery = vi.hoisted(() => ({ current: { data: undefined as unknown, isLoading: false } }));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMyHomeQuery: () => homeQuery.current,
+}));
 
 import HomePage from "./HomePage";
 
 describe("HomePage greeting", () => {
   beforeEach(() => {
     givenName = null;
+    homeQuery.current = { data: { layout: "classic", featured: [] }, isLoading: false };
   });
 
   it("greets with the token given name, like the chat welcome does", () => {
@@ -50,5 +58,30 @@ describe("HomePage greeting", () => {
     const html = renderToStaticMarkup(<HomePage />);
     expect(html).toContain("rework.home.greeting<");
     expect(html).not.toContain("greetingNamed");
+  });
+});
+
+describe("HomePage mode", () => {
+  beforeEach(() => {
+    givenName = null;
+  });
+
+  it("shows the advanced quick access with the featured agents", () => {
+    homeQuery.current = { data: { layout: "advanced", featured: [{}, {}] }, isLoading: false };
+    const html = renderToStaticMarkup(<HomePage />);
+    expect(html).toContain("advanced:2");
+    expect(html).not.toContain("rework.home.subtitle");
+  });
+
+  it("keeps the classic home when the mode cannot be read", () => {
+    homeQuery.current = { data: undefined, isLoading: false };
+    expect(renderToStaticMarkup(<HomePage />)).toContain("rework.home.subtitle");
+  });
+
+  it("renders neither home while the mode loads", () => {
+    homeQuery.current = { data: undefined, isLoading: true };
+    const html = renderToStaticMarkup(<HomePage />);
+    expect(html).not.toContain("rework.home.subtitle");
+    expect(html).not.toContain("advanced:");
   });
 });

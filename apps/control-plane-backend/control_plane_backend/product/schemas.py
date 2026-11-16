@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from control_plane_backend.agent_instances.names import CopyLocale
 from control_plane_backend.agent_instances.suspension import SuspensionReason
+from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
@@ -400,6 +401,21 @@ class HomeAgentsResponse(BaseModel):
 
     agents: list[ManagedAgentInstanceSummary]
     history_unavailable: bool = False
+
+
+class FeaturedHomeAgent(BaseModel):
+    """A carousel agent the user can chat with, with its admin-written extras."""
+
+    agent: ManagedAgentInstanceSummary
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+
+
+class HomeShowcaseResponse(BaseModel):
+    """Platform home mode and the featured agents usable by the current user."""
+
+    layout: HomeLayout = "classic"
+    featured: list[FeaturedHomeAgent] = Field(default_factory=list)
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):

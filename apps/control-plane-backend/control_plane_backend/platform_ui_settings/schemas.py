@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -61,3 +61,91 @@ class SetPlatformUiSettingsRequest(BaseModel):
         if self.default_theme is not None and self.default_theme in self.hidden_themes:
             raise ValueError("default_theme must not be hidden")
         return self
+
+
+# --- Home page mode and featured agents -------------------------------------
+
+HomeLayout = Literal["classic", "advanced"]
+MAX_FEATURED_AGENTS = 10
+MAX_BADGE_LENGTH = 20
+MAX_HIGHLIGHTS = 4
+MAX_HIGHLIGHT_LENGTH = 80
+
+Badge = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_BADGE_LENGTH),
+]
+Highlight = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=MAX_HIGHLIGHT_LENGTH
+    ),
+]
+
+
+class UnknownFeaturedAgentError(ValueError):
+    """A featured agent id that matches no agent instance."""
+
+    def __init__(self, agent_instance_id: str) -> None:
+        super().__init__(f"Unknown agent instance: {agent_instance_id}")
+        self.agent_instance_id = agent_instance_id
+
+
+class FeaturedAgentEntry(BaseModel):
+    """One carousel agent as the admin saves it; list order is display order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_instance_id: str = Field(min_length=1)
+    badge: Badge | None = None
+    highlights: list[Highlight] = Field(default_factory=list, max_length=MAX_HIGHLIGHTS)
+
+
+class SetPlatformHomeRequest(BaseModel):
+    """Replaces the home mode and the whole featured list at once."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    layout: HomeLayout = "classic"
+    featured: list[FeaturedAgentEntry] = Field(
+        default_factory=list, max_length=MAX_FEATURED_AGENTS
+    )
+
+    @model_validator(mode="after")
+    def _check_unique(self) -> SetPlatformHomeRequest:
+        ids = [entry.agent_instance_id for entry in self.featured]
+        if len(set(ids)) != len(ids):
+            raise ValueError("featured must not repeat an agent")
+        return self
+
+
+class HomeAgentChoice(BaseModel):
+    """An agent as the admin sees it in the home settings."""
+
+    agent_instance_id: str
+    display_name: str
+    team_id: str
+    team_name: str | None = None
+
+
+class AdminFeaturedAgent(HomeAgentChoice):
+    """A saved carousel agent; `available` is false when users cannot see it."""
+
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+    available: bool = Field(
+        description="False when disabled, suspended or outside the default teams: hidden from users."
+    )
+
+
+class PlatformHomeSettings(BaseModel):
+    """Home page settings for the platform admin page."""
+
+    layout: HomeLayout = "classic"
+    featured: list[AdminFeaturedAgent] = Field(default_factory=list)
+    candidates: list[HomeAgentChoice] = Field(
+        default_factory=list,
+        description="Enabled agents of the default teams, the only ones an admin can add.",
+    )
+    updated_by: str | None = None
+    updated_at: datetime | None = None

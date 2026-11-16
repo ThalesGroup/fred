@@ -24,11 +24,34 @@ from fred_core.common import personal_team_id
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from sqlalchemy.exc import SQLAlchemyError
 
+from control_plane_backend.platform_ui_settings.service import (
+    home_layout_or_classic,
+    is_featurable,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
-from control_plane_backend.product.schemas import HomeAgentsResponse
+from control_plane_backend.product.schemas import (
+    FeaturedHomeAgent,
+    HomeAgentsResponse,
+    HomeShowcaseResponse,
+)
 from control_plane_backend.product.service import _record_to_summary
 
 logger = logging.getLogger(__name__)
+
+
+async def _usable_team_ids(
+    user: KeycloakUser, deps: ProductServiceDependencies
+) -> list[str]:
+    """Teams whose agents the user may chat with, from current permissions."""
+    teams = deps.team_dependencies
+    refs = await teams.rebac.lookup_user_resources(
+        user, TeamPermission.CAN_USE_TEAM_AGENTS
+    )
+    if isinstance(refs, RebacDisabledResult):
+        return [
+            str(team.id) for team in await teams.get_team_metadata_store().list_all()
+        ]
+    return [ref.id for ref in refs]
 
 
 async def list_home_agents(
@@ -36,18 +59,12 @@ async def list_home_agents(
 ) -> HomeAgentsResponse:
     """Resolve current agent-use permissions before reading bounded SQL launchers."""
     teams = deps.team_dependencies
-    refs, defaults = await asyncio.gather(
-        teams.rebac.lookup_user_resources(user, TeamPermission.CAN_USE_TEAM_AGENTS),
+    usable, defaults = await asyncio.gather(
+        _usable_team_ids(user, deps),
         teams.get_default_team_store().list_team_ids(),
     )
     personal = str(personal_team_id(user.uid))
-    if isinstance(refs, RebacDisabledResult):
-        team_ids = [
-            str(team.id) for team in await teams.get_team_metadata_store().list_all()
-        ]
-    else:
-        team_ids = [ref.id for ref in refs]
-    team_ids = list(set(team_ids) | {personal})
+    team_ids = list(set(usable) | {personal})
     suggestions = list(set(defaults) | {personal})
     store = deps.get_agent_instance_store()
     history_unavailable = False
@@ -66,4 +83,36 @@ async def list_home_agents(
     return HomeAgentsResponse(
         agents=[_record_to_summary(record) for record in records],
         history_unavailable=history_unavailable,
+    )
+
+
+async def get_home_showcase(
+    user: KeycloakUser, deps: ProductServiceDependencies
+) -> HomeShowcaseResponse:
+    """Home mode plus the admin-ordered featured agents this user can chat with."""
+    stored = await deps.get_platform_ui_settings_store().get_home()
+    layout = home_layout_or_classic(stored.layout)
+    # Only the advanced home shows the carousel: skip the lookups otherwise.
+    if layout == "classic" or not stored.featured:
+        return HomeShowcaseResponse(layout=layout)
+    usable, defaults, records = await asyncio.gather(
+        _usable_team_ids(user, deps),
+        deps.team_dependencies.get_default_team_store().list_team_ids(),
+        deps.get_agent_instance_store().get_many(
+            [entry.agent_instance_id for entry in stored.featured]
+        ),
+    )
+    visible = set(defaults) & set(usable)
+    return HomeShowcaseResponse(
+        layout=layout,
+        featured=[
+            FeaturedHomeAgent(
+                agent=_record_to_summary(record),
+                badge=entry.badge,
+                highlights=entry.highlights,
+            )
+            for entry in stored.featured
+            if (record := records.get(entry.agent_instance_id)) is not None
+            and is_featurable(record, visible)
+        ],
     )

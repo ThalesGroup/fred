@@ -52,6 +52,9 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
 
+// The home section has its own test; here only the theme tiles matter.
+vi.mock("./HomeSettingsSection.tsx", () => ({ default: () => null }));
+
 import UiSettingsPage from "./UiSettingsPage";
 
 declare global {

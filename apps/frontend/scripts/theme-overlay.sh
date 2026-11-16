@@ -239,7 +239,7 @@ install_theme() {
             if [ "${name}" = theme-properties.json ] && ! jq -es '
                 length == 1 and (.[0] |
                     type == "object" and
-                    (keys - ["agentIconName", "agentsNicknamePlural", "agentsNicknameSingular", "contactSupportLink", "defaultPersonalAvatarFile", "defaultTeamAvatarFile", "faviconName", "faviconNameDark", "logoName", "logoNameDark", "releaseBrand", "siteDisplayName", "siteSubtitle", "siteTitle"] | length == 0) and
+                    (keys - ["agentIconName", "agentsNicknamePlural", "agentsNicknameSingular", "contactSupportLink", "defaultPersonalAvatarFile", "defaultTeamAvatarFile", "faviconName", "faviconNameDark", "homeBannerImageFile", "logoName", "logoNameDark", "releaseBrand", "siteDisplayName", "siteSubtitle", "siteTitle"] | length == 0) and
                     all(.[]; type == "string" and length <= 200))
             ' "${entry}" >/dev/null 2>&1; then
                 theme_failure "invalid theme-properties.json"

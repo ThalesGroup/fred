@@ -904,6 +904,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getMyHomeControlPlaneV1MeHomeGet: build.query<
+      GetMyHomeControlPlaneV1MeHomeGetApiResponse,
+      GetMyHomeControlPlaneV1MeHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/me/home` }),
+    }),
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
@@ -1709,6 +1715,22 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/ui-settings`,
         method: "PUT",
         body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: build.query<
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse,
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/home` }),
+    }),
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: build.mutation<
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse,
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/home`,
+        method: "PUT",
+        body: queryArg.setPlatformHomeRequest,
       }),
     }),
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
@@ -3085,6 +3107,8 @@ export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse =
 export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg = {
   limit?: number;
 };
+export type GetMyHomeControlPlaneV1MeHomeGetApiResponse = /** status 200 Successful Response */ HomeShowcaseResponse;
+export type GetMyHomeControlPlaneV1MeHomeGetApiArg = void;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
@@ -3604,6 +3628,14 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResp
   /** status 200 Successful Response */ PlatformUiSettings;
 export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
   setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg = void;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg = {
+  setPlatformHomeRequest: SetPlatformHomeRequest;
 };
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
   /** status 200 Successful Response */ MarketplaceSettings;
@@ -5541,6 +5573,15 @@ export type HomeAgentsResponse = {
   agents: ManagedAgentInstanceSummary[];
   history_unavailable?: boolean;
 };
+export type FeaturedHomeAgent = {
+  agent: ManagedAgentInstanceSummary;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type HomeShowcaseResponse = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedHomeAgent[];
+};
 export type InactiveSessionItem = {
   session_id: string;
   team_id: string;
@@ -6319,6 +6360,39 @@ export type PlatformUiSettings = {
 export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
+};
+export type AdminFeaturedAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+  badge?: string | null;
+  highlights?: string[];
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
+};
+export type HomeAgentChoice = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+};
+export type PlatformHomeSettings = {
+  layout?: "classic" | "advanced";
+  featured?: AdminFeaturedAgent[];
+  /** Enabled agents of the default teams, the only ones an admin can add. */
+  candidates?: HomeAgentChoice[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type SetPlatformHomeRequest = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedAgentEntry[];
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -7204,6 +7278,8 @@ export const {
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
   useLazyGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery,
+  useLazyGetMyHomeControlPlaneV1MeHomeGetQuery,
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
@@ -7330,6 +7406,9 @@ export const {
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  useLazyGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
