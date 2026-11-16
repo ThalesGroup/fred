@@ -1024,6 +1024,13 @@
           "refId": "D",
           "legendFormat": "Failed turns (last {{window}})"
         }
+      ],
+      "links": [
+        {
+          "title": "Investigate chat failures",
+          "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}",
+          "targetBlank": false
+        }
       ]
     },
     {
