@@ -27,11 +27,11 @@
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 3
+        "h": 4
       },
       "options": {
         "mode": "markdown",
-        "content": "Recovered calls are valid tool-call proposals reconstructed from completed Mistral responses. Later approval, budget, or execution checks can still stop a proposal. The counter is emitted once per reconstructed call, grouped by model; no user, session, or tool arguments are exported as labels. A blank recovery panel means no matching series has been emitted yet (or the metric is not being scraped)."
+        "content": "Recovered calls are valid tool-call proposals reconstructed from completed Mistral responses. Later approval, budget, or execution checks can still stop a proposal. The counter is emitted once per reconstructed call, grouped by model; no user, session, or tool arguments are exported as labels. A blank recovery panel means no matching series has been emitted yet (or the metric is not being scraped).\n\nNamespace and Pod apply throughout. Keep All for labels absent from your scrape pipeline (including local metrics). Fred service selects runtime panels; the admission panel deliberately includes all services in the selected namespace/pods, including Swift Control Plane."
       }
     },
     {
@@ -41,7 +41,7 @@
       "description": "Valid call proposals reconstructed during the last 24 hours.",
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 4,
         "w": 6,
         "h": 4
       },
@@ -73,7 +73,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(agent_tool_call_text_recovered_total{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum(increase(agent_tool_call_text_recovered_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": true,
           "range": false,
           "legendFormat": "",
@@ -88,7 +88,7 @@
       "description": "Model-call timer samples across selected Fred services.",
       "gridPos": {
         "x": 6,
-        "y": 3,
+        "y": 4,
         "w": 6,
         "h": 4
       },
@@ -120,7 +120,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(llm_call_latency_ms_count{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum(increase(llm_call_latency_ms_count{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": true,
           "range": false,
           "legendFormat": "",
@@ -135,7 +135,7 @@
       "description": "Executed native and recovered tool calls.",
       "gridPos": {
         "x": 12,
-        "y": 3,
+        "y": 4,
         "w": 6,
         "h": 4
       },
@@ -167,7 +167,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(agent_tool_latency_ms_count{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum(increase(agent_tool_latency_ms_count{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": true,
           "range": false,
           "legendFormat": "",
@@ -182,7 +182,7 @@
       "description": "No data is normal until the first failure series exists.",
       "gridPos": {
         "x": 18,
-        "y": 3,
+        "y": 4,
         "w": 6,
         "h": 4
       },
@@ -214,7 +214,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(agent_tool_failed_total{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum(increase(agent_tool_failed_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": true,
           "range": false,
           "legendFormat": "",
@@ -229,7 +229,7 @@
       "description": "A rising count can show one model increasingly needs fallback recovery.",
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 8,
         "w": 12,
         "h": 8
       },
@@ -259,7 +259,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (model_name) (increase(agent_tool_call_text_recovered_total{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum by (model_name) (increase(agent_tool_call_text_recovered_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{model_name}}",
@@ -274,7 +274,7 @@
       "description": "Count per 100 model requests, not a percentage: one response may contain several calls.",
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 8,
         "w": 12,
         "h": 8
       },
@@ -304,7 +304,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (model_name) (increase(agent_tool_call_text_recovered_total{service=~\"${service:regex}\"}[24h])) / clamp_min(sum by (model_name) (increase(llm_call_latency_ms_count{service=~\"${service:regex}\"}[24h])), 1e-9)",
+          "expr": "100 * sum by (model_name) (increase(agent_tool_call_text_recovered_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h])) / clamp_min(sum by (model_name) (increase(llm_call_latency_ms_count{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h])), 1e-9)",
           "instant": false,
           "range": true,
           "legendFormat": "{{model_name}}",
@@ -319,7 +319,7 @@
       "description": "Provider-call latency excluding recovery parsing.",
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -349,7 +349,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, model_name) (rate(llm_call_latency_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name) (rate(llm_call_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
           "instant": false,
           "range": true,
           "legendFormat": "{{model_name}}",
@@ -364,7 +364,7 @@
       "description": "Tool latency across native and recovered calls.",
       "gridPos": {
         "x": 12,
-        "y": 15,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -394,7 +394,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, tool_name) (rate(agent_tool_latency_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, tool_name) (rate(agent_tool_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
           "instant": false,
           "range": true,
           "legendFormat": "{{tool_name}}",
@@ -409,7 +409,7 @@
       "description": "A missing series means no failure event has been emitted for that tool.",
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 24,
         "w": 24,
         "h": 7
       },
@@ -439,7 +439,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (tool_name) (increase(agent_tool_failed_total{service=~\"${service:regex}\"}[24h]))",
+          "expr": "sum by (tool_name) (increase(agent_tool_failed_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[24h]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{tool_name}}",
@@ -453,7 +453,7 @@
       "title": "LLM stream diagnostics",
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 31,
         "w": 24,
         "h": 4
       },
@@ -468,7 +468,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -495,7 +495,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum by (model_name, llm_role, status, error_code) (rate(llm_calls_total{service=~\"${service:regex}\"}[$__rate_interval]))",
+          "expr": "sum by (model_name, llm_role, status, error_code) (rate(llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval]))",
           "legendFormat": "{{model_name}} {{llm_role}} {{status}} {{error_code}}",
           "range": true
         }
@@ -507,7 +507,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 34,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -534,7 +534,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "100 * sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\",status=\"error\"}[$__rate_interval])) / clamp_min(sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\"}[$__rate_interval])), 1e-9)",
+          "expr": "100 * sum by (model_name, llm_role) (rate(llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\",status=\"error\"}[$__rate_interval])) / clamp_min(sum by (model_name, llm_role) (rate(llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])), 1e-9)",
           "legendFormat": "{{model_name}} {{llm_role}}",
           "range": true
         }
@@ -546,7 +546,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -573,7 +573,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_first_chunk_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_first_chunk_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
           "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
           "range": true
         }
@@ -585,7 +585,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 42,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -612,7 +612,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_max_chunk_gap_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_max_chunk_gap_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
           "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
           "range": true
         }
@@ -624,7 +624,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -651,7 +651,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_terminal_silence_ms_bucket{service=~\"${service:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, model_name, llm_role, status) (rate(llm_terminal_silence_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
           "legendFormat": "{{model_name}} {{llm_role}} {{status}}",
           "range": true
         }
@@ -663,7 +663,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 50,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -690,7 +690,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum by (model_name, llm_role) (llm_active_calls{service=~\"${service:regex}\"})",
+          "expr": "sum by (model_name, llm_role) (llm_active_calls{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"})",
           "legendFormat": "{{model_name}} {{llm_role}}",
           "range": true
         }
@@ -702,7 +702,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 58,
+        "y": 59,
         "w": 12,
         "h": 8
       },
@@ -729,7 +729,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "max(event_loop_lag_ms{service=~\"${service:regex}\"})",
+          "expr": "max(event_loop_lag_ms{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"})",
           "legendFormat": "worst process",
           "range": true
         }
@@ -741,7 +741,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 58,
+        "y": 59,
         "w": 12,
         "h": 8
       },
@@ -768,7 +768,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "100 * max(rate(process_cpu_seconds_total[$__rate_interval]) and on(job, instance) llm_calls_total{service=~\"${service:regex}\"})",
+          "expr": "100 * max(rate(process_cpu_seconds_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[$__rate_interval]) and on(job, instance) llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"})",
           "legendFormat": "worst process",
           "range": true
         }
@@ -781,7 +781,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 66,
+        "y": 67,
         "w": 12,
         "h": 8
       },
@@ -808,7 +808,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum(process_resident_memory_bytes and on(job, instance) llm_calls_total{service=~\"${service:regex}\"})",
+          "expr": "sum(process_resident_memory_bytes{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"} and on(job, instance) llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"})",
           "legendFormat": "total",
           "range": true
         }
@@ -822,7 +822,7 @@
       "description": "Content-free metrics; queries and user identities are never labels.",
       "gridPos": {
         "x": 0,
-        "y": 74,
+        "y": 75,
         "w": 12,
         "h": 7
       },
@@ -852,7 +852,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (operation, outcome) (rate(fred_web_research_requests_total{service=~\"${service:regex}\"}[5m]))",
+          "expr": "sum by (operation, outcome) (rate(fred_web_research_requests_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[5m]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
@@ -867,7 +867,7 @@
       "description": "Content-free metrics; queries and user identities are never labels.",
       "gridPos": {
         "x": 12,
-        "y": 74,
+        "y": 75,
         "w": 12,
         "h": 7
       },
@@ -897,7 +897,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(fred_web_research_duration_seconds_bucket{service=~\"${service:regex}\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(fred_web_research_duration_seconds_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[5m])))",
           "instant": false,
           "range": true,
           "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
@@ -912,7 +912,7 @@
       "description": "Content-free metrics; queries and user identities are never labels.",
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 82,
         "w": 12,
         "h": 7
       },
@@ -942,7 +942,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(fred_web_research_requests_total{service=~\"${service:regex}\",outcome=\"busy\"}[5m]))",
+          "expr": "sum(rate(fred_web_research_requests_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\",outcome=\"busy\"}[5m]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
@@ -957,7 +957,7 @@
       "description": "Content-free metrics; queries and user identities are never labels.",
       "gridPos": {
         "x": 12,
-        "y": 81,
+        "y": 82,
         "w": 12,
         "h": 7
       },
@@ -987,10 +987,160 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (stage) (increase(fred_web_research_activity_failures_total{service=~\"${service:regex}\"}[1h]))",
+          "expr": "sum by (stage) (increase(fred_web_research_activity_failures_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[1h]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "text",
+      "title": "Conversation benchmark: admission and persistence",
+      "gridPos": {
+        "x": 0,
+        "y": 89,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Match the dashboard time range to one measured concurrency step; exclude warm-up and other traffic. Client first text, final and clean EOF remain separate JSONL observations. LLM first chunk is not client TTFT. Do not subtract percentiles.\n\nAdmission timers cover selected stages, not all pre-model work. Swift alone emits runtime_binding_internal from its Python Control Plane; Weaver Rust Control Plane is not covered. Persistence timers are aggregate timing hints: store/op are not Prometheus labels, history can acquire a connection inside the SQL timer, and checkpoint pool timing can include SQL fencing. Neither timer covers all SQL or SQLx. Missing series mean unavailable evidence, not zero latency. CPU is process usage, not CPU throttling."
+      }
+    },
+    {
+      "id": 26,
+      "title": "Selected admission stages \u00b7 p95",
+      "type": "timeseries",
+      "description": "Includes all services in selected namespace/pods regardless of Fred service. Timers overlap and are not a complete decomposition of admission. Weaver has no runtime_binding_internal equivalent.",
+      "gridPos": {
+        "x": 0,
+        "y": 94,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, namespace, service, runtime_stage) (rate(runtime_stage_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{namespace}} / {{service}} / {{runtime_stage}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "title": "Persistence acquisition hint \u00b7 p95",
+      "type": "timeseries",
+      "description": "Aggregate Python persistence hint, not pure pool wait: checkpoint paths can include fencing SQL; history session entry may precede actual connection acquisition. No store/op breakdown or SQLx coverage.",
+      "gridPos": {
+        "x": 0,
+        "y": 102,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, namespace, service) (rate(persist_pool_wait_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{namespace}} / {{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Persistence execution hint \u00b7 p95",
+      "type": "timeseries",
+      "description": "Aggregate Python persistence hint: can include deferred connection acquisition and application work. Transaction exit/commit coverage depends on the instrumented path and cannot be isolated here. Do not subtract this p95 from another percentile.",
+      "gridPos": {
+        "x": 12,
+        "y": 102,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, namespace, service) (rate(persist_sql_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{namespace}} / {{service}}",
           "refId": "A"
         }
       ]
@@ -1007,6 +1157,48 @@
   "templating": {
     "list": [
       {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up, namespace)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "sort": 1
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(up{namespace=~\"${namespace:regex}\"}, pod)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "sort": 1
+      },
+      {
         "name": "service",
         "label": "Fred service",
         "type": "query",
@@ -1014,7 +1206,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "query": "label_values(llm_call_latency_ms_count, service)",
+        "query": "label_values(llm_call_latency_ms_count{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}, service)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,

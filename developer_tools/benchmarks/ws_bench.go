@@ -6,29 +6,15 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"nhooyr.io/websocket"
-)
-
-const (
-	colorReset  = "\033[0m"
-	colorBold   = "\033[1m"
-	colorDim    = "\033[2m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorCyan   = "\033[36m"
 )
 
 type askPayload struct {
@@ -51,12 +37,8 @@ type runtimeContextPayload struct {
 }
 
 type eventEnvelope struct {
-	Type string `json:"type"`
-}
-
-type errorEvent struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
+	Type    string          `json:"type"`
+	Content json.RawMessage `json:"content"`
 }
 
 type createV2AgentPayload struct {
@@ -69,647 +51,52 @@ type createdAgentResponse struct {
 	ID string `json:"id"`
 }
 
-type config struct {
-	URL                   string
-	Token                 string
-	TokenInQuery          bool
-	AgentID               string
-	AgentUUID             string
-	AgentCreateURL        string
-	EnsureV2DefinitionRef string
-	EnsureV2ProfileID     string
-	EnsureAgentName       string
-	DeleteCreatedAgent    bool
-	Message               string
-	SessionID             string
-	SessionURL            string
-	SessionTitle          string
-	CreateSession         bool
-	PrepareSessions       bool
-	PrepareConcurrency    int
-	DeleteSession         bool
-	Clients               int
-	Requests              int
-	RequestsPerClient     int
-	Timeout               time.Duration
-	InsecureTLS           bool
-	AllowEmptyTok         bool
-	DebugEvents           bool
-	RampDuration          time.Duration
-	ReadLimitBytes        int64
-	DocumentLibraryIDs    []string
-	DocumentUIDs          []string
-	SearchPolicy          string
-	SearchRagScope        string
-	IncludeSessionScope   *bool
-	IncludeCorpusScope    *bool
-	Protocol              string // "ws" or "sse"
-	SSEUserID             string
-	SSETeamID             string
-	AgentInstanceID       string
-	JSONReportPath        string
-}
-
-type result struct {
-	Duration time.Duration
-	Err      error
-}
-
-type benchmarkLatencyReport struct {
-	Min int64 `json:"min_ms"`
-	Avg int64 `json:"avg_ms"`
-	P50 int64 `json:"p50_ms"`
-	P95 int64 `json:"p95_ms"`
-	P99 int64 `json:"p99_ms"`
-	Max int64 `json:"max_ms"`
-}
-
-type benchmarkJSONReport struct {
-	SchemaVersion     string                  `json:"schema_version"`
-	GeneratedAt       string                  `json:"generated_at"`
-	Outcome           string                  `json:"outcome"`
-	Protocol          string                  `json:"protocol"`
-	Target            string                  `json:"target"`
-	SSEMode           string                  `json:"sse_mode,omitempty"`
-	AgentID           string                  `json:"agent_id,omitempty"`
-	AgentInstanceID   string                  `json:"agent_instance_id,omitempty"`
-	TeamID            string                  `json:"team_id,omitempty"`
-	Clients           int                     `json:"clients"`
-	RequestsPerClient int                     `json:"requests_per_client,omitempty"`
-	TotalRequests     int                     `json:"total_requests"`
-	Success           int                     `json:"success"`
-	Errors            int                     `json:"errors"`
-	ElapsedMS         int64                   `json:"elapsed_ms"`
-	RequestsPerSecond float64                 `json:"requests_per_second"`
-	Latency           *benchmarkLatencyReport `json:"latency,omitempty"`
-	ErrorSamples      []string                `json:"error_samples,omitempty"`
-}
-
-func main() {
-	cfg := parseFlags()
-	if err := validateConfig(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	if cfg.Clients <= 0 {
-		fmt.Fprintln(os.Stderr, "clients must be > 0")
-		os.Exit(2)
-	}
-	perClientMode := cfg.RequestsPerClient > 0
-	if perClientMode {
-		if cfg.RequestsPerClient <= 0 {
-			fmt.Fprintln(os.Stderr, "requests-per-client must be > 0")
-			os.Exit(2)
-		}
-	} else if cfg.Requests <= 0 {
-		fmt.Fprintln(os.Stderr, "requests must be > 0")
-		os.Exit(2)
-	}
-
-	if cfg.Token == "" && !cfg.AllowEmptyTok && !urlHasToken(cfg.URL) {
-		fmt.Fprintln(os.Stderr, "token is required (use -token or include token query param)")
-		os.Exit(2)
-	}
-
-	start := time.Now()
-	if shouldEnsureV2Agent(cfg) {
-		createdAgentID, err := ensureV2Agent(cfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ensure v2 agent failed: %v\n", err)
-			os.Exit(2)
-		}
-		cfg.AgentID = createdAgentID
-		if cfg.DeleteCreatedAgent {
-			defer func() {
-				ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-				if err := deleteAgent(ctx, cfg, createdAgentID); err != nil {
-					fmt.Fprintf(os.Stderr, "delete agent failed: %v\n", err)
-				}
-				cancel()
-			}()
-		}
-	}
-	totalRequests := cfg.Requests
-	effectiveClients := cfg.Clients
-	if perClientMode {
-		totalRequests = cfg.Clients * cfg.RequestsPerClient
-	} else if cfg.Requests < cfg.Clients {
-		effectiveClients = cfg.Requests
-	}
-	printConfigRecap(cfg, perClientMode, totalRequests, effectiveClients)
-
-	var results chan result
-	var wg sync.WaitGroup
-
-	if perClientMode {
-		results = make(chan result, totalRequests)
-		delayPerClient := time.Duration(0)
-		if cfg.RampDuration > 0 && cfg.Clients > 1 {
-			delayPerClient = cfg.RampDuration / time.Duration(cfg.Clients-1)
-		}
-
-		// WS only: optionally pre-create one session per client via HTTP.
-		wsSessionIDs := []string{}
-		if cfg.Protocol != "sse" {
-			if cfg.SessionID != "" {
-				wsSessionIDs = make([]string, cfg.Clients)
-				for i := 0; i < cfg.Clients; i++ {
-					wsSessionIDs[i] = cfg.SessionID
-				}
-			} else if cfg.CreateSession && cfg.PrepareSessions {
-				ids, err := createSessions(cfg, cfg.Clients)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "prepare sessions failed: %v\n", err)
-					os.Exit(2)
-				}
-				wsSessionIDs = ids
-			}
-		}
-
-		for i := 0; i < cfg.Clients; i++ {
-			wg.Add(1)
-			sessionID := cfg.SessionID
-			if cfg.Protocol != "sse" && i < len(wsSessionIDs) {
-				sessionID = wsSessionIDs[i]
-			}
-			startDelay := delayPerClient * time.Duration(i)
-			go func(id string, d time.Duration) {
-				defer wg.Done()
-				if d > 0 {
-					time.Sleep(d)
-				}
-				var resList []result
-				if cfg.Protocol == "sse" {
-					resList = runSSEClientPersistent(cfg, id)
-				} else {
-					resList = runClientPersistent(cfg, id)
-				}
-				for _, r := range resList {
-					results <- r
-				}
-			}(sessionID, startDelay)
-		}
-		wg.Wait()
-		close(results)
-		if cfg.Protocol != "sse" && cfg.DeleteSession && cfg.CreateSession && cfg.PrepareSessions && cfg.SessionID == "" {
-			deleteSessions(cfg, wsSessionIDs)
-		}
-	} else {
-		cfg.Clients = effectiveClients
-		results = make(chan result, totalRequests)
-		jobs := make(chan int)
-		runOnceFn := runOnce
-		if cfg.Protocol == "sse" {
-			runOnceFn = runSSEOnce
-		}
-		for i := 0; i < cfg.Clients; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for range jobs {
-					results <- runOnceFn(cfg)
-				}
-			}()
-		}
-		for i := 0; i < cfg.Requests; i++ {
-			jobs <- i
-		}
-		close(jobs)
-		wg.Wait()
-		close(results)
-	}
-
-	var durations []time.Duration
-	var errorSamples []string
-	errorCount := 0
-	for res := range results {
-		if res.Err != nil {
-			errorCount++
-			if len(errorSamples) < 5 {
-				errorSamples = append(errorSamples, res.Err.Error())
-			}
-			continue
-		}
-		durations = append(durations, res.Duration)
-	}
-
-	elapsed := time.Since(start)
-	report := printSummary(cfg, totalRequests, durations, errorCount, errorSamples, elapsed)
-	if cfg.JSONReportPath != "" {
-		if err := writeJSONReport(cfg.JSONReportPath, report); err != nil {
-			fmt.Fprintf(os.Stderr, "write JSON report: %v\n", err)
-		} else {
-			fmt.Printf("JSON report: %s\n", cfg.JSONReportPath)
-		}
-	}
-}
-
-// parseFlags exists to let the benchmark exercise plain chat and public RAG
-// flows from the same binary. Use the runtime-context flags below to scope
-// Rico's retrieval behaviour without changing the code.
-func parseFlags() config {
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n\n", os.Args[0])
-		flag.PrintDefaults()
-		fmt.Fprintln(flag.CommandLine.Output(), "\nExample:")
-		fmt.Fprintln(flag.CommandLine.Output(), "  make run ARGS='-url ws://localhost:8000/agentic/v1/chatbot/query/ws -token $TOKEN -clients 100 -requests 100'")
-	}
-
-	protocolFlag := flag.String("protocol", "ws", "Transport protocol: ws (agentic-backend) or sse (fred-runtime)")
-	sseUserIDFlag := flag.String("sse-user-id", "bench", "User ID injected into runtime_context for SSE requests (keys sessions per user)")
-	sseTeamIDFlag := flag.String("sse-team-id", "", "Team ID injected into runtime_context for SSE requests (optional for direct mode, required for managed mode)")
-	agentInstanceIDFlag := flag.String("agent-instance-id", "", "Managed mode: control-plane agent instance UUID (SSE only, requires -sse-team-id; mutually exclusive with agent_id on the wire)")
-	jsonReportFlag := flag.String("json-report", "", "Optional path for a machine-readable benchmark summary (never contains token or prompt)")
-	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "Endpoint URL (ws/wss for protocol=ws, http/https for protocol=sse)")
-	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
-	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
-	agentFlag := flag.String("agent", "Georges", "Agent ID (configuration.yaml for ws, fred_sdk agent_id for sse)")
-	agentUUIDFlag := flag.String("agent-uuid", "", "Existing agent UUID to reuse for the benchmark; skips auto-creation when set")
-	agentCreateURLFlag := flag.String("agent-create-url", "", "HTTP v2 agent creation endpoint URL override (optional)")
-	ensureV2DefinitionRefFlag := flag.String("ensure-v2-definition-ref", "", "Optionally create a v2 agent from a definition_ref before benchmarking, e.g. v2.react.rag_expert")
-	ensureV2ProfileIDFlag := flag.String("ensure-v2-profile-id", "", "Optionally create a Basic ReAct v2 agent from a react profile before benchmarking, e.g. rag_expert")
-	ensureAgentNameFlag := flag.String("ensure-agent-name", "Bench RAG Expert", "Display name for an agent created automatically by the benchmark")
-	deleteCreatedAgentFlag := flag.Bool("delete-created-agent", false, "Delete the automatically created v2 agent after the benchmark run")
-	messageFlag := flag.String("message", "Hello", "Prompt message")
-	sessionFlag := flag.String("session", "", "Session ID (optional)")
-	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
-	sessionTitleFlag := flag.String("session-title", "Benchmark", "Session title to skip auto-title")
-	createSessionFlag := flag.Bool("create-session", true, "Create a session before asking (when no session is provided)")
-	prepareSessionsFlag := flag.Bool("prepare-sessions", false, "Pre-create one session per client before measuring")
-	prepareConcurrencyFlag := flag.Int("prepare-concurrency", 20, "Concurrent session creates/deletes during preparation/cleanup")
-	deleteSessionFlag := flag.Bool("delete-session", true, "Delete sessions created by the benchmark when done")
-	rampDurationFlag := flag.Duration("ramp-duration", 10*time.Second, "Optional stagger for client start (e.g. 10s spreads clients evenly over 10 seconds)")
-	clientsFlag := flag.Int("clients", 150, "Concurrent clients")
-	requestsFlag := flag.Int("requests", 0, "Total requests (defaults to clients)")
-	requestsPerClientFlag := flag.Int("requests-per-client", 10, "Requests per client (sequential mode)")
-	timeoutFlag := flag.Duration("timeout", 90*time.Second, "Timeout per request")
-	readLimitBytesFlag := flag.Int64("read-limit-bytes", 4*1024*1024, "Maximum WebSocket message size accepted by the benchmark client before failing the read")
-	insecureFlag := flag.Bool("insecure", false, "Skip TLS verification for wss://")
-	allowEmptyTok := flag.Bool("allow-empty-token", false, "Allow missing token (not recommended)")
-	debugEvents := flag.Bool("debug-events", false, "Print every WebSocket event payload")
-	documentLibraryIDsFlag := flag.String("document-library-ids", "", "Optional comma-separated document library ids for runtime_context.selected_document_libraries_ids")
-	documentUIDsFlag := flag.String("document-uids", "", "Optional comma-separated document uids for runtime_context.selected_document_uids")
-	searchPolicyFlag := flag.String("search-policy", "", "Optional runtime_context.search_policy, e.g. semantic, hybrid, strict")
-	searchRagScopeFlag := flag.String("search-rag-scope", "", "Optional runtime_context.search_rag_scope: corpus_only, hybrid, general_only")
-	includeSessionScopeFlag := flag.String("include-session-scope", "", "Optional runtime_context.include_session_scope: true or false")
-	includeCorpusScopeFlag := flag.String("include-corpus-scope", "", "Optional runtime_context.include_corpus_scope: true or false")
-
-	flag.Parse()
-
-	token := strings.TrimSpace(*tokenFlag)
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("AGENTIC_TOKEN"))
-	}
-	if token == "" && !*allowEmptyTok && !urlHasToken(*urlFlag) {
-		token = "fake-token"
-	}
-
-	requests := *requestsFlag
-	if *requestsPerClientFlag == 0 && requests == 0 {
-		requests = *clientsFlag
-	}
-
-	agentUUID := strings.TrimSpace(*agentUUIDFlag)
-	agentID := strings.TrimSpace(*agentFlag)
-	if agentUUID != "" {
-		agentID = agentUUID
-	}
-
-	return config{
-		URL:                   strings.TrimSpace(*urlFlag),
-		Token:                 token,
-		TokenInQuery:          *tokenInQuery,
-		AgentID:               agentID,
-		AgentUUID:             agentUUID,
-		AgentCreateURL:        strings.TrimSpace(*agentCreateURLFlag),
-		EnsureV2DefinitionRef: strings.TrimSpace(*ensureV2DefinitionRefFlag),
-		EnsureV2ProfileID:     strings.TrimSpace(*ensureV2ProfileIDFlag),
-		EnsureAgentName:       strings.TrimSpace(*ensureAgentNameFlag),
-		DeleteCreatedAgent:    *deleteCreatedAgentFlag,
-		Message:               *messageFlag,
-		SessionID:             strings.TrimSpace(*sessionFlag),
-		SessionURL:            strings.TrimSpace(*sessionURLFlag),
-		SessionTitle:          strings.TrimSpace(*sessionTitleFlag),
-		CreateSession:         *createSessionFlag,
-		PrepareSessions:       *prepareSessionsFlag,
-		PrepareConcurrency:    *prepareConcurrencyFlag,
-		DeleteSession:         *deleteSessionFlag,
-		Clients:               *clientsFlag,
-		Requests:              requests,
-		RequestsPerClient:     *requestsPerClientFlag,
-		Timeout:               *timeoutFlag,
-		ReadLimitBytes:        *readLimitBytesFlag,
-		InsecureTLS:           *insecureFlag,
-		AllowEmptyTok:         *allowEmptyTok,
-		DebugEvents:           *debugEvents,
-		RampDuration:          *rampDurationFlag,
-		DocumentLibraryIDs:    parseCSVFlag(*documentLibraryIDsFlag),
-		DocumentUIDs:          parseCSVFlag(*documentUIDsFlag),
-		SearchPolicy:          strings.TrimSpace(*searchPolicyFlag),
-		SearchRagScope:        strings.TrimSpace(*searchRagScopeFlag),
-		IncludeSessionScope:   parseOptionalBoolFlag(*includeSessionScopeFlag),
-		IncludeCorpusScope:    parseOptionalBoolFlag(*includeCorpusScopeFlag),
-		Protocol:              strings.ToLower(strings.TrimSpace(*protocolFlag)),
-		SSEUserID:             strings.TrimSpace(*sseUserIDFlag),
-		SSETeamID:             strings.TrimSpace(*sseTeamIDFlag),
-		AgentInstanceID:       strings.TrimSpace(*agentInstanceIDFlag),
-		JSONReportPath:        strings.TrimSpace(*jsonReportFlag),
-	}
-}
-
-// validateConfig enforces the SSE managed-mode flag combination: -agent-instance-id
-// is SSE-only and always needs -sse-team-id (the pod authorizes on runtime_context.team_id).
-// -agent-uuid (WS existing-agent mode) is untouched by this check.
-func validateConfig(cfg config) error {
-	if cfg.AgentInstanceID == "" {
-		return nil
-	}
-	if cfg.Protocol != "sse" {
-		return fmt.Errorf("-agent-instance-id requires -protocol=sse (got %q)", cfg.Protocol)
-	}
-	if cfg.SSETeamID == "" {
-		return fmt.Errorf("-agent-instance-id (managed mode) requires -sse-team-id")
-	}
-	return nil
-}
-
-func runOnce(cfg config) result {
-	return runOnceWithSession(cfg, cfg.SessionID)
-}
-
-// runClientPersistent keeps a single WebSocket open for all requests of one client
-// and optionally deletes the session at the end if it was created here.
-func runClientPersistent(cfg config, sessionID string) []result {
-	results := make([]result, 0, maxInt(1, cfg.RequestsPerClient))
-
-	createdByBench := false
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout*time.Duration(maxInt(1, cfg.RequestsPerClient)))
-	defer cancel()
-
-	if sessionID == "" && cfg.CreateSession {
-		createdID, err := createSession(ctx, cfg)
-		if err != nil {
-			results = append(results, result{Err: err})
-			return results
-		}
-		sessionID = createdID
-		createdByBench = true
-	}
-
-	urlStr, err := buildURL(cfg.URL, cfg.Token, cfg.TokenInQuery)
-	if err != nil {
-		results = append(results, result{Err: err})
-		return results
-	}
-
-	dialOpts := &websocket.DialOptions{CompressionMode: websocket.CompressionDisabled}
-	if cfg.Token != "" && !cfg.TokenInQuery {
-		dialOpts.HTTPHeader = http.Header{"Authorization": []string{"Bearer " + cfg.Token}}
-	}
-	if cfg.InsecureTLS {
-		dialOpts.HTTPClient = &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		}
-	}
-
-	conn, _, err := websocket.Dial(ctx, urlStr, dialOpts)
-	if err != nil {
-		results = append(results, result{Err: err})
-		return results
-	}
-	applyConnReadLimit(conn, cfg)
-	defer conn.Close(websocket.StatusNormalClosure, "done")
-
-	for i := 0; i < cfg.RequestsPerClient; i++ {
-		res := runOverOpenConn(ctx, conn, cfg, sessionID)
-		results = append(results, res)
-		if res.Err != nil {
-			break
-		}
-	}
-
-	if createdByBench && cfg.DeleteSession {
-		ctxDel, cancelDel := context.WithTimeout(context.Background(), cfg.Timeout)
-		_ = deleteSession(ctxDel, cfg, sessionID)
-		cancelDel()
-	}
-
-	return results
-}
-
 // runOverOpenConn sends one ask over an existing connection and waits for final.
-func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sessionID string) result {
+func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sessionID string) (res result) {
 	start := time.Now()
-	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
+	res.Measurement.StartedAt = start
 
 	payload := buildAskPayload(cfg, sessionID)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return result{Err: err}
-	}
-
-	if err := conn.Write(reqCtx, websocket.MessageText, payloadBytes); err != nil {
-		return result{Err: err}
-	}
-
-	for {
-		_, msg, err := conn.Read(reqCtx)
-		if err != nil {
-			return result{Err: err}
-		}
-		if cfg.DebugEvents {
-			fmt.Printf("event raw: %s\n", string(msg))
-		}
-		var env eventEnvelope
-		if err := json.Unmarshal(msg, &env); err != nil {
-			return result{Err: fmt.Errorf("invalid event: %w", err)}
-		}
-		switch env.Type {
-		case "stream":
-			continue
-		case "final":
-			return result{Duration: time.Since(start)}
-		case "error":
-			var evt errorEvent
-			if err := json.Unmarshal(msg, &evt); err != nil {
-				return result{Err: fmt.Errorf("error event parse failed: %w", err)}
-			}
-			return result{Err: fmt.Errorf("server error: %s", evt.Content)}
-		default:
-			return result{Err: fmt.Errorf("unknown event type: %s", env.Type)}
-		}
-	}
-}
-
-// printConfigRecap exists to keep load-test runs self-describing.
-func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effectiveClients int) {
-	style := makeStyler(shouldColor())
-	mode := "total-requests"
-	if perClientMode {
-		mode = "per-client"
-	}
-	sessionPlan := "backend-managed"
-	if cfg.SessionID != "" {
-		sessionPlan = "reuse provided session"
-	} else if cfg.CreateSession && cfg.PrepareSessions && perClientMode {
-		sessionPlan = "prepare sessions per client"
-	} else if cfg.CreateSession {
-		sessionPlan = "create per request"
-	}
-
-	fmt.Printf("\n%s\n", style("BENCH CONFIG", colorBold, colorCyan))
-	fmt.Printf("%s %s\n", style("Protocol:", colorDim), cfg.Protocol)
-	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	if cfg.Protocol == "sse" {
-		if cfg.AgentInstanceID != "" {
-			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "managed")
-			fmt.Printf("%s %s\n", style("Agent instance ID:", colorDim), cfg.AgentInstanceID)
-		} else {
-			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "direct")
-			fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
-		}
-		if cfg.SSETeamID != "" {
-			fmt.Printf("%s %s\n", style("Team ID:", colorDim), cfg.SSETeamID)
-		}
-	} else {
-		fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
-	}
-	if cfg.AgentUUID != "" {
-		fmt.Printf("%s %s\n", style("Agent source:", colorDim), "provided UUID")
-	}
-	if cfg.AgentUUID == "" && cfg.EnsureV2DefinitionRef != "" {
-		fmt.Printf("%s %s\n", style("Ensure v2 definition:", colorDim), cfg.EnsureV2DefinitionRef)
-	}
-	if cfg.AgentUUID == "" && cfg.EnsureV2ProfileID != "" {
-		fmt.Printf("%s %s\n", style("Ensure v2 profile:", colorDim), cfg.EnsureV2ProfileID)
-	}
-	if len(cfg.DocumentLibraryIDs) > 0 {
-		fmt.Printf("%s %s\n", style("Document libraries:", colorDim), strings.Join(cfg.DocumentLibraryIDs, ","))
-	}
-	if len(cfg.DocumentUIDs) > 0 {
-		fmt.Printf("%s %s\n", style("Document UIDs:", colorDim), strings.Join(cfg.DocumentUIDs, ","))
-	}
-	if cfg.SearchPolicy != "" {
-		fmt.Printf("%s %s\n", style("Search policy:", colorDim), cfg.SearchPolicy)
-	}
-	if cfg.SearchRagScope != "" {
-		fmt.Printf("%s %s\n", style("RAG scope:", colorDim), cfg.SearchRagScope)
-	}
-	fmt.Printf("%s %s\n", style("Mode:", colorDim), mode)
-	fmt.Printf("%s %d\n", style("Clients:", colorDim), effectiveClients)
-	fmt.Printf("%s %d\n", style("Total requests:", colorDim), totalRequests)
-	if perClientMode {
-		fmt.Printf("%s %d\n", style("Requests per client:", colorDim), cfg.RequestsPerClient)
-	}
-	fmt.Printf("%s %s\n", style("Session plan:", colorDim), sessionPlan)
-	fmt.Printf("%s %t\n", style("Create session:", colorDim), cfg.CreateSession)
-	fmt.Printf("%s %t\n", style("Prepare sessions:", colorDim), cfg.PrepareSessions)
-	fmt.Printf("%s %d\n", style("Prepare concurrency:", colorDim), cfg.PrepareConcurrency)
-	fmt.Printf("%s %t\n", style("Delete sessions:", colorDim), cfg.DeleteSession)
-	fmt.Printf("%s %s\n", style("Session title:", colorDim), cfg.SessionTitle)
-	if cfg.SessionURL != "" {
-		fmt.Printf("%s %s\n", style("Session URL override:", colorDim), cfg.SessionURL)
-	}
-	fmt.Printf("%s %s\n", style("Timeout:", colorDim), cfg.Timeout)
-	fmt.Printf("%s %d\n", style("Read limit bytes:", colorDim), cfg.ReadLimitBytes)
-	if cfg.TokenInQuery {
-		fmt.Printf("%s %s\n", style("Auth:", colorDim), "query")
-	} else {
-		fmt.Printf("%s %s\n", style("Auth:", colorDim), "header")
-	}
-	fmt.Printf("%s %t\n", style("Insecure TLS:", colorDim), cfg.InsecureTLS)
-}
-
-// runOnceWithSession exists to measure one full websocket exchange, including
-// optional session lifecycle.
-func runOnceWithSession(cfg config, sessionID string) result {
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-	defer cancel()
-
-	createdByBench := false
-	if sessionID == "" && cfg.CreateSession {
-		createdID, err := createSession(ctx, cfg)
-		if err != nil {
-			return result{Err: err}
-		}
-		sessionID = createdID
-		createdByBench = true
-	}
-	if createdByBench && cfg.DeleteSession {
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-			if err := deleteSession(ctx, cfg, sessionID); err != nil {
-				fmt.Fprintf(os.Stderr, "delete session failed: %v\n", err)
-			}
-			cancel()
-		}()
-	}
-
-	urlStr, err := buildURL(cfg.URL, cfg.Token, cfg.TokenInQuery)
-	if err != nil {
-		return result{Err: err}
-	}
-
-	dialOpts := &websocket.DialOptions{
-		CompressionMode: websocket.CompressionDisabled,
-	}
-	if cfg.Token != "" && !cfg.TokenInQuery {
-		dialOpts.HTTPHeader = http.Header{
-			"Authorization": []string{"Bearer " + cfg.Token},
-		}
-	}
-	if cfg.InsecureTLS {
-		dialOpts.HTTPClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		}
-	}
-
-	conn, _, err := websocket.Dial(ctx, urlStr, dialOpts)
-	if err != nil {
-		return result{Err: err}
-	}
-	applyConnReadLimit(conn, cfg)
-	defer conn.Close(websocket.StatusNormalClosure, "done")
-
-	payload := buildAskPayload(cfg, sessionID)
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return result{Err: err}
+		res.Err = err
+		return
 	}
 
 	if err := conn.Write(ctx, websocket.MessageText, payloadBytes); err != nil {
-		return result{Err: err}
+		res.Err = err
+		return
 	}
 
 	for {
 		_, msg, err := conn.Read(ctx)
 		if err != nil {
-			return result{Err: err}
+			res.Err = err
+			return
 		}
 		if cfg.DebugEvents {
-			fmt.Printf("event raw: %s\n", string(msg))
+			fmt.Println("WebSocket event received")
 		}
 		var env eventEnvelope
 		if err := json.Unmarshal(msg, &env); err != nil {
-			return result{Err: fmt.Errorf("invalid event: %w", err)}
+			res.Err = benchmarkError("invalid_event")
+			return
 		}
 		switch env.Type {
-		case "stream":
-			continue
-		case "final":
-			return result{Duration: time.Since(start)}
-		case "error":
-			var evt errorEvent
-			if err := json.Unmarshal(msg, &evt); err != nil {
-				return result{Err: fmt.Errorf("error event parse failed: %w", err)}
+		case "stream", "final":
+			var text string
+			_ = json.Unmarshal(env.Content, &text)
+			res.observe(streamEvent{Text: text != "", Final: env.Type == "final"})
+			if env.Type == "final" {
+				return
 			}
-			return result{Err: fmt.Errorf("server error: %s", evt.Content)}
+
+		case "error":
+			res.Err = benchmarkError("execution_error")
+			return
 		default:
-			return result{Err: fmt.Errorf("unknown event type: %s", env.Type)}
+			res.Err = benchmarkError("invalid_event")
+			return
 		}
 	}
 }
@@ -979,7 +366,7 @@ func deleteAgent(ctx context.Context, cfg config, agentID string) error {
 	return nil
 }
 
-func createSessions(cfg config, count int) ([]string, error) {
+func createSessions(ctx context.Context, cfg config, count int) ([]string, error) {
 	if count <= 0 {
 		return []string{}, nil
 	}
@@ -1001,21 +388,29 @@ func createSessions(cfg config, count int) ([]string, error) {
 		go func() {
 			defer wg.Done()
 			for idx := range jobs {
-				ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-				id, err := createSession(ctx, cfg)
+				if ctx.Err() != nil {
+					return
+				}
+				requestCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+				id, err := createSession(requestCtx, cfg)
 				cancel()
 				results <- sessionResult{index: idx, id: id, err: err}
 			}
 		}()
 	}
+dispatch:
 	for i := 0; i < count; i++ {
-		jobs <- i
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case jobs <- i:
+		}
 	}
 	close(jobs)
 	wg.Wait()
 	close(results)
 
-	var firstErr error
+	firstErr := ctx.Err()
 	for res := range results {
 		if res.err != nil && firstErr == nil {
 			firstErr = res.err
@@ -1023,7 +418,7 @@ func createSessions(cfg config, count int) ([]string, error) {
 		ids[res.index] = res.id
 	}
 	if firstErr != nil {
-		return nil, firstErr
+		return ids, firstErr
 	}
 	return ids, nil
 }
@@ -1063,6 +458,9 @@ func deleteSessions(cfg config, sessionIDs []string) {
 	if len(sessionIDs) == 0 {
 		return
 	}
+	// Cleanup survives load cancellation but shares one bounded budget.
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
 	jobs := make(chan string)
 	workers := minInt(len(sessionIDs), cfg.PrepareConcurrency)
 	if workers < 1 {
@@ -1074,19 +472,25 @@ func deleteSessions(cfg config, sessionIDs []string) {
 		go func() {
 			defer wg.Done()
 			for id := range jobs {
-				ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-				if err := deleteSession(ctx, cfg, id); err != nil {
-					fmt.Fprintf(os.Stderr, "delete session failed: %v\n", err)
+				if ctx.Err() != nil {
+					return
 				}
-				cancel()
+				if err := deleteSession(ctx, cfg, id); err != nil {
+					fmt.Fprintf(os.Stderr, "delete session failed: %s\n", classifyError(err))
+				}
 			}
 		}()
 	}
+dispatch:
 	for _, id := range sessionIDs {
 		if id == "" {
 			continue
 		}
-		jobs <- id
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case jobs <- id:
+		}
 	}
 	close(jobs)
 	wg.Wait()
@@ -1183,215 +587,6 @@ func deriveSessionURL(wsURL string) (string, error) {
 	}
 
 	return "", fmt.Errorf("cannot derive session URL from %s (set -session-url)", wsURL)
-}
-
-func shouldColor() bool {
-	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
-		return false
-	}
-	info, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (info.Mode() & os.ModeCharDevice) != 0
-}
-
-func makeStyler(enabled bool) func(string, ...string) string {
-	return func(s string, codes ...string) string {
-		if !enabled || len(codes) == 0 {
-			return s
-		}
-		return strings.Join(codes, "") + s + colorReset
-	}
-}
-
-func buildJSONReport(cfg config, total int, durations []time.Duration, errorCount int, errorSamples []string, elapsed time.Duration) benchmarkJSONReport {
-	redactedErrorSamples := make([]string, 0, len(errorSamples))
-	for _, sample := range errorSamples {
-		redactedErrorSamples = append(redactedErrorSamples, redactReportText(cfg, sample))
-	}
-	report := benchmarkJSONReport{
-		SchemaVersion:     "v1",
-		GeneratedAt:       time.Now().UTC().Format(time.RFC3339Nano),
-		Outcome:           "OK",
-		Protocol:          cfg.Protocol,
-		Target:            redactReportText(cfg, cfg.URL),
-		Clients:           cfg.Clients,
-		RequestsPerClient: cfg.RequestsPerClient,
-		TotalRequests:     total,
-		Success:           len(durations),
-		Errors:            errorCount,
-		ElapsedMS:         elapsed.Milliseconds(),
-		ErrorSamples:      redactedErrorSamples,
-	}
-	if elapsed > 0 {
-		report.RequestsPerSecond = float64(report.Success) / elapsed.Seconds()
-	}
-	if errorCount > 0 {
-		report.Outcome = "DEGRADED"
-	}
-	if report.Success == 0 {
-		report.Outcome = "FAILED"
-	}
-	if cfg.Protocol == "sse" {
-		report.TeamID = cfg.SSETeamID
-		if cfg.AgentInstanceID != "" {
-			report.SSEMode = "managed"
-			report.AgentInstanceID = cfg.AgentInstanceID
-		} else {
-			report.SSEMode = "direct"
-			report.AgentID = cfg.AgentID
-		}
-	} else {
-		report.AgentID = cfg.AgentID
-	}
-	if len(durations) > 0 {
-		stats := summarize(durations)
-		report.Latency = &benchmarkLatencyReport{
-			Min: stats.Min.Milliseconds(),
-			Avg: stats.Avg.Milliseconds(),
-			P50: stats.P50.Milliseconds(),
-			P95: stats.P95.Milliseconds(),
-			P99: stats.P99.Milliseconds(),
-			Max: stats.Max.Milliseconds(),
-		}
-	}
-	return report
-}
-
-func redactReportText(cfg config, value string) string {
-	for _, sensitiveValue := range []string{cfg.Token, cfg.Message} {
-		if sensitiveValue != "" {
-			value = strings.ReplaceAll(value, sensitiveValue, "[REDACTED]")
-		}
-	}
-	return value
-}
-
-func writeJSONReport(path string, report benchmarkJSONReport) error {
-	payload, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	payload = append(payload, '\n')
-	return os.WriteFile(path, payload, 0o644)
-}
-
-func printSummary(cfg config, total int, durations []time.Duration, errorCount int, errorSamples []string, elapsed time.Duration) benchmarkJSONReport {
-	report := buildJSONReport(cfg, total, durations, errorCount, errorSamples, elapsed)
-	success := report.Success
-	style := makeStyler(shouldColor())
-	outcomeColor := colorGreen
-	if report.Outcome == "DEGRADED" {
-		outcomeColor = colorYellow
-	}
-	if report.Outcome == "FAILED" {
-		outcomeColor = colorRed
-	}
-	successPct := 0.0
-	if total > 0 {
-		successPct = (float64(success) / float64(total)) * 100
-	}
-
-	fmt.Printf("\n%s\n", style("BENCH SUMMARY", colorBold, colorCyan))
-	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(report.Outcome, colorBold, outcomeColor))
-	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	if cfg.Protocol == "sse" {
-		if cfg.AgentInstanceID != "" {
-			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "managed")
-			fmt.Printf("%s %s\n", style("Agent instance ID:", colorDim), cfg.AgentInstanceID)
-		} else {
-			fmt.Printf("%s %s\n", style("SSE mode:", colorDim), "direct")
-			fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
-		}
-		if cfg.SSETeamID != "" {
-			fmt.Printf("%s %s\n", style("Team ID:", colorDim), cfg.SSETeamID)
-		}
-	} else {
-		fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
-	}
-	fmt.Printf("%s %d\n", style("Total requests:", colorDim), total)
-	fmt.Printf("%s %d\n", style("Concurrent clients:", colorDim), cfg.Clients)
-	if cfg.RequestsPerClient > 0 {
-		fmt.Printf("%s %d\n", style("Requests per client:", colorDim), cfg.RequestsPerClient)
-	}
-	fmt.Printf("%s %s\n", style("Success:", colorDim), style(fmt.Sprintf("%d (%.2f%%)", success, successPct), colorGreen))
-	if errorCount > 0 {
-		fmt.Printf("%s %s\n", style("Errors:", colorDim), style(fmt.Sprintf("%d", errorCount), colorRed))
-	} else {
-		fmt.Printf("%s %d\n", style("Errors:", colorDim), errorCount)
-	}
-	fmt.Printf("%s %s\n", style("Elapsed:", colorDim), elapsed.Round(time.Millisecond))
-	if success > 0 {
-		fmt.Printf("%s %.2f\n", style("Requests/sec:", colorDim), float64(success)/elapsed.Seconds())
-		stats := summarize(durations)
-		fmt.Printf("%s %s\n",
-			style("Latency ms (min/avg/p50/p95/p99/max):", colorDim),
-			style(fmt.Sprintf("%d/%d/%d/%d/%d/%d",
-				stats.Min.Milliseconds(),
-				stats.Avg.Milliseconds(),
-				stats.P50.Milliseconds(),
-				stats.P95.Milliseconds(),
-				stats.P99.Milliseconds(),
-				stats.Max.Milliseconds(),
-			), colorBold, colorCyan),
-		)
-	}
-	if len(errorSamples) > 0 {
-		fmt.Printf("\n%s\n", style("Sample errors:", colorBold, colorRed))
-		for _, sample := range errorSamples {
-			fmt.Printf("%s %s\n", style("-", colorRed), sample)
-		}
-	}
-	return report
-}
-
-type latencyStats struct {
-	Min time.Duration
-	Max time.Duration
-	Avg time.Duration
-	P50 time.Duration
-	P95 time.Duration
-	P99 time.Duration
-}
-
-func summarize(durations []time.Duration) latencyStats {
-	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-	total := time.Duration(0)
-	for _, d := range durations {
-		total += d
-	}
-	return latencyStats{
-		Min: durations[0],
-		Max: durations[len(durations)-1],
-		Avg: total / time.Duration(len(durations)),
-		P50: percentile(durations, 0.50),
-		P95: percentile(durations, 0.95),
-		P99: percentile(durations, 0.99),
-	}
-}
-
-func percentile(sorted []time.Duration, p float64) time.Duration {
-	if len(sorted) == 0 {
-		return 0
-	}
-	if p <= 0 {
-		return sorted[0]
-	}
-	if p >= 1 {
-		return sorted[len(sorted)-1]
-	}
-	pos := int(math.Ceil(p*float64(len(sorted)))) - 1
-	if pos < 0 {
-		pos = 0
-	}
-	if pos >= len(sorted) {
-		pos = len(sorted) - 1
-	}
-	return sorted[pos]
 }
 
 func minInt(a, b int) int {

@@ -289,11 +289,14 @@ class RuntimeModelOffer(ResolverFact):
 
 class RuntimeModels(ResolverFact):
     policy: OrganizationModelPolicy
+    # Effective space default is a fact, never an alternative to admitted inference.
+    default: ModelOfferKey | None
     recommendation: ModelOfferKey | None
     options: ModelOptions
     legacy_profile_id: str | None
     requires_reselection: bool
     offers: tuple[RuntimeModelOffer, ...]
+    reasoning_default_on: tuple[ModelOfferKey, ...]
 
     @model_validator(mode="after")
     def coherent(self) -> RuntimeModels:

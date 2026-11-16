@@ -93,6 +93,8 @@ def resolved_binding(
                 ),
             ),
             models=dict(
+                default=key if default == "first" else fallback,
+                reasoning_default_on=[],
                 policy=dict(
                     organization_id=org,
                     revision=1,

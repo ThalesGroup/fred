@@ -81,6 +81,31 @@ def admission(monkeypatch: pytest.MonkeyPatch) -> _Admission:
     return _Admission(binding, identity, delegation, provider, request)
 
 
+async def test_resolver_accepts_catalogue_preferences_without_replacing_admission(
+    admission: _Admission,
+) -> None:
+    data = admission.binding.model_dump(mode="json")
+    models = data["models"]
+    models["default"] = models["policy"]["fallback"]
+    models["reasoning_default_on"] = [models["default"]]
+    models["policy"]["reasoning_enabled"] = [models["default"]]
+    assert models["default"] != data["inference"]["selection"]["key"]
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=data))
+    ) as client:
+        target = await admission.resolve(client)
+
+    assert target.effective_agent_id == str(admission.binding.agent.instance_id)
+    authority = admission.request._turn_authority
+    assert authority is not None
+    assert authority.binding.models.default == admission.binding.models.policy.fallback
+    assert authority.binding.models.reasoning_default_on == (
+        admission.binding.models.policy.fallback,
+    )
+    assert authority.binding.inference == admission.binding.inference
+
+
 @pytest.mark.parametrize("status", [200, 401, 403, 404, 500, 503])
 async def test_resolver_uses_workload_lease_and_grant_once(
     admission: _Admission, status: int

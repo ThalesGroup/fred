@@ -191,7 +191,7 @@ func TestPrintSummary_NeverPrintsToken(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		printSummary(cfg, 1, nil, 1, []string{"boom"}, 0)
+		printSummary(cfg, 1, nil, 1, []string{"boom"}, 0, 0)
 	})
 
 	if strings.Contains(output, secretToken) {
@@ -259,7 +259,7 @@ func TestWriteJSONReport(t *testing.T) {
 		Protocol:      "sse",
 	}
 
-	if err := writeJSONReport(path, report); err != nil {
+	if err := writeJSONReport(path, report, ""); err != nil {
 		t.Fatalf("write JSON report: %v", err)
 	}
 	raw, err := os.ReadFile(path)
