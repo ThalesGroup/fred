@@ -37,6 +37,12 @@ number of completed tool executions. The denominator panel uses
 `llm_call_latency_ms_count`; “per 100 model calls” can exceed 100 if a response
 contains several recovered calls.
 
+The **Streams with corrected tool-call IDs** panel uses
+`fred_tool_call_id_corrected_streams_total`. It counts each Chat Completions SSE
+response on its first tool-call ID rewrite and shows a rolling one-hour total
+across all scraped services, independent of the Fred service filter. It
+measures transport rewrites before SDK assembly or tool execution.
+
 The remaining panels use the existing model and tool latency histograms and
 tool-failure counter. The recovery and failure panels show **No data** until
 their first event has been scraped. If every panel is blank, check that the
