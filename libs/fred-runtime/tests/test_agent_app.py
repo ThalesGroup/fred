@@ -70,6 +70,7 @@ from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.react.middleware import rate_limit_retry
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     get_runtime_context,
@@ -77,6 +78,10 @@ from fred_runtime.runtime_context import (
 )
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -2907,6 +2912,95 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
 
     assert len(turns) == 1
     assert turns[0]["session_id"] == "session-depth"
+
+
+@pytest.mark.parametrize(
+    ("upstream_status", "recovers"), [(502, False), (429, False), (429, True)]
+)
+def test_turn_failure_telemetry_uses_terminal_outcome(
+    monkeypatch, tmp_path, upstream_status, recovers
+) -> None:
+    class _UpstreamError(Exception):
+        status_code = upstream_status
+
+    attempts = 0
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1 or not recovers:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    async def no_sleep(_delay: float) -> None:
+        pass
+
+    monkeypatch.setattr(rate_limit_retry, "asyncio", SimpleNamespace(sleep=no_sleep))
+    route = "Medium" if upstream_status == 502 else "Small"
+    model = _Model(
+        responses=[AIMessage(content="pong")],
+        metadata={
+            MODEL_ID_METADATA: "model__openai__synthetic",
+            MODEL_ROUTE_METADATA: route,
+        },
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={"agent_id": definition.agent_id, "input": "ping"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == ("final" if recovers else "execution_error")
+    assert "failure_reason" not in response.json()
+    emissions = recording.emit.call_args_list
+    completed = [
+        call.kwargs["dims"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_completed"
+    ]
+    assert len(completed) == 1
+    assert "failure_reason" not in completed[0]
+    errors = [
+        call.kwargs["dims"]["failure_reason"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_error_total"
+    ]
+    reason = "http_5xx" if upstream_status == 502 else "http_429"
+    assert errors == ([] if recovers else [reason])
+    calls = [
+        call.kwargs["dims"]
+        for call in recording.count.call_args_list
+        if call.args[0] == "llm.calls_total"
+    ]
+    expected_failed = (
+        1 if recovers or upstream_status == 502 else rate_limit_retry._MAX_ATTEMPTS
+    )
+    assert len(calls) == expected_failed + int(recovers)
+    assert all(call["model_route"] == route for call in calls)
+    assert [
+        (call["failure_reason"], call["http_status"])
+        for call in calls
+        if call["status"] == "error"
+    ] == [(reason, str(upstream_status))] * expected_failed
+    if recovers:
+        assert calls[-1]["status"] == "ok"
+        assert calls[-1]["failure_reason"] == calls[-1]["http_status"] == ""
 
 
 def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -> None:

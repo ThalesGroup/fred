@@ -10,16 +10,35 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
 from fred_core.model.diagnostics import ModelHttpObservation
+from google.api_core.exceptions import GoogleAPICallError
+from google.genai.errors import APIError as GenAIError
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.exceptions import ContextOverflowError
 from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
 from openai import APIConnectionError, APIStatusError
 
 Scalar = str | int | float | bool | None
+FailureReason = Literal[
+    "http_5xx",
+    "http_429",
+    "http_400",
+    "http_other_4xx",
+    "stream_interrupted",
+    "timeout_or_connection",
+    "context_limit",
+    "tool_or_capability",
+    "internal_or_unknown",
+]
+
+# Routed model metadata follows the actual BaseChatModel through native child
+# graphs and request overrides, independently of the turn's root selection.
+MODEL_ID_METADATA = "fred_model_capability_id"
+MODEL_ROUTE_METADATA = "fred_model_route"
 
 # Fred's allowlist for OpenAI-compatible HTTP errors.
 _PROVIDER_ERROR_CODES = frozenset(
@@ -142,12 +161,64 @@ def classify_error(exc: BaseException) -> dict[str, Scalar]:
             if 400 <= status < 600 and (name := _provider_error_name(current)):
                 fields["provider_error_name"] = name
             return fields
+        # Other supported SDKs also expose an HTTP status on their errors.
+        # Status attributes are safe to inspect without formatting the error.
+        status = bounded_http_status(
+            current.code
+            if isinstance(current, (GenAIError, GoogleAPICallError))
+            else getattr(current, "status_code", None)
+        )
+        if status is not None and status >= 400:
+            return {
+                "error_code": "rate_limited"
+                if status == 429
+                else "provider_http_error",
+                "http_status": status,
+            }
     # Transport wrappers can hide a more specific cause; check them last.
     if any(isinstance(e, (APIConnectionError, httpx.NetworkError)) for e in chain):
         return {"error_code": "connection_error"}
-    if isinstance(exc, asyncio.CancelledError):
-        return {"error_code": "cancelled"}
+    if any(isinstance(e, ContextOverflowError) for e in chain):
+        return {"error_code": "context_overflow"}
+    if any(isinstance(e, (TimeoutError, httpx.TimeoutException)) for e in chain):
+        return {"error_code": "timeout"}
     return {"error_code": "unknown"}
+
+
+def bounded_http_status(value: object) -> int | None:
+    return int(value) if isinstance(value, int) and 100 <= value <= 599 else None
+
+
+def invocation_failure_reason(
+    fields: dict[str, Scalar], *, stream_started: bool = False
+) -> FailureReason:
+    status = bounded_http_status(fields.get("http_status"))
+    if status == 429:
+        return "http_429"
+    if status == 400:
+        return "http_400"
+    if status is not None:
+        if status >= 500:
+            return "http_5xx"
+        if status >= 400:
+            return "http_other_4xx"
+
+    code = fields.get("error_code")
+    if code == "context_overflow":
+        return "context_limit"
+    if code == "stream_idle_timeout":
+        return "stream_interrupted"
+    if code in {
+        "connect_timeout",
+        "connection_error",
+        "pool_timeout",
+        "read_timeout",
+        "remote_protocol_error",
+        "timeout",
+        "write_timeout",
+    }:
+        return "stream_interrupted" if stream_started else "timeout_or_connection"
+    return "internal_or_unknown"
 
 
 def streaming_selection(
@@ -251,10 +322,22 @@ class LlmProgressCallback(BaseCallbackHandler):
 @dataclass(frozen=True)
 class LlmFailure:
     fields: dict[str, Scalar]
+    reason: FailureReason | None
 
 
-def attach_failure(exc: BaseException, fields: dict[str, Scalar]) -> None:
-    setattr(exc, "_fred_llm_failure", LlmFailure(dict(fields)))
+def attach_failure(
+    exc: BaseException, fields: dict[str, Scalar], reason: FailureReason | None
+) -> None:
+    setattr(exc, "_fred_llm_failure", LlmFailure(dict(fields), reason))
+
+
+def observed_failure_reason(exc: BaseException) -> FailureReason | None:
+    chain, _ = exception_chain(exc)
+    for current in chain:
+        failure = getattr(current, "_fred_llm_failure", None)
+        if isinstance(failure, LlmFailure) and failure.reason is not None:
+            return failure.reason
+    return None
 
 
 def failed_calls(exc: BaseException) -> tuple[list[dict[str, Scalar]], bool]:

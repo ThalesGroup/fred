@@ -5,11 +5,49 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from fred_sdk.authoring.api import ToolInvocationError
+from langchain_core.tools import ToolException
+
+from fred_runtime.capabilities.errors import CapabilityError
 from fred_runtime.execution_errors import UserFacingExecutionError
-from fred_runtime.runtime_support.llm_diagnostics import failed_calls
+from fred_runtime.react.middleware.rate_limit_retry import ProviderRateLimitError
+from fred_runtime.runtime_support.llm_diagnostics import (
+    FailureReason,
+    classify_error,
+    exception_chain,
+    failed_calls,
+    invocation_failure_reason,
+    observed_failure_reason,
+)
+from fred_runtime.runtime_support.tool_execution import TOOL_FAILURE_MARKER
+
+
+@dataclass
+class TurnFailureTelemetry:
+    """Private to one recorded turn, outside the event and history payloads."""
+
+    reason: FailureReason = "internal_or_unknown"
+
+    def record(self, exc: Exception, phase: str) -> None:
+        observed = observed_failure_reason(exc)
+        if observed is not None and observed != "internal_or_unknown":
+            self.reason = observed
+            return
+        chain, _ = exception_chain(exc)
+        if any(isinstance(error, ProviderRateLimitError) for error in chain):
+            self.reason = "http_429"
+        elif phase == "capability_setup" or any(
+            isinstance(error, (CapabilityError, ToolException, ToolInvocationError))
+            or getattr(error, TOOL_FAILURE_MARKER, False) is True
+            for error in chain
+        ):
+            self.reason = "tool_or_capability"
+        else:
+            self.reason = invocation_failure_reason(classify_error(exc))
 
 
 def report_execution_error(logger: logging.Logger, exc: Exception, phase: str) -> str:

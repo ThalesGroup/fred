@@ -17,9 +17,14 @@ import httpx2
 import pytest
 from fred_core.kpi import BaseKPIWriter
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.execution_diagnostics import (
+    TurnFailureTelemetry,
+    report_execution_error,
+)
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
     LlmObservation,
     LlmProgressCallback,
     classify_error,
@@ -83,7 +88,7 @@ async def stream_server(mode: str, *, rejection: tuple[int, bytes] | None = None
                     ],
                 }
                 selected = "success"
-            if mode == "deep":
+            if mode in {"deep", "deep_one"}:
                 messages = body["messages"]
                 last = messages[-1]
                 if last.get("role") == "user" and last.get("content") == "delegate":
@@ -104,7 +109,9 @@ async def stream_server(mode: str, *, rejection: tuple[int, bytes] | None = None
                                     ),
                                 },
                             }
-                            for i, name in enumerate(("good", "bad"))
+                            for i, name in enumerate(
+                                ("good", "bad") if mode == "deep" else ("bad",)
+                            )
                         ],
                     }
                     selected = "success"
@@ -463,6 +470,68 @@ async def test_native_deep_children_are_isolated(caplog):
     ]
     assert max(child_counts) == 2
     assert child_counts[-1] == 0
+
+
+async def test_native_child_exhaustion_reports_the_child_route(monkeypatch):
+    from deepagents import create_deep_agent
+    from deepagents.backends import StateBackend
+    from fred_runtime.react.middleware.rate_limit_retry import (
+        ProviderRateLimitError,
+        RateLimitRetryMiddleware,
+    )
+
+    kpi = Mock(spec=BaseKPIWriter)
+    child_observer = middleware(kpi, "child")
+    retry = RateLimitRetryMiddleware(kpi=None, binding=child_observer._binding)
+    monkeypatch.setattr(retry, "_delay_for", lambda *_: 0)
+    payload = b'{"error":{"code":"rate_limit_exceeded"}}'
+    async with (
+        stream_server("deep_one") as (parent, parent_requests, _),
+        stream_server("success", rejection=(429, payload)) as (
+            child,
+            child_requests,
+            _,
+        ),
+    ):
+        parent.metadata = {
+            MODEL_ID_METADATA: "model__openai__medium",
+            MODEL_ROUTE_METADATA: "Medium",
+        }
+        child.metadata = {
+            MODEL_ID_METADATA: "model__openai__small",
+            MODEL_ROUTE_METADATA: "Small",
+        }
+        graph = create_deep_agent(
+            model=parent,
+            backend=StateBackend(),
+            middleware=[middleware(kpi)],
+            subagents=[
+                {
+                    "name": "general-purpose",
+                    "description": "Synthetic child",
+                    "system_prompt": "Handle the delegated task.",
+                    "model": child,
+                    "tools": [],
+                    "middleware": [retry, child_observer],
+                }
+            ],
+        )
+        with pytest.raises(ProviderRateLimitError) as caught:
+            await graph.ainvoke({"messages": [HumanMessage(content="delegate")]})
+    failure = TurnFailureTelemetry()
+    failure.record(caught.value, "execution")
+    assert failure.reason == "http_429"
+    assert len(parent_requests) == 1
+    assert len(child_requests) == caught.value.attempts
+    invocations = [
+        call.kwargs["dims"]
+        for call in kpi.count.call_args_list
+        if call.args[0] == "llm.calls_total"
+    ]
+    assert [
+        (dims["model_route"], dims["status"], dims["http_status"])
+        for dims in invocations
+    ] == [("Medium", "ok", ""), *[("Small", "error", "429")] * len(child_requests)]
 
 
 async def test_progress_cost_and_no_content_retention():

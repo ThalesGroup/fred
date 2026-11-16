@@ -20,7 +20,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 from typing import Optional, TypeVar
 
 from fred_core.common.team_id import is_personal_team_id
@@ -44,6 +44,7 @@ _Result = TypeVar("_Result")
 
 # Stamped on capability tools at assembly; tags tool KPIs with their capability.
 CAPABILITY_ID_METADATA_KEY = "fred.capability_id"
+TOOL_FAILURE_MARKER = "_fred_observed_tool_failure"
 
 
 def capability_id_of(tool: object) -> str | None:
@@ -252,6 +253,9 @@ class ToolExecution:
                     )
                 raise
             except Exception as e:
+                if not isinstance(e, RunStopError):
+                    with suppress(Exception):
+                        setattr(e, TOOL_FAILURE_MARKER, True)
                 if kpi_dims is not None:
                     kpi_dims["status"] = "error"
                 if kpi is not None:

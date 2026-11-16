@@ -185,7 +185,10 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.execution_diagnostics import (
+    TurnFailureTelemetry,
+    report_execution_error,
+)
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
@@ -4298,6 +4301,7 @@ def _emit_turn_completed(
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
+    failure: TurnFailureTelemetry | None = None,
 ) -> None:
     """
     Emit turn KPIs after the SSE stream closes.
@@ -4370,7 +4374,12 @@ def _emit_turn_completed(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
-                dims=turn_dims,
+                dims={
+                    **turn_dims,
+                    "failure_reason": failure.reason
+                    if failure
+                    else "internal_or_unknown",
+                },
                 actor=KPIActor(type="human", user_id=user_id),
             )
 
@@ -4499,6 +4508,7 @@ async def _stream(
         resolved_team_id = "personal"
 
     collected: list[dict[str, Any]] = []
+    turn_failure = TurnFailureTelemetry()
     expander = _TurnEventExpander(definition, request)
     payloads = _iterate_runtime_event_payloads(
         definition,
@@ -4525,6 +4535,7 @@ async def _stream(
         credential_provider=credential_provider,
         owns_run_record=True,
         steering_enabled=bool(request.agent_instance_id),
+        turn_failure=turn_failure,
     )
     try:
         if on_start is not None:
@@ -4577,6 +4588,7 @@ async def _stream(
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
+        failure=turn_failure,
     )
 
 
@@ -5162,6 +5174,7 @@ async def _iterate_runtime_event_payloads(
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
     steering_enabled: bool = False,
+    turn_failure: TurnFailureTelemetry | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Own the run's scope and release the run record once.
 
@@ -5193,6 +5206,7 @@ async def _iterate_runtime_event_payloads(
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
         steering_enabled=steering_enabled,
+        turn_failure=turn_failure,
     )
     started = time.perf_counter()
     outcome = "succeeded"
@@ -5318,6 +5332,7 @@ async def _iterate_runtime_event_payloads_inner(
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
     steering_enabled: bool = False,
+    turn_failure: TurnFailureTelemetry | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -5756,6 +5771,8 @@ async def _iterate_runtime_event_payloads_inner(
     except Exception as exc:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
+        if turn_failure is not None:
+            turn_failure.record(exc, error_phase)
         message = report_execution_error(logger, exc, error_phase)
         yield RuntimeErrorEvent(message=message).model_dump(mode="json")
     finally:
@@ -7442,6 +7459,7 @@ def _build_agent_router(
             history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
         payloads: list[dict[str, Any]] = []
+        turn_failure = TurnFailureTelemetry()
         expander = _TurnEventExpander(target.definition, internal_req)
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
@@ -7469,6 +7487,7 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
+            turn_failure=turn_failure,
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7491,6 +7510,7 @@ def _build_agent_router(
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
+            failure=turn_failure,
         )
         # Write history after generator is fully consumed.
         # Can await here — no SSE response to block.
@@ -7587,6 +7607,7 @@ def _build_agent_router(
             history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
         payloads: list[dict[str, Any]] = []
+        turn_failure = TurnFailureTelemetry()
         expander = _TurnEventExpander(target.definition, internal_req)
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
@@ -7614,6 +7635,7 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
+            turn_failure=turn_failure,
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7637,6 +7659,7 @@ def _build_agent_router(
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
+            failure=turn_failure,
         )
         if session_id:
             if history_store is not None:
