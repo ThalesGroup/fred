@@ -322,8 +322,8 @@ async def test_factory_astream_cancel_releases_upstream(upstream: _Upstream) -> 
     task = asyncio.create_task(consume())
     await asyncio.wait_for(stalled.wait(), timeout=2)
     task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
     assert upstream.streams[-1].closed
 
 
