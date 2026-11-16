@@ -553,6 +553,29 @@ pub(super) async fn initialize(
             "Explicit source mapping must cover every retained permission.",
         ));
     }
+    assign_sources(conn, organization, source_ids).await?;
+    if receipt.is_none() {
+        replace(
+            conn,
+            organization,
+            "deployment:model-initialization",
+            request,
+        )
+        .await?;
+    }
+    sqlx::query(
+        "insert into organization_model_initialization (organization_id, completed_at) values ($1, now())
+         on conflict (organization_id) do update set completed_at = excluded.completed_at",
+    ).bind(organization).execute(&mut *conn).await?;
+    Ok(())
+}
+
+/// Caller holds the organization lock; existing assignments are retained.
+pub(super) async fn assign_sources(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    source_ids: &[String],
+) -> AppResult<()> {
     let sources: Vec<String> = sqlx::query_scalar(
         "select source_id from model_source where source_id = any($1) order by source_id for share",
     )
@@ -575,18 +598,5 @@ pub(super) async fn initialize(
     .bind(&sources)
     .execute(&mut *conn)
     .await?;
-    if receipt.is_none() {
-        replace(
-            conn,
-            organization,
-            "deployment:model-initialization",
-            request,
-        )
-        .await?;
-    }
-    sqlx::query(
-        "insert into organization_model_initialization (organization_id, completed_at) values ($1, now())
-         on conflict (organization_id) do update set completed_at = excluded.completed_at",
-    ).bind(organization).execute(&mut *conn).await?;
     Ok(())
 }

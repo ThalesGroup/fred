@@ -11,6 +11,24 @@ The client does not provision Keycloak accounts, start the mock or deploy anythi
 The examples below describe available commands; they are not recorded load runs.
 Validation uses local `httptest` servers and doubles only.
 
+## Reproduce the local setup from Git
+
+The deployment and setup entry point is the factory's
+[benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md).
+Its opt-in `BENCH=reference` profile configures the mock and both Fred lines from
+versioned values. Follow its normal bootstrap, identity preparation and
+`k3d-bench-prepare` commands before running this client. Operator inputs and generated
+password files remain private; no private Helm overlay or manual SQL is required.
+
+Build Weaver's images from a revision containing the current Python SDK contract:
+`RuntimeModels` accepts the resolver's `default` and `reasoning_default_on` fields.
+The normal `fred-agents` image build includes `libs/fred-sdk`, so the API and worker
+use the same correction without a separate image patch. For an existing organization,
+the factory uses [the operator source assignment](../../apps/control-plane/README.md#assign-a-source-after-initialization)
+before its normal model-policy API calls. Initialization receipts and existing
+organization defaults are preserved. A successful setup is not a benchmark run;
+start load only with the explicitly selected scenario parameters below.
+
 ## Conversation scenario with factory identities
 
 Run from `developer_tools/benchmarks`. Prepare the identities, shared team/space,

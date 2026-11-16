@@ -22,7 +22,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, logging};
 
-const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | register-local-user <weaver-user-id> <username> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | initialize-models | assign-model-source <organization-uuid> <source-id> | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | register-local-user <weaver-user-id> <username> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -124,6 +124,15 @@ async fn main() -> Result<()> {
                 .context("expected the canonical Weaver user UUID")?;
             let pool = pool(&config).await?;
             control_plane::users::register_local(&pool, id, username).await?;
+            Ok(())
+        }
+        ["assign-model-source", organization, source_id] => {
+            let organization = organization
+                .parse()
+                .context("expected an organization UUID")?;
+            let pool = pool(&config).await?;
+            control_plane::model_catalog::assign_source(&pool, organization, source_id).await?;
+            tracing::info!(%organization, source_id, "Model source assigned");
             Ok(())
         }
         ["initialize-models"] => {

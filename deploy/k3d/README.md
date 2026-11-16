@@ -30,6 +30,24 @@ Its purge retention and lifecycle sweep interval are each one minute (`PT1M`).
 After retention expires, physical cleanup starts on a subsequent sweep; it is not
 guaranteed to finish exactly one minute after the UI deletion.
 
+## Optional conversation benchmark setup
+
+Use the factory's versioned
+[benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md)
+for a fresh installation or a full redeployment with the deterministic mock.
+`BENCH=reference` opts into its mock deployment and Fred values; ordinary deployments
+keep their normal model configuration. Provision the normal demo organizations first,
+then use the factory's explicit preparation command for benchmark accounts and agents.
+
+A redeployment does not re-seed administered model policies. The
+[Control Plane assignment command](../../apps/control-plane/README.md#assign-a-source-after-initialization)
+adds the configured benchmark source to an existing organization without changing
+its policy or receipt; subsequent setup uses ordinary organization APIs. Build the
+normal `fred-agents` image from this checkout so both API and worker include the
+Python resolver contract fix. No private image patch, SQL edit or receipt reset is
+part of this path. The [benchmark client](../../developer_tools/benchmarks/README.md)
+separates identity preparation, scenario execution and report checks.
+
 ## Technical monitor
 
 The profile builds `apps/monitor` and exposes `/admin/monitor` to platform admins.

@@ -696,6 +696,102 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
+async fn operator_source_assignment_is_additive_and_preserves_initialization() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    let mut disabled = provider.source("disabled");
+    disabled.enabled = false;
+    let platform = PlatformConfig {
+        model_sources: vec![provider.source("a"), provider.source("bench"), disabled],
+        organization_models: vec![declaration("TSN", &["a"])],
+        ..Default::default()
+    };
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform.clone()).await;
+    let before = inventory(&app, &identity, org.id).await;
+    let receipt: Value = sqlx::query_scalar(
+        "select to_jsonb(r) from organization_model_initialization r where organization_id=$1",
+    )
+    .bind(org.id)
+    .fetch_one(&e.pool)
+    .await
+    .unwrap();
+    let calls = provider.response.lock().await.2;
+
+    let (first, replay) = tokio::join!(
+        model_catalog::assign_source(&e.pool, org.id, "bench"),
+        model_catalog::assign_source(&e.pool, org.id, "bench"),
+    );
+    first.unwrap();
+    replay.unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let after = inventory(&app, &identity, org.id).await;
+    assert_eq!(after["policy"], before["policy"]);
+    assert_eq!(after["sources"].as_array().unwrap().len(), 2);
+    assert_eq!(calls, provider.response.lock().await.2);
+    assert_eq!(
+        receipt,
+        sqlx::query_scalar::<_, Value>(
+            "select to_jsonb(r) from organization_model_initialization r where organization_id=$1",
+        )
+        .bind(org.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap()
+    );
+
+    for invalid_org in [team.id, Uuid::new_v4()] {
+        assert!(
+            model_catalog::assign_source(&e.pool, invalid_org, "bench")
+                .await
+                .is_err()
+        );
+    }
+    assert!(
+        model_catalog::assign_source(&e.pool, org.id, "unknown")
+            .await
+            .is_err()
+    );
+    assert_eq!(inventory(&app, &identity, org.id).await, after);
+
+    // Fresh organizations need neither a seed policy nor a receipt to receive a source.
+    let fresh = support::member_organization(&e.pool, "Fresh", "alice")
+        .await
+        .unwrap();
+    model_catalog::assign_source(&e.pool, fresh.id, "disabled")
+        .await
+        .unwrap();
+    assert!(!completion(&e, fresh.id).await);
+    let fresh_view = inventory(&app, &identity, fresh.id).await;
+    assert_eq!(fresh_view["policy"]["revision"], 0);
+    assert_eq!(fresh_view["sources"][0]["observation"]["enabled"], false);
+    let deletion = Uuid::new_v4();
+    sqlx::query("insert into deletion(id,target_id,target_kind,organization_id,actor_subject,requested_at,due_at) values($1,$2,'organization',$2,'alice',now(),now())")
+        .bind(deletion).bind(fresh.id).execute(&e.pool).await.unwrap();
+    sqlx::query("update space set deletion_id=$1 where id=$2")
+        .bind(deletion)
+        .bind(fresh.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert!(
+        model_catalog::assign_source(&e.pool, fresh.id, "bench")
+            .await
+            .is_err()
+    );
+    assert!(!sqlx::query_scalar::<_, bool>(
+        "select exists(select 1 from organization_model_source where organization_id=$1 and source_id='bench')",
+    ).bind(fresh.id).fetch_one(&e.pool).await.unwrap());
+    assert_eq!(calls, provider.response.lock().await.2);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
 async fn seed_failure_retry_validation_and_concurrent_replicas() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;

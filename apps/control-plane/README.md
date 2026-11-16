@@ -373,6 +373,38 @@ body, token or configuration value is included in initialization diagnostics.
 Do not delete receipts to retry. Changing an already initialized association requires
 an explicit administrative change; this lot adds no association-management UI.
 
+### Assign a source after initialization
+
+An operator can make an already configured source visible to an existing organization:
+
+```sh
+control-plane assign-model-source <organization-uuid> <source-id>
+# k3d example, using the running deployment's configuration and database credentials:
+kubectl --context k3d-fred -n fred-weaver exec deployment/control-plane-backend -- \
+  control-plane assign-model-source "$ORGANIZATION_ID" bench-mock
+```
+
+Use the organization's UUID returned by Control Plane, not a team UUID. The source
+must already exist in SQL after deploying its `platform.model_sources` configuration.
+The command uses the same deployment credentials and initialized-schema check as
+`initialize-models`; it accepts no browser token. It locks the active organization
+and the source, then adds the assignment in one transaction. Repeating it, including
+concurrently, is safe. Missing sources, missing organizations, team/project IDs and
+organizations pending deletion fail without creating an assignment.
+
+This command grants source visibility only. It makes no provider request, creates
+no policy or receipt, and preserves existing permissions, revisions, document models,
+defaults and fallback choices. A disabled source remains disabled. The organization
+Owner can then refresh its inventory and authorize selected offers through the
+existing model APIs or UI. There is no association-management HTTP endpoint.
+
+For a fresh installation, provision the organization and run the normal one-time
+`initialize-models` declarations first, if configured. The assignment command also
+works on a newly provisioned organization without a policy. For an already initialized
+installation, use this command for additional sources: editing `organization_models`
+and replaying initialization intentionally leaves completed organizations unchanged.
+Never delete the initialization receipt or edit SQL to make a new source visible.
+
 ### Source approval and discovery
 
 Every source has exactly one `inventory`. `kind: discovered` reads the models from an
