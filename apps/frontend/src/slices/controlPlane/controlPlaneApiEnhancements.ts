@@ -644,11 +644,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
             ],
     },
+    // Agent changes also refresh the home settings and the advanced home: their
+    // featured and candidate agents are resolved against the current agents.
     postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: {
       invalidatesTags: (_, __, arg) => [
@@ -663,6 +671,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
           : []),
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
@@ -671,6 +680,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
@@ -679,20 +689,24 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A copy lands in every target team: refresh each team's list it reached.
     postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
-      invalidatesTags: (result) =>
-        (result?.results ?? [])
+      invalidatesTags: (result) => [
+        ...(result?.results ?? [])
           .filter((r) => r.agent)
           .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     // A re-check may lift a capability_pending suspension: the list must show it.
     postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the

@@ -3148,7 +3148,12 @@
         "chat": "Chat",
         "chatWith": "Chat with {{name}}",
         "highlightsTitle": "What it does for you",
-        "allAgents": "All agents"
+        "allAgents": "All agents",
+        "askTitle": "A question? Ask {{name}}",
+        "askPlaceholder": "Ask {{name}} anything…",
+        "askLabel": "Your question to {{name}}",
+        "askSend": "Send",
+        "askHint": "Your question opens a new conversation with {{name}}, who answers it right away."
       }
     },
     "mainNav": {

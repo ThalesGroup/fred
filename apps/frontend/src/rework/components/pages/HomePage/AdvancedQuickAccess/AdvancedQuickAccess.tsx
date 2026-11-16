@@ -20,6 +20,7 @@ import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap"
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type { FeaturedHomeAgent } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import FeaturedCarousel from "../FeaturedCarousel/FeaturedCarousel.tsx";
+import HomeAskBox from "../HomeAskBox/HomeAskBox.tsx";
 import RecentAgents from "../RecentAgents/RecentAgents.tsx";
 import styles from "./AdvancedQuickAccess.module.scss";
 
@@ -58,6 +59,8 @@ export default function AdvancedQuickAccess({ featured, firstName }: AdvancedQui
         </div>
       </div>
       {featured.length > 0 && <FeaturedCarousel featured={featured} teamName={teamName} />}
+      {/* The first featured agent answers the home question. */}
+      {featured[0] && <HomeAskBox agent={featured[0].agent} />}
       <RecentAgents variant="detailed" />
     </div>
   );

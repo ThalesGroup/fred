@@ -54,7 +54,8 @@ export default function HomePage() {
   const showPeriod = tabIndex !== 0;
 
   // Platform-wide mode set on the admin "Interface" page; any failure keeps the classic home.
-  const { data: home, isLoading: homeLoading } = useMyHomeQuery();
+  // Refetched on each visit: agents may have changed since (no reload in a single-page app).
+  const { data: home, isLoading: homeLoading } = useMyHomeQuery(undefined, { refetchOnMountOrArgChange: true });
   const advanced = home?.layout === "advanced";
 
   return (

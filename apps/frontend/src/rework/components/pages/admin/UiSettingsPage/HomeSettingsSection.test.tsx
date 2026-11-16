@@ -139,4 +139,25 @@ describe("HomeSettingsSection", () => {
       },
     });
   });
+
+  it("takes a refetch as is while nothing was edited", () => {
+    const next = stored();
+    next.featured = [next.featured[1]];
+    h.query.data = next;
+    act(() => root.render(<HomeSettingsSection />));
+    expect(items()).toHaveLength(1);
+    expect(items()[0].textContent).toContain("PowerPoint");
+  });
+
+  it("keeps the admin's edits on a refetch and refreshes visibility only", () => {
+    act(() => button("rework.uiSettings.home.moveDown", items()[0]).click());
+    const next = stored();
+    next.featured[0].available = false;
+    next.featured[1].available = true;
+    h.query.data = next;
+    act(() => root.render(<HomeSettingsSection />));
+    expect(items().map((li) => li.textContent?.includes("PowerPoint"))).toEqual([true, false]);
+    expect(items().map((li) => li.getAttribute("data-available"))).toEqual(["true", "false"]);
+    expect(saveButton().disabled).toBe(false);
+  });
 });

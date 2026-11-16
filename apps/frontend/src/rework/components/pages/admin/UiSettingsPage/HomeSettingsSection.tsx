@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -82,6 +82,19 @@ function toRequest(layout: HomeLayout, drafts: DraftAgent[]): SetPlatformHomeReq
   };
 }
 
+/** An agent added but not saved yet is visible to users only while it is still a candidate. */
+function withFreshAgent(draft: DraftAgent, settings: PlatformHomeSettings): DraftAgent {
+  const saved = settings.featured?.find((agent) => agent.agent_instance_id === draft.agent_instance_id);
+  const candidate = settings.candidates?.find((agent) => agent.agent_instance_id === draft.agent_instance_id);
+  const fresh = saved ?? candidate;
+  return {
+    ...draft,
+    display_name: fresh?.display_name ?? draft.display_name,
+    team_name: fresh?.team_name ?? draft.team_name,
+    available: saved ? saved.available : candidate !== undefined,
+  };
+}
+
 function highlightsError(text: string): "count" | "length" | undefined {
   const lines = highlightLines(text);
   if (lines.length > MAX_HIGHLIGHTS) return "count";
@@ -96,21 +109,39 @@ function highlightsError(text: string): "count" | "length" | undefined {
 export default function HomeSettingsSection() {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
-  const { data, isLoading, isError } = usePlatformHomeQuery();
+  // Refetched on each visit; agent changes also refresh it while it is open.
+  const { data, isLoading, isError } = usePlatformHomeQuery(undefined, { refetchOnMountOrArgChange: true });
   const [save, { isLoading: isSaving }] = useSetPlatformHomeMutation();
 
-  const [layout, setLayout] = useState<HomeLayout>("classic");
-  const [drafts, setDrafts] = useState<DraftAgent[]>([]);
+  const [layout, setLayoutState] = useState<HomeLayout>("classic");
+  const [drafts, setDraftsState] = useState<DraftAgent[]>([]);
+  // Set by any admin edit: a refetch must then refresh agent facts, not wipe the draft.
+  const editing = useRef(false);
+  const setLayout = (next: HomeLayout) => {
+    editing.current = true;
+    setLayoutState(next);
+  };
+  const setDrafts: typeof setDraftsState = (next) => {
+    editing.current = true;
+    setDraftsState(next);
+  };
   const [toAdd, setToAdd] = useState<string | undefined>();
   const [serverError, setServerError] = useState<string | undefined>();
 
   const reset = (settings: PlatformHomeSettings) => {
-    setLayout(settings.layout ?? "classic");
-    setDrafts(toDrafts(settings));
+    editing.current = false;
+    setLayoutState(settings.layout ?? "classic");
+    setDraftsState(toDrafts(settings));
     setServerError(undefined);
   };
   useEffect(() => {
-    if (data) reset(data);
+    if (!data) return;
+    if (!editing.current) {
+      reset(data);
+      return;
+    }
+    // Mid-edit: keep the admin's order and texts, refresh names and visibility.
+    setDraftsState((current) => current.map((draft) => withFreshAgent(draft, data)));
   }, [data]);
 
   const request = toRequest(layout, drafts);
@@ -152,6 +183,8 @@ export default function HomeSettingsSection() {
     setServerError(undefined);
     try {
       await save({ setPlatformHomeRequest: request }).unwrap();
+      // The saved settings are the server's now: its refetch replaces the draft.
+      editing.current = false;
       showSuccess({ summary: t("rework.uiSettings.home.saved") });
     } catch (error: unknown) {
       setServerError(normalizeApiError(error).detail);

@@ -3148,7 +3148,12 @@
         "chat": "Discuter",
         "chatWith": "Discuter avec {{name}}",
         "highlightsTitle": "Ce qu'il fait pour vous",
-        "allAgents": "Tous les agents"
+        "allAgents": "Tous les agents",
+        "askTitle": "Une question ? Demandez à {{name}}",
+        "askPlaceholder": "Posez votre question à {{name}}…",
+        "askLabel": "Votre question à {{name}}",
+        "askSend": "Envoyer",
+        "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },
     "mainNav": {
