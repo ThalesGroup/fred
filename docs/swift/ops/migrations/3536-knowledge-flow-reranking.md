@@ -11,27 +11,29 @@ Fred deployments using document access or Knowledge Flow vector search.
 
 ## Prerequisites
 
-Keep the existing local CrossEncoder available in the Knowledge Flow image. For
-optional remote inference, provide an HTTPS-compatible reranking endpoint and
-its API key through a Knowledge Flow environment variable.
+Keep the existing local CrossEncoder available in the Knowledge Flow image if
+using local reranking. For optional remote inference, provide an HTTPS endpoint
+that supports the indexed-results `/rerank` interface.
 
 ## Configuration
 
 Omitting `reranker_model` uses the local CrossEncoder. To select a remote
-model, set `reranker_model.provider: rerank`, `name`,
-`settings.base_url`, and `settings.api_key_env` in Knowledge Flow's
-configuration. Supply the named environment variable to Knowledge Flow API
-pods. Do not put the API key in YAML. The optional chart value defaults to
-`null` for both API and worker. Document access's advanced `rerank` setting
-defaults to off for new agents and stored configurations that omit it. Turn it
-on per agent when the relevance gain justifies the extra search latency.
-Previously saved values remain unchanged.
+model, set `reranker_model.provider: rerank`, `name`, and `settings.base_url`
+in Knowledge Flow's configuration. Use the service base URL without the final
+`/rerank` path. Configure credentials using the procedure "Optional API
+keys for Knowledge Flow model uses", before deploying the remote model. The
+optional chart value defaults to `null` for both API and worker.
+
+Document access's advanced `rerank` setting defaults to off for new agents and
+stored configurations that omit it. Turn it on per agent when the relevance
+gain justifies the extra search latency.
 
 ## Upgrade
 
-Deploy Knowledge Flow before the agent runtime and capability so `/vector/search`
-accepts the new request flag. No data migration or re-ingestion is needed.
-Remote inference is optional and may be configured after the normal upgrade.
+Upgrade Knowledge Flow and the agent runtime and capability with the normal
+deployment procedure. Finish rolling out all Knowledge Flow API replicas before
+enabling reranking on agents or asking `/vector/search` to rerank. Older API
+replicas ignore the new request flag. No data migration or re-ingestion is needed.
 
 ## Validation
 
@@ -43,10 +45,11 @@ returns `503 reranker_unavailable`.
 
 ## Rollback
 
-Remove `reranker_model` and restart Knowledge Flow API pods to return to the
-local CrossEncoder. Turn off the agent switch to skip reranking. For a full
-version rollback, restore the prior runtime and capability along with Knowledge
-Flow. No data rollback is required.
+To resume local reranking, remove `reranker_model` and roll out the affected
+Knowledge Flow pods with the restored configuration. To skip reranking during a
+full rollback to v3.11.1, turn off the agent setting before restoring the prior
+runtime and capability. Restore the prior Knowledge Flow configuration as well.
+No data rollback is required.
 
 ## Limitations
 

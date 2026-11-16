@@ -26,9 +26,9 @@ independent of the Fred upgrade.
 
 ## Validation
 
-After importing, select a time range with chat turns and HTTP traffic.
-Check that the summary cards populate and both error-rate controls update the
-failed-turn and HTTP 5xx charts.
+After importing, select a time range with chat turns and HTTP traffic and check
+that the summary cards populate. Follow the shared lookback validation in the
+dashboard follow-up note for the error-rate charts.
 
 ## Rollback
 

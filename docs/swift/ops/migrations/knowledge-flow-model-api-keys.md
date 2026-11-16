@@ -4,10 +4,11 @@ title: "Optional API keys for Knowledge Flow model uses"
 impact: minor
 configuration: production
 configuration_reason: "The Fred chart adds five optional Knowledge Flow dotenv keys; using separate credentials requires setting them in the deployment and restarting the affected API and workers."
+after: [3536-knowledge-flow-reranking]
 ---
 ## Applicability
 
-Knowledge Flow deployments using OpenAI-compatible chat, vision, or embedding models, the remote Mistral OCR extractor, or the remote reranker. Existing deployments using only `OPENAI_API_KEY` continue to work after a normal upgrade.
+Knowledge Flow deployments using OpenAI-compatible chat, vision, or embedding models, the remote Mistral OCR extractor, or the remote reranker. Existing v3.11.1 deployments using only `OPENAI_API_KEY` continue to work after a normal upgrade.
 
 ## Prerequisites
 
@@ -15,11 +16,11 @@ For optional activation, obtain the credentials for each model endpoint. No data
 
 ## Configuration
 
-Set any of `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, or `KNOWLEDGE_FLOW_RERANKER_API_KEY` in the Knowledge Flow environment or `applications.knowledge-flow-backend.dotenv` Helm values. A nonblank dedicated key takes precedence for its use. An unset or blank dedicated key falls back to `OPENAI_API_KEY`; setting only `OPENAI_API_KEY` remains valid for all five uses. The remote reranker's `settings.api_key_env` field is removed; configure its key through the environment. Do not place credentials in model YAML.
+Set any of `KNOWLEDGE_FLOW_CHAT_API_KEY`, `KNOWLEDGE_FLOW_VISION_API_KEY`, `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY`, `KNOWLEDGE_FLOW_OCR_API_KEY`, or `KNOWLEDGE_FLOW_RERANKER_API_KEY` in the Knowledge Flow environment or `applications.knowledge-flow-backend.dotenv` Helm values. A nonblank dedicated key takes precedence for its use. An unset or blank dedicated key falls back to `OPENAI_API_KEY`. If a deployment tested the unreleased `reranker_model.settings.api_key_env` field, remove that field and supply the reranker credential through `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` before applying v3.12.0. Keep credentials out of model YAML.
 
 ## Upgrade
 
-Deploy normally if retaining the single key and not using `reranker_model.settings.api_key_env`. If a remote reranker configuration contains that field, remove it and set `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` before upgrading. To activate separate keys, update the Knowledge Flow environment or Helm Secret values, then restart the Knowledge Flow API and affected workers so they load the new environment. No special rollout order is required.
+To activate separate keys, update the Knowledge Flow environment or Helm Secret values, then restart the Knowledge Flow API and affected workers so they load the new environment. When enabling reranking at the same time, follow the preceding rollout instructions before turning it on for agents.
 
 ## Validation
 
@@ -27,7 +28,7 @@ Exercise the configured chat, vision, embedding, and remote reranking paths with
 
 ## Rollback
 
-To return to one key on this version, clear the dedicated variables, then restart the affected API and workers with `OPENAI_API_KEY` available. Before rolling back the code with a remote reranker enabled, restore its required `settings.api_key_env` and the named environment variable, or disable `reranker_model`; the previous version cannot start with only `base_url`. No data rollback is required.
+To return to one key on this version, clear the dedicated variables, then restart the affected API and workers with `OPENAI_API_KEY` available. When rolling back to v3.11.1, restore the prior Knowledge Flow configuration and keep the shared key available. If rolling back to an unreleased build that required `settings.api_key_env`, restore the matching field and named environment variable or disable `reranker_model`. No data rollback is required.
 
 ## Limitations
 
