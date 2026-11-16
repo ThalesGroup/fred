@@ -76,9 +76,28 @@
   }
 }
 
+/* Rows of three equal cards; an incomplete last row is centered (5 → 3 + 2). */
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--spacing-s);
+  --gap: var(--spacing-s);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
   width: 100%;
+
+  > * {
+    flex: 0 0 calc((100% - 2 * var(--gap)) / 3);
+  }
+}
+
+@media (max-width: 900px) {
+  .grid > * {
+    flex-basis: calc((100% - var(--gap)) / 2);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid > * {
+    flex-basis: 100%;
+  }
 }

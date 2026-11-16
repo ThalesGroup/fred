@@ -29,10 +29,10 @@ from control_plane_backend.platform_ui_settings.service import (
     get_platform_home as get_platform_home_from_service,
 )
 from control_plane_backend.platform_ui_settings.service import (
-    set_platform_home as set_platform_home_from_service,
+    get_platform_ui_settings as get_platform_ui_settings_from_service,
 )
 from control_plane_backend.platform_ui_settings.service import (
-    get_platform_ui_settings as get_platform_ui_settings_from_service,
+    set_platform_home as set_platform_home_from_service,
 )
 from control_plane_backend.platform_ui_settings.service import (
     set_platform_ui_settings as set_platform_ui_settings_from_service,

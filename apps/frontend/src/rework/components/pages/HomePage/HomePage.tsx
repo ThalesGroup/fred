@@ -64,7 +64,7 @@ export default function HomePage() {
       <div className={styles.page} data-layout={advanced ? "advanced" : "classic"}>
         <header className={styles.header}>
           <ButtonGroup
-            size="2xs"
+            size={advanced ? "medium" : "2xs"}
             color="secondary"
             variant="radio"
             aria-label={t("rework.home.tabs.aria")}

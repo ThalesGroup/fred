@@ -34,9 +34,25 @@
   max-width: 1160px;
 }
 
-/* Advanced home: room above the tabs and at the bottom of the page. */
+/* Advanced home: room above the bar and at the bottom of the page. The bar
+ * spans the content width, tabs at its left and the right slot (search or
+ * period) at its right, in the flow: they can never overlap. */
 .page[data-layout="advanced"] {
   padding: var(--spacing-l) 0 var(--spacing-2xl);
+
+  .header {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--spacing-s);
+    margin: 0 auto;
+    width: 100%;
+    max-width: 920px;
+  }
+
+  .periodSlot {
+    position: static;
+    transform: none;
+  }
 }
 
 /* Tabs sit dead-center of the page; the period selector floats at the right

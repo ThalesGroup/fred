@@ -322,7 +322,7 @@ The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
 The advanced home's section marks (a diamond by default) read
-`--home-marker-color`, `--home-marker-secondary-color`, `--home-marker-size`,
+`--home-marker-color`, `--home-marker-size`,
 `--home-marker-rotate`, `--home-marker-radius` and `--home-marker-display`
 (`none` hides them); set them under the same `html[data-ui-theme="<id>"]` scope.
 Its featured banner reads `--home-banner-background` (any background: color,
@@ -330,6 +330,7 @@ gradient or image), `--home-banner-color` (text, icons, dots),
 `--home-banner-accent` (chat button text and icon tile) and
 `--home-banner-panel-background` (the "what it does" panel); all default to the
 theme's `--primary` / `--on-primary`.
+The greeting title reads `--home-greeting-color` (default `--on-surface`).
 
 To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
 into `theme-translations/fr.json`, for example:

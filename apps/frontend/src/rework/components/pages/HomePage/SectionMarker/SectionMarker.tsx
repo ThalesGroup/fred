@@ -15,6 +15,6 @@
 import styles from "./SectionMarker.module.scss";
 
 /** Decorative mark before an advanced-home section title; a theme restyles it with CSS variables. */
-export default function SectionMarker({ tone = "primary" }: { tone?: "primary" | "secondary" }) {
-  return <span className={styles.marker} data-tone={tone} aria-hidden="true" />;
+export default function SectionMarker() {
+  return <span className={styles.marker} aria-hidden="true" />;
 }

@@ -3149,7 +3149,7 @@
         "chatWith": "Discuter avec {{name}}",
         "highlightsTitle": "Ce qu'il fait pour vous",
         "allAgents": "Tous les agents",
-        "askTitle": "Une question ? Demandez à {{name}}",
+        "askTitle": "Une question ? Demandez à l'agent : {{name}}",
         "askPlaceholder": "Posez votre question à {{name}}…",
         "askLabel": "Votre question à {{name}}",
         "askSend": "Envoyer",

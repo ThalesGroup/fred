@@ -21,7 +21,7 @@
   margin: 0 auto;
   padding-top: var(--spacing-2xl);
   width: 100%;
-  max-width: 1000px;
+  max-width: 920px;
 }
 
 /* Logo on the left, text after a primary rule; stacked on narrow screens. */
@@ -34,7 +34,7 @@
 
 .logo {
   flex: none;
-  width: 96px;
+  width: 150px;
   height: auto;
 }
 
@@ -46,10 +46,11 @@
   padding-left: var(--spacing-l);
 }
 
+/* A theme may color it with --home-greeting-color. */
 .title {
   margin: 0;
-  color: var(--on-surface);
-  font: var(--font-title-large-emphasized);
+  color: var(--home-greeting-color, var(--on-surface));
+  font: var(--font-headline-large);
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
@@ -57,7 +58,8 @@
 .subtitle {
   margin: 0;
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+  font: var(--font-body-large);
+  font-size: 1.125rem;
 }
 
 @media (max-width: 640px) {

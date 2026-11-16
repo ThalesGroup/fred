@@ -42,7 +42,7 @@ export default function RecentAgents({ variant = "compact" }: RecentAgentsProps)
   return (
     <section className={styles.section} data-variant={variant} aria-label={title} aria-busy={isLoading}>
       <div className={styles.head}>
-        {variant === "detailed" ? <SectionMarker tone="secondary" /> : <Icon category="outlined" type="history" />}
+        {variant === "detailed" ? <SectionMarker /> : <Icon category="outlined" type="history" />}
         <h2 className={styles.title}>{title}</h2>
       </div>
       {isLoading ? (

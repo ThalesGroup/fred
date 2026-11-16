@@ -70,7 +70,7 @@
   border-radius: var(--radius-l);
   background: var(--banner-bg);
   padding: var(--spacing-l) var(--spacing-xl);
-  height: 350px;
+  height: 320px;
   overflow: hidden;
   color: var(--banner-fg);
 }
@@ -109,11 +109,13 @@
   width: 3rem;
   height: 3rem;
   color: var(--banner-accent);
+  font-size: 1.75rem;
 }
 
 .name {
   margin: 0 0 var(--spacing-2xs);
   font: var(--font-headline-small);
+  font-weight: 700;
 }
 
 .chips {

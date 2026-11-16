@@ -15,7 +15,7 @@
  */
 
 /* A diamond by default. A theme's CSS may set, on any ancestor:
- *   --home-marker-color, --home-marker-secondary-color,
+ *   --home-marker-color,
  *   --home-marker-size, --home-marker-rotate, --home-marker-radius,
  *   --home-marker-display (none hides it).
  * e.g. a dot: --home-marker-rotate: 0deg; --home-marker-radius: 50%; */
@@ -27,8 +27,4 @@
   background: var(--home-marker-color, var(--primary));
   width: var(--home-marker-size, 10px);
   height: var(--home-marker-size, 10px);
-}
-
-.marker[data-tone="secondary"] {
-  background: var(--home-marker-secondary-color, var(--tertiary));
 }

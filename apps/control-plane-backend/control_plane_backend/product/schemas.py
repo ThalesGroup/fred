@@ -26,13 +26,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from control_plane_backend.agent_instances.names import CopyLocale
 from control_plane_backend.agent_instances.suspension import SuspensionReason
-from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
 )
+from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
