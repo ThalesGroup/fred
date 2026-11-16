@@ -412,10 +412,11 @@ class FeaturedHomeAgent(BaseModel):
 
 
 class HomeShowcaseResponse(BaseModel):
-    """Platform home mode and the featured agents usable by the current user."""
+    """Platform home mode plus the featured and question agents usable by the current user."""
 
     layout: HomeLayout = "classic"
     featured: list[FeaturedHomeAgent] = Field(default_factory=list)
+    ask_agent: ManagedAgentInstanceSummary | None = None
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):

@@ -24,6 +24,7 @@ from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.platform_ui_settings.schemas import (
     AdminFeaturedAgent,
+    AdminHomeAgent,
     HomeAgentChoice,
     HomeLayout,
     PlatformHomeSettings,
@@ -102,6 +103,13 @@ def is_featurable(record: AgentInstanceRecord, default_team_ids: set[str]) -> bo
     )
 
 
+def _saved_agent_ids(stored: StoredPlatformHome) -> list[str]:
+    ids = [entry.agent_instance_id for entry in stored.featured]
+    if stored.ask_agent_instance_id is not None:
+        ids.append(stored.ask_agent_instance_id)
+    return ids
+
+
 async def _home_settings(
     deps: ProductServiceDependencies, stored: StoredPlatformHome
 ) -> PlatformHomeSettings:
@@ -110,7 +118,7 @@ async def _home_settings(
     default_ids = await teams.get_default_team_store().list_team_ids()
     per_team, saved = await asyncio.gather(
         asyncio.gather(*(agent_store.list_by_team(TeamId(t)) for t in default_ids)),
-        agent_store.get_many([entry.agent_instance_id for entry in stored.featured]),
+        agent_store.get_many(_saved_agent_ids(stored)),
     )
     defaults = set(default_ids)
     candidates = sorted(
@@ -141,9 +149,26 @@ async def _home_settings(
         for entry in stored.featured
         if (record := saved.get(entry.agent_instance_id)) is not None
     ]
+    ask_record = (
+        saved.get(stored.ask_agent_instance_id)
+        if stored.ask_agent_instance_id is not None
+        else None
+    )
+    ask_agent = (
+        AdminHomeAgent(
+            agent_instance_id=ask_record.agent_instance_id,
+            display_name=ask_record.display_name,
+            team_id=str(ask_record.team_id),
+            team_name=team_name(str(ask_record.team_id)),
+            available=is_featurable(ask_record, defaults),
+        )
+        if ask_record is not None
+        else None
+    )
     return PlatformHomeSettings(
         layout=home_layout_or_classic(stored.layout),
         featured=featured,
+        ask_agent=ask_agent,
         candidates=[
             HomeAgentChoice(
                 agent_instance_id=r.agent_instance_id,
@@ -175,8 +200,11 @@ async def set_platform_home(
     """Unknown agents are refused; unavailable ones may stay so other edits can be saved."""
     await _require_manage_platform(deps, user)
     ids = [entry.agent_instance_id for entry in request.featured]
-    found = await deps.get_agent_instance_store().get_many(ids)
-    missing = next((agent_id for agent_id in ids if agent_id not in found), None)
+    checked = ids + (
+        [request.ask_agent_instance_id] if request.ask_agent_instance_id else []
+    )
+    found = await deps.get_agent_instance_store().get_many(checked)
+    missing = next((agent_id for agent_id in checked if agent_id not in found), None)
     if missing is not None:
         raise UnknownFeaturedAgentError(missing)
     stored = await deps.get_platform_ui_settings_store().set_home(
@@ -189,6 +217,7 @@ async def set_platform_home(
             )
             for entry in request.featured
         ],
+        ask_agent_instance_id=request.ask_agent_instance_id,
         updated_by=user.uid,
     )
     emit_audit_log(
@@ -196,5 +225,6 @@ async def set_platform_home(
         actor_uid=user.uid,
         layout=request.layout,
         featured=ids,
+        ask_agent=request.ask_agent_instance_id,
     )
     return await _home_settings(deps, stored)

@@ -89,20 +89,23 @@ async def list_home_agents(
 async def get_home_showcase(
     user: KeycloakUser, deps: ProductServiceDependencies
 ) -> HomeShowcaseResponse:
-    """Home mode plus the admin-ordered featured agents this user can chat with."""
+    """Home mode plus the admin-chosen featured and question agents this user can chat with."""
     stored = await deps.get_platform_ui_settings_store().get_home()
     layout = home_layout_or_classic(stored.layout)
-    # Only the advanced home shows the carousel: skip the lookups otherwise.
-    if layout == "classic" or not stored.featured:
+    ask_id = stored.ask_agent_instance_id
+    # Only the advanced home shows these agents: skip the lookups otherwise.
+    if layout == "classic" or (not stored.featured and ask_id is None):
         return HomeShowcaseResponse(layout=layout)
+    ids = [entry.agent_instance_id for entry in stored.featured]
     usable, defaults, records = await asyncio.gather(
         _usable_team_ids(user, deps),
         deps.team_dependencies.get_default_team_store().list_team_ids(),
         deps.get_agent_instance_store().get_many(
-            [entry.agent_instance_id for entry in stored.featured]
+            ids + ([ask_id] if ask_id is not None else [])
         ),
     )
     visible = set(defaults) & set(usable)
+    ask_record = records.get(ask_id) if ask_id is not None else None
     return HomeShowcaseResponse(
         layout=layout,
         featured=[
@@ -115,4 +118,9 @@ async def get_home_showcase(
             if (record := records.get(entry.agent_instance_id)) is not None
             and is_featurable(record, visible)
         ],
+        ask_agent=(
+            _record_to_summary(ask_record)
+            if ask_record is not None and is_featurable(ask_record, visible)
+            else None
+        ),
     )

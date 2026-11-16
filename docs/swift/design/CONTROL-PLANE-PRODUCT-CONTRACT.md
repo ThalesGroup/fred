@@ -5304,7 +5304,8 @@ failed suggestions or authorization remain request errors.
 and replace the platform home: `layout` (`classic` | `advanced`, default
 `classic`) and an ordered `featured` list of at most 10 distinct agent
 instances, each with an optional `badge` (20 characters) and up to four
-`highlights` (80 characters each). An unknown agent returns 422; a disabled,
+`highlights` (80 characters each), plus an optional `ask_agent_instance_id`
+for the question field, independent of the carousel. An unknown agent returns 422; a disabled,
 suspended or no longer default-team agent may stay saved and reads back
 `available: false`. The GET also lists `candidates`: enabled, unsuspended
 agents of the platform default teams, the only ones the admin page offers.
@@ -5312,11 +5313,13 @@ Each PUT emits audit event `platform.home.updated`.
 
 `GET /control-plane/v1/me/home` returns `HomeShowcaseResponse`: the layout and,
 in order, the featured agents the caller can chat with (enabled, unsuspended,
-in a default team where the caller has `CAN_USE_TEAM_AGENTS`). `classic` skips
+in a default team where the caller has `CAN_USE_TEAM_AGENTS`) and `ask_agent`
+under the same rule (absent hides the question field). `classic` skips
 the agent lookups. A stored layout unknown to the running code reads as
-`classic`. Storage: `platform_ui_settings.home_layout` and the
-`platform_home_featured_agent` table (cascade on agent deletion). The advanced
-home sends its question to the first featured agent through router state, never
+`classic`. Storage: `platform_ui_settings.home_layout`,
+`platform_ui_settings.home_ask_agent_instance_id` (set null on agent deletion)
+and the `platform_home_featured_agent` table (cascade on agent deletion). The
+advanced home sends its question to `ask_agent` through router state, never
 the URL; the chat sends it once (`useInitialPrompt`).
 
 ## 72. Contract Notes - reusable capability preparation (2026-11-06)

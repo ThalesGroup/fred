@@ -14,7 +14,8 @@
 """add home layout and featured home agents
 
 `platform_ui_settings.home_layout` picks the home page mode ("classic" by
-default, so existing platforms keep their home page). The new
+default, so existing platforms keep their home page) and
+`home_ask_agent_instance_id` the agent behind its question field. The new
 `platform_home_featured_agent` table holds the admin-ordered carousel agents.
 
 Revision ID: e3a9c41f7b62
@@ -57,6 +58,16 @@ def upgrade() -> None:
                 server_default="classic",
             )
         )
+        batch.add_column(
+            sa.Column("home_ask_agent_instance_id", sa.String(), nullable=True)
+        )
+        batch.create_foreign_key(
+            "fk_platform_ui_settings_home_ask_agent",
+            "agent_instance",
+            ["home_ask_agent_instance_id"],
+            ["agent_instance_id"],
+            ondelete="SET NULL",
+        )
     op.create_table(
         "platform_home_featured_agent",
         sa.Column("agent_instance_id", sa.String(), nullable=False),
@@ -85,4 +96,8 @@ def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("platform_home_featured_agent")
     with op.batch_alter_table("platform_ui_settings") as batch:
+        batch.drop_constraint(
+            "fk_platform_ui_settings_home_ask_agent", type_="foreignkey"
+        )
+        batch.drop_column("home_ask_agent_instance_id")
         batch.drop_column("home_layout")

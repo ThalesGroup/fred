@@ -18,7 +18,10 @@ import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { ApplicationContext } from "../../../../../app/ApplicationContextProvider.tsx";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import type { FeaturedHomeAgent } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import type {
+  FeaturedHomeAgent,
+  ManagedAgentInstanceSummary,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import FeaturedCarousel from "../FeaturedCarousel/FeaturedCarousel.tsx";
 import HomeAskBox from "../HomeAskBox/HomeAskBox.tsx";
 import RecentAgents from "../RecentAgents/RecentAgents.tsx";
@@ -26,11 +29,13 @@ import styles from "./AdvancedQuickAccess.module.scss";
 
 interface AdvancedQuickAccessProps {
   featured: FeaturedHomeAgent[];
+  /** Agent chosen by the admin for the question field; none hides it. */
+  askAgent?: ManagedAgentInstanceSummary | null;
   firstName?: string;
 }
 
 /** "Accès rapide" tab of the advanced home: greeting, featured banner, the user's agents. */
-export default function AdvancedQuickAccess({ featured, firstName }: AdvancedQuickAccessProps) {
+export default function AdvancedQuickAccess({ featured, askAgent, firstName }: AdvancedQuickAccessProps) {
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
   const { logoName, logoNameDark, siteDisplayName } = useFrontendProperties();
@@ -59,8 +64,7 @@ export default function AdvancedQuickAccess({ featured, firstName }: AdvancedQui
         </div>
       </div>
       {featured.length > 0 && <FeaturedCarousel featured={featured} teamName={teamName} />}
-      {/* The first featured agent answers the home question. */}
-      {featured[0] && <HomeAskBox agent={featured[0].agent} />}
+      {askAgent && <HomeAskBox agent={askAgent} />}
       <RecentAgents variant="detailed" />
     </div>
   );

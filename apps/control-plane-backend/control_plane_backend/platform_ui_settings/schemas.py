@@ -84,7 +84,7 @@ Highlight = Annotated[
 
 
 class UnknownFeaturedAgentError(ValueError):
-    """A featured agent id that matches no agent instance."""
+    """A featured or question agent id that matches no agent instance."""
 
     def __init__(self, agent_instance_id: str) -> None:
         super().__init__(f"Unknown agent instance: {agent_instance_id}")
@@ -102,13 +102,18 @@ class FeaturedAgentEntry(BaseModel):
 
 
 class SetPlatformHomeRequest(BaseModel):
-    """Replaces the home mode and the whole featured list at once."""
+    """Replaces the home mode, the whole featured list and the question agent at once."""
 
     model_config = ConfigDict(extra="forbid")
 
     layout: HomeLayout = "classic"
     featured: list[FeaturedAgentEntry] = Field(
         default_factory=list, max_length=MAX_FEATURED_AGENTS
+    )
+    ask_agent_instance_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Agent of the advanced home question field; none hides the field.",
     )
 
     @model_validator(mode="after")
@@ -128,14 +133,19 @@ class HomeAgentChoice(BaseModel):
     team_name: str | None = None
 
 
-class AdminFeaturedAgent(HomeAgentChoice):
-    """A saved carousel agent; `available` is false when users cannot see it."""
+class AdminHomeAgent(HomeAgentChoice):
+    """A saved home agent; `available` is false when users cannot see it."""
 
-    badge: str | None = None
-    highlights: list[str] = Field(default_factory=list)
     available: bool = Field(
         description="False when disabled, suspended or outside the default teams: hidden from users."
     )
+
+
+class AdminFeaturedAgent(AdminHomeAgent):
+    """A saved carousel agent with its admin-written extras."""
+
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
 
 
 class PlatformHomeSettings(BaseModel):
@@ -143,6 +153,7 @@ class PlatformHomeSettings(BaseModel):
 
     layout: HomeLayout = "classic"
     featured: list[AdminFeaturedAgent] = Field(default_factory=list)
+    ask_agent: AdminHomeAgent | None = None
     candidates: list[HomeAgentChoice] = Field(
         default_factory=list,
         description="Enabled agents of the default teams, the only ones an admin can add.",

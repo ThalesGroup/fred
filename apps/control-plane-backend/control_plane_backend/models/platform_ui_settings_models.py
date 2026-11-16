@@ -49,6 +49,12 @@ class PlatformUiSettingsRow(Base):
     home_layout: Mapped[str] = mapped_column(
         String(32), nullable=False, default="classic", server_default="classic"
     )
+    # Agent the advanced home's question field talks to; none hides the field.
+    home_ask_agent_instance_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("agent_instance.agent_instance_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

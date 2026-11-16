@@ -150,6 +150,7 @@ async def test_store_defaults_to_classic_and_keeps_order_and_themes(
             StoredFeaturedAgent("c", "Nouveau", ["Résume"]),
             StoredFeaturedAgent("a", None, []),
         ],
+        ask_agent_instance_id=None,
         updated_by="x",
     )
     # Saving themes again must not reset the home mode, and vice versa.
@@ -162,7 +163,9 @@ async def test_store_defaults_to_classic_and_keeps_order_and_themes(
     assert home.featured[0].highlights == ["Résume"]
     assert themes is not None and themes.default_theme == "pebble"
 
-    await store.set_home(layout="classic", featured=[], updated_by="x")
+    await store.set_home(
+        layout="classic", featured=[], ask_agent_instance_id=None, updated_by="x"
+    )
     assert (await store.get_home()).featured == []
 
 
@@ -177,6 +180,7 @@ async def test_store_defaults_to_classic_and_keeps_order_and_themes(
         {"featured": [{"agent_instance_id": "a", "highlights": ["x" * 81]}]},
         {"featured": [{"agent_instance_id": "a", "highlights": ["  "]}]},
         {"layout": "classic", "extra": 1},
+        {"ask_agent_instance_id": ""},
     ],
 )
 def test_request_rejects_malformed_home(payload: dict) -> None:
@@ -234,14 +238,16 @@ async def test_admin_sees_candidates_and_unavailable_entries(
 @pytest.mark.asyncio
 async def test_admin_cannot_save_an_unknown_agent(engine: AsyncEngine) -> None:
     deps = _deps(engine, _Rebac())
-    with pytest.raises(UnknownFeaturedAgentError):
-        await set_platform_home(
-            user=_user(),
-            request=SetPlatformHomeRequest.model_validate(
-                {"featured": [{"agent_instance_id": "ghost"}]}
-            ),
-            deps=deps,
-        )
+    for payload in (
+        {"featured": [{"agent_instance_id": "ghost"}]},
+        {"ask_agent_instance_id": "ghost"},
+    ):
+        with pytest.raises(UnknownFeaturedAgentError):
+            await set_platform_home(
+                user=_user(),
+                request=SetPlatformHomeRequest.model_validate(payload),
+                deps=deps,
+            )
 
 
 @pytest.mark.asyncio
@@ -255,6 +261,7 @@ async def test_user_sees_only_usable_featured_agents_in_order(
             StoredFeaturedAgent(agent_id, None, [])
             for agent_id in ("c", "off", "susp", "hr", "a", "ghost")
         ],
+        ask_agent_instance_id=None,
         updated_by="x",
     )
     member = await get_home_showcase(
@@ -278,19 +285,93 @@ async def test_classic_or_unknown_layout_returns_no_carousel(
 ) -> None:
     store = PlatformUiSettingsStore(engine)
     await store.set_home(
-        layout="classic", featured=[StoredFeaturedAgent("a", None, [])], updated_by="x"
+        layout="classic",
+        featured=[StoredFeaturedAgent("a", None, [])],
+        ask_agent_instance_id="a",
+        updated_by="x",
     )
     classic = await get_home_showcase(
         _user(), _deps(engine, _Rebac(usable=[DEFAULT_TEAM]))
     )
-    assert (classic.layout, classic.featured) == ("classic", [])
+    assert (classic.layout, classic.featured, classic.ask_agent) == (
+        "classic",
+        [],
+        None,
+    )
 
     await store.set_home(
         layout="from-a-newer-release",
         featured=[StoredFeaturedAgent("a", None, [])],
+        ask_agent_instance_id=None,
         updated_by="x",
     )
     unknown = await get_home_showcase(
         _user(), _deps(engine, _Rebac(usable=[DEFAULT_TEAM]))
     )
     assert unknown.layout == "classic"
+
+
+@pytest.mark.asyncio
+async def test_question_agent_is_saved_apart_from_the_carousel(
+    engine: AsyncEngine,
+) -> None:
+    deps = _deps(engine, _Rebac())
+    saved = await set_platform_home(
+        user=_user(),
+        request=SetPlatformHomeRequest.model_validate(
+            {"layout": "advanced", "ask_agent_instance_id": "b"}
+        ),
+        deps=deps,
+    )
+    assert saved.featured == []
+    assert saved.ask_agent is not None
+    assert (saved.ask_agent.agent_instance_id, saved.ask_agent.available) == ("b", True)
+
+    hidden = await set_platform_home(
+        user=_user(),
+        request=SetPlatformHomeRequest.model_validate(
+            {"layout": "advanced", "ask_agent_instance_id": "off"}
+        ),
+        deps=deps,
+    )
+    assert hidden.ask_agent is not None and hidden.ask_agent.available is False
+
+    cleared = await set_platform_home(
+        user=_user(),
+        request=SetPlatformHomeRequest.model_validate({"layout": "advanced"}),
+        deps=deps,
+    )
+    assert cleared.ask_agent is None
+
+
+@pytest.mark.asyncio
+async def test_user_gets_the_question_agent_only_when_usable(
+    engine: AsyncEngine,
+) -> None:
+    store = PlatformUiSettingsStore(engine)
+    # No carousel: the question field still has its agent.
+    await store.set_home(
+        layout="advanced", featured=[], ask_agent_instance_id="b", updated_by="x"
+    )
+    member = await get_home_showcase(
+        _user(), _deps(engine, _Rebac(usable=[DEFAULT_TEAM]))
+    )
+    assert member.featured == []
+    assert member.ask_agent is not None and member.ask_agent.agent_instance_id == "b"
+
+    outsider = await get_home_showcase(
+        _user(), _deps(engine, _Rebac(usable=[OTHER_TEAM]))
+    )
+    assert outsider.ask_agent is None
+
+    for unusable in ("off", "susp", "hr"):
+        await store.set_home(
+            layout="advanced",
+            featured=[],
+            ask_agent_instance_id=unusable,
+            updated_by="x",
+        )
+        shown = await get_home_showcase(
+            _user(), _deps(engine, _Rebac(usable=[DEFAULT_TEAM, OTHER_TEAM]))
+        )
+        assert shown.ask_agent is None

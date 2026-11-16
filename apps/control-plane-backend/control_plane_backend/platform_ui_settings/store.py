@@ -53,6 +53,7 @@ class StoredPlatformHome:
 
     layout: str
     featured: list[StoredFeaturedAgent]
+    ask_agent_instance_id: str | None
     updated_by: str | None
     updated_at: datetime | None
 
@@ -120,7 +121,7 @@ class PlatformUiSettingsStore:
     async def get_home(
         self, *, session: AsyncSession | None = None
     ) -> StoredPlatformHome:
-        """Home mode ("classic" when never set) and featured agents in display order."""
+        """Home mode ("classic" when never set), featured agents in order and question agent."""
         async with use_session(self._sessions, session) as s:
             settings = await s.get(
                 PlatformUiSettingsRow, PLATFORM_UI_SETTINGS_SINGLETON_ID
@@ -146,6 +147,11 @@ class PlatformUiSettingsStore:
                     )
                     for row in rows
                 ],
+                ask_agent_instance_id=(
+                    settings.home_ask_agent_instance_id
+                    if settings is not None
+                    else None
+                ),
                 updated_by=settings.updated_by if settings is not None else None,
                 updated_at=settings.updated_at if settings is not None else None,
             )
@@ -155,10 +161,11 @@ class PlatformUiSettingsStore:
         *,
         layout: str,
         featured: list[StoredFeaturedAgent],
+        ask_agent_instance_id: str | None,
         updated_by: str | None,
         session: AsyncSession | None = None,
     ) -> StoredPlatformHome:
-        """Replace the home mode and the whole featured list in one transaction."""
+        """Replace the home mode, featured list and question agent in one transaction."""
         async with use_session(self._sessions, session) as s:
             settings = await s.get(
                 PlatformUiSettingsRow, PLATFORM_UI_SETTINGS_SINGLETON_ID
@@ -167,6 +174,7 @@ class PlatformUiSettingsStore:
                 settings = PlatformUiSettingsRow(id=PLATFORM_UI_SETTINGS_SINGLETON_ID)
                 s.add(settings)
             settings.home_layout = layout
+            settings.home_ask_agent_instance_id = ask_agent_instance_id
             settings.updated_by = updated_by
             settings.updated_at = utcnow()
             await s.execute(delete(PlatformHomeFeaturedAgentRow))
@@ -185,6 +193,7 @@ class PlatformUiSettingsStore:
         return StoredPlatformHome(
             layout=layout,
             featured=list(featured),
+            ask_agent_instance_id=ask_agent_instance_id,
             updated_by=updated_by,
             updated_at=updated_at,
         )

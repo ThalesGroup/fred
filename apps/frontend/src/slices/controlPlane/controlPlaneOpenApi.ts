@@ -5581,6 +5581,7 @@ export type FeaturedHomeAgent = {
 export type HomeShowcaseResponse = {
   layout?: "classic" | "advanced";
   featured?: FeaturedHomeAgent[];
+  ask_agent?: ManagedAgentInstanceSummary | null;
 };
 export type InactiveSessionItem = {
   session_id: string;
@@ -6366,8 +6367,16 @@ export type AdminFeaturedAgent = {
   display_name: string;
   team_id: string;
   team_name?: string | null;
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
   badge?: string | null;
   highlights?: string[];
+};
+export type AdminHomeAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
   /** False when disabled, suspended or outside the default teams: hidden from users. */
   available: boolean;
 };
@@ -6380,6 +6389,7 @@ export type HomeAgentChoice = {
 export type PlatformHomeSettings = {
   layout?: "classic" | "advanced";
   featured?: AdminFeaturedAgent[];
+  ask_agent?: AdminHomeAgent | null;
   /** Enabled agents of the default teams, the only ones an admin can add. */
   candidates?: HomeAgentChoice[];
   updated_by?: string | null;
@@ -6393,6 +6403,8 @@ export type FeaturedAgentEntry = {
 export type SetPlatformHomeRequest = {
   layout?: "classic" | "advanced";
   featured?: FeaturedAgentEntry[];
+  /** Agent of the advanced home question field; none hides the field. */
+  ask_agent_instance_id?: string | null;
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;

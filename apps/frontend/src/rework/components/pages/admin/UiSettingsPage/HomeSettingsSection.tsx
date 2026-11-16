@@ -71,9 +71,10 @@ function highlightLines(text: string): string[] {
     .filter(Boolean);
 }
 
-function toRequest(layout: HomeLayout, drafts: DraftAgent[]): SetPlatformHomeRequest {
+function toRequest(layout: HomeLayout, drafts: DraftAgent[], askAgent: string): SetPlatformHomeRequest {
   return {
     layout,
+    ask_agent_instance_id: askAgent || null,
     featured: drafts.map((draft) => ({
       agent_instance_id: draft.agent_instance_id,
       badge: draft.badge.trim() || null,
@@ -115,11 +116,17 @@ export default function HomeSettingsSection() {
 
   const [layout, setLayoutState] = useState<HomeLayout>("classic");
   const [drafts, setDraftsState] = useState<DraftAgent[]>([]);
+  // Agent id of the question field; "" means none, which hides the field.
+  const [askAgent, setAskAgentState] = useState("");
   // Set by any admin edit: a refetch must then refresh agent facts, not wipe the draft.
   const editing = useRef(false);
   const setLayout = (next: HomeLayout) => {
     editing.current = true;
     setLayoutState(next);
+  };
+  const setAskAgent = (next: string) => {
+    editing.current = true;
+    setAskAgentState(next);
   };
   const setDrafts: typeof setDraftsState = (next) => {
     editing.current = true;
@@ -132,6 +139,7 @@ export default function HomeSettingsSection() {
     editing.current = false;
     setLayoutState(settings.layout ?? "classic");
     setDraftsState(toDrafts(settings));
+    setAskAgentState(settings.ask_agent?.agent_instance_id ?? "");
     setServerError(undefined);
   };
   useEffect(() => {
@@ -144,11 +152,22 @@ export default function HomeSettingsSection() {
     setDraftsState((current) => current.map((draft) => withFreshAgent(draft, data)));
   }, [data]);
 
-  const request = toRequest(layout, drafts);
+  const request = toRequest(layout, drafts, askAgent);
   const dirty = useMemo(
-    () => !data || JSON.stringify(request) !== JSON.stringify(toRequest(data.layout ?? "classic", toDrafts(data))),
+    () =>
+      !data ||
+      JSON.stringify(request) !==
+        JSON.stringify(toRequest(data.layout ?? "classic", toDrafts(data), data.ask_agent?.agent_instance_id ?? "")),
     [data, request],
   );
+  // The saved agent stays listed when it is no longer a candidate, flagged as hidden.
+  const savedAsk = data?.ask_agent;
+  const askChoices = [
+    ...(savedAsk && !data?.candidates?.some((agent) => agent.agent_instance_id === savedAsk.agent_instance_id)
+      ? [{ ...savedAsk, hidden: true }]
+      : []),
+    ...(data?.candidates ?? []).map((agent) => ({ ...agent, hidden: false })),
+  ];
   const invalid = drafts.some((draft) => highlightsError(draft.highlights) !== undefined);
   const chosen = new Set(drafts.map((draft) => draft.agent_instance_id));
   const candidates = (data?.candidates ?? []).filter((agent) => !chosen.has(agent.agent_instance_id));
@@ -220,6 +239,34 @@ export default function HomeSettingsSection() {
               onSelect={() => setLayout(id)}
             />
           ))}
+        </div>
+      </div>
+
+      <div className={styles.field}>
+        <span className={styles.label}>{t("rework.uiSettings.home.askLabel")}</span>
+        <p className={styles.hint}>{t("rework.uiSettings.home.askHint")}</p>
+        <div className={styles.addSelect}>
+          <Select
+            size="small"
+            compact
+            ariaLabel={t("rework.uiSettings.home.askLabel")}
+            disabled={locked}
+            value={askAgent}
+            onChange={setAskAgent}
+            search={{
+              placeholder: t("rework.uiSettings.home.searchPlaceholder"),
+              noMatchMessage: t("rework.uiSettings.home.noMatch"),
+            }}
+            options={[
+              { key: "none", value: "", label: t("rework.uiSettings.home.askNone") },
+              ...askChoices.map((agent) => ({
+                key: agent.agent_instance_id,
+                value: agent.agent_instance_id,
+                label: agent.display_name,
+                description: agent.hidden ? t("rework.uiSettings.home.unavailable") : (agent.team_name ?? undefined),
+              })),
+            ]}
+          />
         </div>
       </div>
 

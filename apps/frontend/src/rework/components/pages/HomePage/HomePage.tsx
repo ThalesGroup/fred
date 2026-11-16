@@ -103,7 +103,9 @@ export default function HomePage() {
         {/* Empty while the mode loads, so the classic home never flashes before the advanced one. */}
         {tabIndex === 0 && homeLoading && <div className={styles.quickAccessTab} aria-busy="true" />}
 
-        {tabIndex === 0 && advanced && <AdvancedQuickAccess featured={home?.featured ?? []} firstName={firstName} />}
+        {tabIndex === 0 && advanced && (
+          <AdvancedQuickAccess featured={home?.featured ?? []} askAgent={home?.ask_agent} firstName={firstName} />
+        )}
 
         {tabIndex === 0 && !homeLoading && !advanced && (
           <div className={styles.quickAccessTab}>

@@ -34,7 +34,8 @@ vi.mock("./TopAgents/TopAgents.tsx", () => ({ default: () => null }));
 vi.mock("./TopTeams/TopTeams.tsx", () => ({ default: () => null }));
 vi.mock("./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx", () => ({ default: () => null }));
 vi.mock("./AdvancedQuickAccess/AdvancedQuickAccess.tsx", () => ({
-  default: ({ featured }: { featured: unknown[] }) => `advanced:${featured.length}`,
+  default: ({ featured, askAgent }: { featured: unknown[]; askAgent?: { display_name: string } | null }) =>
+    `advanced:${featured.length}:${askAgent?.display_name ?? "none"}`,
 }));
 const homeQuery = vi.hoisted(() => ({ current: { data: undefined as unknown, isLoading: false } }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -66,10 +67,13 @@ describe("HomePage mode", () => {
     givenName = null;
   });
 
-  it("shows the advanced quick access with the featured agents", () => {
-    homeQuery.current = { data: { layout: "advanced", featured: [{}, {}] }, isLoading: false };
+  it("shows the advanced quick access with the featured and question agents", () => {
+    homeQuery.current = {
+      data: { layout: "advanced", featured: [{}, {}], ask_agent: { display_name: "Juriste" } },
+      isLoading: false,
+    };
     const html = renderToStaticMarkup(<HomePage />);
-    expect(html).toContain("advanced:2");
+    expect(html).toContain("advanced:2:Juriste");
     expect(html).not.toContain("rework.home.subtitle");
   });
 

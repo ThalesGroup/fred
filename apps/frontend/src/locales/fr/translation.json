@@ -4420,10 +4420,13 @@
         },
         "layoutHints": {
           "classic": "Message d'accueil, recherche et agents proposés.",
-          "advanced": "Ajoute la bannière « À la une » et le champ de question à l'agent n°1. Sans agent à la une, ni bannière ni champ."
+          "advanced": "Ajoute la bannière « À la une » et un champ de question adressé à l'agent de votre choix."
         },
         "featuredLabel": "Agents à la une",
-        "featuredHint": "Agents des équipes par défaut, dans l'ordre d'affichage. {{max}} au plus. Le premier reçoit les questions posées depuis l'accueil.",
+        "featuredHint": "Agents des équipes par défaut, dans l'ordre d'affichage. {{max}} au plus. Sans agent à la une, pas de bannière.",
+        "askLabel": "Agent du champ question",
+        "askHint": "Reçoit les questions posées depuis l'accueil avancé. Sans agent, le champ est masqué.",
+        "askNone": "Aucun (champ masqué)",
         "empty": "Aucun agent à la une.",
         "unavailable": "Masqué",
         "moveUp": "Monter {{name}}",

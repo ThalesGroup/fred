@@ -4420,10 +4420,13 @@
         },
         "layoutHints": {
           "classic": "Welcome message, search and suggested agents.",
-          "advanced": "Adds the \"Featured\" banner and the question field for agent #1. With no featured agent, neither is shown."
+          "advanced": "Adds the \"Featured\" banner and a question field sent to the agent of your choice."
         },
         "featuredLabel": "Featured agents",
-        "featuredHint": "Agents of the default teams, in display order. {{max}} at most. The first one receives questions asked from the home page.",
+        "featuredHint": "Agents of the default teams, in display order. {{max}} at most. With no featured agent, no banner.",
+        "askLabel": "Question field agent",
+        "askHint": "Receives the questions asked from the advanced home. With no agent, the field is hidden.",
+        "askNone": "None (field hidden)",
         "empty": "No featured agent.",
         "unavailable": "Hidden",
         "moveUp": "Move {{name}} up",

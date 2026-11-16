@@ -65,6 +65,7 @@ const stored = () => ({
       highlights: ["Plan", "Charte"],
     },
   ],
+  ask_agent: { agent_instance_id: "old", display_name: "Ancien", team_id: "g", available: false } as unknown,
   candidates: [{ agent_instance_id: "word", display_name: "Word", team_id: "g" }],
 });
 
@@ -118,6 +119,7 @@ describe("HomeSettingsSection", () => {
     expect(h.save).toHaveBeenCalledWith({
       setPlatformHomeRequest: {
         layout: "classic",
+        ask_agent_instance_id: "old",
         featured: [
           { agent_instance_id: "ppt", badge: null, highlights: ["Plan", "Charte"] },
           { agent_instance_id: "gen", badge: "Populaire", highlights: ["Résume", "Traduit"] },
@@ -135,6 +137,7 @@ describe("HomeSettingsSection", () => {
     expect(h.save).toHaveBeenCalledWith({
       setPlatformHomeRequest: {
         layout: "advanced",
+        ask_agent_instance_id: "old",
         featured: [{ agent_instance_id: "ppt", badge: "Nouveau", highlights: ["Plan", "Charte"] }],
       },
     });
@@ -159,5 +162,20 @@ describe("HomeSettingsSection", () => {
     expect(items().map((li) => li.textContent?.includes("PowerPoint"))).toEqual([true, false]);
     expect(items().map((li) => li.getAttribute("data-available"))).toEqual(["true", "false"]);
     expect(saveButton().disabled).toBe(false);
+  });
+
+  it("keeps a hidden question agent listed and saves another choice", async () => {
+    const select = button("rework.uiSettings.home.askLabel");
+    expect(select.textContent).toContain("Ancien");
+    act(() => select.click());
+    const option = Array.from(document.body.querySelectorAll('[role="option"]')).find((el) =>
+      el.textContent?.includes("Word"),
+    ) as HTMLElement;
+    expect(document.body.textContent).toContain("rework.uiSettings.home.unavailable");
+    act(() => option.click());
+    await act(async () => saveButton().click());
+    expect(h.save).toHaveBeenCalledWith({
+      setPlatformHomeRequest: expect.objectContaining({ ask_agent_instance_id: "word" }),
+    });
   });
 });
