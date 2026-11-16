@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Fred · Rapport de benchmark</title>
+<style>
+:root{color-scheme:light;--ink:#142b3d;--muted:#536779;--line:#d9e2e8;--blue:#2454c4;--green:#14745b;--bg:#f2f5f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}main{max-width:1360px;margin:auto;padding:36px 32px 56px}header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:24px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--blue)}h1{font-size:34px;letter-spacing:-.04em;margin:8px 0}h2{font-size:19px;margin:0 0 12px}h3{font-size:16px;margin:0}p{margin:8px 0}.muted,.note{color:var(--muted)}.note{font-size:13px}.warning{background:#fff5df;border-left:4px solid #a16800;padding:12px 16px;margin:16px 0}.controls{display:flex;flex-wrap:wrap;gap:16px;margin:22px 0}.control{display:grid;gap:6px;font-size:13px;font-weight:650}select,button{font:inherit;color:var(--ink);border:1px solid #aabcc8;border-radius:6px;background:white;padding:9px 12px}select{min-width:175px}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}:focus-visible{outline:3px solid #c46515;outline-offset:3px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin:20px 0}.card,.panel{background:white;border:1px solid var(--line);border-radius:10px;padding:20px}.card-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.badge{font-size:12px;padding:3px 9px;border-radius:20px;background:#eef2f5;white-space:nowrap}.ok{background:#e5f4ed;color:#166247}.bad{background:#fff0df;color:#854600}.stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0 8px}.stat strong{display:block;font-size:25px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}.stat span{font-size:12px;color:var(--muted)}.metric-row{border-top:1px solid var(--line);padding-top:12px;margin-top:12px;font-variant-numeric:tabular-nums}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}.charts.single{grid-template-columns:1fr}.chart svg{width:100%;height:auto;display:block;min-height:220px}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:10px}.legend span::before{content:"";display:inline-block;width:12px;height:4px;vertical-align:middle;margin-right:6px;background:var(--color)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}th{font-weight:600;color:var(--muted);background:#f5f7fa}th,td{padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}td:last-child{white-space:normal;min-width:170px}td{font-variant-numeric:tabular-nums}.pagination{display:flex;align-items:center;gap:12px;margin-top:16px}.pagination span{margin-right:auto}footer{font-size:12px;color:var(--muted);margin-top:24px}noscript{display:block;padding:24px;background:#fff5df}[hidden]{display:none!important}@media(max-width:760px){main{padding:20px 14px}h1{font-size:28px}.charts{grid-template-columns:1fr}.control,select{width:100%}.stats{gap:8px}.panel{padding:15px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="eyebrow">FRED / MESURES DE CAMPAGNE</div><h1>Conversations sous charge</h1><p class="muted">Comparer Swift et Weaver, du premier texte à la fermeture du flux.</p><p class="note">Rapport local autonome · Aucun accès réseau · Mesures du client et modèle simulé</p></header>
+<noscript>Activez JavaScript pour explorer les résultats intégrés à ce fichier. Aucune connexion réseau n'est nécessaire.</noscript>
+<div id="warnings" role="status"></div>
+<section aria-label="Filtres" class="controls">
+<label class="control">Exécution<select id="run"><option value="all">Toutes les exécutions</option></select></label>
+<label class="control">Concurrence<select id="level"><option value="all">Tous les paliers</option></select></label>
+<label class="control">Tour de conversation<select id="phase"><option value="all">Tous les tours</option><option value="first">Premier tour</option><option value="following">Tours suivants</option></select></label>
+<label class="control">Latence observée<select id="metric"><option value="execution_first_text">Exécution → premier texte</option><option value="execution_final">Exécution → réponse finale</option><option value="execution_eof">Exécution → fermeture du flux</option><option value="total_final">Total → réponse finale</option><option value="total_eof">Total → fermeture du flux</option><option value="preparation">Préparation Weaver</option></select></label>
+</section>
+<p class="note" id="metric-help"></p>
+<section id="cards" class="cards" aria-label="Bilan par exécution" aria-live="polite"></section>
+<div class="charts" id="charts">
+<section class="panel"><h2>Latence par tour</h2><p class="note">Médiane des conversations pour chaque numéro de tour. Tours réussis uniquement.</p><div class="chart" id="turn-chart"></div></section>
+<section class="panel" id="level-panel"><h2>Latence par concurrence</h2><p class="note">Médiane de tous les échantillons du palier. Les filtres de tour s'appliquent.</p><div class="chart" id="level-chart"></div></section>
+</div>
+<section class="panel"><h2>Détail des tours</h2><p class="note">Les latences absentes et les tours en erreur ne sont pas remplacés par zéro. Les identifiants et textes privés ne sont pas inclus.</p><div class="table-wrap"><table><thead><tr><th scope="col">Exécution</th><th scope="col">Palier</th><th scope="col">Client</th><th scope="col">Tour</th><th scope="col">Résultat</th><th scope="col">Contexte</th><th scope="col" id="metric-heading">Latence</th><th scope="col">Erreur</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pagination"><span id="page-status" aria-live="polite"></span><button id="previous" type="button">Précédent</button><button id="next" type="button">Suivant</button></div></section>
+<footer>Source : enregistrements canoniques fred.bench.scenario.v1. Versions déployées, machines, configuration du modèle et liens de conversation non renseignés par ce format. Aucune métadonnée déduite du checkout. Les percentiles décrivent les échantillons disponibles ; ils ne démontrent pas une capacité de production.</footer>
+</main>
+<script>
+'use strict';
+const runs = {{.}};
+const $ = id => document.getElementById(id);
+const colors = ['#2454c4','#14745b','#9357ad','#b45b16','#426a81','#a33858'];
+const statusNames = {OK:'Complet',DEGRADED:'Dégradé',FAILED:'Échec',incomplete:'Incomplet'};
+const outcomeNames = {success:'Réussi',error:'Erreur'};
+const integrityNames = {passed:'Vérifié',failed:'Échec',not_observed:'Non vérifié'};
+const metricHelp = {
+ execution_first_text:'Temps depuis le début de l’exécution jusqu’au premier texte : comparable entre cibles, hors préparation Weaver.',
+ execution_final:'Temps depuis le début de l’exécution jusqu’à la réponse finale : hors préparation Weaver.',
+ execution_eof:'Temps depuis le début de l’exécution jusqu’à la fermeture du flux : inclut la fin du transport, hors préparation Weaver.',
+ total_final:'Temps depuis le début du tour jusqu’à la réponse finale : inclut la préparation par tour de Weaver. Les parcours Swift et Weaver diffèrent.',
+ total_eof:'Temps depuis le début du tour jusqu’à la fermeture du flux : inclut la préparation par tour de Weaver. Les parcours Swift et Weaver diffèrent.',
+ preparation:'Préparation par tour Weaver uniquement. Swift effectue son précontrôle hors de la fenêtre mesurée : aucune mesure de préparation par tour.'
+};
+let page = 0;
+const pageSize = 50;
+const number = n => new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1}).format(n);
+const ms = n => n == null ? 'Non mesuré' : number(n)+' ms';
+function element(tag,text,className) { const node=document.createElement(tag); if(text!=null) node.textContent=text; if(className) node.className=className; return node; }
+function option(parent,value,label) { const node=element('option',label); node.value=value; parent.append(node); }
+runs.forEach((run,i)=>option($('run'),i,run.label));
+const levels=[...new Set(runs.flatMap(r=>r.steps.map(s=>s.concurrency)))].sort((a,b)=>a-b);
+levels.forEach(n=>option($('level'),n,n+' conversation'+(n>1?'s':'')));
+function selectedRuns() { return runs.map((r,i)=>({r,i})).filter(({i})=>$('run').value==='all'||String(i)===$('run').value); }
+function selectedSteps(run) { return run.steps.filter(s=>$('level').value==='all'||String(s.concurrency)===$('level').value); }
+function selectedTurns(run) {
+ const steps=new Set(selectedSteps(run).map(s=>s.step));
+ return run.turns.filter(t=>steps.has(t.step)&&($('phase').value==='all'||t.first===($('phase').value==='first')));
+}
+function samples(turns) { return turns.filter(t=>t.outcome==='success').map(t=>t.metrics[$('metric').value]).filter(v=>v!=null); }
+function summary(values) {
+ if(!values.length) return {count:0,p50:null,p95:null,max:null};
+ const v=[...values].sort((a,b)=>a-b);
+ return {count:v.length,p50:v[Math.ceil(v.length*.50)-1],p95:v[Math.ceil(v.length*.95)-1],max:v[v.length-1]};
+}
+function stat(parent,value,label) { const node=element('div',null,'stat');node.append(element('strong',value),element('span',label));parent.append(node); }
+function showCards() {
+ $('cards').replaceChildren();
+ selectedRuns().forEach(({r,i})=>{
+  const steps=selectedSteps(r), turns=selectedTurns(r), sum=summary(samples(turns));
+  const card=element('article',null,'card'), head=element('div',null,'card-head');
+  const title=element('h3',r.label);title.style.color=colors[i%colors.length];
+  head.append(title,element('span',statusNames[r.status],'badge '+(r.status==='OK'?'ok':'bad')));card.append(head);
+  card.append(element('p','Campagne '+r.campaign,'note'));
+  card.append(element('p',(r.identity==='shared'?'Identité partagée':'Identités distinctes')+' · Profil '+(r.profile==='absent'?'inconnu':r.profile),'note'));
+  let planned=steps.reduce((n,s)=>n+s.planned,0);
+  if($('phase').value==='first') planned=steps.reduce((n,s)=>n+s.concurrency,0);
+  if($('phase').value==='following') planned-=steps.reduce((n,s)=>n+s.concurrency,0);
+  const good=turns.filter(t=>t.outcome==='success').length, failed=turns.filter(t=>t.outcome==='error').length;
+  const stats=element('div',null,'stats');
+  stat(stats,good+' / '+planned,'Tours réussis / prévus');stat(stats,String(failed),'Tours en erreur');
+  const verified=steps.reduce((n,s)=>n+s.historyVerified,0), expected=steps.reduce((n,s)=>n+s.concurrency,0);
+  stat(stats,verified+' / '+expected,'Historiques vérifiés (palier entier)');
+  const duration=steps.length&&steps.every(s=>s.duration!=null)?steps.reduce((n,s)=>n+s.duration,0):null;
+  stat(stats,duration==null?'Non mesurée':number(duration/1000)+' s','Durée de charge (palier entier)');card.append(stats);
+  card.append(element('p',turns.length+' tours observés · '+Math.max(0,planned-turns.length)+' sans résultat','note'));
+  const issues=steps.reduce((n,s)=>n+s.historyErrors+s.historyUnsupported+s.cleanupErrors,0);
+  if(issues||r.authErrors||r.error) card.append(element('p','Vérification / nettoyage : '+issues+' anomalie(s) · Authentification : '+r.authErrors+' erreur(s)'+(r.error?' · '+r.error:''),'warning'));
+  card.append(element('p','N = '+sum.count+' · Médiane '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'metric-row'));
+  card.append(element('p','Statut et authentification : exécution entière. Cartes de tours et latences : filtres actifs.','note'));
+  if(r.warning) card.append(element('p',r.warning,'warning'));
+  $('cards').append(card);
+ });
+}
+function svgNode(tag,attrs,text) {const n=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));if(text!=null)n.textContent=text;return n;}
+function chart(container,byLevel) {
+ container.replaceChildren();
+ const series=selectedRuns().flatMap(({r,i})=>{
+  const turns=selectedTurns(r), steps=selectedSteps(r);
+  if(byLevel) return [{label:r.label,color:colors[i%colors.length],points:steps.map(s=>({x:s.concurrency,y:summary(samples(turns.filter(t=>t.step===s.step))).p50}))}];
+  return steps.map(s=>({label:r.label+' · '+s.concurrency+' conv. (palier '+s.step+')',color:colors[i%colors.length],points:[...new Set(turns.filter(t=>t.step===s.step).map(t=>t.turn))].sort((a,b)=>a-b).map(n=>({x:n,y:summary(samples(turns.filter(t=>t.step===s.step&&t.turn===n))).p50}))}));
+ });
+ const measured=series.flatMap(s=>s.points).filter(p=>p.y!=null);
+ if(!measured.length) {container.append(element('p','Non mesuré pour cette sélection.','muted'));return;}
+ const xs=[...new Set(series.flatMap(s=>s.points.map(p=>p.x)))].sort((a,b)=>a-b), max=measured.reduce((m,p)=>Math.max(m,p.y),1)*1.1;
+ const width=600,height=290,left=66,right=18,top=22,bottom=48;
+ const x=n=>left+(xs.length===1?.5:xs.indexOf(n)/(xs.length-1))*(width-left-right),y=n=>height-bottom-n/max*(height-top-bottom);
+ const svg=svgNode('svg',{viewBox:'0 0 '+width+' '+height,role:'img','aria-label':byLevel?'Latence médiane en millisecondes par concurrence':'Latence médiane en millisecondes par numéro de tour'});
+ svg.append(svgNode('title',{},byLevel?'Latence par concurrence':'Latence par tour'));
+ for(let n=0;n<=4;n++){const v=max*n/4;svg.append(svgNode('line',{x1:left,x2:width-right,y1:y(v),y2:y(v),stroke:'#e0e6ec'}),svgNode('text',{x:left-8,y:y(v)+4,'text-anchor':'end',fill:'#536779','font-size':11},number(v)));}
+ xs.filter((_,i)=>xs.length<12||i%Math.ceil(xs.length/10)===0||i===xs.length-1).forEach(n=>svg.append(svgNode('text',{x:x(n),y:height-bottom+22,'text-anchor':'middle',fill:'#536779','font-size':12},n)));
+ svg.append(svgNode('text',{x:left,y:12,fill:'#536779','font-size':11},'ms'),svgNode('text',{x:width/2,y:height-6,'text-anchor':'middle',fill:'#536779','font-size':12},byLevel?'Conversations simultanées':'Numéro du tour'));
+ let drawn=0;
+ series.forEach((s,i)=>{
+  let last=null;
+  s.points.forEach(p=>{
+   if(p.y==null){last=null;return;}
+   // At most 2000 plotted points; exact aggregates and detail table are retained.
+   if(drawn>=2000)return;drawn++;
+   if(last)svg.append(svgNode('line',{x1:x(last.x),y1:y(last.y),x2:x(p.x),y2:y(p.y),stroke:s.color,'stroke-width':1.5,'stroke-dasharray':i%2?'4 3':'none'}));
+   const dot=svgNode('circle',{cx:x(p.x),cy:y(p.y),r:3,fill:s.color});dot.append(svgNode('title',{},s.label+' · '+p.x+' : '+ms(p.y)));svg.append(dot);last=p;
+  });
+ });
+ container.append(svg);
+ const legend=element('div',null,'legend');series.slice(0,16).forEach(s=>{const label=element('span',s.label);label.style.setProperty('--color',s.color);legend.append(label);});container.append(legend);
+ if(series.length>16||measured.length>2000)container.append(element('p','Affichage limité à 2 000 points et 16 légendes. Utilisez les filtres ; les agrégats et le tableau restent complets.','note'));
+}
+function showTable() {
+ const all=selectedRuns().flatMap(({r})=>selectedTurns(r).map(t=>({r,t})));
+ page=Math.max(0,Math.min(page,Math.ceil(all.length/pageSize)-1));
+ $('rows').replaceChildren();
+ all.slice(page*pageSize,(page+1)*pageSize).forEach(({r,t})=>{
+  const tr=element('tr');
+  [r.label,r.steps[t.step-1].concurrency+' (n° '+t.step+')',t.client,t.turn,outcomeNames[t.outcome],integrityNames[t.integrity],ms(t.metrics[$('metric').value]),t.error||'—'].forEach(v=>tr.append(element('td',String(v))));
+  $('rows').append(tr);
+ });
+ $('metric-heading').textContent=$('metric').selectedOptions[0].textContent+' (ms)';
+ $('page-status').textContent=all.length?((page*pageSize+1)+'–'+Math.min((page+1)*pageSize,all.length)+' sur '+all.length+' tours'):'Aucun tour observé pour cette sélection';
+ $('previous').disabled=page===0;$('next').disabled=(page+1)*pageSize>=all.length;
+}
+function render() {
+ const chosen=selectedRuns().map(({r})=>r);
+ const warnings=[];
+ if(chosen.some(r=>r.profile==='absent'))warnings.push('Profil absent : la comparabilité ne peut pas être établie pour une exécution incomplète.');
+ if(new Set(chosen.map(r=>r.profile)).size>1||new Set(chosen.map(r=>r.identity)).size>1)warnings.push('Profils ou modes d’identité différents : comparaison à interpréter avec précaution.');
+ $('warnings').replaceChildren(...warnings.map(w=>element('p',w,'warning')));
+ $('metric-help').textContent=metricHelp[$('metric').value]+' N désigne le nombre de tours réussis avec cette mesure. P95 : 95 % des échantillons sont inférieurs ou égaux à cette valeur.';
+ showCards();chart($('turn-chart'),false);
+ const multi=new Set(chosen.flatMap(r=>selectedSteps(r).map(s=>s.concurrency))).size>1;
+ $('level-panel').hidden=!multi;$('charts').classList.toggle('single',!multi);if(multi)chart($('level-chart'),true);
+ showTable();
+}
+['run','level','phase','metric'].forEach(id=>$(id).addEventListener('change',()=>{page=0;render();}));
+$('previous').addEventListener('click',()=>{page--;showTable();});$('next').addEventListener('click',()=>{page++;showTable();});render();
+</script>
+</body>
+</html>

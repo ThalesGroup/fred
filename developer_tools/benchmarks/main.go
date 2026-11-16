@@ -71,6 +71,9 @@ type config struct {
 func main() { os.Exit(run()) }
 
 func run() int {
+	if len(os.Args) > 1 && os.Args[1] == "report" {
+		return runHTMLReportCLI(os.Args[2:])
+	}
 	cfg := parseFlags()
 	if cfg.PrepareOnly {
 		return runTermsCLI(cfg)

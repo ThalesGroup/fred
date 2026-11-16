@@ -31,6 +31,11 @@ run: check-go ## Run the benchmark (use ARGS='...')
 tidy: check-go ## Sync go.mod/go.sum
 	$(GO) mod tidy
 
+.PHONY: report
+report: check-go ## Generate an offline HTML report: make report DIR=results [OUTPUT=report.html]
+	@test -n "$(DIR)" || { echo 'DIR is required'; exit 1; }
+	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) report -input "$(DIR)" $(if $(OUTPUT),-output "$(OUTPUT)",)
+
 ##@ Container
 
 .PHONY: docker-build

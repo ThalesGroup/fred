@@ -11,6 +11,65 @@ The client does not provision Keycloak accounts, start the mock or deploy anythi
 The examples below describe available commands; they are not recorded load runs.
 Validation uses local `httptest` servers and doubles only.
 
+## Offline interactive HTML report
+
+After each campaign, generate one standalone HTML file from the existing results:
+
+```bash
+cd developer_tools/benchmarks
+make report DIR=/path/to/results
+# Equivalent; Go 1.24.0 must already be installed/cached for offline use:
+GOTOOLCHAIN=go1.24.0 GOPROXY=off go run . report -input /path/to/results
+# Keep an earlier report and choose another output:
+make report DIR=/path/to/results OUTPUT=/path/to/results/report-2.html
+```
+
+Open `report.html` directly in a browser. No server, CDN, library, fetch or network
+resource is required; JavaScript must be enabled. `make report` defaults to the
+Go 1.24.0 toolchain while respecting an explicit `GOTOOLCHAIN` override. It does
+not change the existing build/run targets. The `report` subcommand dispatches
+before benchmark flags, credentials or runtime initialization, and never starts
+load or contacts Fred. Toolchain/dependencies must be installed beforehand;
+set `GOPROXY=off` to forbid dependency downloads during the command.
+
+The input is a flat directory of canonical conversation scenario JSONL files:
+first record `kind=run`, `schema_version=fred.bench.scenario.v1`, followed by
+`fred.bench.scenario.turn.v1` turns and optional step/final records. Each campaign
+must appear once. Several targets, runs and concurrency levels may share the
+directory. Identity preparation JSONL is recognized by its record kinds and
+terminal `fred.bench.preparation.v1` schema and ignored, regardless of filename.
+Other JSONL formats, mixed campaigns, duplicate turns and unsupported legacy
+formats fail explicitly. JSON, receipts, API captures and private configuration
+files are not read. A malformed scenario line preserves the preceding observations
+and marks the report incomplete; a missing final summary never becomes successful.
+An inconsistent summary is marked incomplete; observed history records establish
+history counts. Input files are never changed. The output must be a new `.html`
+file, created with mode `0600`; existing files and links are never overwritten.
+Remove a generated report deliberately or choose another `-output` to regenerate.
+
+The French interface compares runs, filters concurrency and first/following turns,
+shows median/P95/max with sample counts, and paginates the turn/error table.
+Execution latencies start at execution; total latencies also include Weaver's
+per-turn preparation, which Swift does not perform. Only successful turns with
+observed timestamps contribute to latency statistics. N=0 means **not measured**,
+never zero latency. Duration and history cover whole selected levels, even when
+filtering first/following turns; run status and authentication cover the whole run.
+Per-turn charts show medians across clients; per-concurrency charts show medians
+across the selected turns. Graphs display at most 2,000 points and 16 legend items,
+with an explicit notice; summaries and the 50-row paginated table retain all data.
+
+Bounds are 128 MiB of JSONL, 2 MiB per record, 64 runs and 100,000 turns. This covers
+campaigns such as 500 conversations with 10 turns without unbounded DOM growth.
+Profiles and identity modes that differ produce a comparability warning; an
+interrupted run's profile is unknown because the current header does not record it.
+Deployed versions, machines and model configuration are not inferred from the
+checkout. Only canonical campaign IDs (32 hexadecimal characters), bounded error
+categories, enums, counts and timings enter the report. Identities, conversation
+IDs, prompts, arbitrary error strings and unknown fields are omitted. JSON is
+escaped through `html/template` in JavaScript context. No conversation link is
+invented from pseudonymous identifiers. This report describes client observations,
+not production capacity or server admission time.
+
 ## Reproduce the local setup from Git
 
 The deployment and setup entry point is the factory's
@@ -471,6 +530,7 @@ the shared SSE categories (`http_status`, etc.). No upstream error text is expor
 - `sse_bench.go`: reusable HTTP/SSE framing and completion handling, plus the
   shared SDK runtime event decoder used by Swift and Weaver.
 - `reports.go`: aggregate compatibility and explicit raw export.
+- `report_html.go`, `report.html.tmpl`: offline scenario projection and self-contained interactive report.
 - `auth.go`: private factory input, bounded login and per-identity refresh.
 - `scenario.go`, `scenario_reports.go`: opt-in levels using the common engine,
   post-window checks, progressive private records and phase summaries.
