@@ -111,6 +111,7 @@ func (a *benchmarkIdentity) exchange(ctx context.Context, values url.Values, ope
 		return p, benchmarkError("invalid_issuer")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	injectTurnTrace(req)
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return p, safeAuthError(err)

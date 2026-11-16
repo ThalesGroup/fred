@@ -40,7 +40,7 @@ directory. Identity preparation JSONL is recognized by its record kinds and
 terminal `fred.bench.preparation.v1` schema and ignored, regardless of filename.
 Other JSONL formats, mixed campaigns, duplicate turns and unsupported legacy
 formats fail explicitly. JSON, receipts, API captures and private configuration
-files are not read. A malformed scenario line preserves the preceding observations
+files are not read, except the optional explicit OTLP input below. A malformed scenario line preserves the preceding observations
 and marks the report incomplete; a missing final summary never becomes successful.
 An inconsistent summary is marked incomplete; observed history records establish
 history counts. Input files are never changed. The output must be a new `.html`
@@ -63,12 +63,281 @@ campaigns such as 500 conversations with 10 turns without unbounded DOM growth.
 Profiles and identity modes that differ produce a comparability warning; an
 interrupted run's profile is unknown because the current header does not record it.
 Deployed versions, machines and model configuration are not inferred from the
-checkout. Only canonical campaign IDs (32 hexadecimal characters), bounded error
+checkout. Only canonical campaign/trace/span IDs, bounded error
 categories, enums, counts and timings enter the report. Identities, conversation
 IDs, prompts, arbitrary error strings and unknown fields are omitted. JSON is
 escaped through `html/template` in JavaScript context. No conversation link is
-invented from pseudonymous identifiers. This report describes client observations,
-not production capacity or server admission time.
+invented from pseudonymous identifiers. This report distinguishes client observations and imported server spans; neither
+establishes production capacity. Client timing is not server admission time.
+
+### Local collection: one turn, then a campaign
+
+These are **operator-run commands**, not a record of a Fred run. Use an already
+configured local Weaver installation, its existing credentials/space/instance,
+and the configured `reference` mock profile described below. This recipe neither
+creates identities nor configures agents/models. Prerequisites: Docker on Linux,
+Go 1.24.0 and Go dependencies cached, and dependencies for the normal service
+startup commands. No Langfuse installation is required.
+
+From the checkout, prepare a fresh private destination and start collection:
+
+```bash
+cd developer_tools/benchmarks
+umask 077
+export RESULTS="$(mktemp -d "${TMPDIR:-/tmp}/fred-traced-run.XXXXXX")"
+make traces-start TRACE_DIR="$RESULTS"
+```
+
+In the two service terminals, apply the following environment to their normal
+startup commands, preserving the installation's existing configuration/secrets.
+These commands are supplied for a future operator restart; report generation
+never starts or reconfigures Fred. Normal application startup prerequisites
+(including schema preparation) still apply.
+
+```bash
+# Terminal 1, from the checkout root:
+FRED_OTEL_ENABLED=true OTEL_SERVICE_NAME=control-plane \
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces \
+  make -C apps/control-plane run
+# Terminal 2, from the checkout root:
+FRED_OTEL_ENABLED=true OTEL_SERVICE_NAME=fred-agents \
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces \
+  make -C apps/fred-agents run
+```
+
+Back in the benchmark terminal, set `WEAVER_ORIGIN`, `WEAVER_SPACE`,
+`WEAVER_INSTANCE` and `CREDENTIAL_FILE` to the existing local setup's values.
+The public origin must already route both services. Check a single turn first;
+only continue with the campaign if it succeeded:
+
+```bash
+: "${WEAVER_ORIGIN:?}" "${WEAVER_SPACE:?}" "${WEAVER_INSTANCE:?}" "${CREDENTIAL_FILE:?}"
+GOTOOLCHAIN=go1.24.0 make run ARGS="-scenario=conversation -target=weaver -protocol=sse \
+  -fred-origin=$WEAVER_ORIGIN -space-id=$WEAVER_SPACE \
+  -agent-instance-id=$WEAVER_INSTANCE -credential-file=$CREDENTIAL_FILE \
+  -concurrency-steps=1 -requests-per-client=1 -trace-turns \
+  -mock-profile=reference -delete-session=false \
+  -raw-report=$RESULTS/weaver-one-turn.jsonl"
+# Then a distinct ten-turn campaign, using the same trace destination:
+GOTOOLCHAIN=go1.24.0 make run ARGS="-scenario=conversation -target=weaver -protocol=sse \
+  -fred-origin=$WEAVER_ORIGIN -space-id=$WEAVER_SPACE \
+  -agent-instance-id=$WEAVER_INSTANCE -credential-file=$CREDENTIAL_FILE \
+  -concurrency-steps=1 -requests-per-client=10 -trace-turns \
+  -mock-profile=reference -delete-session=false \
+  -raw-report=$RESULTS/weaver-campaign.jsonl"
+```
+
+After the campaign, let the producers finish exporting **before** stopping the
+Collector. Gracefully stop those operator-started services and wait for their
+shutdown/SDK drain to finish. A one-second scheduled batch interval alone is not
+a flush acknowledgement; unavailable destinations and full queues can lose spans.
+Python shutdown has a 30-second join bound; Rust has a five-second shutdown wait.
+Only then close/retrieve the file and generate the report:
+
+```bash
+make traces-flush TRACE_DIR="$RESULTS"  # graceful Collector stop, not an SDK flush
+make traces-retrieve TRACE_DIR="$RESULTS"
+GOPROXY=off make report DIR="$RESULTS"
+xdg-open "$RESULTS/report.html"
+```
+
+Expected: two separate runs (one and ten turns), client observations and, for
+instrumented successful exports, matching server spans. Use **Explorer** to inspect
+parent links and overlapping timings, then filter runs to compare component
+coverage. Missing spans remain missing; inspect producer/Collector errors rather
+than interpreting them as zero cost. Langfuse real ingestion and Fred/k3d journeys
+require their own operator validation; synthetic integration proves neither.
+
+No special engine or concurrency policy is introduced. Remove `-trace-turns`
+for the existing measurement behavior. With this opt-in, each attempted execution
+gets a fresh W3C trace ID and root span ID **before** token refresh; they are
+optional `trace_id`/`span_id` fields on `fred.bench.scenario.turn.v1`. Requests
+inside the turn carry `traceparent: 00-<trace_id>-<span_id>-01`, without baggage.
+The root is an observation from existing client timestamps, not an exported OTel
+span; the Go client neither installs an SDK nor exports telemetry. Initial login,
+session opening, preflight, post-history and cleanup stay outside this correlation.
+Refresh performed by a turn is measured separately; waiting for another refresh
+is included in total turn latency, not in the individual Keycloak exchange.
+
+Instrumentation must preserve these IDs to correlate server spans. Tracing is
+opt-in and its overhead belongs to the run: compare targets with the same choice.
+The Go flag cannot instrument an unchanged Swift deployment. Swift's existing
+client phases remain comparable where their definitions match Weaver; server
+coverage is not equivalent unless that Swift deployment actually exports the
+same boundaries. Historical runs retain their client metrics with no invented
+LLM, MCP or Control Plane timings.
+
+### Future k3d collection (separate operator rollout)
+
+The local recipe binds the Collector to the developer host's loopback. In a pod,
+`127.0.0.1` means that pod, not the developer host: the local URL above is not a
+k3d endpoint. A future rollout needs an explicitly reachable Collector service
+and networking configuration through the normal deployment workflow. Supply
+`FRED_OTEL_ENABLED`, `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+through `applications.fred-agents.extraEnvVars` and
+`applications.control-plane-backend.extraEnvVars`; preserve their existing `env`
+lists (including `CONFIG_FILE`). This guide does not deploy or validate that setup.
+
+### Collector configuration and optional Langfuse
+
+The local collection recipe uses Docker on Linux with host networking and a
+loopback-only OTLP/HTTP receiver. It pins **Collector contrib 0.165.0 and its image
+digest** in [otel-collector.sh](otel-collector.sh); no Collector installation,
+sudo, SQL, Fred restart or cluster action is performed by these commands.
+Docker access and Python 3 are required. Choose a fresh directory owned by your
+user with mode `0700`; the file is created as `0600` and the container runs as
+your UID/GID. Ports are checked before startup (`FRED_OTEL_PORT`, default `4318`).
+The container is temporary, has no restart policy, and only mounts the config
+read-only and the private output directory for writing.
+
+```bash
+# Run from developer_tools/benchmarks, before an authorized instrumented run:
+export TRACE_DIR="$HOME/.local/share/fred/traces-$(date +%Y%m%d-%H%M%S)"
+make traces-start TRACE_DIR="$TRACE_DIR"
+# Point the concerned producers to http://127.0.0.1:4318/v1/traces.
+# After the run: flush the PRODUCER SDKs first (or gracefully stop those producers).
+make traces-flush TRACE_DIR="$TRACE_DIR"
+# traces-flush is a graceful Collector STOP: it drains batches and closes the file.
+# traces-stop is equivalent; neither command flushes a still-running upstream SDK.
+make traces-retrieve TRACE_DIR="$TRACE_DIR"
+# Optional exclusive copy; refuses to overwrite COPY_TO:
+make traces-retrieve TRACE_DIR="$TRACE_DIR" TRACE_OUTPUT=/private/COPY_TO.otlp.jsonl
+make report DIR=/private/scenario-results TRACES="$TRACE_DIR/traces.otlp.jsonl" \
+  OUTPUT=/private/scenario-results/report-with-traces.html
+```
+
+The file has a 1 s batch delay and 1 s buffered-write interval. Waiting alone is
+not a completion guarantee: close the producers' SDK queues, then stop the
+Collector. Shutdown is capped at 15 s; a forced stop returns failure and does not
+claim complete delivery. File-only collection works without Langfuse credentials.
+A new collection requires a new output directory. Retrieval is refused while
+this recipe's Collector is running. `make report` never starts collection.
+
+To add Langfuse, set these **before** `traces-start`; the optional
+[overlay](otel-collector-langfuse.yaml) is then merged with the same receiver:
+
+```bash
+export FRED_LANGFUSE_OTLP_ENDPOINT='https://YOUR_LANGFUSE/api/public/otel/v1/traces'
+# Supply the complete Basic header from your secret manager; do not paste keys in history.
+export FRED_LANGFUSE_AUTHORIZATION  # value: Basic base64(public-key:secret-key)
+make traces-start TRACE_DIR="$TRACE_DIR"
+```
+
+This forwards the original spans over HTTP/protobuf; trace IDs, span IDs and
+parents remain identical. The Collector copies data for the mutating file branch,
+so Langfuse retains native observation type, model, usage, cost and permitted
+metadata. No Langfuse SDK/provider is installed in the Collector. This is OTLP
+compatibility, not validation against a real Langfuse deployment. The endpoint
+above is the native v3-compatible path (self-hosted Langfuse >= 3.22); a deployment
+using Langfuse v4 realtime ingestion additionally needs its documented
+`x-langfuse-ingestion-version: 4` header in the overlay. The script does not infer
+or upgrade the remote deployment. Docker administrators can inspect container
+environment variables; use a trusted local Docker daemon.
+
+The Langfuse branch has an asynchronous queue of 128 requests with 2 consumers,
+3 s request timeouts and at most 5 s of retries per request. A slow/unavailable
+Langfuse destination can lose spans when the queue fills; it does not delay the
+file exporter. Neither branch provides durable delivery after a crash. Avoid
+unbounded collection: stop after the intended run; the local file has no rotation
+so that the report consumes one complete file. The container is limited to
+256 MiB; overload can lose telemetry and does not imply zero execution duration.
+
+[otel-collector.yaml](otel-collector.yaml) filters **before any file write**. It
+replaces span names with an allowlisted `fred.operation` (otherwise
+`runtime.operation`), admits only closed category/peer/outcome/cache/method
+values, numeric HTTP statuses and finite durations from 0 to 24 h. Resource
+attributes retain only a closed `service.name`; an unknown name becomes
+`unknown`. Scope names/versions/attributes, resource/scope schema URLs, events,
+links, tracestate, status messages and all arbitrary attributes are removed.
+A resource rebuild also removes `entity_refs`, which this version's OTTL cannot
+address. IDs, parent relations, times and numeric OTLP kind/status/counters are
+retained. Transform errors fail closed. Collector payload diagnostics are
+suppressed to prevent a second sensitive file/log channel. The report's own
+projection remains defense in depth for imports from other sources.
+
+Migration from the earlier file-only example: replace direct `otelcol-contrib`
+startup with `traces-start` (or supply the exact pinned config/environment), use
+an entirely fresh private directory, and direct **all** Python/Rust exporters to
+its OTLP endpoint. Move destination credentials to the optional Collector branch;
+never point a producer at the file branch's old arbitrary-attribute recipe. Old
+exports are not retroactively sanitized. Existing Langfuse-only setup migration
+is described with the runtime tracing configuration.
+
+The reproducible synthetic test uses Docker, `uv` and pinned protobuf dependencies.
+It creates a fresh private directory, chooses free loopback ports, starts a fake
+Langfuse receiver, sends nested spans with malicious sentinels in every supported
+text channel (including entity references), tests unavailable-destination behavior,
+compares IDs/parents and stops every test service. To also test the real Python
+adapter, provide an already prepared runtime Python environment:
+
+```bash
+FRED_OTEL_TEST_PYTHON="$PWD/../../libs/fred-runtime/.venv/bin/python" \
+  make traces-test TRACE_DIR="$HOME/.local/share/fred/otel-synthetic-$(date +%Y%m%d-%H%M%S)"
+```
+
+Without `FRED_OTEL_TEST_PYTHON`, only the protocol fixtures run. This test makes
+no Fred conversation, k3d change or real Langfuse request. Its generated
+`multidestination/synthetic-scenario.jsonl` is deliberately synthetic and must
+remain separate from real results; the fixture omits campaign closure so the
+report correctly labels it incomplete.
+
+Sources for the pinned behavior: [file exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.165.0/exporter/fileexporter),
+[transform processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/v0.165.0/processor/transformprocessor),
+[resource rebuilding](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.165.0/processor/groupbyattrsprocessor/attribute_groups.go),
+[HTTP exporter](https://github.com/open-telemetry/opentelemetry-collector/tree/v0.165.0/exporter/otlphttpexporter),
+[Langfuse OTLP](https://langfuse.com/integrations/native/opentelemetry) and
+[OTLP JSON](https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding).
+
+The importer accepts `resourceSpans[].scopeSpans[].spans` exports, either one JSON
+object or multiple JSONL objects; IDs are hexadecimal, timestamps are integer
+nanoseconds (decimal strings or numbers). It discovers `traces.otlp.jsonl` beside
+the scenario files, or accepts `report -traces FILE` / `make report TRACES=FILE`.
+Files ending in `.otlp.jsonl` are excluded from the scenario scanner. A differently
+named JSONL export must be passed with `-traces` so it is excluded as well. There
+is no heuristic matching by timestamps, session or identity: joins require an
+exact `traceId`. Parent links require exact `parentSpanId`, including the client
+observation root. Missing parents, cycles, unknown categories and client/parent interval
+discrepancies remain visible. A child outside its parent can reflect clock skew
+or asynchronous work; it is not removed merely for that reason. Repeated identical spans are deduplicated;
+conflicting duplicates and duplicate scenario trace IDs are rejected.
+
+`fred.category` accepts `runtime`, `control_plane`, `auth`, `keycloak`, `llm`,
+`mcp`, `tool` and `persistence`. A generic tool span is never inferred to be MCP.
+`service.name` and `peer.service` accept fixed labels `fred-agents`, `fred-runtime`,
+`control-plane`, `keycloak`, `llm`, `mcp` and `persistence`; other labels are shown
+as unknown. `kind=3` and a known peer identify an instrumented client call; a
+parent link alone is a span relationship, not necessarily network traffic.
+LLM client spans measure the full instrumented model invocation, including any
+wrappers/retries; they attest a logical dependency, not a pure network duration.
+Span status distinguishes unset, OK and error. Fixed operation names identify the
+instrumented boundary; arbitrary names never enter HTML, even from an external
+unfiltered file. `first_chunk_ms` appears only when a finite nonnegative numeric
+LLM measurement fits the span; zero is measured, absence is unknown, and a value
+beyond the span raises a warning. ReAct streaming currently supplies this metric;
+it is not inferred for graph model calls or from the client first-text timestamp.
+
+The component table includes every selected run and level, plus totals per run
+when more than one level is selected.
+It reports observed/eligible turns and p50/p95/max from each category's union of
+intervals, clipped to that turn's observed client window. Unlike the successful
+client latency metrics, it includes failed turns with a measurable window.
+No sample means **unknown**, never zero. The trace-presence count also includes
+turns without a usable client end; those turns remain outside duration aggregates. Nested or parallel categories are not
+additive; time outside attributed intervals is **unattributed**, not CPU time.
+Coverage counts do not prove a complete trace or distinguish every sampling,
+instrumentation and export gap. Incomplete EOF windows are marked. Initial
+Keycloak login and refresh client timings are shown separately at campaign scope,
+while refresh actually performed in a turn appears in its timeline and metrics.
+
+Use **Explorer** on any turn, then previous/next, to inspect the client timeline,
+server spans and attested parent relationships. A bounded SVG groups observed
+client/peer dependencies by component; a client span and its server child count
+as one call, and generic internal tool parentage creates no network edge.
+LLM invocations use dashed arrows. Detailed span parentage remains in a collapsible
+section. Rendering caps detail at 300 rows
+and 300 links; all imported spans still contribute to the statistics. Import
+limits are 128 MiB, 200,000 spans total and 2,000 spans per turn, in addition to
+the scenario limits. JSON and HTML outputs remain exclusive and private.
 
 ## Reproduce the local setup from Git
 
@@ -530,7 +799,8 @@ the shared SSE categories (`http_status`, etc.). No upstream error text is expor
 - `sse_bench.go`: reusable HTTP/SSE framing and completion handling, plus the
   shared SDK runtime event decoder used by Swift and Weaver.
 - `reports.go`: aggregate compatibility and explicit raw export.
-- `report_html.go`, `report.html.tmpl`: offline scenario projection and self-contained interactive report.
+- `report_html.go`, `report_traces.go`, `report.html.tmpl`: offline scenario/OTLP projection and self-contained interactive report.
+- `trace.go`: optional W3C turn correlation, no SDK/exporter.
 - `auth.go`: private factory input, bounded login and per-identity refresh.
 - `scenario.go`, `scenario_reports.go`: opt-in levels using the common engine,
   post-window checks, progressive private records and phase summaries.
@@ -563,4 +833,7 @@ acceptance, disabled/already accepted versions, version changes, safe failures,
 synthetic-only preparation and its lack of load requests. All services are
 isolated `httptest` doubles, not the running Keycloak, mock or Fred installation.
 No real Fred endpoint, k3d, deployment, load campaign or performance comparison
-was exercised. Backend/frontend contracts were read, not modified.
+was exercised by these checks. `report_ui_test.cjs` runs via Go tests when Node is
+available and exercises filters, turn navigation, coverage and the generated
+template using an offline DOM double. Import checks cover exact joins, interval
+unions, missing/invalid spans, cycles, duplicates and private attribute exclusion.

@@ -33,6 +33,7 @@ from typing import Literal, Optional
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import Dims, KPIActor
+from fred_core.technical_tracing import technical_span
 
 RUNTIME_STAGE_METRIC_ACTOR = KPIActor(type="system", user_id=None)
 
@@ -83,12 +84,13 @@ async def runtime_stage_timer(
             ... do the authorization check ...
     """
     start = time.monotonic()
-    try:
-        yield
-    finally:
-        record_runtime_stage_metric(
-            kpi_writer=kpi_writer,
-            runtime_stage=runtime_stage,
-            start_ts=start,
-            trace_id=trace_id,
-        )
+    with technical_span(runtime_stage):
+        try:
+            yield
+        finally:
+            record_runtime_stage_metric(
+                kpi_writer=kpi_writer,
+                runtime_stage=runtime_stage,
+                start_ts=start,
+                trace_id=trace_id,
+            )

@@ -308,8 +308,16 @@ func (c *scenarioConversation) Close() {} // scenario owns post-window verificat
 func (c *scenarioConversation) Execute(ctx context.Context) result {
 	c.attempts++
 	started := time.Now()
+	var trace turnTrace
+	if c.cfg.TraceTurns {
+		var err error
+		ctx, trace, err = newTurnTrace(ctx)
+		if err != nil {
+			return result{Err: err, Measurement: turnMeasurement{StartedAt: started}}
+		}
+	}
 	token, auth, err := c.identity.token(ctx)
-	row := &scenarioTurn{Auth: auth, PerformanceOutcome: "error", Integrity: "not_observed"}
+	row := &scenarioTurn{TraceID: trace.TraceID, SpanID: trace.SpanID, Auth: auth, PerformanceOutcome: "error", Integrity: "not_observed"}
 	row.ConversationID = pseudonym(c.campaign, c.ID())
 	if err != nil {
 		row.PerformanceError = classifyError(err)

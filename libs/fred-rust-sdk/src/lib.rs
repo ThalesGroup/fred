@@ -5,3 +5,4 @@
 pub mod inference;
 pub mod logging;
 pub mod security;
+pub mod telemetry;

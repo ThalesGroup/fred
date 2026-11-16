@@ -98,6 +98,7 @@ func (a *weaverAdapter) request(ctx context.Context, method, path string, body a
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.Token)
 	req.Header.Set("Content-Type", "application/json")
+	injectTurnTrace(req)
 	return req, nil
 }
 

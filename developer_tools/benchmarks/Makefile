@@ -34,7 +34,25 @@ tidy: check-go ## Sync go.mod/go.sum
 .PHONY: report
 report: check-go ## Generate an offline HTML report: make report DIR=results [OUTPUT=report.html]
 	@test -n "$(DIR)" || { echo 'DIR is required'; exit 1; }
-	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) report -input "$(DIR)" $(if $(OUTPUT),-output "$(OUTPUT)",)
+	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) report -input "$(DIR)" $(if $(OUTPUT),-output "$(OUTPUT)",) $(if $(TRACES),-traces "$(TRACES)",)
+
+##@ Local traces (Docker, Linux)
+
+.PHONY: traces-start traces-stop traces-flush traces-retrieve traces-test
+traces-start: ## Start the pinned Collector in a fresh private TRACE_DIR
+	./otel-collector.sh start "$(TRACE_DIR)"
+
+traces-stop: ## Stop the Collector and close its trace file
+	./otel-collector.sh stop "$(TRACE_DIR)"
+
+traces-flush: ## After SDK flush, gracefully stop/drain the Collector
+	./otel-collector.sh flush "$(TRACE_DIR)"
+
+traces-retrieve: ## Print the closed file path, or copy without overwrite to TRACE_OUTPUT
+	./otel-collector.sh retrieve "$(TRACE_DIR)" $(if $(TRACE_OUTPUT),"$(TRACE_OUTPUT)",)
+
+traces-test: ## Synthetic Collector integration only (Docker); requires a fresh TRACE_DIR
+	uv run --script otel-collector-test.py "$(TRACE_DIR)"
 
 ##@ Container
 

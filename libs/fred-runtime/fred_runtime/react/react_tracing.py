@@ -22,6 +22,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
+from fred_core.technical_tracing import activate_span
 from fred_sdk.contracts.context import PortableContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 
@@ -67,7 +68,8 @@ async def tool_span(
     # than raising) can overwrite it — last write wins on every backend.
     span.set_attribute("status", "ok")
     try:
-        yield span
+        with activate_span(span):
+            yield span
     except asyncio.CancelledError:
         # Cancellation is a distinct terminal outcome, matching the audit stream.
         span.set_attribute("status", "cancelled")

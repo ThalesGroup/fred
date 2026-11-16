@@ -7,18 +7,18 @@
 <title>Fred · Rapport de benchmark</title>
 <style>
 :root{color-scheme:light;--ink:#142b3d;--muted:#536779;--line:#d9e2e8;--blue:#2454c4;--green:#14745b;--bg:#f2f5f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}main{max-width:1360px;margin:auto;padding:36px 32px 56px}header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:24px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--blue)}h1{font-size:34px;letter-spacing:-.04em;margin:8px 0}h2{font-size:19px;margin:0 0 12px}h3{font-size:16px;margin:0}p{margin:8px 0}.muted,.note{color:var(--muted)}.note{font-size:13px}.warning{background:#fff5df;border-left:4px solid #a16800;padding:12px 16px;margin:16px 0}.controls{display:flex;flex-wrap:wrap;gap:16px;margin:22px 0}.control{display:grid;gap:6px;font-size:13px;font-weight:650}select,button{font:inherit;color:var(--ink);border:1px solid #aabcc8;border-radius:6px;background:white;padding:9px 12px}select{min-width:175px}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}:focus-visible{outline:3px solid #c46515;outline-offset:3px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin:20px 0}.card,.panel{background:white;border:1px solid var(--line);border-radius:10px;padding:20px}.card-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.badge{font-size:12px;padding:3px 9px;border-radius:20px;background:#eef2f5;white-space:nowrap}.ok{background:#e5f4ed;color:#166247}.bad{background:#fff0df;color:#854600}.stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0 8px}.stat strong{display:block;font-size:25px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}.stat span{font-size:12px;color:var(--muted)}.metric-row{border-top:1px solid var(--line);padding-top:12px;margin-top:12px;font-variant-numeric:tabular-nums}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}.charts.single{grid-template-columns:1fr}.chart svg{width:100%;height:auto;display:block;min-height:220px}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:10px}.legend span::before{content:"";display:inline-block;width:12px;height:4px;vertical-align:middle;margin-right:6px;background:var(--color)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}th{font-weight:600;color:var(--muted);background:#f5f7fa}th,td{padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}td:last-child{white-space:normal;min-width:170px}td{font-variant-numeric:tabular-nums}.pagination{display:flex;align-items:center;gap:12px;margin-top:16px}.pagination span{margin-right:auto}footer{font-size:12px;color:var(--muted);margin-top:24px}noscript{display:block;padding:24px;background:#fff5df}[hidden]{display:none!important}@media(max-width:760px){main{padding:20px 14px}h1{font-size:28px}.charts{grid-template-columns:1fr}.control,select{width:100%}.stats{gap:8px}.panel{padding:15px}}
-</style>
+.detail{margin-top:20px}.timeline{display:grid;gap:8px}.timeline-row{display:grid;grid-template-columns:minmax(150px,270px) 1fr;gap:12px;align-items:center;font-size:12px}.track{height:22px;background:#edf1f5;position:relative;min-width:120px}.bar{position:absolute;min-width:2px;height:18px;top:2px;background:var(--blue);border-radius:3px}.timeline-row.client .bar{background:#75899a}.timeline-row .label{overflow-wrap:anywhere}.call-map{display:grid;gap:8px}.call-edge{padding:9px 12px;border-left:3px solid var(--blue);background:#f5f7fa;font-size:13px;overflow-wrap:anywhere}.component-table td{white-space:normal}.selection{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.detail-empty{padding:12px 0}.panel+.panel{margin-top:20px}</style>
 </head>
 <body>
 <main>
-<header><div class="eyebrow">FRED / MESURES DE CAMPAGNE</div><h1>Conversations sous charge</h1><p class="muted">Comparer Swift et Weaver, du premier texte à la fermeture du flux.</p><p class="note">Rapport local autonome · Aucun accès réseau · Mesures du client et modèle simulé</p></header>
+<header><div class="eyebrow">FRED / MESURES DE CAMPAGNE</div><h1>Conversations sous charge</h1><p class="muted">Comparer Swift et Weaver, du premier texte à la fermeture du flux.</p><p class="note">Rapport local autonome · Aucun accès réseau · Mesures du client et traces serveur facultatives</p></header>
 <noscript>Activez JavaScript pour explorer les résultats intégrés à ce fichier. Aucune connexion réseau n'est nécessaire.</noscript>
 <div id="warnings" role="status"></div>
 <section aria-label="Filtres" class="controls">
 <label class="control">Exécution<select id="run"><option value="all">Toutes les exécutions</option></select></label>
 <label class="control">Concurrence<select id="level"><option value="all">Tous les paliers</option></select></label>
 <label class="control">Tour de conversation<select id="phase"><option value="all">Tous les tours</option><option value="first">Premier tour</option><option value="following">Tours suivants</option></select></label>
-<label class="control">Latence observée<select id="metric"><option value="execution_first_text">Exécution → premier texte</option><option value="execution_final">Exécution → réponse finale</option><option value="execution_eof">Exécution → fermeture du flux</option><option value="total_final">Total → réponse finale</option><option value="total_eof">Total → fermeture du flux</option><option value="preparation">Préparation Weaver</option></select></label>
+<label class="control">Latence observée<select id="metric"><option value="execution_first_text">Exécution → premier texte</option><option value="execution_final">Exécution → réponse finale</option><option value="execution_eof">Exécution → fermeture du flux</option><option value="total_final">Total → réponse finale</option><option value="total_eof">Total → fermeture du flux</option><option value="preparation">Préparation Weaver</option><option value="auth_refresh">Renouvellement Keycloak (client)</option></select></label>
 </section>
 <p class="note" id="metric-help"></p>
 <section id="cards" class="cards" aria-label="Bilan par exécution" aria-live="polite"></section>
@@ -26,7 +26,9 @@
 <section class="panel"><h2>Latence par tour</h2><p class="note">Médiane des conversations pour chaque numéro de tour. Tours réussis uniquement.</p><div class="chart" id="turn-chart"></div></section>
 <section class="panel" id="level-panel"><h2>Latence par concurrence</h2><p class="note">Médiane de tous les échantillons du palier. Les filtres de tour s'appliquent.</p><div class="chart" id="level-chart"></div></section>
 </div>
-<section class="panel"><h2>Détail des tours</h2><p class="note">Les latences absentes et les tours en erreur ne sont pas remplacés par zéro. Les identifiants et textes privés ne sont pas inclus.</p><div class="table-wrap"><table><thead><tr><th scope="col">Exécution</th><th scope="col">Palier</th><th scope="col">Client</th><th scope="col">Tour</th><th scope="col">Résultat</th><th scope="col">Contexte</th><th scope="col" id="metric-heading">Latence</th><th scope="col">Erreur</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pagination"><span id="page-status" aria-live="polite"></span><button id="previous" type="button">Précédent</button><button id="next" type="button">Suivant</button></div></section>
+<section class="panel"><h2>Temps observé par composant</h2><p class="note">Tous les tours sélectionnés, y compris les erreurs, avec une fin client observable. N = tours avec au moins un intervalle de cette catégorie dans la fenêtre / tours avec une fenêtre mesurable. Les percentiles portent sur les unions d’intervalles par tour ; catégories imbriquées ou concurrentes non additives. Une absence de span ne vaut jamais zéro.</p><div class="table-wrap"><table class="component-table"><thead><tr><th>Exécution</th><th>Palier</th><th>Composant</th><th>N observé / éligible</th><th>P50</th><th>P95</th><th>Max</th></tr></thead><tbody id="components"></tbody></table></div><div class="pagination"><span id="component-page-status"></span><button id="component-previous" type="button">Précédent</button><button id="component-next" type="button">Suivant</button></div><p id="component-coverage" class="note"></p></section>
+<section class="panel"><h2>Détail des tours</h2><p class="note">Les latences absentes et les tours en erreur ne sont pas remplacés par zéro. Les identifiants et textes privés ne sont pas inclus.</p><div class="table-wrap"><table><thead><tr><th scope="col">Exécution</th><th scope="col">Palier</th><th scope="col">Client</th><th scope="col">Tour</th><th scope="col">Résultat</th><th scope="col">Contexte</th><th scope="col" id="metric-heading">Latence</th><th scope="col">Erreur</th><th scope="col">Explorer</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pagination"><span id="page-status" aria-live="polite"></span><button id="previous" type="button">Précédent</button><button id="next" type="button">Suivant</button></div></section>
+<section class="panel detail" aria-label="Analyse du tour sélectionné"><div class="selection"><h2 id="detail-title">Explorer un tour</h2><button id="detail-previous" type="button">Tour précédent</button><button id="detail-next" type="button">Tour suivant</button></div><p id="detail-description" class="note" aria-live="polite"></p><div id="detail-warnings"></div><div class="charts"><section><h3>Chronologie</h3><p class="note">Décalages depuis le début client du tour, en millisecondes. Les barres se chevauchent ; leur somme n’est pas la latence totale. Gris : observations clients, couleur : spans importés.</p><div id="waterfall" class="timeline"></div></section><section><h3>Carte des appels observés</h3><p class="note">Chaque liaison suit parentSpanId. « Client » est une observation locale, pas un span OTLP exporté. Une relation parent/enfant ne prouve pas un appel réseau ; les appels clients attestés sont signalés. LLM : invocation logique complète, pouvant inclure wrappers et reprises.</p><div id="service-map" class="chart"></div><details><summary>Relations détaillées entre spans</summary><div id="call-map" class="call-map"></div></details></section></div><p class="note" id="detail-coverage"></p></section>
 <footer>Source : enregistrements canoniques fred.bench.scenario.v1. Versions déployées, machines, configuration du modèle et liens de conversation non renseignés par ce format. Aucune métadonnée déduite du checkout. Les percentiles décrivent les échantillons disponibles ; ils ne démontrent pas une capacité de production.</footer>
 </main>
 <script>
@@ -43,9 +45,12 @@ const metricHelp = {
  execution_eof:'Temps depuis le début de l’exécution jusqu’à la fermeture du flux : inclut la fin du transport, hors préparation Weaver.',
  total_final:'Temps depuis le début du tour jusqu’à la réponse finale : inclut la préparation par tour de Weaver. Les parcours Swift et Weaver diffèrent.',
  total_eof:'Temps depuis le début du tour jusqu’à la fermeture du flux : inclut la préparation par tour de Weaver. Les parcours Swift et Weaver diffèrent.',
+ auth_refresh:'Renouvellement effectivement effectué par ce tour, mesuré depuis le client. L’attente du verrou est exclue de cette mesure et incluse dans le total du tour. Les tours réutilisant un jeton n’ont pas d’échantillon.',
  preparation:'Préparation par tour Weaver uniquement. Swift effectue son précontrôle hors de la fenêtre mesurée : aucune mesure de préparation par tour.'
 };
-let page = 0;
+let page = 0, componentPage = 0, selectedDetail = null;
+const categoryNames={runtime:"Runtime",control_plane:"Control Plane",auth:"Authentification",keycloak:"Keycloak",llm:"LLM",mcp:"MCP",tool:"Outil (type non précisé)",persistence:"Persistance",unknown:"Non classé"};
+const categories=Object.keys(categoryNames).filter(k=>k!=="unknown");
 const pageSize = 50;
 const number = n => new Intl.NumberFormat('fr-FR',{maximumFractionDigits:1}).format(n);
 const ms = n => n == null ? 'Non mesuré' : number(n)+' ms';
@@ -91,6 +96,8 @@ function showCards() {
   if(issues||r.authErrors||r.error) card.append(element('p','Vérification / nettoyage : '+issues+' anomalie(s) · Authentification : '+r.authErrors+' erreur(s)'+(r.error?' · '+r.error:''),'warning'));
   card.append(element('p','N = '+sum.count+' · Médiane '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'metric-row'));
   card.append(element('p','Statut et authentification : exécution entière. Cartes de tours et latences : filtres actifs.','note'));
+  ['acquire','refresh'].forEach(op=>{const auth=(r.auth||[]).filter(a=>a.operation===op),sum=summary(auth.filter(a=>!a.error).map(a=>a.duration));card.append(element('p',(op==='acquire'?'Connexion Keycloak initiale, hors tours':'Renouvellement Keycloak, campagne entière')+' : '+(auth.length?'N = '+sum.count+' / '+auth.length:'aucun échange client observé (N = 0)')+' · P50 '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'note'));});
+  if(r.traceImport) card.append(element('p',r.traceImport,'note'));
   if(r.warning) card.append(element('p',r.warning,'warning'));
   $('cards').append(card);
  });
@@ -135,12 +142,120 @@ function showTable() {
  all.slice(page*pageSize,(page+1)*pageSize).forEach(({r,t})=>{
   const tr=element('tr');
   [r.label,r.steps[t.step-1].concurrency+' (n° '+t.step+')',t.client,t.turn,outcomeNames[t.outcome],integrityNames[t.integrity],ms(t.metrics[$('metric').value]),t.error||'—'].forEach(v=>tr.append(element('td',String(v))));
+  const td=element('td'),button=element('button','Explorer');button.type='button';button.addEventListener('click',()=>{selectedDetail={r,t};showDetail();$('detail-title').scrollIntoView({behavior:'smooth',block:'start'});});td.append(button);tr.append(td);
   $('rows').append(tr);
  });
  $('metric-heading').textContent=$('metric').selectedOptions[0].textContent+' (ms)';
  $('page-status').textContent=all.length?((page*pageSize+1)+'–'+Math.min((page+1)*pageSize,all.length)+' sur '+all.length+' tours'):'Aucun tour observé pour cette sélection';
  $('previous').disabled=page===0;$('next').disabled=(page+1)*pageSize>=all.length;
 }
+
+function allSelectedTurns() {return selectedRuns().flatMap(({r})=>selectedTurns(r).map(t=>({r,t})));}
+function showComponents() {
+ const rows=[];
+ let total=0,eligible=0,traced=0;
+ selectedRuns().forEach(({r})=>{
+  const turns=selectedTurns(r),groups=new Map();
+  selectedSteps(r).forEach(s=>groups.set(s.step,{label:s.concurrency+' conv. (n° '+s.step+')',turns:[]}));
+  turns.forEach(t=>groups.get(t.step).turns.push(t));
+  const valid=turns.filter(t=>t.detail&&t.detail.duration!=null);
+  total+=turns.length;eligible+=valid.length;traced+=turns.filter(t=>t.detail&&t.detail.spans.length).length;
+  (groups.size>1?[{label:'Tous les paliers sélectionnés',turns},...groups.values()]:[...groups.values()]).forEach(group=>{
+   const measured=group.turns.filter(t=>t.detail&&t.detail.duration!=null);
+   categories.forEach(category=>{const sum=summary(measured.map(t=>t.detail.components[category]).filter(v=>v!=null));rows.push([r.label,group.label,categoryNames[category],sum.count+' / '+measured.length,ms(sum.p50),ms(sum.p95),ms(sum.max)]);});
+  });
+ });
+ componentPage=Math.max(0,Math.min(componentPage,Math.ceil(rows.length/pageSize)-1));
+ $('components').replaceChildren();rows.slice(componentPage*pageSize,(componentPage+1)*pageSize).forEach(values=>{const tr=element('tr');values.forEach(v=>tr.append(element('td',v)));$('components').append(tr);});
+ $('component-page-status').textContent=rows.length?((componentPage*pageSize+1)+'–'+Math.min((componentPage+1)*pageSize,rows.length)+' sur '+rows.length+' agrégats'):'Aucun tour';
+ $('component-previous').disabled=componentPage===0;$('component-next').disabled=(componentPage+1)*pageSize>=rows.length;
+ $('component-coverage').textContent=total+' tours observés · '+eligible+' fenêtres mesurables · '+traced+' tours avec des spans importés · '+(total-eligible)+' tours sans fin mesurable. Couverture de collecte, pas preuve d’exhaustivité. Les statistiques de latence client ci-dessus restent limitées aux tours réussis.';
+}
+function spanLabel(span,index) {return (categoryNames[span.category]||categoryNames.unknown)+' · '+span.service+(span.operation?' · '+span.operation:'')+' · span '+(index+1);}
+
+function observedCalls(detail) {
+ const aliases={'fred-agents':'runtime','fred-runtime':'runtime','control-plane':'control_plane',keycloak:'keycloak',llm:'llm',mcp:'mcp',persistence:'persistence'};
+ const edges=new Map(),nodes=new Set();
+ const add=(from,to,logical)=>{
+  if(!from||!to) return;
+  const key=from+':'+to;
+  if(!edges.has(key)) edges.set(key,{from,to,count:0,logical});
+  edges.get(key).count++;
+  nodes.add(from);nodes.add(to);
+ };
+ detail.spans.forEach(span=>{
+  const service=aliases[span.service];
+  // A server child of a CLIENT span is the other side of the same call.
+  // Only the root's SERVER children add a direct benchmark-client edge.
+  if(span.kind===2&&span.parent===detail.rootId) add('client',service,false);
+  if(span.kind===3) add(service,aliases[span.peer],span.peer==='llm');
+ });
+ return {nodes:[...nodes],edges:[...edges.values()]};
+}
+function showArchitecture(detail) {
+ const graph=observedCalls(detail),container=$('service-map');
+ container.replaceChildren();
+ if(!graph.edges.length) {
+  container.append(element('p','Aucun appel entre composants attesté par les spans disponibles.','detail-empty'));
+  return;
+ }
+ // Fixed semantic nodes: at most seven, regardless of trace size.
+ const positions={client:[8,182],control_plane:[180,40],runtime:[180,270],keycloak:[430,20],llm:[430,135],mcp:[430,250],persistence:[430,365]};
+ const names={client:'Client de test',control_plane:'Control Plane',runtime:'Runtime',keycloak:'Keycloak',llm:'LLM',mcp:'MCP',persistence:'Persistance'};
+ const svg=svgNode('svg',{viewBox:'0 0 610 430',role:'img','aria-label':'Dépendances observées entre composants'});
+ svg.append(svgNode('title',{},'Appels instrumentés : flèches regroupées par composant, sans double comptage client/serveur'));
+ const defs=svgNode('defs'),marker=svgNode('marker',{id:'call-arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'});
+ marker.append(svgNode('path',{d:'M 0 0 L 10 5 L 0 10 z',fill:'#2454c4'}));defs.append(marker);svg.append(defs);
+ graph.edges.forEach(edge=>{
+  const [sx,sy]=positions[edge.from],[tx,ty]=positions[edge.to];
+  let x1=sx+65,y1=sy+23,x2=tx+65,y2=ty+23;
+  const dx=x2-x1,dy=y2-y1;
+  if(Math.abs(dx)>Math.abs(dy)) {x1+=Math.sign(dx)*65;x2-=Math.sign(dx)*65;}
+  else {y1+=Math.sign(dy)*23;y2-=Math.sign(dy)*23;}
+  let path;
+  if(edge.from===edge.to) path='M '+(sx+130)+' '+(sy+12)+' C '+(sx+165)+' '+(sy-20)+' '+(sx+165)+' '+(sy+65)+' '+(sx+130)+' '+(sy+34);
+  else if(dx===0) path='M '+x1+' '+y1+' C '+(x1+45)+' '+y1+' '+(x2+45)+' '+y2+' '+x2+' '+y2;
+  else path='M '+x1+' '+y1+' C '+((x1+x2)/2)+' '+y1+' '+((x1+x2)/2)+' '+y2+' '+x2+' '+y2;
+  const line=svgNode('path',{d:path,fill:'none',stroke:'#2454c4','stroke-width':1.8,'stroke-dasharray':edge.logical?'5 3':'none','marker-end':'url(#call-arrow)'});
+  line.append(svgNode('title',{},names[edge.from]+' → '+names[edge.to]+' : '+edge.count+(edge.logical?' invocation(s) logique(s)':' appel(s) instrumenté(s)')));
+  svg.append(line,svgNode('text',{x:(x1+x2)/2+(dx===0?35:0),y:(y1+y2)/2-5,fill:'#142b3d','font-size':12,'text-anchor':'middle'},String(edge.count)));
+ });
+ graph.nodes.forEach(key=>{
+  const [x,y]=positions[key];
+  svg.append(svgNode('rect',{x,y,width:130,height:46,rx:7,fill:key==='client'?'#edf1f5':'#e6eefc',stroke:'#aabcc8'}));
+  svg.append(svgNode('text',{x:x+65,y:y+28,'text-anchor':'middle','font-size':13,fill:'#142b3d'},names[key]));
+ });
+ container.append(svg,element('p','Chiffres : appels regroupés. Trait plein : appel instrumenté ; pointillé LLM : invocation logique complète. Un span client et son enfant serveur ne comptent qu’une fois. Les relations internes sont détaillées ci-dessous.','note'));
+}
+
+function showDetail() {
+ const all=allSelectedTurns();
+ let index=selectedDetail?all.findIndex(({r,t})=>r===selectedDetail.r&&t===selectedDetail.t):-1;
+ if(index<0){index=0;selectedDetail=all[0]||null;}
+ $('detail-previous').disabled=!all.length||index===0;$('detail-next').disabled=!all.length||index>=all.length-1;
+ $('waterfall').replaceChildren();$('call-map').replaceChildren();$('service-map').replaceChildren();$('detail-warnings').replaceChildren();
+ if(!selectedDetail){$('detail-title').textContent='Aucun tour sélectionné';$('detail-description').textContent='';$('detail-coverage').textContent='';return;}
+ const {r,t}=selectedDetail,d=t.detail;
+ $('detail-title').textContent=r.label+' · palier '+t.step+' · client '+t.client+' · tour '+t.turn;
+ $('detail-description').textContent=outcomeNames[t.outcome]+' · '+(d&&d.duration!=null?'Fenêtre '+ms(d.duration)+(d.complete?' jusqu’à EOF':' partielle'):'Fenêtre non mesurable')+' · '+(index+1)+' / '+all.length+' tours sélectionnés';
+ if(!d){$('waterfall').append(element('p','Observations absentes.','detail-empty'));return;}
+ const warnings=[...d.warnings];
+ if(!d.traceId)warnings.push('Ce tour ne porte pas de corrélation de trace. Seules les observations clients sont disponibles.');
+ else if(!d.spans.length)warnings.push('Aucun span importé pour cet identifiant. Services non instrumentés, export absent ou incomplet : aucune durée serveur déduite.');
+ $('detail-warnings').replaceChildren(...warnings.map(w=>element('p',w,'warning')));
+ const intervals=[...d.observations.map(o=>({...o,client:true})),...d.spans.map((s,i)=>({label:spanLabel(s,i)+' · '+(['statut non renseigné','OK','erreur'][s.status])+(s.firstChunk!=null?' · premier fragment LLM '+ms(s.firstChunk):''),start:s.start,end:s.end,client:false}))];
+ const low=intervals.reduce((n,o)=>Math.min(n,o.start),0),high=intervals.reduce((n,o)=>Math.max(n,o.end),d.duration||1),range=Math.max(1,high-low);
+ intervals.slice(0,300).forEach(o=>{const row=element('div',null,'timeline-row'+(o.client?' client':'')),label=element('span',o.label+' · '+(o.start===o.end?'à '+ms(o.start):ms(o.end-o.start)),'label'),track=element('div',null,'track'),bar=element('div',null,'bar');bar.style.left=((o.start-low)/range*100)+'%';bar.style.width=((o.end-o.start)/range*100)+'%';bar.title=number(o.start)+' → '+number(o.end)+' ms';bar.setAttribute('aria-label',o.label+' : '+bar.title);track.append(bar);row.append(label,track);$('waterfall').append(row);});
+ showArchitecture(d);
+ const byID=new Map(d.spans.map((s,i)=>[s.id,{s,i}]));
+ d.spans.slice(0,300).forEach((s,i)=>{const parent=byID.get(s.parent);let from=s.parent===d.rootId?'Client (observation)':parent?spanLabel(parent.s,parent.i):s.parent?'Parent absent':'Racine distante';let label=from+' → '+spanLabel(s,i);if(s.kind===3&&s.peer!=='unknown')label+=' · appel client vers '+s.peer;if(s.kind===2)label+=' · réception serveur';const edge=element('div',label,'call-edge');$('call-map').append(edge);});
+ if(!d.spans.length)$('call-map').append(element('p','Aucune liaison serveur attestée.','detail-empty'));
+ if(intervals.length>300||d.spans.length>300)$('detail-warnings').append(element('p','Détail limité à 300 lignes de chronologie et 300 liaisons. Les agrégats utilisent tous les spans importés.','warning'));
+ const coverage=categories.filter(c=>d.components[c]!=null).map(c=>categoryNames[c]+' '+ms(d.components[c])).join(' · ');
+ $('detail-coverage').textContent=(coverage||'Aucune durée par composant mesurée.')+(d.unattributed!=null?' · Hors intervalles attribués : '+ms(d.unattributed)+' (temps non attribué, pas du CPU).':'')+' Les observations clients comprennent le réseau et les attentes ; elles ne mesurent pas le travail interne du serveur. La connexion initiale et la création de session sont hors du tour.';
+}
+function moveDetail(delta){const all=allSelectedTurns(),index=all.findIndex(({r,t})=>selectedDetail&&r===selectedDetail.r&&t===selectedDetail.t);selectedDetail=all[Math.max(0,Math.min(all.length-1,index+delta))]||null;showDetail();}
+
 function render() {
  const chosen=selectedRuns().map(({r})=>r);
  const warnings=[];
@@ -151,9 +266,11 @@ function render() {
  showCards();chart($('turn-chart'),false);
  const multi=new Set(chosen.flatMap(r=>selectedSteps(r).map(s=>s.concurrency))).size>1;
  $('level-panel').hidden=!multi;$('charts').classList.toggle('single',!multi);if(multi)chart($('level-chart'),true);
- showTable();
+ showTable();showComponents();showDetail();
 }
-['run','level','phase','metric'].forEach(id=>$(id).addEventListener('change',()=>{page=0;render();}));
+['run','level','phase','metric'].forEach(id=>$(id).addEventListener('change',()=>{page=0;componentPage=0;render();}));
+$('component-previous').addEventListener('click',()=>{componentPage--;showComponents();});$('component-next').addEventListener('click',()=>{componentPage++;showComponents();});
+$('detail-previous').addEventListener('click',()=>moveDetail(-1));$('detail-next').addEventListener('click',()=>moveDetail(1));
 $('previous').addEventListener('click',()=>{page--;showTable();});$('next').addEventListener('click',()=>{page++;showTable();});render();
 </script>
 </body>

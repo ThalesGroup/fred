@@ -16,6 +16,7 @@ type config struct {
 	PrepareOnly           bool
 	AcceptTestTerms       string
 	Scenario              string
+	TraceTurns            bool
 	CredentialFile        string
 	ConcurrencySteps      string
 	IdentityMode          string
@@ -75,6 +76,10 @@ func run() int {
 		return runHTMLReportCLI(os.Args[2:])
 	}
 	cfg := parseFlags()
+	if cfg.TraceTurns && (cfg.Scenario != "conversation" || cfg.PrepareOnly) {
+		fmt.Fprintln(os.Stderr, "trace-turns requires -scenario=conversation (not prepare-only)")
+		return 2
+	}
 	if cfg.PrepareOnly {
 		return runTermsCLI(cfg)
 	}
@@ -223,6 +228,7 @@ func parseFlags() config {
 
 	targetFlag := flag.String("target", "swift", "Backend target: swift or weaver")
 	scenarioFlag := flag.String("scenario", "", "Opt-in conversation scenario (managed SSE, explicit concurrency steps)")
+	traceTurnsFlag := flag.Bool("trace-turns", false, "Opt-in W3C trace correlation per scenario turn; no telemetry export by the client")
 	prepareOnlyFlag := flag.Bool("prepare-only", false, "Check synthetic identities and terms without creating sessions or running load")
 	acceptTermsFlag := flag.String("accept-test-terms", "", "Explicit prepare-only terms acceptance: current (synthetic bench-* accounts only)")
 	credentialsFlag := flag.String("credential-file", "", "Private factory credentials JSON; scenario only, never put credentials in argv")
@@ -305,6 +311,7 @@ func parseFlags() config {
 	}
 
 	return config{
+		TraceTurns:  *traceTurnsFlag,
 		PrepareOnly: *prepareOnlyFlag, AcceptTestTerms: *acceptTermsFlag,
 		Scenario: *scenarioFlag, CredentialFile: *credentialsFlag, ConcurrencySteps: *stepsFlag,
 		IdentityMode: *identityFlag, AuthConcurrency: *authConcurrencyFlag, MockProfile: *mockProfileFlag,

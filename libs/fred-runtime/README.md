@@ -330,6 +330,67 @@ ai:
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
 
+For common distributed tracing, set `FRED_OTEL_ENABLED=true` and
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://collector:4318/v1/traces` in the pod
+environment. Fred creates one OpenTelemetry provider and one HTTP/protobuf
+exporter. The collector can send the same spans to a filtered benchmark file
+and optionally Langfuse; no Langfuse client or second exporter is created in
+this mode. Without this opt-in, the existing logging/null/Langfuse selection
+and credential fallback remain available. To migrate a Langfuse-only setup,
+configure the collector's optional Langfuse destination before enabling common
+tracing; pod Langfuse credentials alone do not enable that destination.
+
+The SDK honors `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`.
+`OTEL_SERVICE_NAME` (or `service.name` in `OTEL_RESOURCE_ATTRIBUTES`) overrides
+`fred-agents`; other resource attributes are excluded. Fred bounds the queue at
+2048 spans, batches at 256 spans, scheduled exports at 1 second and each HTTP
+export at 3 seconds. These explicit bounds override `OTEL_BSP_*` and OTLP timeout
+variables. Shutdown drains outside the event loop; the locked SDK bounds its
+worker join at 30 seconds (eight queued batches plus one in flight need at most
+27 seconds of export budgets). A full queue or unavailable destination may lose
+traces; it does not fail the agent turn.
+
+The common stream retains observation types, model/usage/cost, Fred metadata and
+session/user grouping. Native metadata uses the JSON object attribute
+`langfuse.observation.metadata`: Langfuse's
+[OTLP ingestion parser](https://github.com/langfuse/langfuse/blob/main/packages/shared/src/server/otel/OtelIngestionProcessor.ts)
+accepts it independently of SDK provenance. Fred does not impersonate a Langfuse
+SDK scope to enable SDK-version-specific per-key JSON decoding.
+IO remains off by default; only the existing explicit
+`capture_content` / `LANGFUSE_CAPTURE_CONTENT` opt-in enables bounded IO capture.
+The collector must authorize fields separately for each destination. Its file
+pipeline must replace span names with the closed `fred.operation` vocabulary and
+remove identities, metadata, IO, events and arbitrary attributes **before writing**.
+Do not point the common exporter at an unfiltered technical file writer. See the
+[local collector guide](../../developer_tools/benchmarks/README.md).
+
+W3C `traceparent` links the incoming request, first-party calls and MCP HTTP;
+it conveys no authority. Explicit parent spans take precedence over the active
+OTel context; only an unparented turn falls back to a stable exchange seed.
+A valid W3C trace ID is never hashed again, and unsampled parents remain unsampled.
+The LF-only mode with an explicitly configured global Langfuse tracer also accepts
+W3C parents; the historical logging-plus-credentials runtime fallback keeps its
+previous selection behavior and does not attach incoming W3C at the HTTP boundary.
+The HTTP server span covers authentication, admission,
+streaming and cleanup. Existing model/tool spans are reused. History writes and
+checkpoint operations are measured as whole operations, without SQL statements.
+Model spans are client invocations of the logical `llm` dependency, including
+wrapper/retry work within that boundary, not pure network or provider CPU time.
+
+Coverage is partial: cached JWTs do not run local signature verification; JWKS
+fetches and actual M2M token requests are distinguished from local verification
+and token acquisition waits. The M2M observer anchors its existing monotonic
+duration at its completion timestamp. MCP spans cover HTTP response bodies,
+including long-lived SSE transports; they are not per-tool server execution
+times, and an already-open SSE connection can belong to an earlier trace.
+The MCP client instruments HTTPX's `_send_single_request` seam below auth/retries,
+preserving its normal proxy/NO_PROXY, TLS and pool selection. IAM measurements
+are client-side only: JWKS and M2M calls do not inject `traceparent` into Keycloak.
+External model/MCP server internals, individual SQL calls, pool waits and other
+uninstrumented services remain unmeasured. Sampling, exporter queue loss, process
+failure and Collector delivery can omit spans; trace presence is not proof of
+complete coverage. Parent/child and concurrent intervals must not be summed.
+
 When `observability.metrics: prometheus` is enabled, `create_agent_app(...)`
 starts a dedicated Prometheus exporter on `app.metrics_address:app.metrics_port`
 and restores the shared Fred KPI pipeline, including process and SQL pool KPIs.

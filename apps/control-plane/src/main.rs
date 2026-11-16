@@ -59,8 +59,10 @@ async fn main() -> Result<()> {
         } else {
             logging::LogFormat::Json
         };
-        fred_rust_sdk::logging::init(logging::identity("migration"), "info", format)?;
+        let telemetry =
+            fred_rust_sdk::logging::init(logging::identity("migration"), "info", format)?;
         let outcome = initialize_schema().await;
+        fred_rust_sdk::telemetry::shutdown(telemetry).await;
         stop_on_error(outcome);
         return Ok(());
     }
@@ -85,7 +87,7 @@ async fn main() -> Result<()> {
         None | Some("serve") => "api",
         Some(_) => "job",
     };
-    fred_rust_sdk::logging::init(
+    let telemetry = fred_rust_sdk::logging::init(
         logging::identity(role),
         &config.app.log_level,
         config.app.log_format,
@@ -106,47 +108,59 @@ async fn main() -> Result<()> {
         );
     }
     tracing::info!(config_file, "Configuration loaded");
-    let outcome = match args
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .as_slice()
-    {
-        [] | ["serve"] => serve(config).await,
-        ["register-local-user", id, username] => {
-            anyhow::ensure!(
-                config.security.user.enabled
-                    && config.security.user_directory == control_plane::users::DirectoryKind::Local,
-                "registration requires enabled authentication and security.user_directory=local"
-            );
-            let id = id
-                .parse()
-                .context("expected the canonical Weaver user UUID")?;
-            let pool = pool(&config).await?;
-            control_plane::users::register_local(&pool, id, username).await?;
-            Ok(())
-        }
-        ["assign-model-source", organization, source_id] => {
-            let organization = organization
-                .parse()
-                .context("expected an organization UUID")?;
-            let pool = pool(&config).await?;
-            control_plane::model_catalog::assign_source(&pool, organization, source_id).await?;
-            tracing::info!(%organization, source_id, "Model source assigned");
-            Ok(())
-        }
-        ["initialize-models"] => {
-            let pool = pool(&config).await?;
-            control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources)
+    let outcome = async {
+        match args
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [] | ["serve"] => serve(config).await,
+            ["register-local-user", id, username] => {
+                anyhow::ensure!(
+                    config.security.user.enabled
+                        && config.security.user_directory
+                            == control_plane::users::DirectoryKind::Local,
+                    "registration requires enabled authentication and security.user_directory=local"
+                );
+                let id = id
+                    .parse()
+                    .context("expected the canonical Weaver user UUID")?;
+                let pool = pool(&config).await?;
+                control_plane::users::register_local(&pool, id, username).await?;
+                Ok(())
+            }
+            ["assign-model-source", organization, source_id] => {
+                let organization = organization
+                    .parse()
+                    .context("expected an organization UUID")?;
+                let pool = pool(&config).await?;
+                control_plane::model_catalog::assign_source(&pool, organization, source_id).await?;
+                tracing::info!(%organization, source_id, "Model source assigned");
+                Ok(())
+            }
+            ["initialize-models"] => {
+                let pool = pool(&config).await?;
+                control_plane::model_catalog::configure_sources(
+                    &pool,
+                    &config.platform.model_sources,
+                )
                 .await?;
-            control_plane::model_catalog::initialization::initialize(&pool, &config.platform, true)
+                control_plane::model_catalog::initialization::initialize(
+                    &pool,
+                    &config.platform,
+                    true,
+                )
                 .await
+            }
+            ["import-provisioning", bundle, "--token-file", token] => {
+                import(config, bundle, token).await
+            }
+            _ => Err(anyhow::anyhow!(USAGE)),
         }
-        ["import-provisioning", bundle, "--token-file", token] => {
-            import(config, bundle, token).await
-        }
-        _ => Err(anyhow::anyhow!(USAGE)),
-    };
+    }
+    .await;
+    fred_rust_sdk::telemetry::shutdown(telemetry).await;
     stop_on_error(outcome);
     Ok(())
 }

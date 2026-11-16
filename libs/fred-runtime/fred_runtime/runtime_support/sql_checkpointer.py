@@ -48,6 +48,7 @@ from fred_core.sql.base_sql import (
     json_for_engine,
     run_ddl_with_advisory_lock,
 )
+from fred_core.technical_tracing import technical_span
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -334,11 +335,12 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     @asynccontextmanager
     async def phase(self, phase_name: str):
-        if self._kpi is None:
-            yield
-            return
-        async with phase_timer(self._kpi, phase_name):
-            yield
+        with technical_span("checkpoint.operation"):
+            if self._kpi is None:
+                yield
+                return
+            async with phase_timer(self._kpi, phase_name):
+                yield
 
     @staticmethod
     def _session_id_expression(column: Any) -> Any:

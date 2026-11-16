@@ -24,6 +24,7 @@ from fred_core.logs.context import (
     current_context,
     safe_context,
 )
+from fred_core.technical_tracing import trace_headers
 
 CONTEXT_HEADER = "X-Fred-Log-Context"
 CONTEXT_VERSION = 1
@@ -120,7 +121,10 @@ def outbound_context_headers() -> dict[str, str]:
         logger.warning(
             "Outgoing logging metadata dropped", extra={"reason": "invalid_context"}
         )
-    return {CONTEXT_HEADER: encoded} if encoded is not None else {}
+    return {
+        **({CONTEXT_HEADER: encoded} if encoded is not None else {}),
+        **trace_headers(),
+    }
 
 
 def admit_delegated_log_context(

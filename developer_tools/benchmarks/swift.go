@@ -212,6 +212,7 @@ func executeSwiftSSE(ctx context.Context, client *http.Client, cfg config, sessi
 		return result{Err: err, Measurement: turnMeasurement{StartedAt: start}}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	injectTurnTrace(req)
 	req.Header.Set("Accept", "text/event-stream")
 	if cfg.Token != "" && !cfg.TokenInQuery {
 		req.Header.Set("Authorization", "Bearer "+cfg.Token)

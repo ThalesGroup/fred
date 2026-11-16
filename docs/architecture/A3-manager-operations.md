@@ -52,6 +52,24 @@ refused the write upstream.
   ERROR event, `control-plane stopped`.
 
 
+## Distributed tracing
+
+The [architecture overview](08-operations.md#distributed-tracing) explains the
+shared trace flow. Python uses the [core context helpers](../../libs/fred-core/fred_core/technical_tracing.py)
+and [runtime provider](../../libs/fred-runtime/fred_runtime/app/technical_tracing.py),
+reusing the [observation adapter](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py).
+Rust uses the [shared SDK](../../libs/fred-rust-sdk/src/telemetry.rs).
+The [collector pipeline](../../developer_tools/benchmarks/otel-collector.yaml)
+filters the file destination; its [Langfuse overlay](../../developer_tools/benchmarks/otel-collector-langfuse.yaml)
+receives the same spans with permitted observation data.
+
+The benchmark creates a W3C context per turn without exporting a client root
+span. The [report importer](../../developer_tools/benchmarks/report_traces.go)
+joins exported spans to those client observations by trace ID. Configuration,
+capture controls and collection commands live in the
+[runtime guide](../../libs/fred-runtime/README.md) and
+[collection guide](../../developer_tools/benchmarks/README.md#local-collection-one-turn-then-a-campaign).
+
 ## Errors
 
 Application error bodies use `{"code": "<stable code>", "detail": "<safe message>"}`.

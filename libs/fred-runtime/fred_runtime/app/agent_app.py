@@ -109,6 +109,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     is_service_agent,
 )
+from fred_core.technical_tracing import technical_span, trace_async, trace_headers
 from fred_sdk.contracts.agent_draft import (
     AgentDraftPodRequest,
     AgentDraftResult,
@@ -335,6 +336,7 @@ from .dependencies import (
     get_pod_container_from_app,
 )
 from .observability_factory import bootstrap_observability
+from .technical_tracing import TechnicalTracingMiddleware, shutdown_technical_tracing
 
 logger = logging.getLogger(__name__)
 
@@ -1719,13 +1721,17 @@ async def _resolve_agent_instance(
     if request_id:
         headers["X-Request-Id"] = request_id
     try:
-        response = await http_client.post(
-            f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
-            headers=headers,
-            params=params,
-            auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
-            follow_redirects=False,
-        )
+        with technical_span("control_plane.runtime") as span:
+            response = await http_client.post(
+                f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
+                headers={**headers, **trace_headers()},
+                params=params,
+                auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
+                follow_redirects=False,
+            )
+            span.set_attribute("http.response.status_code", response.status_code)
+            if response.status_code >= 400:
+                span.set_attribute("status", "error")
         if response.status_code == 409:
             problem = response.json()
             if (
@@ -3102,6 +3108,7 @@ class _TurnEventExpander:
         return [payload]
 
 
+@trace_async("history.write")
 async def _write_turn_history(
     *,
     session_id: str,
@@ -7299,6 +7306,7 @@ def create_agent_app(
             for label, close in (
                 ("gc diagnostics", gc_diagnostics.stop),
                 ("pod container", container.shutdown),
+                ("technical tracing", shutdown_technical_tracing),
                 # Release the Keycloak refresh pool deterministically rather
                 # than leaving it to GC, as the control-plane client above is.
                 ("keycloak refresh pool", aclose_token_refresh_client),
@@ -7342,6 +7350,8 @@ def create_agent_app(
         KPIMiddleware,
         kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
     )
+
+    app.add_request_middleware(TechnicalTracingMiddleware)
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

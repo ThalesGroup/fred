@@ -43,6 +43,7 @@ type htmlTurn struct {
 	Integrity string              `json:"integrity"`
 	Error     string              `json:"error"`
 	Metrics   map[string]*float64 `json:"metrics"`
+	Detail    *htmlTurnDetail     `json:"detail"`
 }
 type htmlStep struct {
 	Step               int      `json:"step"`
@@ -55,22 +56,25 @@ type htmlStep struct {
 	CleanupErrors      int      `json:"cleanupErrors"`
 }
 type htmlRun struct {
-	Campaign   string     `json:"campaign"`
-	Label      string     `json:"label"`
-	Target     string     `json:"target"`
-	Identity   string     `json:"identity"`
-	Profile    string     `json:"profile"`
-	Status     string     `json:"status"`
-	Warning    string     `json:"warning"`
-	Error      string     `json:"error"`
-	AuthErrors int        `json:"authErrors"`
-	Steps      []htmlStep `json:"steps"`
-	Turns      []htmlTurn `json:"turns"`
+	Campaign    string     `json:"campaign"`
+	Label       string     `json:"label"`
+	Target      string     `json:"target"`
+	Identity    string     `json:"identity"`
+	Profile     string     `json:"profile"`
+	Status      string     `json:"status"`
+	Warning     string     `json:"warning"`
+	Error       string     `json:"error"`
+	AuthErrors  int        `json:"authErrors"`
+	Auth        []htmlAuth `json:"auth"`
+	TraceImport string     `json:"traceImport"`
+	Steps       []htmlStep `json:"steps"`
+	Turns       []htmlTurn `json:"turns"`
 }
 
 func runHTMLReportCLI(args []string) int {
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
 	input := fs.String("input", "", "Directory containing scenario JSONL results")
+	traces := fs.String("traces", "", "Optional OTLP JSON/JSONL export (default: <input>/traces.otlp.jsonl if present)")
 	output := fs.String("output", "", "New HTML file (default: <input>/report.html; never overwritten)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -85,7 +89,7 @@ func runHTMLReportCLI(args []string) int {
 	if *output == "" {
 		*output = filepath.Join(*input, "report.html")
 	}
-	if err := generateHTMLReport(*input, *output); err != nil {
+	if err := generateHTMLReport(*input, *output, *traces); err != nil {
 		fmt.Fprintln(os.Stderr, "report:", err)
 		return 2
 	}
@@ -93,9 +97,24 @@ func runHTMLReportCLI(args []string) int {
 	return 0
 }
 
-func generateHTMLReport(input, output string) error {
-	runs, err := readHTMLRuns(input)
+func generateHTMLReport(input, output string, tracePaths ...string) error {
+	tracePath := ""
+	if len(tracePaths) > 0 {
+		tracePath = tracePaths[0]
+	}
+	if tracePath == "" {
+		defaultPath := filepath.Join(input, "traces.otlp.jsonl")
+		if _, err := os.Lstat(defaultPath); err == nil {
+			tracePath = defaultPath
+		} else if !os.IsNotExist(err) {
+			return errors.New("cannot inspect default OTLP input")
+		}
+	}
+	runs, err := readHTMLRuns(input, tracePath)
 	if err != nil {
+		return err
+	}
+	if err := attachOTLPTraces(runs, tracePath); err != nil {
 		return err
 	}
 	var rendered bytes.Buffer
@@ -119,7 +138,7 @@ func generateHTMLReport(input, output string) error {
 	return nil
 }
 
-func readHTMLRuns(dir string) ([]htmlRun, error) {
+func readHTMLRuns(dir string, excluded ...string) ([]htmlRun, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, errors.New("input directory unavailable")
@@ -129,7 +148,20 @@ func readHTMLRuns(dir string) ([]htmlRun, error) {
 	var bytesRead int64
 	totalTurns := 0
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || strings.HasSuffix(entry.Name(), ".otlp.jsonl") {
+			continue
+		}
+		skip := false
+		for _, path := range excluded {
+			if path != "" {
+				a, _ := filepath.Abs(path)
+				b, _ := filepath.Abs(filepath.Join(dir, entry.Name()))
+				if a == b {
+					skip = true
+				}
+			}
+		}
+		if skip {
 			continue
 		}
 		info, err := entry.Info()
@@ -239,7 +271,12 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 			return nil, "", errors.New("records after terminal summary")
 		}
 		switch envelope.Kind {
-		case "auth", "preflight", "terms", "onboarding":
+		case "auth":
+			var record authRecord
+			if json.Unmarshal(data, &record) == nil && (record.Operation == "acquire" || record.Operation == "refresh") && !record.StartedAt.IsZero() && !record.FinishedAt.Before(record.StartedAt) {
+				run.Auth = append(run.Auth, htmlAuth{record.Operation, millis(record.FinishedAt.Sub(record.StartedAt)), record.Error != ""})
+			}
+		case "preflight", "terms", "onboarding":
 			// No private identifiers or free text from these records is exported.
 		case "history":
 			var h historyRecord
@@ -293,7 +330,7 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 			if row.Integrity == "passed" || row.Integrity == "failed" {
 				integrity = row.Integrity
 			}
-			run.Turns = append(run.Turns, htmlTurn{row.Step, row.ClientID, row.Turn, row.FirstTurn, row.Outcome, integrity, reportError(row.Error, row.PerformanceError, row.IntegrityError), reportMetrics(row)})
+			run.Turns = append(run.Turns, htmlTurn{row.Step, row.ClientID, row.Turn, row.FirstTurn, row.Outcome, integrity, reportError(row.Error, row.PerformanceError, row.IntegrityError), reportMetrics(row), projectTurnDetail(row)})
 		case "step":
 			var step stepReport
 			if json.Unmarshal(data, &step) != nil || step.Step < 1 || step.Step > len(run.Steps) || seenSteps[step.Step].Step != 0 {
@@ -443,6 +480,10 @@ func reportMetrics(row scenarioTurn) map[string]*float64 {
 		} else {
 			out[key] = nil
 		}
+	}
+	if row.Outcome == "success" && row.Auth != nil && row.Auth.Error == "" && validPair(row.Auth.StartedAt, &row.Auth.FinishedAt) != nil {
+		v := millis(row.Auth.FinishedAt.Sub(row.Auth.StartedAt))
+		out["auth_refresh"] = &v
 	}
 	return out
 }

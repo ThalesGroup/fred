@@ -131,6 +131,53 @@ rules. This does not establish full dashboard migration or collection completene
 The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
 its limits and verification sources.
 
+## Distributed tracing
+
+Traces explain the order, duration and overlap of instrumented operations in a
+conversation turn. A span measures one operation; parent links connect spans
+across services. The offline report also compares time and coverage by component
+across a campaign, including failed turns with usable measurements.
+
+**Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
+
+```mermaid
+flowchart TD
+    F["Control Plane and Agent Pod<br/>Common trace instrumentation"]
+    C["OpenTelemetry Collector"]
+    S["Technical data filter<br/>Before file storage"]
+    H["Offline HTML report<br/>Turn timeline and campaign comparison"]
+    L["Langfuse · optional<br/>Agent observations"]
+
+    F -->|OTLP| C
+    C --> S
+    S -->|Trace file| H
+    C --> L
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class F,H fred
+    class C,L cots
+    class S neutral
+```
+
+Each operation is instrumented once. W3C context preserves trace identity across
+calls; the collector routes the same spans to configured destinations without
+changing their identifiers or parent links. Destination selection belongs to
+the collector, independently of business instrumentation.
+
+Content capture requires explicit opt-in. Langfuse retains observation types,
+model, usage and permitted metadata; the technical file excludes conversation
+content, credentials and arbitrary attributes before storage. Common trace export
+is opt-in, asynchronous and bounded: destination failure can lose telemetry but
+does not fail the conversation.
+
+Durations can overlap and must not be added blindly. A missing span means unknown,
+not zero; a client call does not reveal the remote service's internal execution.
+The report makes coverage and missing parents visible. The
+[tracing reference](A3-manager-operations.md#distributed-tracing) links the
+implementation and collection procedure.
+
 ## Operator diagnostics
 
 The browser offers [self-tests](../../apps/frontend/README.md#weaver-self-tests) to platform administrators who also directly own at least one organization, team, or project. Operators reserve this combination of grants for pre-production testing. A run checks the platform and session once, then exercises each selected space along the organization, team and project path using the operator's rights in that space. The report groups results and skip reasons by level. Two-person isolation and an admitted turn that outlives its original user token are separate manual tests. Results stay on the page until the operator changes the path or leaves. Only identifiers needed to recover disposable fixtures survive a reload.

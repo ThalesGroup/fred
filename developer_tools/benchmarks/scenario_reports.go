@@ -17,6 +17,8 @@ func pseudonym(campaign, value string) string {
 
 type scenarioTurn struct {
 	turnMeasurement
+	TraceID            string            `json:"trace_id,omitempty"`
+	SpanID             string            `json:"span_id,omitempty"`
 	Kind               string            `json:"kind"`
 	Step               int               `json:"step"`
 	Concurrency        int               `json:"concurrency"`

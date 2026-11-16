@@ -1,0 +1,139 @@
+# Copyright Thales 2026
+# Licensed under the Apache License, Version 2.0.
+"""Explicit, bounded OTLP tracing for agent requests, including SSE cleanup."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Mapping
+
+from fred_core.portable.observability import Span, get_tracer
+from fred_core.technical_tracing import (
+    ROOT_TRACE_ID,
+    TechnicalTracer,
+    extract_trace,
+    technical_span,
+)
+from opentelemetry import context as otel_context
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import OTELResourceDetector, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+
+class _FredIdGenerator(RandomIdGenerator):
+    def generate_trace_id(self) -> int:
+        return ROOT_TRACE_ID.get() or super().generate_trace_id()
+
+
+class OTLPTracer(TechnicalTracer):
+    def __init__(
+        self, *, capture_content: bool = False, max_content_chars: int = 100_000
+    ) -> None:
+        # Accept the standard service-name configuration, not arbitrary resource
+        # attributes. Sampling follows the standard SDK environment settings.
+        configured = OTELResourceDetector().detect().attributes
+        self.provider = TracerProvider(
+            id_generator=_FredIdGenerator(),
+            resource=Resource(
+                {"service.name": configured.get("service.name", "fred-agents")}
+            ),
+        )
+        self.provider.add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporter(timeout=3),
+                max_queue_size=2048,
+                max_export_batch_size=256,
+                schedule_delay_millis=1000,
+                export_timeout_millis=3000,
+            )
+        )
+        super().__init__(self.provider.get_tracer("fred"))
+        # Reuse Fred's observation mapping, buffering and explicit content gate.
+        # No Langfuse SDK instance is created: all destinations share this export.
+        from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
+
+        self.observations = LangfuseTracerAdapter(
+            otel_tracer=self,
+            capture_content=capture_content,
+            max_content_chars=max_content_chars,
+        )
+
+    @property
+    def captures_content(self) -> bool:
+        return self.observations.captures_content
+
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Mapping[str, object] | None = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        return self.observations.start_span(
+            name, context=context, attributes=attributes, parent=parent, **kwargs
+        )
+
+    def shutdown(self) -> None:
+        # Locked SDK bounds the batch worker join at 30 s. Our queue holds at
+        # most eight batches plus one in flight, each with a 3 s export budget.
+        # Keep the public shutdown API; do not abandon a to_thread worker.
+        self.provider.shutdown()
+
+
+async def shutdown_technical_tracing() -> None:
+    tracer = get_tracer()
+    if isinstance(tracer, OTLPTracer):
+        await asyncio.to_thread(tracer.shutdown)
+
+
+class TechnicalTracingMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = {
+            key.decode("latin-1"): value.decode("latin-1")
+            for key, value in scope.get("headers", ())
+            if key == b"traceparent"
+        }
+        if not isinstance(get_tracer(), TechnicalTracer):
+            from fred_runtime.integrations.v2_runtime.adapters import (
+                LangfuseTracerAdapter,
+            )
+
+            # LF-only retains its exporter and observation tree, but now accepts
+            # W3C parents without fabricating an additional HTTP observation.
+            if isinstance(get_tracer(), LangfuseTracerAdapter):
+                token = otel_context.attach(extract_trace(headers))
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    otel_context.detach(token)
+            else:
+                await self.app(scope, receive, send)
+            return
+        with technical_span("agent.http", context=extract_trace(headers)) as span:
+
+            async def traced_receive() -> Message:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    span.set_attribute("status", "cancelled")
+                return message
+
+            async def traced_send(message: Message) -> None:
+                if message["type"] == "http.response.start":
+                    status = message["status"]
+                    span.set_attribute("http.response.status_code", status)
+                    if status >= 400:
+                        span.set_attribute("status", "error")
+                await send(message)
+
+            await self.app(scope, traced_receive, traced_send)

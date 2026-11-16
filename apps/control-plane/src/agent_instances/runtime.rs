@@ -267,6 +267,7 @@ pub(crate) async fn resolve_person_runtime_binding(
 }
 
 /// Resolve from an authenticated caller; query assertions still require validation.
+#[tracing::instrument(target = "fred.telemetry", name = "control_plane.resolve_runtime", skip_all, fields(user_id = tracing::field::Empty))]
 async fn resolve_runtime_binding(
     state: &AppState,
     caller: &CurrentUser,

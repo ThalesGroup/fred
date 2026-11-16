@@ -67,11 +67,18 @@ fn logged_path(path: &str) -> &str {
 pub async fn request_logging(request: Request, next: Next) -> Response {
     let (request_id, correlation_id) = (Uuid::new_v4(), Uuid::new_v4());
     let span = tracing::info_span!(
-        "request",
+        target: "fred.telemetry",
+        "control_plane.http",
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+        http.request.method = request.method().as_str(),
+        http.response.status_code = tracing::field::Empty,
+        fred.outcome = tracing::field::Empty,
         request_id = %request_id,
         correlation_id = %correlation_id,
         user_id = tracing::field::Empty,
     );
+    fred_rust_sdk::telemetry::set_remote_parent(&span, request.headers());
     let mut completion = Completion {
         method: request.method().to_string(),
         path: logged_path(request.uri().path()).to_string(),
@@ -117,6 +124,16 @@ struct Completion {
 impl Completion {
     fn finish(&mut self, route: Option<String>, status: Option<u16>, outcome: &str) {
         self.done = true;
+        self.span.record("fred.outcome", outcome);
+        if let Some(status) = status {
+            self.span
+                .record("http.response.status_code", i64::from(status));
+        }
+        // Server failures and dropped requests are errors even though log events
+        // are deliberately excluded from OTel. Never attach an error description.
+        if status.is_some_and(|status| status >= 500) || outcome != "responded" {
+            self.span.record("otel.status_code", "ERROR");
+        }
         let successful = outcome == "responded" && status.is_some_and(|s| s < 400);
         if successful && (self.path.ends_with("/healthz") || self.path.ends_with("/ready")) {
             return;

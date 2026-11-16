@@ -1,0 +1,75 @@
+# Pinned to contrib 0.165.0 by otel-collector.sh. File is a destination boundary.
+# Never move this transform before the receiver's fan-out to Langfuse.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: ${env:FRED_OTEL_LISTEN_ENDPOINT}
+        max_request_body_size: 8388608
+processors:
+  transform/file_safe:
+    # A failed sanitization drops the batch; it must NEVER pass through unchanged.
+    error_mode: propagate
+    trace_statements:
+      - context: resource
+        statements:
+          - keep_keys(attributes, ["service.name"])
+          - set(attributes["service.name"], "unknown") where not IsString(attributes["service.name"])
+          - set(attributes["service.name"], "unknown") where not IsMatch(attributes["service.name"], "^(fred-agents|fred-runtime|control-plane|keycloak|llm|mcp|persistence)$")
+          - set(schema_url, "")
+      - context: scope
+        statements:
+          - keep_keys(attributes, [])
+          - set(name, "")
+          - set(version, "")
+          - set(schema_url, "")
+      - context: span
+        statements:
+          - set(name, "runtime.operation")
+          - set(name, attributes["fred.operation"]) where IsString(attributes["fred.operation"]) and IsMatch(attributes["fred.operation"], "^(agent\\.invoke|agent\\.stream|v2\\.graph\\.await_human|v2\\.graph\\.model|v2\\.graph\\.structured_model|v2\\.react\\.model|v2\\.graph\\.tool|v2\\.graph\\.runtime_tool|v2\\.react\\.runtime_tool|tool\\.invoke|artifact\\.publish|resource\\.fetch|agent\\.http|pod_authz|runtime_binding|runtime_binding_internal|control_plane\\.runtime|auth\\.jwt\\.verify|auth\\.m2m\\.acquire|iam\\.jwks\\.http|iam\\.token\\.initial|iam\\.token\\.renewal|mcp\\.http|history\\.write|checkpoint\\.operation|runtime\\.operation|control_plane\\.http|control_plane\\.resolve_runtime|auth\\.jwt\\.validate|auth\\.jwks\\.lookup|auth\\.jwks\\.fetch)$")
+          - keep_keys(attributes, ["fred.category", "peer.service", "fred.outcome", "fred.cache", "http.request.method", "http.response.status_code", "first_chunk_ms", "duration_ms"])
+          - delete_key(attributes, "fred.category") where not IsString(attributes["fred.category"])
+          - delete_key(attributes, "fred.category") where IsString(attributes["fred.category"]) and not IsMatch(attributes["fred.category"], "^(runtime|llm|tool|auth|control_plane|keycloak|mcp|persistence)$")
+          - delete_key(attributes, "peer.service") where not IsString(attributes["peer.service"])
+          - delete_key(attributes, "peer.service") where IsString(attributes["peer.service"]) and not IsMatch(attributes["peer.service"], "^(fred-agents|fred-runtime|control-plane|keycloak|identity-provider|llm|mcp|persistence)$")
+          - delete_key(attributes, "fred.outcome") where not IsString(attributes["fred.outcome"])
+          - delete_key(attributes, "fred.outcome") where IsString(attributes["fred.outcome"]) and not IsMatch(attributes["fred.outcome"], "^(ok|success|error|cancelled|responded)$")
+          - delete_key(attributes, "fred.cache") where not IsString(attributes["fred.cache"])
+          - delete_key(attributes, "fred.cache") where IsString(attributes["fred.cache"]) and not IsMatch(attributes["fred.cache"], "^(hit|miss|stale|refreshed)$")
+          - delete_key(attributes, "http.request.method") where not IsString(attributes["http.request.method"])
+          - delete_key(attributes, "http.request.method") where IsString(attributes["http.request.method"]) and not IsMatch(attributes["http.request.method"], "^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$")
+          - delete_key(attributes, "http.response.status_code") where not IsInt(attributes["http.response.status_code"])
+          - delete_key(attributes, "http.response.status_code") where IsInt(attributes["http.response.status_code"]) and (attributes["http.response.status_code"] < 100 or attributes["http.response.status_code"] > 599)
+          - delete_key(attributes, "first_chunk_ms") where not IsInt(attributes["first_chunk_ms"]) and not IsDouble(attributes["first_chunk_ms"])
+          - delete_key(attributes, "first_chunk_ms") where attributes["first_chunk_ms"] != nil and not (attributes["first_chunk_ms"] >= 0 and attributes["first_chunk_ms"] <= 86400000)
+          - delete_key(attributes, "duration_ms") where not IsInt(attributes["duration_ms"]) and not IsDouble(attributes["duration_ms"])
+          - delete_key(attributes, "duration_ms") where attributes["duration_ms"] != nil and not (attributes["duration_ms"] >= 0 and attributes["duration_ms"] <= 86400000)
+          - set(status.message, "")
+          - set(trace_state, "")
+          - set(events, nil)
+          - set(links, nil)
+  # Rebuild resources from the already safe attributes. OTTL cannot address
+  # Resource.entity_refs in this pinned version; copying resources would leak it.
+  groupbyattrs/file_resource: {}
+  batch/file:
+    timeout: 1s
+    send_batch_size: 256
+    send_batch_max_size: 512
+exporters:
+  file:
+    path: ${env:FRED_BENCH_TRACE_FILE}
+    format: json
+    append: false
+    flush_interval: 1s
+service:
+  telemetry:
+    # Never log input spans/OTTL contexts on failures, nor expose diagnostics ports.
+    logs:
+      level: fatal
+    metrics:
+      level: none
+  pipelines:
+    traces/file:
+      receivers: [otlp]
+      processors: [transform/file_safe, groupbyattrs/file_resource, batch/file]
+      exporters: [file]

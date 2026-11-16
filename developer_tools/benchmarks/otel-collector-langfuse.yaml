@@ -1,0 +1,26 @@
+# Optional overlay: otel-collector.sh adds it only with FRED_LANGFUSE_OTLP_ENDPOINT.
+# The receiver fan-out copies data for the mutating file transform. This pipeline
+# retains the original names and Langfuse model/usage/metadata attributes.
+exporters:
+  otlp_http/langfuse:
+    traces_endpoint: ${env:FRED_LANGFUSE_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:FRED_LANGFUSE_AUTHORIZATION}
+    timeout: 3s
+    compression: gzip
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 128
+      block_on_overflow: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 2s
+      max_elapsed_time: 5s
+service:
+  pipelines:
+    traces/langfuse:
+      receivers: [otlp]
+      processors: []
+      exporters: [otlp_http/langfuse]
