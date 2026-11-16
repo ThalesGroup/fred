@@ -159,16 +159,14 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
         {groups
           ? groups.map(([agentId, groupSessions]) => (
               <div key={agentId} className={styles.agentGroup}>
-                <div
-                  className={styles.groupHeader}
-                  data-agent-deleted={agentDeleted(agentId)}
-                  title={agentName(groupSessions[0])}
-                >
-                  <span className={styles.groupName}>{agentName(groupSessions[0])}</span>
-                  {agentDeleted(agentId) && (
-                    <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
-                  )}
-                </div>
+                <Tooltip content={agentName(groupSessions[0])} asChild>
+                  <div tabIndex={0} className={styles.groupHeader} data-agent-deleted={agentDeleted(agentId)}>
+                    <span className={styles.groupName}>{agentName(groupSessions[0])}</span>
+                    {agentDeleted(agentId) && (
+                      <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
+                    )}
+                  </div>
+                </Tooltip>
                 {groupSessions.map((session) => renderItem(session, false))}
               </div>
             ))

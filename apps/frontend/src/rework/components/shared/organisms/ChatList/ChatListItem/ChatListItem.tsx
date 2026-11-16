@@ -69,11 +69,7 @@ export function ChatListItem({
         {(agentName || dateLabel) && (
           <div className={styles.meta}>
             {agentName && (
-              <span
-                className={styles.agentLabel}
-                data-agent-deleted={agentDeleted}
-                title={agentDeleted ? undefined : agentName}
-              >
+              <span className={styles.agentLabel} data-agent-deleted={agentDeleted}>
                 <span className={styles.agentName}>{agentName}</span>
                 {agentDeleted && <span className={styles.deletedSuffix}> {t("chatbot.deletedAgentSuffix")}</span>}
               </span>
@@ -93,7 +89,7 @@ export function ChatListItem({
         </span>
       )}
       {unread && turnStatus === null && (
-        <span className={styles.turnStatus} title={t("rework.sidebar.chatList.answerReady")} aria-hidden="true">
+        <span className={styles.turnStatus} aria-hidden="true">
           <span className={styles.unreadDot} />
         </span>
       )}
@@ -107,9 +103,16 @@ export function ChatListItem({
       </span>
     </Link>
   );
-  return agentDeleted ? (
-    <Tooltip text={fullAgentName ? `${fullAgentName} - ${deletedStatus}` : deletedStatus}>{item}</Tooltip>
-  ) : (
-    item
+  const hint = agentDeleted
+    ? fullAgentName
+      ? `${fullAgentName} - ${deletedStatus}`
+      : deletedStatus
+    : [agentName, unread && turnStatus === null ? t("rework.sidebar.chatList.answerReady") : undefined]
+        .filter(Boolean)
+        .join(" — ");
+  return (
+    <Tooltip content={hint} asChild>
+      {item}
+    </Tooltip>
   );
 }

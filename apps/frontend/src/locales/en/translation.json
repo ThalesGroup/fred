@@ -5305,7 +5305,7 @@
       "dependentProjects": "This person still has roles in projects in this team. Remove those roles before removing them from the team.",
       "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
       "title": "Manage {{name}}",
-      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each checkbox immediately adds or removes one role.",
+      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each button immediately adds or removes one role.",
       "roster": "Current members",
       "candidates": "Add people from the parent space",
       "eligibility": "These people hold a direct content role in the parent organization or team. Select each role to grant on this space. Existing roles are shown; no role is added automatically.",
@@ -5317,6 +5317,11 @@
       "failed": "The change could not be confirmed. Refresh the list before retrying."
     },
     "spaceModels": {
+      "help": "Usage rules",
+      "model": "Model",
+      "parent": "Parent space",
+      "local": "Allow",
+      "effective": "Availability",
       "impactRestricted": "The Owner role can change this policy but cannot read agents. Listing them also requires a content role in this space.",
       "title": "Models",
       "ceiling": "Models and reasoning require organization permission. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",

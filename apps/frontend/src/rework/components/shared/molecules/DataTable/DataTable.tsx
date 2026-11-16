@@ -15,6 +15,7 @@
 import styles from "./DataTable.module.scss";
 import React, { useEffect, useMemo, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
+import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
 import type { SelectOption } from "../Select/Select.tsx";
@@ -369,16 +370,13 @@ export default function DataTable<T>({
                 const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
                 return (
                   <div className={styles["datatable-cell"]} key={columnIndex}>
-                    {/* Primitive cell values get single-line ellipsis
-                     * truncation, with the full value readable via the
-                     * native title tooltip — free-length text (usernames,
-                     * team names) must never spill under the neighbouring
-                     * column. Element values are the caller's own layout
-                     * and pass through untouched. */}
-                    {isPrimitive ? (
-                      <span className={styles["cell-text"]} title={String(cellContent)}>
-                        {cellContent}
-                      </span>
+                    {/* Preserve truncation and expose the full value on hover or keyboard focus. */}
+                    {isPrimitive && cellContent !== "" ? (
+                      <Tooltip content={String(cellContent)} asChild>
+                        <span className={styles["cell-text"]} tabIndex={0}>
+                          {cellContent}
+                        </span>
+                      </Tooltip>
                     ) : (
                       cellContent
                     )}

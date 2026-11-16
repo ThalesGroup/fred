@@ -375,10 +375,12 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         const label = t("rework.admin.capabilities.enabledTeams.teams", { count });
         const stack = (
           <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
-            <span className={styles.count} aria-label={label} title={label}>
-              <Icon category="outlined" type="groups" />
-              {count}
-            </span>
+            <Tooltip content={label} asChild>
+              <span tabIndex={0} className={styles.count} aria-label={label}>
+                <Icon category="outlined" type="groups" />
+                {count}
+              </span>
+            </Tooltip>
           </span>
         );
         return (

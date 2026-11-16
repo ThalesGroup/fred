@@ -545,7 +545,9 @@ describe("ManagedChatPage deleted agent", () => {
     const deletedAgent = rendered.querySelector('[data-agent-deleted="true"]');
     expect(deletedAgent?.textContent).toContain("chatbot.deletedAgentSuffix");
     // The suffix sits beside the chip, out of the truncating label.
-    const chipLabel = deletedAgent?.querySelector('[title="Preserved assistant"]');
+    const chipLabel = Array.from(deletedAgent?.querySelectorAll("span") ?? []).find(
+      (node) => node.textContent === "Preserved assistant",
+    );
     expect(chipLabel?.textContent).toBe("Preserved assistant");
     expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
     expect(html).toContain('data-composer-disabled="true"');
@@ -1352,7 +1354,7 @@ describe("ManagedChatPage historical HITL detail", () => {
     const root = createRoot(container);
     try {
       act(() => root.render(<ManagedChatPage />));
-      const toggle = container.querySelector<HTMLButtonElement>('button[title="rework.chatTrace.show"]');
+      const toggle = container.querySelector<HTMLButtonElement>('button[aria-expanded="false"][aria-describedby]');
       if (toggle) act(() => toggle.click());
       const row = container.querySelector<HTMLElement>(
         '[role="button"][aria-label="1. rework.chatTrace.toolLabels.platform.askUser"]',

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { forwardRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -230,11 +231,15 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
         ? {
             a: ({ href, children, title }: { href?: string; children?: React.ReactNode; title?: string }) =>
               href && /^(?:https?:\/\/|mailto:)/i.test(href) ? (
-                <a href={href} title={title} target="_blank" rel="noopener noreferrer">
-                  {children}
-                </a>
+                <Tooltip content={title} asChild>
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {children}
+                  </a>
+                </Tooltip>
               ) : (
-                <span title={href}>{children}</span>
+                <Tooltip content={href} asChild>
+                  <span tabIndex={0}>{children}</span>
+                </Tooltip>
               ),
           }
         : {}),

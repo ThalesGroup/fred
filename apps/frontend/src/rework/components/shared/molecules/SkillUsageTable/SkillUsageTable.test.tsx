@@ -25,19 +25,17 @@ it("sorts usage numerically, preserves origin columns and shows request states",
     const button = [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("rework.analytics.skillUsage.user_count"),
     )!;
+    const skillNames = () =>
+      [...container.querySelectorAll("span[tabindex]")]
+        .map((node) => node.textContent)
+        .filter((text) => text === "alpha" || text === "beta");
     act(() => button.click());
-    expect([...container.querySelectorAll('[title="alpha"], [title="beta"]')].map((e) => e.textContent)).toEqual([
-      "beta",
-      "alpha",
-    ]);
+    expect(skillNames()).toEqual(["beta", "alpha"]);
     act(() => button.click());
-    expect([...container.querySelectorAll('[title="alpha"], [title="beta"]')].map((e) => e.textContent)).toEqual([
-      "alpha",
-      "beta",
-    ]);
+    expect(skillNames()).toEqual(["alpha", "beta"]);
     act(() => root.render(<SkillUsageTable data={data} isLoading={false} isError />));
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("common.loadingError");
-    expect(container.querySelector('[title="alpha"]')).toBeNull();
+    expect(skillNames()).toEqual([]);
     act(() => root.render(<SkillUsageTable isLoading isError={false} />));
     expect(container.querySelector('[role="status"]')?.textContent).toBe("common.loading");
     act(() => root.render(<SkillUsageTable data={{ ...data, rows: [] }} isLoading={false} isError={false} />));

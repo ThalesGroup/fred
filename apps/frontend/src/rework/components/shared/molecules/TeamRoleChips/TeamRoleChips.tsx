@@ -19,6 +19,66 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { UserTeamRelation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import styles from "./TeamRoleChips.module.scss";
 
+interface RoleChipOption {
+  key: string;
+  label: string;
+  held: boolean;
+  pending?: boolean;
+  disabled?: boolean;
+  ariaLabel?: string;
+  description?: ReactNode;
+  onToggle: () => void;
+}
+
+/** Shared presentation; callers supply their own role and permission semantics. */
+export function RoleChips({
+  options,
+  size = "medium",
+  children,
+}: {
+  options: RoleChipOption[];
+  size?: "medium" | "small";
+  children?: ReactNode;
+}) {
+  return (
+    <div className={styles.roleChips} role="group" data-size={size}>
+      {options.map((option) => {
+        // Keep descriptions keyboard-accessible even when role changes are forbidden.
+        const button = (
+          <button
+            key={option.key}
+            type="button"
+            className={styles.roleChip}
+            data-active={option.held}
+            data-pending={option.pending || undefined}
+            aria-pressed={option.held}
+            aria-disabled={option.disabled ?? false}
+            aria-label={option.ariaLabel}
+            onClick={() => {
+              if (!option.disabled) option.onToggle();
+            }}
+          >
+            {option.pending && (
+              <span className={styles.pendingIcon}>
+                <Icon category="outlined" type="schedule" />
+              </span>
+            )}
+            {option.label}
+          </button>
+        );
+        return option.description ? (
+          <Tooltip key={option.key} content={option.description}>
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        );
+      })}
+      {children}
+    </div>
+  );
+}
+
 // AUTHZ-06 (RFC Part 7 §37): one independently togglable chip per elevated
 // team role — a member may hold several at once, so this is a multi-select
 // toggle group, not a single-select pattern. `team_member` is deliberately
@@ -71,41 +131,23 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister, size
   }, [t]);
 
   return (
-    <div className={styles.roleChips} role="group" data-size={size}>
-      {ELEVATED_TEAM_ROLES.map((role) => {
-        // A pending nomination keeps the short "Admin" label, marked by colour and a clock icon;
-        // toggling it cancels the nomination.
+    <RoleChips
+      size={size}
+      options={ELEVATED_TEAM_ROLES.map((role) => {
         const pending = role === "team_admin" && heldRoles.includes("pending_team_admin");
         const held = pending || heldRoles.includes(role);
-        // `aria-disabled` rather than `disabled`: a disabled button leaves the
-        // tab order and stops firing pointer events, so it would silently lose
-        // the very description that tells the reader what the role they cannot
-        // grant actually is. The click guard below is what makes it inert.
-        const readOnly = canAdminister ? !canAdminister(role) : false;
-        return (
-          <Tooltip key={role} content={panels[pending ? "pending_team_admin" : role]}>
-            <button
-              type="button"
-              className={styles.roleChip}
-              data-active={held}
-              data-pending={pending || undefined}
-              aria-pressed={held}
-              aria-disabled={readOnly}
-              aria-label={pending ? t("rework.teamRoles.pending_team_admin") : undefined}
-              onClick={() => {
-                if (!readOnly) onToggle(pending ? "pending_team_admin" : role, held);
-              }}
-            >
-              {pending && (
-                <span className={styles.pendingIcon}>
-                  <Icon category="outlined" type="schedule" />
-                </span>
-              )}
-              {t(`rework.teamRoles.${role}`)}
-            </button>
-          </Tooltip>
-        );
+        return {
+          key: role,
+          label: t(`rework.teamRoles.${role}`),
+          held,
+          pending,
+          disabled: canAdminister ? !canAdminister(role) : false,
+          ariaLabel: pending ? t("rework.teamRoles.pending_team_admin") : undefined,
+          description: panels[pending ? "pending_team_admin" : role],
+          onToggle: () => onToggle(pending ? "pending_team_admin" : role, held),
+        };
       })}
+    >
       {/* Closes the row, after the three toggles. Informational, never a fourth
           toggle: `team_member` is the implicit baseline — automatic for anyone
           holding an elevated role, granted directly to anyone holding none
@@ -120,6 +162,6 @@ export default function TeamRoleChips({ heldRoles, onToggle, canAdminister, size
           {t(`rework.teamRoles.${BASELINE_TEAM_ROLE}`)}
         </span>
       </Tooltip>
-    </div>
+    </RoleChips>
   );
 }

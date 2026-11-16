@@ -183,7 +183,7 @@ function click(label: string) {
   const button = [...host.querySelectorAll("button")].find((item) => {
     const content = item.cloneNode(true) as HTMLButtonElement;
     content.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
-    return item.title === label || content.textContent === label;
+    return item.getAttribute("aria-label") === label || content.textContent === label;
   });
   expect(button).toBeDefined();
   act(() => button!.click());

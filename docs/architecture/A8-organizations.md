@@ -174,7 +174,7 @@ Direct URLs remain subject to the page and API checks.
 
 `TeamSettingsPage` now uses Weaver's generated client for membership management,
 replacing its legacy Swift capability/charter gate. Its roster uses independent role
-checkboxes; no role is synthesized on entry or after granting owner. Read-only rosters are available with direct Read;
+buttons; no role is synthesized on entry or after granting owner. Read-only rosters are available with direct Read;
 candidates and role writes still require Manage. Atomic member removal and voluntary
 departure reuse individual revocation's last-owner and dependent-child checks.
 The parameters and offer routes retain separate owners; unsupported subsections

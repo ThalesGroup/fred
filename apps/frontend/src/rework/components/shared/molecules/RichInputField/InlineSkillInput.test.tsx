@@ -1,3 +1,4 @@
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // @vitest-environment jsdom
 // Copyright Thales 2026 — Licensed under the Apache License, Version 2.0.
 import { act, useCallback, useState } from "react";
@@ -140,7 +141,7 @@ it("keeps canonical text in the editor while placing the clickable token between
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
   expect(container.querySelector(".cm-line")?.textContent).toBe("Before meeting-minutes after");
   const badge = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!;
-  expect(badge.title).toBe("meeting-minutes: Meeting minutes");
+  expect(readTooltip(badge)).toBe("meeting-minutes: Meeting minutes");
   // A skill container; the hairline is for sent messages only.
   expect(badge.dataset).toMatchObject({ kind: "skill" });
   expect(badge.dataset.surface).toBeUndefined();
@@ -158,8 +159,12 @@ it.each([
   ["Backspace", TOKEN.to],
   ["Delete", TOKEN.from],
 ])("%s next to a token removes it whole, and undo restores it with the request intact", (key, caret) => {
+  const token = container.querySelector('[aria-label="chatbot.skills.open"]')!;
+  act(() => token.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
   act(() => editor().dispatch({ selection: { anchor: caret } }));
   pressKey(key);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
   // The token goes with one of the two spaces around it: no double space.
   expect(editor().state.doc.toString()).toBe("Before after\nAction");
   expect(editor().state.selection.main.head).toBe(TOKEN.from);
@@ -169,7 +174,7 @@ it.each([
     undo(editor());
   });
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
-  expect(container.querySelector('[aria-label="chatbot.skills.open"]')).not.toBeNull();
+  expect(readTooltip(container.querySelector('[aria-label="chatbot.skills.open"]'))).toContain("meeting-minutes");
 });
 it("reports each edit as the exact span it replaced, before the new text", () => {
   // Removing "Before " and typing over "after": two spans in one transaction.
@@ -340,7 +345,7 @@ it("opens the prompt preview from its token, which stays one block and sends not
   expect(token().className).toMatch(/action/);
   expect(token().getAttribute("aria-label")).toBe("chatbot.commandTurn.open");
   // The hover hint names the source like the menu's section headings.
-  expect(token().title).toBe("Hello\nchatbot.commandMenu.sections.personal\nSay hello");
+  expect(readTooltip(token())).toBe("Hello\nchatbot.commandMenu.sections.personal\nSay hello");
   act(() => token().click());
   expect(onOpenPrompt).toHaveBeenCalledExactlyOnceWith({
     promptId: "p-hello",
@@ -357,9 +362,9 @@ it("opens the prompt preview from its token, which stays one block and sends not
   expect(editor().state.selection.main.head).toBe(0);
 
   mount({ source: "team", teamName: "Finance" });
-  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.team");
+  expect(readTooltip(token()).split("\n")[1]).toBe("chatbot.commandMenu.sections.team");
   mount({ source: "team" });
-  expect(token().title.split("\n")[1]).toBe("chatbot.commandMenu.sections.teamFallback");
+  expect(readTooltip(token()).split("\n")[1]).toBe("chatbot.commandMenu.sections.teamFallback");
 
   // Without a preview to open the token is not a control.
   mount({ inert: true });
@@ -375,7 +380,7 @@ it("shows two prompt tokens, each one block with its own hint, label and preview
   });
   const tokens = () => Array.from(container.querySelectorAll<HTMLButtonElement>("[data-kind=prompt]"));
   expect(tokens().map((token) => token.textContent)).toEqual(["chat/hello", "chat/bye"]);
-  expect(tokens().map((token) => token.title)).toEqual([
+  expect(tokens().map((token) => readTooltip(token))).toEqual([
     "Hello\nchatbot.commandMenu.sections.personal\nSay hello",
     "Goodbye\nchatbot.commandMenu.sections.team\nSay goodbye",
   ]);

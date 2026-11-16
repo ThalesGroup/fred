@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -72,23 +73,23 @@ export function FolderRow({
 
   return (
     <div className={styles.row}>
-      <button
-        type="button"
-        className={styles.toggle}
-        onClick={onToggle}
-        aria-expanded={expanded}
-        aria-controls={`folder-${id}`}
-      >
-        <span className={styles.chevron} data-expanded={expanded || undefined} aria-hidden>
-          <Icon category="outlined" type="chevron_right" />
-        </span>
-        <span className={styles.folderIcon} aria-hidden>
-          <Icon category="outlined" type="folder" />
-        </span>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
-      </button>
+      <Tooltip content={name} asChild>
+        <button
+          type="button"
+          className={styles.toggle}
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={`folder-${id}`}
+        >
+          <span className={styles.chevron} data-expanded={expanded || undefined} aria-hidden>
+            <Icon category="outlined" type="chevron_right" />
+          </span>
+          <span className={styles.folderIcon} aria-hidden>
+            <Icon category="outlined" type="folder" />
+          </span>
+          <span className={styles.name}>{name}</span>
+        </button>
+      </Tooltip>
 
       <div className={styles.trailing}>
         {(onUpload || onCreateSubfolder || onDelete) && (

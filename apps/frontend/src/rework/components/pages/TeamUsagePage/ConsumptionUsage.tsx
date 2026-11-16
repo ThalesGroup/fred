@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { AnalyticsResponse, AnalyticsRow } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure";
@@ -92,7 +93,11 @@ export default function ConsumptionUsage({
                     columns={[
                       {
                         label: t("rework.personalAnalytics.dimension"),
-                        cellRenderer: (row) => <span title={row.id}>{row.label}</span>,
+                        cellRenderer: (row) => (
+                          <Tooltip content={row.id} asChild>
+                            <span tabIndex={0}>{row.label}</span>
+                          </Tooltip>
+                        ),
                       },
                       {
                         label: t("rework.teamUsage.tokensOverTime.valueLabel"),
@@ -121,7 +126,11 @@ export default function ConsumptionUsage({
                   columns={[
                     {
                       label: t("rework.personalAnalytics.dimension"),
-                      cellRenderer: (row) => <span title={dimension(row).id}>{dimension(row).label}</span>,
+                      cellRenderer: (row) => (
+                        <Tooltip content={dimension(row).id} asChild>
+                          <span tabIndex={0}>{dimension(row).label}</span>
+                        </Tooltip>
+                      ),
                     },
                     ...(["input_tokens", "output_tokens"] as const).map((measure) => ({
                       label: t(`rework.consumption.${measure}`),

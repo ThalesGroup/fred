@@ -144,16 +144,22 @@ export default function PromptCard({
 
       {/* ── Header: category (team) or author team (marketplace) + name ── */}
       <div className={styles.header}>
-        <span className={styles.category} data-uncategorized={!label} title={label ?? undefined}>
-          {label ?? t("rework.promptCategories.noCategory")}
-        </span>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
-        {"logical_name" in prompt && (
-          <span className={styles.category} title={`/${prompt.logical_name}`}>
-            /{prompt.logical_name}
+        <Tooltip content={label ?? undefined} asChild>
+          <span tabIndex={0} className={styles.category} data-uncategorized={!label}>
+            {label ?? t("rework.promptCategories.noCategory")}
           </span>
+        </Tooltip>
+        <Tooltip content={name} asChild>
+          <span tabIndex={0} className={styles.name}>
+            {name}
+          </span>
+        </Tooltip>
+        {"logical_name" in prompt && (
+          <Tooltip content={`/${prompt.logical_name}`} asChild>
+            <span tabIndex={0} className={styles.category}>
+              /{prompt.logical_name}
+            </span>
+          </Tooltip>
         )}
       </div>
 

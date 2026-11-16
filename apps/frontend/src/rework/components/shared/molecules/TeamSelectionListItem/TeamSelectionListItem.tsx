@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useGetTeamAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamSelectionListItem.module.scss";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
@@ -85,14 +86,18 @@ export default function TeamSelectionListItem({
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}
       <span className={styles.labels}>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
+        <Tooltip content={name} asChild>
+          <span tabIndex={0} className={styles.name}>
+            {name}
+          </span>
+        </Tooltip>
         {description && <span className={styles.roles}>{description}</span>}
         {!personal && (
-          <span className={styles.roles} title={roleLabel}>
-            {roleLabel}
-          </span>
+          <Tooltip content={roleLabel} asChild>
+            <span tabIndex={0} className={styles.roles}>
+              {roleLabel}
+            </span>
+          </Tooltip>
         )}
       </span>
     </>

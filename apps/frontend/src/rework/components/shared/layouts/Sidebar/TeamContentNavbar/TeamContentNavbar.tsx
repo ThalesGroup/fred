@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import { canReadSpaceUsage } from "@core/utils/spaceUsage";
 import { sessionQueryArgs } from "../../../../../../slices/controlPlane/controlPlaneApi";
@@ -387,15 +388,19 @@ export default function TeamContentNavbar() {
                   {t(space ? `rework.userSettings.spaceKinds.${space.kind}` : "rework.sidebar.team.spaceLabel")}
                 </span>
               )}
-              <span className={styles.teamPanelName} title={teamDisplayName}>
-                {isPersonalTeam ? t("rework.sidebar.team.userTeam") : (space?.name ?? selectedTeam?.name)}
-              </span>
+              <Tooltip content={teamDisplayName} asChild>
+                <span tabIndex={0} className={styles.teamPanelName}>
+                  {isPersonalTeam ? t("rework.sidebar.team.userTeam") : (space?.name ?? selectedTeam?.name)}
+                </span>
+              </Tooltip>
             </div>
           </div>
           {showRoleLabel && (
-            <span className={styles.teamPanelRoles} title={roleLabel}>
-              {roleLabel}
-            </span>
+            <Tooltip content={roleLabel} asChild>
+              <span tabIndex={0} className={styles.teamPanelRoles}>
+                {roleLabel}
+              </span>
+            </Tooltip>
           )}
         </div>
         {!isPersonalTeam &&

@@ -22,7 +22,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ReactElement,
+  type HTMLAttributes,
+  type Ref,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -66,7 +67,11 @@ export interface TooltipProps {
   gapPx?: number;
   /** Stretch the trigger wrapper to its parent's width (e.g. a whole menu row). */
   fill?: boolean;
-  children: ReactNode;
+  /** Attach directly to one element, preserving its layout and ref. */
+  asChild?: boolean;
+  /** Trigger owned by an embedded editor; React owns only the tooltip panel. */
+  target?: HTMLElement;
+  children?: ReactNode;
 }
 
 // Matches --spacing-2xs (styles/spacings.css) — the gap CSS previously gave
@@ -112,9 +117,11 @@ export const Tooltip = ({
   placement = "top",
   gapPx = TOOLTIP_GAP_PX,
   fill = false,
+  asChild = false,
+  target,
 }: TooltipProps) => {
   const tooltipId = useId();
-  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const wrapperRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLSpanElement>(null);
   // Hover and keyboard-focus are tracked independently, OR'd into `visible` —
   // not collapsed into one boolean — because either can outlast the other:
@@ -125,7 +132,8 @@ export const Tooltip = ({
   // leave event loses it.
   const [isHovering, setIsHovering] = useState(false);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
-  const visible = isHovering || isKeyboardFocused;
+  const enabled = Boolean(content ?? text);
+  const visible = enabled && (isHovering || isKeyboardFocused);
   const [triggerRect, setTriggerRect] = useState<TriggerRect | null>(null);
   const [contentStyle, setContentStyle] = useState<CSSProperties | undefined>(undefined);
 
@@ -137,11 +145,11 @@ export const Tooltip = ({
   // Escaping to body and positioning from the trigger's own viewport rect
   // sidesteps every ancestor's overflow instead of special-casing each one.
   const updateTriggerRect = useCallback(() => {
-    const el = wrapperRef.current;
+    const el = target ?? wrapperRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setTriggerRect({ top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width });
-  }, []);
+  }, [target]);
 
   // Interactive panels close on a short delay so the pointer can cross the gap
   // between the trigger and the panel without the panel disappearing under it.
@@ -169,6 +177,59 @@ export const Tooltip = ({
     if (lastFocusWasKeyboard) setIsKeyboardFocused(true);
   }, []);
   const handleBlur = useCallback(() => setIsKeyboardFocused(false), []);
+
+  // Native listeners also cover disabled controls and editor-owned triggers.
+  // Rebind after each commit so a replaced/ref-forwarded trigger is never stale.
+  useLayoutEffect(() => {
+    const trigger = target ?? (asChild ? wrapperRef.current : null);
+    if (!trigger || !enabled) return;
+    const enter = (event: MouseEvent) => {
+      if (!(event.relatedTarget instanceof Node) || !trigger.contains(event.relatedTarget)) handleMouseEnter();
+    };
+    const leave = (event: MouseEvent) => {
+      if (!(event.relatedTarget instanceof Node) || !trigger.contains(event.relatedTarget)) handleMouseLeave();
+    };
+    trigger.setAttribute(
+      "aria-describedby",
+      [...new Set([...(trigger.getAttribute("aria-describedby") ?? "").split(" "), tooltipId])]
+        .filter(Boolean)
+        .join(" "),
+    );
+    trigger.addEventListener("mouseover", enter);
+    trigger.addEventListener("mouseout", leave);
+    trigger.addEventListener("focusin", handleFocus);
+    trigger.addEventListener("focusout", handleBlur);
+    return () => {
+      trigger.removeEventListener("mouseover", enter);
+      trigger.removeEventListener("mouseout", leave);
+      trigger.removeEventListener("focusin", handleFocus);
+      trigger.removeEventListener("focusout", handleBlur);
+      const remaining = (trigger.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .filter((id) => id !== tooltipId)
+        .join(" ");
+      if (remaining) trigger.setAttribute("aria-describedby", remaining);
+      else trigger.removeAttribute("aria-describedby");
+    };
+  });
+
+  type TriggerProps = HTMLAttributes<HTMLElement> & { ref?: Ref<HTMLElement> };
+  const element = isValidElement<TriggerProps>(children) ? children : undefined;
+  const childRef = element?.props.ref;
+  const setTriggerRef = useCallback(
+    (node: HTMLElement | null) => {
+      wrapperRef.current = node;
+      const cleanup = typeof childRef === "function" ? childRef(node) : undefined;
+      if (childRef && typeof childRef !== "function") childRef.current = node;
+      return () => {
+        wrapperRef.current = null;
+        if (typeof cleanup === "function") cleanup();
+        else if (typeof childRef === "function") childRef(null);
+        else if (childRef) childRef.current = null;
+      };
+    },
+    [childRef],
+  );
 
   useEffect(() => {
     if (visible) {
@@ -307,16 +368,13 @@ export const Tooltip = ({
     });
   }, [triggerRect, placement, gapPx, content, text]);
 
-  const child = isValidElement(children)
-    ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, {
-        "aria-describedby": [
-          (children as ReactElement<{ "aria-describedby"?: string }>).props["aria-describedby"],
-          tooltipId,
-        ]
-          .filter(Boolean)
-          .join(" "),
-      })
-    : children;
+  const child =
+    element && enabled
+      ? cloneElement(element, {
+          "aria-describedby": [element.props["aria-describedby"], tooltipId].filter(Boolean).join(" "),
+          ...(asChild ? { ref: setTriggerRef } : {}),
+        })
+      : children;
 
   const contentClasses = [styles["tooltip-content"]];
   // A string is a hint that needs to wrap, not a panel bringing its own
@@ -325,6 +383,31 @@ export const Tooltip = ({
     contentClasses.push(styles[typeof content === "string" ? "tooltip-content-prose" : "tooltip-content-rich"]);
   if (interactive) contentClasses.push(styles["tooltip-content-interactive"]);
 
+  const panel =
+    triggerRect &&
+    visible &&
+    createPortal(
+      <span
+        ref={contentRef}
+        id={tooltipId}
+        className={contentClasses.join(" ")}
+        role="tooltip"
+        style={contentStyle}
+        onMouseEnter={interactive ? handleMouseEnter : undefined}
+        onMouseLeave={interactive ? handleMouseLeave : undefined}
+      >
+        {content ?? text}
+      </span>,
+      uiPortalRoot(target ?? wrapperRef.current),
+    );
+  if (target) return panel;
+  if (asChild)
+    return (
+      <>
+        {child}
+        {panel}
+      </>
+    );
   return (
     <span
       ref={wrapperRef}
@@ -336,21 +419,7 @@ export const Tooltip = ({
       onBlur={handleBlur}
     >
       {child}
-      {triggerRect &&
-        createPortal(
-          <span
-            ref={contentRef}
-            id={tooltipId}
-            className={contentClasses.join(" ")}
-            role="tooltip"
-            style={contentStyle}
-            onMouseEnter={interactive ? handleMouseEnter : undefined}
-            onMouseLeave={interactive ? handleMouseLeave : undefined}
-          >
-            {content ?? text}
-          </span>,
-          uiPortalRoot(wrapperRef.current),
-        )}
+      {panel}
     </span>
   );
 };

@@ -13,13 +13,14 @@
 // limitations under the License.
 
 import { ReactNode } from "react";
+import { Tooltip } from "../Tooltip/Tooltip";
 import IconButton from "../IconButton/IconButton";
 import styles from "./Chip.module.css";
 
 export interface ChipProps {
   /** Primary label; truncates with an ellipsis when it overflows. */
   label: string;
-  /** Full text for the title tooltip when the label is truncated. Defaults to `label`. */
+  /** Fred Tooltip content for the label. Defaults to `label`; empty disables it. */
   title?: string;
   /** Muted secondary line under the label (e.g. a file status). */
   secondary?: string;
@@ -69,7 +70,16 @@ export default function Chip({
   size = "medium",
   appearance = "outlined",
 }: ChipProps) {
-  const labelProps = { className: styles.label, title: title ?? label };
+  const hint = title ?? label;
+  const labelContent = onClick ? (
+    <button type="button" onClick={onClick} className={styles.label}>
+      {label}
+    </button>
+  ) : (
+    <span className={styles.label} tabIndex={hint ? 0 : undefined}>
+      {label}
+    </span>
+  );
 
   return (
     <span className={styles.chip} data-tone={tone} data-size={size} data-appearance={appearance}>
@@ -79,12 +89,12 @@ export default function Chip({
         </span>
       )}
       <span className={styles.text}>
-        {onClick ? (
-          <button type="button" onClick={onClick} {...labelProps}>
-            {label}
-          </button>
+        {hint ? (
+          <Tooltip content={hint} asChild>
+            {labelContent}
+          </Tooltip>
         ) : (
-          <span {...labelProps}>{label}</span>
+          labelContent
         )}
         {secondary != null && <span className={styles.secondary}>{secondary}</span>}
       </span>

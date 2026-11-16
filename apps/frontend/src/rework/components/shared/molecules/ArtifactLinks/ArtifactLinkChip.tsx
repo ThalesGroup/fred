@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { LinkPart } from "../../../../../slices/runtime/runtimeOpenApi";
@@ -72,32 +73,33 @@ export function ArtifactLinkChip({ link, children, title }: ArtifactLinkChipProp
 
   if (children !== undefined) {
     return (
-      <a
-        href={link.href}
-        title={title}
-        onClick={(event) => {
-          event.preventDefault();
-          onDownload();
-        }}
-      >
-        {children}
-      </a>
+      <Tooltip content={title} asChild>
+        <a
+          href={link.href}
+          onClick={(event) => {
+            event.preventDefault();
+            onDownload();
+          }}
+        >
+          {children}
+        </a>
+      </Tooltip>
     );
   }
 
   return (
-    <button
-      type="button"
-      className={styles.chip}
-      onClick={onDownload}
-      aria-label={t("chatbot.artifactLinks.downloadAria", { name })}
-    >
-      <span className={styles.icon} aria-hidden>
-        <Icon category="outlined" type="download" />
-      </span>
-      <span className={styles.name} title={name}>
-        {name}
-      </span>
-    </button>
+    <Tooltip content={name} asChild>
+      <button
+        type="button"
+        className={styles.chip}
+        onClick={onDownload}
+        aria-label={t("chatbot.artifactLinks.downloadAria", { name })}
+      >
+        <span className={styles.icon} aria-hidden>
+          <Icon category="outlined" type="download" />
+        </span>
+        <span className={styles.name}>{name}</span>
+      </button>
+    </Tooltip>
   );
 }

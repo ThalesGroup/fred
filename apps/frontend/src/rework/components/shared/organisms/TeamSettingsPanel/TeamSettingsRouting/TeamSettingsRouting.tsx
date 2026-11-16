@@ -202,9 +202,11 @@ export default function TeamSettingsRouting({ team, canWrite }: TeamSettingsRout
                   </Tooltip>
                 )}
                 <span className={styles.label}>
-                  <span className={styles.name} title={row.label}>
-                    {row.label}
-                  </span>
+                  <Tooltip content={row.label} asChild>
+                    <span tabIndex={0} className={styles.name}>
+                      {row.label}
+                    </span>
+                  </Tooltip>
                   {/* Visible, not a tooltip: the switch it explains is disabled. */}
                   {isDefault && (
                     <span id={helperId} className={styles.hint}>

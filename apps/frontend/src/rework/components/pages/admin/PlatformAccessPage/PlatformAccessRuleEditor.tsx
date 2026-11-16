@@ -297,19 +297,19 @@ export default function PlatformAccessRuleEditor({
                   </span>
                   <div className={styles.conditionCell}>
                     <span aria-hidden="true">{t("rework.platformAccess.rule.accountField")}</span>
-                    <button
-                      type="button"
-                      disabled={locked}
-                      className={styles.fieldChoice}
-                      aria-label={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
-                      aria-haspopup="dialog"
-                      onClick={() => setPicking(index)}
-                    >
-                      <code className={styles.fieldName} title={selectedField}>
-                        {selectedField}
-                      </code>
-                      <Icon category="outlined" type="edit" />
-                    </button>
+                    <Tooltip content={selectedField} asChild>
+                      <button
+                        type="button"
+                        disabled={locked}
+                        className={styles.fieldChoice}
+                        aria-label={`${t("rework.platformAccess.rule.accountField")}: ${selectedField}`}
+                        aria-haspopup="dialog"
+                        onClick={() => setPicking(index)}
+                      >
+                        <code className={styles.fieldName}>{selectedField}</code>
+                        <Icon category="outlined" type="edit" />
+                      </button>
+                    </Tooltip>
                   </div>
                   <div className={styles.conditionCell}>
                     <span aria-hidden="true">{t("rework.platformAccess.rule.operator")}</span>

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
@@ -115,9 +116,11 @@ export default function AdminTeamsPage() {
             <div className={styles.teamNameCell}>
               <span className={styles.teamName}>{team.name}</span>
               {description && (
-                <span className={styles.teamDescription} title={description}>
-                  {description}
-                </span>
+                <Tooltip content={description} asChild>
+                  <span tabIndex={0} className={styles.teamDescription}>
+                    {description}
+                  </span>
+                </Tooltip>
               )}
             </div>
           );
@@ -137,12 +140,14 @@ export default function AdminTeamsPage() {
             <div className={styles.adminsCell}>
               <AvatarGroup avatars={admins.map(({ name, imageUrl }) => ({ name, imageUrl }))} />
               {pending.length > 0 && (
-                <span
-                  className={styles.pendingAdmins}
-                  title={pending.map(({ name }) => t("rework.adminTeams.pendingAdminHint", { name })).join("\n")}
+                <Tooltip
+                  content={pending.map(({ name }) => t("rework.adminTeams.pendingAdminHint", { name })).join("\n")}
+                  asChild
                 >
-                  {t("rework.adminTeams.existingTeams.pendingCount", { count: pending.length })}
-                </span>
+                  <span tabIndex={0} className={styles.pendingAdmins}>
+                    {t("rework.adminTeams.existingTeams.pendingCount", { count: pending.length })}
+                  </span>
+                </Tooltip>
               )}
             </div>
           );

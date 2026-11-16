@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PlatformAccessPage.module.css";
@@ -59,9 +60,11 @@ export default function PlatformAccessValuePrompt({
           <div>
             <dt>{t("rework.platformAccess.picker.selected")}</dt>
             <dd>
-              <code className={styles.fieldName} title={selectedField}>
-                {selectedField}
-              </code>
+              <Tooltip content={selectedField} asChild>
+                <code tabIndex={0} className={styles.fieldName}>
+                  {selectedField}
+                </code>
+              </Tooltip>
             </dd>
           </div>
           <div>

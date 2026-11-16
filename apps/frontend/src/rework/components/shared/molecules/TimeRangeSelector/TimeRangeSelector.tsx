@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect, useRef, useState } from "react";
 import { initialFocusTarget, useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import { useTranslation } from "react-i18next";
@@ -142,20 +143,21 @@ export default function TimeRangeSelector({
         title={t("rework.analytics.timeRange.previous")}
         aria-label={t("rework.analytics.timeRange.previous")}
       />
-      <button
-        type="button"
-        className={styles.trigger}
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-haspopup="true"
-        aria-expanded={isOpen}
-        title={label}
-      >
-        <div className={styles.triggerInner}>
-          <Icon category="outlined" type="schedule" />
-          <span className={styles.label}>{label}</span>
-          <Icon category="outlined" type="arrow_drop_down" />
-        </div>
-      </button>
+      <Tooltip content={label} asChild>
+        <button
+          type="button"
+          className={styles.trigger}
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-haspopup="true"
+          aria-expanded={isOpen}
+        >
+          <div className={styles.triggerInner}>
+            <Icon category="outlined" type="schedule" />
+            <span className={styles.label}>{label}</span>
+            <Icon category="outlined" type="arrow_drop_down" />
+          </div>
+        </button>
+      </Tooltip>
       <IconButton
         variant="icon"
         size="small"

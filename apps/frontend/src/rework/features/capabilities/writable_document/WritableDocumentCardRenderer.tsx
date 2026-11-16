@@ -28,6 +28,7 @@
 //    `(document_id, updated_at)` exactly once, and only when the page has been open
 //    >5s (history replay happens in the first moments after load; a live write later).
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -91,9 +92,11 @@ export function WritableDocumentCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.icon} aria-hidden>
           <Icon category="outlined" type="edit_document" />
         </span>
-        <span className={styles.title} title={title}>
-          {title}
-        </span>
+        <Tooltip content={title} asChild>
+          <span tabIndex={0} className={styles.title}>
+            {title}
+          </span>
+        </Tooltip>
         {sessionId && (
           <WritableDocumentDownloadButton sessionId={sessionId} documentId={doc.document_id} title={title} />
         )}

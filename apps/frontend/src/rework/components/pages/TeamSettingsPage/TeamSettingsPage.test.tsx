@@ -88,36 +88,36 @@ afterEach(async () => {
 const render = async (landing = false) => {
   await act(async () => root.render(landing ? <TeamLandingPage /> : <TeamSettingsPage />));
 };
-const checkbox = (username: string, role: string) =>
-  container.querySelector<HTMLInputElement>(`input[aria-label="${username}: rework.manager.roles.${role}"]`)!;
+const roleButton = (username: string, role: string) =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="${username}: rework.manager.roles.${role}"]`)!;
 
 it("opens management for an owner without content access and grants nothing automatically", async () => {
   await render(true);
   expect(container.textContent).toContain("navigate:/team/pilote/settings/members");
   await render();
-  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
-  expect(checkbox("nova.responsable", "member").checked).toBe(false);
-  expect(checkbox("nova.responsable", "editor").checked).toBe(false);
-  expect(checkbox("bob", "member").checked).toBe(true);
-  expect(checkbox("bob", "editor").checked).toBe(true);
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("nova.responsable", "editor").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("bob", "member").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("bob", "editor").getAttribute("aria-pressed")).toBe("true");
   expect(h.grant).not.toHaveBeenCalled();
   expect(h.revoke).not.toHaveBeenCalled();
-  await act(async () => checkbox("bob", "analyst").click());
+  await act(async () => roleButton("bob", "analyst").click());
   expect(h.grant).toHaveBeenCalledWith({ id: "pilote", user: "bob", role: "analyst" });
 });
 it("keeps cumulative roles and reports a refused last-owner removal", async () => {
   h.revoke.mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
   await render();
-  await act(async () => checkbox("nova.responsable", "owner").click());
+  await act(async () => roleButton("nova.responsable", "owner").click());
   expect(h.revoke).toHaveBeenCalledWith({ id: "pilote", user: "nova", role: "owner" });
   expect(container.textContent).toContain("rework.spaceMembers.conflict");
-  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
 });
 it("blocks direct access and stops roster reads when management is revoked", async () => {
   await render();
   h.manage = false;
   await render();
-  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.querySelector("button[aria-pressed]")).toBeNull();
   expect(container.textContent).toContain("rework.spaceMembers.forbidden");
   expect(h.roster).toHaveBeenLastCalledWith(
     { id: "pilote", after: undefined, search: undefined },
@@ -186,6 +186,12 @@ it("lets a reader view explicit roles and leave without granting management", as
   await render();
   expect(container.querySelector('input[type="checkbox"]')).toBeNull();
   expect(container.textContent).toContain("rework.manager.roles.editor");
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("bob", "editor").getAttribute("aria-disabled")).toBe("true");
+  await act(async () => roleButton("bob", "editor").click());
+  expect(h.grant).not.toHaveBeenCalled();
+  expect(h.revoke).not.toHaveBeenCalled();
   const leave = Array.from(container.querySelectorAll("button")).find((b) =>
     b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
   )!;

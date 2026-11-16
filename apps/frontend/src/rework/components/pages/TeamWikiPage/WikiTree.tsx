@@ -119,15 +119,17 @@ export function WikiTree({
               ) : (
                 anyExpandable && <span className={styles.spacer} aria-hidden="true" />
               )}
-              <button
-                type="button"
-                className={styles.label}
-                onClick={() => onSelect(page.slug)}
-                aria-current={page.slug === activeSlug ? "page" : undefined}
-              >
-                <span className={styles.title}>{page.title}</span>
-                {page.needs_review && <span className={styles.reviewDot} title={t("rework.wiki.tree.needsReview")} />}
-              </button>
+              <Tooltip content={page.needs_review ? t("rework.wiki.tree.needsReview") : undefined} asChild>
+                <button
+                  type="button"
+                  className={styles.label}
+                  onClick={() => onSelect(page.slug)}
+                  aria-current={page.slug === activeSlug ? "page" : undefined}
+                >
+                  <span className={styles.title}>{page.title}</span>
+                  {page.needs_review && <span className={styles.reviewDot} />}
+                </button>
+              </Tooltip>
               {/* Revealed on hover or keyboard focus. Creating a sub-page by
                   pointing at its parent is what makes the parent unambiguous —
                   no second field to fill, and nothing to get wrong. */}

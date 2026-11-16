@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { LinkPart } from "../../../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -30,18 +31,19 @@ export function CitationLinkChip({ link }: { link: LinkPart }) {
   const host = hostOf(href);
   const name = link.title || host;
   return (
-    <a
-      className={styles.chip}
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`${name} — ${host}`}
-      aria-label={t("chatbot.artifactLinks.citationAria", { name, host })}
-    >
-      <span className={styles.icon} aria-hidden>
-        <Icon category="outlined" type="travel_explore" />
-      </span>
-      <span className={styles.name}>{name}</span>
-    </a>
+    <Tooltip content={`${name} — ${host}`} asChild>
+      <a
+        className={styles.chip}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={t("chatbot.artifactLinks.citationAria", { name, host })}
+      >
+        <span className={styles.icon} aria-hidden>
+          <Icon category="outlined" type="travel_explore" />
+        </span>
+        <span className={styles.name}>{name}</span>
+      </a>
+    </Tooltip>
   );
 }

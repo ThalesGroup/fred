@@ -589,3 +589,49 @@ describe("Tooltip", () => {
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
 });
+
+it("attaches without a wrapper and preserves the trigger ref, handlers and existing description", () => {
+  const onClick = vi.fn();
+  const onMouseEnter = vi.fn();
+  const cleanup = vi.fn();
+  const ref = vi.fn(() => cleanup);
+  act(() =>
+    root.render(
+      <Tooltip content="Details" asChild>
+        <button ref={ref} onClick={onClick} onMouseEnter={onMouseEnter} aria-describedby="existing">
+          Action
+        </button>
+      </Tooltip>,
+    ),
+  );
+  const trigger = container.querySelector("button")!;
+  expect(container.firstElementChild).toBe(trigger);
+  expect(ref).toHaveBeenCalledWith(trigger);
+  act(() => trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(onMouseEnter).toHaveBeenCalledOnce();
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Details");
+  expect(trigger.getAttribute("aria-describedby")?.split(" ")).toHaveLength(2);
+  expect(trigger.getAttribute("aria-describedby")).toContain("existing");
+  act(() => trigger.click());
+  expect(onClick).toHaveBeenCalledOnce();
+  act(() => root.render(null));
+  expect(cleanup).toHaveBeenCalledOnce();
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+});
+
+it("cleans up an editor-owned trigger without replacing it or its description", () => {
+  const trigger = document.createElement("button");
+  trigger.setAttribute("aria-describedby", "existing");
+  document.body.append(trigger);
+  act(() => root.render(<Tooltip target={trigger} content="Skill details" />));
+  act(() => {
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Skill details");
+  act(() => root.render(null));
+  expect(trigger.getAttribute("aria-describedby")).toBe("existing");
+  act(() => trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  trigger.remove();
+});

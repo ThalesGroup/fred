@@ -2,6 +2,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -108,7 +109,7 @@ it.each(["stream", "history"] as const)(
   async (carrier) => {
     render(path, [artifact], carrier);
     expect(anchor().querySelector("strong")?.textContent).toBe("the file");
-    expect(anchor().title).toBe("Deliverable");
+    expect(readTooltip(anchor())).toBe("Deliverable");
     expect(await click(anchor())).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(new URL(path, window.location.href).href, {
       headers: { Authorization: "Bearer fred-test-token" },

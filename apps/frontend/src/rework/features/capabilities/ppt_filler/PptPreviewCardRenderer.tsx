@@ -29,6 +29,7 @@
 // Every mount registers the deck, replay included, to seed the panel selection.
 // Later registrations preserve that selection; the catalogue drives availability.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -88,9 +89,11 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.icon} aria-hidden>
           <Icon category="outlined" type="slideshow" />
         </span>
-        <span className={styles.title} title={title}>
-          {title}
-        </span>
+        <Tooltip content={title} asChild>
+          <span tabIndex={0} className={styles.title}>
+            {title}
+          </span>
+        </Tooltip>
         <div className={styles.tools}>
           <DeckSummaryButton summary={preview.summary} />
           {preview.pptx_download_url && (

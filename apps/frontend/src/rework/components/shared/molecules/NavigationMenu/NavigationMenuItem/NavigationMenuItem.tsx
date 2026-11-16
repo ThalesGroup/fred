@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { ReactNode } from "react";
 import styles from "./NavigationMenuItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
@@ -45,9 +46,7 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
       <span className={styles.icon} aria-hidden="true">
         <Icon {...icon} />
       </span>
-      <span className={styles.label} title={label}>
-        {label}
-      </span>
+      <span className={styles.label}>{label}</span>
       {trailingBadge}
       {badge != null && badge > 0 && (
         <span className={styles.badge} aria-label={t("rework.sidebar.admin.badge.activeTasks", { count: badge })}>
@@ -59,27 +58,31 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
 
   if (props.type === "link") {
     return (
-      <NavLink
-        to={props.linkProps.to}
-        end={false}
-        children={({ isActive }) => (
-          <div className={styles["navigation-menu-item"]} data-selected={isActive}>
-            {Content}
-          </div>
-        )}
-      />
+      <Tooltip content={label} asChild>
+        <NavLink
+          to={props.linkProps.to}
+          end={false}
+          children={({ isActive }) => (
+            <div className={styles["navigation-menu-item"]} data-selected={isActive}>
+              {Content}
+            </div>
+          )}
+        />
+      </Tooltip>
     );
   }
 
   return (
-    <button
-      type="button"
-      className={styles["navigation-menu-item"]}
-      onClick={props.onClick}
-      data-selected={props.selected}
-      aria-selected={props.selected}
-    >
-      {Content}
-    </button>
+    <Tooltip content={label} asChild>
+      <button
+        type="button"
+        className={styles["navigation-menu-item"]}
+        onClick={props.onClick}
+        data-selected={props.selected}
+        aria-selected={props.selected}
+      >
+        {Content}
+      </button>
+    </Tooltip>
   );
 }

@@ -1,3 +1,4 @@
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import type { ThreadMessage } from "@rework/types/thread";
 // @vitest-environment jsdom
 // Copyright Thales 2026
@@ -1198,8 +1199,8 @@ describe("platform skills", () => {
     activateSkills();
     type("/");
     expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
-    // The native tooltip gives the full description, which the row may cut.
-    expect(options()[2].title).toBe("meeting-minutes: Meeting minutes");
+    // The shared tooltip gives the full description, which the row may cut.
+    expect(readTooltip(options()[2])).toBe("meeting-minutes: Meeting minutes");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
     expect(options()[2].querySelector("em")?.textContent).toContain("Meeting minutes");
   });
@@ -1453,7 +1454,7 @@ describe("platform skills", () => {
       act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: append } }));
       const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]");
       expect(prompt?.textContent).toBe("chat/summary");
-      expect(prompt?.title).toContain("Résumé");
+      expect(readTooltip(prompt)).toContain("Résumé");
       expect(container.querySelectorAll('[aria-label="chatbot.skills.open"]')).toHaveLength(2);
       const draft = cm().state.doc.toString();
       await act(async () => renders[renders.length - 1].submit());
@@ -1749,7 +1750,7 @@ describe("personal and team prompt commands", () => {
     const token = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
     expect(token).not.toBeNull();
     expect(token.textContent).toBe("chat/summary");
-    expect(token.title.split("\n")[1]).toBe(
+    expect(readTooltip(token).split("\n")[1]).toBe(
       `chatbot.commandMenu.sections.${source === "team" ? "teamFallback" : "personal"}`,
     );
     expect(token.querySelector('[aria-hidden="true"]')?.textContent).toBe("chat");

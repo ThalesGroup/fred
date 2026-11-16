@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -442,9 +443,11 @@ export default function PlatformAccessLinkManager({
                     label: t("rework.platformAccess.links.username"),
                     cellRenderer: (person) => (
                       <span className={styles.joinerUsername}>
-                        <span className={styles.joinerUsernameText} title={person.username || "-"}>
-                          {person.username || "-"}
-                        </span>
+                        <Tooltip content={person.username || "-"} asChild>
+                          <span tabIndex={0} className={styles.joinerUsernameText}>
+                            {person.username || "-"}
+                          </span>
+                        </Tooltip>
                         {person.deleted && <span>({t("rework.platformAccess.links.deletedUser")})</span>}
                       </span>
                     ),

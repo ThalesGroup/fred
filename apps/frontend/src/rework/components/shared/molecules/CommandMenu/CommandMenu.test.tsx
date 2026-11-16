@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandMenu, type CommandMenuEmptyReason, type CommandMenuEntry } from "./CommandMenu";
 
 vi.mock("react-i18next", () => ({
@@ -22,6 +24,15 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: { name?: string }) => (options?.name ? `${key}:${options.name}` : key),
   }),
 }));
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const mounted: { root: Root; host: HTMLElement }[] = [];
+afterEach(() => {
+  for (const { root, host } of mounted.splice(0)) {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
 
 const prompt = (source: "team" | "personal", command: string): CommandMenuEntry => ({
   kind: "prompt",
@@ -46,17 +57,22 @@ function render(
   props: { activeIndex?: number; teamName?: string; empty?: CommandMenuEmptyReason } = {},
 ) {
   const host = document.createElement("div");
-  host.innerHTML = renderToStaticMarkup(
-    <CommandMenu
-      id="menu"
-      entries={entries}
-      activeIndex={props.activeIndex ?? 0}
-      empty={props.empty ?? "noMatch"}
-      teamName={props.teamName}
-      optionId={(index) => `option-${index}`}
-      onActivate={() => {}}
-      onFocusEntry={() => {}}
-    />,
+  document.body.append(host);
+  const root = createRoot(host);
+  mounted.push({ root, host });
+  act(() =>
+    root.render(
+      <CommandMenu
+        id="menu"
+        entries={entries}
+        activeIndex={props.activeIndex ?? 0}
+        empty={props.empty ?? "noMatch"}
+        teamName={props.teamName}
+        optionId={(index) => `option-${index}`}
+        onActivate={() => {}}
+        onFocusEntry={() => {}}
+      />,
+    ),
   );
   const groups = Array.from(host.querySelectorAll<HTMLElement>('[role="group"]'));
   const heading = (group: HTMLElement) =>
@@ -98,7 +114,7 @@ describe("CommandMenu sections", () => {
   it("labels each group by its own heading and repeats the full label as a tooltip", () => {
     const { headings } = render(ALL, { teamName: "A very long team name" });
     expect(new Set(headings.map((heading) => heading?.id)).size).toBe(3);
-    expect(headings[0]?.title).toBe("chatbot.commandMenu.sections.team:A very long team name");
+    expect(readTooltip(headings[0])).toBe("chatbot.commandMenu.sections.team:A very long team name");
   });
 
   it("keeps one focus and the flat option index across sections", () => {
@@ -128,9 +144,9 @@ describe("CommandMenu sections", () => {
     expect(host.textContent).not.toContain("chatbot.commandMenu.sources.");
     expect(host.querySelector('[role="option"]')?.textContent).toBe("chat/searchsearch");
     const rows = host.querySelectorAll<HTMLElement>('[role="option"]');
-    expect(rows[3]?.title).toBe("review");
+    expect(readTooltip(rows[3])).toBe("review");
     expect(rows[3]?.textContent).toBe("reviewreview");
-    expect(rows[4]?.title).toBe("Analyser des données: Vérifier les calculs.");
+    expect(readTooltip(rows[4])).toBe("Analyser des données: Vérifier les calculs.");
     expect(rows[4]?.textContent).toBe("Analyser des données (analyze-data)Vérifier les calculs.");
   });
 });

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { TFunction } from "i18next";
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
@@ -148,15 +149,11 @@ export function WikiArticle({
             )}
             {edited && <span>{edited}</span>}
             {page.needs_review && (
-              <button
-                type="button"
-                className={styles.reviewChip}
-                onClick={onClearReview}
-                disabled={!canEdit}
-                title={canEdit ? t("rework.wiki.article.clearReviewHint") : undefined}
-              >
-                {t(canEdit ? "rework.wiki.article.markReviewed" : "rework.wiki.article.awaitingReview")}
-              </button>
+              <Tooltip content={canEdit ? t("rework.wiki.article.clearReviewHint") : undefined} asChild>
+                <button type="button" className={styles.reviewChip} onClick={onClearReview} disabled={!canEdit}>
+                  {t(canEdit ? "rework.wiki.article.markReviewed" : "rework.wiki.article.awaitingReview")}
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>

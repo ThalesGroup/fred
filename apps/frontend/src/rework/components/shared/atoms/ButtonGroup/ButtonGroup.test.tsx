@@ -285,3 +285,27 @@ describe("ButtonGroup track surface", () => {
     expect(group()?.getAttribute("data-surface")).toBe("surface-container-lowest");
   });
 });
+
+it("keeps full-width items direct children and exposes their hints during arrow navigation", () => {
+  render(
+    <ButtonGroup
+      size="small"
+      color="primary"
+      variant="radio"
+      fullWidth
+      aria-label="Period"
+      items={[
+        { label: "A", title: "First period" },
+        { label: "B", title: "Second period" },
+      ]}
+    />,
+  );
+  const group = container.querySelector('[role="radiogroup"]')!;
+  expect(Array.from(group.children).every((node) => node.tagName === "BUTTON")).toBe(true);
+  act(() => items()[0].focus());
+  pressKey(items()[0], "ArrowRight");
+  expect(document.activeElement).toBe(items()[1]);
+  expect(items()[1].getAttribute("aria-checked")).toBe("true");
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Second period");
+  expect(container.querySelector("[title]")).toBeNull();
+});

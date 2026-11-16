@@ -20,6 +20,7 @@
 // will use until Save, and offering it here would hand back a different deck
 // than the one being downloaded from.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -73,18 +74,20 @@ export function PptTemplateDownloadButton({
   };
 
   return (
-    <span title={hint}>
-      <Button
-        color="primary"
-        variant="outlined"
-        size="small"
-        disabled={disabled || isDownloading || !canDownload}
-        icon={{ category: "outlined", type: "download" }}
-        onClick={handleDownload}
-        aria-label={`${t("capability.ppt_filler.form.downloadTemplate")} — ${hint}`}
-      >
-        {t("capability.ppt_filler.form.downloadTemplate")}
-      </Button>
-    </span>
+    <Tooltip content={hint} asChild>
+      <span tabIndex={0}>
+        <Button
+          color="primary"
+          variant="outlined"
+          size="small"
+          disabled={disabled || isDownloading || !canDownload}
+          icon={{ category: "outlined", type: "download" }}
+          onClick={handleDownload}
+          aria-label={`${t("capability.ppt_filler.form.downloadTemplate")} — ${hint}`}
+        >
+          {t("capability.ppt_filler.form.downloadTemplate")}
+        </Button>
+      </span>
+    </Tooltip>
   );
 }

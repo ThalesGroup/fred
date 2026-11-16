@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +20,9 @@
 // here would either hide the only way to dismiss a real failure, or offer a
 // dead button that does nothing.
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { TaskTarget, TaskViewModel } from "../../../../features/tasks/taskTypes";
@@ -173,8 +177,18 @@ describe("TaskCard filename", () => {
 
   it("keeps the full name reachable on hover", () => {
     const name = `${"long-report-name-".repeat(4)}.pdf`;
-    expect(renderToStaticMarkup(<TaskCard task={vm({ target: target({ label: name }) })} />)).toContain(
-      `title="${name}"`,
-    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      act(() => root.render(<TaskCard task={vm({ target: target({ label: name }) })} />));
+      const label = Array.from(host.querySelectorAll("span[aria-describedby]")).find(
+        (node) => node.textContent === name,
+      );
+      expect(readTooltip(label)).toBe(name);
+    } finally {
+      act(() => root.unmount());
+      host.remove();
+    }
   });
 });

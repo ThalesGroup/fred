@@ -630,3 +630,26 @@ describe("row activation", () => {
     expect(activate).toHaveBeenCalledOnce();
   });
 });
+
+it("makes primitive cell details keyboard-accessible without activating the row", () => {
+  const onRowClick = vi.fn();
+  render(
+    <DataTable
+      columns={[{ label: "Name", cellRenderer: () => "Full untruncated name" }]}
+      data={makeRows(1)}
+      onRowClick={onRowClick}
+    />,
+  );
+  const cell = container.querySelector<HTMLElement>("span[tabindex]")!;
+  expect(container.querySelector("[title]")).toBeNull();
+  act(() => {
+    cell.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    cell.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  const tooltip = document.querySelector('[role="tooltip"]')!;
+  expect(tooltip.textContent).toBe("Full untruncated name");
+  expect(cell.getAttribute("aria-describedby")).toBe(tooltip.id);
+  expect(onRowClick).not.toHaveBeenCalled();
+  act(() => cell.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+});

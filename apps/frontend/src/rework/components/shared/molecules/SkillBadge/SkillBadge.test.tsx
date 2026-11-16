@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // Copyright Thales 2026. Licensed under the Apache License, Version 2.0.
 
 import { act } from "react";
@@ -56,7 +57,9 @@ it("updates packaged presentation with the interface language while preserving i
   render(true);
   const button = container.querySelector("button")!;
   expect(button.textContent).toContain("Compte rendu de réunion");
-  expect(button.title).toBe(`Compte rendu de réunion: ${fr.chatbot.skills.catalog["meeting-minutes"].description}`);
+  expect(readTooltip(button)).toBe(
+    `Compte rendu de réunion: ${fr.chatbot.skills.catalog["meeting-minutes"].description}`,
+  );
   act(() => button.click());
   expect(onOpen).toHaveBeenCalledWith("meeting-minutes");
   const range = document.createRange();
@@ -67,14 +70,14 @@ it("updates packaged presentation with the interface language while preserving i
   expect(selectedSkillText(range, container)).toBe("/meeting-minutes");
   await act(() => language.changeLanguage("en"));
   expect(button.textContent).toContain("Meeting minutes");
-  expect(button.title).toBe(`Meeting minutes: ${en.chatbot.skills.catalog["meeting-minutes"].description}`);
+  expect(readTooltip(button)).toBe(`Meeting minutes: ${en.chatbot.skills.catalog["meeting-minutes"].description}`);
 });
 
 it("preserves authored custom skills and histories without packaged provenance", () => {
   for (const builtin of [false, undefined]) {
     render(builtin);
     expect(container.querySelector("button")?.textContent).toBe("meeting-minutes");
-    expect(container.querySelector("button")?.title).toContain("Authored description");
+    expect(readTooltip(container.querySelector("button"))).toContain("Authored description");
   }
 });
 
@@ -86,8 +89,8 @@ it.each([
   render(true, "graph");
   const button = container.querySelector("button")!;
   expect(button.textContent).toBe(title);
-  expect(button.title).toMatch(new RegExp(`^${title}: `));
-  expect(button.title.toLowerCase()).not.toContain("mermaid");
+  expect(readTooltip(button)).toMatch(new RegExp(`^${title}: `));
+  expect(readTooltip(button).toLowerCase()).not.toContain("mermaid");
   act(() => button.click());
   expect(onOpen).toHaveBeenCalledWith("graph");
   const range = document.createRange();
@@ -115,7 +118,7 @@ it("falls back to English, then authored metadata for an untranslated packaged s
   expect(container.textContent).toContain("Meeting minutes");
   render(true, "future-skill");
   expect(container.textContent).toBe("future-skill");
-  expect(container.querySelector("button")?.title).toContain("Authored description");
+  expect(readTooltip(container.querySelector("button"))).toContain("Authored description");
 });
 
 it("localizes successful activity and historical invocations only from trusted load provenance", async () => {

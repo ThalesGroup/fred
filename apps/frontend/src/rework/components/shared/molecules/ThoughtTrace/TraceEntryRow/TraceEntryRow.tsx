@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
@@ -56,31 +57,32 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const skillDisplay = skill ? skillPresentation(t, skill) : null;
   if (skill)
     return (
-      <button
-        type="button"
-        className={`${styles.row} ${styles.skillRow}`}
-        aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
-        title={skillDisplay.description || skill.name}
-        onClick={() => openTrace(entry)}
-      >
-        <span className={styles.marker}>
-          <DotStatus status="ok" />
-          <span className={styles.index} aria-hidden="true">
-            {index ?? ""}
+      <Tooltip content={skillDisplay.description || skill.name} asChild>
+        <button
+          type="button"
+          className={`${styles.row} ${styles.skillRow}`}
+          aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
+          onClick={() => openTrace(entry)}
+        >
+          <span className={styles.marker}>
+            <DotStatus status="ok" />
+            <span className={styles.index} aria-hidden="true">
+              {index ?? ""}
+            </span>
           </span>
-        </span>
-        <span className={styles.label}>{label}</span>
-        <span className={styles.primary}>{skillDisplay.title}</span>
-        <span className={styles.secondary}>
-          {t(
-            skill.origin === "user"
-              ? "chatbot.skills.originUser"
-              : skill.child
-                ? "chatbot.skills.originChild"
-                : "chatbot.skills.originAgent",
-          )}
-        </span>
-      </button>
+          <span className={styles.label}>{label}</span>
+          <span className={styles.primary}>{skillDisplay.title}</span>
+          <span className={styles.secondary}>
+            {t(
+              skill.origin === "user"
+                ? "chatbot.skills.originUser"
+                : skill.child
+                  ? "chatbot.skills.originChild"
+                  : "chatbot.skills.originAgent",
+            )}
+          </span>
+        </button>
+      </Tooltip>
     );
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";

@@ -135,7 +135,9 @@ describe("Weaver creation assistant", () => {
     expect(assistantButton()).toBeUndefined();
     act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "pick-template")?.click());
     expect(assistantButton().disabled).toBe(true);
-    expect(assistantButton().title).toBe("rework.weaverAgents.notConnected");
+    expect(assistantButton().hasAttribute("title")).toBe(false);
+    act(() => assistantButton().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("rework.weaverAgents.notConnected");
     act(() => assistantButton().click());
     expect(h.dialog).not.toHaveBeenCalled();
   });

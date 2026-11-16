@@ -132,7 +132,11 @@ describe("MermaidBlock interactions", () => {
     );
     const enlarge = button("mermaid.enlarge");
     await act(async () => enlarge.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-    await act(async () => enlarge.click());
+    await act(async () => {
+      enlarge.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      enlarge.click();
+    });
+    await act(async () => enlarge.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })));
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog).not.toBeNull();
     const close = button("mermaid.close", dialog);

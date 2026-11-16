@@ -120,12 +120,16 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
           </span>
           <span className={styles.welcomeAgentIdentity}>
-            <span className={styles.welcomeAgentName} title={agent.display_name}>
-              {agent.display_name}
-            </span>
-            <span className={styles.welcomeAgentRole} title={agent.role}>
-              {agent.role}
-            </span>
+            <Tooltip content={agent.display_name} asChild>
+              <span tabIndex={0} className={styles.welcomeAgentName}>
+                {agent.display_name}
+              </span>
+            </Tooltip>
+            <Tooltip content={agent.role} asChild>
+              <span tabIndex={0} className={styles.welcomeAgentRole}>
+                {agent.role}
+              </span>
+            </Tooltip>
           </span>
           {agent.description && (
             <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
@@ -1001,7 +1005,7 @@ function ManagedChatContent({
                             tabIndex={0}
                             aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                           >
-                            <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                            <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} title="" />
                             <span className={styles.deletedAgentSuffix}>{t("chatbot.deletedAgentSuffix")}</span>
                           </span>
                         </Tooltip>

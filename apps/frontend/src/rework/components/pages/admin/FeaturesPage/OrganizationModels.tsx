@@ -341,9 +341,11 @@ export function OrganizationModels({
         </p>
       )}
       {refreshError && (
-        <p className={styles.statusWarning} role="alert" title={refreshError}>
-          {t("rework.admin.capabilities.discovery.refreshFailed")} {refreshError}
-        </p>
+        <Tooltip content={refreshError} asChild>
+          <p className={styles.statusWarning} role="alert" tabIndex={0}>
+            {t("rework.admin.capabilities.discovery.refreshFailed")} {refreshError}
+          </p>
+        </Tooltip>
       )}
       {isError && (
         <p className={styles.statusError} role="alert">

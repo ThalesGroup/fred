@@ -5305,7 +5305,7 @@
       "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez ces rôles avant de la retirer de l’équipe.",
       "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
       "title": "Gérer {{name}}",
-      "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque case ajoute ou retire immédiatement un rôle.",
+      "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
       "roster": "Membres actuels",
       "candidates": "Ajouter des personnes de l'espace parent",
       "eligibility": "Ces personnes ont un rôle de contenu direct dans l'organisation ou l'équipe parente. Sélectionnez chaque rôle à leur attribuer dans cet espace. Les rôles existants sont affichés ; aucun rôle n'est ajouté automatiquement.",
@@ -5317,6 +5317,11 @@
       "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
     },
     "spaceModels": {
+      "help": "Règles d'utilisation",
+      "model": "Modèle",
+      "parent": "Espace parent",
+      "local": "Autoriser",
+      "effective": "Disponibilité",
       "impactRestricted": "Le rôle Responsable permet de modifier cette politique, pas de lire les agents. Leur liste nécessite aussi un rôle de lecture dans cet espace.",
       "title": "Modèles",
       "ceiling": "Les modèles et le raisonnement doivent être autorisés par l'organisation. Les restrictions de l'équipe s'appliquent aussi à ses projets. Ces réglages ne donnent aucun droit sur les espaces ou leurs contenus.",

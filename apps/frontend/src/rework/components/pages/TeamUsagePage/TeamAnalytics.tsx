@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
@@ -133,7 +134,11 @@ export default function TeamAnalytics({
               columns={[
                 {
                   label: t("rework.personalAnalytics.agent"),
-                  cellRenderer: (row) => <span title={dimension(row).id}>{dimension(row).label}</span>,
+                  cellRenderer: (row) => (
+                    <Tooltip content={dimension(row).id} asChild>
+                      <span tabIndex={0}>{dimension(row).label}</span>
+                    </Tooltip>
+                  ),
                 },
                 {
                   label: t("rework.teamAnalytics.completed_turns"),
@@ -206,10 +211,12 @@ function MetricTable({ query, name }: { query: ConsumptionQuery; name: string })
           {
             label: t("rework.teamAnalytics.measure"),
             cellRenderer: (row) => (
-              <span title={row.hint}>
-                {row.tool ? `${row.tool} · ` : ""}
-                {row.label}
-              </span>
+              <Tooltip content={row.hint} asChild>
+                <span tabIndex={0}>
+                  {row.tool ? `${row.tool} · ` : ""}
+                  {row.label}
+                </span>
+              </Tooltip>
             ),
           },
           {

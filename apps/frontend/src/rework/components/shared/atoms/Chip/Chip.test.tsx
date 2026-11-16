@@ -67,3 +67,28 @@ it("is outlined by default and tonal on request", () => {
   act(() => root.unmount());
   host.remove();
 });
+
+it("explains its label with the shared tooltip and keeps removal independent", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const onClick = vi.fn();
+  const onRemove = vi.fn();
+  try {
+    act(() => root.render(<Chip label="Draft" title="Draft details" onClick={onClick} onRemove={onRemove} />));
+    const label = host.querySelector("button")!;
+    expect(host.querySelector("[title]")).toBeNull();
+    act(() => label.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Draft details");
+    act(() => label.click());
+    act(() => host.querySelector<HTMLButtonElement>('[aria-label="Remove Draft"]')!.click());
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onRemove).toHaveBeenCalledOnce();
+    act(() => root.render(<Chip label="Draft" title="" />));
+    expect(host.querySelector("[aria-describedby]")).toBeNull();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

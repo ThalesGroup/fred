@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -119,18 +120,14 @@ export function ThoughtTrace({
         </div>
       )}
       {hasActivities && (
-        <button
-          type="button"
-          className={styles.toggle}
-          onClick={toggle}
-          aria-expanded={expanded}
-          title={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")}
-        >
-          <span className={styles.chevron} aria-hidden="true">
-            <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
-          </span>
-          <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
-        </button>
+        <Tooltip content={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")} asChild>
+          <button type="button" className={styles.toggle} onClick={toggle} aria-expanded={expanded}>
+            <span className={styles.chevron} aria-hidden="true">
+              <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+            </span>
+            <span className={`${styles.summary} ${summary.running ? styles.summaryStreaming : ""}`}>{label}</span>
+          </button>
+        </Tooltip>
       )}
 
       {/* One sequence, in the order the turn actually unfolded: reasoning and

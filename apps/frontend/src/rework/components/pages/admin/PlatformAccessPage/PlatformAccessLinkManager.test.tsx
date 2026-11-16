@@ -1,3 +1,4 @@
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
 // @vitest-environment-options {"url":"http://localhost:5173"}
@@ -390,7 +391,7 @@ it("keeps the last known identity visible on a dimmed deleted joiner", () => {
   expect(row?.textContent).toContain("simon(rework.platformAccess.links.deletedUser)");
   expect(row?.textContent).toContain("Simon");
   expect(row?.textContent).toContain("Martin");
-  expect(row?.querySelector(`.${styles.joinerUsernameText}`)?.getAttribute("title")).toBe("simon");
+  expect(readTooltip(row?.querySelector(`.${styles.joinerUsernameText}`))).toBe("simon");
 });
 
 it("keeps cached joiners visible during refresh and handles errors and empty results", () => {
@@ -415,26 +416,38 @@ it("keeps cached joiners visible during refresh and handles errors and empty res
 it("refreshes joined users and the underlying opening count on demand", () => {
   render();
   act(() => button("links.joiners").click());
-  const refresh = frontDialog().querySelector<HTMLButtonElement>('button[aria-label="common.refresh"]')!;
-  expect(refresh.title).toBe("common.refresh");
-  expect(refresh.textContent).toBe("refresh");
-  expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
-  act(() => refresh.click());
+  const refresh = () => frontDialog().querySelector<HTMLButtonElement>('button[aria-label="common.refresh"]')!;
+  expect(readTooltip(refresh())).toBe("common.refresh");
+  expect(refresh().textContent).toBe("refresh");
+  expect(
+    Array.from(document.querySelectorAll(`.${styles.boundedTable} span[aria-describedby]`)).some(
+      (node) => node.textContent === "7",
+    ),
+  ).toBe(true);
+  act(() => refresh().click());
   expect(hooks.joinerRefetch).toHaveBeenCalledOnce();
   expect(hooks.linkRefetch).toHaveBeenCalledOnce();
   hooks.joinerFetching = true;
   hooks.fetching = true;
   render();
   expect(frontDialog().textContent).toContain("simon");
-  expect(document.querySelector(`.${styles.boundedTable} [title="7"]`)).not.toBeNull();
-  expect(refresh.disabled).toBe(true);
-  expect(refresh.getAttribute("aria-busy")).toBe("true");
+  expect(
+    Array.from(document.querySelectorAll(`.${styles.boundedTable} span[aria-describedby]`)).some(
+      (node) => node.textContent === "7",
+    ),
+  ).toBe(true);
+  expect(refresh().disabled).toBe(true);
+  expect(refresh().getAttribute("aria-busy")).toBe("true");
   hooks.joinerFetching = false;
   hooks.fetching = false;
   hooks.linkOpeningCount = 8;
   render();
-  expect(document.querySelector(`.${styles.boundedTable} [title="8"]`)).not.toBeNull();
-  expect(refresh.disabled).toBe(false);
+  expect(
+    Array.from(document.querySelectorAll(`.${styles.boundedTable} span[aria-describedby]`)).some(
+      (node) => node.textContent === "8",
+    ),
+  ).toBe(true);
+  expect(refresh().disabled).toBe(false);
 });
 
 it("shows loading instead of a previous joiner page when pagination is uncached", () => {

@@ -16,6 +16,7 @@ import styles from "./IconButton.module.scss";
 import { ButtonSize, IconButtonVariant, ColorTheme } from "../../utils/Type.ts";
 import { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "../Icon/Icon.tsx";
+import { Tooltip } from "../Tooltip/Tooltip.tsx";
 import { Spinner } from "../Spinner/Spinner.tsx";
 
 // Matches each size's `--icon-size` (IconButton.module.scss) so the spinner
@@ -27,6 +28,8 @@ import { Spinner } from "../Spinner/Spinner.tsx";
 const SPINNER_SIZE: Record<ButtonSize, number> = { "2xs": 16, small: 20, medium: 20 };
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
+  /** Rendered by the Fred Tooltip, never as a native browser title. */
+  title?: string;
   /** Defaults to "on-surface-retreat" — the app's baseline icon-button color. */
   color?: ColorTheme;
   variant: IconButtonVariant;
@@ -61,6 +64,7 @@ export default function IconButton({
   badgeCount,
   disabled,
   className,
+  title,
   "aria-busy": callerBusy,
   ...props
 }: IconButtonProps) {
@@ -75,6 +79,7 @@ export default function IconButton({
       disabled={disabled || loading}
       aria-busy={loading ? true : (callerBusy ?? false)}
       {...props}
+      aria-label={props["aria-label"] ?? title}
     >
       <div className={`${styles["state-layer"]}`}>
         {loading ? <Spinner size={SPINNER_SIZE[iconSize ?? size]} /> : <Icon {...icon} />}
@@ -82,18 +87,29 @@ export default function IconButton({
     </button>
   );
 
-  // The badge lives outside the button because `.btn` is `overflow: hidden` to
-  // clip its state layer to the circle — a child badge would be cut off. The
-  // wrapper only appears when there is a badge, so every other call site keeps
-  // rendering a bare <button>.
-  if (badgeCount === undefined || badgeCount < 1) return button;
+  const control = title ? (
+    <Tooltip content={title} asChild>
+      {disabled || loading ? (
+        <span tabIndex={0} aria-label={props["aria-label"] ?? title}>
+          {button}
+        </span>
+      ) : (
+        button
+      )}
+    </Tooltip>
+  ) : (
+    button
+  );
 
-  return (
+  // Keep the count outside the button's clipped state layer.
+  return badgeCount !== undefined && badgeCount > 0 ? (
     <span className={styles.badgeAnchor}>
-      {button}
+      {control}
       <span className={styles.badge} aria-hidden="true">
         {badgeCount > BADGE_MAX ? `${BADGE_MAX}+` : badgeCount}
       </span>
     </span>
+  ) : (
+    control
   );
 }

@@ -8,7 +8,7 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import Button from "@shared/atoms/Button/Button";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox";
+import { RoleChips } from "@shared/molecules/TeamRoleChips/TeamRoleChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
@@ -29,7 +29,7 @@ import TeamActivity from "./TeamActivity";
 import { SpaceOffers } from "./SpaceOffers";
 import { SpaceModels } from "./SpaceModels";
 
-const ROLES: Role[] = ["owner", "member", "editor", "analyst"];
+const ROLES: Role[] = ["owner", "editor", "analyst", "member"];
 const userLabel = ({ user }: SpaceMember) => {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
   return name ? `${name} (${user.username ?? user.id})` : (user.username ?? user.id);
@@ -223,26 +223,45 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
           ) : (
             <DataTable
               data={page.items}
+              rowKey={(member) => member.user.id}
               columns={[
-                { label: t("rework.spaceMembers.person"), cellRenderer: (member) => <span>{userLabel(member)}</span> },
-                ...ROLES.map((role) => ({
-                  label: t(`rework.manager.roles.${role}`),
-                  cellRenderer: (member: SpaceMember) =>
-                    access.allowed ? (
-                      <Checkbox
-                        checked={member.roles.includes(role)}
-                        disabled={busy || !access.allowed}
-                        aria-label={`${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`}
-                        onChange={(event) => void changeRole(member, role, event.target.checked)}
-                      />
-                    ) : (
-                      <span>{member.roles.includes(role) ? t(`rework.manager.roles.${role}`) : "—"}</span>
-                    ),
-                })),
+                {
+                  label: t("rework.teamSettings.members.table.identifiant"),
+                  size: "minmax(10rem, 1.3fr)",
+                  cellRenderer: (member) => member.user.username ?? member.user.id,
+                },
+                {
+                  label: t("rework.teamSettings.members.table.firstName"),
+                  size: "minmax(7rem, 1fr)",
+                  cellRenderer: (member) => member.user.first_name ?? "",
+                },
+                {
+                  label: t("rework.teamSettings.members.table.lastName"),
+                  size: "minmax(7rem, 1fr)",
+                  cellRenderer: (member) => member.user.last_name ?? "",
+                },
+                {
+                  label: t("rework.manager.roleLabel"),
+                  size: "minmax(12rem, 2fr)",
+                  cellRenderer: (member) => (
+                    <RoleChips
+                      size="small"
+                      options={ROLES.map((role) => ({
+                        key: role,
+                        label: t(`rework.manager.roles.${role}`),
+                        held: member.roles.includes(role),
+                        disabled: busy || !access.allowed,
+                        ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                        onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
+                      }))}
+                    />
+                  ),
+                },
                 ...(access.allowed && !listingCandidates
                   ? [
                       {
                         label: t("rework.spaceMembers.actions"),
+                        size: "6rem",
                         cellRenderer: (member: SpaceMember) => (
                           <Button
                             color="error"

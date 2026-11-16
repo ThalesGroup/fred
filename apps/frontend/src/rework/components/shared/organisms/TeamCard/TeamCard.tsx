@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -49,15 +50,19 @@ export default function TeamCard({ team, onJoined }: { team: DiscoverableTeam; o
             />
           )}
           <div className={styles.teamCardHeaderText}>
-            <div className={styles.teamName} title={team.name}>
-              {team.name}
-            </div>
+            <Tooltip content={team.name} asChild>
+              <div tabIndex={0} className={styles.teamName}>
+                {team.name}
+              </div>
+            </Tooltip>
           </div>
         </div>
         {team.description && (
-          <div className={styles.teamCardDescription} title={team.description}>
-            {team.description}
-          </div>
+          <Tooltip content={team.description} asChild>
+            <div tabIndex={0} className={styles.teamCardDescription}>
+              {team.description}
+            </div>
+          </Tooltip>
         )}
         <div className={styles.teamCardFooter}>
           {team.is_member ? (

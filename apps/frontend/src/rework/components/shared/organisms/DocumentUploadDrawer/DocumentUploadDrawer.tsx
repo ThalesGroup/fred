@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
@@ -662,9 +663,11 @@ export function DocumentUploadDrawer({
                 <ul className={styles.fileList}>
                   {files.map((f, i) => (
                     <li key={`${f.name}-${i}`} className={styles.fileRow}>
-                      <span className={styles.fileName} title={displayPath(f)}>
-                        {displayPath(f)}
-                      </span>
+                      <Tooltip content={displayPath(f)} asChild>
+                        <span tabIndex={0} className={styles.fileName}>
+                          {displayPath(f)}
+                        </span>
+                      </Tooltip>
                       <span className={styles.fileSize}>{formatBytes(f.size)}</span>
                       <IconButton
                         variant="icon"
@@ -721,9 +724,11 @@ export function DocumentUploadDrawer({
                     const decision = decisions.get(conflict.key);
                     return (
                       <li key={conflict.key} className={styles.conflictRow}>
-                        <span className={styles.fileName} title={conflict.label}>
-                          {conflict.label}
-                        </span>
+                        <Tooltip content={conflict.label} asChild>
+                          <span tabIndex={0} className={styles.fileName}>
+                            {conflict.label}
+                          </span>
+                        </Tooltip>
                         {/* One pick per file, so the two options are one
                             control rather than two buttons that happen to be
                             mutually exclusive. Nothing is selected until the

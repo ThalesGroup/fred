@@ -1,5 +1,6 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
@@ -206,17 +207,23 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
             {rows.slice(currentPage * 20, (currentPage + 1) * 20).map((item) => (
               <ResourceCard key={proposals ? item.proposal_id : item.entry_id}>
                 <div className={cardStyles.header}>
-                  <span className={cardStyles.category} title={marketplaceName(item.origin_name, t)}>
-                    {marketplaceName(item.origin_name, t)}
-                  </span>
-                  <h2 className={cardStyles.name} title={item.display_name}>
-                    {item.display_name}
-                  </h2>
+                  <Tooltip content={marketplaceName(item.origin_name, t)} asChild>
+                    <span tabIndex={0} className={cardStyles.category}>
+                      {marketplaceName(item.origin_name, t)}
+                    </span>
+                  </Tooltip>
+                  <Tooltip content={item.display_name} asChild>
+                    <h2 tabIndex={0} className={cardStyles.name}>
+                      {item.display_name}
+                    </h2>
+                  </Tooltip>
                 </div>
                 {item.description && item.description !== item.display_name && (
-                  <p className={cardStyles.description} title={item.description}>
-                    {item.description}
-                  </p>
+                  <Tooltip content={item.description} asChild>
+                    <p tabIndex={0} className={cardStyles.description}>
+                      {item.description}
+                    </p>
+                  </Tooltip>
                 )}
                 <div className={styles.actions}>
                   <Chip

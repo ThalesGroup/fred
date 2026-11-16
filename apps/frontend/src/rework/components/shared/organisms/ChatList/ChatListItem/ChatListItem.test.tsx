@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createInstance } from "i18next";
 import en from "../../../../../../locales/en/translation.json";
@@ -173,7 +174,7 @@ describe("ChatListItem deleted agent presentation", () => {
     expect(settled).toHaveBeenCalledWith(turn);
     expect(container.querySelector('[data-unread="true"]')!.textContent).toContain("Unread");
     expect(container.querySelector('[class*="unreadDot"]')).not.toBeNull();
-    expect(container.querySelector('[title="Answer ready"]')).not.toBeNull();
+    expect(readTooltip(container.querySelector("a"))).toBe("Preserved assistant — Answer ready");
     act(() => markSessionRead("saved"));
     expect(container.querySelector('[data-unread="true"]')).toBeNull();
     expect(container.querySelector('[class*="unreadDot"]')).toBeNull();
@@ -252,7 +253,8 @@ describe("ChatListItem deleted agent presentation", () => {
   it("keeps live agent names and entries free of deletion status", () => {
     show(false);
     expect(container.querySelector('[data-agent-deleted="true"]')).toBeNull();
-    expect(container.querySelector("a")?.getAttribute("aria-describedby")).toBeNull();
+    expect(readTooltip(container.querySelector("a"))).toBe("Preserved assistant");
+    expect(container.querySelector('a [tabindex="0"]')).toBeNull();
     expect(container.textContent).not.toContain("read-only");
     expect(container.textContent).not.toContain("(deleted)");
   });

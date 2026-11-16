@@ -17,6 +17,7 @@
 // the selectable models and the two reasoning modes (never an effort level).
 // `COMPOSER_CHIP_WIDGETS` keeps its widget ids out of the "tune" popover.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -168,20 +169,22 @@ export function ReasoningChip({
   if (!showReasoning && !canPickModel) {
     return (
       <div className={styles.wrap}>
-        <span
-          className={styles.static}
-          title={unavailable ? unavailableLabel : undefined}
-          aria-label={unavailable ? `${displayLabel} — ${unavailableLabel}` : (displayLabel ?? undefined)}
-        >
-          <span className={styles.model} data-unavailable={unavailable || undefined}>
-            {displayLabel}
-          </span>
-          {unavailable && (
-            <span className={styles.warning} aria-hidden="true">
-              <Icon category="outlined" type="error_outline" />
+        <Tooltip content={unavailable ? unavailableLabel : undefined} asChild>
+          <span
+            tabIndex={0}
+            className={styles.static}
+            aria-label={unavailable ? `${displayLabel} — ${unavailableLabel}` : (displayLabel ?? undefined)}
+          >
+            <span className={styles.model} data-unavailable={unavailable || undefined}>
+              {displayLabel}
             </span>
-          )}
-        </span>
+            {unavailable && (
+              <span className={styles.warning} aria-hidden="true">
+                <Icon category="outlined" type="error_outline" />
+              </span>
+            )}
+          </span>
+        </Tooltip>
       </div>
     );
   }
@@ -239,36 +242,37 @@ export function ReasoningChip({
 
   return (
     <div ref={containerRef} className={styles.wrap}>
-      <button
-        type="button"
-        className={styles.trigger}
-        data-open={open}
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={unavailable ? `${ariaLabel} — ${unavailableLabel}` : ariaLabel}
-        title={unavailable ? unavailableLabel : undefined}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {displayLabel ? (
-          <>
-            <span className={styles.model} data-unavailable={unavailable || undefined}>
-              {displayLabel}
-            </span>
-            {unavailable && (
-              <span className={styles.warning} aria-hidden="true">
-                <Icon category="outlined" type="error_outline" />
+      <Tooltip content={unavailable ? unavailableLabel : undefined} asChild>
+        <button
+          type="button"
+          className={styles.trigger}
+          data-open={open}
+          disabled={disabled}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={unavailable ? `${ariaLabel} — ${unavailableLabel}` : ariaLabel}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {displayLabel ? (
+            <>
+              <span className={styles.model} data-unavailable={unavailable || undefined}>
+                {displayLabel}
               </span>
-            )}
-            {showReasoning && <span className={styles.state}>{stateLabel}</span>}
-          </>
-        ) : (
-          <span className={styles.value}>{on ? onLabel : title}</span>
-        )}
-        <span className={styles.chevron}>
-          <Icon category="outlined" type="keyboard_arrow_down" />
-        </span>
-      </button>
+              {unavailable && (
+                <span className={styles.warning} aria-hidden="true">
+                  <Icon category="outlined" type="error_outline" />
+                </span>
+              )}
+              {showReasoning && <span className={styles.state}>{stateLabel}</span>}
+            </>
+          ) : (
+            <span className={styles.value}>{on ? onLabel : title}</span>
+          )}
+          <span className={styles.chevron}>
+            <Icon category="outlined" type="keyboard_arrow_down" />
+          </span>
+        </button>
+      </Tooltip>
 
       {open && (
         <div className={styles.menu}>

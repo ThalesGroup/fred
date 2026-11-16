@@ -21,6 +21,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
+  padding-block: var(--spacing-2xs);
 }
 
 // The pill the baseline badge and the role toggles both wear. They sit side by
@@ -65,6 +66,11 @@
     border-color 100ms ease,
     color 100ms ease;
   cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
 
   &:hover:not([data-active="true"]):not([aria-disabled="true"]) {
     border-color: var(--outline);

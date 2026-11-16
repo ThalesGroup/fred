@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import styles from "./EntityIdentity.module.css";
@@ -50,18 +51,22 @@ export function EntityIdentity({ name, icon, sourceId, runtimeId, version, dimme
     <div className={`${styles.root} ${dimmed ? styles.dimmed : ""}`}>
       {icon && <Icon category="outlined" type={icon} />}
       <div className={styles.text}>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
-        {(identity.length > 0 || version) && (
-          <span className={styles.identity} title={identity.join(" · ")}>
-            {identity.map((part, index) => (
-              <span key={part} className={index === 0 ? styles.sourceId : styles.runtimeId}>
-                {part}
-              </span>
-            ))}
-            {version && <span className={styles.version}>v{version}</span>}
+        <Tooltip content={name} asChild>
+          <span tabIndex={0} className={styles.name}>
+            {name}
           </span>
+        </Tooltip>
+        {(identity.length > 0 || version) && (
+          <Tooltip content={identity.join(" · ")} asChild>
+            <span tabIndex={0} className={styles.identity}>
+              {identity.map((part, index) => (
+                <span key={part} className={index === 0 ? styles.sourceId : styles.runtimeId}>
+                  {part}
+                </span>
+              ))}
+              {version && <span className={styles.version}>v{version}</span>}
+            </span>
+          </Tooltip>
         )}
       </div>
     </div>

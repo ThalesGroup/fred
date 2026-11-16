@@ -190,18 +190,18 @@ export default function PromptSelectionChatPanel({
         <ul className={styles.list}>
           {visible.map((prompt) => (
             <li key={prompt.prompt_id} className={styles.item}>
-              <button
-                type="button"
-                className={styles.row}
-                disabled={insertingId !== null}
-                aria-busy={insertingId === prompt.prompt_id}
-                onClick={() => void handlePick(prompt)}
-              >
-                <span className={styles.name} title={prompt.display_name}>
-                  {prompt.display_name}
-                </span>
-                {prompt.description && <span className={styles.description}>{prompt.description}</span>}
-              </button>
+              <Tooltip content={prompt.display_name} asChild>
+                <button
+                  type="button"
+                  className={styles.row}
+                  disabled={insertingId !== null}
+                  aria-busy={insertingId === prompt.prompt_id}
+                  onClick={() => void handlePick(prompt)}
+                >
+                  <span className={styles.name}>{prompt.display_name}</span>
+                  {prompt.description && <span className={styles.description}>{prompt.description}</span>}
+                </button>
+              </Tooltip>
               {/* A sibling of the row: a button cannot hold a button. */}
               <span className={styles.favorite}>
                 <Tooltip

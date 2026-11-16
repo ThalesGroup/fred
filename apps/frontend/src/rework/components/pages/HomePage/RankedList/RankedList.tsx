@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./RankedList.module.scss";
@@ -50,10 +51,12 @@ export default function RankedList({ items, emptyLabel }: RankedListProps) {
           <span className={styles.rank}>{index + 1}</span>
           {item.leading && <span className={styles.leading}>{item.leading}</span>}
           <div className={styles.main}>
-            <div className={styles.label} title={[item.label, item.sublabel].filter(Boolean).join(" · ")}>
-              {item.label}
-              {item.sublabel && <span className={styles.sublabel}> · {item.sublabel}</span>}
-            </div>
+            <Tooltip content={[item.label, item.sublabel].filter(Boolean).join(" · ")} asChild>
+              <div tabIndex={0} className={styles.label}>
+                {item.label}
+                {item.sublabel && <span className={styles.sublabel}> · {item.sublabel}</span>}
+              </div>
+            </Tooltip>
             <div className={styles.bar}>
               <span style={{ width: `${(item.value * 200n + max) / (2n * max)}%` }} />
             </div>

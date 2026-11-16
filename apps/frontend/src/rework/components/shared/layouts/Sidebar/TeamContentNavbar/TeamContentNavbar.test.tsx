@@ -202,13 +202,13 @@ it("keeps navigation and the mounted chat list through an access recheck, then r
       expect(container.querySelector(`a[href="/team/team-1/${route}"]`)).not.toBeNull();
     }
     expect(container.querySelector("[data-chat-list]")).toBe(chatList);
-    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).not.toBeNull();
     h.accessPending = false;
     h.canRead = h.canManage = false;
     flushSync(() => root.render(<TeamContentNavbar />));
     expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
     expect(container.querySelector("[data-chat-list]")).toBeNull();
-    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).toBeNull();
   } finally {
     flushSync(() => root.unmount());
   }
@@ -581,14 +581,16 @@ describe("TeamContentNavbar collective usage", () => {
       expect(container.querySelector('a[href="/team/team-1/usage"]')).toBeNull();
       expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
       expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
-      container.querySelector<HTMLButtonElement>('button[title="rework.teamSettings.navigation.settings"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
+        .click();
       expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings" : "usage"}`);
       h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";
       flushSync(() => root.render(<TeamContentNavbar />));
       const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
       expect(links).toHaveLength(1);
       expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
-      expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+      expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).toBeNull();
       expect(!!container.querySelector('a[href="/team/team-1/settings/members"]')).toBe(manage);
     } finally {
       flushSync(() => root.unmount());
@@ -613,7 +615,9 @@ describe("TeamContentNavbar collective usage", () => {
   it.each(["loading", "error", "missing", "other-organization", "membership-error", "revoked"])(
     "hides the entry for %s context despite previously available roles",
     (state) => {
-      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('title="rework.teamSettings.navigation.settings"');
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain(
+        'aria-label="rework.teamSettings.navigation.settings"',
+      );
       h.pathname = "/team/team-1/usage";
       expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/usage"');
       if (state === "loading") h.working.loading = true;
@@ -625,7 +629,7 @@ describe("TeamContentNavbar collective usage", () => {
       expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
       h.pathname = "/team/team-1/agents";
       expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain(
-        'title="rework.teamSettings.navigation.settings"',
+        'aria-label="rework.teamSettings.navigation.settings"',
       );
     },
   );
@@ -656,7 +660,7 @@ describe("TeamContentNavbar collective usage", () => {
     h.memberships[0].kind = "personal";
     h.memberships[0].roles = ["owner"];
     const personal = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(personal).toContain('title="rework.teamUsage.title"');
+    expect(personal).toContain('aria-label="rework.teamUsage.title"');
     expect(personal).not.toContain('href="/team/team-1/usage"');
     h.memberships[0].kind = "organization";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
