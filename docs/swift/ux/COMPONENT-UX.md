@@ -70,6 +70,23 @@ successful empty state and partial history failure have separate messages. A
 partial failure preserves suggestions. Reopening home refreshes permissions
 and ranking. Legacy conversations have no inferred activity date.
 
+### Advanced home
+
+**Locations:** `src/rework/components/pages/HomePage/` (`AdvancedQuickAccess`,
+`FeaturedCarousel`, `HomeAskBox`, `SectionMarker`) and
+`admin/UiSettingsPage/HomeSettingsSection.tsx`.
+**Status:** Functional; visual review pending.
+
+Chosen in Administration > Interface (simple or advanced home, platform-wide).
+Only the "Quick access" tab changes: theme logo greeting, a "Featured" banner
+(7 s rotation, paused on hover/focus and under reduced motion, pause/previous/
+next/dots), a text-only question field for the first featured agent, then the
+unchanged home agent selection as cards in rows of three with a centered last
+row. The bar keeps tabs left and search right at content width. Themes restyle
+it with `homeBannerImageFile`, `--home-greeting-color`, `--home-banner-*` and
+`--home-marker-*` (frontend README). The admin draft survives refetches: only
+agent names and visibility refresh while an edit is in progress.
+
 
 ### Platform skills presentation and administration
 
