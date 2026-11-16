@@ -32,6 +32,9 @@ from knowledge_flow_backend.common.structures import Configuration, PgVectorStor
 
 if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder
+
+    from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,6 +80,7 @@ class ApplicationContext:
         if ApplicationContext._instance is not None:
             return
         self.configuration = configuration
+        self._document_reranker: DocumentReranker | None = None
         self._published_artifact_reader: ArtifactReader | None = None
         self._document_models = DocumentModels(configuration.inference_credentials)
         self._corpus_lock = threading.Lock()
@@ -194,6 +198,14 @@ class ApplicationContext:
     def get_document_models(self) -> DocumentModels:
         """Builds the Control Plane's admitted models against this workload's bindings."""
         return self._document_models
+
+    def get_document_reranker(self) -> "DocumentReranker":
+        """One lazily loaded model and HTTP pool per application."""
+        if self._document_reranker is None:
+            from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
+            self._document_reranker = DocumentReranker(self.configuration.reranker_model, self.get_crossencoder_model)
+        return self._document_reranker
 
     def get_crossencoder_model(self) -> "CrossEncoder":
         """
@@ -324,6 +336,10 @@ class ApplicationContext:
         Best-effort cleanup of shared resources.
         """
         # HTTP clients
+        if self._document_reranker is not None:
+            await self._document_reranker.close()
+            self._document_reranker = None
+
         try:
             await http_clients.async_shutdown_shared_clients()
         except Exception:

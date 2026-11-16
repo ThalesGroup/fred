@@ -50,3 +50,6 @@ Apache 2.0 - Copyright Thales.
 
 `GET /documents/tree` lists the bounded visible corpus using the same delegated context as search; attachments are excluded and truncation is explicit.
 Tree SQL cases run with `make test-one TEST=tests/features/test_document_tree.py` and `KF_TREE_TEST_POSTGRES` pointing to an empty disposable database (async SQLAlchemy PostgreSQL URL); fixtures roll back all writes.
+
+Optional local/remote document reranking and separate admitted-model credentials
+are described in [API configuration](config/README.md#document-models-and-reranking).

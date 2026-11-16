@@ -104,3 +104,42 @@
   max-width: 28rem;
   font: var(--font-body-small);
 }
+
+.membersPage {
+  gap: var(--spacing-m);
+  min-width: 0;
+
+  h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  > p {
+    margin: 0;
+  }
+}
+
+.membersSearch {
+  display: flex;
+  flex: 1 1 16rem;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+
+  > :first-child {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.membersTable {
+  flex: 1;
+  min-width: 0;
+  min-height: 12rem;
+}
+
+.membersPagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}

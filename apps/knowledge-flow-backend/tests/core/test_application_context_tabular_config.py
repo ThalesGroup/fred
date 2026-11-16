@@ -12,12 +12,85 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
+
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
 from fred_core.common import PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
-from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, StorageConfig
+from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, RerankerModelConfiguration, StorageConfig
+
+
+def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch):
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    assert config.reranker_model is None
+
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model == RerankerModelConfiguration.model_validate(payload["reranker_model"])
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"provider": "openai"},
+        {"name": ""},
+        {"settings": {"base_url": "file:///tmp/invalid"}},
+        {"settings": {"base_url": "https://models.example/v1", "api_key_env": str(uuid.uuid4())}},
+    ],
+)
+def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, override):
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    remote = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    remote.update(override)
+    payload["reranker_model"] = remote
+    with pytest.raises(ValueError):
+        Configuration.model_validate(payload)
+
+
+def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch):
+    for variable in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    with pytest.raises(ValueError, match="Missing API key for reranker model"):
+        Configuration.model_validate(payload)
+
+
+@pytest.mark.parametrize("variable", ["KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"])
+def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable):
+    for candidate in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(candidate, raising=False)
+    monkeypatch.setenv(variable, str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model is not None
+    assert str(parsed.reranker_model.settings.base_url) == "https://models.example/v1"
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:

@@ -8,6 +8,9 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { RoleChips } from "@shared/molecules/TeamRoleChips/TeamRoleChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
@@ -117,9 +120,127 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
     }
   };
   return (
-    <div className={styles.teamSettingsPage}>
-      <PageHeader title={t("rework.spaceMembers.title", { name: space?.name ?? "" })} />
-      <p>{t(access.offered || access.allowed ? "rework.spaceMembers.separation" : "rework.spaceMembers.readOnly")}</p>
+    <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
+      <PageHeader
+        title={t("rework.spaceMembers.title", { name: space?.name ?? "" })}
+        titleAction={
+          <>
+            <Tooltip
+              content={
+                <span className={styles.modelsHelp}>
+                  {t(
+                    access.offered || access.allowed
+                      ? "rework.spaceMembers.separation"
+                      : "rework.spaceMembers.readOnly",
+                  )}
+                </span>
+              }
+            >
+              <IconButton
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "info" }}
+                aria-label={t("rework.spaceMembers.help")}
+              />
+            </Tooltip>
+            {canRead && (
+              <IconButtonMenu<"refresh" | "leave">
+                iconButton={{
+                  variant: "icon",
+                  size: "small",
+                  icon: { category: "outlined", type: "more_vert" },
+                  "aria-label": t("rework.teamSettings.members.moreActions"),
+                  title: t("rework.teamSettings.members.moreActions"),
+                }}
+                options={[
+                  {
+                    key: "refresh",
+                    value: "refresh",
+                    label: t("rework.spaceMembers.refresh"),
+                    icon: { category: "outlined", type: "refresh" },
+                    disabled: busy || query.isFetching,
+                  },
+                  ...(space && self
+                    ? [
+                        {
+                          key: "leave",
+                          value: "leave" as const,
+                          label: t("rework.teamSettings.navigation.leaveTeam"),
+                          icon: { category: "outlined", type: "logout" } as const,
+                          destructive: true,
+                          disabled: busy,
+                        },
+                      ]
+                    : []),
+                ]}
+                onSelect={(action) => {
+                  if (action === "refresh") void query.refetch();
+                  else if (space && self) setRemovingMember({ id: self, name: space.name });
+                }}
+              />
+            )}
+          </>
+        }
+        actions={
+          canRead && (
+            <>
+              <form
+                className={styles.membersSearch}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSearch(searchDraft.trim());
+                  setCursors([undefined]);
+                }}
+              >
+                <SearchInput
+                  value={searchDraft}
+                  onChange={setSearchDraft}
+                  placeholder={t("rework.teamSettings.members.search.placeholder")}
+                  ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
+                  clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
+                  size="small"
+                />
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  type="submit"
+                  icon={{ category: "outlined", type: "search" }}
+                  aria-label={t("rework.spaceMembers.search")}
+                  title={t("rework.spaceMembers.search")}
+                  disabled={busy}
+                />
+              </form>
+              {access.allowed && space?.kind === "team" && (
+                <Button color="primary" variant="outlined" size="small" onClick={() => setInviteOpen(true)}>
+                  {t("rework.teamSettings.members.inviteLink.title")}
+                </Button>
+              )}
+              {access.allowed && (
+                <Button
+                  color="primary"
+                  variant="filled"
+                  size="small"
+                  disabled={busy}
+                  onClick={() => {
+                    setCandidates(!candidates);
+                    setSearch("");
+                    setSearchDraft("");
+                    setCursors([undefined]);
+                    setError(undefined);
+                  }}
+                >
+                  {t(
+                    candidates
+                      ? "rework.spaceMembers.roster"
+                      : "rework.teamSettings.members.addMembersDialog.buttonLabel",
+                  )}
+                </Button>
+              )}
+            </>
+          )
+        }
+      />
+      {inviteOpen && access.allowed && <TeamInviteLinkDialog teamId={spaceId} onClose={() => setInviteOpen(false)} />}
       <ConfirmationDialog
         open={!!removingMember}
         criticalAction
@@ -146,74 +267,6 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
         <p role="alert">{t("rework.spaceMembers.forbidden")}</p>
       ) : (
         <>
-          <div className={styles.actions}>
-            {access.allowed && space?.kind === "team" && (
-              <Button color="primary" variant="outlined" size="small" onClick={() => setInviteOpen(true)}>
-                {t("rework.teamSettings.members.inviteLink.title")}
-              </Button>
-            )}
-            {inviteOpen && access.allowed && (
-              <TeamInviteLinkDialog teamId={spaceId} onClose={() => setInviteOpen(false)} />
-            )}
-            {access.allowed && (
-              <Button
-                color="primary"
-                variant="outlined"
-                size="small"
-                disabled={busy}
-                onClick={() => {
-                  setCandidates(!candidates);
-                  setSearch("");
-                  setSearchDraft("");
-                  setCursors([undefined]);
-                  setError(undefined);
-                }}
-              >
-                {t(candidates ? "rework.spaceMembers.roster" : "rework.spaceMembers.candidates")}
-              </Button>
-            )}
-            <Button
-              color="primary"
-              variant="outlined"
-              size="small"
-              disabled={busy || query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              {t("rework.spaceMembers.refresh")}
-            </Button>
-          </div>
-          <form
-            className={styles.actions}
-            onSubmit={(event) => {
-              event.preventDefault();
-              setSearch(searchDraft.trim());
-              setCursors([undefined]);
-            }}
-          >
-            <SearchInput
-              value={searchDraft}
-              onChange={setSearchDraft}
-              placeholder={t("rework.teamSettings.members.search.placeholder")}
-              ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
-              clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
-              size="small"
-            />
-            <Button color="primary" variant="outlined" size="small" type="submit" disabled={busy}>
-              {t("rework.spaceMembers.search")}
-            </Button>
-            {space && self && (
-              <Button
-                type="button"
-                color="error"
-                variant="text"
-                size="small"
-                disabled={busy || !canRead}
-                onClick={() => setRemovingMember({ id: self, name: space.name })}
-              >
-                {t("rework.teamSettings.navigation.leaveTeam")}
-              </Button>
-            )}
-          </form>
           {search && <p>{t("rework.spaceMembers.searchPages")}</p>}
           {listingCandidates && <p>{t("rework.spaceMembers.eligibility")}</p>}
           {query.isError ? (
@@ -221,66 +274,70 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
           ) : !page ? (
             <p role="status">{t("common.loading")}</p>
           ) : (
-            <DataTable
-              data={page.items}
-              rowKey={(member) => member.user.id}
-              columns={[
-                {
-                  label: t("rework.teamSettings.members.table.identifiant"),
-                  size: "minmax(10rem, 1.3fr)",
-                  cellRenderer: (member) => member.user.username ?? member.user.id,
-                },
-                {
-                  label: t("rework.teamSettings.members.table.firstName"),
-                  size: "minmax(7rem, 1fr)",
-                  cellRenderer: (member) => member.user.first_name ?? "",
-                },
-                {
-                  label: t("rework.teamSettings.members.table.lastName"),
-                  size: "minmax(7rem, 1fr)",
-                  cellRenderer: (member) => member.user.last_name ?? "",
-                },
-                {
-                  label: t("rework.manager.roleLabel"),
-                  size: "minmax(12rem, 2fr)",
-                  cellRenderer: (member) => (
-                    <RoleChips
-                      size="small"
-                      options={ROLES.map((role) => ({
-                        key: role,
-                        label: t(`rework.manager.roles.${role}`),
-                        held: member.roles.includes(role),
-                        disabled: busy || !access.allowed,
-                        ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
-                        onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
-                      }))}
-                    />
-                  ),
-                },
-                ...(access.allowed && !listingCandidates
-                  ? [
-                      {
-                        label: t("rework.spaceMembers.actions"),
-                        size: "6rem",
-                        cellRenderer: (member: SpaceMember) => (
-                          <Button
-                            color="error"
-                            variant="text"
-                            size="small"
-                            disabled={busy}
-                            onClick={() => setRemovingMember({ id: member.user.id, name: userLabel(member) })}
-                          >
-                            {t("rework.spaceMembers.remove")}
-                          </Button>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
+            <div className={styles.membersTable}>
+              <DataTable
+                size="medium"
+                data={page.items}
+                rowKey={(member) => member.user.id}
+                columns={[
+                  {
+                    label: t("rework.teamSettings.members.table.identifiant"),
+                    size: "minmax(0, 1.3fr)",
+                    cellRenderer: (member) => member.user.username ?? member.user.id,
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.firstName"),
+                    size: "minmax(0, 1fr)",
+                    cellRenderer: (member) => member.user.first_name ?? "",
+                  },
+                  {
+                    label: t("rework.teamSettings.members.table.lastName"),
+                    size: "minmax(0, 1fr)",
+                    cellRenderer: (member) => member.user.last_name ?? "",
+                  },
+                  {
+                    label: t("rework.manager.roleLabel"),
+                    size: "minmax(9rem, 2fr)",
+                    cellRenderer: (member) => (
+                      <RoleChips
+                        size="small"
+                        options={ROLES.map((role) => ({
+                          key: role,
+                          label: t(`rework.manager.roles.${role}`),
+                          held: member.roles.includes(role),
+                          disabled: busy || !access.allowed,
+                          ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                          onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
+                        }))}
+                      />
+                    ),
+                  },
+                  ...(access.allowed && !listingCandidates
+                    ? [
+                        {
+                          label: t("rework.spaceMembers.actions"),
+                          size: "3rem",
+                          cellRenderer: (member: SpaceMember) => (
+                            <IconButton
+                              color="error"
+                              variant="icon"
+                              icon={{ category: "outlined", type: "delete" }}
+                              aria-label={`${t("rework.spaceMembers.remove")}: ${userLabel(member)}`}
+                              title={t("rework.spaceMembers.remove")}
+                              size="small"
+                              disabled={busy}
+                              onClick={() => setRemovingMember({ id: member.user.id, name: userLabel(member) })}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
           )}
           {page?.items.length === 0 && <p>{t("rework.spaceMembers.empty")}</p>}
-          <div className={styles.actions}>
+          <div className={styles.membersPagination}>
             <Button
               color="primary"
               variant="outlined"

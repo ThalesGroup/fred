@@ -61,6 +61,13 @@ crossencoder_model:
     online: true
     local_path: ~/.cache/huggingface/hub
 
+# Optional remote reranker. Omit to use the local CrossEncoder above.
+# reranker_model:
+#   provider: rerank
+#   name: remote-reranker
+#   settings:
+#     base_url: https://models.example/v1
+
 storage:
   postgres:
     host: localhost

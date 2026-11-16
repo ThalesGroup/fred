@@ -225,3 +225,18 @@ async def test_calls_and_retries_keep_admitted_corpus_until_a_new_turn(monkeypat
         next_turn.start(scope)
         await adapter.search("next admission")
         assert client.calls[-1]["document_context"].authorized_space_ids == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rerank", [True, False])
+async def test_reranking_choice_keeps_the_admitted_document_scope(monkeypatch, rerank):
+    client = _Client()
+    adapter, authority = _adapter(client, monkeypatch)
+    with RunScope.open() as scope:
+        scope.turn_authority = authority
+        authority.start(scope)
+        await adapter.search("q", include_attachments=False, rerank=rerank)
+    call = client.calls[0]
+    assert call["rerank"] is rerank
+    assert call["document_context"].space_id == authority.binding.space.id
+    assert call["document_context"].attachment_ids == ()

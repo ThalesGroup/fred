@@ -153,6 +153,10 @@
           "title": "Résultats par défaut",
           "description": "Nombre de résultats à récupérer lorsque le modèle omet top_k."
         },
+        "rerank": {
+          "title": "Réordonner les résultats",
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Désactivé par défaut."
+        },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",
           "description": "Un résultat doit obtenir au moins cette fraction du score du meilleur résultat de la même recherche pour apparaître comme source citée. N'affecte que le panneau Sources destiné aux utilisateurs, jamais ce que le modèle peut lire."
@@ -219,7 +223,7 @@
         },
         "rerank": {
           "title": "Réordonner les correspondances",
-          "description": "Réordonne les passages candidats avec le cross-encoder avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
+          "description": "Réordonne les passages candidats avec le modèle de Knowledge Flow avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
         },
         "min_score": {
           "title": "Pertinence minimale",
@@ -5295,6 +5299,7 @@
       "usageUnavailable": "Usage indisponible"
     },
     "spaceMembers": {
+      "help": "Comprendre les rôles",
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
       "search": "Rechercher",
@@ -5307,7 +5312,6 @@
       "title": "Gérer {{name}}",
       "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
       "roster": "Membres actuels",
-      "candidates": "Ajouter des personnes de l'espace parent",
       "eligibility": "Ces personnes ont un rôle de contenu direct dans l'organisation ou l'équipe parente. Sélectionnez chaque rôle à leur attribuer dans cet espace. Les rôles existants sont affichés ; aucun rôle n'est ajouté automatiquement.",
       "person": "Personne",
       "refresh": "Actualiser",

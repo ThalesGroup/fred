@@ -18,3 +18,36 @@ to its path, with `duckdb_enable_server_cert_verification: true` in the same blo
 These options configure DuckDB `httpfs` only; they do not change URL signing or
 the Python S3 client. Omitted or `null` values retain the installed DuckDB defaults.
 See the [Helm example](../../../deploy/charts/fred/README.md) for the volume mount.
+
+## Document models and reranking
+
+Chat, vision and embeddings use the Control Plane's admitted model connection.
+Each `inference_credentials` entry binds an approved destination to its own
+`api_key_env`; use different entries and variables for endpoints with different
+keys. `DocumentModels` passes each credential directly to the shared factory,
+without changing the process environment. The worker uses the same mechanism
+for admitted embedding and vision stages. The retired Swift `chat_model`,
+`vision_model`, `embedding_model` and remote OCR configuration are not supported.
+
+Reranking is an optional deployment-level service, applied only after Weaver has
+verified the selected passages' publication and visibility. The document access
+capability exposes an advanced `rerank` switch, off by default; similarity keeps
+its existing default. Omit `reranker_model` (or set it to `null`) to keep the
+bundled local CrossEncoder. To use the remote indexed-results protocol:
+
+```yaml
+reranker_model:
+  provider: rerank
+  name: your-reranker
+  settings:
+    base_url: https://models.example/v1
+```
+
+The API posts to `/rerank` under that base URL and requires results containing
+`index` and `relevance_score`. Supply `KNOWLEDGE_FLOW_RERANKER_API_KEY` in the API
+pod environment; a blank value falls back to `OPENAI_API_KEY`. The chart exposes
+`applications.knowledge-flow-backend.configuration.reranker_model` and the
+corresponding `dotenv` key. Neither the worker nor browser receives this key.
+A missing credential prevents startup when a remote model is configured.
+Timeouts or invalid responses produce `503 reranker_unavailable`, without a
+silent fallback. Restart the API after changing its environment.

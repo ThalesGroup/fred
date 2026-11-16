@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-from typing import Optional
+from typing import Literal, Optional
 
 from fred_core import SecurityConfiguration
 from fred_core.common import KpiObservabilityConfig, ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig
@@ -10,7 +10,9 @@ from fred_knowledge.configuration import PgVectorStorageConfig as PgVectorStorag
 from fred_knowledge.configuration import TabularQueryConfig as TabularQueryConfig
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.weaver import InferenceCredentialBinding
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
+
+from knowledge_flow_backend.common.model_api_keys import reranker_api_key
 
 
 class AppConfig(BaseModel):
@@ -39,6 +41,20 @@ class ObservabilityConfig(BaseModel):
     kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
 
 
+class RerankerSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_url: AnyHttpUrl
+
+
+class RerankerModelConfiguration(BaseModel):
+    """Optional deployment-selected reranker for already authorized passages."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["rerank"]
+    name: str = Field(min_length=1)
+    settings: RerankerSettings
+
+
 class Configuration(BaseModel):
     model_config = ConfigDict(extra="forbid")
     app: AppConfig
@@ -47,12 +63,22 @@ class Configuration(BaseModel):
     # the approved destinations and holds the names of their key variables.
     inference_credentials: tuple[InferenceCredentialBinding, ...] = ()
     crossencoder_model: Optional[ModelConfiguration] = None
+    reranker_model: RerankerModelConfiguration | None = Field(
+        default=None,
+        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+    )
     security: SecurityConfiguration
     control_plane_url: str | None = None
     published_artifacts: ArtifactStorageConfig | None = None
     storage: StorageConfig
     use_gpu: bool = True
     text_splitter: TextSplitterConfig = Field(default_factory=TextSplitterConfig)
+
+    @model_validator(mode="after")
+    def require_reranker_credential(self) -> "Configuration":
+        if self.reranker_model:
+            reranker_api_key()
+        return self
 
     @model_validator(mode="before")
     @classmethod

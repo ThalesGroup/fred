@@ -1068,6 +1068,7 @@ class DocumentSearchPort(ABC):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -1085,6 +1086,7 @@ class DocumentSearchPort(ABC):
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
+        `rerank` asks Knowledge Flow to reorder only visible hits.
         """
 
 

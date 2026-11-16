@@ -1407,6 +1407,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         document_context = current_turn().document_context(
@@ -1437,6 +1438,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
                 document_context=document_context,
                 top_k=top_k if isinstance(top_k, int) and top_k > 0 else 8,
                 search_policy=search_policy or get_search_policy(runtime_context),
+                rerank=rerank,
             )
         except Exception as exc:
             raise _wrap_document_port_error(exc) from exc

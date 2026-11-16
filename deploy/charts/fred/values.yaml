@@ -1215,10 +1215,13 @@ applications:
       security:        *kf-security
       inference_credentials: *kf-inference-credentials
       crossencoder_model: *kf-crossencoder-model
+      # Optional remote reranker; null keeps the bundled CrossEncoder.
+      reranker_model: null
       storage:         *kf-storage
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
+      KNOWLEDGE_FLOW_RERANKER_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       FRED_POSTGRES_PASSWORD: ""
 

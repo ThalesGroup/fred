@@ -137,7 +137,7 @@ it("loads eligible parent users only on explicit request", async () => {
   await render();
   expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
   const button = Array.from(container.querySelectorAll("button")).find((b) =>
-    b.textContent?.includes("rework.spaceMembers.candidates"),
+    b.textContent?.includes("rework.teamSettings.members.addMembersDialog.buttonLabel"),
   )!;
   await act(async () => button.click());
   expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
@@ -192,7 +192,10 @@ it("lets a reader view explicit roles and leave without granting management", as
   await act(async () => roleButton("bob", "editor").click());
   expect(h.grant).not.toHaveBeenCalled();
   expect(h.revoke).not.toHaveBeenCalled();
-  const leave = Array.from(container.querySelectorAll("button")).find((b) =>
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.members.moreActions"]')!.click(),
+  );
+  const leave = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((b) =>
     b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
   )!;
   await act(async () => leave.click());

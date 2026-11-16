@@ -724,6 +724,48 @@
       "type": "object",
       "additionalProperties": false
     },
+    "RerankerModelConfiguration": {
+      "additionalProperties": false,
+      "description": "Optional deployment-selected reranker for already authorized passages.",
+      "properties": {
+        "provider": {
+          "const": "rerank",
+          "title": "Provider",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/RerankerSettings"
+        }
+      },
+      "required": [
+        "provider",
+        "name",
+        "settings"
+      ],
+      "title": "RerankerModelConfiguration",
+      "type": "object"
+    },
+    "RerankerSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Base Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url"
+      ],
+      "title": "RerankerSettings",
+      "type": "object"
+    },
     "SecurityConfiguration": {
       "properties": {
         "m2m": {
@@ -1168,6 +1210,18 @@
         }
       ],
       "default": null
+    },
+    "reranker_model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RerankerModelConfiguration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
     },
     "security": {
       "$ref": "#/$defs/SecurityConfiguration"

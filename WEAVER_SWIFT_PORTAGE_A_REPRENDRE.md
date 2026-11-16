@@ -1,8 +1,9 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36`**, vérifiée dans les parents du merge `74b5f3106` (Weaver `5052116a7`, Swift `b7bf4412a`).
-La tranche suivante vers `cf698a739` est préparée localement le 14 novembre,
-sans commit de fusion ; voir la [section 20](#20-integration-swift-du-14-novembre-2026).
+**Borne Swift intégrée : `cf698a739afae1b4cbcd92e82439e32bc1038198`**, vérifiée dans les parents du merge `b8d7c6709` (Weaver `093c2f997`, Swift `cf698a739`).
+La tranche suivante vers `b77588473` est préparée localement le 16 novembre,
+sans commit de fusion ; voir la [section 22](#22-integration-swift-et-layout-membres-du-16-novembre-2026).
+La section 20 conserve la préparation historique de la fusion du 14 novembre.
 Les réceptions et comportements différés restent un inventaire distinct ; leur
 présence dans l'ascendance ne vaut pas validation produit. Les repères
 `53e39f6f7` ci-dessous concernent la tranche initiale.
@@ -3114,3 +3115,74 @@ L'augmentation couvre les nouveaux compteurs, séries, états et export demandé
 le retrait porte sur le branchement KPI legacy de cette page, pas sur les droits
 ou la précision. Prochaine étape : tests/qualité et recette de Dimi, puis intégration
 ciblée des fichiers communs ; les écarts restants ci-dessus exigent un lot complémentaire.
+
+
+## 22. Integration Swift et layout membres du 16 novembre 2026
+
+Dimi demande la correction de l'adaptation de la page Membres et confirme
+l'intégration des trois nouveaux commits Swift. Base Weaver : `a66b450937fd6b2a4aab0ccf7768be372555a24c`,
+checkout initial propre sur `weaver`. Borne déjà fusionnée : `cf698a739` (merge
+`b8d7c6709`). Cible après fetch : `b77588473596d4838659bdcd673f36038a0abbf7`.
+Fusion préparée avec `--no-commit`, conflits résolus et indexés ; aucun commit,
+push, déploiement, accès cluster ou changement de données.
+
+### Apports nouveaux et adaptation
+
+| Commit Swift | Résultat Weaver |
+| --- | --- |
+| `68e68e60e` - reranking | Option avancée `document_access.rerank`, défaut false, version de capacité 0.4.1 ; SDK, adaptateur et recherche `/documents/search` raccordés. Reranker local/distant partagé par l'ApplicationContext, bornes/timeout/erreurs explicites repris. Le modèle reçoit seulement les passages vérifiés par `_visible_hits`. La fusion des sources Weaver et le défaut de similarité existants sont conservés. |
+| `5d0d66af6` - Grafana | Dashboard et documentation repris. Couverture limitée aux producteurs des métriques Python attendues : le Control Plane Rust n'émet pas ces histogrammes HTTP, son absence n'est pas un zéro d'erreurs. Aucun import dans Grafana effectué. |
+| `b77588473` - clés par modèle | Chat, vision et embeddings déjà couverts par `DocumentModels`, `inference_credentials` et `inference_api_key` : aucun deuxième choix de modèles ni nouvelle signature de factory. Régressions Swift adaptées à cette injection. Ajout de la clé dédiée du reranker avec repli `OPENAI_API_KEY`, configuration API/chart et schémas régénérés. |
+
+Les anciens endpoints `/vector/*`, le Control Plane Python, les extracteurs OCR
+retirés et leurs tests ne sont pas réintroduits. Le worker conserve ses modèles
+admis par étape. Les tests de visibilité, de concurrence et de transmission sont
+adaptés aux propriétaires actuels ; les nouveaux tests du reranker sont repris.
+La CI conserve la matrice Weaver et laisse `make` installer les dépendances.
+Les notes opérateur sont adaptées ; les archives OpenSpec Swift restent des
+sources historiques, pas des contrats d'architecture Weaver.
+
+### Pourquoi l'écran Membres débordait
+
+Les trois commits ci-dessus ne modifient pas le layout d'administration.
+Weaver imposait 42 rem de largeur minimale de colonnes (10 + 7 + 7 + 12 + 6),
+contre des identités flexibles chez Swift. Il plaçait en plus le paragraphe
+d'explication, les actions et le formulaire de recherche dans des blocs distincts
+avec marges, avant le tableau. Les captures ne sont pas à largeur identique,
+mais les contraintes CSS suffisent à établir cet écart.
+
+Le correctif réutilise `PageHeader`, `SearchInput`, `Tooltip`, `IconButtonMenu`,
+`IconButton`, `DataTable` et `RoleChips`. Les identités peuvent se tronquer avec
+leur tooltip ; les rôles se replient ; le retrait reste accessible dans une
+colonne compacte avec confirmation. Recherche et actions principales sont dans
+l'en-tête ; aide des rôles et actions secondaires restent accessibles sans
+occuper plusieurs lignes permanentes. Le tableau prend la hauteur disponible,
+avec un minimum et un défilement de page en faible hauteur. Aucun rôle ni droit
+n'est modifié ; pagination et recherche restent côté serveur.
+
+### Vérifications locales
+
+- `make code-quality` réussi : frontend, Knowledge Flow backend, fred-core,
+  fred-runtime, fred-sdk et fred-capability-document-access.
+- 192 tests ciblés réussis, sans additionner les relances : Knowledge Flow 50,
+  core 10, runtime 23, capacité 68, SDK 4 et frontend 37 (dont 13 Membres).
+  Les tests Knowledge Flow vérifient les passages refusés, les limites, les
+  appels concurrents et le HTTP 503 ; pas de modèle distant réel contacté.
+- OpenAPI Knowledge Flow et client RTK régénérés, sans différence de contrat
+  généré : `rerank` existait déjà dans la requête Weaver. Schémas de configuration
+  et Helm régénérés ; contrôles de dérive et validation des YAML/chart réussis.
+- Trois notes opérateur validées par `migration_guides.py check-pr --base HEAD --worktree`.
+  JSON Grafana lisible et `git diff --check` réussi.
+- Bilan séparé : production +507/-157 lignes (net +350), tests +658/-48,
+  traductions +12/-4, schémas générés +102/-0 ; documentation, configuration et
+  dashboard séparés. La croissance fournit le reranker distant borné demandé et
+  les contrôles partagés du layout ; le cache/lock local propre au service de
+  recherche est remplacé par l'instance d'application commune.
+
+Réception restante par Dimi : comparer Membres à largeur identique (grand écran,
+650, 500 et 360 px), noms longs et petite hauteur, accès clavier à l'aide et aux
+menus, recherche/candidats/rôles/retrait/départ. Vérifier ensuite le rerank activé
+et désactivé, puis le modèle distant configuré si souhaité. Aucune recette
+navigateur, fournisseur, Grafana ou déployée n'est attestée ici ; arc42 n'est pas
+élargi à un parcours non réceptionné. Les comportements différés de la section 21
+restent distincts et ne sont pas déclarés terminés par cette fusion.

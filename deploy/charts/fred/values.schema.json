@@ -6627,6 +6627,54 @@
                   ],
                   "default": null
                 },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Optional deployment-selected reranker for already authorized passages.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                },
                 "security": {
                   "properties": {
                     "m2m": {

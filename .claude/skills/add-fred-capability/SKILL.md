@@ -61,3 +61,7 @@ shrink checks or hide code in generated/minified blobs to claim a reduction.
 Run scoped formatting/code-quality checks under `AGENTS.md`; run functional or
 runtime tests only within the requested validation scope. Report remaining wiring
 gaps without describing a prepared library as a working user feature.
+
+`DocumentSearchPort.search(..., rerank=True)` reranks authorized passages through
+Knowledge Flow; its default is false. The `document_access` capability exposes
+this choice in its advanced configuration, outside the model's tool arguments.
