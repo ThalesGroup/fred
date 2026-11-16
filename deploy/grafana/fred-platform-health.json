@@ -122,6 +122,65 @@
         "sort": 1
       },
       {
+        "name": "chat_lookback",
+        "label": "Chat lookback",
+        "type": "custom",
+        "description": "Choose the rolling window for the chat failure rate and turn volume. Auto adapts to the time range and Prometheus scrape interval.",
+        "query": "Auto : $__rate_interval, 5m, 15m, 30m, 1h, 3h, 6h, 12h, 24h",
+        "current": {
+          "text": "Auto",
+          "value": "$__rate_interval",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "Auto",
+            "value": "$__rate_interval",
+            "selected": true
+          },
+          {
+            "text": "5m",
+            "value": "5m",
+            "selected": false
+          },
+          {
+            "text": "15m",
+            "value": "15m",
+            "selected": false
+          },
+          {
+            "text": "30m",
+            "value": "30m",
+            "selected": false
+          },
+          {
+            "text": "1h",
+            "value": "1h",
+            "selected": false
+          },
+          {
+            "text": "3h",
+            "value": "3h",
+            "selected": false
+          },
+          {
+            "text": "6h",
+            "value": "6h",
+            "selected": false
+          },
+          {
+            "text": "12h",
+            "value": "12h",
+            "selected": false
+          },
+          {
+            "text": "24h",
+            "value": "24h",
+            "selected": false
+          }
+        ]
+      },
+      {
         "name": "error_rate_24h",
         "label": "24h error rate",
         "type": "custom",
@@ -149,7 +208,7 @@
         "name": "error_rate_detail",
         "label": "Error rate detail",
         "type": "custom",
-        "description": "Show the adaptive-window curves on both error-rate charts.",
+        "description": "Show the chat failure rate for the selected lookback and the adaptive HTTP 5xx curves.",
         "query": "On : 1, Off : 0",
         "current": {
           "text": "On",
@@ -866,7 +925,7 @@
       "id": 4,
       "title": "Failed turn rate over time",
       "type": "timeseries",
-      "description": "The adaptive failure rate and Turn volume use the same rolling window and timestamps. Hover to see the window and its estimated failed and total turns. The rolling 24-hour rate is a separate reference. Gaps in the rate indicate no turns in the window or missing telemetry.",
+      "description": "Chat lookback sets the rolling window for the detailed failure rate and Turn volume. Hover to see the window and its estimated failed and total turns. The rolling 24-hour rate is a separate reference. Gaps in the rate indicate no turns in the window or missing telemetry.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -898,7 +957,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/^Adaptive rate \\(/"
+              "options": "/^Failure rate \\(/"
             },
             "properties": [
               {
@@ -983,11 +1042,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "label_replace((((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__rate_interval])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval])) > 0))) and on () (vector(${error_rate_detail:raw}) == 1), \"window\", \"$__rate_interval\", \"__name__\", \".*\")",
+          "expr": "label_replace((((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[${chat_lookback:raw}])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}])) > 0))) and on () (vector(${error_rate_detail:raw}) == 1), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
           "instant": false,
           "range": true,
           "refId": "B",
-          "legendFormat": "Adaptive rate (last {{window}})"
+          "legendFormat": "Failure rate (last {{window}})"
         },
         {
           "datasource": {
@@ -995,7 +1054,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "label_replace(sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval])), \"window\", \"$__rate_interval\", \"__name__\", \".*\")",
+          "expr": "label_replace(sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}])), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
           "instant": false,
           "range": true,
           "refId": "C",
@@ -1007,7 +1066,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "label_replace((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__rate_interval])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval]))), \"window\", \"$__rate_interval\", \"__name__\", \".*\")",
+          "expr": "label_replace((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[${chat_lookback:raw}])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}]))), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
           "instant": false,
           "range": true,
           "refId": "D",
@@ -1019,7 +1078,7 @@
       "id": 5,
       "title": "Turn volume over time",
       "type": "timeseries",
-      "description": "Estimated counts for the same adaptive rolling window as the detailed failure rate. Hover to see the window duration. The total includes failed turns.",
+      "description": "Estimated counts for the same rolling window as the detailed failure rate, set by Chat lookback. Hover to see the window duration. The total includes failed turns.",
       "datasource": {
         "type": "dashboard",
         "uid": "-- Dashboard --"

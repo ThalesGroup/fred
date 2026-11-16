@@ -21,9 +21,10 @@ apply to both error-rate charts. They use dropdowns for Grafana 12.1
 compatibility. Expand **HTTP route latency** to investigate a route spike.
 The latency panels use 2xx and 3xx responses.
 
-The detailed failed-turn rate and turn volume share the same adaptive rolling
-window and sample timestamps. Hover over the detailed rate to see the window
-duration and the estimated failed and total counts behind the percentage.
+**Chat lookback** sets the rolling window shared by the detailed failed-turn
+rate and turn volume. **Auto** uses Grafana's adaptive Prometheus interval.
+Fixed windows range from **5m** to **24h**. Hover over either chart to see the
+window duration and the estimated failed and total counts at the same timestamp.
 
 ## Agent runtime
 
