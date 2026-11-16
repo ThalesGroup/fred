@@ -133,7 +133,7 @@ git clone https://github.com/ThalesGroup/knowledge-flow.git
 cd knowledge-flow
 make dev
 cp config/.env.template config/.env
-# Edit .env to add OPENAI_API_KEY
+# Edit config/.env to add OPENAI_API_KEY or dedicated Knowledge Flow model keys
 make run
 ```
 
@@ -163,11 +163,12 @@ instructions.
 
 | Provider       | How to enable                                                           |
 | -------------- | ----------------------------------------------------------------------- |
-| OpenAI         | Set `OPENAI_API_KEY` in `.env`                                          |
+| OpenAI         | Set `OPENAI_API_KEY` or a dedicated key for the model use in `config/.env` |
 | Azure OpenAI   | Set Azure variables and update `configuration.yaml`                     |
 | Ollama (local) | Set `OLLAMA_BASE_URL` and configure model block in `configuration.yaml` |
 
 See the `ai:` section in `config/configuration.yaml` for complete setup examples.
+See [the configuration guide](config/README.md#openai-compatible-model-api-keys) for dedicated chat, vision, embeddings, and OCR keys and their fallback behavior.
 
 ---
 

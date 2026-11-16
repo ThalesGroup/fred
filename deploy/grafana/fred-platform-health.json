@@ -1,0 +1,1894 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus datasource that scrapes the Fred backends.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "id": null,
+  "uid": "fred-platform-health",
+  "title": "Fred / Platform health",
+  "description": "Failed chat turns and backend HTTP errors, latency and traffic.",
+  "tags": [
+    "fred",
+    "reliability"
+  ],
+  "schemaVersion": 39,
+  "version": 0,
+  "editable": true,
+  "timezone": "browser",
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values({__name__=~\"agent_turn_completed_count|api_request_latency_ms_count\"}, cluster)",
+        "query": {
+          "query": "label_values({__name__=~\"agent_turn_completed_count|api_request_latency_ms_count\"}, cluster)",
+          "refId": "StandardVariableQuery"
+        },
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "options": [],
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values({__name__=~\"agent_turn_completed_count|api_request_latency_ms_count\",cluster=~\"$cluster\"}, namespace)",
+        "query": {
+          "query": "label_values({__name__=~\"agent_turn_completed_count|api_request_latency_ms_count\",cluster=~\"$cluster\"}, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "options": [],
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "runtime",
+        "label": "Chat runtime",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}, runtime_id)",
+        "query": {
+          "query": "label_values(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}, runtime_id)",
+          "refId": "StandardVariableQuery"
+        },
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "options": [],
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "error_rate_24h",
+        "label": "24h error rate",
+        "type": "custom",
+        "description": "Show the rolling 24-hour curves on both error-rate charts.",
+        "query": "On : 1, Off : 0",
+        "current": {
+          "text": "On",
+          "value": "1",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "On",
+            "value": "1",
+            "selected": true
+          },
+          {
+            "text": "Off",
+            "value": "0",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "error_rate_detail",
+        "label": "Error rate detail",
+        "type": "custom",
+        "description": "Show the adaptive-window curves on both error-rate charts.",
+        "query": "On : 1, Off : 0",
+        "current": {
+          "text": "On",
+          "value": "1",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "On",
+            "value": "1",
+            "selected": true
+          },
+          {
+            "text": "Off",
+            "value": "0",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Failed turns",
+      "type": "canvas",
+      "description": "Failed turns divided by all recorded turns over the selected time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Failure rate",
+          "expr": "((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__range])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__range]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__range])) > 0)) or vector(0/0)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Error count",
+          "expr": "(round((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__range])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__range]))))) or vector(0/0)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Total count",
+          "expr": "(round(sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__range])))) or vector(0/0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failure rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "root": {
+          "name": "Summary",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "Headline",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Failure rate",
+                  "fixed": ""
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 32
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 7,
+                "height": 45
+              }
+            },
+            {
+              "name": "Errors",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Error count",
+                  "fixed": ""
+                },
+                "align": "right",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 68,
+                "width": 88,
+                "top": 53,
+                "height": 24
+              }
+            },
+            {
+              "name": "Divider",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "fixed",
+                  "fixed": "failed /"
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 0,
+                "width": 48,
+                "top": 53,
+                "height": 24
+              }
+            },
+            {
+              "name": "Total",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Total count",
+                  "fixed": ""
+                },
+                "align": "left",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": -68,
+                "width": 88,
+                "top": 53,
+                "height": 24
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "HTTP 5xx",
+      "type": "canvas",
+      "description": "5xx responses divided by all HTTP requests across services over the selected time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Failure rate",
+          "expr": "((sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__range])) or 0 * sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))) / (sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])) > 0)) or vector(0/0)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Error count",
+          "expr": "(round((sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__range])) or 0 * sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))))) or vector(0/0)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Total count",
+          "expr": "(round(sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])))) or vector(0/0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failure rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total count"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "root": {
+          "name": "Summary",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "Headline",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Failure rate",
+                  "fixed": ""
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 32
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 7,
+                "height": 45
+              }
+            },
+            {
+              "name": "Errors",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Error count",
+                  "fixed": ""
+                },
+                "align": "right",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 68,
+                "width": 88,
+                "top": 53,
+                "height": 24
+              }
+            },
+            {
+              "name": "Divider",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "fixed",
+                  "fixed": "5xx /"
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 0,
+                "width": 48,
+                "top": 53,
+                "height": 24
+              }
+            },
+            {
+              "name": "Total",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Total count",
+                  "fixed": ""
+                },
+                "align": "left",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "center",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": -68,
+                "width": 88,
+                "top": 53,
+                "height": 24
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "HTTP p95 latency",
+      "type": "canvas",
+      "description": "p95 time until the API starts responding for 2xx/3xx requests, pooled across services over the selected time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Latency",
+          "expr": "(histogram_quantile(0.95, sum by (le) (increase(api_request_latency_ms_bucket{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"[23]..\"}[$__range]))) >= 0) or vector(0/0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Latency"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "root": {
+          "name": "Summary",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "Headline",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Latency",
+                  "fixed": ""
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 32
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 7,
+                "height": 45
+              }
+            },
+            {
+              "name": "Scope",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "fixed",
+                  "fixed": "Across all services"
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 53,
+                "height": 24
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "HTTP traffic",
+      "type": "canvas",
+      "description": "Total estimated HTTP requests divided by the duration of the selected time range. The total is shown below.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Average traffic",
+          "expr": "(sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])) / $__range_s) or vector(0/0)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Total requests",
+          "expr": "(round(sum(increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])))) or vector(0/0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Average traffic"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: req/s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total requests"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: requests"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "root": {
+          "name": "Summary",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "Headline",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Average traffic",
+                  "fixed": ""
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 32
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 7,
+                "height": 45
+              }
+            },
+            {
+              "name": "Request count",
+              "type": "text",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "Total requests",
+                  "fixed": ""
+                },
+                "align": "center",
+                "valign": "middle",
+                "size": 13
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 4,
+                "right": 4,
+                "top": 53,
+                "height": 24
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Chat turns",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 4,
+      "title": "Failed turn rate over time",
+      "type": "timeseries",
+      "description": "Failed turns divided by all turns. The 24h error rate and Error rate detail controls show the rolling 24-hour and adaptive windows, respectively. Gaps indicate no recorded turns in the window or missing telemetry.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 15,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineWidth": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Adaptive window"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "auto"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[24h])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h])) > 0)) and on () (vector(${error_rate_24h:raw}) == 1)",
+          "instant": false,
+          "range": true,
+          "refId": "A",
+          "legendFormat": "Rolling 24 hours"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__rate_interval])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval])) > 0))) and on () (vector(${error_rate_detail:raw}) == 1)",
+          "instant": false,
+          "range": true,
+          "refId": "B",
+          "legendFormat": "Adaptive window"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Turn volume over time",
+      "type": "timeseries",
+      "description": "Estimated turn counts in each rolling hour. The total includes failed turns.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 5,
+        "w": 9,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 9,
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All turns"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed turns"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[1h]))",
+          "instant": false,
+          "range": true,
+          "refId": "A",
+          "legendFormat": "All turns"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[1h])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[1h])))",
+          "instant": false,
+          "range": true,
+          "refId": "B",
+          "legendFormat": "Failed turns"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "By agent template",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 6,
+          "title": "Failed turn rate by agent template",
+          "type": "timeseries",
+          "description": "Failed turn rate for each catalog template over Grafana's adaptive rolling window. Check turn volume before interpreting a spike.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 14,
+            "w": 15,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "decimals": 2,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 9,
+                "lineWidth": 2,
+                "showPoints": "auto",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc",
+              "hideZeros": false
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "(sum by (template_agent_id)(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[$__rate_interval])) or 0 * sum by (template_agent_id)(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval]))) / (sum by (template_agent_id)(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[$__rate_interval])) > 0)",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "{{template_agent_id}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Turn volume by agent template",
+          "type": "timeseries",
+          "description": "Estimated turn counts in each rolling hour for each catalog template.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "gridPos": {
+            "x": 15,
+            "y": 14,
+            "w": 9,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "decimals": 0,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 9,
+                "lineWidth": 2,
+                "showPoints": "auto",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc",
+              "hideZeros": false
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (template_agent_id)(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[1h]))",
+              "instant": false,
+              "range": true,
+              "refId": "A",
+              "legendFormat": "{{template_agent_id}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "HTTP APIs",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "title": "HTTP 5xx rate by service",
+      "type": "timeseries",
+      "description": "5xx responses divided by all requests for each service. Solid lines use Grafana's adaptive window. Dashed lines use a rolling 24-hour window. Gaps indicate no requests in the window or missing samples.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^fred-agents \\((adaptive|24h)\\)$/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^knowledge-flow \\((adaptive|24h)\\)$/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^control-plane \\((adaptive|24h)\\)$/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ \\(24h\\)$/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    7,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__rate_interval]))) or 0 * (sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))) / ((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) > 0)) and on () (vector(${error_rate_detail:raw}) == 1)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}} (adaptive)"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[24h]))) or 0 * (sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[24h])))) / ((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[24h]))) > 0)) and on () (vector(${error_rate_24h:raw}) == 1)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}} (24h)"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "HTTP p95 latency by service",
+      "type": "timeseries",
+      "description": "Time until the API starts responding for 2xx/3xx requests. Stream completion is measured separately by chat turn telemetry.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 9,
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fred-agents"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "knowledge-flow"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "control-plane"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(api_request_latency_ms_bucket{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"[23]..\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "HTTP requests by endpoint",
+      "type": "table",
+      "description": "Totals and p95 over the selected time range. Drag across a chart to focus on a spike. Sorted by 5xx requests. Latency covers 2xx/3xx responses.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))) > 0",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "((sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__range]))) or 0 * (sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])))) and ((sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))) > 0)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "((sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__range]))) or 0 * (sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range])))) / ((sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))) > 0)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "D",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, service, method, route) (increase(api_request_latency_ms_bucket{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"[23]..\"}[$__range]))) and on (service, method, route) ((sum by (service, method, route) (increase(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__range]))) > 0)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "service": 0,
+              "method": 1,
+              "route": 2,
+              "Value #A": 3,
+              "Value #B": 4,
+              "Value #C": 5,
+              "Value #D": 6
+            },
+            "renameByName": {
+              "service": "Service",
+              "method": "Method",
+              "route": "Route",
+              "Value #A": "Requests",
+              "Value #B": "5xx requests",
+              "Value #C": "5xx rate",
+              "Value #D": "p95 latency (2xx/3xx)"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "5xx requests",
+            "desc": true
+          }
+        ],
+        "enablePagination": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "-",
+          "custom": {
+            "minWidth": 150
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Requests"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5xx requests"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 125
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5xx rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95 latency (2xx/3xx)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 175
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 145
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Method"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 85
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "HTTP requests per second by service",
+      "type": "timeseries",
+      "description": "Requests observed by Fred backend middleware across all HTTP status codes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 9,
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fred-agents"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "knowledge-flow"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "control-plane"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "HTTP route latency",
+      "type": "row",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 15,
+          "title": "HTTP p95 latency by route",
+          "type": "timeseries",
+          "description": "Each line shows p95 time until the API starts responding for one service, HTTP method, and route. Uses 2xx/3xx responses and Grafana's adaptive window. Gaps indicate no successful requests in the window or missing telemetry.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 40,
+            "w": 24,
+            "h": 12
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "min": 0,
+              "decimals": 2,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "lineWidth": 2,
+                "showPoints": "auto",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc",
+              "hideZeros": false
+            },
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "max"
+              ],
+              "sortBy": "Max",
+              "sortDesc": true
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "editorMode": "code",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, service, method, route) (rate(api_request_latency_ms_bucket{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"[23]..\"}[$__rate_interval]))) >= 0",
+              "instant": false,
+              "range": true,
+              "legendFormat": "{{service}} / {{method}} {{route}}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Weekend",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(150, 160, 175, 1)",
+        "target": {
+          "queryType": "timeRegions",
+          "timeRegion": {
+            "fromDayOfWeek": 6,
+            "from": "00:00",
+            "toDayOfWeek": 1,
+            "to": "00:00",
+            "timezone": "Europe/Paris"
+          }
+        }
+      }
+    ]
+  }
+}

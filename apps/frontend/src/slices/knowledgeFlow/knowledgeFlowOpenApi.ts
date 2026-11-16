@@ -3152,6 +3152,8 @@ export type SearchRequest = {
   question: string;
   /** Number of results to return. */
   top_k?: number;
+  /** Reorder authorized hits with the configured Knowledge Flow reranker. */
+  rerank?: boolean;
   /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   document_library_tags_ids?: string[] | null;
   /** Optional list of document UIDs to restrict results to specific documents. */
@@ -3178,7 +3180,7 @@ export type SimilaritySearchRequest = {
   document_library_tags_ids?: string[];
   /** Number of matches to return (best-first). */
   top_k?: number;
-  /** Re-rank matches best-first with the cross-encoder. */
+  /** Re-rank matches with the configured Knowledge Flow reranker. */
   rerank?: boolean;
   /** Drop matches below this relevance score. */
   min_score?: number | null;

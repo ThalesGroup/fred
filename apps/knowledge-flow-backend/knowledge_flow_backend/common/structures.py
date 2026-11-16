@@ -34,8 +34,10 @@ from fred_core.common import (
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import IngestionProcessingProfile as IngestionProcessingProfile
 from fred_pod.common.structures import LogOutputFormat
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import WithJsonSchema
+
+from knowledge_flow_backend.common.model_api_keys import api_key_for_role
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -1106,6 +1108,22 @@ class ObservabilityConfig(BaseModel):
     kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
 
 
+class RerankerSettings(BaseModel):
+    """Settings for Knowledge Flow's indexed-results rerank endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+    base_url: AnyHttpUrl
+
+
+class RerankerModelConfiguration(BaseModel):
+    """Configure a remote reranker with the usual provider/name/settings shape."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["rerank"]
+    name: str = Field(min_length=1)
+    settings: RerankerSettings
+
+
 class Configuration(BaseModel):
     app: AppConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
@@ -1119,9 +1137,13 @@ class Configuration(BaseModel):
     vision_worker_client_id: str = "agentic"
     ocr_model: Optional[ModelConfiguration] = Field(
         default=None,
-        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
+        description="Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR.",
     )
     crossencoder_model: Optional[ModelConfiguration] = None
+    reranker_model: Optional[RerankerModelConfiguration] = Field(
+        default=None,
+        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+    )
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
@@ -1140,6 +1162,13 @@ class Configuration(BaseModel):
     storage: StorageConfig
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
+
+    @model_validator(mode="after")
+    def require_reranker_credential(self) -> "Configuration":
+        """Fail at startup if a configured remote reranker cannot authenticate."""
+        if self.reranker_model:
+            api_key_for_role("reranker")
+        return self
 
     @model_validator(mode="before")
     @classmethod

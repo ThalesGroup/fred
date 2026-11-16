@@ -7894,7 +7894,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -7949,6 +7949,55 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -12986,7 +13035,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -13041,6 +13090,55 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -18075,7 +18173,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -18130,6 +18228,47 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -22957,7 +23096,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -23012,6 +23151,47 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -27839,7 +28019,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -27894,6 +28074,47 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "const": "rerank",
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for Knowledge Flow's indexed-results rerank endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
