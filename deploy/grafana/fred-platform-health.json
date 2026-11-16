@@ -123,9 +123,9 @@
       },
       {
         "name": "chat_lookback",
-        "label": "Chat lookback",
+        "label": "Lookback",
         "type": "custom",
-        "description": "Choose the rolling window for the chat failure rate and turn volume. Auto adapts to the time range and Prometheus scrape interval.",
+        "description": "Set the rolling window for the chat failure rate, turn volume, and HTTP 5xx rate by service. Auto adapts to the time range and Prometheus scrape interval.",
         "query": "Auto : $__rate_interval, 5m, 15m, 30m, 1h, 3h, 6h, 12h, 24h",
         "current": {
           "text": "Auto",
@@ -176,54 +176,6 @@
           {
             "text": "24h",
             "value": "24h",
-            "selected": false
-          }
-        ]
-      },
-      {
-        "name": "error_rate_24h",
-        "label": "24h error rate",
-        "type": "custom",
-        "description": "Show the rolling 24-hour curves on both error-rate charts.",
-        "query": "On : 1, Off : 0",
-        "current": {
-          "text": "On",
-          "value": "1",
-          "selected": true
-        },
-        "options": [
-          {
-            "text": "On",
-            "value": "1",
-            "selected": true
-          },
-          {
-            "text": "Off",
-            "value": "0",
-            "selected": false
-          }
-        ]
-      },
-      {
-        "name": "error_rate_detail",
-        "label": "Error rate detail",
-        "type": "custom",
-        "description": "Show the chat failure rate for the selected lookback and the adaptive HTTP 5xx curves.",
-        "query": "On : 1, Off : 0",
-        "current": {
-          "text": "On",
-          "value": "1",
-          "selected": true
-        },
-        "options": [
-          {
-            "text": "On",
-            "value": "1",
-            "selected": true
-          },
-          {
-            "text": "Off",
-            "value": "0",
             "selected": false
           }
         ]
@@ -925,7 +877,7 @@
       "id": 4,
       "title": "Failed turn rate over time",
       "type": "timeseries",
-      "description": "Chat lookback sets the rolling window for the detailed failure rate and Turn volume. Hover to see the window and its estimated failed and total turns. The rolling 24-hour rate is a separate reference. Gaps in the rate indicate no turns in the window or missing telemetry.",
+      "description": "Lookback sets the rolling window for the detailed failure rate and Turn volume. Hover to see the window and its estimated failed and total turns. The rolling 24-hour rate is a separate reference. Gaps in the rate indicate no turns in the window or missing telemetry.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1030,7 +982,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[24h])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h])) > 0)) and on () (vector(${error_rate_24h:raw}) == 1)",
+          "expr": "((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[24h])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[24h])) > 0))",
           "instant": false,
           "range": true,
           "refId": "A",
@@ -1042,7 +994,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "label_replace((((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[${chat_lookback:raw}])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}])) > 0))) and on () (vector(${error_rate_detail:raw}) == 1), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
+          "expr": "label_replace((((sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\",finish_reason=\"error\"}[${chat_lookback:raw}])) or 0 * sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}]))) / (sum(increase(agent_turn_completed_count{cluster=~\"$cluster\",namespace=~\"$namespace\",runtime_id=~\"$runtime\"}[${chat_lookback:raw}])) > 0))), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
           "instant": false,
           "range": true,
           "refId": "B",
@@ -1078,7 +1030,7 @@
       "id": 5,
       "title": "Turn volume over time",
       "type": "timeseries",
-      "description": "Estimated counts for the same rolling window as the detailed failure rate, set by Chat lookback. Hover to see the window duration. The total includes failed turns.",
+      "description": "Estimated counts for the same rolling window as the detailed failure rate. Hover to see the window duration. The total includes failed turns.",
       "datasource": {
         "type": "dashboard",
         "uid": "-- Dashboard --"
@@ -1321,7 +1273,7 @@
       "id": 10,
       "title": "HTTP 5xx rate by service",
       "type": "timeseries",
-      "description": "5xx responses divided by all requests for each service. Solid lines use Grafana's adaptive window. Dashed lines use a rolling 24-hour window. Gaps indicate no requests in the window or missing samples.",
+      "description": "5xx responses divided by all requests for each service over the selected Lookback. Hover to see the window duration. Gaps indicate no requests in the window or missing samples.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1352,7 +1304,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/^fred-agents \\((adaptive|24h)\\)$/"
+              "options": "/^fred-agents \\(last /"
             },
             "properties": [
               {
@@ -1367,7 +1319,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/^knowledge-flow \\((adaptive|24h)\\)$/"
+              "options": "/^knowledge-flow \\(last /"
             },
             "properties": [
               {
@@ -1382,7 +1334,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "/^control-plane \\((adaptive|24h)\\)$/"
+              "options": "/^control-plane \\(last /"
             },
             "properties": [
               {
@@ -1391,32 +1343,6 @@
                   "mode": "fixed",
                   "fixedColor": "blue"
                 }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/ \\(24h\\)$/"
-            },
-            "properties": [
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    7,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              },
-              {
-                "id": "custom.showPoints",
-                "value": "never"
               }
             ]
           }
@@ -1442,22 +1368,10 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[$__rate_interval]))) or 0 * (sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval])))) / ((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[$__rate_interval]))) > 0)) and on () (vector(${error_rate_detail:raw}) == 1)",
+          "expr": "label_replace((((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[${chat_lookback:raw}]))) or 0 * (sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[${chat_lookback:raw}])))) / ((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[${chat_lookback:raw}]))) > 0)), \"window\", \"${chat_lookback:raw}\", \"__name__\", \".*\")",
           "instant": false,
           "range": true,
-          "legendFormat": "{{service}} (adaptive)"
-        },
-        {
-          "refId": "B",
-          "editorMode": "code",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "(((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\",http_status=~\"5..\"}[24h]))) or 0 * (sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[24h])))) / ((sum by (service) (rate(api_request_latency_ms_count{cluster=~\"$cluster\",namespace=~\"$namespace\"}[24h]))) > 0)) and on () (vector(${error_rate_24h:raw}) == 1)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{service}} (24h)"
+          "legendFormat": "{{service}} (last {{window}})"
         }
       ]
     },
