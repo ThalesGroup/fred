@@ -15,11 +15,16 @@ runtimes, control plane, and Knowledge Flow to see all services.
 The summary cards follow the selected time range. **Cluster** and **Namespace**
 apply to all panels when the corresponding labels are available in Prometheus.
 Keep **All** selected for labels your scrape pipeline does not supply.
-**Chat runtime** applies to the chat metrics. The
-**24h error rate** and **Error rate detail** controls default to **On** and
-apply to both error-rate charts. They use dropdowns for Grafana 12.1
-compatibility. Expand **HTTP route latency** to investigate a route spike.
-The latency panels use 2xx and 3xx responses.
+**Chat runtime** applies to the chat metrics. Expand **HTTP route latency** to
+investigate a route spike. The latency panels use 2xx and 3xx responses.
+
+**Lookback** sets the rolling window for the detailed failed-turn rate, turn
+volume, and HTTP 5xx rate by service. **Auto** uses Grafana's adaptive
+Prometheus interval for each rate panel. Both chat charts share the same
+resolved window. Fixed windows range from **5m** to **24h**.
+Hover over the charts to see the window duration. The chat tooltips also show
+the estimated failed and total counts at the same timestamp. Click **Failure
+rate** in the chat legend to isolate it from the rolling 24-hour reference.
 
 ## Agent runtime
 
