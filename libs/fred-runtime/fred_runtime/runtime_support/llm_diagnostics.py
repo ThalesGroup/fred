@@ -21,8 +21,10 @@ from openai import APIConnectionError, APIStatusError
 
 Scalar = str | int | float | bool | None
 
+# Fred's allowlist for OpenAI-compatible HTTP errors.
 _PROVIDER_ERROR_CODES = frozenset(
     {
+        "content_filter",
         "context_length_exceeded",
         "insufficient_quota",
         "invalid_api_key",

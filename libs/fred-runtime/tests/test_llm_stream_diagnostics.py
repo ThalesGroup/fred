@@ -257,6 +257,11 @@ def terminal_records(caplog):
             "context_length_exceeded",
         ),
         (
+            400,
+            b'{"error":{"code":"content_filter","type":null,"message":"private-provider-value"}}',
+            "content_filter",
+        ),
+        (
             500,
             b'{"error":{"code":"private-provider-value","type":"server_error"}}',
             "server_error",
@@ -264,7 +269,14 @@ def terminal_records(caplog):
         (400, b'{"detail":"private-provider-value"}', None),
         (502, b"<html>private-provider-value</html>", None),
     ],
-    ids=["gateway-400", "openai-code", "openai-type", "unknown-detail", "html-502"],
+    ids=[
+        "gateway-400",
+        "openai-code",
+        "azure-content-filter",
+        "openai-type",
+        "unknown-detail",
+        "html-502",
+    ],
 )
 async def test_provider_rejection_in_call_and_support_logs(
     status, payload, reason, caplog
