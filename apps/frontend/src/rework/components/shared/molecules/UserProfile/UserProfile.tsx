@@ -180,7 +180,13 @@ function WorkingOrganizationMenu({ onClose }: { onClose: () => void }) {
       </div>
       {context.error || context.loading || !choices.length ? (
         <p className={styles.organizationLabel} role="status">
-          {t(context.loading ? "common.loading" : "rework.manager.unavailable")}
+          {t(
+            context.loading
+              ? "common.loading"
+              : context.error
+                ? "rework.manager.unavailable"
+                : "rework.profileMenu.noWorkingOrganization",
+          )}
         </p>
       ) : choices.length === 1 && context.organization ? (
         <Tooltip content={context.organization.name} asChild>

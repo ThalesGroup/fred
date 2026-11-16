@@ -2971,6 +2971,7 @@
     },
     "profileMenu": {
       "workingOrganization": "Organisation de travail",
+      "noWorkingOrganization": "Aucune organisation de travail",
       "organizationLink": "Cette ressource appartient à {{name}}.",
       "continueInOrganization": "Continuer dans {{name}}",
       "contactSupport": "Contacter le support",
