@@ -9,6 +9,7 @@ import re
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
+from prometheus_client import Counter
 
 NORMALIZE_TOOL_CALL_IDS_SETTING = "normalize_streamed_tool_call_ids"
 SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER = "X-Fred-Skip-Tool-Call-Id-Normalization"
@@ -16,11 +17,16 @@ _SKIP_NORMALIZATION_EXTENSION = "fred.skip_tool_call_id_normalization"
 _MAX_EVENT_BYTES = 256 * 1024
 _MAX_CALL_INDEXES = 1024
 _LINE_END = re.compile(rb"\r\n?|\n")
+_CORRECTED_STREAMS = Counter(
+    "fred_tool_call_id_corrected_streams_total",
+    "Chat Completions SSE responses with at least one corrected tool-call ID.",
+)
 
 
 class _ToolCallEvents:
     def __init__(self) -> None:
         self._known_calls: set[tuple[int, int]] = set()
+        self._counted_correction = False
         self._frame = bytearray()
         self._oversized = False
         self._line_has_data = False
@@ -112,7 +118,11 @@ class _ToolCallEvents:
         for index in data_lines[:-1]:
             # Keep a line between neighboring fields, even with mixed CR/LF.
             lines[index] = b":" + lines[index][len(lines[index].rstrip(b"\r\n")) :]
-        return b"".join(lines)
+        normalized = b"".join(lines)
+        if not self._counted_correction:
+            _CORRECTED_STREAMS.inc()
+            self._counted_correction = True
+        return normalized
 
     def _normalize_calls(self, event: object) -> bool:
         choices = event.get("choices") if isinstance(event, dict) else None

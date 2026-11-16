@@ -18,6 +18,7 @@ from fred_core.model.factory import get_model
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from openai import _base_client as openai_client
+from prometheus_client import REGISTRY
 
 
 def _event(delta: dict[str, object], finish_reason: str | None = None) -> bytes:
@@ -138,6 +139,12 @@ def _model(name: str = "mistral-medium-test", **settings: object) -> ChatOpenAI:
     )
 
 
+def _corrected_streams() -> float:
+    count = REGISTRY.get_sample_value("fred_tool_call_id_corrected_streams_total")
+    assert count is not None
+    return count
+
+
 def _assert_repaired(chunk: AIMessageChunk) -> None:
     assert chunk.tool_calls == [
         {
@@ -155,17 +162,20 @@ def test_factory_stream_repairs_continuation_and_pairs_tool_result(
 ) -> None:
     model = _model()
     message = HumanMessage(content="Look up Évry.")
+    corrected_before = _corrected_streams()
     with closing(cast(Generator[AIMessageChunk], model.stream([message]))) as stream:
         chunk = next(stream)
         assert upstream.streams[-1].reads == 1
         for part in stream:
             chunk += part
     _assert_repaired(cast(AIMessageChunk, chunk))
+    assert _corrected_streams() == corrected_before + 1
     result = ToolMessage(content="Done", tool_call_id="call_first")
     assert (
         "".join(str(part.content) for part in model.stream([message, chunk, result]))
         == "Found it."
     )
+    assert _corrected_streams() == corrected_before + 1
     history = json.loads(upstream.requests[-1].content)["messages"]
     assert (
         history[-2]["tool_calls"][0]["id"]
@@ -259,10 +269,12 @@ async def test_shared_pool_keeps_concurrent_response_state_and_opt_out_local(
                 chunk += part
         return cast(AIMessageChunk, chunk)
 
+    corrected_before = _corrected_streams()
     repaired, unchanged, valid_literal = await asyncio.wait_for(
         asyncio.gather(consume(enabled), consume(disabled), consume(literal)), timeout=3
     )
     _assert_repaired(repaired)
+    assert _corrected_streams() == corrected_before + 1
     assert [call["id"] for call in unchanged.tool_calls] == ["null"]
     assert [call["id"] for call in unchanged.invalid_tool_calls] == ["call_first"]
     assert valid_literal.invalid_tool_calls == []
