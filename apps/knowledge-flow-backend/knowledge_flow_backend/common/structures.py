@@ -1109,17 +1109,24 @@ class ObservabilityConfig(BaseModel):
 
 
 class RerankerSettings(BaseModel):
-    """Settings for Knowledge Flow's indexed-results rerank endpoint."""
+    """Settings for a remote reranker endpoint."""
 
     model_config = ConfigDict(extra="forbid")
     base_url: AnyHttpUrl
+
+    @field_validator("base_url")
+    @classmethod
+    def require_path_only_base_url(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        if value.query is not None or value.fragment is not None:
+            raise ValueError("reranker base_url must not have a query or fragment")
+        return value
 
 
 class RerankerModelConfiguration(BaseModel):
     """Configure a remote reranker with the usual provider/name/settings shape."""
 
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["rerank"]
+    provider: Literal["rerank", "predict"]
     name: str = Field(min_length=1)
     settings: RerankerSettings
 
@@ -1142,7 +1149,7 @@ class Configuration(BaseModel):
     crossencoder_model: Optional[ModelConfiguration] = None
     reranker_model: Optional[RerankerModelConfiguration] = Field(
         default=None,
-        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+        description="Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used.",
     )
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(

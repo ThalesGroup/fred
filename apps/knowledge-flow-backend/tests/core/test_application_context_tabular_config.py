@@ -32,14 +32,15 @@ from knowledge_flow_backend.common.structures import (
 )
 
 
-def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch):
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch, provider):
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     assert config.reranker_model is None
 
     monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
-        "provider": "rerank",
+        "provider": provider,
         "name": "remote-reranker",
         "settings": {"base_url": "https://models.example/v1"},
     }
@@ -53,6 +54,8 @@ def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monke
         {"provider": "openai"},
         {"name": ""},
         {"settings": {"base_url": "file:///tmp/invalid"}},
+        {"settings": {"base_url": "https://models.example/v1?tenant=one"}},
+        {"settings": {"base_url": "https://models.example/v1#fragment"}},
         {"settings": {"base_url": "https://models.example/v1", "api_key_env": str(uuid.uuid4())}},
     ],
 )
@@ -71,13 +74,14 @@ def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, ove
         Configuration.model_validate(payload)
 
 
-def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch):
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch, provider):
     for variable in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(variable, raising=False)
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
-        "provider": "rerank",
+        "provider": provider,
         "name": "remote-reranker",
         "settings": {"base_url": "https://models.example/v1"},
     }
@@ -86,14 +90,15 @@ def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize("variable", ["KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"])
-def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable):
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable, provider):
     for candidate in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(candidate, raising=False)
     monkeypatch.setenv(variable, str(uuid.uuid4()))
     config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
     payload = config.model_dump(mode="json")
     payload["reranker_model"] = {
-        "provider": "rerank",
+        "provider": provider,
         "name": "remote-reranker",
         "settings": {"base_url": "https://models.example/v1"},
     }
