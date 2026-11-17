@@ -153,6 +153,10 @@
           "title": "Default results",
           "description": "How many hits to retrieve when the model omits top_k."
         },
+        "rerank": {
+          "title": "Re-rank search results",
+          "description": "Reorder search results to surface the most relevant passages. Can improve the agent's answers, but adds noticeable search latency. Disabled by default."
+        },
         "min_source_score_ratio": {
           "title": "Minimum source relevance ratio",
           "description": "A hit must score at least this fraction of the best hit in the same search to be shown as a cited source. Only affects the human-facing Sources panel, never what the model itself can read."
@@ -223,7 +227,7 @@
         },
         "rerank": {
           "title": "Re-rank matches",
-          "description": "Re-order candidate passages with the cross-encoder before returning them. More accurate, slightly slower. Recommended."
+          "description": "Re-order candidate passages with the configured Knowledge Flow reranker before returning them. More accurate, slightly slower. Recommended."
         },
         "min_score": {
           "title": "Minimum relevance",

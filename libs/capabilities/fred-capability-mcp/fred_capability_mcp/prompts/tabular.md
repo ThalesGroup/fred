@@ -54,6 +54,10 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   non-null value: preserve exact spelling and formatting in filters.
   Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
+- In ordinary SQL strings (`'...'`), double embedded apostrophes:
+  `O'Reilly` becomes `'O''Reilly'`. Do not use `\'` in these strings.
+  Double quotes (`"..."`) delimit table or column names. If needed, JSON-encode
+  the SQL query afterwards, preserving its SQL quoting.
 - In joins, qualify column references with their table alias, including
   references in filters, GROUP BY and ORDER BY, to avoid ambiguous columns.
 - Only SELECT is available. Do not attempt mutations or schema changes.

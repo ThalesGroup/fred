@@ -52,6 +52,7 @@ class _FakePort(runtime_contract.DocumentSearchPort):
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> runtime_contract.DocumentSearchResult:
         self.calls.append(
             {
@@ -62,6 +63,7 @@ class _FakePort(runtime_contract.DocumentSearchPort):
                 "search_policy": search_policy,
                 "include_attachments": include_attachments,
                 "include_team_documents": include_team_documents,
+                "rerank": rerank,
             }
         )
         return runtime_contract.DocumentSearchResult(hits=(_hit("d1"),))
@@ -83,10 +85,12 @@ def test_search_signature_takes_scope_params_not_identity() -> None:
         "search_policy",
         "include_attachments",
         "include_team_documents",
+        "rerank",
     } <= params
     assert "attachments_only" not in params
     assert sig.parameters["include_attachments"].default is True
     assert sig.parameters["include_team_documents"].default is True
+    assert sig.parameters["rerank"].default is False
     # No context/identity/token parameter may leak into the capability-facing
     # surface (RFC §10 doctrine).
     assert not ({"context", "identity", "token", "access_token", "binding"} & params)

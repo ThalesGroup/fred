@@ -30,6 +30,9 @@ const h = vi.hoisted(() => ({
   routed: true,
   builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
   refetch: vi.fn(),
+  dispatch: vi.fn(),
+  getRunningQueryThunk: vi.fn(),
+  upsertQueryData: vi.fn(),
   rerun: vi.fn(),
   reset: vi.fn(),
   saveOverrides: vi.fn(),
@@ -60,10 +63,16 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ siteDisplayName: "Acme", agentsNicknamePlural: "Assistants" }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => "/pod/capabilities/ppt_builder" }));
+vi.mock("react-redux", () => ({
+  useDispatch: () => h.dispatch,
+  useSelector: () => "/pod/capabilities/ppt_builder",
+}));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
+  pptBuilderCapabilityApi: {
+    util: { getRunningQueryThunk: h.getRunningQueryThunk, upsertQueryData: h.upsertQueryData },
+  },
   useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
   useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => ({
     data: options.skip ? undefined : h.builtin,
@@ -146,7 +155,20 @@ const button = (label: string) =>
   [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(label)) as HTMLButtonElement;
 
 beforeEach(() => {
-  for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
+  for (const fn of [
+    h.refetch,
+    h.dispatch,
+    h.getRunningQueryThunk,
+    h.upsertQueryData,
+    h.rerun,
+    h.reset,
+    h.saveOverrides,
+    h.upload,
+    h.showSuccess,
+    h.showError,
+  ])
+    fn.mockReset();
+  h.upsertQueryData.mockImplementation((_endpoint, _arg, data) => ({ type: "platform/cache", payload: data }));
   h.translate.mockClear();
   h.visionAvailability.mockReset().mockReturnValue({ available: true });
   h.review = undefined;
@@ -231,6 +253,23 @@ describe("PptBuilderPlatformPanel", () => {
       summary: `${K}.uploadError`,
       detail: "The uploaded .pptx exceeds the 50 MB limit.",
     });
+  });
+
+  it("keeps a successful upload successful when the query cannot be refetched", async () => {
+    const next = { analysis: null, replacement: analysis({ status: "pending", inventory: null }) };
+    h.upload.mockResolvedValue(next);
+    h.refetch.mockImplementation(() => {
+      throw new Error("Cannot refetch a query that has not been started yet.");
+    });
+    show({ analysis: null });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "brand.pptx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.uploaded` });
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.upsertQueryData).toHaveBeenCalledWith("getPptBuilderPlatform", undefined, next);
+    expect(h.dispatch).toHaveBeenCalledWith({ type: "platform/cache", payload: next });
+    expect(h.refetch).not.toHaveBeenCalled();
   });
 
   it("says when the upload fails without a reason from the server", async () => {
