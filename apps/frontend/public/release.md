@@ -1,3 +1,28 @@
+**v3.12.0** - 2026-11-16
+
+- **Summary**
+
+  Improve the relevance of document search results by enabling reranking on an agent. Operators can monitor chat and service health together in Grafana.
+
+- **Features**
+
+  - Enable reranking in an agent's advanced document search settings to put more relevant results first (#3536)
+  - Monitor chat activity, failures and service errors in a Grafana dashboard with a shared lookback window (#3539, #3561)
+
+- **Improvements**
+
+  - Configure separate credentials for Knowledge Flow's model services while keeping the shared key as a fallback (#3559)
+  - Get clearer diagnostics for model provider rejections and trace them with a gateway correlation ID when available (#3542)
+
+- **Bug Fixes**
+
+  - Keep conversations moving when a model sends incomplete information while calling a tool (#3554)
+  - Improve table filters for values containing apostrophes (#3545)
+
+- **Deployment note**
+
+  Existing v3.11.1 deployments can upgrade with their current configuration. Follow the operator guide to enable reranking or separate model credentials.
+
 **v3.11.1** - 2026-11-13
 
 - **Summary**

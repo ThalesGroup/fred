@@ -644,8 +644,6 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            // No token figure here (#2403): a tool call costs nothing by
-            // itself, and the row deliberately shows latency only.
           });
           break;
         }

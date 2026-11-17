@@ -658,7 +658,12 @@ safe snapshot also appears in `execution_error.llm_failures`, alongside the
 existing support `error_ref`. Exception causes/groups are bounded; a truncation
 flag means the list is incomplete. No prompt, answer, tool value or raw exception
 message is added. Upstream `x-request-id` and `apim-request-id` are restricted to
-128 ASCII identifier characters and omitted when delegation is enabled.
+128 ASCII identifier characters and omitted when delegation is enabled. HTTP
+4xx/5xx responses also record `x-correlation-id` as `x_correlation_id` under the
+same rules. When the response contains a recognized OpenAI error code or type,
+or the gateway detail `OASValidation`, the failed call records it as
+`provider_error_name`. Provider names and IDs are diagnostic fields outside
+the Prometheus label set.
 
 To investigate in OpenSearch Dashboards (field prefix depends on ingestion):
 

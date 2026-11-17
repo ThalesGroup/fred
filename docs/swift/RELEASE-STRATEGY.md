@@ -134,6 +134,13 @@ absent/stale guide, insufficient version or mismatched tag pair, and attach the
 guide to the GitHub release. The shared push-release skill retains explicit
 approval after merge and before tags; it no longer defaults blindly to a patch.
 
+Both GitHub release descriptions include an Alembic head section generated from
+their shared tagged commit. It lists the head revision of each backend, runtime
+and capability Alembic tree. It describes the tagged source, not the state of a
+deployed database. Review it with the operator guide during release preparation;
+the guide remains the source of upgrade and rollback steps. A tree's head remains
+listed when it has not changed since earlier releases.
+
 ## Tagging a release
 
 A release is **two Git tags on the same commit**, not one — each drives its own CI

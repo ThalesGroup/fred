@@ -285,6 +285,8 @@ class TracingKpiMiddleware(AgentMiddleware):
             if span is not None:
                 with suppress(Exception):
                     for key, value in fields.items():
+                        if key in {"provider_error_name", "x_correlation_id"}:
+                            continue
                         if key == "model_name" and response_model_name is not None:
                             value = response_model_name
                         span.set_attribute(key, value)

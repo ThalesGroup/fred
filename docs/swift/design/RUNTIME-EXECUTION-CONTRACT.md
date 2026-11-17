@@ -702,7 +702,7 @@ provider's tokenizer.
 | --- | --- |
 | `final.token_usage` | Billed usage of the whole turn: the sum of every model call, since each provider reports per call (§8.41) |
 | `final.context_tokens` | `input_tokens` of the turn's last model call, i.e. the context left at turn end. ReAct only; Graph agents leave it `None` and UIs fall back to `token_usage` (§8.57) |
-| `tool_call` / `tool_result` | No token figure: a tool call costs nothing by itself (§8.57) |
+| `tool_result` | No isolated token cost: SQL/tool execution does not itself report model usage |
 
 The assistant-final history row persists both fields (`ChatMetadata`), so a
 reloaded conversation shows what the live stream showed. Rows written before
@@ -4427,15 +4427,15 @@ tokenizer. `FinalRuntimeEvent` gains one field:
 | --- | --- |
 | `context_tokens: int \| None` | `input_tokens` of the turn's LAST model call — the context size at turn end |
 
-`ToolCallRuntimeEvent.token_usage` is **removed**, and tool rows now carry no
-token figure at all: a tool call costs nothing by itself, so the row shows
-latency only. (An intermediate version of this work added a
-`tool_context_cost` map attributing each round's context growth per `call_id`;
-it served its diagnostic purpose — proving the tools cost ~2 300 tokens, not
-~17 500 — and was then removed along with its display as UI weight. The
-measurement is recoverable from this issue's history if a per-tool figure is
-ever wanted again.) `token_usage` on `FinalRuntimeEvent` is unchanged and still
-carries the billed total.
+`ToolCallRuntimeEvent.token_usage` remains removed. **2026-11-13:** the abandoned
+per-tool token-display feature's dedicated `ModelCallTokenUsage` type and
+`model_call_usage` fields are also retired from tool-call/final events,
+history builders and frontend SSE propagation. Existing accumulated
+`token_usage`, cache accounting and final `context_tokens` remain unchanged.
+Historical metadata is still tolerated without a database rewrite. The drawer
+shows status, duration and recorded SQL/results without tool token badges or a
+model-usage explanation paragraph. No tokenizer or additional provider request
+is introduced.
 
 **The conversation header sums what the messages display, not the invoice.**
 Summing billed usage there put `72 595` above two messages badged `16 871` and
