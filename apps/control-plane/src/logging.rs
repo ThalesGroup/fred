@@ -113,6 +113,13 @@ const POLLED_ROUTES: [&str; 3] = [
     "/me/onboarding",
 ];
 
+fn standard_method(method: &str) -> &str {
+    match method {
+        "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS" => method,
+        _ => "other",
+    }
+}
+
 struct Completion {
     method: String,
     path: String,
@@ -138,7 +145,18 @@ impl Completion {
         if successful && (self.path.ends_with("/healthz") || self.path.ends_with("/ready")) {
             return;
         }
-        let duration_ms = self.started.elapsed().as_secs_f64() * 1000.0;
+        let elapsed = self.started.elapsed();
+        let duration_ms = elapsed.as_secs_f64() * 1000.0;
+        if let Some(status) = status {
+            // Labels never take the raw path or a nonstandard method: both are client text.
+            fred_rust_sdk::metrics::http_request(
+                identity("api").service,
+                route.as_deref().unwrap_or("unmatched"),
+                standard_method(&self.method),
+                status,
+                elapsed,
+            );
+        }
         // Without a template (no route matched, or cancelled before routing), the path
         // alone locates the caller; `Uri::path` never carries the query string.
         let unmatched_path = route.is_none().then_some(self.path.as_str());
@@ -370,6 +388,15 @@ mod tests {
         assert_eq!(lines[1]["route"], "/spaces/{id}");
         assert!(lines[1].get("path").is_none(), "{text}");
         assert!(!text.contains("secret"), "{text}");
+        // Metrics never carry a raw path, matched or not.
+        let scraped = fred_rust_sdk::metrics::render().unwrap();
+        for route in ["unmatched", "/spaces/{id}"] {
+            assert!(
+                scraped.contains(&format!(r#"route="{route}""#)),
+                "{scraped}"
+            );
+        }
+        assert!(!scraped.contains("/retired/7") && !scraped.contains("/spaces/42"));
     }
 
     #[tokio::test]

@@ -30,6 +30,8 @@ opentelemetry = { version = "0.32", default-features = false, features = ["trace
 opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace"] }
 opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client", "reqwest-rustls"] }
 tracing-opentelemetry = { version = "0.33", default-features = false }
+# Text exposition only; its default protobuf encoder is unused.
+prometheus = { version = "0.14", default-features = false }
 uuid = { version = "1.28.0", features = ["v5"] }
 utoipa = "6.0"
 

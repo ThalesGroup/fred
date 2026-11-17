@@ -46,6 +46,13 @@ into the shared chat history contract under the same configured base URL.
 No additional server or deployment is required. Apply migrations 0009 and 0010
 before startup; the latter indexes sessions awaiting retirement receipts.
 
+## Metrics
+
+`app.metrics_port` opens an unauthenticated Prometheus `GET /metrics` listener,
+outside `base_url`; absent, there is none. The chart sets 9222 as the container's
+`metrics` port, which neither the Service nor the ingress routes. The series reuse
+the Python KPI names: see the [Fred bench dashboard](../../deploy/grafana/README.md#fred-bench).
+
 ## From scratch (fred-deployment-factory)
 
 **Host run**: see the [first start](../../deploy/k3d/README.md#first-start).

@@ -52,6 +52,10 @@ pub struct AppConfig {
     #[serde(default = "default_address")]
     pub address: String,
     pub port: u16,
+    /// Prometheus `/metrics` port on `address`, outside `base_url` and without
+    /// authentication: no ingress may route it. Absent disables the listener.
+    #[serde(default)]
+    pub metrics_port: Option<u16>,
     #[serde(default = "default_log_level")]
     pub log_level: String,
     /// `json` (one object per stdout line) or `text`, as the Python APIs' `app.log_format`.

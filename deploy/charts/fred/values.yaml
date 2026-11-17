@@ -1688,6 +1688,9 @@ applications:
     ports: &manager-ports
     - name: http
       containerPort: 8222
+    # Pod-level scrape of `app.metrics_port`; neither the Service nor the ingress routes it.
+    - name: metrics
+      containerPort: 9222
     service:
       annotations: {}
       extraLabels: {}
@@ -1792,6 +1795,7 @@ applications:
         base_url: /control-plane/v1
         address: 0.0.0.0
         port: 8222
+        metrics_port: 9222
         log_level: info
         log_format: json
         bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN

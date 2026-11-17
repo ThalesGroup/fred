@@ -292,6 +292,12 @@ async fn serve(config: Config) -> Result<()> {
     let addr = config.listen_addr();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(addr, "control-plane listening");
+    let metrics = match config.app.metrics_port {
+        Some(port) => {
+            Some(tokio::net::TcpListener::bind((config.app.address.as_str(), port)).await?)
+        }
+        None => None,
+    };
     let app = api::router(
         state,
         &config.app.base_url,
@@ -315,6 +321,15 @@ async fn serve(config: Config) -> Result<()> {
                 .context("HTTP server stopped")
         }
     }));
+    if let Some(listener) = metrics {
+        let stopping = stopping.clone();
+        tasks.push(Box::pin(async move {
+            axum::serve(listener, fred_rust_sdk::metrics::router())
+                .with_graceful_shutdown(stopping)
+                .await
+                .context("metrics server stopped")
+        }));
+    }
     if let Some(storage) = content.clone() {
         let stopping = stopping.clone();
         tasks.push(Box::pin(async move {

@@ -18420,6 +18420,15 @@
                     "log_level": {
                       "type": "string"
                     },
+                    "metrics_port": {
+                      "description": "Prometheus `/metrics` port on `address`, outside `base_url` and without\nauthentication: no ingress may route it. Absent disables the listener.",
+                      "format": "int32",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
                     "port": {
                       "format": "int32",
                       "minimum": 0,
@@ -20895,6 +20904,15 @@
                     },
                     "log_level": {
                       "type": "string"
+                    },
+                    "metrics_port": {
+                      "description": "Prometheus `/metrics` port on `address`, outside `base_url` and without\nauthentication: no ingress may route it. Absent disables the listener.",
+                      "format": "int32",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
                     },
                     "port": {
                       "format": "int32",
