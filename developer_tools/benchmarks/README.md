@@ -133,12 +133,14 @@ cleanup and trace retrieval. Compare like-for-like deployments and model setting
 **Sampling at the source.** Bench sends W3C `traceparent` sampled flags: `01` for
 selected turns, `00` otherwise. `--trace-sample 0.01` randomly selects about 1% of
 turns, while client statistics still cover the whole measured run. Setup, history
-and cleanup requests carry `00`. Servers must use parent-based sampling and
-propagate the context; bench cannot override an independently configured sampler.
-The existing Python/Rust instrumentation supports this contract. If an operator
-also wants unsampled background roots, the standard server setting is
-`OTEL_TRACES_SAMPLER=parentbased_always_off` (honor sampled parents, drop new roots).
-Changing that setting requires the operator's own rollout. `--client-only` skips
+and cleanup requests carry `00`. Weaver services must select
+`observability.tracer: diagnostic` and `diagnostic.collector_endpoint` in their YAML
+configuration. That backend fixes parent-based sampling with new roots dropped;
+no SDK environment settings are needed. Prepare the environment once, then change
+the bench's sampling between runs without restarting Fred. A sampled header is
+not an authorization mechanism; other clients can send one in the same development
+environment. The bench never changes server configuration.
+`--client-only` skips
 trace retrieval only; use `--trace-sample 0` to request no turn trace recording.
 Missing server spans are never interpreted as zero server work.
 
@@ -253,22 +255,20 @@ export RESULTS="$(mktemp -d "${TMPDIR:-/tmp}/fred-traced-run.XXXXXX")"
 make traces-start TRACE_DIR="$RESULTS"
 ```
 
-In the two service terminals, apply the following environment to their normal
-startup commands, preserving the installation's existing configuration/secrets.
-These commands are supplied for a future operator restart; report generation
-never starts or reconfigures Fred. Normal application startup prerequisites
-(including schema preparation) still apply.
+In both services' existing YAML configuration, select:
 
-```bash
-# Terminal 1, from the checkout root:
-FRED_OTEL_ENABLED=true OTEL_SERVICE_NAME=control-plane \
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces \
-  make -C apps/control-plane run
-# Terminal 2, from the checkout root:
-FRED_OTEL_ENABLED=true OTEL_SERVICE_NAME=fred-agents \
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces \
-  make -C apps/fred-agents run
+```yaml
+observability:
+  tracer: diagnostic
+  diagnostic:
+    collector_endpoint: http://127.0.0.1:4318/v1/traces
 ```
+
+Preserve the rest of each configuration, including KPI settings. Restart the two
+services with their normal commands (`make -C apps/control-plane run` and
+`make -C apps/fred-agents run`). Report generation never starts or reconfigures
+Fred; normal startup prerequisites still apply. Diagnostic collection records
+only sampled request contexts and never prompts, answers or identity metadata.
 
 Back in the benchmark terminal, set `WEAVER_ORIGIN`, `WEAVER_SPACE`,
 `WEAVER_INSTANCE` and `CREDENTIAL_FILE` to the existing local setup's values.
@@ -335,13 +335,13 @@ LLM, MCP or Control Plane timings.
 ### k3d collection (separate operator rollout)
 
 Use the deployment factory's
-[Weaver traces recipe](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/README.md#advanced-weaver-traces).
+[Weaver traces recipe](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md#diagnostic-traces).
 Its opt-in collector reuses this directory's sanitization pipeline and stores
-rotated OTLP JSONL on a PVC. Its application overlay supplies the internal service
-endpoint and enables Control Plane and Agent Pod export, preserving credentials
+rotated OTLP JSONL on a PVC. Its explicit application VALUES overlay selects `observability.tracer: diagnostic`
+and supplies the internal Collector endpoint, preserving credentials
 and TLS configuration. In a pod, `127.0.0.1` means that pod, so the local endpoint
-above cannot be used for k3d. A browser question can exercise the server spans;
-the HTML campaign report also needs the benchmark client's turn observations.
+above cannot be used for k3d. Ordinary browser questions do not request diagnostic traces.
+Use bench diagnostic mode to collect correlated turn measurements and spans.
 
 ### Collector configuration and optional Langfuse
 
@@ -390,8 +390,8 @@ make traces-start TRACE_DIR="$TRACE_DIR"
 
 This forwards the original spans over HTTP/protobuf; trace IDs, span IDs and
 parents remain identical. The Collector copies data for the mutating file branch,
-so Langfuse retains native observation type, model, usage, cost and permitted
-metadata. No Langfuse SDK/provider is installed in the Collector. This is OTLP
+so each destination receives identical span identities. Fred diagnostic producers
+export technical fields only, even when this optional destination is configured. No Langfuse SDK/provider is installed in the Collector. This is OTLP
 compatibility, not validation against a real Langfuse deployment. The endpoint
 above is the native v3-compatible path (self-hosted Langfuse >= 3.22); a deployment
 using Langfuse v4 realtime ingestion additionally needs its documented
@@ -425,8 +425,8 @@ startup with `traces-start` (or supply the exact pinned config/environment), use
 an entirely fresh private directory, and direct **all** Python/Rust exporters to
 its OTLP endpoint. Move destination credentials to the optional Collector branch;
 never point a producer at the file branch's old arbitrary-attribute recipe. Old
-exports are not retroactively sanitized. Existing Langfuse-only setup migration
-is described with the runtime tracing configuration.
+exports are not retroactively sanitized. Standalone Langfuse remains a separate runtime backend; diagnostic mode does not
+export its identity, content or observation metadata.
 
 The reproducible synthetic test uses Docker, `uv` and pinned protobuf dependencies.
 It creates a fresh private directory, chooses free loopback ports, starts a fake
@@ -508,10 +508,8 @@ the scenario limits. JSON and HTML outputs remain exclusive and private.
 
 The deployment and setup entry point is the factory's
 [benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md).
-Its opt-in `BENCH=reference` profile configures the mock and both Fred lines from
-versioned values. Follow its normal bootstrap, identity preparation and
-`k3d-bench-prepare` commands before running this client. Operator inputs and generated
-password files remain private; no private Helm overlay or manual SQL is required.
+Its `VALUES` files configure the mock and Fred connection. Follow that guide
+before running this client; no manual SQL is required.
 
 Build Weaver's images from a revision containing the current Python SDK contract:
 `RuntimeModels` accepts the resolver's `default` and `reasoning_default_on` fields.

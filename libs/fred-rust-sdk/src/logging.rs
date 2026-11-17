@@ -131,6 +131,7 @@ pub fn init(
     identity: LogIdentity,
     level: &str,
     format: LogFormat,
+    diagnostic: Option<&crate::telemetry::DiagnosticConfig>,
 ) -> anyhow::Result<Option<opentelemetry_sdk::trace::SdkTracerProvider>> {
     let level: Level = level
         .parse()
@@ -138,7 +139,7 @@ pub fn init(
     let colors = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     // One output stream needs a global filter. A per-layer filter can retain a
     // disabled dependency `enabled!` probe and suppress the following cached event.
-    let provider = crate::telemetry::provider_from_env(identity.service)?;
+    let provider = crate::telemetry::provider_from_config(identity.service, diagnostic)?;
     tracing_subscriber::registry()
         .with(tracing_subscriber::filter::filter_fn(move |m| {
             enabled(m, level, identity)

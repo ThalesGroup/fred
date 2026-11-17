@@ -31,21 +31,29 @@ Authentication regressions moved here with the implementation. Changes must
 preserve issuer/audience/signature/time validation, identity mapping and the
 separate human and delegated-workload admission contracts.
 
-Technical tracing uses the existing `logging` subscriber and is disabled unless
-`FRED_OTEL_ENABLED=true`. Control Plane exports OTLP HTTP/protobuf to
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (or the standard generic OTLP endpoint);
-`OTEL_SERVICE_NAME` overrides its default `control-plane` identity. No collector
-connection or export worker is created while disabled. `logging::init` returns
-the optional provider; applications should await `telemetry::shutdown` before exit.
-The single OTLP stream goes to the shared collector, which can fan out the same
-span identities to the offline report and optional Langfuse destination. Rust
-produces technical spans only; it does not create artificial LLM observations.
+Experimental diagnostic tracing uses the existing logging subscriber. Applications
+pass the configured `observability` section to the SDK; Control Plane supports:
 
-The middleware accepts W3C `traceparent`/`tracestate` without changing caller
-authority or the separate request/correlation IDs. The SDK's default parent-based
-sampler honors the incoming sampled flag; an unsampled trace still propagates its
-context to JWKS HTTP requests. Baggage is not forwarded. Standard
-`OTEL_TRACES_SAMPLER` configuration can override this sampling policy. Explicit spans cover HTTP,
+```yaml
+observability:
+  tracer: diagnostic
+  diagnostic:
+    collector_endpoint: http://collector:4318/v1/traces
+```
+
+Without this selection, no exporter or worker is created. The service identity
+comes from the application (`control-plane`), and the full endpoint comes from
+YAML. The fixed parent-based sampler drops new roots and honors sampled incoming
+W3C parents. Bench chooses which turns request traces; ordinary requests without
+a sampled parent remain unrecorded. No activation or sampling environment variable
+is needed. `logging::init` returns the optional provider, drained by
+`telemetry::shutdown` at exit.
+
+The middleware accepts W3C context without changing caller authority or the
+separate request/correlation IDs. Unsampled context still propagates to JWKS
+HTTP requests; baggage is not forwarded. This is a development diagnostic tool,
+not production tracing or an authenticated bench-only channel.
+Explicit spans cover HTTP,
 runtime binding, JWKS cache lookup, actual JWKS HTTP, and local JWT validation.
 Only a Keycloak network fetch has category `keycloak`; cached validation stays
 `auth`. The runtime-binding span includes its SQL work, without per-query spans.

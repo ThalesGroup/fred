@@ -37,7 +37,7 @@ ai:
     read: 30
 
 observability:
-  tracer: logging     # null | logging | langfuse
+  tracer: logging     # null | logging | langfuse | diagnostic
   kpi:
     log:
       enabled: true

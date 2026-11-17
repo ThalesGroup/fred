@@ -95,27 +95,11 @@ def bootstrap_observability(
 
 
 def _build_tracer(config: PodObservabilityConfig) -> Tracer:
-    if os.getenv("FRED_OTEL_ENABLED", "").lower() == "true":
-        from fred_runtime.integrations.v2_runtime.adapters import (
-            langfuse_content_capture_enabled,
-            langfuse_max_content_chars,
-        )
-
+    if config.tracer == TracerBackend.diagnostic:
         from .technical_tracing import OTLPTracer
 
-        capture_content = langfuse_content_capture_enabled(
-            config.langfuse.capture_content
-        )
-        if capture_content:
-            logger.warning(
-                "OTel content capture is enabled; restrict the collector's destinations."
-            )
-        return OTLPTracer(
-            capture_content=capture_content,
-            max_content_chars=langfuse_max_content_chars(
-                config.langfuse.max_content_chars
-            ),
-        )
+        assert config.diagnostic is not None  # validated by PodObservabilityConfig
+        return OTLPTracer(collector_endpoint=str(config.diagnostic.collector_endpoint))
     if config.tracer == TracerBackend.null:
         return Tracer()
     if config.tracer == TracerBackend.logging:

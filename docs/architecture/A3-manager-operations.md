@@ -55,13 +55,15 @@ refused the write upstream.
 ## Distributed tracing
 
 The [architecture overview](08-operations.md#distributed-tracing) explains the
-shared trace flow. Python uses the [core context helpers](../../libs/fred-core/fred_core/technical_tracing.py)
-and [runtime provider](../../libs/fred-runtime/fred_runtime/app/technical_tracing.py),
-reusing the [observation adapter](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py).
+developer diagnostic flow. Both services select `observability.tracer: diagnostic`
+and `diagnostic.collector_endpoint` in YAML; the fixed sampler records sampled
+parents and drops new roots. Python uses the [core context helpers](../../libs/fred-core/fred_core/technical_tracing.py)
+and [runtime provider](../../libs/fred-runtime/fred_runtime/app/technical_tracing.py);
+it exports only the core technical allowlist, without Langfuse observation mapping.
 Rust uses the [shared SDK](../../libs/fred-rust-sdk/src/telemetry.rs).
 The [collector pipeline](../../developer_tools/benchmarks/otel-collector.yaml)
 filters the file destination; its [Langfuse overlay](../../developer_tools/benchmarks/otel-collector-langfuse.yaml)
-receives the same spans with permitted observation data.
+receives the same content-free technical spans from diagnostic producers.
 
 The [interactive CLI](../../developer_tools/benchmarks/bench.go) selects spaces
 and agents through existing Control Plane APIs, then reuses the conversation

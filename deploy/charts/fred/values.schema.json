@@ -1658,17 +1658,43 @@
                   "additionalProperties": false
                 },
                 "observability": {
-                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse | diagnostic\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
                   "properties": {
                     "tracer": {
-                      "description": "Distributed tracing backend for the agent pod.\n\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
+                      "description": "Distributed tracing backend for the agent pod.\n\n- diagnostic \u2014 technical spans for sampled incoming requests, via a Collector\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
                       "enum": [
+                        "diagnostic",
                         "null",
                         "logging",
                         "langfuse"
                       ],
                       "title": "TracerBackend",
                       "type": "string"
+                    },
+                    "diagnostic": {
+                      "anyOf": [
+                        {
+                          "description": "Experimental developer tracing; no conversation content or identity export.",
+                          "properties": {
+                            "collector_endpoint": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Collector Endpoint",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "title": "DiagnosticTracingConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
                     },
                     "kpi": {
                       "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
@@ -18406,6 +18432,66 @@
                   ],
                   "type": "object"
                 },
+                "observability": {
+                  "description": "Developer-only diagnostics configured alongside the application's other YAML settings.",
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "logging"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "null"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "diagnostic": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "collector_endpoint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "type": "object"
+                        },
+                        "tracer": {
+                          "enum": [
+                            "diagnostic"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "diagnostic",
+                        "tracer"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
                 "platform": {
                   "additionalProperties": false,
                   "properties": {
@@ -20821,6 +20907,66 @@
                     "port"
                   ],
                   "type": "object"
+                },
+                "observability": {
+                  "description": "Developer-only diagnostics configured alongside the application's other YAML settings.",
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "logging"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "null"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "diagnostic": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "collector_endpoint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "type": "object"
+                        },
+                        "tracer": {
+                          "enum": [
+                            "diagnostic"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "diagnostic",
+                        "tracer"
+                      ],
+                      "type": "object"
+                    }
+                  ]
                 },
                 "platform": {
                   "additionalProperties": false,

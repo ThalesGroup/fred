@@ -5,45 +5,34 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 
-from fred_core.portable.observability import Span, get_tracer
+from fred_core.portable.observability import get_tracer
 from fred_core.technical_tracing import (
-    ROOT_TRACE_ID,
     TechnicalTracer,
     extract_trace,
     technical_span,
 )
 from opentelemetry import context as otel_context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import OTELResourceDetector, Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import SpanLimits, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
+from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, ParentBased
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
-class _FredIdGenerator(RandomIdGenerator):
-    def generate_trace_id(self) -> int:
-        return ROOT_TRACE_ID.get() or super().generate_trace_id()
-
-
 class OTLPTracer(TechnicalTracer):
-    def __init__(
-        self, *, capture_content: bool = False, max_content_chars: int = 100_000
-    ) -> None:
-        # Accept the standard service-name configuration, not arbitrary resource
-        # attributes. Sampling follows the standard SDK environment settings.
-        configured = OTELResourceDetector().detect().attributes
+    """Developer diagnostics: technical fields only, sampled incoming requests only."""
+
+    def __init__(self, *, collector_endpoint: str) -> None:
         self.provider = TracerProvider(
-            id_generator=_FredIdGenerator(),
-            resource=Resource(
-                {"service.name": configured.get("service.name", "fred-agents")}
-            ),
+            sampler=ParentBased(ALWAYS_OFF),
+            resource=Resource({"service.name": "fred-agents"}),
+            span_limits=SpanLimits(max_attributes=16, max_attribute_length=2048),
         )
         self.provider.add_span_processor(
             BatchSpanProcessor(
-                OTLPSpanExporter(timeout=3),
+                OTLPSpanExporter(endpoint=collector_endpoint, timeout=3),
                 max_queue_size=2048,
                 max_export_batch_size=256,
                 schedule_delay_millis=1000,
@@ -51,32 +40,6 @@ class OTLPTracer(TechnicalTracer):
             )
         )
         super().__init__(self.provider.get_tracer("fred"))
-        # Reuse Fred's observation mapping, buffering and explicit content gate.
-        # No Langfuse SDK instance is created: all destinations share this export.
-        from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
-
-        self.observations = LangfuseTracerAdapter(
-            otel_tracer=self,
-            capture_content=capture_content,
-            max_content_chars=max_content_chars,
-        )
-
-    @property
-    def captures_content(self) -> bool:
-        return self.observations.captures_content
-
-    def start_span(
-        self,
-        name: str,
-        *,
-        context: object | None = None,
-        attributes: Mapping[str, object] | None = None,
-        parent: Span | None = None,
-        **kwargs: object,
-    ) -> Span:
-        return self.observations.start_span(
-            name, context=context, attributes=attributes, parent=parent, **kwargs
-        )
 
     def shutdown(self) -> None:
         # Locked SDK bounds the batch worker join at 30 s. Our queue holds at

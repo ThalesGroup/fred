@@ -37,6 +37,7 @@ Options:
 
 Defaults:
   Diagnostic: 10 questions, one conversation, all traces requested.
+  Requires Fred YAML observability.tracer=diagnostic and a Collector endpoint.
   Performance: 1000 questions, concurrency 10, warm-up 20, traces off.
   Both modes measure client latency, throughput and errors for every turn.
   The selected Fred agent owns the model choice (real provider or mock).
@@ -365,7 +366,8 @@ func interactiveBench(ctx context.Context, u *benchUI, origin string, clientOnly
 	prefs.Origin = origin
 	var collector *benchCollector
 	if !clientOnly && options.sampleRate > 0 {
-		u.printf("Checking the collector...\n")
+		u.printf("Fred must use observability.tracer=diagnostic with diagnostic.collector_endpoint.\n")
+		u.printf("Checking the collector (server configuration is not changed)...\n")
 		if origin == "http://weaver.localhost:8088" {
 			collector, err = discoverBenchCollector(ctx, readBenchCommand)
 		} else {
@@ -373,7 +375,7 @@ func interactiveBench(ctx context.Context, u *benchUI, origin string, clientOnly
 		}
 		if err != nil {
 			u.printf("%s %s\n", u.style("33", "Traces unavailable:"), terminalText(err.Error()))
-			choice, e := u.choose("Client KPIs still work without server traces", []string{"Exit and set up tracing", "Continue with client timings only"}, 0)
+			choice, e := u.choose("Client KPIs still work without server traces", []string{"Exit and configure Fred diagnostic tracing", "Continue with client timings only"}, 0)
 			if e != nil {
 				return e
 			}
@@ -666,6 +668,9 @@ func executeInteractiveBench(ctx context.Context, u *benchUI, cfg config, collec
 		u.printf("Retrieving traces (up to 30 seconds)...\n")
 		matched, _, err := collector.collect(ctx, dir)
 		u.printf("Server traces found for %d/%d sampled questions.\n", matched, sampled)
+		if matched == 0 {
+			u.printf("Check observability.tracer=diagnostic and diagnostic.collector_endpoint in both Fred services, then redeploy them before retrying.\n")
+		}
 		if err != nil {
 			u.printf("%s %s\n", u.style("33", "Partial collection:"), terminalText(err.Error()))
 		}

@@ -102,11 +102,12 @@ space determine what the person may do. [Security](03-security.md) explains thes
 Control Plane decides every remote model call Fred makes for an organization, from
 one organization policy that the Owner administers in **Models**. For agents, it
 selects the chat model at admission of each turn, using the working space's
-organization policy, the assistant's recommendation and the user's choice. For the
-organization's documents, the policy names the embedding model, an optional
-image-description model, and the default chat model that document tools such as
-summary and extraction use. Team and project execution do not introduce separate
-model policies, and no component chooses a remote model in its own configuration.
+organization policy, local restrictions/defaults, the assistant's recommendation
+and the user's choice. Team/project policies can narrow organization permissions
+and supply defaults, never authorize additional models. For documents, the
+organization policy names the embedding model, an optional image-description model
+and the default chat model used by summary and extraction. Runtime components do
+not choose remote models independently in their own configuration.
 
 Models packaged with a workload are a different boundary: the search reranker, OCR
 and audio transcription run inside Knowledge Flow, send no document to a provider,

@@ -18,19 +18,63 @@ use opentelemetry_sdk::{
     error::OTelSdkResult,
     propagation::TraceContextPropagator,
     trace::{
-        BatchConfigBuilder, BatchSpanProcessor, SdkTracerProvider, Span, SpanData, SpanProcessor,
+        BatchConfigBuilder, BatchSpanProcessor, Sampler, SdkTracerProvider, Span, SpanData,
+        SpanProcessor,
     },
 };
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{Layer, registry::LookupSpan};
 
-/// The provider has no exporter, worker or network activity unless explicitly enabled.
-pub fn provider_from_env(service: &'static str) -> anyhow::Result<Option<SdkTracerProvider>> {
-    if !std::env::var("FRED_OTEL_ENABLED").is_ok_and(|value| value.eq_ignore_ascii_case("true")) {
-        return Ok(None);
+/// Developer-only diagnostics configured alongside the application's other YAML settings.
+#[derive(Debug, Clone, Default, serde::Deserialize, utoipa::ToSchema)]
+#[serde(tag = "tracer", rename_all = "lowercase", deny_unknown_fields)]
+pub enum ObservabilityConfig {
+    #[default]
+    Logging,
+    Null,
+    Diagnostic {
+        diagnostic: DiagnosticConfig,
+    },
+}
+
+impl ObservabilityConfig {
+    pub fn diagnostic(&self) -> Option<&DiagnosticConfig> {
+        match self {
+            Self::Diagnostic { diagnostic } => Some(diagnostic),
+            _ => None,
+        }
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DiagnosticConfig {
+    pub collector_endpoint: String,
+}
+
+impl DiagnosticConfig {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        let url = reqwest::Url::parse(&self.collector_endpoint)?;
+        anyhow::ensure!(
+            matches!(url.scheme(), "http" | "https") && url.host_str().is_some(),
+            "diagnostic.collector_endpoint must be an HTTP(S) URL"
+        );
+        Ok(())
+    }
+}
+
+/// No exporter, worker or network activity without a configured diagnostic backend.
+pub fn provider_from_config(
+    service: &'static str,
+    config: Option<&DiagnosticConfig>,
+) -> anyhow::Result<Option<SdkTracerProvider>> {
+    let Some(config) = config else {
+        return Ok(None);
+    };
+    config.validate()?;
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
+        .with_endpoint(&config.collector_endpoint)
         .with_protocol(Protocol::HttpBinary)
         .with_timeout(Duration::from_secs(3))
         .build()?;
@@ -45,14 +89,9 @@ pub fn provider_from_env(service: &'static str) -> anyhow::Result<Option<SdkTrac
         .build();
     Ok(Some(
         SdkTracerProvider::builder()
+            .with_sampler(Sampler::ParentBased(Box::new(Sampler::AlwaysOff)))
             .with_span_processor(SafeSpans(processor))
-            .with_resource(
-                Resource::builder_empty()
-                    .with_service_name(
-                        std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| service.into()),
-                    )
-                    .build(),
-            )
+            .with_resource(Resource::builder_empty().with_service_name(service).build())
             .build(),
     ))
 }

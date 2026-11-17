@@ -2195,3 +2195,13 @@ and adjacent windows, Acme/Globex and revocation, shared historical reads, exact
 homonyms, membership filtering before limits, late UI responses and unavailable/empty
 states. Execution of tests and code-quality remains assigned to Dimi; these additions
 are not a claim of passing tests or deployed reception.
+
+### Developer diagnostic tracing
+
+Select `observability.tracer: diagnostic` with
+`observability.diagnostic.collector_endpoint` in the service YAML. The default
+keeps diagnostic export off. The [SDK guide](../../libs/fred-rust-sdk/README.md)
+describes the fixed request-based sampling and bounded technical export; the
+[bench guide](../../developer_tools/benchmarks/README.md) describes collection.
+This is an experimental developer facility; a sampled request context carries
+no authority and does not certify bench as its sender.

@@ -100,6 +100,9 @@
         "app": {
           "$ref": "#/$defs/AppConfig"
         },
+        "observability": {
+          "$ref": "#/$defs/ObservabilityConfig"
+        },
         "platform": {
           "$ref": "#/$defs/PlatformConfig"
         },
@@ -332,6 +335,18 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "DiagnosticConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "collector_endpoint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "collector_endpoint"
       ],
       "type": "object"
     },
@@ -723,6 +738,57 @@
         "openai_responses"
       ],
       "type": "string"
+    },
+    "ObservabilityConfig": {
+      "description": "Developer-only diagnostics configured alongside the application's other YAML settings.",
+      "oneOf": [
+        {
+          "properties": {
+            "tracer": {
+              "enum": [
+                "logging"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "tracer"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "tracer": {
+              "enum": [
+                "null"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "tracer"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "diagnostic": {
+              "$ref": "#/$defs/DiagnosticConfig"
+            },
+            "tracer": {
+              "enum": [
+                "diagnostic"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "diagnostic",
+            "tracer"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "OrganizationModels": {
       "additionalProperties": false,

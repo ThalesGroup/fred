@@ -83,7 +83,7 @@ observability:
     opensearch:
       enabled: true
       index: weaver-kpi
-  tracer: logging    # null | logging | langfuse (needs LANGFUSE_* keys in .env)
+  tracer: logging    # null | logging | langfuse | diagnostic (needs LANGFUSE_* keys in .env)
   langfuse:
     host: "http://localhost:3001"
     # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env

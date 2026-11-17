@@ -3,7 +3,7 @@ schema: 1
 title: "Reproducible local conversation benchmarks and additive model source assignment"
 impact: minor
 configuration: local
-configuration_reason: "Optional factory BENCH=reference values add a local mock source and workload binding; normal production chart configuration is unchanged."
+configuration_reason: "Optional factory model values add a local mock source and workload binding; normal production chart configuration is unchanged."
 covers:
   - c3f3a58ca04e9bf4040765d3f8fee4c9c69a834e
 ---
@@ -25,7 +25,7 @@ this change requires no reset or schema migration.
 
 Follow the factory's versioned
 [benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md).
-Its optional `BENCH=reference` deployment profile adds the mock source and local
+Its optional `VALUES` file adds the mock source and local
 workload binding to normal values. Operator credentials and generated account
 passwords are local private inputs, never committed overlays or command-line secrets.
 

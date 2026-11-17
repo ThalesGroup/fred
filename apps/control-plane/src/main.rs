@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
             logging::LogFormat::Json
         };
         let telemetry =
-            fred_rust_sdk::logging::init(logging::identity("migration"), "info", format)?;
+            fred_rust_sdk::logging::init(logging::identity("migration"), "info", format, None)?;
         let outcome = initialize_schema().await;
         fred_rust_sdk::telemetry::shutdown(telemetry).await;
         stop_on_error(outcome);
@@ -91,6 +91,7 @@ async fn main() -> Result<()> {
         logging::identity(role),
         &config.app.log_level,
         config.app.log_format,
+        config.observability.diagnostic(),
     )
     .map_err(|error| {
         if args.first().is_some_and(|a| a == "import-provisioning") {

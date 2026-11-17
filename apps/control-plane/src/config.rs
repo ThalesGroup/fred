@@ -30,6 +30,8 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Configuration {
+    #[serde(default)]
+    pub observability: fred_rust_sdk::telemetry::ObservabilityConfig,
     pub app: AppConfig,
     pub security: SecurityConfig,
     pub storage: StorageConfig,
@@ -199,6 +201,9 @@ impl Configuration {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if let Some(diagnostic) = self.observability.diagnostic() {
+            diagnostic.validate()?;
+        }
         self.platform.validate()?;
         if let Some(history) = &self.storage.history {
             history.validate()?;

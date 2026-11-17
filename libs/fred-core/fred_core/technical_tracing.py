@@ -13,7 +13,6 @@ import math
 import time
 from collections.abc import Callable, Coroutine, Iterator, Mapping
 from contextlib import contextmanager
-from contextvars import ContextVar
 from functools import wraps
 from typing import Any, ParamSpec, TypeVar
 
@@ -65,7 +64,6 @@ _NUMERIC_ATTRIBUTES = frozenset(
     {"first_chunk_ms", "duration_ms", "http.response.status_code"}
 )
 _PROPAGATOR = TraceContextTextMapPropagator()
-ROOT_TRACE_ID: ContextVar[int | None] = ContextVar("fred_root_trace_id", default=None)
 P = ParamSpec("P")
 R = TypeVar("R")
 

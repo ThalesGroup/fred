@@ -1,12 +1,13 @@
 """Isolated synthetic producer; OTLP endpoint provided by the test harness."""
 
 import json
+import sys
 from fred_core.portable.observability import set_tracer
 from fred_core.technical_tracing import activate_span, extract_trace, technical_span
 from fred_runtime.app.technical_tracing import OTLPTracer
 from fred_sdk.contracts.context import PortableContext, PortableEnvironment
 
-tracer = OTLPTracer(capture_content=True)
+tracer = OTLPTracer(collector_endpoint=sys.argv[1])
 set_tracer(tracer)
 context = PortableContext(
     request_id="synthetic-request",

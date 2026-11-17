@@ -288,12 +288,12 @@ def main():
                     failing.set()
                 t0 = time.monotonic()
                 if mode == "native-producer":
-                    env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = (
-                        f"http://127.0.0.1:{port}/v1/traces"
-                    )
-                    env["OTEL_SERVICE_NAME"] = "fred-agents"
                     subprocess.run(
-                        [native_python, str(HERE / "otel-collector-native-emitter.py")],
+                        [
+                            native_python,
+                            str(HERE / "otel-collector-native-emitter.py"),
+                            f"http://127.0.0.1:{port}/v1/traces",
+                        ],
                         env=env,
                         check=True,
                         timeout=20,
@@ -348,27 +348,8 @@ def main():
                             assert (
                                 by_name[child].parent_span_id == by_name[parent].span_id
                             )
-                        model_attrs = {
-                            a.key: a.value.string_value
-                            for a in by_name["v2.react.model"].attributes
-                        }
-                        assert (
-                            model_attrs["langfuse.observation.model.name"]
-                            == "synthetic-model"
-                        )
-                        assert json.loads(
-                            model_attrs["langfuse.observation.usage_details"]
-                        ) == {"input": 3, "output": 5}
-                        assert json.loads(
-                            model_attrs["langfuse.observation.cost_details"]
-                        ) == {"total": 0.1}
-                        assert (
-                            json.loads(model_attrs["langfuse.observation.metadata"])[
-                                "secret"
-                            ]
-                            == "synthetic-private-metadata"
-                        )
-                        assert "synthetic-private" in str(original)
+                        assert "langfuse.observation" not in str(original)
+                        assert "synthetic-private" not in str(original)
                     (root / (mode + "-fake-langfuse.json")).write_text(
                         json.dumps(MessageToDict(original), indent=2)
                     )

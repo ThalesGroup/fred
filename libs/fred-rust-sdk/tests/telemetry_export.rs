@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Exercise production environment configuration in separate processes, without
+//! Exercise diagnostic configuration in separate processes, without
 //! changing the test runner's environment or contacting a real collector.
 use std::{
     sync::{
@@ -18,7 +18,10 @@ use tracing_subscriber::prelude::*;
 #[tokio::test]
 async fn disabled_and_unavailable_export_do_not_block_work_or_shutdown() {
     if let Ok(mode) = std::env::var("FRED_TELEMETRY_TEST_CHILD") {
-        let provider = telemetry::provider_from_env("synthetic-rust").unwrap();
+        let config = (mode != "disabled").then(|| telemetry::DiagnosticConfig {
+            collector_endpoint: std::env::var("FRED_TELEMETRY_TEST_ENDPOINT").unwrap(),
+        });
+        let provider = telemetry::provider_from_config("synthetic-rust", config.as_ref()).unwrap();
         if mode == "disabled" {
             assert!(provider.is_none());
             telemetry::shutdown(provider).await;
@@ -30,8 +33,18 @@ async fn disabled_and_unavailable_export_do_not_block_work_or_shutdown() {
         let started = Instant::now();
         // More than the bounded queue, while the receiver fails or stalls.
         for _ in 0..4096 {
-            let _span =
-                tracing::info_span!(target: "fred.telemetry", "control_plane.http").entered();
+            let span = tracing::info_span!(target: "fred.telemetry", "control_plane.http");
+            let mut headers = axum::http::HeaderMap::new();
+            if mode != "unrequested" {
+                let parent = if mode == "unsampled" {
+                    "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00"
+                } else {
+                    "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"
+                };
+                headers.insert("traceparent", parent.parse().unwrap());
+            }
+            telemetry::set_remote_parent(&span, &headers);
+            let _span = span.enter();
         }
         assert!(started.elapsed() < Duration::from_secs(2));
         let shutdown_started = Instant::now();
@@ -67,7 +80,13 @@ async fn disabled_and_unavailable_export_do_not_block_work_or_shutdown() {
         .await
         .unwrap();
     });
-    for mode in ["disabled", "unavailable", "stalled"] {
+    for mode in [
+        "disabled",
+        "unrequested",
+        "unsampled",
+        "unavailable",
+        "stalled",
+    ] {
         let before = requests.load(Ordering::Relaxed);
         let endpoint = endpoint.clone();
         let outcome = tokio::task::spawn_blocking(move || {
@@ -86,18 +105,7 @@ async fn disabled_and_unavailable_export_do_not_block_work_or_shutdown() {
                 ])
                 .env("NO_PROXY", "*")
                 .env("FRED_TELEMETRY_TEST_CHILD", mode)
-                .env(
-                    "FRED_OTEL_ENABLED",
-                    if mode == "disabled" { "false" } else { "true" },
-                )
-                .env(
-                    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-                    if mode == "disabled" {
-                        "invalid endpoint".into()
-                    } else {
-                        format!("{endpoint}/{mode}")
-                    },
-                )
+                .env("FRED_TELEMETRY_TEST_ENDPOINT", format!("{endpoint}/{mode}"))
                 .spawn()
                 .unwrap();
             let started = Instant::now();
@@ -116,7 +124,7 @@ async fn disabled_and_unavailable_export_do_not_block_work_or_shutdown() {
         .await
         .unwrap();
         let contacted = requests.load(Ordering::Relaxed) > before;
-        if !outcome || contacted != (mode != "disabled") {
+        if !outcome || contacted != matches!(mode, "unavailable" | "stalled") {
             server.abort();
             let _ = server.await;
             panic!("export mode {mode} failed or exceeded the process deadline");

@@ -35,7 +35,7 @@ guaranteed to finish exactly one minute after the UI deletion.
 Use the factory's versioned
 [benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md)
 for a fresh installation or a full redeployment with the deterministic mock.
-`BENCH=reference` opts into its mock deployment and Fred values; ordinary deployments
+`VALUES` selects its mock connection and deployment configuration; ordinary deployments
 keep their normal model configuration. Provision the normal demo organizations first,
 then use the factory's explicit preparation command for benchmark accounts and agents.
 

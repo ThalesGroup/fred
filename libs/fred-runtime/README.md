@@ -330,47 +330,40 @@ ai:
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
 
-For common distributed tracing, set `FRED_OTEL_ENABLED=true` and
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://collector:4318/v1/traces` in the pod
-environment. Fred creates one OpenTelemetry provider and one HTTP/protobuf
-exporter. The collector can send the same spans to a filtered benchmark file
-and optionally Langfuse; no Langfuse client or second exporter is created in
-this mode. Without this opt-in, the existing logging/null/Langfuse selection
-and credential fallback remain available. To migrate a Langfuse-only setup,
-configure the collector's optional Langfuse destination before enabling common
-tracing; pod Langfuse credentials alone do not enable that destination.
+For experimental developer diagnostics, configure the existing selector in the
+pod's YAML (also supported by Control Plane):
 
-The SDK honors `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`.
-`OTEL_SERVICE_NAME` (or `service.name` in `OTEL_RESOURCE_ATTRIBUTES`) overrides
-`fred-agents`; other resource attributes are excluded. Fred bounds the queue at
-2048 spans, batches at 256 spans, scheduled exports at 1 second and each HTTP
-export at 3 seconds. These explicit bounds override `OTEL_BSP_*` and OTLP timeout
-variables. Shutdown drains outside the event loop; the locked SDK bounds its
-worker join at 30 seconds (eight queued batches plus one in flight need at most
-27 seconds of export budgets). A full queue or unavailable destination may lose
-traces; it does not fail the agent turn.
+```yaml
+observability:
+  tracer: diagnostic
+  diagnostic:
+    collector_endpoint: http://collector:4318/v1/traces
+```
 
-The common stream retains observation types, model/usage/cost, Fred metadata and
-session/user grouping. Native metadata uses the JSON object attribute
-`langfuse.observation.metadata`: Langfuse's
-[OTLP ingestion parser](https://github.com/langfuse/langfuse/blob/main/packages/shared/src/server/otel/OtelIngestionProcessor.ts)
-accepts it independently of SDK provenance. Fred does not impersonate a Langfuse
-SDK scope to enable SDK-version-specific per-key JSON decoding.
-IO remains off by default; only the existing explicit
-`capture_content` / `LANGFUSE_CAPTURE_CONTENT` opt-in enables bounded IO capture.
-The collector must authorize fields separately for each destination. Its file
-pipeline must replace span names with the closed `fred.operation` vocabulary and
-remove identities, metadata, IO, events and arbitrary attributes **before writing**.
-Do not point the common exporter at an unfiltered technical file writer. See the
+This prepares tracing at startup; it does not record ordinary requests. The fixed
+parent-based sampler records only sampled incoming W3C contexts. Bench diagnostic
+mode requests every turn; performance mode requests none unless a sample fraction
+is selected. Missing, invalid and unsampled parents produce no exported spans.
+The context is not authorization and does not prove the caller is bench.
+
+This mode exports only closed technical operation names, categories, outcomes and
+numeric timings/statuses. No prompts, answers, tool payloads, user/session metadata
+or Langfuse observation mapping are prepared. `LANGFUSE_CAPTURE_CONTENT` cannot
+enable content in diagnostic mode. Existing standalone logging/null/Langfuse
+backends keep their own behavior; they are not selected through a hidden OTel flag.
+
+Fred creates one OTLP HTTP/protobuf exporter with the configured full trace URL,
+service name `fred-agents`, a queue of 2048 spans, batches of 256, a one-second
+export interval and a three-second HTTP timeout. Sampling and service identity
+are fixed by this mode, independent of `OTEL_TRACES_SAMPLER` and `OTEL_SERVICE_NAME`.
+Shutdown drains outside the event loop; its worker join is bounded at 30 seconds.
+Queue saturation or an unavailable Collector can lose spans. These bounds do not
+establish zero overhead or production suitability. See the
 [local collector guide](../../developer_tools/benchmarks/README.md).
 
-W3C `traceparent` links the incoming request, first-party calls and MCP HTTP;
-it conveys no authority. Explicit parent spans take precedence over the active
-OTel context; only an unparented turn falls back to a stable exchange seed.
-A valid W3C trace ID is never hashed again, and unsampled parents remain unsampled.
-The LF-only mode with an explicitly configured global Langfuse tracer also accepts
-W3C parents; the historical logging-plus-credentials runtime fallback keeps its
-previous selection behavior and does not attach incoming W3C at the HTTP boundary.
+W3C `traceparent` links the incoming request, first-party calls and MCP HTTP.
+Explicit parent spans take precedence over active context; diagnostics do not
+create a sampled root from a business identifier.
 The HTTP server span covers authentication, admission,
 streaming and cleanup. Existing model/tool spans are reused. History writes and
 checkpoint operations are measured as whole operations, without SQL statements.

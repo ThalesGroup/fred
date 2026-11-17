@@ -16,13 +16,24 @@ references to Secrets, never literal values in application configuration.
 outbox and lifecycle work in one process. Knowledge Flow runs its Temporal worker.
 There is no separate `control-plane worker` command in this runtime.
 
-Model governance and credential provisioning have different lifetimes. The
-organization Owner changes permitted models and defaults through Control Plane;
-deployment supplies approved destinations and local credentials to the workloads.
-Changing a policy does not provision a missing credential. Credentials injected
-as environment variables require a workload restart after Secret rotation;
-the [rotation contract](A13-models.md#deployment-evidence) explains ordering and
-the limits for turns already in progress.
+A model source defines a provider connection and its inventory. Weaver cannot add
+sources through the UI; deployment configuration supplies them and their credentials.
+
+| Action | Responsible | Where | Restart / redeploy? |
+| --- | --- | --- | --- |
+| Add or change a source | Operator | Deployment configuration | Yes, affected services |
+| Assign an existing source to an organization | Operator | Operator CLI | No |
+| Refresh a discovered model inventory | Organization Owner | Models UI | No |
+| Add a model to a declared inventory | Operator | Deployment configuration | Yes, Control Plane |
+| Authorize models or set organization defaults | Organization Owner | Models UI | No |
+| Restrict models or set team/project defaults | Local Owner | Space settings UI | No |
+| Select a permitted model | Editor / user | Assistant / conversation UI | No |
+| Rotate an injected key | Operator | Secrets | Restart consuming services |
+
+Refreshing an inventory grants no permission; changing a policy provisions no
+credential. The [model reference](A13-models.md#deployment-evidence) covers deployment
+and rotation; [selection rules](02.3-agent-administration.md#model-default-and-mcp-selection)
+explain how defaults apply.
 
 ## Ingestion preparation
 
@@ -81,7 +92,8 @@ ever be compared with a limit, a bill or a quota, it belongs in the registry.
 OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
 Application logs are not among these figures: every process writes them to stdout
 and the platform's collector routes them, as described under Logs and lifecycle.
-Prometheus and OpenTelemetry serve technical health and operations.
+Prometheus serves technical health and operations. OpenTelemetry diagnostics are
+reserved for developer investigations and benchmark campaigns.
 
 The runtime reports consumption in its own name, using its workload identity.
 Control Plane derives the person, space and agent from the session metadata.
@@ -133,56 +145,51 @@ its limits and verification sources.
 
 ## Distributed tracing
 
-Traces explain the order, duration and overlap of instrumented operations in a
-conversation turn. A span measures one operation; parent links connect spans
-across services. The offline report also compares time and coverage by component
-across a campaign, including failed turns with usable measurements.
+Weaver's OpenTelemetry instrumentation is an experimental developer diagnostic
+facility. It explains the order, duration and overlap of instrumented operations
+in a conversation turn; it is not a production tracing service or a guarantee of
+complete coverage or negligible overhead.
 
-The interactive benchmark connects as a Fred user and selects accessible spaces
-and agents by name. It sends built-in general questions or document questions
-about a chosen topic and saves the measurements as JSON/JSONL. Model and supplier selection remain
-with the agent. Local results contain technical measurements, not conversation
-content; unavailable traces are explicit and never trigger infrastructure changes.
+The environment is prepared through Fred's YAML observability configuration,
+selecting diagnostic tracing and a Collector endpoint. The benchmark then chooses
+which calls request traces using W3C context: all measured calls in diagnostic
+mode, none by default in performance mode, or an explicit fraction. Ordinary
+requests without a sampled context are not recorded. Changing campaigns requires
+no service restart once the environment is prepared. W3C context grants no
+permissions and is not proof that the caller is the benchmark.
 
 **Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
 
 ```mermaid
 flowchart TD
-    F["Control Plane and Agent Pod<br/>Common trace instrumentation"]
-    C["OpenTelemetry Collector"]
-    S["Technical data filter<br/>Before file storage"]
-    H["Offline HTML report<br/>Turn timeline and campaign comparison"]
-    L["Langfuse · optional<br/>Agent observations"]
+    B["Developer benchmark"]
+    F["Control Plane and Agent Pod<br/>Diagnostic configuration"]
+    C["OpenTelemetry Collector<br/>Technical data filter"]
+    H["Offline report<br/>Timelines and campaign comparison"]
 
-    F -->|OTLP| C
-    C --> S
-    S -->|Trace file| H
-    C --> L
+    B -->|Sampled request context| F
+    F -->|Technical spans| C
+    C -->|Trace file| H
+    B -->|Client measurements| H
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class F,H fred
-    class C,L cots
-    class S neutral
+    class B,F,H fred
+    class C cots
 ```
 
-Each operation is instrumented once. W3C context preserves trace identity across
-calls; the collector routes the same spans to configured destinations without
-changing their identifiers or parent links. Destination selection belongs to
-the collector, independently of business instrumentation.
+Diagnostic producers exclude prompts, answers, tool payloads and identity metadata.
+Their bounded background queues export to the Collector, which filters technical
+files before storage. An unavailable destination can lose spans. Client statistics
+remain independent of trace sampling; trace retrieval and visual reporting use
+only the available observations. The benchmark does not deploy or reconfigure Fred.
 
-Content capture requires explicit opt-in. Langfuse retains observation types,
-model, usage and permitted metadata; the technical file excludes conversation
-content, credentials and arbitrary attributes before storage. Common trace export
-is opt-in, asynchronous and bounded: destination failure can lose telemetry but
-does not fail the conversation.
-
-Durations can overlap and must not be added blindly. A missing span means unknown,
-not zero; a client call does not reveal the remote service's internal execution.
-The report makes coverage and missing parents visible. The
-[tracing reference](A3-manager-operations.md#distributed-tracing) links the
-implementation and collection procedure.
+A span measures an instrumented boundary, not every operation inside a dependency.
+Durations can overlap and must not be added blindly. Missing spans mean unknown,
+not zero. Production sampling, incident retention and operational guarantees are
+outside this facility's scope. The [technical reference](A3-manager-operations.md#distributed-tracing)
+identifies the configuration and collection procedure.
 
 ## Operator diagnostics
 

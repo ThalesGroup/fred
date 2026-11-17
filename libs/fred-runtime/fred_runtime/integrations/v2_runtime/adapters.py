@@ -60,7 +60,7 @@ from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_trace
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
-from fred_core.technical_tracing import ROOT_TRACE_ID, TechnicalSpan, TechnicalTracer
+from fred_core.technical_tracing import TechnicalTracer
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     GeoPart,
@@ -456,56 +456,9 @@ class LangfuseSpanAdapter(SpanPort):
             otel_span.set_attributes(attributes)
 
 
-class _OTelObservation:
-    """Langfuse wire attributes on Fred's existing span; no SDK client/exporter.
-
-    Keep this small mapping tested against the locked SDK's attribute helpers.
-    Data authorization belongs to each collector pipeline, before persistence.
-    """
-
-    def __init__(self, span: TechnicalSpan, observation_type: str):
-        self._span = span
-        self._otel_span = span.otel_span
-        self.id = span.span_id
-        self._type = observation_type
-        self._metadata: dict[str, object] = {}
-
-    def update(self, **kwargs: Any) -> None:
-        attributes: dict[str, Any] = {"langfuse.observation.type": self._type}
-        for key, value in kwargs.get("metadata", {}).items():
-            if value is not None:
-                self._metadata[key] = value
-            self._span.set_attribute(key, value)
-        if self._metadata:
-            # The OTLP metadata object is scope-independent. SDK5's per-key JSON
-            # encoding is decoded only for Langfuse SDK scopes/headers, not Fred.
-            attributes["langfuse.observation.metadata"] = json.dumps(
-                self._metadata, ensure_ascii=False, default=str
-            )
-        for key in ("input", "output", "usage_details", "cost_details"):
-            if key in kwargs:
-                attributes[f"langfuse.observation.{key}"] = _serialize_trace_attribute(
-                    kwargs[key]
-                )
-        if "model" in kwargs:
-            attributes["langfuse.observation.model.name"] = kwargs["model"]
-        if "level" in kwargs:
-            attributes["langfuse.observation.level"] = kwargs["level"]
-        self._otel_span.set_attributes(attributes)
-
-    def start_observation(self, **kwargs: Any) -> _LangfuseSpanLike:
-        raise RuntimeError("Fred OTel children must use the common tracer")
-
-    def end(self, *, end_time: int | None = None) -> None:
-        self._otel_span.end(end_time=end_time)
-
-
 class LangfuseTracerAdapter(TracerPort):
     """
-    Shared Fred observation mapping for a Langfuse client or Fred's OTel tracer.
-
-    Collector mode reuses the mapping and buffered span adapter without creating
-    a Langfuse client, provider, exporter or media worker.
+    Fred observation mapping for the standalone Langfuse backend.
 
     Trace shape produced here:
     - **one trace per turn**, seeded on `exchange_id` so every span of one
@@ -527,12 +480,10 @@ class LangfuseTracerAdapter(TracerPort):
         self,
         client: Langfuse | None = None,
         *,
-        otel_tracer: TechnicalTracer | None = None,
         capture_content: bool = False,
         max_content_chars: int = 20000,
     ):
         self._client = client
-        self._otel_tracer = otel_tracer
         self._capture_content = capture_content
         self._max_content_chars = max_content_chars
 
@@ -659,25 +610,7 @@ class LangfuseTracerAdapter(TracerPort):
         elif active.is_valid:
             trace_context["parent_span_id"] = otel_trace.format_span_id(active.span_id)
         observation_type = _LANGFUSE_OBSERVATION_TYPE_BY_SPAN_NAME.get(name, "span")
-        if self._otel_tracer is not None:
-            # The provider's ID generator reads this only for a true root.
-            # Active (including unsampled) and explicit parents retain their IDs.
-            token = ROOT_TRACE_ID.set(
-                int(trace_id, 16) if isinstance(context, PortableContext) else None
-            )
-            try:
-                native = self._otel_tracer.open_span(
-                    name,
-                    context=otel_trace.set_span_in_context(explicit)
-                    if isinstance(explicit, otel_trace.Span)
-                    else None,
-                )
-            finally:
-                ROOT_TRACE_ID.reset(token)
-            native.otel_span.update_name(name)
-            span = _OTelObservation(native, observation_type)
-            span.update(metadata=metadata)
-        elif isinstance(parent, LangfuseSpanAdapter):
+        if isinstance(parent, LangfuseSpanAdapter):
             # trace_context marks a new application root in the SDK, even
             # with a parent_span_id. Native child creation preserves the root
             # that owns the trace's input/output.
@@ -898,8 +831,6 @@ def build_default_tracer() -> TracerPort:
     Example:
     - `services = RuntimeServices(tracer=build_default_tracer(), ...)`
     """
-
-    from fred_core.technical_tracing import TechnicalTracer
 
     configured = get_tracer()
     if isinstance(configured, TechnicalTracer):

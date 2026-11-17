@@ -303,23 +303,29 @@ async def test_mcp_transport_covers_body_and_parents_tool(telemetry, monkeypatch
     assert "secret-sentinel" not in "".join(s.to_json() for s in spans.values())
 
 
-def test_explicit_backend_and_standard_service_name(telemetry, monkeypatch):
+def test_explicit_diagnostic_backend_ignores_environment(telemetry, monkeypatch):
     from fred_runtime.app import technical_tracing as module
     from fred_runtime.app.config import PodObservabilityConfig
     from fred_runtime.app.observability_factory import _build_tracer
     from fred_runtime.integrations.v2_runtime import adapters
 
-    monkeypatch.setenv("FRED_OTEL_ENABLED", "true")
     monkeypatch.setenv("OTEL_SERVICE_NAME", "fred-runtime")
     monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "secret=secret-sentinel")
     monkeypatch.setattr(
         module, "OTLPSpanExporter", lambda **kwargs: InMemorySpanExporter()
     )
-    tracer = _build_tracer(PodObservabilityConfig())
+    tracer = _build_tracer(
+        PodObservabilityConfig.model_validate(
+            {
+                "tracer": "diagnostic",
+                "diagnostic": {"collector_endpoint": "http://127.0.0.1:4318/v1/traces"},
+            }
+        )
+    )
     assert isinstance(tracer, OTLPTracer)
     try:
         assert dict(tracer.provider.resource.attributes) == {
-            "service.name": "fred-runtime"
+            "service.name": "fred-agents"
         }
         set_tracer(tracer)
         monkeypatch.setattr(
