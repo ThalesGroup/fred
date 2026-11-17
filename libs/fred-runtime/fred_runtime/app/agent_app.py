@@ -1855,10 +1855,9 @@ async def _resolve_agent_instance(
             "runtime_id": resolution.agent.runtime_id,
             "template_id": str(resolution.agent.template_id),
         }
+        owned = await history.session_ownership(conversation, resolution.subject_id)
         accepted = await checkpointer.abind_conversation(
-            conversation,
-            association,
-            allow_create=not await history.session_exists(conversation),
+            conversation, association, allow_create=owned is None
         )
         if not accepted:
             raise HTTPException(
@@ -1986,10 +1985,9 @@ async def _enforce_session_ownership(
     history_store = get_runtime_context().config.history_store
     if history_store is None:
         return
-    if not await history_store.session_exists(session_id):
-        return  # new session — the caller becomes its owner
-    if await history_store.session_belongs_to_user(session_id, authenticated_user.uid):
-        return  # caller owns this session
+    owned = await history_store.session_ownership(session_id, authenticated_user.uid)
+    if owned is not False:
+        return  # new session (the caller becomes its owner) or the caller's own
     _emit_audit_event(
         container,
         "warning",
@@ -6138,7 +6136,8 @@ def _build_agent_router(
             )
             and caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and await history_store.session_ownership(session_id, caller_uid)
+            is not True
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -6523,7 +6522,8 @@ def _build_agent_router(
             )
             and caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and await history_store.session_ownership(session_id, caller_uid)
+            is not True
         ):
             # No history to prove ownership (e.g. an erase retry after history
             # went first): nothing left is a successful no-op, otherwise every

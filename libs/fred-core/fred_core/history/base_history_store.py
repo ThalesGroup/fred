@@ -52,7 +52,7 @@ class BaseHistoryStore(ABC):
     - ``get``: retrieve messages for a session, optionally scoped to one user
     - ``list_sessions``: return distinct session IDs for a user, most recent first
     - ``delete_session``: remove session rows, optionally scoped to one user
-    - ``session_belongs_to_user``: ownership oracle for checkpoint authorization
+    - ``session_ownership``: ownership oracle for checkpoint authorization
     """
 
     @abstractmethod
@@ -134,33 +134,21 @@ class BaseHistoryStore(ABC):
         """
 
     @abstractmethod
-    async def session_belongs_to_user(
+    async def session_ownership(
         self,
         session_id: str,
         user_id: str,
-    ) -> bool:
+    ) -> bool | None:
         """
-        Return True iff at least one row exists for (session_id, user_id).
+        One read: ``None`` when no history row exists for ``session_id``,
+        ``True`` when at least one row belongs to ``user_id``, else ``False``.
 
         Why this exists:
         - checkpoint tables do not store user_id directly, so authorization
-          for checkpoint read/delete requires an ownership oracle from history.
-        """
-        raise NotImplementedError
-
-    async def session_exists(
-        self,
-        session_id: str,
-    ) -> bool:
-        """
-        Return True iff any history row exists for ``session_id`` (any owner).
-
-        Why this exists:
-        - paired with :meth:`session_belongs_to_user`, this lets a caller enforce a
-          private-per-owner policy: a session that EXISTS but does not belong to the
-          authenticated user must be refused (RUNTIME-07 rev. 2, finding F-C). It
-          distinguishes a brand-new session (allow — the caller becomes owner) from
-          another user's session (deny).
+          for checkpoint read/delete requires an ownership oracle from history;
+        - the private-per-owner gate (RUNTIME-07 rev. 2, finding F-C) admits a
+          brand-new session (the caller becomes owner) and refuses another
+          user's existing one.
         """
         raise NotImplementedError
 
@@ -209,15 +197,9 @@ class NoOpHistoryStore(BaseHistoryStore):
     ) -> int:
         return 0
 
-    async def session_belongs_to_user(
+    async def session_ownership(
         self,
         session_id: str,
         user_id: str,
-    ) -> bool:
-        return False
-
-    async def session_exists(
-        self,
-        session_id: str,
-    ) -> bool:
-        return False
+    ) -> bool | None:
+        return None

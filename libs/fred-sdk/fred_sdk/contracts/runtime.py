@@ -1004,12 +1004,12 @@ class HistoryStorePort(Protocol):
         """
         ...
 
-    async def session_belongs_to_user(
+    async def session_ownership(
         self,
         session_id: str,
         user_id: str,
-    ) -> bool:
-        """Return True iff at least one history row exists for (session_id, user_id)."""
+    ) -> bool | None:
+        """``None`` without history rows, else whether one belongs to ``user_id``."""
         ...
 
     async def next_rank(self, session_id: str) -> int:

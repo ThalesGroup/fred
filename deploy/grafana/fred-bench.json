@@ -781,7 +781,7 @@
       "id": 100,
       "type": "table",
       "title": "Persistence per store and operation",
-      "description": "Operations per turn and the mean of one operation. checkpoint: get_tuple reads the latest checkpoint, put and put_writes are the graph's writes, owner refreshes the thread owner index after each put, hitl_claim and hitl_claim_start serve resumes. history/save is the history upsert inside the fenced history write. Pool wait is connection checkout plus, for checkpoint writes, the turn-lease fence; SQL execution includes (de)serialization. A blank cell is not measured.",
+      "description": "Operations per turn and the mean of one operation. checkpoint: get_tuple reads the latest checkpoint, put and put_writes are the graph's writes, owner refreshes the thread owner index once per graph run (after its first put, not after per-step puts), hitl_claim and hitl_claim_start serve resumes. history/save is the history upsert inside the fenced history write. Pool wait is connection checkout plus, for checkpoint writes, the turn-lease fence; SQL execution includes (de)serialization. A blank cell is not measured.",
       "gridPos": {
         "x": 12,
         "y": 22,

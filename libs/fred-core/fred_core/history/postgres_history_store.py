@@ -49,7 +49,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import MetaData, delete, func, select, text, update
+from sqlalchemy import MetaData, delete, exists, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -418,35 +418,21 @@ class PostgresHistoryStore(BaseHistoryStore):
             await s.commit()
             return count
 
-    async def session_belongs_to_user(
+    async def session_ownership(
         self,
         session_id: str,
         user_id: str,
         session: AsyncSession | None = None,
-    ) -> bool:
-        """Return True iff at least one history row exists for (session_id, user_id)."""
+    ) -> bool | None:
+        """``None`` without history rows, else whether one belongs to ``user_id``."""
+        in_session = SessionHistoryRow.session_id == session_id
+        mine = SessionHistoryRow.user_id == user_id
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
-                select(func.count()).where(
-                    SessionHistoryRow.session_id == session_id,
-                    SessionHistoryRow.user_id == user_id,
-                )
+                select(exists().where(in_session), exists().where(in_session, mine))
             )
-            return (result.scalar() or 0) > 0
-
-    async def session_exists(
-        self,
-        session_id: str,
-        session: AsyncSession | None = None,
-    ) -> bool:
-        """Return True iff any history row exists for ``session_id`` (any owner)."""
-        async with use_session(self._sessions, session) as s:
-            result = await s.execute(
-                select(func.count()).where(
-                    SessionHistoryRow.session_id == session_id,
-                )
-            )
-            return (result.scalar() or 0) > 0
+            present, owned = result.one()
+            return bool(owned) if present else None
 
     # ------------------------------------------------------------------
     # Rank helper

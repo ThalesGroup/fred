@@ -972,7 +972,7 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
         "get",
         "list_sessions",
         "delete_session",
-        "session_belongs_to_user",
+        "session_ownership",
     }
 
     # Implementation must have all required methods.
@@ -1088,6 +1088,8 @@ def test_migrated_sqlite_startup_reads_and_writes_history(
 
         base_rank = asyncio.run(history_store.next_rank(session_id="fresh-session"))
         assert base_rank == 0
+        ownership = history_store.session_ownership
+        assert asyncio.run(ownership("fresh-session", "alice")) is None
 
         asyncio.run(
             history_store.save(
@@ -1108,6 +1110,8 @@ def test_migrated_sqlite_startup_reads_and_writes_history(
         )
 
         messages = asyncio.run(history_store.get("fresh-session", user_id="alice"))
+        assert asyncio.run(ownership("fresh-session", "alice")) is True
+        assert asyncio.run(ownership("fresh-session", "bob")) is False
 
     assert len(messages) == 1
     assert messages[0].parts[0].text == "hello"

@@ -132,6 +132,23 @@ async def test_aput_writes_exactly_one_owner_row_upsert(checkpointer):
 
 
 @pytest.mark.asyncio
+async def test_owner_row_is_written_once_per_graph_run_not_per_step(engine):
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    cp = FredSqlCheckpointer(engine, prefix="v2_", kpi=_RecordingKPIWriter())
+    for source in ("input", "loop", "loop"):
+        await cp.aput(_config("thread-A"), empty_checkpoint(), {"source": source}, {})
+
+    ops = [e["dims"]["op"] for e in emitted if e["name"] == "persist_sql_ms"]
+    assert ops == ["put", "owner", "put", "put"]
+    assert len(await _owner_rows(cp)) == 1
+
+
+@pytest.mark.asyncio
 async def test_aput_records_injected_identity(checkpointer):
     # If a caller injects __fred_user_id/__fred_space_id, aput records them.
     await _put(

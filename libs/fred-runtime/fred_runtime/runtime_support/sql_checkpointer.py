@@ -698,7 +698,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.
-            await self._record_thread_owner(configurable)
+            # Once per graph run, not per superstep: a thread's first checkpoint
+            # is never a "loop" one, so every thread still gets its row.
+            if metadata.get("source") != "loop":
+                await self._record_thread_owner(configurable)
             return _make_config(
                 thread_id=thread_id,
                 checkpoint_ns=checkpoint_ns,
@@ -1430,7 +1433,9 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     async def _record_thread_owner(self, configurable: dict[str, Any]) -> None:
         """
-        Best-effort upsert of this thread's owner/age row. Called from ``aput``.
+        Best-effort upsert of this thread's owner/age row. Called from ``aput``
+        for the checkpoint that starts a graph run (``input``/``update``/``fork``),
+        so ``last_activity_at`` advances per turn; a resumed run keeps the previous.
 
         Runtime invocation sites supply user and admitted space under
         ``__fred_user_id``/``__fred_space_id``. LangGraph excludes these from
@@ -1465,7 +1470,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         except Exception:
             self._logger.warning(
                 "checkpoint_thread_owner write skipped (best-effort); owner "
-                "index may lag until the next checkpoint write",
+                "index may lag until the next turn",
                 exc_info=True,
             )
 
