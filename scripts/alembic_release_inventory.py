@@ -181,8 +181,10 @@ def render_inventory(root: Path, version: str, commit: str) -> str:
         "",
         f"Source commit: `{commit}`",
         "",
-        "Each row shows the head of an Alembic migration tree at the source commit above. "
-        "It does not show which migrations have run in a deployment.",
+        (
+            "Each row shows the head of an Alembic migration tree at the source commit above. "
+            + "It does not show which migrations have run in a deployment."
+        ),
         "",
         "| Component | Migration tree | Head |",
         "| --- | --- | --- |",
