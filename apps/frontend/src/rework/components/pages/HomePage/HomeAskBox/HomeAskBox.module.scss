@@ -32,7 +32,7 @@
 
 .box {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--spacing-s);
   transition:
     border-color 150ms ease,
@@ -54,10 +54,10 @@
   flex: none;
   place-items: center;
   border-radius: var(--radius-ms);
-  background: var(--primary-container);
+  background: var(--secondary-container);
   width: 2.5rem;
   height: 2.5rem;
-  color: var(--on-primary-container);
+  color: var(--on-secondary-container);
   font-size: 1.5rem;
 }
 

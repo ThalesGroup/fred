@@ -61,7 +61,6 @@ export default function AdvancedQuickAccess({ featured, askAgent, askMaxChars, f
           <h1 className={styles.title}>
             {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
           </h1>
-          <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
         </div>
       </div>
       {featured.length > 0 && <FeaturedCarousel featured={featured} teamName={teamName} />}

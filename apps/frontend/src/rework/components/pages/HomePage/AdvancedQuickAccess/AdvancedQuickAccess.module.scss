@@ -21,7 +21,7 @@
   margin: 0 auto;
   padding-top: var(--spacing-2xl);
   width: 100%;
-  max-width: 920px;
+  max-width: 828px;
 }
 
 /* Logo on the left, text after a primary rule; stacked on narrow screens. */
@@ -34,7 +34,7 @@
 
 .logo {
   flex: none;
-  width: 150px;
+  width: 135px;
   height: auto;
 }
 
@@ -50,16 +50,9 @@
 .title {
   margin: 0;
   color: var(--home-greeting-color, var(--on-surface));
-  font: var(--font-headline-large);
+  font: var(--font-headline-medium-emphasized);
   letter-spacing: -0.01em;
   text-wrap: balance;
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-large);
-  font-size: 1.125rem;
 }
 
 @media (max-width: 640px) {

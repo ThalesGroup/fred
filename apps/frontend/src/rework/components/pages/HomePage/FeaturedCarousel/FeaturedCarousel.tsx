@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -38,29 +38,48 @@ const prefersReducedMotion = () =>
 export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouselProps) {
   const { t } = useTranslation();
   const { agentIconName } = useFrontendProperties();
-  const [index, setIndex] = useState(0);
+  // Track index: 0 and count + 1 are edge copies, so wrapping keeps sliding the same way.
+  const [slot, setSlot] = useState(1);
+  // Set for one frame while jumping from an edge copy to its real twin, without animation.
+  const [instant, setInstant] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
   // Auto-rotation is opt-out by the user (pause button) and off for reduced motion.
   const [playing, setPlaying] = useState(() => !prefersReducedMotion());
   // Hover or keyboard focus inside the banner holds it without changing `playing`.
   const [held, setHeld] = useState(false);
   const count = featured.length;
+  const loop = count > 1;
   // The list can shrink on refetch (an agent was disabled): stay in range.
-  const position = Math.min(index, Math.max(count - 1, 0));
+  const trackPos = loop ? Math.min(Math.max(slot, 0), count + 1) : 0;
+  const position = loop ? (trackPos - 1 + count) % count : 0;
   const current = featured[position];
+  // An edge copy maps to its real twin; also covers a missed transitionend (reduced motion).
+  const settle = (s: number) => (s > count ? 1 : s < 1 ? count : s);
 
   useEffect(() => {
-    if (!playing || held || count < 2) return;
-    const timer = window.setInterval(() => setIndex((i) => (i + 1) % count), AUTOPLAY_MS);
+    if (!playing || held || !loop) return;
+    const timer = window.setInterval(() => setSlot((s) => settle(s) + 1), AUTOPLAY_MS);
     return () => window.clearInterval(timer);
-  }, [playing, held, count]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settle only reads count
+  }, [playing, held, loop, count]);
+
+  // Flush the jump with transitions off, then turn them back on before paint.
+  useLayoutEffect(() => {
+    if (!instant) return;
+    trackRef.current?.getBoundingClientRect();
+    setInstant(false);
+  }, [instant]);
 
   if (!current) return null;
-  const { agent } = current;
-  const team = teamName(agent.team_id);
-  const goTo = (next: number) => {
-    setIndex((next + count) % count);
+  const goTo = (nextSlot: number) => {
+    setSlot(nextSlot);
     setPlaying(false);
   };
+  const slides = featured.map((item, source) => ({ item, source, key: item.agent.agent_instance_id }));
+  if (loop) {
+    slides.unshift({ item: featured[count - 1], source: count - 1, key: "edge-last" });
+    slides.push({ item: featured[0], source: 0, key: "edge-first" });
+  }
 
   return (
     <section className={styles.section} aria-roledescription="carousel" aria-labelledby="featured-title">
@@ -85,24 +104,22 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
               variant="outlined"
               size="small"
               icon={{ category: "outlined", type: "chevron_left" }}
-              onClick={() => goTo(position - 1)}
+              onClick={() => goTo(settle(trackPos) - 1)}
               aria-label={t("rework.home.advanced.previous")}
             />
             <IconButton
               variant="outlined"
               size="small"
               icon={{ category: "outlined", type: "chevron_right" }}
-              onClick={() => goTo(position + 1)}
+              onClick={() => goTo(settle(trackPos) + 1)}
               aria-label={t("rework.home.advanced.next")}
             />
           </div>
         )}
       </div>
 
-      <article
-        className={styles.banner}
-        aria-roledescription="slide"
-        aria-label={t("rework.home.advanced.slideLabel", { position: position + 1, count, name: agent.display_name })}
+      <div
+        className={styles.viewport}
         // Announced only when the user moves it: auto-rotation must not interrupt.
         aria-live={playing ? "off" : "polite"}
         onMouseEnter={() => setHeld(true)}
@@ -112,68 +129,100 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeld(false);
         }}
       >
-        <div className={styles.main}>
-          <div className={styles.identity}>
-            <span className={styles.icon}>
-              <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
-            </span>
-            <div className={styles.nameBlock}>
-              <h3 className={styles.name}>{agent.display_name}</h3>
-              <p className={styles.role}>{agent.role}</p>
-            </div>
-          </div>
-          {(current.badge || team) && (
-            <div className={styles.chips}>
-              {current.badge && <span className={styles.badge}>{current.badge}</span>}
-              {team && <span className={styles.team}>{t("rework.home.advanced.proposedBy", { team })}</span>}
-            </div>
-          )}
-          <p className={styles.description}>{agent.description || t("rework.agentCard.noDescription")}</p>
-          <div className={styles.launch}>
-            <AgentChatButton
-              to={`/team/${agent.team_id}/managed-chat/${agent.agent_instance_id}`}
-              aria-label={t("rework.home.advanced.chatWith", { name: agent.display_name })}
-            />
-          </div>
+        {/* Every slide stays mounted so the track can slide; off-screen ones are inert. */}
+        <div
+          ref={trackRef}
+          className={styles.track}
+          data-instant={instant}
+          style={{ transform: `translateX(-${trackPos * 100}%)` }}
+          onTransitionEnd={(event) => {
+            if (event.target !== event.currentTarget || settle(trackPos) === trackPos) return;
+            setInstant(true);
+            setSlot(settle(trackPos));
+          }}
+        >
+          {slides.map(({ item, source, key }, k) => {
+            const { agent } = item;
+            const team = teamName(agent.team_id);
+            const active = k === trackPos;
+            return (
+              <article
+                key={key}
+                className={styles.banner}
+                aria-roledescription="slide"
+                aria-label={t("rework.home.advanced.slideLabel", {
+                  position: source + 1,
+                  count,
+                  name: agent.display_name,
+                })}
+                aria-hidden={!active || key.startsWith("edge-")}
+                inert={!active}
+              >
+                <div className={styles.main}>
+                  <div className={styles.identity}>
+                    <span className={styles.icon}>
+                      <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
+                    </span>
+                    <div className={styles.nameBlock}>
+                      <h3 className={styles.name}>{agent.display_name}</h3>
+                      <p className={styles.role}>{agent.role}</p>
+                    </div>
+                  </div>
+                  {(item.badge || team) && (
+                    <div className={styles.chips}>
+                      {item.badge && <span className={styles.badge}>{item.badge}</span>}
+                      {team && <span className={styles.team}>{t("rework.home.advanced.proposedBy", { team })}</span>}
+                    </div>
+                  )}
+                  <p className={styles.description}>{agent.description || t("rework.agentCard.noDescription")}</p>
+                </div>
+                {(item.highlights?.length ?? 0) > 0 && (
+                  <div className={styles.highlights}>
+                    <h4 className={styles.highlightsTitle}>{t("rework.home.advanced.highlightsTitle")}</h4>
+                    <ul>
+                      {item.highlights?.map((line) => (
+                        <li key={line}>
+                          <span className={styles.bullet} aria-hidden="true" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className={styles.foot}>
+                  <div className={styles.launch}>
+                    <AgentChatButton
+                      to={`/team/${agent.team_id}/managed-chat/${agent.agent_instance_id}`}
+                      aria-label={t("rework.home.advanced.chatWith", { name: agent.display_name })}
+                    />
+                  </div>
+                  {count > 1 ? (
+                    <div className={styles.dots}>
+                      {featured.map((other, j) => (
+                        <button
+                          key={other.agent.agent_instance_id}
+                          type="button"
+                          aria-current={j === source}
+                          aria-label={t("rework.home.advanced.show", { name: other.agent.display_name })}
+                          onClick={() => goTo(j + 1)}
+                        >
+                          <span />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span />
+                  )}
+                  <Link to={`/team/${agent.team_id}/agents`} className={styles.allAgents}>
+                    {t("rework.home.advanced.allAgents")}
+                    <Icon category="outlined" type="arrow_forward" />
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
-        {(current.highlights?.length ?? 0) > 0 && (
-          <div className={styles.highlights}>
-            <h4 className={styles.highlightsTitle}>{t("rework.home.advanced.highlightsTitle")}</h4>
-            <ul>
-              {current.highlights?.map((line) => (
-                <li key={line}>
-                  <span className={styles.bullet} aria-hidden="true" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className={styles.foot}>
-          <span />
-          {count > 1 ? (
-            <div className={styles.dots}>
-              {featured.map((item, i) => (
-                <button
-                  key={item.agent.agent_instance_id}
-                  type="button"
-                  aria-current={i === position}
-                  aria-label={t("rework.home.advanced.show", { name: item.agent.display_name })}
-                  onClick={() => goTo(i)}
-                >
-                  <span />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <span />
-          )}
-          <Link to={`/team/${agent.team_id}/agents`} className={styles.allAgents}>
-            {t("rework.home.advanced.allAgents")}
-            <Icon category="outlined" type="arrow_forward" />
-          </Link>
-        </div>
-      </article>
+      </div>
     </section>
   );
 }

@@ -58,7 +58,7 @@ function render(ids: string[], extras: { badge?: string; highlights?: string[] }
   );
 }
 
-const shown = () => container.querySelector("h3")?.textContent;
+const shown = () => container.querySelector("article:not([inert]) h3")?.textContent;
 const button = (label: string) => container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement | null;
 const banner = () => container.querySelector("article") as HTMLElement;
 

@@ -18,16 +18,13 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import styles from "./AgentChatButton.module.scss";
 
 interface AgentChatButtonProps {
-  /** Chat route. Without it, and without `submit`, the button shows disabled. */
+  /** Chat route. Without it the button shows disabled. */
   to?: string;
-  /** Submits the enclosing form instead (the home question field). */
-  submit?: boolean;
-  disabled?: boolean;
   "aria-label"?: string;
 }
 
 /** The agent card's "Chat" button, spectrum border on hover; shared with the home page. */
-export default function AgentChatButton({ to, submit, disabled, "aria-label": ariaLabel }: AgentChatButtonProps) {
+export default function AgentChatButton({ to, "aria-label": ariaLabel }: AgentChatButtonProps) {
   const { t } = useTranslation();
   const button = (
     <Button
@@ -36,9 +33,7 @@ export default function AgentChatButton({ to, submit, disabled, "aria-label": ar
       size="medium"
       icon={{ category: "outlined", type: "reviews" }}
       className={styles.chatButton}
-      type={submit ? "submit" : "button"}
-      disabled={submit ? disabled : !to}
-      aria-label={submit ? ariaLabel : undefined}
+      disabled={!to}
     >
       {t("rework.agentCard.chat")}
     </Button>

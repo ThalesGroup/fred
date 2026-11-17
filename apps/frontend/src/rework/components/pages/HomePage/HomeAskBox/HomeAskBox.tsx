@@ -16,13 +16,13 @@ import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { countUnicodeCodePoints } from "@core/utils/chatInput.ts";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type { ManagedAgentInstanceSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { initialPromptState } from "../../ManagedChatPage/useInitialPrompt";
-import AgentChatButton from "@shared/organisms/AgentCard/AgentChatButton.tsx";
 import SectionMarker from "../SectionMarker/SectionMarker.tsx";
 import styles from "./HomeAskBox.module.scss";
 
@@ -89,7 +89,16 @@ export default function HomeAskBox({ agent, maxChars }: HomeAskBoxProps) {
           aria-invalid={tooLong || undefined}
           aria-describedby={maxChars !== undefined ? limitId : undefined}
         />
-        <AgentChatButton submit disabled={!question || tooLong} />
+        {/* The chat composer's send button. */}
+        <IconButton
+          type="submit"
+          variant="filled"
+          color="primary"
+          size="small"
+          icon={{ category: "outlined", type: "arrow_upward" }}
+          disabled={!question || tooLong}
+          aria-label={t("chatbot.sendMessage")}
+        />
       </form>
       <CharacterLimitNotice id={limitId} count={count} limit={maxChars} />
       <p className={styles.hint}>{t("rework.home.advanced.askHint", { name: agent.display_name })}</p>

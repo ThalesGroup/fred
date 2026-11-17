@@ -56,22 +56,53 @@
   text-align: right;
 }
 
-/* Fixed height: long texts are clamped rather than resizing the page at each slide. */
-.banner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-l);
+/* Window over the track: one slide wide, the track slides under it. */
+.viewport {
   border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.track {
+  --slide-motion: 600ms cubic-bezier(0.65, 0, 0.35, 1);
+
+  display: flex;
+  transition: transform var(--slide-motion);
+}
+
+/* Jump from an edge copy to its real twin: no animation. */
+.track[data-instant="true"],
+.track[data-instant="true"] .banner {
+  transition: none;
+}
+
+/* Depth while sliding: the leaving card shrinks and fades, the incoming one grows back. */
+.banner {
+  transition:
+    transform var(--slide-motion),
+    opacity var(--slide-motion);
+
+  &[inert] {
+    transform: scale(0.96);
+    opacity: 0.5;
+  }
+}
+
+/* Fixed height, texts clamped: the foot row sits at the same place on every slide. */
+.banner {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  flex: 0 0 100%;
+  gap: var(--spacing-l);
   background: var(--surface-container);
   padding: var(--spacing-l) var(--spacing-xl);
-  height: 320px;
+  height: 288px;
   overflow: hidden;
   color: var(--on-surface);
 }
 
 .main {
   display: flex;
-  flex: 2 1 420px;
   flex-direction: column;
   gap: var(--spacing-s);
   min-width: 0;
@@ -90,11 +121,11 @@
   justify-content: center;
   align-items: center;
   border-radius: var(--radius-ms);
-  background: var(--primary-container);
-  width: 4rem;
-  height: 4rem;
-  color: var(--on-primary-container);
-  font-size: 2rem;
+  background: var(--secondary-container);
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--on-secondary-container);
+  font-size: 1.75rem;
 }
 
 .nameBlock {
@@ -105,8 +136,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--secondary);
-  font: var(--font-headline-small);
-  font-weight: 700;
+  font: var(--font-title-large-emphasized);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -118,7 +148,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--on-surface);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
 }
 
 .chips {
@@ -155,18 +185,17 @@
   font: var(--font-body-medium);
 }
 
+/* Chat, dots and "all agents" share the foot row, on one line. */
 .launch {
-  margin-top: auto;
+  justify-self: start;
 }
 
 .highlights {
   display: flex;
-  flex: 1 1 280px;
   flex-direction: column;
-  /* As tall as its lines, starting about level with the role, under the agent name. */
-  align-self: flex-start;
+  /* As tall as its lines, centered in the space above the foot row. */
+  align-self: center;
   gap: var(--spacing-s);
-  margin-top: var(--spacing-3xl);
   border-radius: var(--radius-m);
   background: var(--surface-container-high);
   padding: var(--spacing-m);
@@ -211,7 +240,7 @@
 .foot {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  flex: 1 1 100%;
+  grid-column: 1 / -1;
   align-items: center;
   margin: calc(-1 * var(--spacing-s)) 0 calc(-1 * var(--spacing-s));
 }
@@ -267,6 +296,10 @@
 
 /* Narrow banner: drop the highlights so the fixed height still fits. */
 @container (max-width: 900px) {
+  .banner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .highlights {
     display: none;
   }
@@ -280,6 +313,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .track,
+  .banner,
   .dots span {
     transition: none;
   }
