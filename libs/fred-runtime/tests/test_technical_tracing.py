@@ -143,6 +143,98 @@ async def test_two_streaming_turns_keep_parent_until_cleanup(telemetry):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("disconnect_at", ["streaming", "final_send", "after_body"])
+@pytest.mark.parametrize("http_status", [200, 503])
+async def test_disconnect_classification_tracks_response_completion(
+    telemetry, disconnect_at, http_status
+):
+    _, exporter = telemetry
+    receive_message = None
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        nonlocal receive_message
+        receive_message = receive
+        await send(
+            {"type": "http.response.start", "status": http_status, "headers": []}
+        )
+        await send(
+            {
+                "type": "http.response.body",
+                "body": b"data: partial\n\n",
+                "more_body": True,
+            }
+        )
+        if disconnect_at == "streaming":
+            await receive()
+            return
+        # ASGI defaults more_body to false when omitted.
+        await send({"type": "http.response.body", "body": b""})
+        if disconnect_at == "after_body":
+            await receive()
+        # A late disconnect must not shorten the span's cleanup coverage.
+        with technical_span("history.write"):
+            assert not exporter.get_finished_spans()
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        if (
+            disconnect_at == "final_send"
+            and message["type"] == "http.response.body"
+            and not message.get("more_body", False)
+        ):
+            assert receive_message is not None
+            await receive_message()
+            await asyncio.sleep(0)
+
+    await TechnicalTracingMiddleware(app)(
+        {"type": "http", "headers": []}, receive, send
+    )
+    span = next(s for s in exporter.get_finished_spans() if s.name == "agent.http")
+    expected = (
+        "cancelled"
+        if disconnect_at == "streaming"
+        else "error"
+        if http_status >= 400
+        else None
+    )
+    assert span.attributes.get("fred.outcome") == expected
+    assert span.attributes["http.response.status_code"] == http_status
+    assert span.status.status_code == (
+        trace.StatusCode.ERROR if expected else trace.StatusCode.UNSET
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [OSError, asyncio.CancelledError])
+async def test_failed_final_send_is_not_response_completion(telemetry, failure):
+    _, exporter = telemetry
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        if message["type"] == "http.response.body":
+            raise failure("secret-sentinel")
+
+    with pytest.raises(failure):
+        await TechnicalTracingMiddleware(app)(
+            {"type": "http", "headers": []}, receive, send
+        )
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes["fred.outcome"] == (
+        "cancelled" if failure is asyncio.CancelledError else "error"
+    )
+    assert span.status.status_code == trace.StatusCode.ERROR
+    assert "secret-sentinel" not in span.to_json()
+
+
+@pytest.mark.asyncio
 async def test_cancelled_sse_ends_span_without_exception_content(telemetry):
     _, exporter = telemetry
 

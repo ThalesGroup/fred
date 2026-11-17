@@ -58,7 +58,7 @@ func TestHTMLInterruptedAndMissingObservations(t *testing.T) {
 	}
 	for _, tail := range []string{"", `{"kind":`} {
 		run, _, err := readHTMLRun(strings.NewReader(data[:cut] + tail))
-		if err != nil || run.Status != "incomplete" || len(run.Turns) != 10 || run.Profile != "absent" {
+		if err != nil || run.Status != "incomplete" || len(run.Turns) != 10 {
 			t.Fatalf("partial report lost evidence: %+v %v", run, err)
 		}
 	}

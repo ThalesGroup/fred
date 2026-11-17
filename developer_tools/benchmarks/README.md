@@ -1,19 +1,184 @@
-# Fred benchmark client: Swift and Weaver on one engine
+# Fred bench
 
-One Go executable supports Weaver managed SSE, Swift managed/direct SSE and the
-historical Swift WebSocket commands. `-target=swift` remains the default.
-Weaver is the lot 2 adaptation of the lot 1 engine, not a second load scheduler.
-Unknown targets and unsupported Weaver combinations fail before network access.
+```bash
+./bench
+```
 
-An opt-in conversation scenario adds private factory credentials, per-identity
-token renewal, concurrency steps and deterministic context/history verification.
-The client does not provision Keycloak accounts, start the mock or deploy anything.
-The examples below describe available commands; they are not recorded load runs.
-Validation uses local `httptest` servers and doubles only.
+Choose **Diagnostic** or **Performance**, connect in your browser, then select your
+**space** and **agent** by name. Before you start, the CLI explains the load, warm-up,
+client KPIs and server traces, and displays the model currently selected by Fred.
+Afterwards it prints a compact recap and the saved JSON/JSONL paths. It does not
+generate HTML or open a result browser. Use arrows and Enter; Ctrl+C stops the run and preserves
+observations already recorded. `NO_COLOR=1` disables colors; a plain terminal uses
+numbered choices.
 
-## Offline interactive HTML report
+```bash
+./bench run --origin URL    # Choose another Fred platform
+./bench --help
+```
 
-After each campaign, generate one standalone HTML file from the existing results:
+Build once inside the checkout, and repeat after updating the Go sources:
+
+```bash
+cd developer_tools/benchmarks
+./build.sh                  # Builds ./bench; no installation or deployment
+```
+
+Help accepts `-h`, `--h`, `-help`, `--help` and `help`, including after `run`
+or `report`; `./bench help run` and `./bench help report` show command usage.
+CLI prompts and diagnostics are in English. Help writes to stdout and exits 0
+without connecting or creating files; usage errors write to stderr and exit 2.
+
+Go 1.24 is required; the build respects `GOTOOLCHAIN`. Nothing is installed into
+`~/.local/bin`, and no shell configuration or `PATH` is changed.
+
+**Questions.** “General English” covers explanation, arithmetic, summarization,
+rewriting, reasoning and conversation follow-up. “Documents” asks only for a topic
+(such as RAGuard) and constructs ten English questions requesting evidence and
+citations. You can preview the selected questions before starting. Generic
+questions do not guarantee document retrieval. The benchmark measures performance
+and stream/history integrity; it does not grade the factual quality of answers.
+The agent's Fred configuration selects models, suppliers and capabilities. The
+client has no mock-specific contract and never calls a supplier directly.
+
+**Model.** Bench asks Fred for the current model selection before confirmation,
+including defaults/fallbacks; a saved recommendation alone is not authoritative.
+The model name and configured source are displayed without credentials. This is a
+preview, not a model pin: Fred admits each turn using its current configuration.
+Bench does not infer whether a source is a paid provider or a mock from a model
+name, and never changes it. Select the desired model on the agent in Fred.
+
+**What the files mean:**
+
+| File | Contents |
+| --- | --- |
+| `conversation.jsonl` | Measured turn timings/outcomes, run settings and verification records; one JSON record per line |
+| `summary.json` | Aggregate client KPIs: counts, latency, throughput and errors |
+| `traces.otlp.jsonl` | Optional server trace snapshot, correlated with sampled turns |
+| `warmup/conversation.jsonl` | Extra warm-up observations, excluded from measured KPIs |
+
+Client KPIs cover every measured question regardless of trace sampling. Latency
+statistics use successful turns with observed timestamps; errors are counted
+separately. Traces help explain internal calls; they are not needed for client KPIs.
+
+**Connection.** Browser login uses the platform's public Keycloak configuration,
+authorization code with PKCE and a temporary loopback callback. The public client
+must allow `http://127.0.0.1:<port>/callback`; the local factory's `app` client does.
+Keycloak browser SSO avoids repeated credential entry. Access and refresh tokens
+stay in memory and are renewed during the session, never saved in preferences or
+reports. This guided flow currently supports Keycloak with the `sub` identity
+claim. Local HTTP issuer aliases `keycloak` and `app-keycloak` are accepted only
+when every resolved address is loopback; other nonlocal issuers require HTTPS.
+Existing advanced bearer/credential-file commands remain available.
+Onboarding and current terms must be completed in Fred; bench never accepts them
+or approves an agent's human-input request automatically.
+
+**Results.** Private timestamped directories under
+`.bench/` alongside the binary hold client measurements, this run's
+filtered traces and `summary.json`. Preferences remember the platform, selected
+space/agent and latest run, without credentials. Questions and answers are not
+exported. Conversations remain available in Fred unless `--cleanup` is selected. “Run again”
+creates new conversations and a new result directory. The binary and `.bench/` are ignored by
+Git. `BENCH_STATE_DIR` can explicitly select another absolute results directory.
+
+**Traces.** Automatic retrieval targets the existing local deployment at
+`http://weaver.localhost:8088`, context `k3d-fred`, namespace `fred-infra`. It requires
+`kubectl`, Docker access and the already configured collector/PVC described in
+[k3d collection](#k3d-collection-separate-operator-rollout). Discovery reads the
+volume and node dynamically; collection reads current and rotated files without
+creating pods, restarting services or deploying anything. Only this run's spans
+and report-safe attributes are retained. It waits briefly for export stabilization;
+a snapshot is not an acknowledged SDK flush or proof of exhaustive instrumentation.
+The terminal shows how many sampled questions have correlated traces. If the collector is not
+accessible, bench offers to exit or explicitly continue with client timings only.
+Other deployments can use `bench run --client-only` and the offline trace import
+below. No missing span is interpreted as zero time.
+
+## Diagnostic or performance
+
+| Mode | Measured questions | Concurrent conversations | Warm-up | Traces requested |
+| --- | ---: | ---: | ---: | ---: |
+| `diagnostic` | 10 | 1 | 0 | 100% |
+| `performance` | 1000 | 10 | 20, excluded | 0% |
+
+```bash
+./bench run --mode diagnostic
+./bench run --mode performance
+./bench run --mode performance --requests 10000 --concurrency 20 --cleanup
+./bench run --mode performance --trace-sample 0.01
+```
+
+The same ten questions repeat in **new conversations of at most ten turns**; the
+last conversation can be shorter. `--requests` counts Fred agent turns, not model
+calls. `--concurrency` bounds simultaneous conversations under the same signed-in
+identity. This is a closed-loop workload: each conversation waits for its answer
+before sending its next question. It does not impose a fixed arrival rate or
+simulate distinct users. A failed turn stops that conversation; other conversations
+continue. There are no automatic benchmark retries; unstarted turns remain visible.
+
+`--warmup 0` disables warm-up. Otherwise warm-up must succeed before measurement;
+its separate `warmup/` records never enter the measured KPIs. Choose `--cleanup` to
+request deletion of this run's new conversations after measurement and history
+verification, including warm-up. Deletion is asynchronous; the receipt does not
+prove physical disk reclamation. By default conversations remain available in Fred.
+
+**Statistics independent of traces.** `summary.json` contains counts, errors,
+timeouts, successful turns/second, and exact mean/P50/P95/P99/max for successful
+turns, including first-text and full-stream latencies. Each metric has its own
+sample count; absent observations are not zero. Raw `conversation.jsonl` preserves
+all observed measured turns, including failures. CPU and RAM are not collected. Throughput covers the measured load window, including session setup
+and client scheduling/writes, excluding warm-up, initial login, history checks,
+cleanup and trace retrieval. Compare like-for-like deployments and model settings.
+
+**Sampling at the source.** Bench sends W3C `traceparent` sampled flags: `01` for
+selected turns, `00` otherwise. `--trace-sample 0.01` randomly selects about 1% of
+turns, while client statistics still cover the whole measured run. Setup, history
+and cleanup requests carry `00`. Servers must use parent-based sampling and
+propagate the context; bench cannot override an independently configured sampler.
+The existing Python/Rust instrumentation supports this contract. If an operator
+also wants unsampled background roots, the standard server setting is
+`OTEL_TRACES_SAMPLER=parentbased_always_off` (honor sampled parents, drop new roots).
+Changing that setting requires the operator's own rollout. `--client-only` skips
+trace retrieval only; use `--trace-sample 0` to request no turn trace recording.
+Missing server spans are never interpreted as zero server work.
+
+**Bounded overhead and storage.** Performance mode batches JSONL writes in a
+64 KiB buffer, syncing at most once per second while records arrive and flushing
+on normal/Ctrl+C exit. An abrupt process/machine failure can lose buffered data.
+Progress refreshes once per second; no per-turn console output. Limits: 50,000
+measured turns, 256 concurrent conversations, 1,000 warm-up turns, 120 MiB per raw
+file and 128 MiB trace snapshots. Bench refuses another run when
+existing `.bench/` files exceed 512 MiB; archive old runs yourself. This is a
+per-run guard, not a filesystem quota for simultaneous bench processes. The existing
+k3d collector rotates files separately. Sampling does not disable application logs,
+conversation persistence, or unrelated traffic; those retain their own costs.
+
+**Using the OpenAI-compatible mock.** Select a Fred agent whose model uses the
+mock's URL, exactly as you select an agent using Mistral. No mock flag, marker or
+special questions belong in bench. In the mock repository, `reference` produces
+one fixed text response after 1000 ms; `streaming` produces 100 fragments after
+1000 ms, spaced by 50 ms. Server-side `config.benchmark.initialDelayMs` and
+`fragmentIntervalMs` configure the pacing in Helm values (see the mock README).
+Use `reference` first for a simple baseline and `streaming` for sustained SSE.
+These profiles answer text only, so they do not exercise retrieval/tool calls or
+reasoning quality. Watch mock CPU and its periodic summaries: a saturated mock
+can be the bottleneck. Fragments are not tokens; no token throughput is invented.
+
+## Advanced and automated use
+
+The same Go engine supports Weaver managed SSE, Swift managed/direct SSE and the
+historical Swift WebSocket commands. With explicit legacy flags, `-target=swift`
+remains the default; unsupported Weaver combinations fail before network access.
+`-questions-file` accepts a JSON array of 1–100 questions, sent unchanged in order.
+`questions.example.json` is an optional RAGuard example, not the interactive default.
+`make conversation` remains a scripting shortcut with explicit space/agent IDs,
+output directory and an existing Fred user bearer in `AGENTIC_TOKEN`.
+
+## Optional legacy HTML tool
+
+HTML rendering is separate from the guided benchmark. Existing reports are kept;
+no HTML is generated by `./bench` or `./bench run`. The explicit offline command
+remains available for older workflows:
 
 ```bash
 cd developer_tools/benchmarks
@@ -48,7 +213,7 @@ file, created with mode `0600`; existing files and links are never overwritten.
 Remove a generated report deliberately or choose another `-output` to regenerate.
 
 The French interface compares runs, filters concurrency and first/following turns,
-shows median/P95/max with sample counts, and paginates the turn/error table.
+shows mean/median/P95/P99/max with sample counts, and paginates the turn/error table.
 Execution latencies start at execution; total latencies also include Weaver's
 per-turn preparation, which Swift does not perform. Only successful turns with
 observed timestamps contribute to latency statistics. N=0 means **not measured**,
@@ -60,8 +225,8 @@ with an explicit notice; summaries and the 50-row paginated table retain all dat
 
 Bounds are 128 MiB of JSONL, 2 MiB per record, 64 runs and 100,000 turns. This covers
 campaigns such as 500 conversations with 10 turns without unbounded DOM growth.
-Profiles and identity modes that differ produce a comparability warning; an
-interrupted run's profile is unknown because the current header does not record it.
+Different identity modes produce a comparability warning. Keep agent settings,
+questions and deployment conditions comparable yourself; the client does not infer them.
 Deployed versions, machines and model configuration are not inferred from the
 checkout. Only canonical campaign/trace/span IDs, bounded error
 categories, enums, counts and timings enter the report. Identities, conversation
@@ -74,7 +239,7 @@ establishes production capacity. Client timing is not server admission time.
 
 These are **operator-run commands**, not a record of a Fred run. Use an already
 configured local Weaver installation, its existing credentials/space/instance,
-and the configured `reference` mock profile described below. This recipe neither
+and the selected agent configuration. This recipe neither
 creates identities nor configures agents/models. Prerequisites: Docker on Linux,
 Go 1.24.0 and Go dependencies cached, and dependencies for the normal service
 startup commands. No Langfuse installation is required.
@@ -116,14 +281,14 @@ GOTOOLCHAIN=go1.24.0 make run ARGS="-scenario=conversation -target=weaver -proto
   -fred-origin=$WEAVER_ORIGIN -space-id=$WEAVER_SPACE \
   -agent-instance-id=$WEAVER_INSTANCE -credential-file=$CREDENTIAL_FILE \
   -concurrency-steps=1 -requests-per-client=1 -trace-turns \
-  -mock-profile=reference -delete-session=false \
+  -delete-session=false \
   -raw-report=$RESULTS/weaver-one-turn.jsonl"
 # Then a distinct ten-turn campaign, using the same trace destination:
 GOTOOLCHAIN=go1.24.0 make run ARGS="-scenario=conversation -target=weaver -protocol=sse \
   -fred-origin=$WEAVER_ORIGIN -space-id=$WEAVER_SPACE \
   -agent-instance-id=$WEAVER_INSTANCE -credential-file=$CREDENTIAL_FILE \
   -concurrency-steps=1 -requests-per-client=10 -trace-turns \
-  -mock-profile=reference -delete-session=false \
+  -delete-session=false \
   -raw-report=$RESULTS/weaver-campaign.jsonl"
 ```
 
@@ -167,16 +332,16 @@ coverage is not equivalent unless that Swift deployment actually exports the
 same boundaries. Historical runs retain their client metrics with no invented
 LLM, MCP or Control Plane timings.
 
-### Future k3d collection (separate operator rollout)
+### k3d collection (separate operator rollout)
 
-The local recipe binds the Collector to the developer host's loopback. In a pod,
-`127.0.0.1` means that pod, not the developer host: the local URL above is not a
-k3d endpoint. A future rollout needs an explicitly reachable Collector service
-and networking configuration through the normal deployment workflow. Supply
-`FRED_OTEL_ENABLED`, `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-through `applications.fred-agents.extraEnvVars` and
-`applications.control-plane-backend.extraEnvVars`; preserve their existing `env`
-lists (including `CONFIG_FILE`). This guide does not deploy or validate that setup.
+Use the deployment factory's
+[Weaver traces recipe](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/README.md#advanced-weaver-traces).
+Its opt-in collector reuses this directory's sanitization pipeline and stores
+rotated OTLP JSONL on a PVC. Its application overlay supplies the internal service
+endpoint and enables Control Plane and Agent Pod export, preserving credentials
+and TLS configuration. In a pod, `127.0.0.1` means that pod, so the local endpoint
+above cannot be used for k3d. A browser question can exercise the server spans;
+the HTML campaign report also needs the benchmark client's turn observations.
 
 ### Collector configuration and optional Langfuse
 
@@ -360,13 +525,10 @@ start load only with the explicitly selected scenario parameters below.
 ## Conversation scenario with factory identities
 
 Run from `developer_tools/benchmarks`. Prepare the identities, shared team/space,
-agent and mock configuration outside the load window. The selected instance must
-use the separately configured mock OpenAI profile `reference` or `streaming`;
-`-mock-profile` selects the expected response oracle, not the server configuration.
-The marker/ACK contract is maintained in the mock checkout's README under
-"Opt-in deterministic chat benchmarks". No real-model performance is measured by
-this scenario. Its control flow uses public APIs and has no dependency on Fred's
-database, queues, locks or a particular future Redis implementation.
+agent and mock configuration outside the load window. The selected agent may use any model configured in Fred. This advanced recipe
+uses several factory-created accounts for concurrency tests; the single-user
+recipe above uses an existing bearer token. Both run the same conversation engine
+and produce the same report format. Setup and rights remain outside the load window.
 
 The factory produces a private JSON file (mode `0600`, or stricter):
 
@@ -374,8 +536,10 @@ The factory produces a private JSON file (mode `0600`, or stricter):
 {"schema_version":1,"issuer":"http://localhost:8080/realms/app","client_id":"fred-bench-local","client_secret":"REDACTED","users":[{"label":"user-0001","username":"bench-example-0001","password":"REDACTED"}]}
 ```
 
-`-credential-file` is the only credential input for this scenario. Never pass
-passwords/client secrets on the command line. The client accepts only regular
+`-credential-file` enables multiple identities and token renewal. When supplied,
+it takes precedence over `AGENTIC_TOKEN`. Without it, `AGENTIC_TOKEN` supplies one
+identity (shared across conversations). Never pass passwords/client secrets on the
+command line. The client accepts only regular
 private files up to 4 MiB. The issuer must use HTTP(S), one `/realms/<name>` path,
 and a local test host: `localhost`, `*.localhost`, loopback IPv4/IPv6, `keycloak`
 or `app-keycloak`. Arrange name resolution to the intended test Keycloak first.
@@ -431,7 +595,7 @@ also joins configured default teams; explicit terms acceptance therefore retains
 that normal backend side effect. The preparation stops at its first failed identity.
 
 Start with an explicitly authorized one-conversation run, then reuse the same
-explicit concurrency steps and mock profile on each independently running target:
+explicit concurrency steps on each independently running target:
 
 ```bash
 # Weaver; all quoted variables are operator-supplied, never written to reports.
@@ -440,7 +604,7 @@ GOTOOLCHAIN=go1.24.0 go run . \
   -credential-file="$CREDS" -fred-origin="$WEAVER_ORIGIN" \
   -space-id="$SPACE_ID" -agent-instance-id="$WEAVER_INSTANCE_ID" \
   -concurrency-steps=1 -identity-mode=per-conversation \
-  -requests-per-client=10 -mock-profile=reference -timeout=30s \
+  -requests-per-client=10 -timeout=30s \
   -raw-report=results/weaver-scenario.jsonl \
   -json-report=results/weaver-scenario-summary.json
 
@@ -450,7 +614,7 @@ GOTOOLCHAIN=go1.24.0 go run . \
   -credential-file="$CREDS" -url="$SWIFT_STREAM_URL" \
   -sse-team-id="$TEAM_ID" -agent-instance-id="$SWIFT_INSTANCE_ID" \
   -concurrency-steps=1 -identity-mode=per-conversation \
-  -requests-per-client=10 -mock-profile=reference -timeout=30s \
+  -requests-per-client=10 -timeout=30s \
   -raw-report=results/swift-scenario.jsonl \
   -json-report=results/swift-scenario-summary.json
 ```
@@ -465,16 +629,15 @@ Bounds are 32 levels, 10,000 clients per level and 100 turns per conversation.
 Do not use legacy `-clients`, `-requests`, `-ramp-duration`, `-session` or identity
 overrides here. Bootstrap, WebSocket, query tokens and TLS bypass are unsupported.
 
-Every turn adds a fresh `MOCK_BENCH_V1` user marker. The bounded oracle checks
-the ACK's exact current marker and complete ordered list of earlier user markers,
-detecting missing, duplicate or foreign context. For `streaming`, it also checks
-all 99 numbered continuation lines; SDK fragments can be split or combined, so
-their observed count is recorded rather than equated to the mock's nominal 100.
-The final answer and streamed text must agree when both exist. The ACK proves
-which marked user history reached the model, not reasoning or unmarked content.
+Every turn sends its question unchanged. The client checks the Fred SSE protocol:
+one final answer, nonempty text, bounded content, and matching streamed/final text
+when both are supplied. These checks do not assess answer quality or prove what
+history the model received. Provider-specific answer or timing rules do not belong
+in this client.
 
 After every load window joins all clients, the client reads owned conversation
-history and verifies ordered user markers, assistant final ACKs, session IDs,
+history and compares the ordered user and final assistant texts with SHA-256
+digests kept in memory from the executed turns. It also verifies session IDs,
 exchange pairing and ranks. Weaver resolves `SessionDetails.messages_url`;
 Swift uses its existing runtime `/agents/sessions/<id>/messages` endpoint.
 Unsupported history is recorded as `unsupported`, never `verified`. Read/shape
@@ -505,8 +668,7 @@ the actual measured client behavior, not server execution time.
 
 Each attempted turn records its level, concurrency, first/following status,
 campaign-scoped pseudonyms for identity and conversation, outcome, performance
-outcome and integrity outcome. No credentials, usernames, JWT subjects, marker
-payloads, prompts, answer text, endpoint URLs or backend session IDs are exported.
+outcome and integrity outcome. No credentials, usernames, JWT subjects, prompts, answer text, endpoint URLs or backend session IDs are exported.
 The same conversation pseudonym joins turn and post-history records. Auth login
 and refresh have their own timed records and aggregate statistics. Turn start
 includes refresh waiting; optional `auth` describes a refresh actually performed
@@ -518,11 +680,11 @@ Text retained for verification is limited to 128 KiB; JSON history to 4 MiB.
 
 Per-level summaries distinguish planned, attempted, not started, successful and
 failed turns. A failed conversation stops; others continue. Performance errors,
-ACK integrity errors, post-history errors/unsupported status and cleanup errors
+stream integrity errors, post-history errors/unsupported status and cleanup errors
 are separate counts. p50/p95/max and sample counts are given separately for
 first and following successful turns: preparation, execution-to-text/final/EOF,
 total-to-final/EOF and silence. Percentiles use nearest rank; a zero sample count
-means unmeasured, not zero latency. Failed or invalid-ACK turns are excluded;
+means unmeasured, not zero latency. Failed or invalid-stream turns are excluded;
 post-history failure preserves the separately recorded turn measurements.
 Load elapsed includes session opening and export backpressure, and excludes
 initial login/preflight, post-history and cleanup. Total per-turn latency includes
@@ -804,7 +966,7 @@ the shared SSE categories (`http_status`, etc.). No upstream error text is expor
 - `auth.go`: private factory input, bounded login and per-identity refresh.
 - `scenario.go`, `scenario_reports.go`: opt-in levels using the common engine,
   post-window checks, progressive private records and phase summaries.
-- `oracle.go`: bounded marker/ACK and persisted-history verification.
+- `oracle.go`: bounded stream and persisted-history verification.
 - `prepare.go`, `onboarding.go`: explicit preparation command and read-only
   preflight through the existing Control Plane terms/access APIs.
 

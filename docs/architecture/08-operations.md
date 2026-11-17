@@ -138,6 +138,12 @@ conversation turn. A span measures one operation; parent links connect spans
 across services. The offline report also compares time and coverage by component
 across a campaign, including failed turns with usable measurements.
 
+The interactive benchmark connects as a Fred user and selects accessible spaces
+and agents by name. It sends built-in general questions or document questions
+about a chosen topic and saves the measurements as JSON/JSONL. Model and supplier selection remain
+with the agent. Local results contain technical measurements, not conversation
+content; unavailable traces are explicit and never trigger infrastructure changes.
+
 **Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
 
 ```mermaid

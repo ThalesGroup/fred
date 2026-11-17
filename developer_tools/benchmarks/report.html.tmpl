@@ -27,7 +27,7 @@
 <section class="panel" id="level-panel"><h2>Latence par concurrence</h2><p class="note">Médiane de tous les échantillons du palier. Les filtres de tour s'appliquent.</p><div class="chart" id="level-chart"></div></section>
 </div>
 <section class="panel"><h2>Temps observé par composant</h2><p class="note">Tous les tours sélectionnés, y compris les erreurs, avec une fin client observable. N = tours avec au moins un intervalle de cette catégorie dans la fenêtre / tours avec une fenêtre mesurable. Les percentiles portent sur les unions d’intervalles par tour ; catégories imbriquées ou concurrentes non additives. Une absence de span ne vaut jamais zéro.</p><div class="table-wrap"><table class="component-table"><thead><tr><th>Exécution</th><th>Palier</th><th>Composant</th><th>N observé / éligible</th><th>P50</th><th>P95</th><th>Max</th></tr></thead><tbody id="components"></tbody></table></div><div class="pagination"><span id="component-page-status"></span><button id="component-previous" type="button">Précédent</button><button id="component-next" type="button">Suivant</button></div><p id="component-coverage" class="note"></p></section>
-<section class="panel"><h2>Détail des tours</h2><p class="note">Les latences absentes et les tours en erreur ne sont pas remplacés par zéro. Les identifiants et textes privés ne sont pas inclus.</p><div class="table-wrap"><table><thead><tr><th scope="col">Exécution</th><th scope="col">Palier</th><th scope="col">Client</th><th scope="col">Tour</th><th scope="col">Résultat</th><th scope="col">Contexte</th><th scope="col" id="metric-heading">Latence</th><th scope="col">Erreur</th><th scope="col">Explorer</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pagination"><span id="page-status" aria-live="polite"></span><button id="previous" type="button">Précédent</button><button id="next" type="button">Suivant</button></div></section>
+<section class="panel"><h2>Détail des tours</h2><p class="note">Les latences absentes et les tours en erreur ne sont pas remplacés par zéro. Les identifiants et textes privés ne sont pas inclus.</p><div class="table-wrap"><table><thead><tr><th scope="col">Exécution</th><th scope="col">Palier</th><th scope="col">Conversation</th><th scope="col">Tour</th><th scope="col">Résultat</th><th scope="col">Contexte</th><th scope="col" id="metric-heading">Latence</th><th scope="col">Erreur</th><th scope="col">Explorer</th></tr></thead><tbody id="rows"></tbody></table></div><div class="pagination"><span id="page-status" aria-live="polite"></span><button id="previous" type="button">Précédent</button><button id="next" type="button">Suivant</button></div></section>
 <section class="panel detail" aria-label="Analyse du tour sélectionné"><div class="selection"><h2 id="detail-title">Explorer un tour</h2><button id="detail-previous" type="button">Tour précédent</button><button id="detail-next" type="button">Tour suivant</button></div><p id="detail-description" class="note" aria-live="polite"></p><div id="detail-warnings"></div><div class="charts"><section><h3>Chronologie</h3><p class="note">Décalages depuis le début client du tour, en millisecondes. Les barres se chevauchent ; leur somme n’est pas la latence totale. Gris : observations clients, couleur : spans importés.</p><div id="waterfall" class="timeline"></div></section><section><h3>Carte des appels observés</h3><p class="note">Chaque liaison suit parentSpanId. « Client » est une observation locale, pas un span OTLP exporté. Une relation parent/enfant ne prouve pas un appel réseau ; les appels clients attestés sont signalés. LLM : invocation logique complète, pouvant inclure wrappers et reprises.</p><div id="service-map" class="chart"></div><details><summary>Relations détaillées entre spans</summary><div id="call-map" class="call-map"></div></details></section></div><p class="note" id="detail-coverage"></p></section>
 <footer>Source : enregistrements canoniques fred.bench.scenario.v1. Versions déployées, machines, configuration du modèle et liens de conversation non renseignés par ce format. Aucune métadonnée déduite du checkout. Les percentiles décrivent les échantillons disponibles ; ils ne démontrent pas une capacité de production.</footer>
 </main>
@@ -38,7 +38,7 @@ const $ = id => document.getElementById(id);
 const colors = ['#2454c4','#14745b','#9357ad','#b45b16','#426a81','#a33858'];
 const statusNames = {OK:'Complet',DEGRADED:'Dégradé',FAILED:'Échec',incomplete:'Incomplet'};
 const outcomeNames = {success:'Réussi',error:'Erreur'};
-const integrityNames = {passed:'Vérifié',failed:'Échec',not_observed:'Non vérifié'};
+const integrityNames = {passed:'Flux vérifié',failed:'Échec',not_observed:'Non vérifié'};
 const metricHelp = {
  execution_first_text:'Temps depuis le début de l’exécution jusqu’au premier texte : comparable entre cibles, hors préparation Weaver.',
  execution_final:'Temps depuis le début de l’exécution jusqu’à la réponse finale : hors préparation Weaver.',
@@ -67,9 +67,9 @@ function selectedTurns(run) {
 }
 function samples(turns) { return turns.filter(t=>t.outcome==='success').map(t=>t.metrics[$('metric').value]).filter(v=>v!=null); }
 function summary(values) {
- if(!values.length) return {count:0,p50:null,p95:null,max:null};
+ if(!values.length) return {count:0,mean:null,p50:null,p95:null,p99:null,max:null};
  const v=[...values].sort((a,b)=>a-b);
- return {count:v.length,p50:v[Math.ceil(v.length*.50)-1],p95:v[Math.ceil(v.length*.95)-1],max:v[v.length-1]};
+ return {count:v.length,mean:v.reduce((a,b)=>a+b,0)/v.length,p99:v[Math.ceil(v.length*.99)-1],p50:v[Math.ceil(v.length*.50)-1],p95:v[Math.ceil(v.length*.95)-1],max:v[v.length-1]};
 }
 function stat(parent,value,label) { const node=element('div',null,'stat');node.append(element('strong',value),element('span',label));parent.append(node); }
 function showCards() {
@@ -80,21 +80,27 @@ function showCards() {
   const title=element('h3',r.label);title.style.color=colors[i%colors.length];
   head.append(title,element('span',statusNames[r.status],'badge '+(r.status==='OK'?'ok':'bad')));card.append(head);
   card.append(element('p','Campagne '+r.campaign,'note'));
-  card.append(element('p',(r.identity==='shared'?'Identité partagée':'Identités distinctes')+' · Profil '+(r.profile==='absent'?'inconnu':r.profile),'note'));
+  if(r.mode) card.append(element('p','Mode: '+r.mode+' · Warm-up excluded: '+r.warmupTurns+' turns · Trace sampling requested: '+(r.traceSampleRate==null?'unknown':number(r.traceSampleRate*100)+'%'),'note'));
+  card.append(element('p',(r.identity==='shared'?'Identité partagée':'Identités distinctes'),'note'));
   let planned=steps.reduce((n,s)=>n+s.planned,0);
-  if($('phase').value==='first') planned=steps.reduce((n,s)=>n+s.concurrency,0);
-  if($('phase').value==='following') planned-=steps.reduce((n,s)=>n+s.concurrency,0);
+  if($('phase').value==='first') planned=steps.reduce((n,s)=>n+(s.conversations||s.concurrency),0);
+  if($('phase').value==='following') planned-=steps.reduce((n,s)=>n+(s.conversations||s.concurrency),0);
   const good=turns.filter(t=>t.outcome==='success').length, failed=turns.filter(t=>t.outcome==='error').length;
   const stats=element('div',null,'stats');
   stat(stats,good+' / '+planned,'Tours réussis / prévus');stat(stats,String(failed),'Tours en erreur');
-  const verified=steps.reduce((n,s)=>n+s.historyVerified,0), expected=steps.reduce((n,s)=>n+s.concurrency,0);
+  const verified=steps.reduce((n,s)=>n+s.historyVerified,0), expected=steps.reduce((n,s)=>n+(s.conversations||s.concurrency),0);
   stat(stats,verified+' / '+expected,'Historiques vérifiés (palier entier)');
   const duration=steps.length&&steps.every(s=>s.duration!=null)?steps.reduce((n,s)=>n+s.duration,0):null;
-  stat(stats,duration==null?'Non mesurée':number(duration/1000)+' s','Durée de charge (palier entier)');card.append(stats);
+  stat(stats,duration==null?'Non mesurée':number(duration/1000)+' s','Durée de charge (palier entier)');
+  const allStepTurns=r.turns.filter(t=>steps.some(s=>s.step===t.step));
+  const allGood=allStepTurns.filter(t=>t.outcome==='success').length;
+  stat(stats,duration>0?number(allGood*1000/duration)+'/s':'Not measured','Successful Fred turns/s (whole step)');
+  const timeouts=turns.filter(t=>t.error==='timeout').length;
+  stat(stats,String(timeouts),'Timeouts');card.append(stats);
   card.append(element('p',turns.length+' tours observés · '+Math.max(0,planned-turns.length)+' sans résultat','note'));
   const issues=steps.reduce((n,s)=>n+s.historyErrors+s.historyUnsupported+s.cleanupErrors,0);
   if(issues||r.authErrors||r.error) card.append(element('p','Vérification / nettoyage : '+issues+' anomalie(s) · Authentification : '+r.authErrors+' erreur(s)'+(r.error?' · '+r.error:''),'warning'));
-  card.append(element('p','N = '+sum.count+' · Médiane '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'metric-row'));
+  card.append(element('p','N = '+sum.count+' · Mean '+ms(sum.mean)+' · P99 '+ms(sum.p99)+' · Médiane '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'metric-row'));
   card.append(element('p','Statut et authentification : exécution entière. Cartes de tours et latences : filtres actifs.','note'));
   ['acquire','refresh'].forEach(op=>{const auth=(r.auth||[]).filter(a=>a.operation===op),sum=summary(auth.filter(a=>!a.error).map(a=>a.duration));card.append(element('p',(op==='acquire'?'Connexion Keycloak initiale, hors tours':'Renouvellement Keycloak, campagne entière')+' : '+(auth.length?'N = '+sum.count+' / '+auth.length:'aucun échange client observé (N = 0)')+' · P50 '+ms(sum.p50)+' · P95 '+ms(sum.p95)+' · Max '+ms(sum.max),'note'));});
   if(r.traceImport) card.append(element('p',r.traceImport,'note'));
@@ -236,7 +242,7 @@ function showDetail() {
  $('waterfall').replaceChildren();$('call-map').replaceChildren();$('service-map').replaceChildren();$('detail-warnings').replaceChildren();
  if(!selectedDetail){$('detail-title').textContent='Aucun tour sélectionné';$('detail-description').textContent='';$('detail-coverage').textContent='';return;}
  const {r,t}=selectedDetail,d=t.detail;
- $('detail-title').textContent=r.label+' · palier '+t.step+' · client '+t.client+' · tour '+t.turn;
+ $('detail-title').textContent=r.label+' · palier '+t.step+' · conversation '+t.client+' · tour '+t.turn;
  $('detail-description').textContent=outcomeNames[t.outcome]+' · '+(d&&d.duration!=null?'Fenêtre '+ms(d.duration)+(d.complete?' jusqu’à EOF':' partielle'):'Fenêtre non mesurable')+' · '+(index+1)+' / '+all.length+' tours sélectionnés';
  if(!d){$('waterfall').append(element('p','Observations absentes.','detail-empty'));return;}
  const warnings=[...d.warnings];
@@ -259,8 +265,7 @@ function moveDetail(delta){const all=allSelectedTurns(),index=all.findIndex(({r,
 function render() {
  const chosen=selectedRuns().map(({r})=>r);
  const warnings=[];
- if(chosen.some(r=>r.profile==='absent'))warnings.push('Profil absent : la comparabilité ne peut pas être établie pour une exécution incomplète.');
- if(new Set(chosen.map(r=>r.profile)).size>1||new Set(chosen.map(r=>r.identity)).size>1)warnings.push('Profils ou modes d’identité différents : comparaison à interpréter avec précaution.');
+ if(new Set(chosen.map(r=>r.identity)).size>1)warnings.push('Modes d’identité différents : comparaison à interpréter avec précaution.');
  $('warnings').replaceChildren(...warnings.map(w=>element('p',w,'warning')));
  $('metric-help').textContent=metricHelp[$('metric').value]+' N désigne le nombre de tours réussis avec cette mesure. P95 : 95 % des échantillons sont inférieurs ou égaux à cette valeur.';
  showCards();chart($('turn-chart'),false);

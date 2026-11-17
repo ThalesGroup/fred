@@ -121,19 +121,34 @@ class TechnicalTracingMiddleware:
                 await self.app(scope, receive, send)
             return
         with technical_span("agent.http", context=extract_trace(headers)) as span:
+            response_complete = False
+            disconnected = False
 
             async def traced_receive() -> Message:
+                nonlocal disconnected
                 message = await receive()
                 if message["type"] == "http.disconnect":
-                    span.set_attribute("status", "cancelled")
+                    disconnected = True
                 return message
 
             async def traced_send(message: Message) -> None:
+                nonlocal response_complete
                 if message["type"] == "http.response.start":
                     status = message["status"]
                     span.set_attribute("http.response.status_code", status)
                     if status >= 400:
                         span.set_attribute("status", "error")
                 await send(message)
+                if message["type"] == "http.response.body" and not message.get(
+                    "more_body", False
+                ):
+                    response_complete = True
 
-            await self.app(scope, traced_receive, traced_send)
+            try:
+                await self.app(scope, traced_receive, traced_send)
+            finally:
+                # ASGI may report disconnect after normal completion, including
+                # while the final send is returning. Classify after cleanup;
+                # only a successfully sent final body establishes completion.
+                if disconnected and not response_complete:
+                    span.set_attribute("status", "cancelled")

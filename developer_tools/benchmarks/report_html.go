@@ -23,13 +23,17 @@ const reportMaxBytes = 128 << 20
 const reportMaxTurns = 100000
 
 type reportRunHeader struct {
-	Kind     string `json:"kind"`
-	Schema   string `json:"schema_version"`
-	Campaign string `json:"campaign_id"`
-	Target   string `json:"target"`
-	Identity string `json:"identity_mode"`
-	Steps    []int  `json:"concurrency_steps"`
-	Turns    int    `json:"turns"`
+	TotalTurns      int      `json:"total_turns"`
+	Mode            string   `json:"mode"`
+	TraceSampleRate *float64 `json:"trace_sample_rate"`
+	WarmupTurns     int      `json:"warmup_turns"`
+	Kind            string   `json:"kind"`
+	Schema          string   `json:"schema_version"`
+	Campaign        string   `json:"campaign_id"`
+	Target          string   `json:"target"`
+	Identity        string   `json:"identity_mode"`
+	Steps           []int    `json:"concurrency_steps"`
+	Turns           int      `json:"turns"`
 }
 
 // Only this allowlisted projection reaches HTML. In particular, never export
@@ -46,6 +50,7 @@ type htmlTurn struct {
 	Detail    *htmlTurnDetail     `json:"detail"`
 }
 type htmlStep struct {
+	Conversations      int      `json:"conversations"`
 	Step               int      `json:"step"`
 	Concurrency        int      `json:"concurrency"`
 	Planned            int      `json:"planned"`
@@ -56,19 +61,21 @@ type htmlStep struct {
 	CleanupErrors      int      `json:"cleanupErrors"`
 }
 type htmlRun struct {
-	Campaign    string     `json:"campaign"`
-	Label       string     `json:"label"`
-	Target      string     `json:"target"`
-	Identity    string     `json:"identity"`
-	Profile     string     `json:"profile"`
-	Status      string     `json:"status"`
-	Warning     string     `json:"warning"`
-	Error       string     `json:"error"`
-	AuthErrors  int        `json:"authErrors"`
-	Auth        []htmlAuth `json:"auth"`
-	TraceImport string     `json:"traceImport"`
-	Steps       []htmlStep `json:"steps"`
-	Turns       []htmlTurn `json:"turns"`
+	Mode            string     `json:"mode"`
+	TraceSampleRate *float64   `json:"traceSampleRate"`
+	WarmupTurns     int        `json:"warmupTurns"`
+	Campaign        string     `json:"campaign"`
+	Label           string     `json:"label"`
+	Target          string     `json:"target"`
+	Identity        string     `json:"identity"`
+	Status          string     `json:"status"`
+	Warning         string     `json:"warning"`
+	Error           string     `json:"error"`
+	AuthErrors      int        `json:"authErrors"`
+	Auth            []htmlAuth `json:"auth"`
+	TraceImport     string     `json:"traceImport"`
+	Steps           []htmlStep `json:"steps"`
+	Turns           []htmlTurn `json:"turns"`
 }
 
 func runHTMLReportCLI(args []string) int {
@@ -76,6 +83,12 @@ func runHTMLReportCLI(args []string) int {
 	input := fs.String("input", "", "Directory containing scenario JSONL results")
 	traces := fs.String("traces", "", "Optional OTLP JSON/JSONL export (default: <input>/traces.otlp.jsonl if present)")
 	output := fs.String("output", "", "New HTML file (default: <input>/report.html; never overwritten)")
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), "bench report - view or generate an offline report\n\nUsage:\n  ./bench report\n  ./bench report --input DIR [--traces FILE] [--output FILE]\n\nWithout options, open the latest saved report.\nWith --input, generate a new HTML report without contacting Fred.\n\nOptions:\n")
+		fs.PrintDefaults()
+		fmt.Fprintln(fs.Output(), "\n  -h, --h, -help, --help, help\n        Show this help and exit\n\nExample:\n  ./bench report --input .bench/run-example")
+	}
+	args = benchHelpArguments(fs, args)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -93,7 +106,7 @@ func runHTMLReportCLI(args []string) int {
 		fmt.Fprintln(os.Stderr, "report:", err)
 		return 2
 	}
-	fmt.Println("Rapport HTML créé :", *output)
+	fmt.Println("HTML report created:", *output)
 	return 0
 }
 
@@ -122,6 +135,9 @@ func generateHTMLReport(input, output string, tracePaths ...string) error {
 	// encoding/json's HTML escaping. No template.JS or raw JSON insertion.
 	if err := template.Must(template.New("report").Parse(reportHTML)).Execute(&rendered, runs); err != nil {
 		return errors.New("cannot render report")
+	}
+	if rendered.Len() > reportMaxBytes {
+		return errors.New("HTML report exceeds 128 MiB; reduce the run size")
 	}
 	if strings.ToLower(filepath.Ext(output)) != ".html" {
 		return errors.New("output must be a new .html file")
@@ -245,12 +261,26 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 	if len(header.Campaign) == 32 && strings.Trim(header.Campaign, "0123456789abcdef") == "" {
 		campaign = header.Campaign
 	}
-	run := &htmlRun{Campaign: campaign, Target: header.Target, Identity: header.Identity, Profile: "absent", Status: "incomplete", Turns: []htmlTurn{}}
+	if header.Mode != "" && header.Mode != "diagnostic" && header.Mode != "performance" {
+		return nil, "", errors.New("invalid benchmark mode")
+	}
+	if header.TotalTurns < 0 || header.TotalTurns > 50000 || (header.TotalTurns > 0 && (header.Mode != "performance" || len(header.Steps) != 1)) || header.WarmupTurns < 0 || header.WarmupTurns > 1000 {
+		return nil, "", errors.New("invalid performance plan")
+	}
+	if header.TraceSampleRate != nil && !(*header.TraceSampleRate >= 0 && *header.TraceSampleRate <= 1) {
+		return nil, "", errors.New("invalid sampling rate")
+	}
+	run := &htmlRun{Mode: header.Mode, TraceSampleRate: header.TraceSampleRate, WarmupTurns: header.WarmupTurns, Campaign: campaign, Target: header.Target, Identity: header.Identity, Status: "incomplete", Turns: []htmlTurn{}}
 	for i, n := range header.Steps {
 		if n < 1 || n > 10000 {
 			return nil, "", errors.New("invalid concurrency level")
 		}
-		run.Steps = append(run.Steps, htmlStep{Step: i + 1, Concurrency: n, Planned: n * header.Turns})
+		planned, conversations := n*header.Turns, n
+		if header.TotalTurns > 0 {
+			planned = header.TotalTurns
+			conversations = (planned + header.Turns - 1) / header.Turns
+		}
+		run.Steps = append(run.Steps, htmlStep{Step: i + 1, Concurrency: n, Planned: planned, Conversations: conversations})
 	}
 	var summary *scenarioReport
 	seenTurns := map[[3]int]bool{}
@@ -312,7 +342,14 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 			if row.Step < 1 || row.Step > len(run.Steps) || row.Concurrency != run.Steps[row.Step-1].Concurrency || row.ClientID < 1 || row.ClientID > row.Concurrency || row.Turn < 1 || row.Turn > header.Turns || row.FirstTurn != (row.Turn == 1) {
 				return nil, "", errors.New("turn outside declared plan")
 			}
-			key := [3]int{row.Step, row.ClientID, row.Turn}
+			conversationIndex := row.ClientID
+			if header.TotalTurns > 0 {
+				conversationIndex = row.ConversationIndex
+				if conversationIndex < 1 || conversationIndex > run.Steps[row.Step-1].Conversations || (conversationIndex-1)*header.Turns+row.Turn > header.TotalTurns {
+					return nil, "", errors.New("conversation outside declared plan")
+				}
+			}
+			key := [3]int{row.Step, conversationIndex, row.Turn}
 			if seenTurns[key] {
 				return nil, "", errors.New("duplicate turn")
 			}
@@ -330,7 +367,7 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 			if row.Integrity == "passed" || row.Integrity == "failed" {
 				integrity = row.Integrity
 			}
-			run.Turns = append(run.Turns, htmlTurn{row.Step, row.ClientID, row.Turn, row.FirstTurn, row.Outcome, integrity, reportError(row.Error, row.PerformanceError, row.IntegrityError), reportMetrics(row), projectTurnDetail(row)})
+			run.Turns = append(run.Turns, htmlTurn{row.Step, conversationIndex, row.Turn, row.FirstTurn, row.Outcome, integrity, reportError(row.Error, row.PerformanceError, row.IntegrityError), reportMetrics(row), projectTurnDetail(row)})
 		case "step":
 			var step stepReport
 			if json.Unmarshal(data, &step) != nil || step.Step < 1 || step.Step > len(run.Steps) || seenSteps[step.Step].Step != 0 {
@@ -359,9 +396,6 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 		observedHTMLHistory(run, historyCounts)
 		run.Warning += " Résumé final absent : campagne interrompue ou incomplète."
 		return run, header.Campaign, nil
-	}
-	if summary.MockProfile == "reference" || summary.MockProfile == "streaming" {
-		run.Profile = summary.MockProfile
 	}
 	run.Error = reportError(summary.Error)
 	run.AuthErrors = summary.AuthErrors
@@ -403,7 +437,7 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 		valid = false
 	}
 	if run.Status == "OK" {
-		if run.Error != "" || run.AuthErrors > 0 || run.Profile == "absent" {
+		if run.Error != "" || run.AuthErrors > 0 {
 			valid = false
 		}
 		for _, step := range run.Steps {
@@ -413,7 +447,7 @@ func readHTMLRun(input io.Reader) (*htmlRun, string, error) {
 					count++
 				}
 			}
-			if count != step.Planned || step.HistoryVerified != step.Concurrency || step.HistoryErrors+step.HistoryUnsupported+step.CleanupErrors > 0 {
+			if count != step.Planned || step.HistoryVerified != step.Conversations || step.HistoryErrors+step.HistoryUnsupported+step.CleanupErrors > 0 {
 				valid = false
 			}
 		}
@@ -494,7 +528,7 @@ func reportError(values ...string) string {
 			continue
 		}
 		switch value {
-		case "timeout", "canceled", "transport_error", "execution_error", "execution_interrupted", "incomplete_stream", "http_status", "invalid_event", "event_too_large", "invalid_session", "session_not_created", "invalid_binding", "model_unavailable", "invalid_response", "invalid_execution_url", "unsupported_transport", "terms_acceptance_required", "preflight_model_or_binding_unavailable", "preflight_route_or_team_mismatch", "ack_context_mismatch", "ack_fragment_mismatch", "ack_missing", "ack_stream_final_mismatch", "ack_terminal_count", "history_missing_turns", "history_context_mismatch", "history_turn_mismatch", "history_ack_mismatch", "history_unsupported":
+		case "timeout", "canceled", "transport_error", "execution_error", "execution_interrupted", "human_input_required", "incomplete_stream", "http_status", "invalid_event", "event_too_large", "invalid_session", "session_not_created", "invalid_binding", "model_unavailable", "invalid_response", "invalid_execution_url", "unsupported_transport", "terms_acceptance_required", "preflight_model_or_binding_unavailable", "preflight_route_or_team_mismatch", "answer_missing", "answer_stream_final_mismatch", "answer_terminal_count", "answer_too_large", "history_missing_turns", "history_input_mismatch", "history_turn_mismatch", "history_answer_mismatch", "history_unsupported":
 			return value
 		}
 		for _, prefix := range []string{"http_", "auth_http_", "history_http_"} {

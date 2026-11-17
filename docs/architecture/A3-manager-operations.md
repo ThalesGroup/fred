@@ -63,6 +63,11 @@ The [collector pipeline](../../developer_tools/benchmarks/otel-collector.yaml)
 filters the file destination; its [Langfuse overlay](../../developer_tools/benchmarks/otel-collector-langfuse.yaml)
 receives the same spans with permitted observation data.
 
+The [interactive CLI](../../developer_tools/benchmarks/bench.go) selects spaces
+and agents through existing Control Plane APIs, then reuses the conversation
+scenario and its JSON/JSONL outputs. [Browser login](../../developer_tools/benchmarks/bench_login.go)
+uses Keycloak PKCE with in-memory renewal; [k3d retrieval](../../developer_tools/benchmarks/bench_traces.go)
+reads the existing collector volume and retains only the run's trace IDs.
 The benchmark creates a W3C context per turn without exporting a client root
 span. The [report importer](../../developer_tools/benchmarks/report_traces.go)
 joins exported spans to those client observations by trace ID. Configuration,

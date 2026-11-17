@@ -1,9 +1,11 @@
 .DEFAULT_GOAL := help
 
 REPO_ROOT := $(abspath $(CURDIR)/../..)
-BINARY ?= agentic_bench_client.exe
+BINARY ?= bench
 GO ?= go
 ARGS ?=
+ORIGIN ?= http://weaver.localhost:8088
+QUESTIONS ?= questions.example.json
 PACKAGE ?= .
 DOCKER ?= docker
 REGISTRY ?=
@@ -18,6 +20,17 @@ HELM_VALUES ?= $(REPO_ROOT)/deploy/charts/agentic-bench/values.yaml
 HELM_VALUES_EXISTING ?= $(REPO_ROOT)/developer_tools/benchmarks/values-existing-agent.yaml
 
 ##@ Benchmarks
+
+.PHONY: conversation
+conversation: check-go ## Ask the questions in Weaver: SPACE=<uuid> AGENT=<uuid> DIR=<results> [QUESTIONS=file.json]; bearer in AGENTIC_TOKEN
+	@test -n "$(SPACE)" -a -n "$(AGENT)" -a -n "$(DIR)" || { echo 'SPACE, AGENT and DIR are required'; exit 1; }
+	@test -n "$$AGENTIC_TOKEN" || { echo 'Export AGENTIC_TOKEN with your current Fred user token'; exit 1; }
+	@umask 077; mkdir -p "$(DIR)"
+	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) \
+		-scenario=conversation -target=weaver -protocol=sse \
+		-fred-origin="$(ORIGIN)" -space-id="$(SPACE)" -agent-instance-id="$(AGENT)" \
+		-questions-file="$(QUESTIONS)" -trace-turns -delete-session=false \
+		-raw-report="$(DIR)/conversation.jsonl"
 
 .PHONY: build
 build: tidy ## Build the benchmark binary

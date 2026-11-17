@@ -25,6 +25,7 @@ func TestSSEStreamOutcomes(t *testing.T) {
 		{"terminal before final", "data:{\"kind\":\"execution_error\"}\n\ndata:{\"kind\":\"final\"}\n\n", "execution_error", false, true},
 		{"terminal after final", "data:{\"kind\":\"final\"}\n\ndata:{\"kind\":\"execution_error\"}\n\n", "execution_error", false, true},
 		{"interrupted", "data:{\"kind\":\"execution_interrupted\"}\n\n", "execution_interrupted", false, false},
+		{"human input", "data:{\"kind\":\"awaiting_human\"}\n\n", "human_input_required", false, false},
 		{"missing final", "data:{\"kind\":\"status\"}\n\n", "incomplete_stream", false, false},
 		{"empty", "", "incomplete_stream", false, false},
 		{"unterminated final", "data:{\"kind\":\"final\"}\n", "incomplete_stream", false, false},

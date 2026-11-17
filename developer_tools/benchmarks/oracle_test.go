@@ -1,55 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"strings"
 	"testing"
 )
 
-func ackText(marker turnMarker, previous []turnMarker, profile string) string {
-	data, _ := json.Marshal(mockACK{marker, previous})
-	text := ackPrefix + string(data) + "\n"
-	if profile == "streaming" {
-		for i := 2; i <= 100; i++ {
-			text += "MOCK_BENCH_FRAGMENT_V1 " + itoa(i) + "/100\n"
-		}
-	}
-	return text
-}
-func itoa(i int) string {
-	const digits = "0123456789"
-	if i < 10 {
-		return string(digits[i])
-	}
-	return itoa(i/10) + string(digits[i%10])
-}
-func TestMockACKDetectsMissingDuplicateMixedAndWrongOrder(t *testing.T) {
-	a, b := turnMarker{"c", 1, "n1"}, turnMarker{"c", 2, "n2"}
-	current := turnMarker{"c", 3, "n3"}
-	want := []turnMarker{a, b}
-	if err := validateACK(ackText(current, want, "reference"), current, want, "reference"); err != nil {
-		t.Fatal(err)
-	}
-	for _, prior := range [][]turnMarker{nil, {}, {a, a}, {b, a}, {a, {"foreign", 2, "n2"}}} {
-		if err := validateACK(ackText(current, prior, "reference"), current, want, "reference"); err == nil {
-			t.Fatal("bad history accepted", prior)
-		}
-	}
-	text := ackText(a, []turnMarker{}, "streaming")
-	if err := validateACK(text, a, []turnMarker{}, "streaming"); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateACK(strings.Replace(text, "2/100", "3/100", 1), a, []turnMarker{}, "streaming"); err == nil {
-		t.Fatal("fragment gap accepted")
-	}
-	if err := validateACK(text+text, a, []turnMarker{}, "streaming"); err == nil {
-		t.Fatal("duplicate ACK accepted")
-	}
-}
-
 func TestAnswerObserverBoundedAndActualFragments(t *testing.T) {
-	marker := turnMarker{"c", 1, "n"}
-	answer := ackText(marker, []turnMarker{}, "reference")
+	answer := "An ordinary answer with citations [1]."
 	o := &answerObserver{}
 	for _, part := range []string{answer[:10], answer[10:]} {
 		data, _ := json.Marshal(map[string]string{"kind": "assistant_delta", "delta": part})
@@ -57,11 +16,11 @@ func TestAnswerObserverBoundedAndActualFragments(t *testing.T) {
 	}
 	data, _ := json.Marshal(map[string]string{"kind": "final", "content": answer})
 	_, _ = o.decode(data)
-	if o.fragments != 2 || o.verify(marker, []turnMarker{}, "reference") != nil {
+	if o.fragments != 2 || o.verify() != nil {
 		t.Fatal("invalid streaming observation")
 	}
 	_, _ = o.decode(data)
-	if o.verify(marker, []turnMarker{}, "reference") == nil {
+	if o.verify() == nil {
 		t.Fatal("multiple finals accepted")
 	}
 	o = &answerObserver{}
@@ -69,5 +28,50 @@ func TestAnswerObserverBoundedAndActualFragments(t *testing.T) {
 	_, _ = o.decode(data)
 	if o.deltas.Len() != 0 || o.err == nil {
 		t.Fatal("answer bound missing")
+	}
+}
+
+func TestGenericAnswerValidation(t *testing.T) {
+	for _, tc := range []struct {
+		final, delta string
+		count        int
+		want         bool
+	}{
+		{"Arbitrary natural answer", "", 1, true},
+		{"Réponse [1]", "Réponse [1]", 1, true},
+		{"", "Partial answer", 0, false},
+		{"", "", 1, false},
+		{"Changed", "Original", 1, false},
+	} {
+		o := &answerObserver{final: tc.final, finals: tc.count}
+		o.deltas.WriteString(tc.delta)
+		if (o.verify() == nil) != tc.want {
+			t.Fatalf("unexpected validation: %+v", tc)
+		}
+	}
+}
+
+func TestHistoryChecksObservedContentAndPairing(t *testing.T) {
+	turns := []completedTurn{{sha256.Sum256([]byte("Question")), sha256.Sum256([]byte("Answer"))}}
+	message := func(role, text, exchange, session string, rank int) json.RawMessage {
+		data, _ := json.Marshal(map[string]any{"session_id": session, "exchange_id": exchange, "rank": rank, "role": role, "channel": "final", "parts": []map[string]string{{"type": "text", "text": text}}})
+		return data
+	}
+	good := []json.RawMessage{message("user", "Question", "e1", "s", 1), message("assistant", "Answer", "e1", "s", 2)}
+	if err := verifyHistory(good, "s", turns); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]json.RawMessage{
+		good[:1],
+		{good[0], message("assistant", "Foreign answer", "e1", "s", 2)},
+		{message("user", "Changed question", "e1", "s", 1), good[1]},
+		{good[0], message("assistant", "Answer", "e2", "s", 2)},
+		{good[0], message("assistant", "Answer", "e1", "other", 2)},
+		{good[0], message("assistant", "Answer", "e1", "s", 1)},
+		{good[0], good[1], good[1]},
+	} {
+		if verifyHistory(bad, "s", turns) == nil {
+			t.Fatal("invalid history accepted")
+		}
 	}
 }

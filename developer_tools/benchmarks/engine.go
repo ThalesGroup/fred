@@ -19,6 +19,8 @@ type conversation interface {
 
 type loadPlan struct {
 	Clients, Requests, Turns int
+	TotalTurns               int
+	DiscardResults           bool
 	Ramp, Timeout            time.Duration
 	Observe                  func(result)
 }
@@ -58,6 +60,7 @@ func (p *phaseMeasurement) finish(err error) {
 
 // Optional observations are pointers: an unobserved milestone is never zero.
 type turnMeasurement struct {
+	ConversationIndex  int               `json:"conversation_index,omitempty"`
 	Preparation        *phaseMeasurement `json:"preparation,omitempty"`
 	ExecutionStartedAt *time.Time        `json:"execution_started_at,omitempty"`
 	History            *phaseMeasurement `json:"history,omitempty"`
@@ -80,7 +83,7 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 	results := make(chan result)
 	var wg sync.WaitGroup
 	// Both legacy scheduling modes use this same sequential conversation loop.
-	runTurns := func(client, turns int, previous map[string]int) {
+	runTurns := func(client, turns, conversationIndex int, previous map[string]int) {
 		if ctx.Err() != nil {
 			return
 		}
@@ -122,6 +125,7 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 			m := &res.Measurement
 			m.SchemaVersion, m.CampaignID = "fred.bench.turn.v1", campaignID
 			previous[conversationID]++
+			m.ConversationIndex = conversationIndex
 			m.ClientID, m.ConversationID, m.Turn = client+1, conversationID, previous[conversationID]
 			m.Outcome = "success"
 			if res.Err != nil {
@@ -145,7 +149,7 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 		go func(client int) {
 			defer wg.Done()
 			previous := make(map[string]int)
-			if plan.Turns > 0 {
+			if plan.Turns > 0 && plan.TotalTurns == 0 {
 				if plan.Ramp > 0 && plan.Clients > 1 {
 					timer := time.NewTimer(plan.Ramp * time.Duration(client) / time.Duration(plan.Clients-1))
 					defer timer.Stop()
@@ -155,11 +159,15 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 					case <-timer.C:
 					}
 				}
-				runTurns(client, plan.Turns, previous)
+				runTurns(client, plan.Turns, 0, previous)
 			} else {
-				for range jobs {
+				for job := range jobs {
 					if ctx.Err() == nil {
-						runTurns(client, 1, previous)
+						turns := 1
+						if plan.TotalTurns > 0 {
+							turns = min(plan.Turns, plan.TotalTurns-job*plan.Turns)
+						}
+						runTurns(client, turns, job+1, previous)
 					}
 				}
 			}
@@ -167,10 +175,14 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 	}
 	go func() {
 		defer close(jobs)
-		if plan.Turns > 0 {
+		if plan.Turns > 0 && plan.TotalTurns == 0 {
 			return
 		}
-		for job := 0; job < plan.Requests; job++ {
+		jobsCount := plan.Requests
+		if plan.TotalTurns > 0 {
+			jobsCount = (plan.TotalTurns + plan.Turns - 1) / plan.Turns
+		}
+		for job := 0; job < jobsCount; job++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -184,7 +196,9 @@ func runLoad(ctx context.Context, plan loadPlan, open func(context.Context, int)
 		if plan.Observe != nil {
 			plan.Observe(res)
 		}
-		collected = append(collected, res)
+		if !plan.DiscardResults {
+			collected = append(collected, res)
+		}
 	}
 	return collected
 }

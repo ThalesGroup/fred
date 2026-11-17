@@ -1,56 +1,17 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
-	"io"
-	"reflect"
-	"strconv"
 	"strings"
 	"time"
 )
 
-const markerPrefix = "MOCK_BENCH_V1 "
-const ackPrefix = "MOCK_BENCH_ACK_V1 "
 const maxAnswerBytes = 128 * 1024
 
-type turnMarker struct {
-	Conversation string `json:"conversation"`
-	Turn         int    `json:"turn"`
-	Nonce        string `json:"nonce"`
-}
-type mockACK struct {
-	turnMarker
-	Previous []turnMarker `json:"previous"`
-}
-
-func strictJSON(text string, out any) bool {
-	d := json.NewDecoder(strings.NewReader(text))
-	d.DisallowUnknownFields()
-	return d.Decode(out) == nil && d.Decode(new(any)) == io.EOF
-}
-
-func validateACK(answer string, marker turnMarker, previous []turnMarker, profile string) error {
-	lines := strings.Split(strings.TrimSuffix(answer, "\n"), "\n")
-	if len(lines) == 0 || !strings.HasPrefix(lines[0], ackPrefix) {
-		return benchmarkError("ack_missing")
-	}
-	var ack mockACK
-	if !strictJSON(strings.TrimPrefix(lines[0], ackPrefix), &ack) || ack.turnMarker != marker || !reflect.DeepEqual(ack.Previous, previous) {
-		return benchmarkError("ack_context_mismatch")
-	}
-	want := 1
-	if profile == "streaming" {
-		want = 100
-	}
-	if len(lines) != want {
-		return benchmarkError("ack_fragment_mismatch")
-	}
-	for i := 1; i < len(lines); i++ {
-		if lines[i] != "MOCK_BENCH_FRAGMENT_V1 "+strconv.Itoa(i+1)+"/100" {
-			return benchmarkError("ack_fragment_mismatch")
-		}
-	}
-	return nil
+// Keep only digests for post-run history checks; never export answer content.
+type completedTurn struct {
+	Input, Answer [32]byte
 }
 
 // Retain bounded text only until verification; no field below is serialized.
@@ -113,24 +74,24 @@ func (o *answerObserver) decode(data []byte) (streamEvent, error) {
 	}
 	return event, nil
 }
-func (o *answerObserver) verify(marker turnMarker, previous []turnMarker, profile string) error {
+func (o *answerObserver) verify() error {
 	if o.err != nil {
 		return o.err
 	}
 	if o.finals != 1 {
-		return benchmarkError("ack_terminal_count")
+		return benchmarkError("answer_terminal_count")
 	}
 	answer := o.final
 	if answer == "" {
 		answer = o.deltas.String()
 	}
 	if answer == "" {
-		return benchmarkError("ack_missing")
+		return benchmarkError("answer_missing")
 	}
 	if o.deltas.Len() > 0 && o.final != "" && o.deltas.String() != o.final {
-		return benchmarkError("ack_stream_final_mismatch")
+		return benchmarkError("answer_stream_final_mismatch")
 	}
-	return validateACK(answer, marker, previous, profile)
+	return nil
 }
 
 type historyMessage struct {
@@ -145,8 +106,8 @@ type historyMessage struct {
 	} `json:"parts"`
 }
 
-func verifyHistory(data []json.RawMessage, session string, markers []turnMarker, profile string) error {
-	if len(markers) == 0 {
+func verifyHistory(data []json.RawMessage, session string, turns []completedTurn) error {
+	if len(turns) == 0 {
 		return benchmarkError("history_no_completed_turns")
 	}
 	user, assistant, rank := 0, 0, -1
@@ -168,35 +129,25 @@ func verifyHistory(data []json.RawMessage, session string, markers []turnMarker,
 		}
 		switch {
 		case message.Role == "user":
-			if user != assistant || user >= len(markers) || message.ExchangeID == "" {
+			if user != assistant || user >= len(turns) || message.ExchangeID == "" {
 				return benchmarkError("history_turn_mismatch")
 			}
-			var found []turnMarker
-			for _, line := range strings.Split(text.String(), "\n") {
-				if strings.HasPrefix(line, markerPrefix) {
-					var marker turnMarker
-					if !strictJSON(strings.TrimPrefix(line, markerPrefix), &marker) {
-						return benchmarkError("history_marker_invalid")
-					}
-					found = append(found, marker)
-				}
-			}
-			if len(found) != 1 || found[0] != markers[user] {
-				return benchmarkError("history_context_mismatch")
+			if sha256.Sum256([]byte(text.String())) != turns[user].Input {
+				return benchmarkError("history_input_mismatch")
 			}
 			exchange = message.ExchangeID
 			user++
 		case message.Role == "assistant" && message.Channel == "final":
-			if user != assistant+1 || message.ExchangeID != exchange || assistant >= len(markers) {
+			if user != assistant+1 || message.ExchangeID != exchange || assistant >= len(turns) {
 				return benchmarkError("history_turn_mismatch")
 			}
-			if err := validateACK(text.String(), markers[assistant], markers[:assistant], profile); err != nil {
-				return benchmarkError("history_ack_mismatch")
+			if sha256.Sum256([]byte(text.String())) != turns[assistant].Answer {
+				return benchmarkError("history_answer_mismatch")
 			}
 			assistant++
 		}
 	}
-	if user != len(markers) || assistant != len(markers) {
+	if user != len(turns) || assistant != len(turns) {
 		return benchmarkError("history_missing_turns")
 	}
 	return nil
