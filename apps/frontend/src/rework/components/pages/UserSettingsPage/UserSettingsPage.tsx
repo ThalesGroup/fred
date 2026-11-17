@@ -180,6 +180,76 @@ export default function UserSettingsPage() {
             deleting={isDeletingPicture}
           />
         </section>
+        <section className={styles.userSettingsCard}>
+          <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.interfaceTitle")}</h2>
+          <div className={styles.userSettingsCardRow}>
+            {/* Nothing to choose when the platform offers a single theme. */}
+            {offeredUiThemes.length > 1 && (
+              <div className={styles.userSettingsThemeSelect}>
+                <Select<UiTheme>
+                  size="xs"
+                  compact
+                  options={offeredUiThemes.map((theme) => ({
+                    key: theme,
+                    value: theme,
+                    label: uiThemeLabel(theme, t),
+                  }))}
+                  value={uiTheme}
+                  onChange={(theme) => setUiTheme(theme, notifyPreferenceError)}
+                  ariaLabel={t("rework.userSettings.app.uiThemeAria")}
+                />
+              </div>
+            )}
+            <ButtonGroup
+              variant="radio"
+              aria-label={t("rework.userSettings.app.themeAria")}
+              selectedIndex={themeMode === "light" ? 0 : themeMode === "dark" ? 1 : 2}
+              items={[
+                {
+                  label: t("rework.userSettings.app.light"),
+                  icon: { category: "outlined", type: "light_mode" },
+                  onClick: () => setThemeMode("light", notifyPreferenceError),
+                },
+                {
+                  label: t("rework.userSettings.app.dark"),
+                  icon: { category: "outlined", type: "dark_mode" },
+                  onClick: () => setThemeMode("dark", notifyPreferenceError),
+                },
+                {
+                  label: t("rework.userSettings.app.system"),
+                  icon: { category: "outlined", type: "desktop_windows" },
+                  onClick: () => setThemeMode("system", notifyPreferenceError),
+                },
+              ]}
+              size={"small"}
+              color={"secondary"}
+              surface="surface-container-lowest"
+            ></ButtonGroup>
+          </div>
+        </section>
+        <section className={styles.userSettingsCard}>
+          <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.languageTitle")}</h2>
+          <div className={styles.userSettingsCardRow}>
+            <ButtonGroup
+              variant="radio"
+              aria-label={t("rework.userSettings.app.languageAria")}
+              selectedIndex={i18n.language === "fr" ? 0 : 1}
+              items={[
+                {
+                  label: t("rework.userSettings.app.french"),
+                  onClick: () => changeLanguage("fr"),
+                },
+                {
+                  label: t("rework.userSettings.app.english"),
+                  onClick: () => changeLanguage("en"),
+                },
+              ]}
+              size={"small"}
+              color={"secondary"}
+              surface="surface-container-lowest"
+            ></ButtonGroup>
+          </div>
+        </section>
         <section className={styles.userSettingsCard} aria-labelledby="profile-access-title">
           <h2 id="profile-access-title" className={styles.userSettingsCardTitle}>
             {t("rework.userSettings.accessTitle")}
@@ -243,72 +313,6 @@ export default function UserSettingsPage() {
               <div className={styles.userSettingsIdentityRole}>{t("rework.userSettings.noSpaces")}</div>
             ))}
         </section>
-        <section className={styles.userSettingsCard}>
-          <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.interfaceTitle")}</h2>
-          <div className={styles.userSettingsCardRow}>
-            {/* Nothing to choose when the platform offers a single theme. */}
-            {offeredUiThemes.length > 1 && (
-              <div className={styles.userSettingsThemeSelect}>
-                <Select<UiTheme>
-                  size="xs"
-                  compact
-                  options={offeredUiThemes.map((theme) => ({
-                    key: theme,
-                    value: theme,
-                    label: uiThemeLabel(theme, t),
-                  }))}
-                  value={uiTheme}
-                  onChange={(theme) => setUiTheme(theme, notifyPreferenceError)}
-                  ariaLabel={t("rework.userSettings.app.uiThemeAria")}
-                />
-              </div>
-            )}
-            <ButtonGroup
-              variant="radio"
-              aria-label={t("rework.userSettings.app.themeAria")}
-              selectedIndex={themeMode === "light" ? 0 : themeMode === "dark" ? 1 : 2}
-              items={[
-                {
-                  label: t("rework.userSettings.app.light"),
-                  icon: { category: "outlined", type: "light_mode" },
-                  onClick: () => setThemeMode("light", notifyPreferenceError),
-                },
-                {
-                  label: t("rework.userSettings.app.dark"),
-                  icon: { category: "outlined", type: "dark_mode" },
-                  onClick: () => setThemeMode("dark", notifyPreferenceError),
-                },
-                {
-                  label: t("rework.userSettings.app.system"),
-                  icon: { category: "outlined", type: "desktop_windows" },
-                  onClick: () => setThemeMode("system", notifyPreferenceError),
-                },
-              ]}
-              size={"small"}
-              color={"secondary"}
-              surface="surface-container-lowest"
-            ></ButtonGroup>
-          </div>
-        </section>
-        <div className={styles.userSettingsApplication}>
-          <ButtonGroup
-            variant="radio"
-            aria-label={t("rework.userSettings.app.languageAria")}
-            selectedIndex={i18n.language === "fr" ? 0 : 1}
-            items={[
-              {
-                label: t("rework.userSettings.app.french"),
-                onClick: () => changeLanguage("fr"),
-              },
-              {
-                label: t("rework.userSettings.app.english"),
-                onClick: () => changeLanguage("en"),
-              },
-            ]}
-            size={"small"}
-            color={"secondary"}
-          ></ButtonGroup>
-        </div>
         <div className={styles.userSettingsLegals}>
           <Link to={"/gdpr"}>
             <Button color={"primary"} variant={"text"} size={"medium"}>

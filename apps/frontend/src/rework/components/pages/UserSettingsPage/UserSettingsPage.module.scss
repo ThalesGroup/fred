@@ -89,13 +89,6 @@
   font: var(--font-body-medium);
 }
 
-.userSettingsApplication {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--spacing-s);
-}
-
 /* Settings card: a titled group of related controls. */
 .userSettingsCard {
   display: flex;

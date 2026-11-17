@@ -133,19 +133,35 @@ it("waits for current authorization and sends content users to agents", async ()
   await render(true);
   expect(container.textContent).toContain("navigate:/team/pilote/agents");
 });
-it("loads eligible parent users only on explicit request", async () => {
-  await render();
-  expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
-  const button = Array.from(container.querySelectorAll("button")).find((b) =>
+const addButton = () =>
+  Array.from(container.querySelectorAll("button")).find((b) =>
     b.textContent?.includes("rework.teamSettings.members.addMembersDialog.buttonLabel"),
-  )!;
-  await act(async () => button.click());
-  expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  );
+it("opens the add dialog over an unchanged roster and gives focus back on close", async () => {
+  await render();
+  expect(h.candidates).not.toHaveBeenCalled();
+  addButton()!.focus();
+  await act(async () => addButton()!.click());
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("rework.spaceMembers.add.eligibility.team");
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(roleButton("bob", "editor")).toBeTruthy();
+  expect(addButton()).toBeTruthy();
+  expect(container.textContent).not.toContain("rework.spaceMembers.roster");
+  expect(h.roster).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  const cancel = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "common.cancel")!;
+  await act(async () => cancel.click());
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(addButton());
   expect(h.grant).not.toHaveBeenCalled();
+});
+it("offers no add dialog where the server lists no eligible people", async () => {
+  h.kind = "organization";
+  await render();
+  expect(addButton()).toBeUndefined();
 });
 
 it.each([
-  ["organization", "resources"],
   ["team", "agents"],
   ["project", "agents"],
   ["personal", "agents"],
@@ -170,14 +186,25 @@ it("waits for the organization kind and never falls through to agents after a fa
   expect(container.textContent).toBe("rework.manager.unavailable");
 });
 
-it("preserves management-only and forbidden organization landings", async () => {
+it("sends every organization landing to Home, its panel, whatever the access", async () => {
   h.kind = "organization";
   await render(true);
-  expect(container.textContent).toBe("navigate:/team/pilote/settings/members");
+  expect(container.textContent).toBe("navigate:/home");
   h.manage = false;
+  h.read = true;
+  await render(true);
+  expect(container.textContent).toBe("navigate:/home");
+  h.read = false;
+  await render(true);
+  expect(container.textContent).toBe("navigate:/home");
+  expect(h.grant).not.toHaveBeenCalled();
+});
+
+it("keeps a forbidden landing when the space is not listed", async () => {
+  h.manage = false;
+  h.spacesError = true;
   await render(true);
   expect(container.textContent).toBe("rework.spaceMembers.forbidden");
-  expect(h.grant).not.toHaveBeenCalled();
 });
 
 it("lets a reader view explicit roles and leave without granting management", async () => {
@@ -219,4 +246,23 @@ it("submits a scoped search and resets pagination", async () => {
     container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
   expect(h.roster).toHaveBeenLastCalledWith({ id: "pilote", after: undefined, search: "Bob" }, expect.anything());
+});
+it("keeps the header lean: no search button, no tooltip on more, a plain info icon", async () => {
+  await render();
+  expect(container.querySelector('button[type="submit"]')).toBeNull();
+  const more = container.querySelector<HTMLElement>('[aria-label="rework.teamSettings.members.moreActions"]')!;
+  expect(more.tagName).toBe("BUTTON");
+  expect(more.closest("[tabindex='0']")).toBeNull();
+  // The info icon is not a button; its tooltip trigger stays reachable by keyboard.
+  const info = container.querySelector<HTMLElement>(".material-symbols-outlined")!.closest<HTMLElement>("[tabindex]")!;
+  expect(info.textContent).toBe("info");
+  expect(info.closest("button")).toBeNull();
+  expect(container.querySelector("input")!.closest('[data-size="xs"]')).toBeTruthy();
+});
+
+it("tells an organization's admins that its members are not managed here yet", async () => {
+  h.kind = "organization";
+  await render();
+  expect(container.textContent).toContain("rework.spaceMembers.organizationUnavailable");
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });
