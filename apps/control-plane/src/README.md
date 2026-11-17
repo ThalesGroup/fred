@@ -67,3 +67,8 @@ shared offer governance in [agents](agents.rs), and `admin/McpConnectionsPage` i
 Targeted fixtures are `src/mcp_connections/tests.rs`, `tests/support/managed_mcp.rs`
 and `libs/fred-runtime/tests/test_managed_mcp.py`. See the
 [operating procedure](../README.md#managed-mcp-connections-reception-pending) before reception.
+
+Hosted application registration and routing live in [applications](applications/mod.rs):
+SQL identity/destinations, shared offer governance, credential-free static UI and
+user-authenticated API proxy. The root proxy routes are separate from the generated
+JSON API; see [operations](../README.md#hosted-applications-reception-pending).

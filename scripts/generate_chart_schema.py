@@ -686,11 +686,10 @@ _GLOBAL = _obj(
 
 
 def _registrations() -> dict:
-    """Reserved until application and KB publisher registration is ported to Rust."""
+    """Retired maps: templates reject them with explicit operator guidance."""
     unsupported = {
         "type": "object",
-        "maxProperties": 0,
-        "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211).",
+        "description": "Legacy values are rejected by the template; applications use Control Plane SQL, and Knowledge Base publishers remain unsupported.",
     }
     return _obj(
         {

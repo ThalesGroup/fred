@@ -16,15 +16,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
-  enabled: false,
   query: vi.fn((_args: unknown, _options: unknown) => ({ refetch: vi.fn() })),
 }));
 
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: h.enabled, isLoading: false }),
-}));
-vi.mock("../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
-  useTeamApplicationsQuery: (args: unknown, options: unknown) => h.query(args, options),
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useSpaceApplicationsQuery: (args: unknown, options: unknown) => h.query(args, options),
 }));
 
 import { CROSS_SESSION_REFRESH_INTERVAL_MS } from "@hooks/crossSessionRefresh.ts";
@@ -41,14 +37,13 @@ function render(skip = false) {
 
 describe("useTeamApplications", () => {
   beforeEach(() => {
-    h.enabled = false;
     h.query.mockClear();
   });
 
-  it("suppresses the catalog subscription and polling while applications are disabled", () => {
-    render();
+  it("suppresses the catalog subscription and polling when explicitly skipped", () => {
+    render(true);
     expect(h.query).toHaveBeenCalledWith(
-      { teamId: "team-1" },
+      { spaceId: "team-1" },
       {
         skip: true,
         pollingInterval: 0,
@@ -57,11 +52,10 @@ describe("useTeamApplications", () => {
     );
   });
 
-  it("keeps the bounded refresh behavior when applications are enabled", () => {
-    h.enabled = true;
+  it("keeps the bounded refresh behavior without deployment configuration", () => {
     render();
     expect(h.query).toHaveBeenCalledWith(
-      { teamId: "team-1" },
+      { spaceId: "team-1" },
       {
         skip: false,
         pollingInterval: CROSS_SESSION_REFRESH_INTERVAL_MS,
@@ -70,8 +64,7 @@ describe("useTeamApplications", () => {
     );
   });
 
-  it("preserves an explicit caller skip when the feature is enabled", () => {
-    h.enabled = true;
+  it("preserves an explicit caller skip for unavailable spaces", () => {
     render(true);
     const lastCall = h.query.mock.calls[h.query.mock.calls.length - 1];
     expect(lastCall?.[1]).toMatchObject({ skip: true, pollingInterval: 0 });

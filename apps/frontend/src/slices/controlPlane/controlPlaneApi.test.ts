@@ -802,3 +802,38 @@ it("never replays team link creation after an uncertain unauthorized response", 
   expect(fetch).toHaveBeenCalledTimes(1);
   store.dispatch(api.util.resetApiState());
 });
+
+it.each(["organization", "space"] as const)(
+  "refreshes an open application catalog after %s authorization changes",
+  async (scope) => {
+    const { store, fetch } = setup([]);
+    await store.dispatch(api.endpoints.spaceApplications.initiate({ spaceId: "team-a" })).unwrap();
+    const catalogUrl = "http://localhost/control-plane/v1/spaces/team-a/applications";
+    expect(fetch.mock.calls[0][0].url).toBe(catalogUrl);
+    if (scope === "organization") {
+      await store
+        .dispatch(
+          api.endpoints.setOrganizationCapabilityDefault.initiate({
+            organizationId: "org",
+            sourceId: "$applications",
+            capabilityId: "application:uuid",
+            setDefaultOnRequest: { default_on: false },
+          }),
+        )
+        .unwrap();
+    } else {
+      await store
+        .dispatch(
+          api.endpoints.replaceSpaceCapabilityPolicy.initiate({
+            spaceId: "team-a",
+            sourceId: "$applications",
+            replaceSpaceCapabilityPolicy: { expected_revision: 2, restricted: true, permitted_ids: [] },
+          }),
+        )
+        .unwrap();
+    }
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+    expect(fetch.mock.calls.filter(([request]) => request.url === catalogUrl)).toHaveLength(2);
+    store.dispatch(api.util.resetApiState());
+  },
+);

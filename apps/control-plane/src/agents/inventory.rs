@@ -34,6 +34,7 @@ use crate::{
 pub enum PodCapabilityKind {
     #[default]
     Tool,
+    Application,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -96,6 +97,10 @@ pub struct PodCapabilityDescriptor {
     pub public_version: Option<String>,
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub name_by_lang: BTreeMap<String, String>,
+    #[serde(default)]
+    pub description_by_lang: BTreeMap<String, String>,
     pub icon: String,
     #[serde(default)]
     pub kind: PodCapabilityKind,
@@ -128,7 +133,8 @@ impl PodInventory {
         ensure!(self.complete, "incomplete inventory");
         for entry in &self.capabilities {
             ensure!(
-                !entry.id.starts_with("skill:"),
+                !entry.id.starts_with("skill:")
+                    && !matches!(entry.kind, PodCapabilityKind::Application),
                 "reserved instruction offer"
             );
             ensure!(
@@ -220,6 +226,7 @@ pub struct AffectedAgentInstance {
 pub enum OfferOrigin {
     Pod,
     ManagedMcp,
+    Application,
 }
 
 impl From<&SelectingInstance> for AffectedAgentInstance {
@@ -371,48 +378,51 @@ pub(super) async fn read_inventory(
                 .collect(),
         });
     }
-    let mut central = CapabilityInventory {
-        source_id: crate::mcp_connections::SOURCE_ID.into(),
-        origin: OfferOrigin::ManagedMcp,
-        runtime_id: None,
-        enabled: true,
-        observation: CatalogObservationState::Observed,
-        checked_at: None,
-        observed_at: None,
-        capabilities: Vec::new(),
-        template_capabilities: Vec::new(),
-    };
-    for offer in
-        catalog::capabilities(&mut *tx, crate::mcp_connections::SOURCE_ID, organization_id).await?
-    {
-        central.capabilities.push(CapabilityInventoryOffer {
-            source_id: offer.source_id.clone(),
-            origin: OfferOrigin::ManagedMcp,
+    for (source_id, origin) in [
+        (crate::mcp_connections::SOURCE_ID, OfferOrigin::ManagedMcp),
+        (crate::applications::SOURCE_ID, OfferOrigin::Application),
+    ] {
+        let mut central = CapabilityInventory {
+            source_id: source_id.into(),
+            origin,
             runtime_id: None,
-            route_base_url: None,
-            default_on: policy.default_on(&offer.source_id, &offer.capability_id),
-            unusable_instances: instances
-                .iter()
-                .filter(|instance| {
-                    instance.selected.contains(&offer.capability_id)
-                        && (!offer.advertised
-                            || !enablement::usable(
-                                &policy,
-                                &instance.space,
-                                &offer.source_id,
-                                &offer.capability_id,
-                            ))
-                })
-                .map(AffectedAgentInstance::from)
-                .collect(),
-            capability_id: offer.capability_id,
-            version: offer.version,
-            advertised: offer.advertised,
-            descriptor: serde_json::from_value(offer.descriptor.0)
-                .context("invalid stored offer description")?,
-        });
+            enabled: true,
+            observation: CatalogObservationState::Observed,
+            checked_at: None,
+            observed_at: None,
+            capabilities: Vec::new(),
+            template_capabilities: Vec::new(),
+        };
+        for offer in catalog::capabilities(&mut *tx, source_id, organization_id).await? {
+            central.capabilities.push(CapabilityInventoryOffer {
+                source_id: offer.source_id.clone(),
+                origin,
+                runtime_id: None,
+                route_base_url: None,
+                default_on: policy.default_on(&offer.source_id, &offer.capability_id),
+                unusable_instances: instances
+                    .iter()
+                    .filter(|instance| {
+                        instance.selected.contains(&offer.capability_id)
+                            && (!offer.advertised
+                                || !enablement::usable(
+                                    &policy,
+                                    &instance.space,
+                                    &offer.source_id,
+                                    &offer.capability_id,
+                                ))
+                    })
+                    .map(AffectedAgentInstance::from)
+                    .collect(),
+                capability_id: offer.capability_id,
+                version: offer.version,
+                advertised: offer.advertised,
+                descriptor: serde_json::from_value(offer.descriptor.0)
+                    .context("invalid stored offer description")?,
+            });
+        }
+        items.push(central);
     }
-    items.push(central);
     tx.commit().await?;
     let unusable = items
         .iter_mut()
@@ -423,7 +433,9 @@ pub(super) async fn read_inventory(
 }
 
 pub(super) fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
-    if runtime_id == crate::mcp_connections::SOURCE_ID {
+    if runtime_id == crate::mcp_connections::SOURCE_ID
+        || runtime_id == crate::applications::SOURCE_ID
+    {
         return Ok(());
     }
     if s.agent_catalog

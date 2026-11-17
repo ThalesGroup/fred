@@ -9,10 +9,31 @@ with `make -C apps/control-plane generate-openapi` (`apps/control-plane/openapi.
 the [generated TypeScript client](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
 provides a versioned view. Regenerate this inventory with `make -C docs/architecture generate-models`.
 
+## Root application transport
+
+The [application proxy](../../apps/control-plane/src/applications/proxy.rs) mounts
+outside `/control-plane/v1` and the generated OpenAPI inventory. These are
+implementation references, not evidence of deployed application acceptance.
+
+| Root path | Boundary |
+| --- | --- |
+| `/apps/{logical_name}/...` | Enabled application's static GET/HEAD assets; no authentication required, no bearer or cookies forwarded. |
+| `/app-services/{logical_name}/teams/{space_uuid}/...` | Authenticated person, current entry permission and capability policy; forwards the verified bearer to the registered API with the same space path. |
+
+Redirects and ambiguous paths are rejected. Request bodies are bounded to 16 MiB
+and 60 seconds; responses stream up to 64 MiB within the 180-second upstream
+deadline. Admission completes before the network call; no SQL transaction spans
+upstream work. The service still enforces its own business and resource rights.
+
+## Generated business API inventory
+
+The application registry operations below describe registration and catalogue
+contracts; they do not establish acceptance of a service's business workflows.
+
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/platform`](#platform-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
@@ -167,6 +188,14 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
 
+## /platform routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/platform/applications` | `platform_applications` | Required |
+| POST | `/platform/applications` | `create_application` | Required |
+| PUT | `/platform/applications/{application_id}` | `update_application` | Required |
+
 ## /powerpoint-uploads routes
 
 | Method | Path | Operation | Authentication |
@@ -224,6 +253,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
+| GET | `/spaces/{space_id}/applications` | `space_applications` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{source_id}` | `replace_space_capability_policy` | Required |
 | GET | `/spaces/{space_id}/marketplace-installations/{installation_id}` | `marketplace_installation` | Required |

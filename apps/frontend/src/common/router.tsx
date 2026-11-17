@@ -43,6 +43,7 @@ import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import PlatformApplicationsPage from "@components/pages/admin/ApplicationsPage/PlatformApplicationsPage.tsx";
 import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -50,7 +51,6 @@ import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
-import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
 import { adminIndexPath } from "@core/guards/organizationOwnerPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -207,21 +207,12 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "team/:teamId/apps",
-        element: (
-          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
-            <TeamApplicationsPage />
-          </FrontendFeatureGate>
-        ),
+        element: <TeamApplicationsPage />,
       },
       {
-        // Every deeper segment belongs to the selected build-time application.
-        // The host resolves the team catalog before touching its local loader.
+        // Resolve the authorized application before mounting its hosted UI.
         path: "team/:teamId/apps/:appId/*",
-        element: (
-          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
-            <TeamApplicationHostPage />
-          </FrontendFeatureGate>
-        ),
+        element: <TeamApplicationHostPage />,
       },
       {
         path: "team/:teamId/usage",
@@ -268,6 +259,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/organizations",
         element: <OrganizationsPage />,
       },
+      { path: "admin/applications", element: <PlatformApplicationsPage /> },
       {
         path: "admin/monitor",
         element: <MonitorPage />,

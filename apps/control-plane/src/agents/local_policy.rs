@@ -117,6 +117,11 @@ async fn space_capability_policies(
             crate::mcp_connections::SOURCE_ID.into(),
             true,
             inventory::OfferOrigin::ManagedMcp,
+        )))
+        .chain(std::iter::once((
+            crate::applications::SOURCE_ID.into(),
+            true,
+            inventory::OfferOrigin::Application,
         )));
     for (source_id, enabled, origin) in sources {
         let (revision, restricted, permitted_ids) = stored(&mut tx, id, &source_id).await?;
@@ -140,13 +145,12 @@ async fn space_capability_policies(
         result.push(SpaceCapabilityPolicy {
             source_id: source_id.clone(),
             origin,
-            runtime_id: (source_id != crate::mcp_connections::SOURCE_ID)
-                .then_some(source_id.clone()),
+            runtime_id: matches!(origin, inventory::OfferOrigin::Pod).then_some(source_id.clone()),
             revision,
             restricted,
             permitted_ids,
             source_enabled: enabled,
-            reachable: source_id == crate::mcp_connections::SOURCE_ID
+            reachable: !matches!(origin, inventory::OfferOrigin::Pod)
                 || observation.as_ref().is_some_and(|v| v.reachable),
             offers,
         });
@@ -177,6 +181,7 @@ async fn replace_space_capability_policy(
     require_local(space.kind)?;
     inventory::require_source(&s, &runtime)?;
     if runtime != crate::mcp_connections::SOURCE_ID
+        && runtime != crate::applications::SOURCE_ID
         && catalog::observation(&mut *tx, &runtime).await?.is_none()
     {
         return Err(AppError::Conflict(

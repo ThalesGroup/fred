@@ -34,8 +34,10 @@ const OBSERVATION_TONE: Record<CatalogObservationState, StatusBadgeTone> = {
 export function OrganizationCapabilities({
   organizationId,
   capabilityColumns,
+  origin = "pod",
 }: {
   organizationId: string;
+  origin?: "pod" | "application";
   capabilityColumns: DataTableColumn<CapabilityInventoryOffer>[];
 }) {
   const { t } = useTranslation();
@@ -45,7 +47,7 @@ export function OrganizationCapabilities({
     isFetching,
     isError,
   } = useOrganizationCapabilitiesQuery({ organizationId }, { refetchOnMountOrArgChange: true });
-  const pods = inventory?.filter((source) => source.origin === "pod");
+  const pods = inventory?.filter((source) => source.origin === origin);
   const [refreshInventory] = useRefreshOrganizationCapabilitiesMutation();
   const [refreshing, setRefreshing] = useState<string[]>([]);
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string | null>(null);
@@ -69,13 +71,13 @@ export function OrganizationCapabilities({
     [organizationId, refreshInventory, showError, t],
   );
   useEffect(() => {
-    if (!pods || isFetching || isError || initialRefreshStarted.current) return;
+    if (origin !== "pod" || !pods || isFetching || isError || initialRefreshStarted.current) return;
     // A fresh installation has no inventory yet; later refreshes stay manual.
     initialRefreshStarted.current = true;
     pods
       .filter((pod) => pod.enabled && pod.observation === "not_observed")
       .forEach((pod) => void refresh(pod.source_id));
-  }, [pods, isFetching, isError, refresh]);
+  }, [pods, isFetching, isError, refresh, origin]);
 
   // Resolved on every render so the selected pod follows the refetched inventory.
   const selectedPod = pods?.find((pod) => pod.source_id === selectedRuntimeId) ?? null;
@@ -138,6 +140,19 @@ export function OrganizationCapabilities({
   }
   if (!pods) {
     return isFetching ? <p className={styles.status}>{t("rework.admin.capabilities.loading")}</p> : null;
+  }
+  if (origin === "application") {
+    const applications = pods.flatMap((source) => source.capabilities);
+    return applications.length ? (
+      <DataTable
+        columns={capabilityColumns}
+        data={applications}
+        rowKey={(offer) => offer.capability_id}
+        size="medium"
+      />
+    ) : (
+      <PageEmptyState icon="widgets" message={t("rework.admin.capabilities.emptyApps")} />
+    );
   }
   if (selectedPod) {
     return (

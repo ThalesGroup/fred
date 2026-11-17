@@ -96,7 +96,8 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         ]);
     // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
     Router::new()
-        .nest(base_url, routes(state))
+        .nest(base_url, routes(state.clone()))
+        .merge(crate::applications::proxy_routes().with_state(state))
         .layer(cors)
         .layer(axum::middleware::from_fn(logging::request_logging))
 }
@@ -1218,6 +1219,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::agents::routes())
         .merge(crate::model_catalog::http::routes())
         .merge(crate::mcp_connections::routes())
+        .merge(crate::applications::routes())
         .merge(crate::capability_preparation::routes())
         .merge(crate::agent_instances::http::routes())
         .merge(crate::prompts::http::routes())

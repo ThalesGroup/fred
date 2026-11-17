@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   isPersonalTeam: false,
   language: "en",
   result: { data: undefined, isLoading: false, isError: false } as {
-    data?: { items: Array<Record<string, unknown>> };
+    data?: Array<Record<string, unknown>>;
     isLoading: boolean;
     isError: boolean;
   },
@@ -29,14 +29,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: h.language } }),
 }));
 vi.mock("react-router-dom", () => ({
+  useParams: () => ({ teamId: h.isPersonalTeam ? "personal" : "team-1" }),
   Link: ({ to, children, className }: { to: string; children: React.ReactNode; className: string }) => (
     <a href={to} className={className}>
       {children}
     </a>
   ),
-}));
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({ teamId: "team-1", isPersonalTeam: h.isPersonalTeam }),
 }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
@@ -45,12 +43,19 @@ vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
 import TeamApplicationsPage from "./TeamApplicationsPage.tsx";
 
 const application = {
-  id: "example",
+  id: "registry-uuid",
+  logical_name: "example",
+  display_name: "Example",
+  description: "Example application",
+  source_id: "$applications",
+  capability_id: "application:registry-uuid",
+  entry_permission: "read",
+  api_path: "/app-services/example/teams/team-1/",
   version: "1.0.0",
-  name: { en: "Example", fr: "Exemple" },
-  description: { en: "An example application", fr: "Une application d'exemple" },
+  display_name_by_lang: { en: "Example", fr: "Exemple" },
+  description_by_lang: { en: "An example application", fr: "Une application d'exemple" },
   icon: "extension",
-  ui_prefix: "/apps/example",
+  ui_path: "/apps/example",
 };
 
 function render() {
@@ -65,12 +70,12 @@ describe("TeamApplicationsPage", () => {
   });
 
   it("renders the generic empty state when the authorized catalog is empty", () => {
-    h.result.data = { items: [] };
+    h.result.data = [];
     expect(render()).toContain("teamAppsPage.noAppDescription");
   });
 
   it("links an authorized application under the selected team", () => {
-    h.result.data = { items: [application] };
+    h.result.data = [application];
     const html = render();
     expect(html).toContain('href="/team/team-1/apps/example"');
     expect(html).toContain("Example");
@@ -81,7 +86,7 @@ describe("TeamApplicationsPage", () => {
   // card has to resolve them against the active language, not a fixed one.
   it("renders application labels in the active locale", () => {
     h.language = "fr";
-    h.result.data = { items: [application] };
+    h.result.data = [application];
     const html = render();
     expect(html).toContain("Exemple");
     expect(html).not.toContain("Example");
@@ -89,7 +94,7 @@ describe("TeamApplicationsPage", () => {
 
   it("never offers applications in a personal space", () => {
     h.isPersonalTeam = true;
-    h.result.data = { items: [application] };
+    h.result.data = [application];
     const html = render();
     expect(html).toContain("teamAppsPage.noAppDescription");
     expect(html).not.toContain('href="/team/team-1/apps/example"');

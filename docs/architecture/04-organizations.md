@@ -31,6 +31,13 @@ aggregates, without content access or business-structure authority. The
 [roles annex](A11-roles.md) details each mandate and the organization access
 allowlist that remains unimplemented.
 
+For hosted applications, the platform Admin registers approved destinations and
+controls global availability; registrations start disabled. The organization
+Owner authorizes their business use through the existing capability policy.
+Team and project Owners can narrow that ceiling. Each person must also hold the
+application's entry permission in the selected collective space; personal spaces
+are excluded. Registration and governance confer no business-data access.
+
 ## Spaces and memberships
 
 ```mermaid

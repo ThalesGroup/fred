@@ -13,17 +13,15 @@
 // limitations under the License.
 
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@hooks/crossSessionRefresh.ts";
-import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
-import { useTeamApplicationsQuery } from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
+import { useSpaceApplicationsQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 
 /** One bounded, team-keyed subscription shared by the sidebar and app pages. */
 export function useTeamApplications(teamId: string | undefined, skip = false) {
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", skip);
-  const shouldSkip = !applicationsEnabled || skip || !teamId;
+  const shouldSkip = skip || !teamId || teamId === "personal";
   // Security-sensitive catalog: a grant revoked in another session has to
   // replace an already-open app without waiting for the next poll.
-  const result = useTeamApplicationsQuery({ teamId: teamId ?? "" }, crossSessionRefreshOptions(shouldSkip));
+  const result = useSpaceApplicationsQuery({ spaceId: teamId ?? "" }, crossSessionRefreshOptions(shouldSkip));
   useRefetchOnWindowFocus(result.refetch, shouldSkip);
 
-  return result;
+  return { ...result, data: result.currentData };
 }

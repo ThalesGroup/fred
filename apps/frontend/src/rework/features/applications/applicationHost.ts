@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ApplicationSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { SpaceApplication } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
@@ -28,7 +28,7 @@ export interface FredApplicationFrameTarget {
 }
 
 /**
- * Resolve the catalog's configured UI prefix into an iframe target. The value
+ * Resolve the catalog's public UI path into an iframe target. The value
  * is deployment configuration rather than Fred source, so it is validated
  * before it can become a src: a `javascript:` or `data:` entry would otherwise
  * run in whatever origin the frame inherits. The target origin is derived from
@@ -36,14 +36,14 @@ export interface FredApplicationFrameTarget {
  * configuration change rather than a code change.
  */
 export function applicationFrameTarget(
-  application: ApplicationSummary,
+  application: SpaceApplication,
   baseOrigin: string,
 ): FredApplicationFrameTarget | null {
-  if (!application.ui_prefix) return null;
+  if (!application.ui_path) return null;
 
   let url: URL;
   try {
-    url = new URL(application.ui_prefix, baseOrigin);
+    url = new URL(application.ui_path, baseOrigin);
   } catch {
     return null;
   }

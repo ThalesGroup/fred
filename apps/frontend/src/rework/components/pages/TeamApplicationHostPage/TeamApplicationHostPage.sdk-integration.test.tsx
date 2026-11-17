@@ -59,20 +59,25 @@ const h = vi.hoisted(() => ({
   teamName: "Team One",
   darkMode: false,
   locale: "en",
-  agents: [] as Array<{ agent_instance_id: string; status?: string }>,
+  agents: [] as Array<{ agent_instance_id: string; status?: string; suspension_reason?: string | null }>,
   result: {
-    data: {
-      items: [
-        {
-          id: "example",
-          version: "1.0.0",
-          name: { en: "Example App" },
-          description: { en: "An example" },
-          icon: "extension",
-          ui_prefix: "/apps/example-ui/",
-        },
-      ],
-    },
+    data: [
+      {
+        id: "registry-uuid",
+        logical_name: "example",
+        display_name: "Example",
+        description: "Example application",
+        source_id: "$applications",
+        capability_id: "application:registry-uuid",
+        entry_permission: "read",
+        api_path: "/app-services/example/teams/team-1/",
+        version: "1.0.0",
+        display_name_by_lang: { en: "Example App" },
+        description_by_lang: { en: "An example" },
+        icon: "extension",
+        ui_path: "/apps/example-ui/",
+      },
+    ],
     isLoading: false,
     isError: false,
   },
@@ -92,23 +97,22 @@ vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ siteDisplayName: "Acme" }),
 }));
 
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({
-    teamId: h.teamId,
-    isPersonalTeam: false,
-    selectedTeam: { id: h.teamId, name: h.teamName },
-  }),
-}));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
-    () => ({ unwrap: () => Promise.resolve([]) }),
-  ],
-  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => [
-    () => ({ unwrap: () => Promise.resolve(h.agents) }),
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useMySpacesQuery: () => ({ currentData: [{ id: h.teamId, name: h.teamName, kind: "team" }] }),
+  useLazyListSessionsQuery: () => [() => ({ unwrap: () => Promise.resolve([]) })],
+  useLazyListAgentInstancesQuery: () => [
+    () => ({
+      unwrap: () =>
+        Promise.resolve({
+          items: h.agents.map((agent) => ({
+            ...agent,
+            preparation_state: agent.suspension_reason ? "suspended" : "ready",
+          })),
+        }),
+    }),
   ],
 }));
 vi.mock("@rework/features/applications/applicationRequest.ts", () => ({
@@ -248,7 +252,7 @@ beforeEach(() => {
   h.darkMode = false;
   h.locale = "en";
   h.agents = [];
-  h.result.data.items[0].ui_prefix = "/apps/example-ui/";
+  h.result.data[0].ui_path = "/apps/example-ui/";
 });
 
 integration("actual packed SDK with the production FRED host page", () => {
@@ -325,7 +329,7 @@ integration("actual packed SDK with the production FRED host page", () => {
     [
       "frame target",
       () => {
-        h.result.data.items[0].ui_prefix = "https://replacement.example/app/";
+        h.result.data[0].ui_path = "https://replacement.example/app/";
       },
     ],
     [

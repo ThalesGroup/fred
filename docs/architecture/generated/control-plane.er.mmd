@@ -27,6 +27,7 @@ erDiagram
 "control_plane.agent_instance" }o--o| "control_plane.capability_preparation" : "preparation_id"
 "control_plane.capability_offer" }o--|| "control_plane.capability_source" : "source_id"
 "control_plane.capability_offer" |o--o| "control_plane.mcp_connection" : "connection_id"
+"control_plane.capability_offer" |o--o| "control_plane.application" : "application_id"
 "control_plane.runtime_template_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
 "control_plane.runtime_template_capability" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
@@ -89,6 +90,7 @@ erDiagram
 "control_plane.space_model_policy" }o--o| "control_plane.model_offer" : "default_source_id, default_upstream_model_id"
 "control_plane.space_model_setting" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.space_model_setting" }o--|| "control_plane.space_model_policy" : "space_id"
+"control_plane.application" }o--|| "control_plane.capability_offer" : "source_id, capability_id"
 
 "control_plane.deletion" {
   uuid id
@@ -328,6 +330,7 @@ erDiagram
   jsonb descriptor
   boolean advertised
   uuid connection_id FK
+  uuid application_id FK
 }
 "control_plane.runtime_template_capability" {
   text runtime_id FK
@@ -806,4 +809,16 @@ erDiagram
   text upstream_model_id FK
   boolean disabled
   boolean reasoning_default_on
+}
+"control_plane.application" {
+  uuid id
+  text logical_name
+  text ui_base_url
+  text api_base_url
+  text entry_permission
+  bigint revision
+  text updated_by
+  timestamp_with_time_zone updated_at
+  text source_id FK
+  text capability_id FK
 }

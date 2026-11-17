@@ -70,6 +70,7 @@ impl CatalogSnapshot {
             ensure!(
                 valid_key(&offer.capability_id)
                     && !offer.capability_id.starts_with("managed-mcp:")
+                    && !offer.capability_id.starts_with("application:")
                     && valid_key(&offer.version),
                 "invalid capability identity or version"
             );

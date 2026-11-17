@@ -17,7 +17,6 @@
 // `t` is mocked to echo its key (plus any interpolated count), so we assert on
 // which key each state uses and on the enabled-team count it renders.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,7 +29,6 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  applicationsEnabled: false,
   drawer: undefined as
     | undefined
     | { organizationId: string; runtimeId?: string; capability: { id: string; route_base_url?: string } | null },
@@ -78,9 +76,6 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
-}));
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
 
 // The offers panel has its own suite; a marker is enough to see which panel the page chose.
@@ -153,7 +148,6 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  h.applicationsEnabled = false;
   h.list = { data: undefined, isLoading: false, isError: false };
   container = document.createElement("div");
   document.body.append(container);
@@ -294,35 +288,15 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 });
 
 describe("FeaturesPage kind filter", () => {
-  it("hides the Apps filter by default", () => {
-    const html = renderToStaticMarkup(<FeaturesPage organizationId="O1" />);
-    expect(html).not.toContain("rework.admin.capabilities.kindFilter.app");
-  });
-
-  it("renders the Apps filter only when the deployment switch is enabled", () => {
-    h.applicationsEnabled = true;
-    const html = renderToStaticMarkup(<FeaturesPage organizationId="O1" />);
-    expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.model");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.knowledge_base");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.app");
-  });
-
-  it("falls back to the pod offers when the deployment switch goes off on the Apps tab", () => {
-    h.applicationsEnabled = true;
-    renderKnowledgeBases([cap({ id: "legacy_tool", kind: "tool" })]);
+  it("always exposes Applications and routes it through organization offers", () => {
+    renderKnowledgeBases([cap({ id: "legacy_app", kind: "app" })]);
     const appsTab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
       element.textContent?.endsWith("kindFilter.app"),
     );
+    expect(appsTab).toBeDefined();
     act(() => appsTab!.click());
-
-    h.applicationsEnabled = false;
-    act(() => root.render(<FeaturesPage organizationId="O1" />));
-
     expect(container.textContent).toContain("organization-offers");
-    expect(container.textContent).not.toContain("cap.legacy_tool");
-    expect(container.textContent).not.toContain("kindFilter.app");
+    expect(container.textContent).not.toContain("cap.legacy_app");
   });
 });
 
