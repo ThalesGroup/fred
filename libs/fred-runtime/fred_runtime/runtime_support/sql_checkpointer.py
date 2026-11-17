@@ -396,7 +396,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_ns = str(configurable.get("checkpoint_ns", ""))
             explicit_checkpoint_id = get_checkpoint_id(config)
 
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 row = None
                 if explicit_checkpoint_id:
                     result = await conn.execute(
@@ -428,6 +431,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     row = result.fetchone()
 
                 if row is None:
+                    record_persist_metrics(
+                        self._kpi,
+                        store="checkpoint",
+                        op="get_tuple",
+                        pool_wait_ms=pool_wait_ms,
+                        sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                    )
                     return None
 
                 checkpoint_id = str(row.checkpoint_id)
@@ -455,6 +465,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     .order_by(self.writes_table.c.task_id, self.writes_table.c.idx)
                 )
                 writes_rows = writes_result.fetchall()
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="get_tuple",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
 
             resolved_config = (
                 config
@@ -1426,14 +1443,24 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             thread_id = str(configurable["thread_id"])
             user_id = configurable.get("__fred_user_id")
             space_id = configurable.get("__fred_space_id")
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
                 await self._fence_turn_write(conn, thread_id)
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 await self._upsert_owner(
                     conn,
                     thread_id=thread_id,
                     user_id=str(user_id) if user_id is not None else None,
                     space_id=str(space_id) if space_id is not None else None,
                     last_activity_at=func.now(),
+                )
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="owner",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
         except Exception:
             self._logger.warning(

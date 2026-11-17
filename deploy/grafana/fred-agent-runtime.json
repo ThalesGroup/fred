@@ -1079,7 +1079,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, namespace, service, runtime_stage) (rate(runtime_stage_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, namespace, service, runtime_stage) (rate(runtime_stage_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",runtime_stage=~\"pod_authz|runtime_binding.*\"}[$__rate_interval])))",
           "instant": false,
           "range": true,
           "legendFormat": "{{namespace}} / {{service}} / {{runtime_stage}}",

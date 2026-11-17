@@ -89,7 +89,10 @@ from fred_core.history.history_schema import (
 )
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
-from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
+from fred_core.kpi.kpi_runtime_stage_metric import (
+    record_runtime_stage_metric,
+    runtime_stage_timer,
+)
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import (
@@ -3773,9 +3776,12 @@ def _emit_turn_completed(
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
+    history_write: tuple[float, float] | None = None,
 ) -> None:
     """
     Emit turn KPIs after the SSE stream closes.
+
+    `history_write` (start, end) becomes the turn's `history_write` stage.
 
     Two metrics are emitted:
 
@@ -3841,6 +3847,14 @@ def _emit_turn_completed(
             },
             actor=KPIActor(type="human", user_id=user_id),
         )
+
+        if history_write is not None:
+            record_runtime_stage_metric(
+                kpi_writer=kpi,
+                runtime_stage="history_write",
+                start_ts=history_write[0],
+                end_ts=history_write[1],
+            )
 
         if outcome.is_error:
             kpi.emit(
@@ -3994,6 +4008,7 @@ async def _stream(
             raise AuthorityLostError()
 
         collected: list[dict[str, Any]] = []
+        history_write: tuple[float, float] | None = None
         expander = _TurnEventExpander(definition, request)
         payloads = _iterate_runtime_event_payloads(
             definition,
@@ -4029,6 +4044,7 @@ async def _stream(
         finally:
             await complete_cleanup(payloads.aclose())
             if session_id and history_store is not None:
+                write_start = time.monotonic()
                 try:
                     await complete_cleanup(
                         _write_turn_history(
@@ -4058,6 +4074,8 @@ async def _stream(
                         mode="json"
                     )
                     collected.append(terminal)
+                finally:
+                    history_write = (write_start, time.monotonic())
 
     finally:
         if request._active_turn is not None:
@@ -4089,6 +4107,7 @@ async def _stream(
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
+        history_write=history_write,
     )
 
 
@@ -4829,6 +4848,7 @@ async def _iterate_runtime_event_payloads_inner(
       child; handed to every adapter this turn builds
     """
 
+    setup_start = time.monotonic()
     request_id = str(current_context().get("request_id") or uuid4())
     ctx = request.context or {}
     correlation_id = str(current_context().get("correlation_id") or uuid4())
@@ -5043,6 +5063,11 @@ async def _iterate_runtime_event_payloads_inner(
             runtime.bind(binding)
             await runtime.activate()
             executor = await runtime.get_executor()
+            record_runtime_stage_metric(
+                kpi_writer=services.kpi_writer,
+                runtime_stage="turn_setup",
+                start_ts=setup_start,
+            )
             # Graph agents receive their typed input schema; the agent's
             # build_turn_state() maps it to graph state before the first node runs.
             # The standard contract is a single "message" field in the input schema.
@@ -5109,6 +5134,11 @@ async def _iterate_runtime_event_payloads_inner(
             runtime.bind(binding)
             await runtime.activate()
             executor = await runtime.get_executor()
+            record_runtime_stage_metric(
+                kpi_writer=services.kpi_writer,
+                runtime_stage="turn_setup",
+                start_ts=setup_start,
+            )
             # On HITL resume, messages are ignored by the codec — the graph
             # resumes from its checkpointed interrupt via Command(resume=...).
             # ReActInput.validate_messages requires at least one (user)

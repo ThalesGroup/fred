@@ -13,15 +13,18 @@
 # limitations under the License.
 
 """
-Dedicated, closed-cardinality timer for the three TURN-01 pre-LLM stages.
+Dedicated, closed-cardinality timer for agent-turn stages outside model calls:
+admission (`pod_authz`, `runtime_binding`, `runtime_binding_internal`), then
+the run's construction before its graph starts (`turn_setup`) and the fenced
+history write that ends the turn (`history_write`).
 
 Why this is a separate mechanism from kpi_phase_metric.phase_timer:
 - `app.phase_latency_ms{phase=...}` is shared by Graph, checkpoint SQL, and
   Knowledge Flow, with a wide and still-growing value set — adding `phase` to
   PROMETHEUS_ALLOWED_LABELS would make all of that visible in Grafana at once,
-  a far bigger cardinality decision than "make TURN-01's three stages
+  a far bigger cardinality decision than "make these few stages
   distinguishable."
-- `runtime_stage` here has exactly three closed values (see RuntimeStage) and
+- `runtime_stage` here has exactly five closed values (see RuntimeStage) and
   is deliberately isolated in its own metric name (`runtime.stage_latency_ms`)
   and its own module, so a future change to the generic phase mechanism can
   never silently affect this dedicated Grafana contract, or vice versa.
@@ -37,18 +40,25 @@ from fred_core.technical_tracing import technical_span
 
 RUNTIME_STAGE_METRIC_ACTOR = KPIActor(type="system", user_id=None)
 
-RuntimeStage = Literal["pod_authz", "runtime_binding", "runtime_binding_internal"]
+RuntimeStage = Literal[
+    "pod_authz",
+    "runtime_binding",
+    "runtime_binding_internal",
+    "turn_setup",
+    "history_write",
+]
 
 
 def record_runtime_stage_metric(
     *,
-    kpi_writer: BaseKPIWriter,
+    kpi_writer: Optional[BaseKPIWriter],
     runtime_stage: RuntimeStage,
     start_ts: float,
+    end_ts: Optional[float] = None,
     trace_id: Optional[str] = None,
 ) -> None:
     """
-    Emit `runtime.stage_latency_ms` for one pre-LLM stage.
+    Emit `runtime.stage_latency_ms` for one turn stage, ending now or at `end_ts`.
 
     `trace_id`, when provided, correlates this stage across a service
     boundary (e.g. a pod's runtime-binding call and the control-plane request
@@ -56,7 +66,10 @@ def record_runtime_stage_metric(
     must never be added to PROMETHEUS_ALLOWED_LABELS (unbounded cardinality,
     a pivot vector from a wide-audience dashboard back into raw logs).
     """
-    ms = int((time.monotonic() - start_ts) * 1000)
+    if kpi_writer is None:
+        return
+    end = time.monotonic() if end_ts is None else end_ts
+    ms = int((end - start_ts) * 1000)
     dims: Dims = {"runtime_stage": runtime_stage}
     kpi_writer.emit(
         name="runtime.stage_latency_ms",
@@ -77,7 +90,7 @@ async def runtime_stage_timer(
     trace_id: Optional[str] = None,
 ):
     """
-    Context manager timing one pre-LLM stage.
+    Context manager timing one turn stage.
 
     Usage:
         async with runtime_stage_timer(kpi, "pod_authz"):

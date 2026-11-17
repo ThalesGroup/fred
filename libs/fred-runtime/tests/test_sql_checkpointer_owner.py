@@ -99,6 +99,15 @@ async def test_aput_emits_persist_sql_and_pool_wait_metrics(engine):
     for event in put_events:
         assert event["value"] >= 0.0
 
+    # The owner-index transaction and the checkpoint read are operations too,
+    # including a read that finds no checkpoint.
+    emitted.clear()
+    await cp.aget_tuple(_config("thread-A"))
+    await cp.aget_tuple(_config("thread-unknown"))
+    await _put(cp, "thread-A")
+    ops = [e["dims"]["op"] for e in emitted if e["name"] == "persist_sql_ms"]
+    assert ops == ["get_tuple", "get_tuple", "put", "owner"]
+
 
 @pytest.mark.asyncio
 async def test_aput_is_silent_without_a_kpi_writer(engine):
