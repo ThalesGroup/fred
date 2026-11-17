@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-/* A diamond by default. A theme's CSS may set, on any ancestor:
- *   --home-marker-color,
- *   --home-marker-size, --home-marker-rotate, --home-marker-radius,
- *   --home-marker-display (none hides it).
- * e.g. a dot: --home-marker-rotate: 0deg; --home-marker-radius: 50%; */
+/* Hidden by default. A theme's CSS may set, on any ancestor:
+ *   --home-marker-display: block (shows it), --home-marker-color, --home-marker-size,
+ *   --home-marker-rotate, --home-marker-radius (also shape the banner bullets).
+ * e.g. a diamond: --home-marker-rotate: 45deg; --home-marker-radius: 0; */
 .marker {
-  display: var(--home-marker-display, block);
+  display: var(--home-marker-display, none);
   flex: none;
-  transform: rotate(var(--home-marker-rotate, 45deg));
-  border-radius: var(--home-marker-radius, 0);
+  transform: rotate(var(--home-marker-rotate, 0deg));
+  border-radius: var(--home-marker-radius, 50%);
   background: var(--home-marker-color, var(--primary));
   width: var(--home-marker-size, 10px);
   height: var(--home-marker-size, 10px);

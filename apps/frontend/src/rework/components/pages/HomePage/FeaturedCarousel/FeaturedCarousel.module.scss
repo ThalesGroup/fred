@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-/* Advanced home "featured" banner. Colors default to the theme's primary and
- * can be set apart with --home-banner-*; a theme may add a decorative image
- * through `homeBannerImageFile`. */
+/* Advanced home "featured" banner: the team agents page card (AgentCard), larger.
+ * It reads the theme color tokens like the card does; a theme recolors it by
+ * redefining them on `article[aria-roledescription="slide"]`, and may add a
+ * decorative image through `homeBannerImageFile`. */
 
 .section {
   display: flex;
@@ -58,21 +59,16 @@
 
 /* Fixed height: long texts are clamped rather than resizing the page at each slide. */
 .banner {
-  /* Theme hooks, defaulting to the theme's primary colors (see the frontend README). */
-  --banner-bg: var(--home-banner-background, var(--primary));
-  --banner-fg: var(--home-banner-color, var(--on-primary));
-  --banner-accent: var(--home-banner-accent, var(--primary));
-  --banner-panel: var(--home-banner-panel-background, color-mix(in srgb, var(--primary) 70%, black));
   display: flex;
   position: relative;
   flex-wrap: wrap;
   gap: var(--spacing-l);
-  border-radius: var(--radius-l);
-  background: var(--banner-bg);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
   padding: var(--spacing-l) var(--spacing-xl);
   height: 320px;
   overflow: hidden;
-  color: var(--banner-fg);
+  color: var(--on-surface);
 }
 
 .decoration {
@@ -93,6 +89,7 @@
   min-width: 0;
 }
 
+/* AgentCard's icon, name and role, one size up. */
 .identity {
   display: flex;
   align-items: center;
@@ -105,17 +102,35 @@
   justify-content: center;
   align-items: center;
   border-radius: var(--radius-ms);
-  background: var(--banner-fg);
-  width: 3rem;
-  height: 3rem;
-  color: var(--banner-accent);
-  font-size: 1.75rem;
+  background: var(--primary-container);
+  width: 4rem;
+  height: 4rem;
+  color: var(--on-primary-container);
+  font-size: 2rem;
+}
+
+.nameBlock {
+  min-width: 0;
 }
 
 .name {
-  margin: 0 0 var(--spacing-2xs);
+  margin: 0;
+  overflow: hidden;
+  color: var(--secondary);
   font: var(--font-headline-small);
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-large);
 }
 
 .chips {
@@ -136,52 +151,24 @@
 
 .team {
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--banner-fg) 14%, transparent);
+  background: var(--surface-container-high);
   padding: 2px var(--spacing-s);
+  color: var(--on-surface-retreat);
   font: var(--font-label-medium);
-}
-
-.pitch {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  margin: 0;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  font: var(--font-title-medium);
 }
 
 .description {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  opacity: 0.88;
   margin: 0;
   -webkit-line-clamp: 4;
   overflow: hidden;
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
 
 .launch {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: var(--spacing-s);
   margin-top: auto;
-  border-radius: var(--radius-ms);
-  background: var(--banner-fg);
-  padding: var(--spacing-s) var(--spacing-l);
-  min-height: 3rem;
-  color: var(--banner-accent);
-  font: var(--font-label-large);
-  text-decoration: none;
-
-  &:hover {
-    background: color-mix(in srgb, var(--banner-fg) 88%, var(--banner-accent));
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--banner-fg);
-    outline-offset: 2px;
-  }
 }
 
 .highlights {
@@ -189,13 +176,12 @@
   position: relative;
   flex: 1 1 280px;
   flex-direction: column;
-  /* As tall as its lines, starting about level with the pitch, under the agent name. */
+  /* As tall as its lines, starting about level with the role, under the agent name. */
   align-self: flex-start;
   gap: var(--spacing-s);
   margin-top: var(--spacing-3xl);
-  border: 1px solid color-mix(in srgb, var(--banner-fg) 20%, transparent);
   border-radius: var(--radius-m);
-  background: var(--banner-panel);
+  background: var(--surface-container-high);
   padding: var(--spacing-m);
   min-height: 0;
   overflow: hidden;
@@ -213,20 +199,24 @@
     display: flex;
     align-items: flex-start;
     gap: var(--spacing-s);
+    color: var(--on-surface);
     font: var(--font-body-medium);
   }
 }
 
 .highlightsTitle {
   margin: 0;
+  color: var(--secondary);
   font: var(--font-title-small);
 }
 
+/* A dot by default; same shape variables as the section markers. */
 .bullet {
   flex: none;
-  transform: rotate(45deg);
+  transform: rotate(var(--home-marker-rotate, 0deg));
   margin: 6px 4px 0 2px;
-  background: var(--banner-fg);
+  border-radius: var(--home-marker-radius, 50%);
+  background: var(--secondary);
   width: 8px;
   height: 8px;
 }
@@ -260,13 +250,13 @@
     display: block;
     transition: width 0.2s;
     border-radius: 3px;
-    background: color-mix(in srgb, var(--banner-fg) 45%, transparent);
+    background: var(--outline-variant);
     width: 6px;
     height: 6px;
   }
 
   button[aria-current="true"] span {
-    background: var(--banner-fg);
+    background: var(--secondary);
     width: 24px;
   }
 }
@@ -279,7 +269,7 @@
   opacity: 0.85;
   padding: var(--spacing-xs) 0;
   min-height: 2.75rem;
-  color: var(--banner-fg);
+  color: var(--secondary);
   font: var(--font-label-large);
   text-decoration: none;
 

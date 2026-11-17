@@ -20,6 +20,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type { FeaturedHomeAgent } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import AgentChatButton from "@shared/organisms/AgentCard/AgentChatButton.tsx";
 import SectionMarker from "../SectionMarker/SectionMarker.tsx";
 import styles from "./FeaturedCarousel.module.scss";
 
@@ -119,24 +120,24 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
             <span className={styles.icon}>
               <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
             </span>
-            <div>
+            <div className={styles.nameBlock}>
               <h3 className={styles.name}>{agent.display_name}</h3>
-              <div className={styles.chips}>
-                {current.badge && <span className={styles.badge}>{current.badge}</span>}
-                {team && <span className={styles.team}>{t("rework.home.advanced.proposedBy", { team })}</span>}
-              </div>
+              <p className={styles.role}>{agent.role}</p>
             </div>
           </div>
-          <p className={styles.pitch}>{agent.role}</p>
-          {agent.description && <p className={styles.description}>{agent.description}</p>}
-          <Link
-            to={`/team/${agent.team_id}/managed-chat/${agent.agent_instance_id}`}
-            className={styles.launch}
-            aria-label={t("rework.home.advanced.chatWith", { name: agent.display_name })}
-          >
-            <Icon category="outlined" type="chat_bubble" />
-            {t("rework.home.advanced.chatWithAgent")}
-          </Link>
+          {(current.badge || team) && (
+            <div className={styles.chips}>
+              {current.badge && <span className={styles.badge}>{current.badge}</span>}
+              {team && <span className={styles.team}>{t("rework.home.advanced.proposedBy", { team })}</span>}
+            </div>
+          )}
+          <p className={styles.description}>{agent.description || t("rework.agentCard.noDescription")}</p>
+          <div className={styles.launch}>
+            <AgentChatButton
+              to={`/team/${agent.team_id}/managed-chat/${agent.agent_instance_id}`}
+              aria-label={t("rework.home.advanced.chatWith", { name: agent.display_name })}
+            />
+          </div>
         </div>
         {(current.highlights?.length ?? 0) > 0 && (
           <div className={styles.highlights}>

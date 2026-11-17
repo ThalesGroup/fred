@@ -3144,7 +3144,6 @@
         "slideLabel": "{{position}} of {{count}}: {{name}}",
         "show": "Show {{name}}",
         "proposedBy": "Offered by {{team}}",
-        "chatWithAgent": "Chat with the agent",
         "chat": "Chat",
         "chatWith": "Chat with {{name}}",
         "highlightsTitle": "What it does for you",
