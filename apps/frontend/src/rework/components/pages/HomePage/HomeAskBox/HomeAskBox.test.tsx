@@ -19,7 +19,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
+}));
 vi.mock("@shared/atoms/Icon/Icon.tsx", () => ({ default: () => null }));
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentIconName: "person" }),
@@ -88,5 +90,19 @@ describe("HomeAskBox", () => {
     type("Ligne");
     act(() => field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true })));
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("blocks a question over the agent pod limit, like the chat composer", () => {
+    act(() => root.render(<HomeAskBox agent={agent} maxChars={5} />));
+    type("  Bonjour  ");
+    expect(sendButton().disabled).toBe(true);
+    expect(field().getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).toContain("chatbot.errors.chatInputTooLong");
+    act(() => field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(navigate).not.toHaveBeenCalled();
+
+    // The count is on the trimmed question that is sent.
+    type("  Salut  ");
+    expect(sendButton().disabled).toBe(false);
   });
 });

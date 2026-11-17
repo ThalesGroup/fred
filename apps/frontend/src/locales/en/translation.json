@@ -3151,7 +3151,6 @@
         "askTitle": "A question? Ask the agent: {{name}}",
         "askPlaceholder": "Ask {{name}} anything…",
         "askLabel": "Your question to {{name}}",
-        "askSend": "Send",
         "askHint": "Your question opens a new conversation with {{name}}, who answers it right away."
       }
     },

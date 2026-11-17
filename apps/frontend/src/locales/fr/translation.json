@@ -3151,7 +3151,6 @@
         "askTitle": "Une question ? Demandez à l'agent : {{name}}",
         "askPlaceholder": "Posez votre question à {{name}}…",
         "askLabel": "Votre question à {{name}}",
-        "askSend": "Envoyer",
         "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },

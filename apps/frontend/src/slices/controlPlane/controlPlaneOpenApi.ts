@@ -5582,6 +5582,8 @@ export type HomeShowcaseResponse = {
   layout?: "classic" | "advanced";
   featured?: FeaturedHomeAgent[];
   ask_agent?: ManagedAgentInstanceSummary | null;
+  /** Chat message limit of the question agent's runtime pod; null when unpublished or not read in time (the chat still enforces it). */
+  ask_max_chat_input_chars?: number | null;
 };
 export type InactiveSessionItem = {
   session_id: string;

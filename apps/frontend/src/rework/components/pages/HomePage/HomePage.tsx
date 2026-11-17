@@ -104,7 +104,12 @@ export default function HomePage() {
         {tabIndex === 0 && homeLoading && <div className={styles.quickAccessTab} aria-busy="true" />}
 
         {tabIndex === 0 && advanced && (
-          <AdvancedQuickAccess featured={home?.featured ?? []} askAgent={home?.ask_agent} firstName={firstName} />
+          <AdvancedQuickAccess
+            featured={home?.featured ?? []}
+            askAgent={home?.ask_agent}
+            askMaxChars={home?.ask_max_chat_input_chars}
+            firstName={firstName}
+          />
         )}
 
         {tabIndex === 0 && !homeLoading && !advanced && (

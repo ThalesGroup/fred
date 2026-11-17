@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
@@ -36,6 +37,7 @@ from control_plane_backend.platform_ui_settings.store import (
     PlatformUiSettingsStore,
     StoredFeaturedAgent,
 )
+from control_plane_backend.product import home_agents
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.home_agents import get_home_showcase
 from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
@@ -111,7 +113,11 @@ def _deps(engine: AsyncEngine, rebac: _Rebac) -> ProductServiceDependencies:
             ),
         ),
     )
+    runtime = SimpleNamespace(runtime_id="rt", enabled=True, base_url="http://rt")
     fake = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(runtime_catalog_sources=[runtime])
+        ),
         team_dependencies=teams,
         get_platform_ui_settings_store=lambda: ui_store,
         get_agent_instance_store=lambda: agent_store,
@@ -121,6 +127,14 @@ def _deps(engine: AsyncEngine, rebac: _Rebac) -> ProductServiceDependencies:
 
 def _user() -> KeycloakUser:
     return KeycloakUser(uid="u", username="u", roles=[], email=None)
+
+
+@pytest.fixture(autouse=True)
+def pod_limit(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """The pod read behind the question field limit; offline in every test."""
+    read = AsyncMock(return_value=([], 4000))
+    monkeypatch.setattr(home_agents, "_runtime_execution_metadata_for_source", read)
+    return read
 
 
 @pytest_asyncio.fixture
@@ -375,3 +389,35 @@ async def test_user_gets_the_question_agent_only_when_usable(
             _user(), _deps(engine, _Rebac(usable=[DEFAULT_TEAM, OTHER_TEAM]))
         )
         assert shown.ask_agent is None
+
+
+@pytest.mark.asyncio
+async def test_question_limit_comes_from_the_agent_pod_and_never_blocks(
+    engine: AsyncEngine, pod_limit: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await PlatformUiSettingsStore(engine).set_home(
+        layout="advanced", featured=[], ask_agent_instance_id="b", updated_by="x"
+    )
+    deps = _deps(engine, _Rebac(usable=[DEFAULT_TEAM]))
+    assert (await get_home_showcase(_user(), deps)).ask_max_chat_input_chars == 4000
+    pod_limit.assert_awaited_once_with("http://rt")
+
+    async def slow(_base_url: str) -> tuple[list, int]:
+        await asyncio.sleep(1)
+        return [], 4000
+
+    monkeypatch.setattr(home_agents, "_runtime_execution_metadata_for_source", slow)
+    monkeypatch.setattr(home_agents, "ASK_LIMIT_TIMEOUT_SECONDS", 0.01)
+    late = await get_home_showcase(_user(), deps)
+    assert late.ask_agent is not None and late.ask_max_chat_input_chars is None
+
+    # No question agent usable by the caller: no pod read at all.
+    pod_limit.reset_mock()
+    monkeypatch.setattr(
+        home_agents, "_runtime_execution_metadata_for_source", pod_limit
+    )
+    outsider = await get_home_showcase(
+        _user(), _deps(engine, _Rebac(usable=[OTHER_TEAM]))
+    )
+    assert outsider.ask_max_chat_input_chars is None
+    pod_limit.assert_not_awaited()

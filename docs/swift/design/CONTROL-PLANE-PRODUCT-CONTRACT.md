@@ -5314,7 +5314,11 @@ Each PUT emits audit event `platform.home.updated`.
 `GET /control-plane/v1/me/home` returns `HomeShowcaseResponse`: the layout and,
 in order, the featured agents the caller can chat with (enabled, unsuspended,
 in a default team where the caller has `CAN_USE_TEAM_AGENTS`) and `ask_agent`
-under the same rule (absent hides the question field). `classic` skips
+under the same rule (absent hides the question field), with
+`ask_max_chat_input_chars`: the `app.max_chat_input_chars` the agent's runtime
+pod publishes, read like an execution preparation (one runtime template request
+per advanced home load with a question agent, bounded at 2 s, best-effort: null
+when unpublished, slow or unreachable; the chat still enforces the limit). `classic` skips
 the agent lookups. A stored layout unknown to the running code reads as
 `classic`. Storage: `platform_ui_settings.home_layout`,
 `platform_ui_settings.home_ask_agent_instance_id` (set null on agent deletion)

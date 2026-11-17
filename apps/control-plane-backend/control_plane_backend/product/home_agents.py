@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Home launchers from shared SQL state, independent of analytics and pods."""
+"""Home launchers from shared SQL state; only the question field limit reads a pod."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from fred_core.common import personal_team_id
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from sqlalchemy.exc import SQLAlchemyError
 
+from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.platform_ui_settings.service import (
     home_layout_or_classic,
     is_featurable,
@@ -34,7 +35,10 @@ from control_plane_backend.product.schemas import (
     HomeAgentsResponse,
     HomeShowcaseResponse,
 )
-from control_plane_backend.product.service import _record_to_summary
+from control_plane_backend.product.service import (
+    _record_to_summary,
+    _runtime_execution_metadata_for_source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +90,35 @@ async def list_home_agents(
     )
 
 
+# The home must not wait on a slow pod: past this, no counter (the chat still enforces it).
+ASK_LIMIT_TIMEOUT_SECONDS = 2.0
+
+
+async def _chat_input_limit(
+    record: AgentInstanceRecord, deps: ProductServiceDependencies
+) -> int | None:
+    """`app.max_chat_input_chars` of the agent's pod, read like a chat preparation."""
+    source = next(
+        (
+            item
+            for item in deps.configuration.platform.runtime_catalog_sources
+            if item.enabled and item.runtime_id == record.source_runtime_id
+        ),
+        None,
+    )
+    if source is None:
+        return None
+    try:
+        _, limit = await asyncio.wait_for(
+            _runtime_execution_metadata_for_source(source.base_url),
+            ASK_LIMIT_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.debug("Chat input limit of %s timed out", source.runtime_id)
+        return None
+    return limit
+
+
 async def get_home_showcase(
     user: KeycloakUser, deps: ProductServiceDependencies
 ) -> HomeShowcaseResponse:
@@ -106,6 +139,8 @@ async def get_home_showcase(
     )
     visible = set(defaults) & set(usable)
     ask_record = records.get(ask_id) if ask_id is not None else None
+    if ask_record is not None and not is_featurable(ask_record, visible):
+        ask_record = None
     return HomeShowcaseResponse(
         layout=layout,
         featured=[
@@ -118,9 +153,10 @@ async def get_home_showcase(
             if (record := records.get(entry.agent_instance_id)) is not None
             and is_featurable(record, visible)
         ],
-        ask_agent=(
-            _record_to_summary(ask_record)
-            if ask_record is not None and is_featurable(ask_record, visible)
+        ask_agent=_record_to_summary(ask_record) if ask_record is not None else None,
+        ask_max_chat_input_chars=(
+            await _chat_input_limit(ask_record, deps)
+            if ask_record is not None
             else None
         ),
     )

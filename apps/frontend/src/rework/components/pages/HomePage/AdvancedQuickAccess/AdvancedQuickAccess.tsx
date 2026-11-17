@@ -31,11 +31,12 @@ interface AdvancedQuickAccessProps {
   featured: FeaturedHomeAgent[];
   /** Agent chosen by the admin for the question field; none hides it. */
   askAgent?: ManagedAgentInstanceSummary | null;
+  askMaxChars?: number | null;
   firstName?: string;
 }
 
 /** "Accès rapide" tab of the advanced home: greeting, featured banner, the user's agents. */
-export default function AdvancedQuickAccess({ featured, askAgent, firstName }: AdvancedQuickAccessProps) {
+export default function AdvancedQuickAccess({ featured, askAgent, askMaxChars, firstName }: AdvancedQuickAccessProps) {
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
   const { logoName, logoNameDark, siteDisplayName } = useFrontendProperties();
@@ -64,7 +65,7 @@ export default function AdvancedQuickAccess({ featured, askAgent, firstName }: A
         </div>
       </div>
       {featured.length > 0 && <FeaturedCarousel featured={featured} teamName={teamName} />}
-      {askAgent && <HomeAskBox agent={askAgent} />}
+      {askAgent && <HomeAskBox agent={askAgent} maxChars={askMaxChars ?? undefined} />}
       <RecentAgents variant="detailed" />
     </div>
   );

@@ -417,6 +417,14 @@ class HomeShowcaseResponse(BaseModel):
     layout: HomeLayout = "classic"
     featured: list[FeaturedHomeAgent] = Field(default_factory=list)
     ask_agent: ManagedAgentInstanceSummary | None = None
+    ask_max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Chat message limit of the question agent's runtime pod; null when "
+            "unpublished or not read in time (the chat still enforces it)."
+        ),
+    )
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):
