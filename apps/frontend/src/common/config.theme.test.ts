@@ -15,7 +15,13 @@ it("loads branding from the deployment theme without accepting auth or feature o
         if (url === "/config.json")
           return { properties: { siteTitle: "Stock", faviconName: "fred" }, feature_flags: { chat: true } };
         if (url === "/theme-properties.json")
-          return { siteTitle: "Acme", logoName: "acme", user_auth: { enabled: true }, feature_flags: { chat: false } };
+          return {
+            siteTitle: "Acme",
+            logoName: "acme",
+            homeBannerImageFile: "acme-rays.svg",
+            user_auth: { enabled: true },
+            feature_flags: { chat: false },
+          };
         if (url === "/theme-catalog.json") return { themes: [{ id: "acme", label: "Acme", base: "pebble" }] };
         return { user_auth: { enabled: false }, root_bootstrap_required: false };
       },
@@ -27,6 +33,7 @@ it("loads branding from the deployment theme without accepting auth or feature o
   expect(getProperty("siteTitle")).toBe("Acme");
   expect(getProperty("faviconName")).toBe("fred");
   expect(getProperty("logoName")).toBe("acme");
+  expect(getProperty("homeBannerImageFile")).toBe("acme-rays.svg");
   expect(getConfig().user_auth.enabled).toBe(false);
   expect(getConfig().feature_flags.chat).toBe(true);
 });
