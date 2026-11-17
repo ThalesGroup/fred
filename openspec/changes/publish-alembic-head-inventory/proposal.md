@@ -2,13 +2,13 @@
 
 ## Why
 
-Operators cannot currently see which Alembic revisions ship in each Fred release without inspecting several source trees or images. A release-scoped inventory gives them a single, reviewable reference for database upgrade planning and troubleshooting.
+Operators cannot currently see the Alembic head of every component in a Fred release without inspecting several source trees or images. A release-scoped inventory gives them one reference for the expected migration targets.
 
 Tracking: https://github.com/ThalesGroup/fred/issues/3571
 
 ## What Changes
 
-- Generate a deterministic Markdown inventory of every Alembic revision in each backend and capability migration tree at the tagged commit, including the head revision for each tree.
+- Generate a deterministic Markdown inventory containing only the head revision of each backend and capability migration tree at the tagged commit.
 - Attach the inventory to both the code and chart GitHub releases alongside the existing operator migration guide.
 - Update the shared push-release skill and release documentation so the inventory is reviewed before tag approval and verified after publication.
 
@@ -16,11 +16,11 @@ Tracking: https://github.com/ThalesGroup/fred/issues/3571
 
 ### New Capabilities
 
-- `release-alembic-inventory`: Publish a complete, version-specific Alembic revision inventory for operators.
+- `release-alembic-heads`: Publish a version-specific Alembic head inventory for operators.
 
 ### Modified Capabilities
 
-None. The existing migration guide continues to describe operator actions; the new inventory records the revisions included in the release.
+None. The existing migration guide continues to describe operator actions; the new inventory records the head of each migration tree in the release.
 
 ## Impact
 

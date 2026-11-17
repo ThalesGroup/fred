@@ -25,7 +25,7 @@ calculate it. Do not guess missing migration procedures to clear a coverage chec
 
 Prepare one reviewable PR before tag approval: the proposed version, Python package
 versions and synchronized locks, user-facing notes and the complete consolidated
-DevOps guide, plus the Alembic revision inventory. Explain required upgrade actions
+DevOps guide, plus the Alembic head inventory. Explain required upgrade actions
 separately from optional activation and user re-ingestion. For an
 all-none release, explicitly say that normal deployment needs no additional action.
 Reconcile duplicate or conflicting instructions in source notes and regenerate;
@@ -230,18 +230,18 @@ Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep
 operator steps out of the UI document; fix sources and regenerate if the guide
 needs changes. Resolve all coverage blockers before requesting tag approval.
 
-### Review the Alembic revision inventory
+### Review the Alembic head inventory
 
 Generate the same inventory that both tagged publication workflows will attach:
 
 ```bash
 V=X.Y.Z
 python3 scripts/alembic_release_inventory.py --version "$V" \
-  --output target/release-inventory/alembic-revisions.md
+  --output target/release-inventory/alembic-heads.md
 ```
 
-Read the Markdown, including every backend and capability tree, its head and all
-revisions. A new component with Alembic migrations must appear automatically.
+Read the Markdown and confirm that it shows exactly one head per backend and
+capability tree. A new component with Alembic migrations must appear automatically.
 This preview records the current topic-branch commit; regenerate it from the
 merged `swift` commit in Step 6 so the source commit matches the tags. The
 inventory is generated at publication and is not staged in the release-preparation PR.
@@ -272,7 +272,7 @@ Show the developer the PR link and **full new `release.md` entry** verbatim, plu
 
 - the branch, the ancestry-based baseline, maximum migration impact and proposed version,
 - the generated operator guide, its ordered procedures and remaining deployment limitations,
-- the Alembic inventory file, component coverage and each tree's head,
+- the Alembic head inventory file, component coverage and each tree's head,
 - the prepared shared-library versions, changed and unchanged capability packages,
   selected manifest versions, saved-config compatibility evidence, chart `appVersion`
   values, lockfile diff and Python artifact validation result,
@@ -296,7 +296,7 @@ After developer approval and PR merge, use a clean `swift` checkout or worktree.
 Fetch `origin/swift`, fast-forward to the merged commit, and verify that the
 approved release inputs are present. Rerun `make release-plan` and the committed
 guide verification for the proposed version. Regenerate and review
-`target/release-inventory/alembic-revisions.md` from this merged commit. If the
+`target/release-inventory/alembic-heads.md` from this merged commit. If the
 merge result or release range changed the version, guide, Python versions or locks,
 update through a follow-up
 PR and repeat review and CI. Present the merged commit and exact version, then
@@ -346,6 +346,6 @@ at build time; the value committed in the file is not used.
 
 Wait for both full tag-triggered publication workflows to finish successfully,
 including migration validation, before reporting publication complete. Verify
-each GitHub release contains `migration.md` and `alembic-revisions.md`, and that
+each GitHub release contains `migration.md` and `alembic-heads.md`, and that
 the two inventories have the same content. A missing/stale guide, insufficient
 version or missing paired tag blocks artifact publication.

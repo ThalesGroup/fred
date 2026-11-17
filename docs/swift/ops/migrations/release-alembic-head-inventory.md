@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Attach the complete Alembic revision inventory to Fred releases"
+title: "Attach Alembic migration heads to Fred releases"
 impact: none
 configuration: none
 configuration_reason: "Only release publication tooling and documentation change; no chart values, application settings or database schema change."
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Check that both the code and chart GitHub releases attach `alembic-revisions.md` and that it lists every migration-bearing component and its head.
+Check that both the code and chart GitHub releases attach `alembic-heads.md` and that it lists every migration-bearing component and its head.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-The inventory lists revisions shipped in the release, not revisions applied to a particular database.
+The inventory lists each migration tree's head in the tagged source, not the revision applied to a particular database.

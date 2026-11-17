@@ -148,10 +148,10 @@ jobs:
           tags: |
               type=match,pattern=chart/v?(.*),group=1
 
-      - name: Generate Alembic revision inventory
+      - name: Generate Alembic head inventory
         env:
           RELEASE_VERSION: ${{ steps.meta.outputs.version }}
-        run: python3 scripts/alembic_release_inventory.py --version "$RELEASE_VERSION" --output alembic-revisions.md
+        run: python3 scripts/alembic_release_inventory.py --version "$RELEASE_VERSION" --output alembic-heads.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -171,7 +171,7 @@ jobs:
             ```
           files: |
             docs/swift/ops/releases/v${{ steps.meta.outputs.version }}/migration.md
-            alembic-revisions.md
+            alembic-heads.md
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.meta.outputs.version, '-') }}

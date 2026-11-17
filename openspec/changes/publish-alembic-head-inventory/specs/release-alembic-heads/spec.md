@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Provide operators with a complete, trustworthy list of Alembic migrations included in each published Fred release.
+Provide operators with the Alembic head of each migration tree in a published Fred release.
 
 ## ADDED Requirements
 
-### Requirement: Inventory every shipped Alembic tree
+### Requirement: Show one head for every shipped Alembic tree
 
-Each Fred release SHALL include a Markdown inventory of all Alembic revision files in every backend and component migration tree shipped from its tagged source commit. The inventory MUST group revisions by owning backend or component, identify each tree's head, and list every revision identifier, description, and parent revision.
+Each Fred release SHALL include a Markdown inventory of every backend and component Alembic migration tree shipped from its tagged source commit. The inventory MUST identify each tree's owner, path, and single head revision. It MUST NOT list historical revisions.
 
 #### Scenario: Backend and capability migrations
 
 - **WHEN** a release contains the control-plane backend, knowledge-flow backend, runtime, and capability Alembic trees
-- **THEN** the inventory includes each tree and all its revisions, including revisions unchanged since the preceding release
+- **THEN** the inventory includes one head for each tree, with no historical revision list
 
 #### Scenario: New component migration tree
 
@@ -27,7 +27,7 @@ The inventory SHALL be generated from the same commit as the paired `code/vX.Y.Z
 #### Scenario: Repeated generation
 
 - **WHEN** the inventory is generated twice from the same source commit and release version
-- **THEN** both files have identical content and revision ordering
+- **THEN** both files have identical content and tree ordering
 
 #### Scenario: Invalid migration graph
 

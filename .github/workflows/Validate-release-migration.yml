@@ -26,7 +26,7 @@ jobs:
         run: |
           uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py verify \
             --version "${RELEASE_TAG#*/v}" --require-tags --tag-attempts 7
-      - name: Verify Alembic revision inventory before publication
+      - name: Verify Alembic head inventory before publication
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/alembic_release_inventory.py --version "${RELEASE_TAG#*/v}" --output "$RUNNER_TEMP/alembic-revisions.md"
+        run: python3 scripts/alembic_release_inventory.py --version "${RELEASE_TAG#*/v}" --output "$RUNNER_TEMP/alembic-heads.md"

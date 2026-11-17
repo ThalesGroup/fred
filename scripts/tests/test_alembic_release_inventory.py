@@ -1,4 +1,4 @@
-"""Release inventory coverage for real and synthetic Alembic trees."""
+"""Release head inventory coverage for real and synthetic Alembic trees."""
 
 import importlib.util
 import sys
@@ -55,7 +55,7 @@ class InventoryTests(unittest.TestCase):
             )
 
     def test_new_component_is_discovered_and_output_is_stable(self):
-        write_revision(self.tree, "root", description="Create | records")
+        write_revision(self.tree, "root", description="Create records")
         write_revision(self.tree, "latest", "root", "Add records")
         capability = (
             self.root / "libs" / "capabilities" / "new-capability" / "pkg" / "custom_migrations"
@@ -64,10 +64,12 @@ class InventoryTests(unittest.TestCase):
         first = inventory.render_inventory(self.root, "3.12.0", COMMIT)
         second = inventory.render_inventory(self.root, "3.12.0", COMMIT)
         self.assertEqual(first, second)
-        self.assertIn("## new-capability", first)
-        self.assertIn("Head: `latest`", first)
-        self.assertLess(first.index("| `root`"), first.index("| `latest`"))
-        self.assertIn("Create \\| records", first)
+        self.assertIn("| new-capability |", first)
+        self.assertIn("| example-backend | `apps/example-backend/alembic` | `latest` |", first)
+        self.assertIn("| new-capability | `libs/capabilities/new-capability/pkg/custom_migrations` | `cap_root` |", first)
+        self.assertNotIn("`root`", first)
+        self.assertNotIn("Create records", first)
+        self.assertEqual(len([line for line in first.splitlines() if line.startswith("| ")]), 4)
 
     def test_rejects_broken_graphs(self):
         cases = {

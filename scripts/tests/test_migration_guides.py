@@ -502,9 +502,9 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue(upload["with"]["fail_on_unmatched_files"])
             files = upload["with"]["files"].splitlines()
             self.assertTrue(any(path.endswith("/migration.md") for path in files))
-            self.assertIn("alembic-revisions.md", files)
+            self.assertIn("alembic-heads.md", files)
             generator = next(
-                s for s in release["steps"] if s.get("name") == "Generate Alembic revision inventory"
+                s for s in release["steps"] if s.get("name") == "Generate Alembic head inventory"
             )
             self.assertLess(release["steps"].index(generator), release["steps"].index(upload))
         validation = m.yaml.safe_load(
@@ -512,7 +512,7 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                step.get("name") == "Verify Alembic revision inventory before publication"
+                step.get("name") == "Verify Alembic head inventory before publication"
                 for step in validation["jobs"]["validate"]["steps"]
             )
         )

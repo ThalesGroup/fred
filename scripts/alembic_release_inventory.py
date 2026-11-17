@@ -1,10 +1,9 @@
-"""Build the Alembic revision inventory attached to Fred releases."""
+"""Build the Alembic head inventory attached to Fred releases."""
 
 from __future__ import annotations
 
 import argparse
 import ast
-import heapq
 import os
 import re
 import subprocess
@@ -20,7 +19,6 @@ REVISION_ID = re.compile(r"[A-Za-z0-9_]+\Z")
 class Revision:
     identifier: str
     parents: tuple[str, ...]
-    description: str
     path: Path
 
 
@@ -73,11 +71,7 @@ def _revision(path: Path, root: Path) -> Revision:
         raise ValueError(f"{path}: invalid down_revision {raw_parents!r}")
     if len(set(parents)) != len(parents):
         raise ValueError(f"{path}: duplicate parent revision")
-    docstring = ast.get_docstring(module)
-    if not docstring:
-        raise ValueError(f"{path}: missing revision description")
-    description = next((line.strip() for line in docstring.splitlines() if line.strip()), "")
-    return Revision(identifier, parents, description, path.relative_to(root))
+    return Revision(identifier, parents, path.relative_to(root))
 
 
 def _owner(path: Path) -> str:
@@ -113,19 +107,18 @@ def _migration_tree(tree_dir: Path, root: Path) -> MigrationTree:
     if len(heads) != 1:
         raise ValueError(f"{tree_dir}: expected one head, found {heads}")
     ready = [identifier for identifier, count in remaining.items() if count == 0]
-    heapq.heapify(ready)
-    ordered: list[Revision] = []
+    visited = 0
     while ready:
-        identifier = heapq.heappop(ready)
-        ordered.append(by_id[identifier])
+        identifier = ready.pop()
+        visited += 1
         for child in children[identifier]:
             remaining[child] -= 1
             if remaining[child] == 0:
-                heapq.heappush(ready, child)
-    if len(ordered) != len(revisions):
+                ready.append(child)
+    if visited != len(revisions):
         raise ValueError(f"{tree_dir}: cycle in revision graph")
     relative_path = tree_dir.relative_to(root)
-    return MigrationTree(_owner(relative_path), relative_path, heads[0], tuple(ordered))
+    return MigrationTree(_owner(relative_path), relative_path, heads[0], tuple(revisions))
 
 
 def discover_trees(root: Path) -> tuple[MigrationTree, ...]:
@@ -184,31 +177,20 @@ def render_inventory(root: Path, version: str, commit: str) -> str:
         raise ValueError(f"invalid source commit {commit!r}")
     trees = discover_trees(root)
     lines = [
-        f"# Alembic revisions - Fred v{version}",
+        f"# Alembic heads - Fred v{version}",
         "",
         f"Source commit: `{commit}`",
         "",
-        "This inventory lists the revisions shipped in the tagged source. "
+        "Each row shows the head of an Alembic migration tree at the source commit above. "
         "It does not show which migrations have run in a deployment.",
+        "",
+        "| Component | Migration tree | Head |",
+        "| --- | --- | --- |",
     ]
     for tree in trees:
-        lines.extend(
-            [
-                "",
-                f"## {tree.owner}",
-                "",
-                f"Tree: `{tree.path.as_posix()}`  ",
-                f"Head: `{tree.head}`  ",
-                f"Revisions: {len(tree.revisions)}",
-                "",
-                "| Revision | Parent(s) | Description |",
-                "| --- | --- | --- |",
-            ]
+        lines.append(
+            f"| {tree.owner} | `{tree.path.as_posix()}` | `{tree.head}` |"
         )
-        for revision in tree.revisions:
-            parents = ", ".join(f"`{parent}`" for parent in revision.parents) or "base"
-            description = revision.description.replace("|", "\\|").replace("`", "\\`")
-            lines.append(f"| `{revision.identifier}` | {parents} | {description} |")
     return "\n".join(lines) + "\n"
 
 
