@@ -40,6 +40,8 @@ jobs:
   check-config:
     name: "${{ matrix.app }}"
     runs-on: ubuntu-latest
+    env:
+      UV: uv
     strategy:
       matrix:
         include:
