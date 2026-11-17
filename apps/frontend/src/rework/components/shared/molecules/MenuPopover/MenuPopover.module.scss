@@ -129,6 +129,11 @@
   min-width: 0;
 }
 
+/* In the column the label's auto margin would size it to its text; capped, it ellipsizes. */
+.itemText .itemLabel {
+  max-width: 100%;
+}
+
 .itemDescription {
   overflow: hidden;
   color: var(--on-surface-retreat);

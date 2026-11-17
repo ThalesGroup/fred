@@ -19,7 +19,7 @@
  * 10px below the panel top; the next block's own inset separates it from the items. */
 .root {
   position: relative;
-  padding: var(--spacing-2xs) var(--spacing-xs);
+  padding: var(--spacing-2xs);
 }
 
 .heading {
@@ -30,12 +30,13 @@
 .block {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: var(--radius-ms);
-  padding: calc(var(--spacing-2xs) + var(--spacing-3xs) - 1px) calc(var(--spacing-xs) - 1px)
-    calc(var(--spacing-2xs) - 1px);
+  border-radius: var(--radius-s);
+  /* Tighter on the right: the gear or chevron sits close to the panel edge. */
+  padding: calc(var(--spacing-2xs) + var(--spacing-3xs) - 1px) calc(var(--spacing-2xs) - 1px)
+    calc(var(--spacing-2xs) - 1px) calc(var(--spacing-xs) - 1px);
   width: 100%;
   color: var(--on-surface);
 }
@@ -59,16 +60,22 @@
 }
 
 .eyebrow {
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* Long space names get a second line before the ellipsis. */
 .title {
+  display: -webkit-box;
   margin: 0;
   overflow: hidden;
   font: var(--font-title-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* Icons take their parent's font size; 1.25rem is the menu row icon size (MenuPopover). */
@@ -76,4 +83,24 @@
   display: flex;
   color: var(--on-surface-retreat);
   font-size: 1.25rem;
+}
+
+/* 1.5rem: the organization icon fills the same 24px+ slot as a team avatar. */
+.leading {
+  display: flex;
+  flex: none;
+  /* The block's gap is tight for the gear; the mark keeps a full xs from the labels. */
+  margin-right: calc(var(--spacing-xs) - var(--spacing-2xs));
+  color: var(--on-surface-retreat);
+  font-size: 1.5rem;
+}
+
+/* Third line of the labels: aligned with them, the mark centres on all three. */
+.caption {
+  display: block;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

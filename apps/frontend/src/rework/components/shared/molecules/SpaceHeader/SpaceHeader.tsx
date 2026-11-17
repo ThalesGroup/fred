@@ -23,12 +23,32 @@ export interface SpaceHeaderProps {
   title: string;
   /** Turns the block into the trigger of a space menu, rendered as `children`. */
   menu?: { open: boolean; onToggle: () => void; ref?: Ref<HTMLButtonElement> };
+  /** The space's mark before its labels: a team avatar, or the organization icon. */
+  leading?: ReactNode;
+  /** A tiny third line under the labels, such as the person's roles in the space. */
+  caption?: string;
+  /** A trailing control of the read-only form, such as the space's settings gear. */
+  action?: ReactNode;
   children?: ReactNode;
 }
 
 /** A nav panel's heading with its space: read-only, or the trigger of a space menu. */
-export default function SpaceHeader({ eyebrow, title, menu, children }: SpaceHeaderProps) {
-  const eyebrowLine = eyebrow && <span className={styles.eyebrow}>{eyebrow}</span>;
+export default function SpaceHeader({ eyebrow, title, leading, caption, menu, action, children }: SpaceHeaderProps) {
+  const eyebrowLine = eyebrow && (
+    <span className={styles.eyebrow} title={eyebrow}>
+      {eyebrow}
+    </span>
+  );
+  const captionLine = caption && (
+    <span className={styles.caption} title={caption}>
+      {caption}
+    </span>
+  );
+  const leadingMark = leading && (
+    <span className={styles.leading} aria-hidden>
+      {leading}
+    </span>
+  );
   return (
     <div className={styles.root}>
       {menu ? (
@@ -42,9 +62,13 @@ export default function SpaceHeader({ eyebrow, title, menu, children }: SpaceHea
             aria-expanded={menu.open}
             onClick={menu.onToggle}
           >
+            {leadingMark}
             <span className={styles.text}>
               {eyebrowLine}
-              <span className={styles.title}>{title}</span>
+              <span className={styles.title} title={title}>
+                {title}
+              </span>
+              {captionLine}
             </span>
             <span className={styles.chevron} aria-hidden>
               <Icon category="outlined" type={menu.open ? "expand_less" : "expand_more"} />
@@ -53,10 +77,15 @@ export default function SpaceHeader({ eyebrow, title, menu, children }: SpaceHea
         </h2>
       ) : (
         <div className={styles.block}>
+          {leadingMark}
           <span className={styles.text}>
             {eyebrowLine}
-            <h2 className={styles.title}>{title}</h2>
+            <h2 className={styles.title} title={title}>
+              {title}
+            </h2>
+            {captionLine}
           </span>
+          {action}
         </div>
       )}
       {children}
