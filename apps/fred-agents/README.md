@@ -78,6 +78,18 @@ default. Connection forms are described in the
 [Control Plane README](../control-plane/README.md#inference-connection). A missing or
 mismatched binding refuses execution.
 
+`ai.normalize_streamed_tool_call_ids` defaults to `true`. This deployment-only
+switch controls the shared Python correction for malformed continuation IDs in
+admitted Chat Completions streams. Set it to `false` and restart the affected pod
+to diagnose a provider compatibility problem; restore `true` afterwards. It
+applies to all admitted models in that pod, including title calls and native
+children that use the same factory. It changes neither model permissions nor
+arguments. There is no UI toggle; Responses API and Rust Ralph are unaffected.
+With the Fred chart, set
+`applications.fred-agents.configuration.ai.normalize_streamed_tool_call_ids`;
+with the standalone agent-pod chart, set
+`configuration.ai.normalize_streamed_tool_call_ids`.
+
 M4 requires a managed instance and canonical `runtime_context.space_id`, plus
 trusted person/workload delegation. Each turn, including a later HITL resume,
 resolves again; retries and children keep the current turn's local authority.

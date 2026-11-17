@@ -549,7 +549,10 @@ def _execute_response_adapter() -> TypeAdapter[Any]:
 
 def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
     """Models come exclusively from the complete turn resolver, never pod discovery."""
-    return RoutedChatModelFactory(credentials=config.inference_credentials)
+    return RoutedChatModelFactory(
+        credentials=config.inference_credentials,
+        normalize_streamed_tool_call_ids=config.ai.normalize_streamed_tool_call_ids,
+    )
 
 
 @dataclass(slots=True)

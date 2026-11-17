@@ -190,6 +190,15 @@ class PodAIConfig(BaseModel):
     """
 
     knowledge_flow_url: str = "http://localhost:8111/knowledge-flow/v2"
+    normalize_streamed_tool_call_ids: bool = Field(
+        default=True,
+        strict=True,
+        description=(
+            "Repair malformed continuation tool-call IDs in admitted Chat Completions "
+            "streams for this pod. Disable only for provider compatibility diagnosis; "
+            "this does not change model permissions or affect Responses API."
+        ),
+    )
     timeout: RuntimeTimeouts = Field(
         default_factory=RuntimeTimeouts,
         description=(

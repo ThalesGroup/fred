@@ -567,6 +567,12 @@
               "title": "Knowledge Flow Url",
               "type": "string"
             },
+            "normalize_streamed_tool_call_ids": {
+              "default": true,
+              "description": "Repair malformed continuation tool-call IDs in admitted Chat Completions streams for this pod. Disable only for provider compatibility diagnosis; this does not change model permissions or affect Responses API.",
+              "title": "Normalize Streamed Tool Call Ids",
+              "type": "boolean"
+            },
             "timeout": {
               "description": "Minimal timeout settings for outbound runtime HTTP clients.\n\nWhy this exists:\n- KF/MCP clients need consistent timeout settings across runtimes\n\nHow to use it:\n- construct with explicit connect/read values\n- call `as_httpx_timeout_config()` to feed httpx",
               "properties": {

@@ -8,7 +8,7 @@ from typing import cast
 import httpx
 import pytest
 from fred_runtime.app.agent_app import _build_chat_model_factory
-from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.config import AgentPodConfig, PodAIConfig
 from fred_runtime.model_routing.provider import RoutedChatModelFactory
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -22,7 +22,9 @@ def test_pod_model_factory_does_not_fetch_discovery(monkeypatch):
     monkeypatch.setattr(httpx.Client, "get", forbidden)
     monkeypatch.setattr(httpx.AsyncClient, "get", forbidden)
     factory = _build_chat_model_factory(
-        cast(AgentPodConfig, SimpleNamespace(inference_credentials=()))
+        cast(
+            AgentPodConfig, SimpleNamespace(inference_credentials=(), ai=PodAIConfig())
+        )
     )
     assert isinstance(factory, RoutedChatModelFactory)
 

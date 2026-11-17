@@ -513,6 +513,12 @@
           "title": "Knowledge Flow Url",
           "type": "string"
         },
+        "normalize_streamed_tool_call_ids": {
+          "default": true,
+          "description": "Repair malformed continuation tool-call IDs in admitted Chat Completions streams for this pod. Disable only for provider compatibility diagnosis; this does not change model permissions or affect Responses API.",
+          "title": "Normalize Streamed Tool Call Ids",
+          "type": "boolean"
+        },
         "timeout": {
           "$ref": "#/$defs/RuntimeTimeouts",
           "description": "Timeout settings for pod outbound HTTP calls to Knowledge Flow and other runtime adapters."
