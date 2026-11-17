@@ -91,6 +91,12 @@ from fred_runtime.capabilities.assembly import (
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.authority import RunStopError
+
+# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
+# Read it as one boundary:
+# - this file should decide when Fred invokes, streams, and emits runtime events
+# - the adapter file should deal with LangChain messages, stream payload shapes,
+#   and runnable config translation
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
     complete_cleanup,
@@ -110,12 +116,6 @@ from .middleware.tool_call_recovery import (
     is_mistral_model_name,
     is_tool_call_recovery_reference_block,
 )
-
-# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
-# Read it as one boundary:
-# - this file should decide when Fred invokes, streams, and emits runtime events
-# - the adapter file should deal with LangChain messages, stream payload shapes,
-#   and runnable config translation
 from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
@@ -1054,12 +1054,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # calls succeeds — success anywhere hands the final
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
-                        # The usage of the model call that decided to make these
-                        # tool calls, folded into the turn's billed total once
-                        # here — not once per parallel tool call. It is NOT
-                        # attached to the individual ToolCallRuntimeEvents any
-                        # more (#2403): showing a decision's whole prompt on a
-                        # tool row read as if the tool had consumed it.
+                        # Bill the requesting model response once, even when it
+                        # requests several tools.
                         tool_model_name, tool_call_token_usage, _ = (
                             _runtime_metadata_from_message(message)
                         )

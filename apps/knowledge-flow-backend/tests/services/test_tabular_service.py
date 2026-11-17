@@ -821,7 +821,7 @@ async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
     assert empty.rows == []
     assert empty.error is None
     assert empty.sql_query == empty_sql
-    assert empty.message == "Requête exécutée avec succès : 0 ligne correspondant aux conditions."
+    assert empty.message == "Query executed successfully: 0 rows matched the conditions."
 
     for expression, expected in [("COUNT(*)", 0), ("SUM(amount)", None)]:
         aggregate = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT {expression} AS value FROM {sales_alias} WHERE 1 = 0"))
