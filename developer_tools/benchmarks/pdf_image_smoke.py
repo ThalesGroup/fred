@@ -45,7 +45,6 @@ def run(corpus: Path, optional: bool) -> dict:
         raw["observability"]["kpi"]["prometheus"]["enabled"] = False
         for profile in raw["processing"]["profiles"].values():
             profile["process_images"] = False
-            profile["generate_summary"] = False
             if optional:
                 for processor in profile["input_processors"]:
                     processor["class_path"] = processor["class_path"].replace(
