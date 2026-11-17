@@ -67,7 +67,7 @@ it does not certify every deletion, replacement or in-flight execution scenario.
 | Boundary | Source of truth | Consumer / enforcement |
 | --- | --- | --- |
 | Approved destinations and inventory | [`ModelSource`](../../apps/control-plane/src/model_catalog/config.rs), platform configuration | [`discovery.rs`](../../apps/control-plane/src/model_catalog/discovery.rs), retained SQL observations; discovery grants no permission |
-| Organization source assignment | [`model_catalog::assign_source`](../../apps/control-plane/src/model_catalog/mod.rs), `organization_model_source` | Trusted [operator CLI](../../apps/control-plane/README.md#assign-a-source-after-initialization), additive transaction under the organization lock; keeps policy and initialization receipt unchanged |
+| Organization source assignment | [`model_catalog::initialization`](../../apps/control-plane/src/model_catalog/initialization.rs), `organization_model_source` | Deployment adds declared sources on startup/provisioning under the organization lock; existing policies and completion receipts are preserved |
 | Organization policy | [`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs), organization model tables | Organization Owner through [`http.rs`](../../apps/control-plane/src/model_catalog/http.rs); technical Admin alone cannot administer the policy |
 | Team/project policy | [`local_policy.rs`](../../apps/control-plane/src/model_catalog/local_policy.rs), `space_model_policy` and `space_model_setting` | Local Owner writes a revision-checked policy under the organization governance lock; the shared projection narrows parent permissions for configuration, preparation and admission |
 | UI choices | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), public `InferenceSelection` | [`OrganizationModels`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx), generated frontend client; preparation is not admission |
@@ -261,9 +261,8 @@ class control_plane.model_source,control_plane.model_offer,control_plane.organiz
 
 Generated from the [configuration schema](../../apps/control-plane/config/schema/configuration.schema.json).
 `platform.model_sources` contains `ModelSource`; `platform.organization_models`
-contains `OrganizationModels` for one-time initialization after provisioning.
-The SQL policy subsequently administered through the UI remains authoritative;
-initialization is not a restart-time overwrite. Embedded Ralph's local bindings
+contains `OrganizationModels`: sources are added at startup/provisioning; permissions
+and defaults are seeded once. Subsequent UI choices remain authoritative. Embedded Ralph's local bindings
 are in `platform.inference_credentials`.
 
 The schema defines shape and defaults. Cross-field validation and eligibility

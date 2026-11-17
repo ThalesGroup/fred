@@ -515,8 +515,8 @@ Build Weaver's images from a revision containing the current Python SDK contract
 `RuntimeModels` accepts the resolver's `default` and `reasoning_default_on` fields.
 The normal `fred-agents` image build includes `libs/fred-sdk`, so the API and worker
 use the same correction without a separate image patch. For an existing organization,
-the factory uses [the operator source assignment](../../apps/control-plane/README.md#assign-a-source-after-initialization)
-before its normal model-policy API calls. Initialization receipts and existing
+the same [organization configuration](../../apps/control-plane/README.md#configure-organization-models)
+adds the mock source at startup; its Owner then refreshes and permits the model. Initialization receipts and existing
 organization defaults are preserved. A successful setup is not a benchmark run;
 start load only with the explicitly selected scenario parameters below.
 

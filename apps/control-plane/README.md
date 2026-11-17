@@ -287,7 +287,7 @@ platform:
       visibility_scope: example-gateway-deployments
 ```
 
-### Initialize organization models once
+### Configure organization models
 
 `platform.organization_models` declares exact existing organization names (the same
 PostgreSQL lookup as provisioning), explicit source IDs and exact offer keys. It
@@ -346,17 +346,17 @@ Control Plane (for k3d: `kubectl exec deployment/control-plane-backend --
 control-plane initialize-models`, with the deployment context/namespace). This trusted operator command uses deployment database credentials, not a
 browser token, starts no service and requires every declared organization to exist.
 Each pass has a 120-second deadline; discovery retains its five-second per-source
-limit and runs outside transactions. This is initialization, not ongoing YAML sync.
+limit and runs outside transactions.
 
-**Initialize once, preserve afterwards.** Per organization, assignments, initial
-policy and completion receipt commit together under the existing organization lock.
-A successful replay performs no discovery and changes no decisions. UI edits,
-including an empty policy, survive restart. A separate durable receipt also remembers
-an administered policy after deletion; removing a policy or assignment cannot make
-the seed recreate it. Removing YAML is not revocation. Source revision changes,
-credential rotation and disabling remain handled by `configure_sources`, independently
-of the receipt. Keep identical declarations across replicas; a concurrent refresh
-may report `model_refresh_superseded`, which is safely replayable.
+**Add sources on every pass; seed policy only once.** Startup and provisioning add
+`sources` to each named organization under its existing lock, including organizations
+already initialized. Replays preserve permissions, policy revisions, document models,
+defaults and completion receipts, and perform no discovery for an administered policy.
+The Owner refreshes newly assigned sources and permits their models in the Models UI.
+Empty or deleted policies are not recreated. Removing a source from YAML does not
+revoke an existing assignment; disable the source or withdraw model permissions to
+stop its use. Source revision changes and credential rotation remain handled by
+`configure_sources`. Keep identical declarations across replicas.
 
 Every model permission references an explicit organization source assignment from
 creation. The foreign key is validated in the initial schema. Already administered
@@ -370,40 +370,22 @@ Correct the exact ID, source configuration or discovery dependency and replay
 completion receipt; earlier successful organizations and the organization provisioning
 itself remain committed. Discovery failure retains the last inventory. No provider
 body, token or configuration value is included in initialization diagnostics.
-Do not delete receipts to retry. Changing an already initialized association requires
-an explicit administrative change; this lot adds no association-management UI.
+Do not delete receipts to retry. To add a source, update the existing organization
+declaration and restart Control Plane; no UUID lookup or manual assignment is needed.
 
 ### Assign a source after initialization
 
-An operator can make an already configured source visible to an existing organization:
+For deployment-managed organizations, use `platform.organization_models.sources`
+as described above. The existing operator command remains available for an explicit
+assignment outside those declarations:
 
 ```sh
 control-plane assign-model-source <organization-uuid> <source-id>
-# k3d example, using the running deployment's configuration and database credentials:
-kubectl --context k3d-fred -n fred-weaver exec deployment/control-plane-backend -- \
-  control-plane assign-model-source "$ORGANIZATION_ID" bench-mock
 ```
 
-Use the organization's UUID returned by Control Plane, not a team UUID. The source
-must already exist in SQL after deploying its `platform.model_sources` configuration.
-The command uses the same deployment credentials and initialized-schema check as
-`initialize-models`; it accepts no browser token. It locks the active organization
-and the source, then adds the assignment in one transaction. Repeating it, including
-concurrently, is safe. Missing sources, missing organizations, team/project IDs and
-organizations pending deletion fail without creating an assignment.
-
-This command grants source visibility only. It makes no provider request, creates
-no policy or receipt, and preserves existing permissions, revisions, document models,
-defaults and fallback choices. A disabled source remains disabled. The organization
-Owner can then refresh its inventory and authorize selected offers through the
-existing model APIs or UI. There is no association-management HTTP endpoint.
-
-For a fresh installation, provision the organization and run the normal one-time
-`initialize-models` declarations first, if configured. The assignment command also
-works on a newly provisioned organization without a policy. For an already initialized
-installation, use this command for additional sources: editing `organization_models`
-and replaying initialization intentionally leaves completed organizations unchanged.
-Never delete the initialization receipt or edit SQL to make a new source visible.
+It requires an active organization and a configured source, uses deployment credentials,
+and adds visibility without discovery, policy changes or a new initialization receipt.
+A disabled source stays disabled. Repeating the command is safe.
 
 ### Source approval and discovery
 

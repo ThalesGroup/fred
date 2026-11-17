@@ -39,10 +39,9 @@ for a fresh installation or a full redeployment with the deterministic mock.
 keep their normal model configuration. Provision the normal demo organizations first,
 then use the factory's explicit preparation command for benchmark accounts and agents.
 
-A redeployment does not re-seed administered model policies. The
-[Control Plane assignment command](../../apps/control-plane/README.md#assign-a-source-after-initialization)
-adds the configured benchmark source to an existing organization without changing
-its policy or receipt; subsequent setup uses ordinary organization APIs. Build the
+A redeployment adds sources from the existing
+[organization configuration](../../apps/control-plane/README.md#configure-organization-models)
+without re-seeding administered policies; subsequent setup uses ordinary organization APIs. Build the
 normal `fred-agents` image from this checkout so both API and worker include the
 Python resolver contract fix. No private image patch, SQL edit or receipt reset is
 part of this path. The [benchmark client](../../developer_tools/benchmarks/README.md)
@@ -295,8 +294,7 @@ A failed initialization grants nothing for that organization and is retried at t
 next control plane start, which stops on that failure: choose the profile matching
 the exported keys before importing the bundle. Correct the dependency and replay
 `control-plane initialize-models` in the manager's environment; already completed
-organizations are untouched. For historical policies, supply all source mappings
-explicitly; their administered choices are preserved. See the [initialization contract](../../apps/control-plane/README.md#initialize-organization-models-once)
+organizations gain newly declared sources while their administered choices are preserved. See the [initialization contract](../../apps/control-plane/README.md#configure-organization-models)
 for diagnostics, bounds and recovery.
 
 Discovery lists the provider's complete visible inventory and grants no access.

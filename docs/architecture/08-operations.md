@@ -22,7 +22,7 @@ sources through the UI; deployment configuration supplies them and their credent
 | Action | Responsible | Where | Restart / redeploy? |
 | --- | --- | --- | --- |
 | Add or change a source | Operator | Deployment configuration | Yes, affected services |
-| Assign an existing source to an organization | Operator | Operator CLI | No |
+| Add a source to an organization | Operator | `platform.organization_models.sources` | Yes, Control Plane |
 | Refresh a discovered model inventory | Organization Owner | Models UI | No |
 | Add a model to a declared inventory | Operator | Deployment configuration | Yes, Control Plane |
 | Authorize models or set organization defaults | Organization Owner | Models UI | No |
@@ -30,6 +30,8 @@ sources through the UI; deployment configuration supplies them and their credent
 | Select a permitted model | Editor / user | Assistant / conversation UI | No |
 | Rotate an injected key | Operator | Secrets | Restart consuming services |
 
+Startup adds declared sources to existing organizations without overwriting UI
+permissions or defaults. Removing a declaration is not revocation.
 Refreshing an inventory grants no permission; changing a policy provisions no
 credential. The [model reference](A13-models.md#deployment-evidence) covers deployment
 and rotation; [selection rules](02.3-agent-administration.md#model-default-and-mcp-selection)
