@@ -4,15 +4,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  margin: 0 auto;
   width: 100%;
-  max-width: 960px;
-  min-height: 0;
-  overflow-y: auto;
   color: var(--on-surface);
   overflow-wrap: anywhere;
 }
-.page p {
+/* The page's own paragraphs only: the shared PageHeader keeps its spacing. */
+.page > p,
+.page > div > p {
   margin: 0;
 }
 .fields {

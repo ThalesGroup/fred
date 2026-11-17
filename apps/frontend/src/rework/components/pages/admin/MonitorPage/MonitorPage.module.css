@@ -8,6 +8,7 @@
 }
 
 .page {
+  gap: var(--spacing-m);
   width: 100%;
 }
 

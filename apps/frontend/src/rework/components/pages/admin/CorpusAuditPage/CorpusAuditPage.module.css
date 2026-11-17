@@ -18,9 +18,7 @@
   flex: 1;
   flex-direction: column;
   gap: var(--spacing-l);
-  margin: 0 auto;
   width: 100%;
-  max-width: 1080px;
   /* Same reasoning as FeaturesPage.module.css: DataTable claims 100% of
    * this container's height, so the container needs a concrete height of its
    * own (via the shared layout's flex:1) or the table becomes a disconnected

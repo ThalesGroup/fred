@@ -30,7 +30,7 @@ export interface PageHeaderProps {
   tabs?: ReactNode;
   /** Keeps the header pinned to the top of the scrolling content — for dashboards whose `actions`
    *  (e.g. a time range) must stay reachable next to the charts far down the page. Assumes the
-   *  page's `--spacing-xl` gutter, which the header bleeds over to hide what scrolls under it. */
+   *  card inset, which the header bleeds over to hide what scrolls under it. */
   sticky?: boolean;
 }
 
@@ -56,10 +56,12 @@ export default function PageHeader({
   return (
     <div className={sticky ? `${styles.wrapper} ${styles.sticky}` : styles.wrapper}>
       {breadcrumb && <div className={styles.breadcrumb}>{breadcrumb}</div>}
-      <div className={subtitle ? `${styles.header} ${styles.headerWithSubtitle}` : styles.header}>
+      <div className={styles.header}>
         <div className={styles.titleBlock}>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>{title}</h1>
+            <h1 className={styles.title} title={title}>
+              {title}
+            </h1>
             {titleAction}
           </div>
           {subtitle && <p className={styles.subtitle}>{subtitle}</p>}

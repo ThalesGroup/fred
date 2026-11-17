@@ -35,6 +35,7 @@ export default function OrganizationsPage() {
     <div className={styles.adminTeamsPage}>
       <PageHeader
         title={t("rework.organizations.title")}
+        subtitle={t("rework.organizations.subtitle")}
         actions={
           access.isAdmin && (
             <Button

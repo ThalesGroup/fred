@@ -330,7 +330,7 @@ export default function AnalyticsPage() {
   if (serviceDown) {
     return (
       <div className={styles.page}>
-        <PageHeader title={t("rework.analytics.title")} />
+        <PageHeader title={t("rework.analytics.title")} subtitle={t("rework.analytics.subtitle")} />
         <ServiceNotice
           icon="cloud_off"
           title={t("rework.serviceNotice.controlPlane.title")}
@@ -345,6 +345,7 @@ export default function AnalyticsPage() {
     <div className={styles.page}>
       <PageHeader
         title={t("rework.analytics.title")}
+        subtitle={t("rework.analytics.subtitle")}
         sticky
         actions={
           <>

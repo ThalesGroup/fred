@@ -143,7 +143,7 @@ export default function MigrationPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t("rework.tasks.migration.title")} />
+      <PageHeader title={t("rework.tasks.migration.title")} subtitle={t("rework.provisioning.description")} />
 
       <section className={styles.overview}>
         <div className={styles.overviewHeader}>

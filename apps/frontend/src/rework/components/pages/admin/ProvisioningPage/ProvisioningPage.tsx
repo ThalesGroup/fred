@@ -34,7 +34,7 @@ export default function ProvisioningPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t("rework.provisioning.title")} />
+      <PageHeader title={t("rework.provisioning.title")} subtitle={t("rework.provisioning.description")} />
       {access.isLoading ? (
         <p role="status">{t("common.loading")}</p>
       ) : access.isError ? (
@@ -48,7 +48,6 @@ export default function ProvisioningPage() {
         <p role="alert">{t("rework.provisioning.forbidden")}</p>
       ) : (
         <>
-          <p>{t("rework.provisioning.description")}</p>
           <form onSubmit={submit} aria-busy={result.isLoading}>
             <fieldset disabled={busy} className={styles.fields}>
               <legend>{t("rework.provisioning.bundle")}</legend>
