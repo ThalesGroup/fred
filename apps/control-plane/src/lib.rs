@@ -28,6 +28,7 @@ pub mod agent_instances;
 pub mod agents;
 pub mod analytics;
 pub mod api;
+pub mod applications;
 pub use fred_rust_sdk::security::authentication as auth;
 pub mod authorization;
 pub mod bootstrap;

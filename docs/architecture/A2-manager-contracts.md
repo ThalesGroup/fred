@@ -33,7 +33,8 @@ are outside this catalogue.
 | `prompt`, `prompt_category`, `prompt_favorite` | Space-owned definitions and categories; caller preferences. |
 | `marketplace_entry`, `marketplace_proposal`, `marketplace_installation` | Frozen packages, catalogue decisions and independent-installation receipts; see the [backend contract](../../apps/control-plane/README.md#local-marketplace-api). |
 | `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
-| `runtime_catalog`, `capability_offer`, template/capability policies | Observed pod offers and their authorization ceilings. |
+| `runtime_catalog`, `capability_source`, `capability_offer`, template/capability policies | Pod, managed MCP and application offers; shared organization and local authorization ceilings. |
+| `application` | Hosted-application registry: immutable UUID/logical name, approved UI/API destinations and entry permission. Presentation and availability belong to the linked offer; see [implementation references](#hosted-application-implementation-references). |
 | `mcp_connection` | Space-owned configuration and published tools; purge removes offer projections and permissions. The organization management journey awaits [functional reception](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending). |
 | Model source, offer and policy tables | [Organization model governance](A13-models.md). |
 | `folder`, `document`, `document_content`, `document_current` | Document placement, stored-content references and current content; bytes live in object storage. |
@@ -73,6 +74,7 @@ application path writes it yet.
 | Family | Table | Trigger / function | When | Why |
 | --- | --- | --- | --- | --- |
 | 1. Immutability | `agent_instance` | `agent_definition` / `protect_agent_definition` | BEFORE INSERT OR UPDATE / ROW | agent identity, placement and creation provenance; edit attribution |
+| 1. Immutability | `application` | `application_identity` / `preserve_application_identity` | BEFORE UPDATE / ROW | application UUID and logical name |
 | 1. Immutability | `document` | `document_immutable` / `forbid_document_move` | BEFORE UPDATE / ROW | document placement |
 | 1. Immutability | `document_content` | `document_content_immutable` / `protect_document_content` | BEFORE UPDATE / ROW | content bytes and publication; no current-content cleanup |
 | 1. Immutability | `document_processing` | `document_processing_identity` / `protect_processing_identity` | BEFORE UPDATE / ROW | processing identity and terminal outcome |
@@ -181,6 +183,27 @@ usable offers. Local restrictions narrow the organization ceiling. Permission
 changes affect new admissions, not an already admitted turn. See the
 [capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use)
 and [catalogue implementation](../../apps/control-plane/src/agents/catalog.rs).
+
+### Hosted application implementation references
+
+Registration and entry admission are separate from each application's business
+journey. The [registry and proxy contract](../../apps/control-plane/README.md#hosted-applications-reception-pending)
+is the component entry point; these references do not establish end-to-end
+acceptance of an application's business operations.
+
+| Source | Responsibility |
+| --- | --- |
+| [Migration 0034](../../apps/control-plane/migrations/0034_hosted_applications.sql) | Registry identity and one linked `capability_offer` under `$applications`; no runtime entry. |
+| [Registry handlers](../../apps/control-plane/src/applications/http.rs) | Platform Admin registration, disabled initially; revision-checked updates; authorized collective-space catalogue without internal URLs. |
+| [Admission](../../apps/control-plane/src/applications/mod.rs) and [capability policy](../../apps/control-plane/src/agents/enablement.rs) | Existing entry permission and organization ceiling, narrowed by team/project policy; personal spaces excluded. |
+| [Proxy](../../apps/control-plane/src/applications/proxy.rs) | Approved destination, bounded transport and credential separation; see the [root transport inventory](A12-control-plane-api.md#root-application-transport). |
+| [Application host](../../apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx) and [bridge contract](../../apps/frontend/src/rework/features/applications/applicationHost.ts) | Stable logical name for the SDK; host-owned authenticated requests, no token in frame messages. |
+
+Registered services are trusted platform extensions, including approved private
+service addresses. A same-origin iframe is not hostile-code isolation. Entry
+admission does not replace the application's own resource ownership and business
+permissions; its database and workers remain owned by that service. Application
+offers are excluded from agent tool selection.
 
 ### Model storage
 

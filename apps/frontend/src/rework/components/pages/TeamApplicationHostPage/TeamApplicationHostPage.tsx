@@ -16,12 +16,12 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import type { ApplicationSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { SpaceApplication } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
-  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+  useLazyListAgentInstancesQuery,
+  useLazyListSessionsQuery,
+  useMySpacesQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { ApplicationErrorBoundary } from "@rework/features/applications/ApplicationErrorBoundary.tsx";
@@ -70,7 +70,7 @@ function ApplicationHostState({ state }: { state: HostState }) {
 type FrameStatus = "connecting" | "ready" | "protocol-mismatch" | "unreachable";
 
 interface ApplicationFrameProps {
-  application: ApplicationSummary;
+  application: SpaceApplication;
   src: string;
   targetOrigin: string;
   teamId: string;
@@ -101,8 +101,11 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
 
   const locale = i18n.resolvedLanguage ?? i18n.language ?? "en";
   const theme: "light" | "dark" = darkMode ? "dark" : "light";
-  const basePath = applicationRouteBasePath(teamId, application.id);
-  const request = useMemo(() => createApplicationRequest(application.id, teamId), [application.id, teamId]);
+  const basePath = applicationRouteBasePath(teamId, application.logical_name);
+  const request = useMemo(
+    () => createApplicationRequest(application.logical_name, teamId),
+    [application.logical_name, teamId],
+  );
 
   // openChat navigates after awaiting two lookups. Without this the user can
   // click away, the listing lands, and the router yanks them back — useNavigate
@@ -115,8 +118,8 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
     };
   }, []);
 
-  const [fetchTeamSessions] = useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery();
-  const [fetchTeamAgents] = useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery();
+  const [fetchTeamSessions] = useLazyListSessionsQuery();
+  const [fetchTeamAgents] = useLazyListAgentInstancesQuery();
 
   /**
    * Resolve where "open a conversation" should land.
@@ -133,7 +136,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
     async (candidateSessionId: string | null) => {
       if (candidateSessionId) {
         try {
-          const sessions = await fetchTeamSessions({ teamId }).unwrap();
+          const sessions = await fetchTeamSessions({ spaceId: teamId }).unwrap();
           if (goneRef.current) return;
           const match = sessions?.find((s) => s.session_id === candidateSessionId);
           if (match?.agent_instance_id) {
@@ -149,13 +152,14 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       // unambiguous, and otherwise the picker is the honest answer rather than
       // guessing on the user's behalf.
       try {
-        const agents = await fetchTeamAgents({ teamId }).unwrap();
+        const agents = await fetchTeamAgents({ spaceId: teamId }).unwrap();
         if (goneRef.current) return;
         // Suspended instances are hidden from chat, so they must not be
         // counted here either — otherwise two "agents" could look ambiguous
         // when only one is actually reachable.
-        const enabled = (agents ?? []).filter((a) => a.status === "enabled" && !a.suspension_reason);
-        if (enabled.length === 1) {
+        const enabled = (agents.items ?? []).filter((a) => a.status === "enabled" && a.preparation_state === "ready");
+        // A partial catalog cannot establish that this is the only usable agent.
+        if (enabled.length === 1 && agents.next_cursor == null) {
           navigate(applicationNewChatTarget(teamId, enabled[0].agent_instance_id));
           return;
         }
@@ -192,7 +196,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       {
         type: "fred:context",
         protocolVersion: FRED_APP_PROTOCOL_VERSION,
-        applicationId: application.id,
+        applicationId: application.logical_name,
         context: {
           team: { id: teamId, name, isPersonal: false },
           route: { basePath: currentBase, subPath: currentSubPath },
@@ -204,7 +208,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       targetOrigin,
     );
     sentContextRef.current = { locale: currentLocale, theme: currentTheme };
-  }, [application.id, targetOrigin, teamId]);
+  }, [application.logical_name, targetOrigin, teamId]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -349,7 +353,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           ref={frameRef}
           className={status === "ready" ? styles.frame : styles.frameLoading}
           src={src}
-          title={applicationLocaleText(application.name, locale)}
+          title={applicationLocaleText(application.display_name_by_lang ?? {}, locale) || application.display_name}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
         />
       )}
@@ -359,7 +363,9 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
 
 export default function TeamApplicationHostPage() {
   const { teamId, appId, "*": subPath = "" } = useParams<{ teamId: string; appId: string; "*": string }>();
-  const { isPersonalTeam, selectedTeam } = useSelectedTeam();
+  const memberships = useMySpacesQuery();
+  const selectedTeam = memberships.currentData?.find((space) => space.id === teamId);
+  const isPersonalTeam = teamId === "personal" || selectedTeam?.kind === "personal";
   const { data, isLoading, isError } = useTeamApplications(teamId, isPersonalTeam || !appId);
 
   if (isLoading) return <ApplicationHostState state="catalog-loading" />;
@@ -368,16 +374,19 @@ export default function TeamApplicationHostPage() {
   // Searching the authorized response first is the important ordering: an
   // unknown or unentitled id learns nothing beyond "unavailable", and no frame
   // is created for an application this team may not use.
-  const application = data.items?.find((candidate) => candidate.id === appId);
+  const application = data.find((candidate) => candidate.logical_name === appId);
   if (!application) return <ApplicationHostState state="unavailable" />;
 
   const target = applicationFrameTarget(application, window.location.origin);
   if (!target) return <ApplicationHostState state="unavailable" />;
 
   return (
-    <ApplicationErrorBoundary applicationId={application.id} fallback={<ApplicationHostState state="render" />}>
+    <ApplicationErrorBoundary
+      applicationId={application.logical_name}
+      fallback={<ApplicationHostState state="render" />}
+    >
       <ApplicationFrame
-        key={`${teamId}:${application.id}:${target.src}`}
+        key={`${teamId}:${application.logical_name}:${target.src}`}
         application={application}
         src={target.src}
         targetOrigin={target.targetOrigin}

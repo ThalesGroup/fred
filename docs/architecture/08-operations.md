@@ -8,7 +8,11 @@ defaults with the instance values, including the Control Plane's model sources
 and each runtime's credential references. The
 [operations reference](A3-manager-operations.md) and
 [model reference](A13-models.md#deployment-evidence) identify the deployment inputs.
-The frontend forwards `/control-plane/v1` to port 8222.
+The frontend forwards `/control-plane/v1`, `/apps/` and `/app-services/` to Control
+Plane. Application destinations come from its SQL registry, without per-application
+gateway configuration. Static assets are public and credential-free; API requests
+use authenticated space admission. Each application service owns its deployment,
+database schema and workers independently of its Fred registration.
 
 Rust configuration is validated against its generated schema. Credentials are
 references to Secrets, never literal values in application configuration.
@@ -21,7 +25,8 @@ sources through the UI; deployment configuration supplies them and their credent
 
 | Action | Responsible | Where | Restart / redeploy? |
 | --- | --- | --- | --- |
-| Add or change a source | Operator | Deployment configuration | Yes, affected services |
+| Register, update or suspend an application | Platform Admin | Applications UI, persisted in SQL | No; the service must already be deployed |
+| Add or change a model source | Operator | Deployment configuration | Yes, affected services |
 | Add a source to an organization | Operator | `platform.organization_models.sources` | Yes, Control Plane |
 | Refresh a discovered model inventory | Organization Owner | Models UI | No |
 | Add a model to a declared inventory | Operator | Deployment configuration | Yes, Control Plane |
@@ -51,8 +56,9 @@ these indexes.
 
 ## PostgreSQL ownership
 
-One database contains four isolated schemas. Control Plane owns `control_plane`
-(tables, functions, triggers and SQLx history) and `cp_read` (read contracts).
+Fred's core services share four isolated schemas in one database. Control Plane
+owns `control_plane` (tables, functions, triggers and SQLx history) and `cp_read`
+(read contracts).
 Knowledge Flow owns `knowledge`; Agent Pod owns `runtime`, including Alembic
 history and checkpoints. Their logins are `fred_cp`, `fred_kf`, `fred_runtime`;
 `fred_monitor` reads only its platform-role view. Consumers receive SELECT through

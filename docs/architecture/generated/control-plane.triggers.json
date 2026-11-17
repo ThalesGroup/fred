@@ -28,6 +28,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - application UUID and logical name",
+    "function": "preserve_application_identity",
+    "table": "application",
+    "trigger": "application_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - collective avatars belong only to teams; personal avatars belong to subjects",
     "function": "require_team_avatar",
     "table": "avatar",

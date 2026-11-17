@@ -465,6 +465,23 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    platformApplications: build.query<PlatformApplicationsApiResponse, PlatformApplicationsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/applications` }),
+    }),
+    createApplication: build.mutation<CreateApplicationApiResponse, CreateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/applications`,
+        method: "POST",
+        body: queryArg.createApplication,
+      }),
+    }),
+    updateApplication: build.mutation<UpdateApplicationApiResponse, UpdateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/applications/${queryArg.applicationId}`,
+        method: "PUT",
+        body: queryArg.updateApplication,
+      }),
+    }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
     }),
@@ -753,6 +770,9 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
+    }),
+    spaceApplications: build.query<SpaceApplicationsApiResponse, SpaceApplicationsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/applications` }),
     }),
     spaceCapabilityPolicies: build.query<SpaceCapabilityPoliciesApiResponse, SpaceCapabilityPoliciesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies` }),
@@ -1671,6 +1691,17 @@ export type OrganizationTeamsApiArg = {
   search?: string;
   page?: number;
 };
+export type PlatformApplicationsApiResponse = /** status 200 undefined */ Application[];
+export type PlatformApplicationsApiArg = void;
+export type CreateApplicationApiResponse = /** status 201 undefined */ Application;
+export type CreateApplicationApiArg = {
+  createApplication: CreateApplication;
+};
+export type UpdateApplicationApiResponse = /** status 200 undefined */ Application;
+export type UpdateApplicationApiArg = {
+  applicationId: string;
+  updateApplication: UpdateApplication;
+};
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
@@ -1932,6 +1963,10 @@ export type AdmitRuntimeApiArg = {
 };
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
+  spaceId: string;
+};
+export type SpaceApplicationsApiResponse = /** status 200 undefined */ SpaceApplication[];
+export type SpaceApplicationsApiArg = {
   spaceId: string;
 };
 export type SpaceCapabilityPoliciesApiResponse = /** status 200 undefined */ SpaceCapabilityPolicy[];
@@ -3315,22 +3350,28 @@ export type CapabilityFieldDescription = {
   type: CapabilityFieldType;
 };
 export type CapabilityExecutionModel = "react" | "graph";
-export type PodCapabilityKind = "tool";
+export type PodCapabilityKind = "tool" | "application";
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  };
   execution_models?: CapabilityExecutionModel[];
   icon: string;
   id: string;
   kind?: PodCapabilityKind;
   name: string;
+  name_by_lang?: {
+    [key: string]: string;
+  };
   public_version?: string | null;
   runtime_id?: string | null;
   source_id?: string | null;
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
 };
-export type OfferOrigin = "pod" | "managed_mcp";
+export type OfferOrigin = "pod" | "managed_mcp" | "application";
 export type AffectedAgentInstance = {
   agent_instance_id: string;
   display_name: string;
@@ -3536,6 +3577,42 @@ export type DiscoverableTeam = {
 export type TeamDirectoryPage = {
   items: DiscoverableTeam[];
   total: number;
+};
+export type ApplicationMetadata = {
+  description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  };
+  display_name: string;
+  display_name_by_lang?: {
+    [key: string]: string;
+  };
+  icon: string;
+  version?: string;
+};
+export type Application = ApplicationMetadata & {
+  api_base_url?: string | null;
+  capability_id: string;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  id: string;
+  logical_name: string;
+  revision: number;
+  source_id: string;
+  ui_base_url: string;
+};
+export type CreateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  entry_permission?: SpacePermission;
+  logical_name: string;
+  ui_base_url: string;
+};
+export type UpdateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  expected_revision: number;
+  ui_base_url: string;
 };
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
@@ -4185,6 +4262,15 @@ export type AgentTemplateSummary = {
   team_instantiable: boolean;
   template_id: string;
 };
+export type SpaceApplication = ApplicationMetadata & {
+  api_path?: string | null;
+  capability_id: string;
+  entry_permission: SpacePermission;
+  id: string;
+  logical_name: string;
+  source_id: string;
+  ui_path: string;
+};
 export type LocalOffer = {
   advertised: boolean;
   capability_id: string;
@@ -4709,6 +4795,10 @@ export const {
   useLazyTeamSupervisionQuery,
   useOrganizationTeamsQuery,
   useLazyOrganizationTeamsQuery,
+  usePlatformApplicationsQuery,
+  useLazyPlatformApplicationsQuery,
+  useCreateApplicationMutation,
+  useUpdateApplicationMutation,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useDefaultSkillsQuery,
@@ -4773,6 +4863,8 @@ export const {
   useAdmitRuntimeMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useSpaceApplicationsQuery,
+  useLazySpaceApplicationsQuery,
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,

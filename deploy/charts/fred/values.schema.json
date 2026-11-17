@@ -99,13 +99,11 @@
       "properties": {
         "applications": {
           "type": "object",
-          "maxProperties": 0,
-          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+          "description": "Legacy values are rejected by the template; applications use Control Plane SQL, and Knowledge Base publishers remain unsupported."
         },
         "knowledgeBasePublishers": {
           "type": "object",
-          "maxProperties": 0,
-          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+          "description": "Legacy values are rejected by the template; applications use Control Plane SQL, and Knowledge Base publishers remain unsupported."
         }
       },
       "additionalProperties": false

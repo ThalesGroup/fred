@@ -5351,12 +5351,12 @@
       "agentHint": "The choice must respect organization permissions and space restrictions. Without a recommendation, the agent follows the space default, then the organization default."
     },
     "toolGovernance": {
-      "title": "Tools",
+      "title": "Tools and applications",
       "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space.",
       "restrict": "Restrict offers in this space",
       "inherit": "Without a local restriction, this space follows its parent permissions.",
       "denyAll": "Allow no offers in this space",
-      "offer": "Pod offer",
+      "offer": "Offer",
       "parent": "Parent ceiling",
       "local": "Local choice",
       "effective": "Effective decision",
@@ -5608,6 +5608,44 @@
       "invalid": "Enter a positive whole number within the organization ceiling.",
       "failed": "Could not save the purge delay.",
       "saved": "Purge delay saved."
+    },
+    "applications": {
+      "registryHint": "Register hosted applications, then enable them for organization owners to authorize.",
+      "create": "Register application",
+      "edit": "Edit application",
+      "editNamed": "Edit {{name}}",
+      "display_name": "Name",
+      "description": "Description",
+      "logical_name": "Application key",
+      "icon": "Icon",
+      "version": "Version",
+      "ui_base_url": "Internal UI destination",
+      "api_base_url": "Internal API destination",
+      "ui_base_urlHint": "Full HTTP(S) directory URL, ending with /, from which the application UI is served.",
+      "api_base_urlHint": "Optional HTTP(S) base URL of the application API, ending with /. Leave empty for a UI-only application.",
+      "entry_permission": "Permission required to use this application",
+      "permissions": {
+        "read": "Read space content",
+        "write": "Edit space content",
+        "manage": "Manage the space",
+        "run_evaluations": "Run evaluations",
+        "manage_evaluation_corpus": "Manage the evaluation corpus",
+        "read_conversations_for_evaluation": "Read conversations for evaluation",
+        "read_usage": "View usage"
+      },
+      "enabled": "Enabled on the platform",
+      "active": "Enabled",
+      "inactive": "Disabled",
+      "createdDisabled": "New applications are disabled. Review the registration, then enable it. Organization owners decide where it is authorized.",
+      "conflict": "This registration changed. Close and reopen it before saving. If registering, choose an unused application key.",
+      "invalid": "Check the application key, labels and HTTP(S) destinations.",
+      "saveFailed": "The application could not be saved.",
+      "display_name_by_lang": "Translated name (optional)",
+      "description_by_lang": "Translated description (optional)",
+      "locale": {
+        "en": "English",
+        "fr": "French"
+      }
     }
   },
   "runtime": {

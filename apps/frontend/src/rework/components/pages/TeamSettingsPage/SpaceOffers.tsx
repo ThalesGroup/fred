@@ -7,6 +7,7 @@ import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
+import { applicationLocaleText } from "@rework/features/applications/applicationI18n";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import {
   useSpaceCapabilityPoliciesQuery,
@@ -16,7 +17,7 @@ import {
 import styles from "./TeamSettingsPage.module.scss";
 
 export function SpaceOffers({ spaceId }: { spaceId: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const access = useSpaceAccess(spaceId, "manage");
   const query = useSpaceCapabilityPoliciesQuery(
     { spaceId },
@@ -62,7 +63,13 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
       ) : (
         query.currentData.map((policy) => (
           <section key={policy.source_id} className={styles.offerSource}>
-            <h2>{policy.origin === "managed_mcp" ? t("rework.mcp.centralSource") : policy.source_id}</h2>
+            <h2>
+              {policy.origin === "application"
+                ? t("teamAppsPage.title")
+                : policy.origin === "managed_mcp"
+                  ? t("rework.mcp.centralSource")
+                  : policy.source_id}
+            </h2>
             {(!policy.source_enabled || !policy.reachable) && (
               <p role="status">
                 {t(`rework.toolGovernance.source.${!policy.source_enabled ? "disabled" : "unavailable"}`)}
@@ -104,7 +111,8 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
                   label: t("rework.toolGovernance.offer"),
                   cellRenderer: (offer) => (
                     <span className={styles.offerName}>
-                      {t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
+                      {applicationLocaleText(offer.descriptor.name_by_lang ?? {}, i18n.language) ||
+                        t(offer.descriptor.name, { defaultValue: offer.descriptor.name })}
                     </span>
                   ),
                 },

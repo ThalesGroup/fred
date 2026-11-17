@@ -31,6 +31,13 @@ libraries belong to their pod. Knowledge Flow processes documents and serves
 knowledge through its API. Each backend also has background work: grouping it
 here with its owner does not imply a single process or replica.
 
+A hosted **application** embeds a trusted business UI in a collective space.
+Control Plane stores its registration in PostgreSQL and owns entry admission and
+forwarding to its approved services. The application owns its business records,
+action permissions and workers. It is separate from Agent Pods and agent tools;
+the [contract annex](A2-manager-contracts.md#hosted-application-implementation-references)
+traces these boundaries.
+
 ## 1.2. Importing a document
 
 ```mermaid

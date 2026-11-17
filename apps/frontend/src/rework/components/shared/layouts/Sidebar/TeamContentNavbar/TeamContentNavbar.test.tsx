@@ -40,9 +40,8 @@ const h = vi.hoisted(() => ({
   pathname: "/team/team-1/resources",
   relations: ["team_member"] as string[],
   charterEnabled: undefined as boolean | undefined,
-  applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
-    data?: { items: Array<Record<string, unknown>> };
+    data?: Array<Record<string, unknown>>;
     isError: boolean;
   },
   refetchKnowledgeBases: vi.fn(),
@@ -51,7 +50,6 @@ const h = vi.hoisted(() => ({
   avatarQuery: vi.fn(),
   wiki: vi.fn(),
   applications: vi.fn(),
-  flags: vi.fn(),
   canUseKnowledgeBases: true,
   knowledgeBases: { currentData: undefined, isError: false } as {
     currentData?: { definition_id: string; name: string; description: string }[];
@@ -136,11 +134,6 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
   }),
-}));
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: (name: string, skip: boolean) => (
-    h.flags(name, skip), { enabled: h.applicationsEnabled, isLoading: false }
-  ),
 }));
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
@@ -237,13 +230,11 @@ it("offers a local retry after access checks fail and restores navigation when t
 describe("TeamContentNavbar applications entry", () => {
   beforeEach(() => {
     h.isPersonalTeam = false;
-    h.applicationsEnabled = false;
     h.result = { data: undefined, isError: false };
   });
 
   it("adds exactly one generic Apps entry when an authorized app is available", () => {
-    h.applicationsEnabled = true;
-    h.result.data = { items: [application] };
+    h.result.data = [application];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html.match(/href="\/team\/team-1\/apps"/g)).toHaveLength(1);
     expect(html).toContain("rework.sidebar.team.menu.apps");
@@ -251,13 +242,12 @@ describe("TeamContentNavbar applications entry", () => {
   });
 
   it("hides Apps when the catalog is unavailable, empty, or failed", () => {
-    h.applicationsEnabled = true;
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
 
-    h.result = { data: { items: [] }, isError: false };
+    h.result = { data: [], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
 
-    h.result = { data: { items: [application] }, isError: true };
+    h.result = { data: [application], isError: true };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
   });
 
@@ -265,21 +255,19 @@ describe("TeamContentNavbar applications entry", () => {
   // heard of is ordinary — it must not suppress the entry the way a build-time
   // registry miss once did.
   it("shows Apps for an application version this Fred build predates", () => {
-    h.applicationsEnabled = true;
-    h.result = { data: { items: [{ ...application, version: "2.0.0" }] }, isError: false };
+    h.result = { data: [{ ...application, version: "2.0.0" }], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/apps"');
   });
 
   it("never shows Apps for a personal space", () => {
-    h.applicationsEnabled = true;
     h.isPersonalTeam = true;
-    h.result = { data: { items: [application] }, isError: false };
+    h.result = { data: [application], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
   });
 
-  it("hides Apps behind the default-off deployment switch despite a compatible cached catalog", () => {
-    h.result.data = { items: [application] };
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  it("uses the authorized catalog without a deployment switch", () => {
+    h.result.data = [application];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/apps"');
   });
 });
 
@@ -289,7 +277,6 @@ describe("TeamContentNavbar applications entry", () => {
 describe("TeamContentNavbar — the wiki entry", () => {
   beforeEach(() => {
     h.isPersonalTeam = false;
-    h.applicationsEnabled = false;
     h.result = { data: undefined, isError: false };
     h.wikiEnabled = undefined;
     h.pathname = "/team/team-1/agents";
@@ -459,8 +446,7 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
   expect(h.avatarQuery).toHaveBeenLastCalledWith(true);
-  expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
-  expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
+  expect(h.applications).toHaveBeenLastCalledWith("team-1", false);
   expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
   expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
@@ -687,4 +673,13 @@ it("offers team activity to content readers separately from management and consu
     h.canManage = false;
     h.canRead = true;
   }
+});
+
+it("offers an authorized evaluation application to an analyst without content read", () => {
+  h.canRead = false;
+  h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["analyst"] }];
+  h.result = { data: [application], isError: false };
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(h.applications).toHaveBeenLastCalledWith("team-1", false);
+  expect(html).toContain('href="/team/team-1/apps"');
 });

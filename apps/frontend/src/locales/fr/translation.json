@@ -5351,12 +5351,12 @@
       "agentHint": "Le choix doit respecter les autorisations de l'organisation et les restrictions de l'espace. Sans recommandation, l'agent suit le défaut de l'espace, puis celui de l'organisation."
     },
     "toolGovernance": {
-      "title": "Outils",
+      "title": "Outils et applications",
       "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace.",
       "restrict": "Restreindre les offres dans cet espace",
       "inherit": "Sans restriction locale, cet espace suit les autorisations de ses parents.",
       "denyAll": "Ne rien autoriser dans cet espace",
-      "offer": "Offre du pod",
+      "offer": "Offre",
       "parent": "Plafond parent",
       "local": "Choix local",
       "effective": "Décision effective",
@@ -5608,6 +5608,44 @@
       "invalid": "Saisissez un entier positif respectant le plafond de l’organisation.",
       "failed": "Impossible d’enregistrer le délai de purge.",
       "saved": "Délai de purge enregistré."
+    },
+    "applications": {
+      "registryHint": "Enregistrez les applications hébergées, puis activez-les pour que les Owners d’organisation puissent les autoriser.",
+      "create": "Enregistrer une application",
+      "edit": "Modifier l’application",
+      "editNamed": "Modifier {{name}}",
+      "display_name": "Nom",
+      "description": "Description",
+      "logical_name": "Clé de l’application",
+      "icon": "Icône",
+      "version": "Version",
+      "ui_base_url": "Destination interne de l’interface",
+      "api_base_url": "Destination interne de l’API",
+      "ui_base_urlHint": "URL complète du répertoire HTTP(S) qui sert l’interface, terminée par /.",
+      "api_base_urlHint": "URL HTTP(S) facultative de base de l’API, terminée par /. Laissez vide pour une application sans API.",
+      "entry_permission": "Permission requise pour utiliser cette application",
+      "permissions": {
+        "read": "Lire le contenu de l’espace",
+        "write": "Modifier le contenu de l’espace",
+        "manage": "Gérer l’espace",
+        "run_evaluations": "Exécuter des évaluations",
+        "manage_evaluation_corpus": "Gérer le corpus d’évaluation",
+        "read_conversations_for_evaluation": "Lire les conversations pour évaluation",
+        "read_usage": "Consulter la consommation"
+      },
+      "enabled": "Activée sur la plateforme",
+      "active": "Activée",
+      "inactive": "Désactivée",
+      "createdDisabled": "Une nouvelle application est désactivée. Vérifiez son inscription avant de l’activer. Les Owners d’organisation décident où elle est autorisée.",
+      "conflict": "Cette inscription a changé. Fermez et rouvrez-la avant d’enregistrer. Pour une création, choisissez une clé d’application inutilisée.",
+      "invalid": "Vérifiez la clé de l’application, les libellés et les destinations HTTP(S).",
+      "saveFailed": "Impossible d’enregistrer l’application.",
+      "display_name_by_lang": "Nom traduit (facultatif)",
+      "description_by_lang": "Description traduite (facultative)",
+      "locale": {
+        "en": "Anglais",
+        "fr": "Français"
+      }
     }
   },
   "runtime": {

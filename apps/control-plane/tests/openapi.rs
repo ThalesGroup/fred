@@ -164,6 +164,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     }
     let expected = [
         "get /healthz",
+        "get /platform/applications",
+        "post /platform/applications",
+        "put /platform/applications/{application_id}",
+        "get /spaces/{space_id}/applications",
         "get /frontend/config",
         "get /me/onboarding",
         "post /gcu",

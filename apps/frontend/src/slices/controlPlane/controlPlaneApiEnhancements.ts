@@ -169,6 +169,7 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "Applications",
     "MyAvatar",
     "TeamAvatar",
     "TeamDirectory",
@@ -195,6 +196,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    platformApplications: { providesTags: ["Applications"] },
+    spaceApplications: { providesTags: ["Applications"], keepUnusedDataFor: 0 },
+    createApplication: {
+      invalidatesTags: ["Applications", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    updateApplication: {
+      invalidatesTags: ["Applications", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
     teamDocumentActivity(endpoint) {
       // A hung poll must not prevent reconnect convergence; retain no old pages
       // once their team/view is left. URL and contract remain generated.
@@ -281,7 +292,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
     },
     wikiAvailability: { providesTags: ["Wiki", "OrganizationCapabilities", "AgentTemplates"] },
-    replaceSpaceCapabilityPolicy: { invalidatesTags: ["Wiki"], extraOptions: { retryUnauthorized: false } },
+    replaceSpaceCapabilityPolicy: {
+      invalidatesTags: ["Wiki", "Applications", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
     wikiPages: { providesTags: wikiTags },
     wikiPage: { providesTags: wikiTags },
     wikiRules: { providesTags: wikiTags },
@@ -685,7 +699,11 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: ["OrganizationCapabilities"],
     },
     setOrganizationCapabilityDefault: {
-      invalidatesTags: (_result, _error, arg) => [{ type: "OrganizationCapabilities", id: arg.organizationId }],
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "OrganizationCapabilities", id: arg.organizationId },
+        "Applications",
+        "SpaceCapabilityPolicies",
+      ],
       extraOptions: { retryUnauthorized: false },
     },
     entries: { providesTags: ["Folders", "Documents"] },
@@ -820,6 +838,12 @@ export const {
   useDeletePromptMutation,
   useListAttachmentsQuery,
   useDeleteAttachmentMutation,
+  usePlatformApplicationsQuery,
+  useSpaceApplicationsQuery,
+  useCreateApplicationMutation,
+  useUpdateApplicationMutation,
+  useLazyListSessionsQuery,
+  useLazyListAgentInstancesQuery,
   useListSessionsQuery,
   useGetSessionQuery,
   useCreateSessionMutation,

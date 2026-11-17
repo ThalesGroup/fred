@@ -101,11 +101,10 @@ assistant with **Team documents** enabled and ask about the PDF: the answer cite
 it and its sources are visible
 ([journey](../../docs/architecture/02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents)).
 
-**What does not work yet.** Screens still calling the retired Python control plane
-(`slices/legacyControlPlane`) fail: parts of Home, Prompts, Wiki, knowledge bases,
-applications, marketplace and most platform administration pages. Among agent
-capabilities, only document search is wired. [AGENTS.md](../../AGENTS.md#weaver-fred-5x-current-state-versus-target)
-states the current and target state of each component.
+**Functional scope.** The [architecture dossier](../../docs/architecture/README.md)
+describes the validated Weaver scope. Component READMEs distinguish implemented
+contracts from deployed acceptance; see the [hosted-application contract](../../apps/control-plane/README.md#hosted-applications-reception-pending)
+for SQL registration, shared capability governance and the dynamic gateway.
 
 **Day to day.** `make k3d-app-validate FRED=weaver APP=fred DIR=../fred` renders
 without building. Read a component's logs with

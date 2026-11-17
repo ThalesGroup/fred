@@ -39,9 +39,10 @@ const h = vi.hoisted(() => ({
   uiPrefix: "/apps/example-ui/",
   sessions: [] as Array<{ session_id: string; agent_instance_id?: string }>,
   sessionsFail: false,
+  agentsNextCursor: null as string | null,
   agents: [] as Array<{ agent_instance_id: string; status?: string; suspension_reason?: string | null }>,
   result: { data: undefined, isLoading: false, isError: false } as {
-    data?: { items: Array<Record<string, unknown>> };
+    data?: Array<Record<string, unknown>>;
     isLoading: boolean;
     isError: boolean;
   },
@@ -61,25 +62,29 @@ vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ siteDisplayName: "Acme" }),
 }));
 
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({
-    teamId: h.teamId,
-    isPersonalTeam: h.isPersonalTeam,
-    selectedTeam: { id: h.teamId, name: h.teamName },
-  }),
-}));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => [
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useMySpacesQuery: () => ({
+    currentData: [{ id: h.teamId, name: h.teamName, kind: h.isPersonalTeam ? "personal" : "team" }],
+  }),
+  useLazyListSessionsQuery: () => [
     () => ({
       unwrap: () => (h.sessionsFail ? Promise.reject(new Error("down")) : Promise.resolve(h.sessions)),
     }),
   ],
-  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery: () => [
-    () => ({ unwrap: () => Promise.resolve(h.agents) }),
+  useLazyListAgentInstancesQuery: () => [
+    () => ({
+      unwrap: () =>
+        Promise.resolve({
+          next_cursor: h.agentsNextCursor,
+          items: h.agents.map((agent) => ({
+            ...agent,
+            preparation_state: agent.suspension_reason ? "suspended" : "ready",
+          })),
+        }),
+    }),
   ],
 }));
 vi.mock("@rework/features/applications/applicationRequest.ts", () => ({
@@ -95,18 +100,25 @@ const FRED_ORIGIN = "http://localhost:3000";
 
 function application() {
   return {
-    id: "example",
+    id: "registry-uuid",
+    logical_name: "example",
+    display_name: "Example",
+    description: "Example application",
+    source_id: "$applications",
+    capability_id: "application:registry-uuid",
+    entry_permission: "read",
+    api_path: "/app-services/example/teams/team-1/",
     version: "1.0.0",
-    name: { en: "Example App", fr: "Application exemple" },
-    description: { en: "An example", fr: "Un exemple" },
+    display_name_by_lang: { en: "Example App", fr: "Application exemple" },
+    description_by_lang: { en: "An example", fr: "Un exemple" },
     icon: "extension",
-    ui_prefix: h.uiPrefix,
+    ui_path: h.uiPrefix,
   };
 }
 
 function withUiPrefix(uiPrefix: string) {
   h.uiPrefix = uiPrefix;
-  h.result.data = { items: [application()] };
+  h.result.data = [application()];
 }
 
 let container: HTMLDivElement | undefined;
@@ -193,6 +205,7 @@ beforeEach(() => {
   h.sessions = [];
   h.sessionsFail = false;
   h.agents = [];
+  h.agentsNextCursor = null;
   h.request.mockReset();
   h.subPath = "";
   h.teamId = "team-1";
@@ -200,7 +213,7 @@ beforeEach(() => {
   h.darkMode = false;
   h.locale = "en";
   h.uiPrefix = "/apps/example-ui/";
-  h.result = { data: { items: [application()] }, isLoading: false, isError: false };
+  h.result = { data: [application()], isLoading: false, isError: false };
 });
 
 describe("TeamApplicationHostPage frame admission", () => {
@@ -466,6 +479,16 @@ describe("TeamApplicationHostPage routing", () => {
     expect(h.navigate).toHaveBeenCalledWith("/team/team-1/managed-chat/agent-9");
   });
 
+  it("opens the picker when a partial catalog has one usable agent but more instances remain", async () => {
+    h.agents = [{ agent_instance_id: "agent-9", status: "enabled" }];
+    h.agentsNextCursor = "next-page";
+    await renderPage();
+    await postFromFrame({ type: "fred:ready", protocolVersion: "1" });
+    await postFromFrame({ type: "fred:open-chat" });
+    expect(h.navigate).toHaveBeenCalledWith("/team/team-1/agents");
+    expect(h.navigate).not.toHaveBeenCalledWith("/team/team-1/managed-chat/agent-9");
+  });
+
   it("shows the picker rather than guessing when several agents are available", async () => {
     h.agents = [
       { agent_instance_id: "agent-9", status: "enabled" },
@@ -710,9 +733,7 @@ describe("TeamApplicationHostPage lifecycle replacement", () => {
       () => {
         h.appId = "other";
         h.uiPrefix = "/apps/other/";
-        h.result.data = {
-          items: [{ ...application(), id: "other", ui_prefix: h.uiPrefix }],
-        };
+        h.result.data = [{ ...application(), id: "other-uuid", logical_name: "other", ui_path: h.uiPrefix }];
       },
       FRED_ORIGIN,
     ],

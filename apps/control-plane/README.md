@@ -1393,6 +1393,36 @@ upload receipts, quotas, original storage and capability preparation are reused.
 An unsupported file owner or configuration rejects the whole operation rather
 than dropping a capability. No Swift storage adapter or second workflow is used.
 
+## Hosted applications (reception pending)
+
+Platform Admin registers application UI directories and optional API directories
+through `/platform/applications`; registrations start disabled. These are trusted
+HTTP(S) services: API requests carry the caller's bearer. Register the full upstream
+UI directory (for example `http://fred-evaluator-ui:8080/apps/evaluation/`) and API
+root (for example `http://application-api:8080/api/`). URLs must
+end in `/` and contain no credentials, query or fragment. The stable logical name
+is the SDK application ID; the UUID identifies the registry entry. A revision is
+required for updates. Suspension preserves application data and governance.
+
+Applications use the `$applications` source and existing organization capability
+and team/project capability-policy screens. An organization Owner authorizes an
+offer; local Owners can only restrict the inherited ceiling. Personal spaces are
+excluded. The entry permission uses the existing space permission matrix (register
+Evaluation with `run_evaluations`); each service still checks its own action rights.
+Applications never become agent tools or pod templates.
+
+`/spaces/{space_id}/applications` returns permitted applications and browser paths,
+without internal destinations. The gateway forwards `/apps/` and `/app-services/`
+to Control Plane. Static GET/HEAD requests carry no credentials; API requests retain
+`teams/{space_uuid}/...` below the registered API directory and forward only the
+validated user bearer. Redirects and unsafe path segments are rejected. Requests
+are capped at 16 MiB/60 seconds; responses stream up to 64 MiB with a 180-second
+upstream deadline. Suspension affects new admissions, not already admitted calls.
+
+Targeted disposable reception: `make test-integration
+CARGO_TEST_OPTS=applications::hosted_applications_registration_governance_and_proxy`.
+Local SQL/HTTP checks do not establish deployed UI acceptance.
+
 ## Managed MCP connections (reception pending)
 
 Each connection belongs to a space. The supported management journey is the

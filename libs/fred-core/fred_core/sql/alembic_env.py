@@ -44,6 +44,7 @@ from pathlib import Path
 from sqlalchemy import MetaData, pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.schema import CreateSchema
 
 from fred_core.common.structures import PostgresStoreConfig
 
@@ -148,6 +149,7 @@ def make_alembic_env(
     get_postgres_config: Callable[[], PostgresStoreConfig],
     version_table: str = "alembic_version",
     owned_tables: Collection[str] | None = None,
+    create_schema: bool = False,
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Return ``(run_migrations_offline, run_migrations_online)`` for *env.py*.
 
@@ -160,6 +162,9 @@ def make_alembic_env(
         version_table: Name of the Alembic version table.  Set a unique name
             per backend when multiple backends share the same database so their
             migration histories don't collide.
+        create_schema: Create the configured PostgreSQL schema in the migration
+            transaction before Alembic creates its version table. Opt in only
+            when this application owns schema initialization.
         owned_tables: Table names this backend's migration tree owns. REQUIRED
             whenever *target_metadata* includes a shared declarative base
             (fred-core's ``CoreBase``): deriving ownership from the metadata
@@ -221,6 +226,9 @@ def make_alembic_env(
             include_object=_include_object,
         )
         with context.begin_transaction():
+            schema = _postgres_config().schema_name if is_postgres else None
+            if create_schema and schema is not None:
+                connection.execute(CreateSchema(schema, if_not_exists=True))
             context.run_migrations()
 
     async def _run_async_migrations() -> None:
@@ -255,8 +263,13 @@ def make_alembic_env(
             include_object=_include_object,
         )
         with context.begin_transaction():
-            if pg:
-                context.execute(f"SET search_path TO {pg.schema_name}")
+            if pg and pg.schema_name is not None:
+                if create_schema:
+                    context.execute(CreateSchema(pg.schema_name, if_not_exists=True))
+                schema = context.get_context().dialect.identifier_preparer.quote(
+                    pg.schema_name
+                )
+                context.execute(f"SET search_path TO {schema}")
             context.run_migrations()
 
     def run_migrations_online() -> None:

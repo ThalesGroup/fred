@@ -526,7 +526,7 @@ async def test_m2m_network_observer_does_not_label_cache_as_network(
         auth.M2MAuthConfig(
             keycloak_realm_url="https://iam.invalid/realms/test",
             client_id="test",
-            secret_env="OTEL_TEST_SECRET",
+            secret_env="OTEL_TEST_SECRET",  # pragma: allowlist secret - test environment variable name
         ),
         transport=httpx.MockTransport(respond),
     )

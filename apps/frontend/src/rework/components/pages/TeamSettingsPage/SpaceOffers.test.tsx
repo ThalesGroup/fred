@@ -18,7 +18,10 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key }),
+  useTranslation: () => ({
+    i18n: { language: "en" },
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+  }),
 }));
 vi.mock("@core/hooks/useSpaceAccess", () => ({ useSpaceAccess: () => ({ allowed: h.allowed, settled: true }) }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
@@ -132,4 +135,17 @@ it("distinguishes unavailable source from a saved refusal", () => {
   expect(container.textContent).toContain("source.unavailable");
   expect(container.textContent).toContain("rework.toolGovernance.denied");
   expect(container.textContent).toContain("graph");
+});
+
+it("restricts applications with the same parent ceiling and revision as other offers", async () => {
+  h.policies[0].source_id = "$applications";
+  h.policies[0].origin = "application";
+  render();
+  expect(container.textContent).toContain("teamAppsPage.title");
+  await act(async () => container.querySelector<HTMLInputElement>("input")!.click());
+  expect(h.calls[0]).toEqual({
+    spaceId: "project",
+    sourceId: "$applications",
+    replaceSpaceCapabilityPolicy: { expected_revision: 4, restricted: true, permitted_ids: ["tool"] },
+  });
 });

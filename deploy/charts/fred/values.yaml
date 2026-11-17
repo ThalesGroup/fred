@@ -370,15 +370,9 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
-# ── Registrations ────────────────────────────────────────────────────
-# What this deployment serves, one entry per application or Knowledge Base, keyed
-# by its id: Helm merges maps, so each one can come from its own values file, and
-# `null` removes it (a whole entry, not one of its fields). The chart derives from them the control plane's
-# platform.application_sources and knowledge_bases.publishers, and the frontend
-# gateway's FRONTEND_APPLICATIONS_JSON; setting those directly is refused.
-# Registration grants no access: a platform admin enables each one per team.
-# Rust control plane: both maps must remain empty until #3211 is ported.
-# Non-empty registrations are rejected by the schema and templates.
+# Retired registration maps stay empty. Applications are registered through
+# Admin > Applications and stored in Control Plane SQL. Knowledge Base publishers
+# remain unsupported. Non-empty legacy values are rejected.
 registrations:
   applications: {}
   knowledgeBasePublishers: {}
@@ -954,17 +948,6 @@ applications:
               service:
                 name: knowledge-flow-backend
                 port: 8000
-            # Worked example — sending an application UI straight to its own
-            # Service, skipping the frontend hop. Only the path changes hands:
-            # the browser URL stays /apps/acme-forecast/, so ui_prefix and the
-            # bundle's base path are unaffected. Keep its gateway in
-            # registrations.applications regardless, since /app-services still
-            # goes through the frontend and needs the id to answer 404 vs 503.
-            # - path: /apps/acme-forecast
-            #   pathType: Prefix
-            #   service:
-            #     name: acme-forecast-ui
-            #     port: 80
       tls:
         - secretName: frontend-crt
           hosts:

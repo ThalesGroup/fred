@@ -5989,3 +5989,6 @@ mod team_activity;
 
 #[path = "support/team_discovery.rs"]
 mod team_discovery;
+
+#[path = "support/applications.rs"]
+mod applications;
