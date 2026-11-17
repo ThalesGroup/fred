@@ -37,7 +37,7 @@ const prefersReducedMotion = () =>
 /** Admin-ordered "featured" agents of the advanced home, one at a time. */
 export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouselProps) {
   const { t } = useTranslation();
-  const { agentIconName, homeBannerImageFile } = useFrontendProperties();
+  const { agentIconName } = useFrontendProperties();
   const [index, setIndex] = useState(0);
   // Auto-rotation is opt-out by the user (pause button) and off for reduced motion.
   const [playing, setPlaying] = useState(() => !prefersReducedMotion());
@@ -112,9 +112,6 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeld(false);
         }}
       >
-        {homeBannerImageFile && (
-          <img className={styles.decoration} src={`/images/${homeBannerImageFile}`} alt="" aria-hidden="true" />
-        )}
         <div className={styles.main}>
           <div className={styles.identity}>
             <span className={styles.icon}>

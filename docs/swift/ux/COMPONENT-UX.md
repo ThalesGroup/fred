@@ -84,7 +84,7 @@ next/dots), a text-only question field for the agent the admin picks (hidden whe
 unchanged home agent selection as team agents page cards (`AgentCard`, read-only) in rows of three with a centered last
 row. The bar keeps tabs left and search right at content width. The banner is
 a large agent card (shared `AgentChatButton`); section marks are hidden by
-default. Themes restyle it with `homeBannerImageFile`, `--home-greeting-color`,
+default. Themes restyle it with `--home-greeting-color`,
 `--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
 agent names and visibility refresh while an edit is in progress.
 

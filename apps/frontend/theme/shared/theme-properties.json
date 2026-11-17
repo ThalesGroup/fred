@@ -9,6 +9,5 @@
   "faviconName": "fred",
   "faviconNameDark": "fred-dark",
   "defaultTeamAvatarFile": "acme-team-avatar.svg",
-  "agentIconName": "customAgent",
-  "homeBannerImageFile": ""
+  "agentIconName": "customAgent"
 }

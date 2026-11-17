@@ -16,8 +16,7 @@
 
 /* Advanced home "featured" banner: the team agents page card (AgentCard), larger.
  * It reads the theme color tokens like the card does; a theme recolors it by
- * redefining them on `article[aria-roledescription="slide"]`, and may add a
- * decorative image through `homeBannerImageFile`. */
+ * redefining them on `article[aria-roledescription="slide"]`. */
 
 .section {
   display: flex;
@@ -60,7 +59,6 @@
 /* Fixed height: long texts are clamped rather than resizing the page at each slide. */
 .banner {
   display: flex;
-  position: relative;
   flex-wrap: wrap;
   gap: var(--spacing-l);
   border-radius: var(--radius-m);
@@ -71,18 +69,8 @@
   color: var(--on-surface);
 }
 
-.decoration {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: auto;
-  height: 100%;
-  pointer-events: none;
-}
-
 .main {
   display: flex;
-  position: relative;
   flex: 2 1 420px;
   flex-direction: column;
   gap: var(--spacing-s);
@@ -173,7 +161,6 @@
 
 .highlights {
   display: flex;
-  position: relative;
   flex: 1 1 280px;
   flex-direction: column;
   /* As tall as its lines, starting about level with the role, under the agent name. */
@@ -223,7 +210,6 @@
 
 .foot {
   display: grid;
-  position: relative;
   grid-template-columns: 1fr auto 1fr;
   flex: 1 1 100%;
   align-items: center;

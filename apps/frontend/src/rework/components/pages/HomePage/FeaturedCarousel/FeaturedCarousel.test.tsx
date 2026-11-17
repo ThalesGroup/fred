@@ -23,7 +23,7 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@shared/atoms/Icon/Icon.tsx", () => ({ default: () => null }));
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({
-  useFrontendProperties: () => ({ agentIconName: "person", homeBannerImageFile: "rays.svg" }),
+  useFrontendProperties: () => ({ agentIconName: "person" }),
 }));
 
 import FeaturedCarousel, { AUTOPLAY_MS } from "./FeaturedCarousel";
@@ -112,6 +112,5 @@ describe("FeaturedCarousel", () => {
     render(["a"], { badge: "Nouveau", highlights: ["Résume"] });
     expect(container.textContent).toContain("Nouveau");
     expect(container.textContent).toContain("Résume");
-    expect(container.querySelector('img[src="/images/rays.svg"]')).not.toBeNull();
   });
 });

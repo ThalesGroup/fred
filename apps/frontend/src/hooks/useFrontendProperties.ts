@@ -25,8 +25,6 @@ export interface FrontendProperties {
   faviconName: string;
   faviconNameDark: string;
   gcuVersion: string | null;
-  /** Optional decorative image of the advanced home banner, a file of the theme's `images/`. */
-  homeBannerImageFile: string;
   logoName: string;
   logoNameDark: string;
   rootBootstrapRequired: boolean;
@@ -68,7 +66,6 @@ export function useFrontendProperties(): FrontendProperties {
       // acceptance page (chicken-and-egg, FRONT-10). Static config stays as a
       // last-resort fallback.
       gcuVersion: getGcuVersion() ?? (getProperty("gcuVersion") || null),
-      homeBannerImageFile: getProperty("homeBannerImageFile") || "",
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
       // Sourced from the public pre-auth `/frontend/config` (via

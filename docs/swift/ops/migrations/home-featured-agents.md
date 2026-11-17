@@ -3,7 +3,7 @@ schema: 1
 title: "Advanced home page with admin-chosen featured agents"
 impact: minor
 configuration: none
-configuration_reason: "Settings live in the control-plane database and are edited in the admin UI; no chart or application setting changes. The new homeBannerImageFile theme key is optional."
+configuration_reason: "Settings live in the control-plane database and are edited in the admin UI; no chart or application setting changes."
 ---
 ## Applicability
 Existing deployments upgrading the control-plane and frontend.
@@ -12,9 +12,8 @@ Existing deployments upgrading the control-plane and frontend.
 Normal control-plane database migration privileges.
 
 ## Configuration
-No configuration changes are required. Themes may optionally add
-`homeBannerImageFile` and the `--home-*` CSS variables documented in the
-frontend README.
+No configuration changes are required. Themes may optionally set the
+`--home-*` CSS variables documented in the frontend README.
 
 ## Upgrade
 Use the normal deployment procedure and control-plane Alembic upgrade.

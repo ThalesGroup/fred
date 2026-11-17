@@ -274,9 +274,8 @@ Pebble, Cobalt or Cloud, including colors, fonts and radii. The JSON may set
 these branding keys: `siteDisplayName`, `siteTitle`, `siteSubtitle`,
 `agentsNicknameSingular`, `agentsNicknamePlural`, `logoName`, `logoNameDark`,
 `faviconName`, `faviconNameDark`, `defaultTeamAvatarFile`,
-`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand`,
-`contactSupportLink` and `homeBannerImageFile` (decorative image of the
-advanced home banner, a file of `shared/images/`). It cannot change authentication, feature flags or the
+`defaultPersonalAvatarFile`, `agentIconName`, `releaseBrand` and
+`contactSupportLink`. It cannot change authentication, feature flags or the
 frontend base path. See `theme/` for a working example. Symlinks are dropped and
 an archive with entries escaping its root is refused. A zip made from a folder
 (`zip -r acme-theme.zip acme-theme/`) is accepted: the wrapper folder is skipped.
@@ -329,7 +328,7 @@ a diamond). Set them under the same `html[data-ui-theme="<id>"]` scope.
 Its featured banner is a large agent card: it reads the theme color tokens
 (`--surface-container`, `--secondary`, `--primary`, `--on-surface`…). To give it
 its own colors, redefine those tokens on `article[aria-roledescription="slide"]`
-under the theme scope; `homeBannerImageFile` adds a decorative image on its right.
+under the theme scope, and add a background image there the same way.
 The greeting title reads `--home-greeting-color` (default `--on-surface`).
 
 To change UI text, copy a key's nesting from `src/locales/fr/translation.json`

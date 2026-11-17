@@ -82,7 +82,6 @@ const THEME_PROPERTY_KEYS = [
   "defaultTeamAvatarFile",
   "faviconName",
   "faviconNameDark",
-  "homeBannerImageFile",
   "logoName",
   "logoNameDark",
   "releaseBrand",
