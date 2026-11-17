@@ -666,6 +666,7 @@ applications:
           connect_timeout_seconds: 5
 
       ai:
+        normalize_streamed_tool_call_ids: true
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v2"
         timeout:
           connect: 5

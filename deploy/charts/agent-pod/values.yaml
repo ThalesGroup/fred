@@ -35,6 +35,8 @@ httpRoute:
 # validated against it by values.schema.json. Set at least app.runtime_id,
 # app.base_url, security.m2m and security.user (README.md, "Configure").
 configuration:
+  ai:
+    normalize_streamed_tool_call_ids: true
   storage:
     postgres:
       host: postgres

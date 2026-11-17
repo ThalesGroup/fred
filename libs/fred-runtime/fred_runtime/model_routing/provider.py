@@ -71,8 +71,12 @@ class FredCoreModelProvider:
 
 class RoutedChatModelFactory(ChatModelFactoryPort):
     def __init__(
-        self, *, credentials: tuple[InferenceCredentialBinding, ...] = ()
+        self,
+        *,
+        credentials: tuple[InferenceCredentialBinding, ...] = (),
+        normalize_streamed_tool_call_ids: bool = True,
     ) -> None:
+        self._normalize_streamed_tool_call_ids = normalize_streamed_tool_call_ids
         self._credentials = {item.credential_binding: item for item in credentials}
         if len(self._credentials) != len(credentials):
             raise ModelRoutingError("Duplicate inference credential binding")
@@ -117,7 +121,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         if connection.route == "azure_deployment" and not _SEGMENT.fullmatch(model_id):
             raise ModelRoutingError("Invalid model identifier for a deployment route")
         config = ModelConfiguration(
-            provider="openai", name=model_id, settings=admission.chat_settings()
+            provider="openai",
+            name=model_id,
+            settings={
+                **admission.chat_settings(),
+                "normalize_streamed_tool_call_ids": self._normalize_streamed_tool_call_ids,
+            },
         )
         identity = json.dumps(
             selection.key.identity, ensure_ascii=False, separators=(",", ":")
