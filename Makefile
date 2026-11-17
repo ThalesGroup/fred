@@ -418,3 +418,4 @@ release-guide: ## Generate and validate the DevOps guide: make release-guide REL
 
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+	python3 -m unittest discover -s scripts/tests -p 'test_alembic_release_inventory.py' -v
