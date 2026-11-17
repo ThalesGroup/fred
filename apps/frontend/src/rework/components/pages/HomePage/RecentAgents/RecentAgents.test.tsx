@@ -17,7 +17,7 @@ vi.mock("@shared/atoms/Button/Button.tsx", () => ({
 vi.mock("./CompactAgentCard.tsx", () => ({
   default: ({ instance }: { instance: { agent_instance_id: string } }) => <span>{instance.agent_instance_id}</span>,
 }));
-vi.mock("./AgentLaunchCard.tsx", () => ({
+vi.mock("@shared/organisms/AgentCard/AgentCard.tsx", () => ({
   default: ({ instance }: { instance: { agent_instance_id: string } }) => <b>{instance.agent_instance_id}</b>,
 }));
 import RecentAgents from "./RecentAgents";

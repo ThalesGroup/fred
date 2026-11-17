@@ -18,15 +18,18 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
 import { useHomeAgentsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
-import AgentLaunchCard from "./AgentLaunchCard.tsx";
+import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import CompactAgentCard from "./CompactAgentCard.tsx";
 import SectionMarker from "../SectionMarker/SectionMarker.tsx";
 import styles from "./RecentAgents.module.scss";
 
 interface RecentAgentsProps {
-  /** `detailed` (advanced home) shows full cards; the selection is the same. */
+  /** `detailed` (advanced home) shows the team agents page card; the selection is the same. */
   variant?: "compact" | "detailed";
 }
+
+// The home never manages agents: the shared card shows no menu without that right.
+const noop = () => undefined;
 
 /** Five SQL-backed launchers: recent usable agents, then accessible suggestions. */
 export default function RecentAgents({ variant = "compact" }: RecentAgentsProps) {
@@ -61,10 +64,16 @@ export default function RecentAgents({ variant = "compact" }: RecentAgentsProps)
           <div className={variant === "detailed" ? styles.grid : styles.row} data-count={data?.agents.length ?? 0}>
             {data?.agents.map((instance) =>
               variant === "detailed" ? (
-                <AgentLaunchCard
+                <AgentCard
                   key={instance.agent_instance_id}
                   instance={instance}
-                  teamName={teamName(instance.team_id)}
+                  teamId={instance.team_id}
+                  canManageAgents={false}
+                  onEdit={noop}
+                  onToggleEnabled={noop}
+                  onDuplicate={noop}
+                  onCopyTo={noop}
+                  onDelete={noop}
                 />
               ) : (
                 <CompactAgentCard

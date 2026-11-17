@@ -62,7 +62,7 @@
   }
 }
 
-/* Advanced home: heading on the left, full cards on a responsive grid. */
+/* Advanced home: heading on the left, team agents page cards on a responsive grid. */
 .section[data-variant="detailed"] {
   align-items: stretch;
 
@@ -85,8 +85,10 @@
   gap: var(--gap);
   width: 100%;
 
+  /* Same minimum height as the team agents page grid. */
   > * {
     flex: 0 0 calc((100% - 2 * var(--gap)) / 3);
+    min-height: 200px;
   }
 }
 
