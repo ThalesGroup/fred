@@ -1,0 +1,1264 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source that scrapes the Fred Agent Pods, the Control Plane and the kubelet (cAdvisor).",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "One benchmark run read from Prometheus: turn rate and latency, a mean per-turn breakdown, CPU per turn and memory per container, tokens per turn.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "How to read this dashboard",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Set the time range to exactly one benchmark run, from its first to its last measured turn: the summary panels are averages over the whole selected range, so idle time or a warm-up lowers them. Metrics carry no campaign label; other traffic in the same namespace is included.\n\nTurn metrics come from the server that runs the agent: the Python Agent Pod, or the Control Plane (service `control-plane`) for Ralph, timed from the start of its event stream after admission. The Control Plane does not relay Agent Pod streams: its HTTP metrics cover its own requests, such as the runtime binding, not a Python turn. **not measured** means the series is absent, never zero. Durations overlap and are means: they are not an exact cascade."
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Turns seen by the server",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Turns per second",
+      "description": "Completed turns divided by the selected range, per service and agent template.",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: turns/s",
+          "noValue": "not measured",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range])) / $__range_s",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failed turns",
+      "description": "Turns that ended with an execution error (finish_reason=\"error\") in the range. Shows 0 only when turns were measured; not measured when no turn series exists.",
+      "gridPos": {
+        "x": 5,
+        "y": 5,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "not measured",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\",finish_reason=\"error\"}[$__range]))\nor 0 * sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Mean turn duration",
+      "description": "Mean duration of a turn as timed by its server, until its terminal event: the Agent Pod from the request, the Control Plane (Ralph) from the start of the event stream after admission. Excludes ingress, network and client.",
+      "gridPos": {
+        "x": 9,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "not measured",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_sum{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))\n/ sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "p95 turn duration",
+      "description": "95th percentile of the Agent Pod turn duration, interpolated in the histogram buckets. Hidden when more than 5% of turns exceed the largest finite bucket: the percentile would then be that bucket's bound, not a measurement. Turn buckets are in ms (500, 1000, 1500, 2000, 2500, 5000...): around 1 s the value is interpolated within 500 ms wide buckets. Images exporting the older default buckets (up to 10) keep this panel empty.",
+      "gridPos": {
+        "x": 14,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "not measurable (buckets)",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, service, template_agent_id) (increase(agent_turn_completed_bucket{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range])))\nand on (service, template_agent_id) (\n  sum by (service, template_agent_id) (increase(agent_turn_completed_bucket{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\",le=\"+Inf\"}[$__range]))\n  - max by (service, template_agent_id) (sum by (le, service, template_agent_id) (increase(agent_turn_completed_bucket{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\",le!=\"+Inf\"}[$__range])))\n  <= 0.05 * sum by (service, template_agent_id) (increase(agent_turn_completed_bucket{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\",le=\"+Inf\"}[$__range]))\n)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Control Plane requests per second",
+      "description": "HTTP requests timed by the Control Plane, Swift's Python one or Weaver's Rust one, health probes excluded. A streamed response (Ralph) counts when its head is sent.",
+      "gridPos": {
+        "x": 19,
+        "y": 5,
+        "w": 5,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "not measured",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(api_request_latency_ms_count{namespace=\"$namespace\",app=\"control-plane-backend\"}[$__range])) / $__range_s",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Control Plane",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Turns and failed turns per second",
+      "description": "Completed turns per second over time; failed turns are those ending with an execution error.",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: turns/s",
+          "noValue": "not measured"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (rate(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}} / {{template_agent_id}} turns",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (rate(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\",finish_reason=\"error\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}} / {{template_agent_id}} failed",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Mean turn duration over time",
+      "description": "Mean server-side turn duration (Agent Pod, or Control Plane for Ralph) in each rate window.",
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "not measured"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (rate(agent_turn_completed_sum{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__rate_interval]))\n/ sum by (service, template_agent_id) (rate(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{service}} / {{template_agent_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Where a turn's time goes (means per service, all agents)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Mean time per turn by measured source",
+      "description": "Each bar is the total time of one measured source in the range divided by the service's turns. These metrics have no agent label, so this view covers every agent of the selected services. The turn timer starts after admission (authorization, runtime binding, conversation lease) and stops after the history write, the lease release and the final event. Model calls exclude the conversation-title call, which runs beside the first turn. Checkpoint persistence covers the graph's checkpoint reads and writes, including the owner index; its pool wait includes connection checkout and the turn-lease fence. Sources can overlap or include child runs: the bars are not an exact cascade. Unattributed is the turn mean minus model calls, turn setup, checkpoint persistence and history write; it is not a phase, and it is not measured when one of those sources is missing.",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "noValue": "not measured",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "namePlacement": "top",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 24,
+        "sizing": "manual"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(agent_turn_completed_sum{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: turn seen by the Agent Pod",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_call_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: model calls (without the title call)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_first_chunk_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: model calls until first chunk (part of model calls)",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(runtime_stage_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",runtime_stage=\"turn_setup\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: turn setup (runtime and graph construction)",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(persist_sql_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",store=\"checkpoint\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: checkpoint SQL execution",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(persist_pool_wait_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",store=\"checkpoint\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: checkpoint pool wait and turn fence",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(runtime_stage_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",runtime_stage=\"history_write\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: history write (fence and messages)",
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  sum by (service) (increase(agent_turn_completed_sum{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))\n  - sum by (service) (increase(llm_call_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n  - sum by (service) (increase(runtime_stage_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",runtime_stage=~\"turn_setup|history_write\"}[$__range]))\n  - sum by (service) (increase(persist_sql_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",store=\"checkpoint\"}[$__range]))\n  - sum by (service) (increase(persist_pool_wait_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",store=\"checkpoint\"}[$__range]))\n) / sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}}: unattributed (turn minus model, setup, checkpoint, history write)",
+          "refId": "G"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Model calls and admission per turn",
+      "description": "Model calls per turn and their means, without the conversation-title call, counted separately: it runs beside the first turn of a conversation. Runtime binding is part of admission, before the turn timer starts. A blank cell is not measured.",
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": ""
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Model calls per turn"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean model call"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean time to first chunk"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #D"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean runtime binding (before the turn)"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #E"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Title calls per turn"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_call_latency_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_call_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n/ sum by (service) (increase(llm_call_latency_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_first_chunk_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))\n/ sum by (service) (increase(llm_first_chunk_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role!=\"title\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "C",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(runtime_stage_latency_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\",runtime_stage=\"runtime_binding\"}[$__range]))\n/ sum by (service) (increase(runtime_stage_latency_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\",runtime_stage=\"runtime_binding\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "D",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (increase(llm_call_latency_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\",llm_role=\"title\"}[$__range]))\n/ sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "E",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "type": "table",
+      "title": "Persistence per store and operation",
+      "description": "Operations per turn and the mean of one operation. checkpoint: get_tuple reads the latest checkpoint, put and put_writes are the graph's writes, owner refreshes the thread owner index after each put, hitl_claim and hitl_claim_start serve resumes. history/save is the history upsert inside the fenced history write. Pool wait is connection checkout plus, for checkpoint writes, the turn-lease fence; SQL execution includes (de)serialization. A blank cell is not measured.",
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "noValue": ""
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Operations per turn"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean SQL execution"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mean pool wait"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, store, op) (increase(persist_sql_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))\n/ on (service) group_left sum by (service) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, store, op) (increase(persist_sql_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))\n/ sum by (service, store, op) (increase(persist_sql_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, store, op) (increase(persist_pool_wait_ms_sum{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))\n/ sum by (service, store, op) (increase(persist_pool_wait_ms_count{namespace=\"$namespace\",service=~\"${service:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "C",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "CPU and memory per container",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "bargauge",
+      "title": "CPU time per turn by container",
+      "description": "CPU time each container used in the range divided by every measured turn of the namespace, Ralph's included (1 s = one core busy for one second). Containers come from the kubelet (cAdvisor): the selected namespace, the benchmark mock (fred-bench) and PostgreSQL (fred-infra, shared by all lines). Python processes (process_cpu_seconds_total) are shown too; they need no cAdvisor.",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "not measured",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "namePlacement": "top",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 24,
+        "sizing": "manual"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, container) (increase(container_cpu_usage_seconds_total{namespace=~\"$namespace|fred-bench\"}[$__range]) or increase(container_cpu_usage_seconds_total{namespace=\"fred-infra\",container=\"postgres\"}[$__range]))\n/ on () group_left () (sum(increase(agent_turn_completed_count{namespace=\"$namespace\"}[$__range])) > 0)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{namespace}}/{{container}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (app) (increase(process_cpu_seconds_total{namespace=\"$namespace\"}[$__range]))\n/ on () group_left () (sum(increase(agent_turn_completed_count{namespace=\"$namespace\"}[$__range])) > 0)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{app}} (Python process)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "CPU usage by container",
+      "description": "Cores used by each container (1 = one full core), from the kubelet (cAdvisor). Not CPU-limit utilization or throttling.",
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: cores",
+          "noValue": "not measured"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, container) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace|fred-bench\"}[$__rate_interval]) or rate(container_cpu_usage_seconds_total{namespace=\"fred-infra\",container=\"postgres\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{namespace}}/{{container}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Memory working set by container",
+      "description": "Working-set memory of each container from the kubelet (cAdvisor): the value the kubelet compares with the memory limit.",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "not measured"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (namespace, container) (container_memory_working_set_bytes{namespace=~\"$namespace|fred-bench\"} or container_memory_working_set_bytes{namespace=\"fred-infra\",container=\"postgres\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{namespace}}/{{container}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Tokens per turn",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Tokens per turn",
+      "description": "Model tokens reported per completed turn, per service and agent template. No price is applied. Cache-read tokens are part of the input when the provider reports them.",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "not measured",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_quantity_input_tokens_total{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))\n/ sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}: input",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_quantity_output_tokens_total{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))\n/ sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}: output",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, template_agent_id) (increase(agent_turn_completed_quantity_cache_read_tokens_total{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))\n/ sum by (service, template_agent_id) (increase(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\",template_agent_id=~\"${agent:regex}\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{service}} / {{template_agent_id}}: cache read",
+          "refId": "C"
+        }
+      ]
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "fred",
+    "benchmark"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(up{job=\"apps\"}, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "label_values(up{job=\"apps\"}, namespace)",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "fred-weaver",
+          "value": "fred-weaver"
+        },
+        "options": [],
+        "hide": 0,
+        "sort": 1
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(agent_turn_completed_count{namespace=\"$namespace\"}, service)",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "label_values(agent_turn_completed_count{namespace=\"$namespace\"}, service)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "sort": 1,
+        "allValue": ".*"
+      },
+      {
+        "name": "agent",
+        "label": "Agent template",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}, template_agent_id)",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "label_values(agent_turn_completed_count{namespace=\"$namespace\",service=~\"${service:regex}\"}, template_agent_id)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [],
+        "hide": 0,
+        "sort": 1,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Fred bench",
+  "uid": "fred-bench",
+  "version": 1
+}

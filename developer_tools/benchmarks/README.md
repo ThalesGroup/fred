@@ -60,6 +60,8 @@ name, and never changes it. Select the desired model on the agent in Fred.
 Client KPIs cover every measured question regardless of trace sampling. Latency
 statistics use successful turns with observed timestamps; errors are counted
 separately. Traces help explain internal calls; they are not needed for client KPIs.
+For the server side, open [Fred bench](../../deploy/grafana/README.md#fred-bench) in
+Grafana on the run's time range.
 
 **Connection.** Browser login uses the platform's public Keycloak configuration,
 authorization code with PKCE and a temporary loopback callback. The public client

@@ -10,9 +10,8 @@ below, and select a Prometheus data source that meets the dashboard's requiremen
 [`fred-platform-health.json`](fred-platform-health.json) uses Fred's
 `agent_turn_completed_count`, `api_request_latency_ms_count`, and
 `api_request_latency_ms_bucket` metrics. Use a source that scrapes the Python agent
-runtimes and Knowledge Flow. Weaver's Rust Control Plane does not emit these
-Python HTTP histograms; its health is not covered by these panels. Missing
-series must not be interpreted as zero errors.
+runtimes, Knowledge Flow and the Control Plane. Missing series must not be
+interpreted as zero errors.
 
 The summary cards follow the selected time range. **Cluster** and **Namespace**
 apply to all panels when the corresponding labels are available in Prometheus.
@@ -27,6 +26,37 @@ resolved window. Fixed windows range from **5m** to **24h**.
 Hover over the charts to see the window duration. The chat tooltips also show
 the estimated failed and total counts at the same timestamp. Click **Failure
 rate** in the chat legend to isolate it from the rolling 24-hour reference.
+
+## Fred bench
+
+[`fred-bench.json`](fred-bench.json) explains one benchmark run on the server side.
+Set the time range to the run, from its first to its last measured turn: summary
+panels average the whole range and have no campaign label. Choose one **Namespace**;
+**Service** and **Agent template** filter the turn panels.
+
+- **Turns**: rate, failures, mean and p95 duration of `agent_turn_completed`, the
+  turn as its server times it (Agent Pod, or Control Plane for Ralph). The p95 stays empty while more than 5% of
+  turns exceed the histogram's largest finite bucket.
+- **Where a turn's time goes**: per service, the time of each source divided by the
+  turns: model calls and their first chunk, the `turn_setup` and `history_write`
+  stages, checkpoint SQL and pool wait, then the unattributed rest. The Agent Pod's
+  timer starts after admission (authorization, runtime binding, conversation lease)
+  and stops after the history write, the lease release and the final event. Model
+  calls exclude the conversation-title call (`llm_role="title"`), which runs beside
+  the first turn; the side tables count it, give binding as admission time, and
+  split persistence by `store` and `op`. These means can overlap or include child
+  runs; they are not a cascade, and the rest is not a phase.
+- **CPU and memory**: per container from the kubelet's cAdvisor (factory job
+  `containers`): the namespace, the benchmark mock and PostgreSQL, which is shared
+  by all lines. CPU per turn divides by the namespace's measured turns, Ralph's included.
+- **Tokens per turn**: input, output and cache-read tokens, without prices.
+
+Ralph's series come from the Control Plane (service `control-plane`). Its turn runs
+from the start of the event stream, after admission, to `final` or
+`execution_error`; its model calls include the title call, and the first one the
+conversation load. Ralph reports no tokens to Prometheus: the consumption registry
+keeps them. The Control Plane does not relay Agent Pod streams; its HTTP metrics
+cover only its own requests. **not measured** marks an absent series, never zero.
 
 ## Agent runtime
 
@@ -79,18 +109,20 @@ The admission panel uses `runtime_stage_latency_ms` with the bounded
 Swift's Python Control Plane also emits `runtime_binding_internal`. The latter
 overlaps the caller's binding timer. These stages do not cover all admission work,
 JWT validation or client preparation. Weaver's Rust Control Plane does not emit
-the internal stage or Python HTTP histograms; its existing request logs provide
-route/status/duration evidence, not the same decomposition.
+the internal stage; its `api_request_latency_ms` times each route, not the same
+decomposition. The same label also carries the turn stages `turn_setup` and
+`history_write`, which this admission panel leaves out.
 
 The persistence panels use `persist_pool_wait_ms` and `persist_sql_ms`. They are
 **aggregate timing hints**, not a precise pool-versus-query breakdown:
 
-- Prometheus drops `store` and `op`, so history and checkpoint observations cannot
-  be separated there. The metrics cover instrumented Python operations, not all
-  database traffic or Control Plane SQLx.
-- History measures entry into a SQLAlchemy session; connection acquisition may
-  happen later, inside the execution timer. Checkpoint acquisition timing can
-  include the turn-fencing SQL check.
+- The closed `store` (`checkpoint`, `history`) and `op` labels separate the
+  operations: checkpoint `get_tuple`, `put`, `put_writes`, `owner`, `hitl_claim`,
+  `hitl_claim_start`, and history `save`. The metrics cover instrumented Python
+  operations, not all database traffic or Control Plane SQLx.
+- A turn's history `save` runs in a session the turn-lease fence already opened,
+  so its pool wait is near zero; the `history_write` stage times the whole write.
+  Checkpoint write acquisition timing includes the turn-fencing SQL check.
 - Execution timing can contain application work. Transaction exit/commit coverage
   depends on the instrumented path and cannot be isolated in these aggregates.
   Failed operations are not guaranteed to emit either timer.
@@ -100,8 +132,8 @@ The process panels use `process_cpu_seconds_total` and
 selected runtime targets by `job,instance`. CPU is percent of one core and may
 exceed 100%; it is not CPU-limit utilization or throttling. Loop lag is a sampled
 Python gauge and can miss short spikes; emission requires enabled process KPI
-sampling. The factory does not configure cAdvisor/kubelet scraping, so this
-dashboard makes no CPU-throttling or container-memory claim. SQL pool gauges
+sampling. This dashboard makes no CPU-throttling or container-memory claim; per
+container CPU and memory are in [Fred bench](#fred-bench). SQL pool gauges
 named `process.db_pool.*` in the KPI pipeline are not Prometheus series: the
 single-event exporter deliberately skips `process.*` KPIs.
 
