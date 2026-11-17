@@ -29,4 +29,4 @@ jobs:
       - name: Verify Alembic head inventory before publication
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/alembic_release_inventory.py --version "${RELEASE_TAG#*/v}" --output "$RUNNER_TEMP/alembic-heads.md"
+        run: python3 scripts/alembic_release_inventory.py --version "${RELEASE_TAG#*/v}" > /dev/null

@@ -1,10 +1,10 @@
 ---
 schema: 1
-title: "Attach Alembic migration heads to Fred releases"
+title: "Show Alembic migration heads in Fred release descriptions"
 impact: none
 configuration: none
 configuration_reason: "Only release publication tooling and documentation change; no chart values, application settings or database schema change."
-no_action_reason: "The inventory is generated from the tagged source and attached to GitHub releases; existing deployments upgrade normally without extra actions."
+no_action_reason: "The section is generated from the tagged source in GitHub release descriptions; existing deployments upgrade normally without extra actions."
 ---
 ## Applicability
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Check that both the code and chart GitHub releases attach `alembic-heads.md` and that it lists every migration-bearing component and its head.
+Check that both the code and chart GitHub release descriptions list every migration-bearing component and its head.
 
 ## Rollback
 

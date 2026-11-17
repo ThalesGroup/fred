@@ -1,4 +1,4 @@
-"""Build the Alembic head inventory attached to Fred releases."""
+"""Build the Alembic head section for Fred release descriptions."""
 
 from __future__ import annotations
 
@@ -199,13 +199,16 @@ def main() -> None:
     parser.add_argument(
         "--version", required=True, help="Fred release version without the v prefix"
     )
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, help="write Markdown to a file instead of stdout")
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     content = render_inventory(root, arguments.version, commit)
-    arguments.output.parent.mkdir(parents=True, exist_ok=True)
-    arguments.output.write_text(content, encoding="utf-8")
+    if arguments.output is None:
+        print(content, end="")
+    else:
+        arguments.output.parent.mkdir(parents=True, exist_ok=True)
+        arguments.output.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":

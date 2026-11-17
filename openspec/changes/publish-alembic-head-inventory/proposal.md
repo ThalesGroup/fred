@@ -9,8 +9,8 @@ Tracking: https://github.com/ThalesGroup/fred/issues/3571
 ## What Changes
 
 - Generate a deterministic Markdown inventory containing only the head revision of each backend and capability migration tree at the tagged commit.
-- Attach the inventory to both the code and chart GitHub releases alongside the existing operator migration guide.
-- Update the shared push-release skill and release documentation so the inventory is reviewed before tag approval and verified after publication.
+- Add the head table to both code and chart GitHub release descriptions, while keeping the existing operator migration guide attachment.
+- Update the shared push-release skill and release documentation so the section is reviewed before tag approval and verified after publication.
 
 ## Capabilities
 

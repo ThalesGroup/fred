@@ -232,19 +232,19 @@ needs changes. Resolve all coverage blockers before requesting tag approval.
 
 ### Review the Alembic head inventory
 
-Generate the same inventory that both tagged publication workflows will attach:
+Preview the section that both tagged publication workflows will add to their
+GitHub release descriptions:
 
 ```bash
 V=X.Y.Z
-python3 scripts/alembic_release_inventory.py --version "$V" \
-  --output target/release-inventory/alembic-heads.md
+python3 scripts/alembic_release_inventory.py --version "$V"
 ```
 
-Read the Markdown and confirm that it shows exactly one head per backend and
-capability tree. A new component with Alembic migrations must appear automatically.
-This preview records the current topic-branch commit; regenerate it from the
-merged `swift` commit in Step 6 so the source commit matches the tags. The
-inventory is generated at publication and is not staged in the release-preparation PR.
+Confirm that it shows exactly one head per backend and capability tree. A new
+component with Alembic migrations must appear automatically. This preview
+records the current topic-branch commit; regenerate it from the merged `swift`
+commit in Step 6 so the source commit matches the tags. The section is generated
+at publication and is not staged in the release-preparation PR.
 
 ## Step 5 — commit and open a PR for review
 
@@ -272,7 +272,7 @@ Show the developer the PR link and **full new `release.md` entry** verbatim, plu
 
 - the branch, the ancestry-based baseline, maximum migration impact and proposed version,
 - the generated operator guide, its ordered procedures and remaining deployment limitations,
-- the Alembic head inventory file, component coverage and each tree's head,
+- the Alembic head section, component coverage and each tree's head,
 - the prepared shared-library versions, changed and unchanged capability packages,
   selected manifest versions, saved-config compatibility evidence, chart `appVersion`
   values, lockfile diff and Python artifact validation result,
@@ -295,10 +295,9 @@ Re-read the file before any further edit and keep their changes; never revert th
 After developer approval and PR merge, use a clean `swift` checkout or worktree.
 Fetch `origin/swift`, fast-forward to the merged commit, and verify that the
 approved release inputs are present. Rerun `make release-plan` and the committed
-guide verification for the proposed version. Regenerate and review
-`target/release-inventory/alembic-heads.md` from this merged commit. If the
-merge result or release range changed the version, guide, Python versions or locks,
-update through a follow-up
+guide verification for the proposed version. Regenerate and review the Alembic
+head section from this merged commit. If the merge result or release range
+changed the version, guide, Python versions or locks, update through a follow-up
 PR and repeat review and CI. Present the merged commit and exact version, then
 **stop for explicit go / no-go on the two tags**.
 
@@ -346,6 +345,6 @@ at build time; the value committed in the file is not used.
 
 Wait for both full tag-triggered publication workflows to finish successfully,
 including migration validation, before reporting publication complete. Verify
-each GitHub release contains `migration.md` and `alembic-heads.md`, and that
-the two inventories have the same content. A missing/stale guide, insufficient
-version or missing paired tag blocks artifact publication.
+each GitHub release contains `migration.md` and the same Alembic head section in
+its description. A missing/stale guide, insufficient version or missing paired
+tag blocks artifact publication.

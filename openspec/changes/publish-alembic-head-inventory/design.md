@@ -6,7 +6,7 @@ See proposal.md. Fred publishes paired code and chart tags from one commit. Both
 
 ## Goals / Non-Goals
 
-**Goals:** Generate one head-only inventory from tagged source with stable ordering and attach it to both GitHub releases. Make additions of new migration-bearing components visible automatically.
+**Goals:** Generate one head-only section from tagged source with stable ordering and include it in both GitHub release descriptions. Make additions of new migration-bearing components visible automatically.
 
 **Non-Goals:** Query a running database, infer which revisions an operator has applied, or prescribe upgrade and rollback operations. The existing operator guide owns those instructions.
 
@@ -14,7 +14,7 @@ See proposal.md. Fred publishes paired code and chart tags from one commit. Both
 
 ### Generate at publication from the checked-out tag
 
-Use a small repository script invoked in both `create-release` jobs, after checkout and before `action-gh-release`. Feed it the version derived from the tag and write `alembic-heads.md` into the job workspace. The paired tag validation already ensures the tags identify one commit. Generating in CI avoids a committed, frequently stale copy and does not change image contents. Attaching a GitHub release asset makes the inventory directly downloadable; a loose file inside a Helm chart would be harder for operators to find.
+Use a small repository script invoked in both `create-release` jobs, after checkout and before `action-gh-release`. Feed it the version derived from the tag and pass its Markdown output into the release action's `body`. The paired tag validation already ensures the tags identify one commit. Generating in CI avoids a committed, frequently stale copy and does not change image contents. The heads appear directly in the release description, alongside the existing image or chart instructions.
 
 ### Discover migration trees and parse revision metadata without application imports
 
@@ -27,8 +27,8 @@ For each tree, validate unique revision IDs, local parent references, acyclicity
 ## Risks / Trade-offs
 
 - A migration tree with unusual metadata syntax or nonstandard version locations could fail publication. The failure is preferable to an incomplete inventory; focused fixtures and a run against the repository detect this before tagging.
-- GitHub assets are separate from the OCI chart and images. The release skill will link the asset in the pre-tag review and confirm both publication results.
+- The release description is separate from the OCI chart and images. The release skill will preview the section before tag approval and confirm both publication results.
 
 ## Migration Plan
 
-Add the generator, tests, workflow steps, skill instruction, and release strategy note in one reviewed PR. No database or deployment migration is needed. If publication must be rolled back, revert the workflow and skill change; already published inventory assets remain accurate for their tagged commits.
+Add the generator, tests, workflow steps, skill instruction, and release strategy note in one reviewed PR. No database or deployment migration is needed. If publication must be rolled back, revert the workflow and skill change; already published release descriptions remain accurate for their tagged commits.

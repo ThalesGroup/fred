@@ -1,6 +1,7 @@
 """Release head inventory coverage for real and synthetic Alembic trees."""
 
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -53,6 +54,18 @@ class InventoryTests(unittest.TestCase):
                 len(list((REPOSITORY / tree.path / "versions").glob("*.py")))
                 - int((REPOSITORY / tree.path / "versions" / "__init__.py").exists()),
             )
+
+    def test_cli_writes_release_section_to_stdout(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--version", "3.12.0"],
+            cwd=REPOSITORY,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("# Alembic heads - Fred v3.12.0", result.stdout)
+        self.assertEqual(result.stdout.count("| `apps/"), 2)
+        self.assertEqual(result.stdout.count("| `libs/"), 3)
 
     def test_new_component_is_discovered_and_output_is_stable(self):
         write_revision(self.tree, "root", description="Create records")
