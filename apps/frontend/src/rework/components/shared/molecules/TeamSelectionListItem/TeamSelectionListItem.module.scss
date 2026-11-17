@@ -26,6 +26,26 @@
   text-decoration: none;
 }
 
+/* The personal space and destinations (marketplace) stand apart from the team list:
+ * outlined, and one line tall around a 24px mark. */
+.itemPersonal {
+  border: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  min-height: 40px;
+}
+
+/* An icon in the avatar's slot, at the personal avatar's 24px. */
+.mark {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
+}
+
 /* M3 state layer: the majority text/icon colour (`on-surface`) at 8% over the
  * panel background — never a raw surface tone or hardcoded rgba. */
 .item:hover {
@@ -68,8 +88,12 @@
   white-space: nowrap;
 }
 
-.command {
+/* Resets the button chrome only; the personal outline must survive it. */
+.command:not(.itemPersonal) {
   border: 0;
+}
+
+.command {
   background: transparent;
   width: 100%;
   font: inherit;

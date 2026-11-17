@@ -63,19 +63,21 @@ active spaces across all their organizations, each with its `organization_id`.
 Team/project selection uses a space identifier; a supplied identifier never changes
 server authority.
 
-The frontend [HomeNavPanel](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/HomeNavPanel/HomeNavPanel.tsx)
-filters these memberships by organization and groups projects under their visible
-team using `parent_id`. An isolated project remains selectable, including when
-its organization has no membership row; the selector then identifies the scope
-by an accessible space's name. Search retains the parent of a matching project.
+The frontend [OrganizationNavPanel](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/OrganizationNavPanel/OrganizationNavPanel.tsx)
+is the working organization's panel, shown at `/home` and on the organization's own
+content pages (`/team/<organizationId>/...`). It lists the marketplace and the personal space, the
+organization's content menu (with Read) and its settings gear (with Manage), then the
+organization's teams where the person holds a direct role. Projects are not listed
+there; they are reached from their team.
 [TeamContentNavbar](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
-uses the same memberships for its shared breadcrumb and project links. These
-presentation rules add no inherited access; routes retain their permission checks.
-Home groups the organization workspace and personal workspace as peers, and offers
-an organization selector only when multiple scopes are available. The shared
+uses the same memberships for its link up to the parent space; a team's "Projects" entry opens
+[TeamProjectsPage](../../apps/frontend/src/rework/components/pages/TeamProjectsPage/TeamProjectsPage.tsx)
+(`/team/<teamId>/projects`), whose cards are the person's projects of that team. It
+still hosts the organization's settings menu. These presentation rules add no inherited access;
+routes retain their permission checks. The shared
 [space landing](../../apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamLandingPage.tsx)
-routes content readers to organization resources or to agents in other space kinds;
-management-only users retain the members-settings destination.
+sends an organization to `/home`, content readers of other space kinds to agents, and
+management-only users to the members settings.
 
 ## Spaces and memberships
 

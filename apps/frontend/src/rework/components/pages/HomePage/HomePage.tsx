@@ -39,7 +39,7 @@ export type HomePeriod = 7 | 30 | 90;
 const PERIODS: HomePeriod[] = [7, 30, 90];
 
 /**
- * Landing page behind the mainNavBar Home entry (`/home`, #2298). First pass of
+ * The organization's landing page (`/home`). First pass of
  * the user dashboard: a "responsible AI" nudge panel and the top community
  * prompts. A period selector in the header scopes every statistic on screen.
  */

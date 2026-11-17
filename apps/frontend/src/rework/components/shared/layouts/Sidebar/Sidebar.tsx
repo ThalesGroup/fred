@@ -13,11 +13,14 @@
 // limitations under the License.
 
 import WorkingOrganizationRoute from "@core/guards/WorkingOrganizationRoute";
-import MainNavBar from "./MainNavBar/MainNavBar.tsx";
-import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
+import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { skipsBusinessBootstrap } from "@core/utils/adminRoutes";
+import OrganizationNavPanel from "./OrganizationNavPanel/OrganizationNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import { isChatRoute, useChatNavPanel } from "@core/hooks/useChatNavPanel";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
+import { isOrganizationRoute, isSpaceSettingsRoute } from "@core/utils/organizationRoute";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
@@ -32,49 +35,66 @@ export default function Sidebar({
   navigation?: boolean;
   /** The page belongs to the platform admin space. */
   platformArea?: boolean;
-  /** A platform admin with no organization membership: the rail has nothing else to offer. */
+  /** A platform admin with no organization membership. */
   platformOnly?: boolean;
   organizationArea?: boolean;
 }) {
   const { pathname } = useLocation();
   const { collapsed } = useChatNavPanel();
 
-  const getSidebarMode = (): SidebarMode => {
-    if (platformArea) return "ADMIN";
-    if (pathname.startsWith("/home")) return "HOME";
-    if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
-    if (pathname.startsWith("/admin")) return "ADMIN";
-    return "TEAM";
-  };
-  const sidebarMode: SidebarMode = getSidebarMode();
-
   return (
     <div className={styles["sidebar-container"]}>
-      <div className={styles.rail}>
-        <div className={styles["main-nav-bar-container"]}>
-          {navigation && <MainNavBar platformOnly={platformOnly} />}
-        </div>
+      {navigation && !platformOnly && <BootstrapSubscription />}
+      <div className={styles["nav-panel-card"]} hidden={collapsed && isChatRoute(pathname)}>
+        {navigation && (
+          <WorkingOrganizationRoute silent>
+            <div className={styles["nav-panel-body"]}>
+              <NavPanel platformArea={platformArea} />
+            </div>
+          </WorkingOrganizationRoute>
+        )}
         <div className={styles["user-profile-container"]}>
           <UserProfile
             agentManagement={isWeaverContentRoute(pathname)}
             admitted={navigation}
             platformArea={platformArea}
             organizationArea={organizationArea}
+            platformOnly={platformOnly}
           />
         </div>
       </div>
-      {navigation && (
-        <WorkingOrganizationRoute silent>
-          <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
-            {sidebarMode === "HOME" && <HomeNavPanel />}
-            {sidebarMode === "TEAM" && <TeamContentNavbar />}
-            {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-            {sidebarMode === "ADMIN" && <AdminNavbar platformArea={platformArea} />}
-          </div>
-        </WorkingOrganizationRoute>
-      )}
     </div>
   );
 }
 
-type SidebarMode = "HOME" | "TEAM" | "MARKETPLACE" | "ADMIN";
+/** Keeps the frontend bootstrap subscribed across routes, so admin gating stays current. */
+function BootstrapSubscription() {
+  const { pathname } = useLocation();
+  useUserCapabilities(skipsBusinessBootstrap(pathname));
+  return null;
+}
+
+type SidebarMode = "ORGANIZATION" | "TEAM" | "MARKETPLACE" | "ADMIN";
+
+// Reads the working organization here, not in Sidebar: onboarding renders the sidebar before its provider.
+function NavPanel({ platformArea }: { platformArea: boolean }) {
+  const { pathname } = useLocation();
+  const { organizationId } = useWorkingOrganization();
+  const getSidebarMode = (): SidebarMode => {
+    if (platformArea) return "ADMIN";
+    // The organization's settings keep the space settings menu of TeamContentNavbar.
+    if (isOrganizationRoute(pathname, organizationId) && !isSpaceSettingsRoute(pathname)) return "ORGANIZATION";
+    if (pathname.startsWith("/marketplace")) return "MARKETPLACE";
+    if (pathname.startsWith("/admin")) return "ADMIN";
+    return "TEAM";
+  };
+  const sidebarMode = getSidebarMode();
+  return (
+    <>
+      {sidebarMode === "ORGANIZATION" && <OrganizationNavPanel />}
+      {sidebarMode === "TEAM" && <TeamContentNavbar />}
+      {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
+      {sidebarMode === "ADMIN" && <AdminNavbar platformArea={platformArea} />}
+    </>
+  );
+}

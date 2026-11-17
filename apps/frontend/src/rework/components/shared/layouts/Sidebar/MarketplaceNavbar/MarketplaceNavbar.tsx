@@ -18,11 +18,14 @@ import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
+import { useNavigate } from "react-router-dom";
+import SpaceUpLink from "../SpaceUpLink/SpaceUpLink.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { organization } = useWorkingOrganization();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
 
@@ -56,6 +59,7 @@ export default function MarketplaceNavbar() {
 
   return (
     <div className={styles["marketplace-navbar-container"]}>
+      {organization && <SpaceUpLink name={organization.name} kind="organization" onClick={() => navigate("/home")} />}
       <SpaceHeader eyebrow={organization?.name} title={t("rework.sidebar.marketplace.title")} />
       <NavigationMenu items={navigationItems} />
     </div>

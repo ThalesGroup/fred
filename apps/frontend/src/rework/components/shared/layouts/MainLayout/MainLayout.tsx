@@ -20,6 +20,7 @@ import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdm
 import { usePlatformArea } from "@core/hooks/usePlatformArea";
 import { ChatNavPanelProvider } from "@core/hooks/useChatNavPanel";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
+import { isOrganizationAdminRoute } from "@core/utils/adminRoutes";
 import styles from "./MainLayout.module.css";
 
 function AdmittedWorkspace() {
@@ -33,7 +34,7 @@ function AdmittedWorkspace() {
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   const area = usePlatformArea(!navigation);
   const { pathname } = useLocation();
-  const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
+  const organizationArea = isOrganizationAdminRoute(pathname);
   const platformArea = area.platformArea && !organizationArea;
   return (
     <ChatNavPanelProvider>

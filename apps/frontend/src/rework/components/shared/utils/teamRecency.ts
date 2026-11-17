@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Per-device "recently viewed teams" for the Home nav-panel team switcher.
+// Per-device "recently viewed teams" for the organization nav-panel team list.
 // Deliberately client-only (localStorage): a switcher convenience, not synced
 // across devices — so it needs no backend, no endpoint and no DB migration.
 // Every read/write is guarded: a blocked or full storage degrades to "no

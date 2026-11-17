@@ -39,7 +39,6 @@ vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
 }));
 vi.mock("@hooks/useUserCapabilities.ts", () => ({ useUserCapabilities: () => ({ canAdmin: true }) }));
 vi.mock("@shared/molecules/UserProfile/UserProfile.tsx", () => ({ default: () => null }));
-vi.mock("@shared/layouts/Sidebar/MainNavBar/MainNavBar.tsx", () => ({ default: () => null }));
 vi.mock("@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -51,7 +50,7 @@ import ManagerArea from "./ManagerArea";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 
 // The router wraps every route in the same content block, as here.
-it("keeps the shell mounted when opening platform administration", () => {
+it("keeps the shell mounted and focus on the switcher when switching from an organization page", () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement("div");
   document.body.append(host);
@@ -82,10 +81,13 @@ it("keeps the shell mounted when opening platform administration", () => {
   );
   expect(host.textContent).toContain("Teams page");
   const shell = host.querySelector("main");
-  act(() => host.querySelector<HTMLAnchorElement>('a[href="/admin/organizations"]')!.click());
+  const trigger = host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+  act(() => trigger.click());
+  act(() => host.querySelector<HTMLButtonElement>('[role="menuitemradio"]')!.click());
   expect(host.textContent).toContain("Organizations page");
   expect(host.querySelector("main")).toBe(shell);
-  expect(host.querySelector('button[aria-haspopup="menu"]')).toBeNull();
+  expect(host.querySelector('button[aria-haspopup="menu"]')).toBe(trigger);
+  expect(document.activeElement).toBe(trigger);
   act(() => root.unmount());
   host.remove();
 });

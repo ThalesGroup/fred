@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { ReactNode } from "react";
 import styles from "./NavigationMenuItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
@@ -58,31 +57,27 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
 
   if (props.type === "link") {
     return (
-      <Tooltip content={label} asChild>
-        <NavLink
-          to={props.linkProps.to}
-          end={false}
-          children={({ isActive }) => (
-            <div className={styles["navigation-menu-item"]} data-selected={isActive}>
-              {Content}
-            </div>
-          )}
-        />
-      </Tooltip>
+      <NavLink
+        to={props.linkProps.to}
+        end={false}
+        children={({ isActive }) => (
+          <div className={styles["navigation-menu-item"]} data-selected={isActive}>
+            {Content}
+          </div>
+        )}
+      />
     );
   }
 
   return (
-    <Tooltip content={label} asChild>
-      <button
-        type="button"
-        className={styles["navigation-menu-item"]}
-        onClick={props.onClick}
-        data-selected={props.selected}
-        aria-selected={props.selected}
-      >
-        {Content}
-      </button>
-    </Tooltip>
+    <button
+      type="button"
+      className={styles["navigation-menu-item"]}
+      onClick={props.onClick}
+      data-selected={props.selected}
+      aria-selected={props.selected}
+    >
+      {Content}
+    </button>
   );
 }

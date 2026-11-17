@@ -14,19 +14,20 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useHref, useNavigate } from "react-router-dom";
 import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import { useGetMyAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory";
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
+import { AdminConsoleLink, AdminConsoleMenuItem } from "./AdminConsoleMenuItem";
 
-import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import { useOptionalWorkingOrganization, useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 
 /** Only the admitted section reads the working context; logout stays available before admission. */
 export default function UserProfile({
@@ -34,15 +35,19 @@ export default function UserProfile({
   agentManagement = false,
   platformArea = false,
   organizationArea = false,
+  platformOnly = false,
 }: {
   admitted?: boolean;
   agentManagement?: boolean;
   platformArea?: boolean;
   organizationArea?: boolean;
+  /** A platform admin with no organization membership. */
+  platformOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { contactSupportLink } = useFrontendProperties();
+  const helpCenterHref = useHref("/help");
   const [open, setOpen] = useState(false);
   const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, {
     skip: !admitted,
@@ -55,6 +60,9 @@ export default function UserProfile({
   const userFullName =
     KeyCloakService.GetUserFullName() || KeyCloakService.GetUserName() || KeyCloakService.GetUserId();
   const userEmail = KeyCloakService.GetUserMail();
+  // A single organization leaves nothing to choose; loading, errors and "none" still explain themselves.
+  const working = useOptionalWorkingOrganization();
+  const singleOrganization = !!working && !working.loading && !working.error && working.organizations.length === 1;
 
   useEffect(() => {
     if (!open) return;
@@ -118,22 +126,43 @@ export default function UserProfile({
                           />,
                         ]
                       : []),
+                    platformOnly ? (
+                      <AdminConsoleLink key="admin" to="/admin/organizations" onClose={() => setOpen(false)} />
+                    ) : (
+                      <AdminConsoleMenuItem key="admin" onClose={() => setOpen(false)} />
+                    ),
                   ]
                 : [],
-              admitted ? [<WorkingOrganizationMenu key="organization" onClose={() => setOpen(false)} />] : [],
-              admitted && contactSupportLink
-                ? [
-                    <MenuPopoverItem
-                      key="support"
-                      icon={{ category: "outlined", type: "contact_support" }}
-                      label={t("rework.profileMenu.contactSupport")}
-                      onClick={() => {
-                        setOpen(false);
-                        window.open(contactSupportLink, "_blank", "noopener,noreferrer");
-                      }}
-                    />,
-                  ]
+              admitted && !singleOrganization
+                ? [<WorkingOrganizationMenu key="organization" onClose={() => setOpen(false)} />]
                 : [],
+              [
+                admitted && (
+                  <MenuPopoverItem
+                    key="help"
+                    icon={{ category: "outlined", type: "help" }}
+                    label={t("rework.mainNav.helpCenter")}
+                    onClick={() => {
+                      setOpen(false);
+                      // Same-origin page: no noopener, so the browser copies this tab's OIDC session.
+                      window.open(helpCenterHref, "_blank");
+                    }}
+                  />
+                ),
+                ...(admitted && contactSupportLink
+                  ? [
+                      <MenuPopoverItem
+                        key="support"
+                        icon={{ category: "outlined", type: "contact_support" }}
+                        label={t("rework.profileMenu.contactSupport")}
+                        onClick={() => {
+                          setOpen(false);
+                          window.open(contactSupportLink, "_blank", "noopener,noreferrer");
+                        }}
+                      />,
+                    ]
+                  : []),
+              ],
               [
                 <MenuPopoverItem
                   key="logout"
@@ -148,18 +177,30 @@ export default function UserProfile({
         </div>
       )}
 
-      <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
-        <button
-          type="button"
-          className={styles.trigger}
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
-        >
-          <UserAvatar name={userFullName} size="small" imageUrl={admitted ? pictureUrl || undefined : undefined} />
-        </button>
-      </Tooltip>
+      {/* The profile card closes the nav panel; its menu opens upwards. */}
+      <button
+        type="button"
+        className={styles.trigger}
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
+      >
+        <UserAvatar name={userFullName} size="small" imageUrl={admitted ? pictureUrl || undefined : undefined} />
+        <span className={styles.identity}>
+          <span className={styles.name} title={userFullName}>
+            {userFullName}
+          </span>
+          {userEmail && (
+            <span className={styles.email} title={userEmail}>
+              {userEmail}
+            </span>
+          )}
+        </span>
+        <span className={styles.chevron} aria-hidden>
+          <Icon category="outlined" type={open ? "expand_more" : "expand_less"} />
+        </span>
+      </button>
       {admitted && !platformArea && (
         <PatchNoteDialog open={readingPatchNotes} notes={patchNotes} onClose={() => setReadingPatchNotes(false)} />
       )}
@@ -179,15 +220,15 @@ function WorkingOrganizationMenu({ onClose }: { onClose: () => void }) {
         {t("rework.profileMenu.workingOrganization")}
       </div>
       {context.error || context.loading || !choices.length ? (
-        <p className={styles.organizationLabel} role="status">
-          {t(context.loading ? "common.loading" : "rework.manager.unavailable")}
-        </p>
-      ) : choices.length === 1 && context.organization ? (
-        <Tooltip content={context.organization.name} asChild>
-          <div tabIndex={0} className={styles.organizationName}>
-            {context.organization.name}
-          </div>
-        </Tooltip>
+        <span className={styles.organizationLabel} role="status">
+          {t(
+            context.loading
+              ? "common.loading"
+              : context.error
+                ? "rework.profileMenu.organizationsUnavailable"
+                : "rework.profileMenu.noOrganization",
+          )}
+        </span>
       ) : (
         choices.map((organization) => (
           <MenuPopoverItem

@@ -35,6 +35,7 @@ import MarketplacePage from "@components/pages/marketplace/MarketplacePage";
 import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelpPage.tsx";
 import SkillsPage from "@components/pages/SkillsPage/SkillsPage";
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
+import TeamProjectsPage from "@components/pages/TeamProjectsPage/TeamProjectsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamLandingPage from "@components/pages/TeamSettingsPage/TeamLandingPage";
@@ -155,15 +156,14 @@ const applicationRoutes: RouteObject[] = [
     children: [
       {
         // Bare `/` lands on the Home dashboard (#2298). The team switcher lives
-        // in the Home nav panel; the personal-space agents page is reached from
+        // in the organization nav panel; the personal-space agents page is reached from
         // there rather than being the app's landing route.
         index: true,
         element: <Navigate to="/home" replace />,
       },
       {
-        // Landing behind the mainNavBar Home entry (#2298). The team switcher
-        // renders in the Home nav panel (Sidebar HOME mode); this is the
-        // content-area placeholder.
+        // The organization's landing: its panel (Sidebar ORGANIZATION mode) holds the
+        // team list; this is the content-area page.
         path: "home",
         element: <HomePage />,
       },
@@ -174,6 +174,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "team/:teamId/managed-chat/:agentInstanceId",
         element: <ManagedChatPageRoute />,
+      },
+      {
+        path: "team/:teamId/projects",
+        element: <TeamProjectsPage />,
       },
       {
         path: "team/:teamId/skills",
@@ -243,6 +247,8 @@ const applicationRoutes: RouteObject[] = [
         path: "team/:teamId",
         element: <TeamLandingPage />,
       },
+      // The marketplace opens on its first menu entry.
+      { path: "marketplace", element: <Navigate to="/marketplace/teams" replace /> },
       {
         path: "marketplace/teams",
         element: <MarketplaceTeams />,

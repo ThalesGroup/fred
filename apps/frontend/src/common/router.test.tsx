@@ -53,6 +53,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "home",
       "team/:teamId/agents",
       "team/:teamId/managed-chat/:agentInstanceId",
+      "team/:teamId/projects",
       "team/:teamId/skills",
       "team/:teamId/prompts",
       "team/:teamId/resources",
@@ -66,6 +67,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "team/:teamId/settings",
       "team/:teamId/settings/:section",
       "team/:teamId",
+      "marketplace",
       "marketplace/teams",
       "marketplace/prompts",
       "marketplace/agents",
@@ -117,4 +119,8 @@ describe("Fred UI parity during manager reconstruction", () => {
 
 it("keeps invitation entry behind Weaver admission without legacy announcement or charter queries", () => {
   expect(isWeaverContentRoute("/join/invitation-token")).toBe(true);
+});
+
+it("serves a team's projects page under Weaver admission only", () => {
+  expect(isWeaverContentRoute("/team/team-1/projects")).toBe(true);
 });

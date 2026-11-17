@@ -12,32 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import { canReadSpaceUsage } from "@core/utils/spaceUsage";
+import { teamProjects } from "@core/utils/teamProjects";
 import { sessionQueryArgs } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   useMySpacesQuery,
   useGetMyAvatarQuery,
   useGetTeamAvatarQuery,
   useMarketplaceProposalSpacesQuery,
-  useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { teamRoleLabel } from "@shared/utils/teamRoleLabel";
 import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
-import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
-import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { spaceRolesCaption } from "@shared/utils/teamRoleLabel";
+import SpaceUpLink from "../SpaceUpLink/SpaceUpLink.tsx";
+import { useSpaceContentItems } from "../useSpaceContentItems.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import SpaceHeader from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
@@ -46,11 +47,6 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
-import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
-import { IconType } from "@shared/utils/Type.ts";
-import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
-import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -65,7 +61,7 @@ import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
-  const { agentIconName, agentsNicknamePlural, defaultTeamAvatarFile } = useFrontendProperties();
+  const { defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
@@ -92,15 +88,7 @@ export default function TeamContentNavbar() {
             item.id === space.parent_id && item.kind === "team" && item.organization_id === space.organization_id,
         )
       : undefined;
-  const projects =
-    space?.kind === "team"
-      ? (memberships.currentData ?? [])
-          .filter(
-            (item) =>
-              item.kind === "project" && item.parent_id === space.id && item.organization_id === space.organization_id,
-          )
-          .sort((a, b) => a.name.localeCompare(b.name))
-      : [];
+  const hasProjects = teamProjects(memberships.currentData, space).length > 0;
   const ancestors = [organization, parentTeam].filter((item) => item !== undefined && item.id !== space?.id);
   const publicationTeams = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), {
     skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
@@ -118,7 +106,7 @@ export default function TeamContentNavbar() {
     manage.offered || ((space?.kind === "team" || space?.kind === "project") && content.offered);
   const canReadConsumption = canReadSpaceUsage(space, organizationId);
   const canReadContent = content.offered;
-  // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
+  // Organizations have no agent workspace, hence no conversations.
   const hasAgentWorkspace = space?.kind !== "organization";
 
   const { currentData: pictureUrl } = useGetMyAvatarQuery(undefined, {
@@ -135,18 +123,18 @@ export default function TeamContentNavbar() {
   );
   const teamPictureUrl = !teamPicture.isError ? teamPicture.currentData : undefined;
 
-  // Record every entry into a team so the Home nav-panel switcher can offer a
+  // Record every entry into a team so the organization nav panel can offer a
   // "recently viewed" sort. Client-only (localStorage), best-effort.
   useEffect(() => {
     if (teamId) recordTeamVisit(teamId);
   }, [teamId]);
 
-  // Return content readers through their space landing; owner-only users return to Home rather
-  // than looping through the neutral landing back to this management page.
+  // Content readers return through their space landing. An organization's panel lives at /home, and
+  // owner-only users go there rather than loop through the landing back to this management page.
   const handleBack = () => {
-    navigate(canReadContent ? `/team/${teamId}` : "/home");
+    if (space?.kind === "organization") navigate("/home", { state: { focusSettings: true } });
+    else navigate(canReadContent ? `/team/${teamId}` : "/home");
   };
-  const capabilities = useTeamCapabilities(selectedTeam);
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
@@ -154,46 +142,17 @@ export default function TeamContentNavbar() {
   // Consumption stays in settings navigation; personal usage keeps its header shortcut.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
-  const { data: teamApplications, isError: applicationsError } = useTeamApplications(
-    teamId,
-    agentManagement || !canReadContent || isPersonalTeam || inSettings || inUsage,
-  );
-  // Every entry the Control Plane returns is already registered and authorized
-  // for this team; Fred no longer compiles application code, so there is no
-  // second, build-time compatibility question to ask here.
-  const showApplications =
-    canReadContent &&
-    applicationsEnabled &&
-    !isPersonalTeam &&
-    !applicationsError &&
-    (teamApplications?.items?.length ?? 0) > 0;
+  // Opened from a gear: focus moves into the settings panel, starting on its back button.
+  const backContainer = useRef<HTMLSpanElement>(null);
+  const focusPanel = (location.state as { focusPanel?: boolean } | null)?.focusPanel === true;
+  useEffect(() => {
+    if (focusPanel && (inSettings || inUsage)) backContainer.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [focusPanel, inSettings, inUsage]);
 
-  // A team has a wiki when an admin has enabled the `team_wiki` agent
-  // capability for it (WIKI-03) — one decision covering the team's agents and
-  // its people. Hidden while the answer is unknown rather than shown
-  // optimistically: an entry that appears and then vanishes on a slow answer
-  // reads worse than one that arrives a moment late, and the control-plane
-  // refuses the wiki routes anyway.
-  const { currentData: wikiAvailability, isError: wikiUnavailable } = useWikiAvailabilityQuery(
-    { spaceId: space?.id ?? "" },
-    {
-      skip: !canReadContent || !space || !["team", "personal"].includes(space.kind),
-      refetchOnMountOrArgChange: true,
-    },
-  );
-  const showWiki = !wikiUnavailable && canReadContent && wikiAvailability?.enabled === true;
-  // Porting entry only: it does not depend on the removed Swift catalog.
-  const showKnowledgeBases = canReadContent && (!!space || capabilities.canUseTeamKnowledgeBases);
-
-  // Display cumulative Weaver roles consistently with Home; legacy summaries
-  // remain a fallback only after their relations have actually loaded.
-  const relationsLoaded = !!space || (!!selectedTeam && "my_relations" in selectedTeam);
-  const roleLabel = teamRoleLabel(space?.roles ?? selectedTeam?.my_relations ?? [], t);
-  const showRoleLabel = !isPersonalTeam && (!!space || !!selectedTeam?.is_member) && relationsLoaded;
+  const rolesCaption = isPersonalTeam ? undefined : spaceRolesCaption(space?.roles ?? [], t);
 
   // Team avatar (28×28, 4px): the team's own image, else the deployment default,
-  // else colour-tinted square initials — the same chain as the Home team list
+  // else colour-tinted square initials — the same chain as the organization team list
   // and the team cards, so one team looks the same on every surface. The
   // personal space keeps that list's round user avatar (UserAvatar) — the "this
   // is you" signal — sized down to fit this compact header.
@@ -232,63 +191,15 @@ export default function TeamContentNavbar() {
     />
   );
 
-  const navigationItems: NavigationMenuItemProps[] = canReadContent
-    ? [
-        ...(hasAgentWorkspace
-          ? ([
-              {
-                type: "link",
-                label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
-                icon: { category: "outlined", type: agentIconName as IconType, filled: true },
-                linkProps: { to: `/team/${teamId}/agents` },
-              },
-            ] satisfies NavigationMenuItemProps[])
-          : []),
-        {
-          type: "link",
-          label: t("rework.sidebar.team.menu.resources"),
-          icon: { category: "outlined", type: "folder", filled: true },
-          linkProps: { to: `/team/${teamId}/resources` },
-        },
-        {
-          type: "link",
-          label: t("rework.spaceSkills.title"),
-          icon: { category: "outlined", type: "school", filled: true },
-          linkProps: { to: `/team/${teamId}/skills` },
-        },
-        {
-          type: "link",
-          label: "Prompts",
-          icon: { category: "outlined", type: "chat", filled: true },
-          linkProps: { to: `/team/${teamId}/prompts` },
-        },
-      ]
-    : [];
-  if (showKnowledgeBases) {
-    navigationItems.push({
-      type: "link",
-      label: t("rework.sidebar.team.menu.knowledgeBases"),
-      icon: { category: "outlined", type: "database", filled: true },
-      linkProps: { to: `/team/${teamId}/knowledge-bases` },
-    });
-  }
-  if (showWiki) {
-    navigationItems.push({
-      type: "link",
-      label: t("rework.sidebar.team.menu.wiki"),
-      trailingBadge: <BetaBadge label={t("rework.wiki.betaBadge.label")} />,
-      icon: { category: "outlined", type: "book_2", filled: true },
-      linkProps: { to: `/team/${teamId}/wiki` },
-    });
-  }
-  if (showApplications) {
-    navigationItems.push({
-      type: "link",
-      label: t("rework.sidebar.team.menu.apps"),
-      icon: { category: "outlined", type: "widgets", filled: true },
-      linkProps: { to: `/team/${teamId}/apps` },
-    });
-  }
+  const navigationItems = useSpaceContentItems({
+    teamId,
+    space,
+    canReadContent,
+    isPersonalTeam,
+    selectedTeam,
+    skipApplications: inSettings || inUsage,
+    showProjects: space?.kind === "team" && (canReadContent || hasProjects),
+  });
 
   const activityItems: NavigationMenuItemProps[] =
     canReadContent && space?.kind === "team"
@@ -348,91 +259,87 @@ export default function TeamContentNavbar() {
     });
   }
 
-  const backButton = (
-    <span className={styles["settings-back-container"]}>
-      <Button
-        color={"primary"}
-        variant={"text"}
-        size={"small"}
-        onClick={handleBack}
-        icon={{ category: "outlined", type: "arrow_back", filled: true }}
-      >
-        {t("rework.back")}
-      </Button>
-    </span>
-  );
+  // The quiet link up to the parent space always tops the panel; leaving settings sits under the header.
+  const parent = ancestors[ancestors.length - 1];
+  const up =
+    space && parent
+      ? {
+          name: parent.name,
+          kind: parent.kind,
+          onClick: () => navigate(parent.kind === "organization" ? "/home" : `/team/${parent.id}`),
+        }
+      : undefined;
+  const leaveSettings = inSettings || inUsage;
 
   return (
     <div className={styles.mainNavPanel}>
-      {space && ancestors.length > 0 && (
-        <div className={styles.breadcrumb}>
-          <Breadcrumb
-            label={t("rework.home.spaceLocation")}
-            segments={[
-              ...ancestors.map((ancestor) => ({
-                label: ancestor.name,
-                onClick: () => navigate(`/team/${ancestor.id}`),
-              })),
-              { label: teamDisplayName },
-            ]}
-          />
-        </div>
+      {up && (
+        <SpaceUpLink name={up.name} kind={up.kind === "organization" ? "organization" : "team"} onClick={up.onClick} />
       )}
-      <div className={styles.teamPanelHeader}>
-        <div className={styles.teamPanelHeaderText}>
-          <div className={styles.teamPanelIdentity}>
-            {teamAvatar}
-            <div className={styles.teamPanelTitle}>
-              {!isPersonalTeam && (
-                <span className={styles.teamPanelKicker}>
-                  {t(space ? `rework.userSettings.spaceKinds.${space.kind}` : "rework.sidebar.team.spaceLabel")}
-                </span>
-              )}
-              <Tooltip content={teamDisplayName} asChild>
-                <span tabIndex={0} className={styles.teamPanelName}>
-                  {isPersonalTeam ? t("rework.sidebar.team.userTeam") : (space?.name ?? selectedTeam?.name)}
-                </span>
-              </Tooltip>
-            </div>
-          </div>
-          {showRoleLabel && (
-            <Tooltip content={roleLabel} asChild>
-              <span tabIndex={0} className={styles.teamPanelRoles}>
-                {roleLabel}
-              </span>
-            </Tooltip>
-          )}
-        </div>
-        {!isPersonalTeam &&
-          (canOpenTeamSettings || canReadConsumption || activityItems.length > 0) &&
-          !inSettings &&
-          !inUsage && (
-            <span className={styles.teamPanelSettingsButton}>
+      {/* Every space shares one header, settings included; an organization is only reached here for its settings. */}
+      {space?.kind === "organization" ? (
+        <SpaceHeader
+          leading={<Icon category="outlined" type="domain" />}
+          eyebrow={t("rework.manager.kinds.organization")}
+          title={space.name}
+          caption={rolesCaption}
+        />
+      ) : (
+        <SpaceHeader
+          leading={teamAvatar}
+          eyebrow={
+            isPersonalTeam
+              ? undefined
+              : t(space ? `rework.userSettings.spaceKinds.${space.kind}` : "rework.sidebar.team.spaceLabel")
+          }
+          title={teamDisplayName}
+          caption={rolesCaption}
+          action={
+            !isPersonalTeam &&
+            (canOpenTeamSettings || canReadConsumption || activityItems.length > 0) &&
+            !inSettings &&
+            !inUsage ? (
               <IconButton
-                size={"small"}
-                variant={"icon"}
+                size="small"
+                variant="icon"
                 icon={{ category: "outlined", type: "settings", filled: true }}
                 onClick={() =>
                   navigate(
-                    canOpenTeamSettings ? settingsBase : canReadConsumption ? usageBase : `${settingsBase}/activity`,
+                    canOpenTeamSettings
+                      ? `${settingsBase}/members`
+                      : canReadConsumption
+                        ? usageBase
+                        : `${settingsBase}/activity`,
+                    { state: { focusPanel: true } },
                   )
                 }
                 title={t("rework.teamSettings.navigation.settings")}
               />
-            </span>
-          )}
-        {isPersonalTeam && !inUsage && (
-          <span className={styles.teamPanelSettingsButton}>
-            <IconButton
-              size={"small"}
-              variant={"icon"}
-              icon={{ category: "outlined", type: "settings", filled: true }}
-              onClick={() => navigate(usageBase)}
-              title={t("rework.teamUsage.title")}
-            />
-          </span>
-        )}
-      </div>
+            ) : isPersonalTeam && !inUsage ? (
+              <IconButton
+                size="small"
+                variant="icon"
+                icon={{ category: "outlined", type: "settings", filled: true }}
+                onClick={() => navigate(usageBase)}
+                title={t("rework.teamUsage.title")}
+              />
+            ) : undefined
+          }
+        />
+      )}
+      {leaveSettings && (
+        <span ref={backContainer} className={`${styles["settings-back-container"]} ${styles.closeSettings}`}>
+          <Button
+            color={"primary"}
+            variant={"text"}
+            size={"small"}
+            onClick={handleBack}
+            icon={{ category: "outlined", type: "close", filled: true }}
+          >
+            {t("rework.teamSettings.navigation.closeSettings")}
+          </Button>
+        </span>
+      )}
       <div className={styles.navigationContainer}>
         {(content.error || manage.error) && (
           <ServiceNotice
@@ -454,32 +361,10 @@ export default function TeamContentNavbar() {
           />
         )}
         {inSettings || (inUsage && !isPersonalTeam) ? (
-          <>
-            {backButton}
-            <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems]} />
-          </>
-        ) : inUsage ? (
-          // Personal usage has no membership-management tabs.
-          backButton
-        ) : (
+          <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems]} />
+        ) : inUsage ? null : ( // Personal usage has no membership-management tabs.
           <>
             <NavigationMenu items={navigationItems} />
-            {projects.length > 0 && (
-              <section className={styles.projects} aria-label={t("rework.home.projectsOf", { name: space!.name })}>
-                <p>{t("rework.home.projectsOf", { name: space!.name })}</p>
-                {projects.map((project) => (
-                  <TeamSelectionListItem
-                    key={project.id}
-                    redirection={`/team/${project.id}`}
-                    name={project.name}
-                    description={t("rework.userSettings.spaceKinds.project")}
-                    roles={project.roles}
-                    imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}
-                    avatarName={project.name}
-                  />
-                ))}
-              </section>
-            )}
             <Separator margin={"var(--spacing-m)"} />
             {canReadContent && hasAgentWorkspace && <ChatList teamId={teamId} spaceId={space?.id} />}
           </>

@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A select built on `TextInput` (rather than the `Select` molecule) so its
-// resting border and content font match the sibling search field exactly — the
-// `Select` trigger uses different neutral-outline/font tokens at the compact
-// `xs` tier. The trigger is a read-only `TextInput`; the listbox reuses the
-// shared `MenuPopover` shell, anchored just below (same pattern as
-// `EnumSelectRow`, minus its side-anchoring).
+// Sort control of the team list: an icon button beside search that opens the
+// shared `MenuPopover` as a listbox, the current order highlighted.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import styles from "./TeamSortSelect.module.scss";
 
@@ -44,13 +39,9 @@ export default function TeamSortSelect<T extends string>({
   ariaLabel,
 }: TeamSortSelectProps<T>) {
   const [open, setOpen] = useState(false);
-  const [triggerFocused, setTriggerFocused] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  const focusTrigger = () => wrapRef.current?.querySelector("input")?.focus();
 
   // Close on outside click.
   useEffect(() => {
@@ -83,11 +74,10 @@ export default function TeamSortSelect<T extends string>({
   const selectOption = (optionValue: T) => {
     onChange(optionValue);
     setOpen(false);
-    focusTrigger();
   };
 
-  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
     } else if (event.key === "Escape") {
@@ -116,7 +106,6 @@ export default function TeamSortSelect<T extends string>({
       case "Escape":
         event.preventDefault();
         setOpen(false);
-        focusTrigger();
         break;
       default:
         break;
@@ -125,45 +114,16 @@ export default function TeamSortSelect<T extends string>({
 
   return (
     <div ref={wrapRef} className={styles.wrap}>
-      <div className={styles.triggerWrap}>
-        <TextInput
-          size="xs"
-          value={selected?.label ?? ""}
-          readOnly
-          // Drop the empty hint/counter row below the field — this trigger never
-          // shows one.
-          compact
-          role="combobox"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-label={ariaLabel}
-          onClick={() => setOpen((prev) => !prev)}
-          // `user-select: none` is ignored on form controls, so block the mouse
-          // from starting a selection / placing the caret at the source. The
-          // click still toggles, and keyboard focus is unaffected.
-          onMouseDown={(event) => event.preventDefault()}
-          onKeyDown={handleTriggerKeyDown}
-          onFocus={() => setTriggerFocused(true)}
-          onBlur={() => setTriggerFocused(false)}
-          // Inline (beats TextInput's own compound selectors) to: reserve room
-          // for the chevron; kill the caret + text selection; and drive the
-          // active look ourselves. The primary outline is 1px here (not the
-          // component-wide 2px focus ring) and shows while open OR focused — the
-          // trigger loses focus to the listbox while open, so a plain :focus
-          // style wouldn't cover the open state.
-          style={{
-            cursor: "pointer",
-            caretColor: "transparent",
-            userSelect: "none",
-            WebkitUserSelect: "none",
-            paddingRight: "calc(var(--spacing-xs) + 1.25rem)",
-            ...(open || triggerFocused ? { outline: "1px solid var(--primary)", borderColor: "transparent" } : {}),
-          }}
-        />
-        <span className={styles.chevron} aria-hidden="true">
-          <Icon category="outlined" type={open ? "expand_less" : "expand_more"} />
-        </span>
-      </div>
+      <IconButton
+        size="small"
+        variant="icon"
+        icon={{ category: "outlined", type: "sort" }}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={handleTriggerKeyDown}
+      />
 
       {open && (
         <div className={styles.menuAnchor}>

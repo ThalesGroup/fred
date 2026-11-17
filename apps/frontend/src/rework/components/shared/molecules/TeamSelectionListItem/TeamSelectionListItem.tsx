@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useGetTeamAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamSelectionListItem.module.scss";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import type { IconType } from "@shared/utils/Type.ts";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import type { TeamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import type { UserTeamRelation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
@@ -35,6 +36,8 @@ interface TeamSelectionListItemProps {
   /** The current user's folded roles on this team (from `Team.my_relations`).
    *  Ignored for the personal space (`personal`), which shows no role line. */
   roles?: (UserTeamRelation | import("../../../../../slices/controlPlane/controlPlaneOpenApi").Role)[];
+  /** A destination rather than a team (e.g. the marketplace): this icon replaces the avatar. */
+  icon?: IconType;
   /** Personal space: renders the user's initials avatar and hides the role line. */
   personal?: boolean;
   /** Team banner image, or the user's picture for the personal space; when
@@ -62,6 +65,7 @@ export default function TeamSelectionListItem({
   description,
   roles = [],
   personal = false,
+  icon,
   imgUrl,
   avatarName,
   avatarColor,
@@ -78,31 +82,30 @@ export default function TeamSelectionListItem({
 
   const content = (
     <>
-      {personal ? (
-        <UserAvatar name={avatarName} size="small" imageUrl={imageUrl} />
+      {icon ? (
+        <span className={styles.mark} aria-hidden>
+          <Icon category="outlined" type={icon} />
+        </span>
+      ) : personal ? (
+        <UserAvatar name={avatarName} size="x-small" imageUrl={imageUrl} />
       ) : imageUrl ? (
         <img className={styles.avatar} src={imageUrl} alt="" width={32} height={32} decoding="async" />
       ) : (
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}
       <span className={styles.labels}>
-        <Tooltip content={name} asChild>
-          <span tabIndex={0} className={styles.name}>
-            {name}
-          </span>
-        </Tooltip>
+        <span className={styles.name} title={name}>
+          {name}
+        </span>
         {description && <span className={styles.roles}>{description}</span>}
-        {!personal && (
-          <Tooltip content={roleLabel} asChild>
-            <span tabIndex={0} className={styles.roles}>
-              {roleLabel}
-            </span>
-          </Tooltip>
-        )}
+        {!personal && !icon && <span className={styles.roles}>{roleLabel}</span>}
       </span>
     </>
   );
-  const className = `${styles.item}${description ? ` ${styles.withDescription}` : ""}`;
+  // The personal space and destinations stand apart from the team list: outlined and compact.
+  const className = [styles.item, (personal || icon) && styles.itemPersonal, description && styles.withDescription]
+    .filter(Boolean)
+    .join(" ");
   return onActivate ? (
     <button
       type="button"
