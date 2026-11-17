@@ -500,7 +500,22 @@ class WorkflowTests(unittest.TestCase):
                 if s.get("uses", "").startswith("softprops/")
             )
             self.assertTrue(upload["with"]["fail_on_unmatched_files"])
-            self.assertTrue(upload["with"]["files"].endswith("/migration.md"))
+            files = upload["with"]["files"].splitlines()
+            self.assertTrue(any(path.endswith("/migration.md") for path in files))
+            self.assertIn("alembic-revisions.md", files)
+            generator = next(
+                s for s in release["steps"] if s.get("name") == "Generate Alembic revision inventory"
+            )
+            self.assertLess(release["steps"].index(generator), release["steps"].index(upload))
+        validation = m.yaml.safe_load(
+            (root / ".github/workflows/Validate-release-migration.yml").read_text()
+        )
+        self.assertTrue(
+            any(
+                step.get("name") == "Verify Alembic revision inventory before publication"
+                for step in validation["jobs"]["validate"]["steps"]
+            )
+        )
 
     def test_pr_check_runs_without_path_filters_or_secrets(self):
         root = SCRIPT.parents[1]
