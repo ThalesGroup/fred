@@ -241,7 +241,8 @@ python3 scripts/alembic_release_inventory.py --version "$V"
 ```
 
 Confirm that it shows exactly one head per backend and capability tree. A new
-component with Alembic migrations must appear automatically. This preview
+component with Alembic migrations must appear automatically. Keep each tree's
+head even when no migration was added in this release. This preview
 records the current topic-branch commit; regenerate it from the merged `swift`
 commit in Step 6 so the source commit matches the tags. The section is generated
 at publication and is not staged in the release-preparation PR.

@@ -84,6 +84,39 @@ class InventoryTests(unittest.TestCase):
         self.assertNotIn("Create records", first)
         self.assertEqual(len([line for line in first.splitlines() if line.startswith("| ")]), 4)
 
+    def test_head_persists_across_tags_without_new_migrations(self):
+        def git(*args):
+            return subprocess.run(
+                ["git", *args],
+                cwd=self.root,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+        write_revision(self.tree, "first")
+        write_revision(self.tree, "stable_head", "first")
+        git("init", "-q")
+        git("config", "user.name", "Release Test")
+        git("config", "user.email", "release-test@example.com")
+        git("add", ".")
+        git("commit", "-qm", "Add migrations")
+        git("tag", "code/v1.0.0")
+        for version in ("1.0.1", "1.0.2"):
+            (self.root / "release.txt").write_text(version, encoding="utf-8")
+            git("add", "release.txt")
+            git("commit", "-qm", "Update release metadata")
+            git("tag", f"code/v{version}")
+        commits = []
+        for version in ("1.0.0", "1.0.1", "1.0.2"):
+            git("checkout", "-q", "--detach", f"code/v{version}")
+            commit = git("rev-parse", "HEAD")
+            commits.append(commit)
+            section = inventory.render_inventory(self.root, version, commit)
+            self.assertIn("| example-backend | `apps/example-backend/alembic` | `stable_head` |", section)
+            self.assertNotIn("`first`", section)
+        self.assertEqual(len(set(commits)), 3)
+
     def test_rejects_broken_graphs(self):
         cases = {
             "missing parent": [("only", "absent")],

@@ -3,7 +3,7 @@
 ## 1. Inventory generation
 
 - [x] 1.1 Add a generator that discovers every Alembic tree, reads revision IDs and parents, validates each graph, and writes deterministic head-only Markdown; verify it inventories the current five trees.
-- [x] 1.2 Add focused tests for head-only output, a newly added tree, duplicate IDs, missing parents, cycles, and multiple heads; run only the generator's test module during development.
+- [x] 1.2 Add focused tests for head-only output, an unchanged head across later tags, a newly added tree, duplicate IDs, missing parents, cycles, and multiple heads; run only the generator's test module during development.
 
 ## 2. Release publication
 

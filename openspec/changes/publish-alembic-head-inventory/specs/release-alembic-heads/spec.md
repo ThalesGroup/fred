@@ -20,6 +20,11 @@ Each Fred release description SHALL include a Markdown section for every backend
 - **WHEN** a later release adds a component with an Alembic migration tree
 - **THEN** that component appears in the generated inventory without a manually maintained component list
 
+#### Scenario: No new migration in several releases
+
+- **WHEN** a migration tree's head was introduced before several later release tags and the later releases contain no new migration for that tree
+- **THEN** each later release description still shows that head from its tagged source
+
 ### Requirement: Inventory reflects the published commit
 
 The inventory SHALL be generated from the same commit as the paired `code/vX.Y.Z` and `chart/vX.Y.Z` tags. Generation MUST be deterministic, and publication MUST fail if a discovered tree contains duplicate revision identifiers, missing parent revisions, a cycle, or an ambiguous head.
