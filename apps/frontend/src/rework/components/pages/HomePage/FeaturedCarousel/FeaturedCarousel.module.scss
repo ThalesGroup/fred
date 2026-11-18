@@ -1,0 +1,321 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Advanced home "featured" banner: the team agents page card (AgentCard), larger.
+ * It reads the theme color tokens like the card does; a theme recolors it by
+ * redefining them on `article[aria-roledescription="slide"]`. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  container-type: inline-size;
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.position {
+  min-width: 3em;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: right;
+}
+
+/* Window over the track: one slide wide, the track slides under it. */
+.viewport {
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.track {
+  --slide-motion: 600ms cubic-bezier(0.65, 0, 0.35, 1);
+
+  display: flex;
+  transition: transform var(--slide-motion);
+}
+
+/* Jump from an edge copy to its real twin: no animation. */
+.track[data-instant="true"],
+.track[data-instant="true"] .banner {
+  transition: none;
+}
+
+/* Depth while sliding: the leaving card shrinks and fades, the incoming one grows back. */
+.banner {
+  transition:
+    transform var(--slide-motion),
+    opacity var(--slide-motion);
+
+  &[inert] {
+    transform: scale(0.96);
+    opacity: 0.5;
+  }
+}
+
+/* Fixed height, texts clamped: the foot row sits at the same place on every slide. */
+.banner {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  flex: 0 0 100%;
+  gap: var(--spacing-l);
+  background: var(--surface-container);
+  padding: var(--spacing-l) var(--spacing-xl);
+  height: 288px;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+/* AgentCard's icon, name and role, one size up. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-ms);
+  background: var(--secondary-container);
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--on-secondary-container);
+  font-size: 1.75rem;
+}
+
+.nameBlock {
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--secondary);
+  font: var(--font-title-large-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.badge {
+  border-radius: var(--radius-full);
+  background: var(--tertiary-container);
+  padding: 2px var(--spacing-s);
+  color: var(--on-tertiary-container);
+  font: var(--font-label-medium);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.team {
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
+  padding: 2px var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+/* Chat, dots and "all agents" share the foot row, on one line. */
+.launch {
+  justify-self: start;
+}
+
+.highlights {
+  display: flex;
+  flex-direction: column;
+  /* As tall as its lines, centered in the space above the foot row. */
+  align-self: center;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-height: 0;
+  overflow: hidden;
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-s);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-s);
+    color: var(--on-surface);
+    font: var(--font-body-medium);
+  }
+}
+
+.highlightsTitle {
+  margin: 0;
+  color: var(--secondary);
+  font: var(--font-title-small);
+}
+
+/* A dot by default; same shape variables as the section markers. */
+.bullet {
+  flex: none;
+  transform: rotate(var(--home-marker-rotate, 0deg));
+  margin: 6px 4px 0 2px;
+  border-radius: var(--home-marker-radius, 50%);
+  background: var(--secondary);
+  width: 8px;
+  height: 8px;
+}
+
+.foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-column: 1 / -1;
+  align-items: center;
+  margin: calc(-1 * var(--spacing-s)) 0 calc(-1 * var(--spacing-s));
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-2xs);
+
+  button {
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    width: 36px;
+    height: 24px;
+  }
+
+  span {
+    display: block;
+    transition: width 0.2s;
+    border-radius: 3px;
+    background: var(--outline-variant);
+    width: 6px;
+    height: 6px;
+  }
+
+  button[aria-current="true"] span {
+    background: var(--secondary);
+    width: 24px;
+  }
+}
+
+.allAgents {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: var(--spacing-2xs);
+  opacity: 0.85;
+  padding: var(--spacing-xs) 0;
+  min-height: 2.75rem;
+  color: var(--secondary);
+  font: var(--font-label-large);
+  text-decoration: none;
+
+  &:hover {
+    opacity: 1;
+    text-decoration: underline;
+  }
+}
+
+/* Narrow banner: drop the highlights so the fixed height still fits. */
+@container (max-width: 900px) {
+  .banner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .highlights {
+    display: none;
+  }
+}
+
+@container (max-width: 640px) {
+  .banner {
+    padding: var(--spacing-m);
+    height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track,
+  .banner,
+  .dots span {
+    transition: none;
+  }
+}

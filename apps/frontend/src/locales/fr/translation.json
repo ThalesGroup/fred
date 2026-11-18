@@ -3141,6 +3141,24 @@
         "deltaFlat": "stable",
         "vsPrevious": "vs période précédente",
         "periodCaption": "sur les {{count}} derniers jours"
+      },
+      "advanced": {
+        "featuredTitle": "À la une",
+        "pause": "Mettre en pause le défilement",
+        "play": "Reprendre le défilement",
+        "previous": "Agent précédent",
+        "next": "Agent suivant",
+        "slideLabel": "{{position}} sur {{count}} : {{name}}",
+        "show": "Afficher {{name}}",
+        "proposedBy": "Proposé par {{team}}",
+        "chat": "Discuter",
+        "chatWith": "Discuter avec {{name}}",
+        "highlightsTitle": "Ce qu'il fait pour vous",
+        "allAgents": "Tous les agents",
+        "askTitle": "Une question ? Demandez à l'agent : {{name}}",
+        "askPlaceholder": "Posez votre question à {{name}}…",
+        "askLabel": "Votre question à {{name}}",
+        "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },
     "mainNav": {
@@ -4397,7 +4415,51 @@
       "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
       "lastUpdated": "Modifié par {{who}} le {{when}}",
       "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",
-      "unknownAuthor": "un administrateur"
+      "unknownAuthor": "un administrateur",
+      "home": {
+        "title": "Page d'accueil",
+        "layoutLabel": "Accueil proposé aux utilisateurs",
+        "layouts": {
+          "classic": "Accueil simple",
+          "advanced": "Accueil avancé"
+        },
+        "layoutHints": {
+          "classic": "Message d'accueil, recherche et agents proposés.",
+          "advanced": "Ajoute la bannière « À la une » et un champ de question adressé à l'agent de votre choix."
+        },
+        "featuredLabel": "Agents à la une",
+        "featuredHint": "Agents des équipes par défaut, dans l'ordre d'affichage. {{max}} au plus. Sans agent à la une, pas de bannière.",
+        "askLabel": "Agent du champ question",
+        "askHint": "Reçoit les questions posées depuis l'accueil avancé. Sans agent, le champ est masqué.",
+        "askNone": "Aucun (champ masqué)",
+        "empty": "Aucun agent à la une.",
+        "unavailable": "Masqué",
+        "moveUp": "Monter {{name}}",
+        "moveDown": "Descendre {{name}}",
+        "remove": "Retirer {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Facultatif, par exemple « Nouveau ».",
+        "highlightsLabel": "Ce qu'il fait pour vous",
+        "highlightsHint": "Facultatif. Un point par ligne, {{max}} au plus, {{length}} caractères chacun.",
+        "highlightsError": {
+          "count": "{{max}} points au plus.",
+          "length": "{{length}} caractères au plus par point."
+        },
+        "addLabel": "Agent à ajouter",
+        "addPlaceholder": "Choisir un agent",
+        "searchPlaceholder": "Rechercher un agent",
+        "noMatch": "Aucun agent trouvé",
+        "noCandidate": "Aucun autre agent disponible dans les équipes par défaut",
+        "add": "Ajouter",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saved": "Page d'accueil enregistrée",
+        "saveFailed": "La page d'accueil n'a pas été enregistrée",
+        "loadFailed": "Impossible de charger les réglages de la page d'accueil. Rechargez la page.",
+        "subtitle": "Choisissez l'accueil proposé à tous les utilisateurs et les agents mis en avant. Enregistré pour toute la plateforme.",
+        "unavailableHint": "Masqué pour les utilisateurs : agent désactivé, suspendu ou hors des équipes par défaut.",
+        "unsaved": "Modifications non enregistrées"
+      }
     },
     "platformPrompt": {
       "title": "Prompts plateforme",

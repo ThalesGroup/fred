@@ -32,6 +32,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     UploadWarning,
 )
+from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
@@ -400,6 +401,30 @@ class HomeAgentsResponse(BaseModel):
 
     agents: list[ManagedAgentInstanceSummary]
     history_unavailable: bool = False
+
+
+class FeaturedHomeAgent(BaseModel):
+    """A carousel agent the user can chat with, with its admin-written extras."""
+
+    agent: ManagedAgentInstanceSummary
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+
+
+class HomeShowcaseResponse(BaseModel):
+    """Platform home mode plus the featured and question agents usable by the current user."""
+
+    layout: HomeLayout = "classic"
+    featured: list[FeaturedHomeAgent] = Field(default_factory=list)
+    ask_agent: ManagedAgentInstanceSummary | None = None
+    ask_max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Chat message limit of the question agent's runtime pod; null when "
+            "unpublished or not read in time (the chat still enforces it)."
+        ),
+    )
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):

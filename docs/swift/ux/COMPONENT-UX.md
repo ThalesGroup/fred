@@ -70,6 +70,28 @@ successful empty state and partial history failure have separate messages. A
 partial failure preserves suggestions. Reopening home refreshes permissions
 and ranking. Legacy conversations have no inferred activity date.
 
+### Advanced home
+
+**Locations:** `src/rework/components/pages/HomePage/` (`AdvancedQuickAccess`,
+`FeaturedCarousel`, `HomeAskBox`, `SectionMarker`) and
+`admin/UiSettingsPage/HomeSettingsSection.tsx`.
+**Status:** Functional; visual review pending.
+
+Chosen in Administration > Interface (simple or advanced home, platform-wide).
+Only the "Quick access" tab changes: theme logo greeting (no subtitle), a
+"Featured" banner (7 s rotation, paused on hover/focus and under reduced
+motion, pause/previous/next/dots), a text-only question field for the agent the
+admin picks (hidden when none, the chat composer's send button), then the
+unchanged home agent selection as team agents page cards (`AgentCard`,
+read-only) in rows of three with a centered last row. The content and the bar
+(tabs left, search right) are 828 px wide. The banner is a large agent card
+(shared `AgentChatButton`) on a sliding track: off-screen slides are inert and
+shrink/fade, edge copies keep the wrap going the same way, no motion under
+reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
+icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
+`--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
+agent names and visibility refresh while an edit is in progress.
+
 
 ### Platform skills presentation and administration
 

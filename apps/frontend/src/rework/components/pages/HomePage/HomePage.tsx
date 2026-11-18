@@ -23,6 +23,8 @@ import ResponsibleAiSection from "./ResponsibleAiSection/ResponsibleAiSection.ts
 import TopAgents from "./TopAgents/TopAgents.tsx";
 import TopTeams from "./TopTeams/TopTeams.tsx";
 import MarketplaceTopPrompts from "./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx";
+import AdvancedQuickAccess from "./AdvancedQuickAccess/AdvancedQuickAccess.tsx";
+import { useMyHomeQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./HomePage.module.scss";
 
 /** Days a home-page statistic is scoped to, chosen by the header selector. */
@@ -51,66 +53,91 @@ export default function HomePage() {
   const [tabIndex, setTabIndex] = useState(0);
   const showPeriod = tabIndex !== 0;
 
+  // Platform-wide mode set on the admin "Interface" page; any failure keeps the classic home.
+  // Refetched on each visit: agents may have changed since (no reload in a single-page app).
+  const { data: home, isLoading: homeLoading } = useMyHomeQuery(undefined, { refetchOnMountOrArgChange: true });
+  const advanced = home?.layout === "advanced";
+
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <ButtonGroup
-          size="2xs"
-          color="secondary"
-          variant="radio"
-          aria-label={t("rework.home.tabs.aria")}
-          selectedIndex={tabIndex}
-          onSelectedIndexChange={setTabIndex}
-          items={[
-            { label: t("rework.home.tabs.quickAccess") },
-            { label: t("rework.home.tabs.activity") },
-            { label: t("rework.home.tabs.trending") },
-          ]}
-        />
-        {showPeriod && (
-          <div className={styles.periodSlot}>
-            <ButtonGroup
-              size="small"
-              color="secondary"
-              variant="radio"
-              aria-label={t("rework.home.period.label")}
-              selectedIndex={periodIndex}
-              onSelectedIndexChange={setPeriodIndex}
-              items={PERIODS.map((days) => ({
-                label: t("rework.home.period.days", { count: days }),
-                title: t(`rework.home.period.d${days}`),
-              }))}
-            />
+    // Fills the shell card (no shell inset), so the scrollbar sits at the card's right edge.
+    <div className={styles.scroller} data-shell-inset="none">
+      <div className={styles.page} data-layout={advanced ? "advanced" : "classic"}>
+        <header className={styles.header}>
+          <ButtonGroup
+            size={advanced ? "medium" : "2xs"}
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.home.tabs.aria")}
+            selectedIndex={tabIndex}
+            onSelectedIndexChange={setTabIndex}
+            items={[
+              { label: t("rework.home.tabs.quickAccess") },
+              { label: t("rework.home.tabs.activity") },
+              { label: t("rework.home.tabs.trending") },
+            ]}
+          />
+          {!showPeriod && advanced && (
+            <div className={styles.periodSlot}>
+              <HomeSearch compact />
+            </div>
+          )}
+          {showPeriod && (
+            <div className={styles.periodSlot}>
+              <ButtonGroup
+                size="small"
+                color="secondary"
+                variant="radio"
+                aria-label={t("rework.home.period.label")}
+                selectedIndex={periodIndex}
+                onSelectedIndexChange={setPeriodIndex}
+                items={PERIODS.map((days) => ({
+                  label: t("rework.home.period.days", { count: days }),
+                  title: t(`rework.home.period.d${days}`),
+                }))}
+              />
+            </div>
+          )}
+        </header>
+
+        {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
+        {/* Empty while the mode loads, so the classic home never flashes before the advanced one. */}
+        {tabIndex === 0 && homeLoading && <div className={styles.quickAccessTab} aria-busy="true" />}
+
+        {tabIndex === 0 && advanced && (
+          <AdvancedQuickAccess
+            featured={home?.featured ?? []}
+            askAgent={home?.ask_agent}
+            askMaxChars={home?.ask_max_chat_input_chars}
+            firstName={firstName}
+          />
+        )}
+
+        {tabIndex === 0 && !homeLoading && !advanced && (
+          <div className={styles.quickAccessTab}>
+            <div className={styles.headerText}>
+              <h1 className={styles.title}>
+                {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
+              </h1>
+              <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
+            </div>
+            <HomeSearch />
+            <RecentAgents />
           </div>
         )}
-      </header>
 
-      {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
-      {tabIndex === 0 && (
-        <div className={styles.quickAccessTab}>
-          <div className={styles.headerText}>
-            <h1 className={styles.title}>
-              {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
-            </h1>
-            <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
-          </div>
-          <HomeSearch />
-          <RecentAgents />
-        </div>
-      )}
+        {tabIndex === 1 && (
+          <>
+            <ActivityKpis period={period} />
+            <ResponsibleAiSection period={period} />
+            <div className={styles.cols}>
+              <TopTeams period={period} />
+              <TopAgents period={period} />
+            </div>
+          </>
+        )}
 
-      {tabIndex === 1 && (
-        <>
-          <ActivityKpis period={period} />
-          <ResponsibleAiSection period={period} />
-          <div className={styles.cols}>
-            <TopTeams period={period} />
-            <TopAgents period={period} />
-          </div>
-        </>
-      )}
-
-      {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
+        {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
+      </div>
     </div>
   );
 }

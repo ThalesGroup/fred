@@ -89,6 +89,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
+    "ControlPlanePlatformHome",
     "ControlPlaneMarketplaceSettings",
     "ControlPlaneAgentMarketplace",
     "ControlPlanePlatformDefaultTeams",
@@ -643,11 +644,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
             ],
     },
+    // Agent changes also refresh the home settings and the advanced home: their
+    // featured and candidate agents are resolved against the current agents.
     postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: {
       invalidatesTags: (_, __, arg) => [
@@ -662,6 +671,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
           : []),
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
@@ -670,6 +680,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
@@ -678,20 +689,24 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A copy lands in every target team: refresh each team's list it reached.
     postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
-      invalidatesTags: (result) =>
-        (result?.results ?? [])
+      invalidatesTags: (result) => [
+        ...(result?.results ?? [])
           .filter((r) => r.agent)
           .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     // A re-check may lift a capability_pending suspension: the list must show it.
     postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
@@ -936,6 +951,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
     },
+    // Home mode and featured agents: one LIST tag shared by the admin page and the
+    // user home; agent edits also refresh the user home (availability may change).
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: {
+      providesTags: [{ type: "ControlPlanePlatformHome" as const, id: "LIST" }],
+    },
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformHome", id: "LIST" }],
+    },
+    getMyHomeControlPlaneV1MeHomeGet: {
+      providesTags: [
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+        { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+      ],
+    },
     // Agents marketplace settings: a switch-off removes published agents (listing
     // and card states) and changes every team's effective settings.
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: {
@@ -1166,6 +1195,10 @@ export const {
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
+  // Home mode and featured agents (admin "Interface" page, user home).
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery: usePlatformHomeQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation: useSetPlatformHomeMutation,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery: useMyHomeQuery,
   // Agents marketplace settings (admin "Marketplaces" page).
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery: useMarketplaceSettingsQuery,
   useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery:

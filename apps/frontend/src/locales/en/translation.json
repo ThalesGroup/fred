@@ -3141,6 +3141,24 @@
         "deltaFlat": "flat",
         "vsPrevious": "vs previous period",
         "periodCaption": "over the last {{count}} days"
+      },
+      "advanced": {
+        "featuredTitle": "Featured",
+        "pause": "Pause the rotation",
+        "play": "Resume the rotation",
+        "previous": "Previous agent",
+        "next": "Next agent",
+        "slideLabel": "{{position}} of {{count}}: {{name}}",
+        "show": "Show {{name}}",
+        "proposedBy": "Offered by {{team}}",
+        "chat": "Chat",
+        "chatWith": "Chat with {{name}}",
+        "highlightsTitle": "What it does for you",
+        "allAgents": "All agents",
+        "askTitle": "A question? Ask the agent: {{name}}",
+        "askPlaceholder": "Ask {{name}} anything…",
+        "askLabel": "Your question to {{name}}",
+        "askHint": "Your question opens a new conversation with {{name}}, who answers it right away."
       }
     },
     "mainNav": {
@@ -4397,7 +4415,51 @@
       "saveFailed": "Interface settings were not saved",
       "lastUpdated": "Changed by {{who}} on {{when}}",
       "loadFailed": "Could not load the interface settings. Reload the page.",
-      "unknownAuthor": "an administrator"
+      "unknownAuthor": "an administrator",
+      "home": {
+        "title": "Home page",
+        "layoutLabel": "Home page offered to users",
+        "layouts": {
+          "classic": "Simple home",
+          "advanced": "Advanced home"
+        },
+        "layoutHints": {
+          "classic": "Welcome message, search and suggested agents.",
+          "advanced": "Adds the \"Featured\" banner and a question field sent to the agent of your choice."
+        },
+        "featuredLabel": "Featured agents",
+        "featuredHint": "Agents of the default teams, in display order. {{max}} at most. With no featured agent, no banner.",
+        "askLabel": "Question field agent",
+        "askHint": "Receives the questions asked from the advanced home. With no agent, the field is hidden.",
+        "askNone": "None (field hidden)",
+        "empty": "No featured agent.",
+        "unavailable": "Hidden",
+        "moveUp": "Move {{name}} up",
+        "moveDown": "Move {{name}} down",
+        "remove": "Remove {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Optional, for example \"New\".",
+        "highlightsLabel": "What it does for you",
+        "highlightsHint": "Optional. One point per line, {{max}} at most, {{length}} characters each.",
+        "highlightsError": {
+          "count": "{{max}} points at most.",
+          "length": "{{length}} characters at most per point."
+        },
+        "addLabel": "Agent to add",
+        "addPlaceholder": "Choose an agent",
+        "searchPlaceholder": "Search an agent",
+        "noMatch": "No agent found",
+        "noCandidate": "No other agent available in the default teams",
+        "add": "Add",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saved": "Home page saved",
+        "saveFailed": "The home page was not saved",
+        "loadFailed": "Could not load the home page settings. Reload the page.",
+        "subtitle": "Choose the home page offered to every user and the agents it features. Saved for the whole platform.",
+        "unavailableHint": "Hidden from users: agent disabled, suspended or outside the default teams.",
+        "unsaved": "Unsaved changes"
+      }
     },
     "platformPrompt": {
       "title": "Platform prompts",

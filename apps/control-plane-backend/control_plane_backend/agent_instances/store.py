@@ -486,6 +486,28 @@ class AgentInstanceStore:
             return None
         return _row_to_record(row)
 
+    async def get_many(
+        self,
+        agent_instance_ids: list[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, AgentInstanceRecord]:
+        """Records by id in one query; unknown ids are simply absent."""
+        if not agent_instance_ids:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(AgentInstanceRow).where(
+                            AgentInstanceRow.agent_instance_id.in_(agent_instance_ids)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return {row.agent_instance_id: _row_to_record(row) for row in rows}
+
     async def get_for_team(
         self,
         agent_instance_id: str,

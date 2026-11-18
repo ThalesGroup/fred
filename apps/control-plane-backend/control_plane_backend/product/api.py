@@ -65,7 +65,10 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
-from control_plane_backend.product.home_agents import list_home_agents
+from control_plane_backend.product.home_agents import (
+    get_home_showcase,
+    list_home_agents,
+)
 from control_plane_backend.product.schemas import (
     AgentCopyRequest,
     AgentCopyResponse,
@@ -83,6 +86,7 @@ from control_plane_backend.product.schemas import (
     FrontendBootstrap,
     FrontendConfig,
     HomeAgentsResponse,
+    HomeShowcaseResponse,
     InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
@@ -1896,6 +1900,18 @@ async def get_my_home_agents(
 ) -> HomeAgentsResponse:
     """List launchers using current permissions, without querying runtime pods."""
     return await list_home_agents(user, deps, limit=limit)
+
+
+@router.get(
+    "/me/home",
+    response_model=HomeShowcaseResponse,
+    summary="Home page mode and the featured agents the user can chat with.",
+)
+async def get_my_home(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> HomeShowcaseResponse:
+    return await get_home_showcase(user, deps)
 
 
 @router.get(

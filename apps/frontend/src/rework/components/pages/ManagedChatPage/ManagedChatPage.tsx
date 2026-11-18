@@ -63,6 +63,7 @@ import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
 import type { ThreadMessage } from "@rework/types/thread";
 import { useComposerRecall } from "./useComposerRecall";
+import { useInitialPrompt } from "./useInitialPrompt";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -664,6 +665,15 @@ export default function ManagedChatPage() {
     chat.isLoadingHistory ||
     (chat.sessionId !== null && chat.isHydratingAttachments) ||
     awaitingHumanAnswer;
+  // A question asked from the home page: copied into the composer, then sent
+  // under the same conditions as the send button, once the agent is known.
+  useInitialPrompt({
+    input: chat.input,
+    setInput: chat.setInput,
+    send: () => void chat.handleSend(),
+    ready:
+      !composerInputDisabled && !chat.waitResponse && !chat.attachmentsUploading && chat.agentInstance !== undefined,
+  });
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
