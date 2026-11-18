@@ -16,8 +16,9 @@
 
 from typing import Protocol
 
-from fred_core.common.utils import user_display_name
 from fred_pod.security.structure import KeycloakUser
+
+from fred_core.common.utils import user_display_name
 
 
 class OfficeCoreProperties(Protocol):
