@@ -55,7 +55,7 @@ from fred_sdk.contracts.runtime import (
     ToolProviderPort,
     ToolResultRuntimeEvent,
 )
-from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import TOOL_REF_CHART_RENDER, TOOL_REF_GEO_RENDER_POINTS
 from fred_sdk.support.builtins import catalog as builtin_catalog
 from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain_core.tools import tool as lc_tool
@@ -642,7 +642,7 @@ def test_graph_executor_allows_geo_tool_without_agent_declaration() -> None:
     executor = asyncio.run(runtime.build_executor(_binding()))
     assert isinstance(executor, GraphExecutor)
     allowed = executor._allowed_tool_refs  # pyright: ignore[reportPrivateUsage]
-    assert allowed == frozenset({TOOL_REF_GEO_RENDER_POINTS})
+    assert allowed == frozenset({TOOL_REF_GEO_RENDER_POINTS, TOOL_REF_CHART_RENDER})
     events: list[RuntimeEvent] = []
     context = NodeContext(
         binding=_binding(),
@@ -759,14 +759,12 @@ def test_invalid_geo_emits_tool_error_without_part() -> None:
         tuning_values={},
         sink=events.append,
     )
-
     result = asyncio.run(
         context.invoke_tool(
             TOOL_REF_GEO_RENDER_POINTS,
             {"points": [{"latitude": 91, "longitude": 2}]},
         )
     )
-
     tool_result = next(
         event for event in events if isinstance(event, ToolResultRuntimeEvent)
     )
@@ -775,6 +773,35 @@ def test_invalid_geo_emits_tool_error_without_part() -> None:
     assert tool_result.is_error
     assert tool_result.ui_parts == ()
     assert "points.0.latitude" in tool_result.content
+
+
+def test_invalid_chart_emits_tool_error_without_part() -> None:
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(),
+        model=None,
+        graph_agent_id="test.chart",
+        node_id="chart",
+        allowed_tool_refs=frozenset({TOOL_REF_CHART_RENDER}),
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_CHART_RENDER,
+            {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]},
+        )
+    )
+    tool_result = next(
+        event for event in events if isinstance(event, ToolResultRuntimeEvent)
+    )
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert tool_result.is_error
+    assert tool_result.ui_parts == ()
+    assert "x_key" in tool_result.content
 
 
 @pytest.mark.asyncio

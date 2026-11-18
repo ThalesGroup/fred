@@ -935,6 +935,17 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
+export type ChartPart = {
+  chart_type: "bar" | "line" | "area" | "pie" | "table";
+  /** Actual rows returned by a data tool, with JSON scalar values. */
+  rows: {
+    [key: string]: string | number | number | boolean | null;
+  }[];
+  title: string;
+  type?: "chart";
+  x_key?: string | null;
+  y_keys?: string[];
+};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -972,6 +983,9 @@ export type AwaitingHumanRuntimeEvent = {
   } | null;
   ui_parts?: (
     | ({
+        type: "chart";
+      } & ChartPart)
+    | ({
         type: "geo";
       } & GeoPart)
     | ({
@@ -1008,6 +1022,9 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1102,6 +1119,9 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)

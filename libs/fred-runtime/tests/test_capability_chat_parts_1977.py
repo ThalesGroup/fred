@@ -84,7 +84,33 @@ def _capability_with_part(cap_id: str, part: type[BaseModel]):
 
 
 def test_builtin_kinds_derive_from_sdk_base_union() -> None:
-    assert BUILTIN_CHAT_PART_KINDS == frozenset({"link", "geo"})
+    assert BUILTIN_CHAT_PART_KINDS == frozenset({"link", "geo", "chart"})
+
+
+def test_registry_boot_includes_chart_without_duplicate_geo() -> None:
+    from typing import get_args
+
+    from fred_sdk.contracts.ui_part_union import current_ui_part_union
+    from fred_sdk.support.builtins import ChartPart
+
+    registry = CapabilityRegistry()
+    registry.validate(env={})
+    union = current_ui_part_union()
+    members = get_args(get_args(union)[0])
+    assert members.count(ChartPart) == 1
+    assert [part.__name__ for part in members].count("GeoPart") == 1
+
+
+def test_capability_cannot_redeclare_chart_kind() -> None:
+    from fred_runtime.capabilities import DuplicateChatPartKindError
+
+    class _ChartCollidingPart(BaseModel):
+        type: Literal["chart"] = "chart"
+
+    registry = CapabilityRegistry()
+    registry.register(_capability_with_part("duplicate_chart", _ChartCollidingPart))
+    with pytest.raises(DuplicateChatPartKindError, match="chart"):
+        registry.validate(env={})
 
 
 def test_chat_parts_compose_in_deterministic_capability_order() -> None:

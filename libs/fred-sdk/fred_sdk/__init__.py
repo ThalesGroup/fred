@@ -176,6 +176,7 @@ if TYPE_CHECKING:
     # Built-in tool references
     # ---------------------------------------------------------------------------
     from fred_sdk.support.builtins import (
+        TOOL_REF_CHART_RENDER,
         TOOL_REF_GEO_RENDER_POINTS,
         TOOL_REF_KNOWLEDGE_SEARCH,
         TOOL_REF_SIMILARITY_SEARCH,
@@ -274,6 +275,7 @@ _LAZY: dict[str, str] = {
     "load_agent_prompt_markdown": "fred_sdk.resources",
     "load_packaged_markdown": "fred_sdk.resources",
     # Built-in tool references
+    "TOOL_REF_CHART_RENDER": "fred_sdk.support.builtins",
     "TOOL_REF_GEO_RENDER_POINTS": "fred_sdk.support.builtins",
     "TOOL_REF_KNOWLEDGE_SEARCH": "fred_sdk.support.builtins",
     "TOOL_REF_SIMILARITY_SEARCH": "fred_sdk.support.builtins",
@@ -385,6 +387,7 @@ __all__ = [
     "load_agent_prompt_markdown",
     "load_packaged_markdown",
     # Built-in tool references
+    "TOOL_REF_CHART_RENDER",
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
     "TOOL_REF_SIMILARITY_SEARCH",

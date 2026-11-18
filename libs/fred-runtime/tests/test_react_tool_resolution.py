@@ -44,7 +44,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     ToolProviderPort,
 )
-from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import TOOL_REF_CHART_RENDER, TOOL_REF_GEO_RENDER_POINTS
 from fred_sdk.support.builtins import catalog as builtin_catalog
 from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain.mcp import MCPAdapter
@@ -205,6 +205,38 @@ async def test_new_local_builtin_is_discovered_without_agent_declaration(
         _, result = await matches[0].invoke({"value": 3})
         assert result is not None
         assert result.blocks[0].data == {"value": 3}
+
+
+def test_chart_tool_is_available_once_with_or_without_declaration() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_CHART_RENDER),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        chart_specs = [
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_CHART_RENDER
+        ]
+        assert len(chart_specs) == 1
+        assert chart_specs[0].runtime_name == "chart_render"
+
+
+@pytest.mark.asyncio
+async def test_invalid_chart_returns_tool_error_without_part() -> None:
+    chart_spec = next(
+        spec
+        for spec in _resolver().resolve_tools()
+        if spec.tool_ref == TOOL_REF_CHART_RENDER
+    )
+    content, result = await chart_spec.invoke(
+        {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]}
+    )
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert "x_key" in content
 
 
 def _provider_error_artifact() -> ToolInvocationResult:
@@ -600,7 +632,8 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
             binding=binding,
         )
         assert [spec.tool_ref for spec in resolver.resolve_tools()] == [
-            TOOL_REF_GEO_RENDER_POINTS
+            TOOL_REF_GEO_RENDER_POINTS,
+            TOOL_REF_CHART_RENDER,
         ]
 
     binding = _binding().model_copy(
@@ -614,7 +647,11 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
         services=RuntimeServices(),
         binding=binding,
     ).resolve_tools()
-    assert [spec.runtime_name for spec in specs] == ["ask_user", "geo_render_points"]
+    assert [spec.runtime_name for spec in specs] == [
+        "ask_user",
+        "geo_render_points",
+        "chart_render",
+    ]
     bound = ReActToolBinder(
         runtime_tools=specs, tracer=None, binding=binding
     ).build_tools()

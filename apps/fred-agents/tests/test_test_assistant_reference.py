@@ -51,7 +51,9 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     ToolInvokerPort,
 )
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from fred_sdk.graph.runtime import GraphExecutionOutput
+from fred_sdk.support.builtins import ChartPart
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -230,6 +232,45 @@ async def test_invoke_returns_the_output_model() -> None:
     )
     assert isinstance(output, GraphExecutionOutput)
     assert output.content.startswith("Echo: echo invoke")
+
+
+@pytest.mark.asyncio
+async def test_chart_scenario_emits_returned_rows_as_typed_part() -> None:
+    rebuild_ui_part_union((ChartPart,))
+    try:
+        result = await _ExecutorDriver().send("s-chart", "chart")
+    finally:
+        rebuild_ui_part_union(())
+    final = next(event for event in result.events if event.get("kind") == "final")
+    assert any(
+        event.get("kind") == "tool_call" and event.get("tool_name") == "chart.render"
+        for event in result.events
+    )
+    chart = final["ui_parts"][0]
+    assert chart["type"] == "chart"
+    assert chart["chart_type"] == "bar"
+    assert chart["rows"] == [
+        {"quarter": "Q1", "sales": 12},
+        {"quarter": "Q2", "sales": 19},
+        {"quarter": "Q3", "sales": 15},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chart_part_survives_human_input_pause() -> None:
+    rebuild_ui_part_union((ChartPart,))
+    try:
+        driver = _ExecutorDriver()
+        paused = await driver.send("s-chart-hitl", "chart confirm")
+        awaiting = next(
+            event for event in paused.events if event.get("kind") == "awaiting_human"
+        )
+        assert awaiting["ui_parts"][0]["type"] == "chart"
+        assert awaiting["ui_parts"][0]["rows"][1] == {"quarter": "Q2", "sales": 19}
+        resumed = await driver.resume("s-chart-hitl", awaiting, "continue")
+    finally:
+        rebuild_ui_part_union(())
+    assert any(event.get("kind") == "final" for event in resumed.events)
 
 
 @pytest.mark.asyncio
