@@ -1,11 +1,11 @@
 ## 1. Shared attribution and trusted context
 
 - [x] 1.1 Add the pure Office author formatter in `fred-core` for `KeycloakUser | None` plus a trusted fallback user ID, call it during Word export, and verify focused tests for complete names, blank-name username fallback, ID fallback, Unicode, and the 255-character boundary.
-- [x] 1.2 Add `CapabilityContext.author: str | None` and pass only a string selected from the verified `KeycloakUser` without changing `CapabilityIdentity`; verify focused tests for verified and delegated subjects, context propagation, absent author, and the unchanged model-visible identity schema. Direct and streamed routes share the same execution path and receive only the authenticated subject.
+- [x] 1.2 Add `CapabilityContext.author: KeycloakUser | None` and pass the verified user without changing `CapabilityIdentity`; verify focused tests for verified and delegated subjects, context propagation, absent author, and the unchanged model-visible identity schema. Direct and streamed routes share the same execution path and receive only the authenticated subject.
 
 ## 2. PowerPoint output
 
-- [x] 2.1 Write PPTX core properties at each PowerPoint save point from the shared author string, with ID fallback at the tool boundary; verify focused tests read both properties back from generated PPTX bytes and the source template remains unchanged.
+- [x] 2.1 Call the shared Office property setter at each PowerPoint save point, with ID fallback at the tool boundary; verify focused tests read both properties back from generated PPTX bytes and the source template remains unchanged.
 - [x] 2.2 Apply attribution in PPT Filler's worker; verify focused fill tests for distinct author strings, delegated-ID fallback, and 255/256-character inputs. The shared formatter covers profile and username selection.
 - [x] 2.3 Apply attribution to PPT Builder's delivered deck; verify focused build tests for the same identity cases and that preview generation does not alter the downloaded PPTX metadata.
 

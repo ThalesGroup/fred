@@ -36,6 +36,7 @@ from typing import (
     cast,
 )
 
+from fred_core.conversion.office_author import OfficeAuthor, set_office_author
 from pptx.oxml.ns import qn
 from pptx.parts.chart import ChartPart
 from pptx.shapes.picture import Picture
@@ -1617,7 +1618,7 @@ class _Renderer:
         patterns: Sequence[Optional[Pattern]],
         numbers: Optional[Sequence[int]] = None,
         starts: Optional[Sequence[int]] = None,
-        author: str | None = None,
+        author: OfficeAuthor | None = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
@@ -1710,8 +1711,7 @@ class _Renderer:
                 )
         _remove_slides(self.prs, original_ids)
         if author is not None:
-            self.prs.core_properties.author = author[:255]
-            self.prs.core_properties.last_modified_by = author[:255]
+            set_office_author(self.prs.core_properties, author)
         buffer = io.BytesIO()
         self.prs.save(buffer)
         preview = buffer
@@ -2503,7 +2503,7 @@ def render_deck(
     numbers: Optional[Sequence[int]] = None,
     starts: Optional[Sequence[int]] = None,
     *,
-    author: str | None = None,
+    author: OfficeAuthor | None = None,
 ) -> RenderResult:
     """Render ``plan``, slide ``i`` on ``patterns[i]`` (CPU-bound; call off the event loop).
     ``numbers``: sent-plan numbers; ``starts`` continues a split list's numbering.

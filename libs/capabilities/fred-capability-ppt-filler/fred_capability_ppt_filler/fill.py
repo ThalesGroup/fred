@@ -56,6 +56,7 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
 from fred_core import convert_office_bytes_to_pdf
+from fred_core.conversion.office_author import OfficeAuthor, set_office_author
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -591,7 +592,7 @@ def _build_filled_deck(
     provided: Dict[str, object],
     image_keys_by_slide: Dict[int, set[str]],
     prefetched: Dict[str, object],
-    author: str | None = None,
+    author: OfficeAuthor | None = None,
 ) -> Tuple[Optional[bytes], Optional[str]]:
     """Synchronous fill worker: open, traverse/replace, place images, strip
     authoring notes, save. Runs off the event loop via ``asyncio.to_thread``
@@ -656,8 +657,7 @@ def _build_filled_deck(
         apply_kept_notes_to_slide(slide)
 
     if author is not None:
-        presentation.core_properties.author = author[:255]
-        presentation.core_properties.last_modified_by = author[:255]
+        set_office_author(presentation.core_properties, author)
     buffer = io.BytesIO()
     presentation.save(buffer)
     return buffer.getvalue(), None

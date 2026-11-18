@@ -51,6 +51,8 @@ from fred_capability_ppt_filler.capability import (
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
+from fred_core.conversion.office_author import OfficeAuthor
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -112,14 +114,23 @@ def _fill_tool(ctx):
 @pytest.mark.parametrize(
     ("author", "expected"),
     [
-        ("Ada Lovelace", "Ada Lovelace"),
+        (
+            KeycloakUser(
+                uid="ada",
+                username="ada",
+                roles=[],
+                first_name=" Ada ",
+                last_name=" Lovelace ",
+            ),
+            "Ada Lovelace",
+        ),
         ("Grace Hopper", "Grace Hopper"),
         ("name" * 64, ("name" * 64)[:255]),
         ("delegated-user", "delegated-user"),
     ],
 )
 def test_filled_deck_uses_acting_author_without_changing_template(
-    author: str, expected: str
+    author: OfficeAuthor, expected: str
 ) -> None:
     source = Presentation()
     source.slides.add_slide(source.slide_layouts[6])

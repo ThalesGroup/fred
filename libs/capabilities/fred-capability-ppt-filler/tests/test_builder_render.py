@@ -66,6 +66,8 @@ from fred_capability_ppt_filler.builder.render import (
 from fred_capability_ppt_filler.builder.tools import _issue_line, catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
+from fred_core.conversion.office_author import OfficeAuthor
+from fred_pod.security.structure import KeycloakUser
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -141,14 +143,23 @@ def _render(
 @pytest.mark.parametrize(
     ("author", "expected"),
     [
-        ("Ada Lovelace", "Ada Lovelace"),
+        (
+            KeycloakUser(
+                uid="ada",
+                username="ada",
+                roles=[],
+                first_name=" Ada ",
+                last_name=" Lovelace ",
+            ),
+            "Ada Lovelace",
+        ),
         ("Grace Hopper", "Grace Hopper"),
         ("b" * 256, "b" * 255),
         ("delegated-user", "delegated-user"),
     ],
 )
 def test_rendered_deck_uses_acting_author_without_changing_template(
-    author: str, expected: str
+    author: OfficeAuthor, expected: str
 ) -> None:
     plan, patterns = _deck(_on(_pattern("Title and Content"), title="Example"))
     template = Presentation(io.BytesIO(TEMPLATE))

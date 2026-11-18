@@ -39,6 +39,7 @@ from typing import Any
 
 import pytest
 from _tracer_capability import TracerEchoCapability, TracerEchoConfig
+from fred_pod.security.structure import KeycloakUser
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     build_capability_agent_block,
@@ -256,17 +257,24 @@ def test_exact_selection_builds_typed_contexts() -> None:
 
 def test_author_reaches_only_trusted_capability_context() -> None:
     registry = _registry(TracerEchoCapability())
+    user = KeycloakUser(
+        uid="verified-user",
+        username="verified-name",
+        roles=[],
+        first_name="Ada",
+        last_name="Lovelace",
+    )
     contexts = build_capability_contexts(
         registry,
         selected_capability_ids=["tracer_echo"],
         capability_config={},
         identity=_identity(),
         services=RuntimeServices(),
-        author="Ada Lovelace",
+        author=user,
     )
 
     context = contexts["tracer_echo"]
-    assert context.author == "Ada Lovelace"
+    assert context.author is user
     assert "Ada Lovelace" not in repr(context)
     assert "author" not in CapabilityIdentity.model_json_schema()["properties"]
 

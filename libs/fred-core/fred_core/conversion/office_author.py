@@ -14,7 +14,26 @@
 
 """Select the embedded author of a generated Office file."""
 
+from typing import Protocol
+
 from fred_pod.security.structure import KeycloakUser
+
+
+class OfficeCoreProperties(Protocol):
+    @property
+    def author(self) -> str: ...
+
+    @author.setter
+    def author(self, value: str) -> None: ...
+
+    @property
+    def last_modified_by(self) -> str: ...
+
+    @last_modified_by.setter
+    def last_modified_by(self, value: str) -> None: ...
+
+
+OfficeAuthor = KeycloakUser | str
 
 
 def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
@@ -27,3 +46,13 @@ def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
         if user.username.strip():
             return user.username[:255]
     return fallback_user_id[:255]
+
+
+def set_office_author(properties: OfficeCoreProperties, author: OfficeAuthor) -> None:
+    """Set the same bounded author on Word and PowerPoint core properties."""
+    if isinstance(author, KeycloakUser):
+        name = office_author_name(author, author.uid)
+    else:
+        name = office_author_name(None, author)
+    properties.author = name
+    properties.last_modified_by = name

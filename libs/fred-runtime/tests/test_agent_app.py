@@ -113,9 +113,9 @@ def test_office_author_uses_only_verified_execution_subject() -> None:
         uid="verified-user", client_id="delegate", run_id="run", agent_id="agent"
     )
 
-    assert agent_app_module._verified_office_author(user) == "Ada Lovelace"
-    assert agent_app_module._verified_office_author(delegated) is None
-    assert agent_app_module._verified_office_author(None) is None
+    assert agent_app_module._verified_author_user(user) is user
+    assert agent_app_module._verified_author_user(delegated) is None
+    assert agent_app_module._verified_author_user(None) is None
 
 
 @pytest.fixture(autouse=True)

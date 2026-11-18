@@ -39,6 +39,7 @@ from typing import (
 )
 
 from fred_core import convert_office_bytes_to_pdf
+from fred_core.conversion.office_author import OfficeAuthor
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -1340,7 +1341,7 @@ def _prepare_and_render(
     prefetched: Dict[str, object],
     numbers: Optional[List[int]] = None,
     starts: Optional[List[int]] = None,
-    author: str | None = None,
+    author: OfficeAuthor | None = None,
 ):
     """Picture validation/transcoding and the render, together in one worker
     thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU.
