@@ -54,6 +54,8 @@ function validChart(part: UiPartRendererProps["part"]): part is UiPartRendererPr
     !Array.isArray(part.rows) ||
     part.rows.length === 0 ||
     part.rows.length > 50 ||
+    (part.y_keys !== undefined &&
+      (!Array.isArray(part.y_keys) || !part.y_keys.every((key) => typeof key === "string"))) ||
     !part.rows.every((row) => row && typeof row === "object" && !Array.isArray(row) && Object.values(row).every(scalar))
   ) {
     return false;

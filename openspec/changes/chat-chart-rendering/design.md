@@ -26,6 +26,8 @@ The runtime registry adds the catalog's output part models to its boot-time part
 
 The chart arguments accept `bar`, `line`, `area`, `pie`, or `table`, a short title, 1-50 row objects, an X key and one or more Y keys for plotted views. Table view does not need Y keys. All row values are JSON scalars or null. Every plotted row must have the mapped keys; Y values must be finite numbers or nonempty canonical numeric strings, with null allowed as a gap. Pie values must be nonnegative. The serialized payload limit is 50,000 characters. An early row-size check avoids serializing oversized values before full validation. Invalid inputs produce a tool error without a partial part. The part retains the original scalar rows; numeric conversion is only for plotting so the raw table shows source values. No query identifier or SQL string is accepted because the tool cannot verify either.
 
+LangChain validates ReAct and Deep tool arguments before calling the local handler. The binding converts those validation failures into tool error messages so the agent can correct its call and continue.
+
 ### D4. Frontend uses Recharts and current tokens
 
 Add a renderer for the `chart` part to the current part registry, backed by Recharts primitives. Use the same surface tokens as KPI charts for axes and tooltips, and their shared multi-series palette for distinct series colors. The legacy MUI renderer is a behavior reference only. A semantic, scrollable raw-row table is available for all chart types. Long labels, empty data, invalid saved parts, narrow layouts, keyboard access to values, and light/dark themes receive focused checks. Do not parse free text to infer charts.

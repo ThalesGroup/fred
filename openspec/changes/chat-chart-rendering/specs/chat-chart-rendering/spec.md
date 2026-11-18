@@ -38,6 +38,10 @@ The runtime SHALL expose `chart.render` once to ReAct, Deep, and Graph agents wi
 - **WHEN** a plotted series contains a non-numeric value other than null
 - **THEN** the tool reports a validation error and emits no chart part
 
+#### Scenario: Invalid ReAct or Deep tool arguments
+- **WHEN** a ReAct or Deep agent calls the chart tool with missing or invalid arguments
+- **THEN** the tool returns a validation error without a chart part and the agent turn can continue
+
 #### Scenario: Oversized result
 - **WHEN** rows exceed 50 entries or the chart payload exceeds 50,000 serialized characters
 - **THEN** the tool reports the applicable limit and emits no partial chart

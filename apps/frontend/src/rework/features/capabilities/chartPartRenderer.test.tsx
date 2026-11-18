@@ -105,6 +105,12 @@ it("rejects nested saved table cells and negative pie slices", () => {
       }}
     />,
   );
+  const malformedKeys = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{ type: "chart", chart_type: "table", title: "Bad", rows: [{ value: 1 }], y_keys: "value" }}
+    />,
+  );
   expect(nested).toContain("chat.chart.unavailable");
   expect(negative).toContain("chat.chart.unavailable");
+  expect(malformedKeys).toContain("chat.chart.unavailable");
 });
