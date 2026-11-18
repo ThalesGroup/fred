@@ -82,7 +82,12 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
   }
 
   return (
-    <section className={styles.section} aria-roledescription="carousel" aria-labelledby="featured-title">
+    <section
+      className={styles.section}
+      data-featured-carousel
+      aria-roledescription="carousel"
+      aria-labelledby="featured-title"
+    >
       <div className={styles.head}>
         <h2 id="featured-title" className={styles.title}>
           <SectionMarker />
@@ -149,6 +154,7 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
               <article
                 key={key}
                 className={styles.banner}
+                data-featured-slide
                 aria-roledescription="slide"
                 aria-label={t("rework.home.advanced.slideLabel", {
                   position: source + 1,
