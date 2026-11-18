@@ -109,6 +109,37 @@ def _fill_tool(ctx):
     return tools[0]
 
 
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        ("Ada Lovelace", "Ada Lovelace"),
+        ("Grace Hopper", "Grace Hopper"),
+        ("name" * 64, ("name" * 64)[:255]),
+        ("delegated-user", "delegated-user"),
+    ],
+)
+def test_filled_deck_uses_acting_author_without_changing_template(
+    author: str, expected: str
+) -> None:
+    source = Presentation()
+    source.slides.add_slide(source.slide_layouts[6])
+    source.core_properties.author = "Template creator"
+    source.core_properties.last_modified_by = "Template editor"
+    template = io.BytesIO()
+    source.save(template)
+
+    filled, error = fill_mod._build_filled_deck(template.getvalue(), {}, {}, {}, author)
+
+    assert error is None
+    assert filled is not None
+    properties = Presentation(io.BytesIO(filled)).core_properties
+    assert properties.author == expected
+    assert properties.last_modified_by == expected
+    source_properties = Presentation(io.BytesIO(template.getvalue())).core_properties
+    assert source_properties.author == "Template creator"
+    assert source_properties.last_modified_by == "Template editor"
+
+
 @pytest.fixture
 def no_pdf(monkeypatch):
     """Disable the best-effort PDF preview by default (fill returns the download chip)."""

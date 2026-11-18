@@ -71,6 +71,7 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
+from fred_core.conversion.office_author import office_author_name
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
     ChatMessage,
@@ -4443,6 +4444,7 @@ async def _stream(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
+    author: str | None = None,
     team_id: str | None = None,
     agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
@@ -4510,6 +4512,7 @@ async def _stream(
         definition,
         request,
         access_token=access_token,
+        author=author,
         team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -4787,6 +4790,12 @@ def _enforce_turn_options(
         ) from exc
 
 
+def _verified_office_author(user: KeycloakUser | AssertedUser | None) -> str | None:
+    if isinstance(user, KeycloakUser):
+        return office_author_name(user, user.uid)
+    return None
+
+
 def _build_capability_block(
     capability_registry: CapabilityRegistry | None,
     tuning: AgentTuning | None,
@@ -4794,6 +4803,7 @@ def _build_capability_block(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     services: RuntimeServices,
     user_id: str | None,
+    author: str | None = None,
     session_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
@@ -4891,6 +4901,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
+        author=author,
         turn_options=turn_options,
         team_settings=team_settings,
     )
@@ -5147,6 +5158,7 @@ async def _iterate_runtime_event_payloads(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
+    author: str | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5179,6 +5191,7 @@ async def _iterate_runtime_event_payloads(
         definition,
         request,
         access_token,
+        author=author,
         team_id=team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -5304,6 +5317,7 @@ async def _iterate_runtime_event_payloads_inner(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
+    author: str | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5567,6 +5581,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
+            author=author,
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
@@ -7452,6 +7467,7 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
+            author=_verified_office_author(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7597,6 +7613,7 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
+            author=_verified_office_author(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7827,6 +7844,7 @@ def _build_agent_router(
         stream = _stream(
             target.definition,
             internal_req,
+            author=_verified_office_author(authenticated_user),
             access_token=None if provider and provider.delegated else access_token,
             team_id=target.team_id,
             agent_instance_name=target.agent_instance_name,

@@ -6,7 +6,7 @@ PowerPoint files generated from an uploaded template retain the template creator
 
 - Attribute newly generated PPT Filler and PPT Builder downloads to the acting user instead of retaining template metadata.
 - Use the same name selection rule as Word export: trimmed first and last name when both are available, otherwise the authenticated username. Keep values within the Office core property limit.
-- Pass the verified `KeycloakUser` in `CapabilityContext.author` and select the Office author string when each file is generated. Share the selection logic between Word and PowerPoint where the existing package dependencies permit it.
+- Pass only the verified Office author string in `CapabilityContext.author`. Share the selection logic between Word and PowerPoint where the existing package dependencies permit it.
 - Preserve templates and previously downloaded files. Deck content, preview, download access, and filenames stay as they are.
 
 ## Capabilities

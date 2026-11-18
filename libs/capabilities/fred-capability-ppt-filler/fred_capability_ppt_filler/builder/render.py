@@ -82,6 +82,7 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.fill import BuildNoteCode, BuiltSlide
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.pptx_author import set_deck_author
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
@@ -1617,6 +1618,7 @@ class _Renderer:
         patterns: Sequence[Optional[Pattern]],
         numbers: Optional[Sequence[int]] = None,
         starts: Optional[Sequence[int]] = None,
+        author: str | None = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
@@ -1708,6 +1710,8 @@ class _Renderer:
                     "agenda."
                 )
         _remove_slides(self.prs, original_ids)
+        if author is not None:
+            set_deck_author(self.prs, author)
         buffer = io.BytesIO()
         self.prs.save(buffer)
         preview = buffer
@@ -2498,6 +2502,8 @@ def render_deck(
     images: Optional[Mapping[str, PreparedImage]] = None,
     numbers: Optional[Sequence[int]] = None,
     starts: Optional[Sequence[int]] = None,
+    *,
+    author: str | None = None,
 ) -> RenderResult:
     """Render ``plan``, slide ``i`` on ``patterns[i]`` (CPU-bound; call off the event loop).
     ``numbers``: sent-plan numbers; ``starts`` continues a split list's numbering.
@@ -2505,7 +2511,7 @@ def render_deck(
     presentation = open_presentation(template_bytes)
     try:
         return _Renderer(presentation, inventory, images or {}).render(
-            plan, patterns, numbers, starts
+            plan, patterns, numbers, starts, author
         )
     except ValueError as exc:
         raise RenderError(

@@ -138,6 +138,44 @@ def _render(
     return result, Presentation(io.BytesIO(result.pptx))
 
 
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        ("Ada Lovelace", "Ada Lovelace"),
+        ("Grace Hopper", "Grace Hopper"),
+        ("b" * 256, "b" * 255),
+        ("delegated-user", "delegated-user"),
+    ],
+)
+def test_rendered_deck_uses_acting_author_without_changing_template(
+    author: str, expected: str
+) -> None:
+    plan, patterns = _deck(_on(_pattern("Title and Content"), title="Example"))
+    template = Presentation(io.BytesIO(TEMPLATE))
+    template.core_properties.author = "Template creator"
+    template.core_properties.last_modified_by = "Template editor"
+    source = io.BytesIO()
+    template.save(source)
+
+    result = render_deck(
+        source.getvalue(),
+        INVENTORY,
+        plan,
+        patterns,
+        author=author,
+    )
+
+    properties = Presentation(io.BytesIO(result.pptx)).core_properties
+    assert properties.author == expected
+    assert properties.last_modified_by == expected
+    preview_properties = Presentation(io.BytesIO(result.preview_pptx)).core_properties
+    assert preview_properties.author == expected
+    assert preview_properties.last_modified_by == expected
+    source_properties = Presentation(io.BytesIO(source.getvalue())).core_properties
+    assert source_properties.author == "Template creator"
+    assert source_properties.last_modified_by == "Template editor"
+
+
 def test_layout_pattern_fills_title_and_levelled_bullets():
     result, deck = _render(
         _on(

@@ -254,6 +254,35 @@ def test_exact_selection_builds_typed_contexts() -> None:
     assert greeter_config.greeting == "yo"  # upgraded from the v1 shape
 
 
+def test_author_reaches_only_trusted_capability_context() -> None:
+    registry = _registry(TracerEchoCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["tracer_echo"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+        author="Ada Lovelace",
+    )
+
+    context = contexts["tracer_echo"]
+    assert context.author == "Ada Lovelace"
+    assert "Ada Lovelace" not in repr(context)
+    assert "author" not in CapabilityIdentity.model_json_schema()["properties"]
+
+
+def test_missing_author_keeps_capability_context_compatible() -> None:
+    registry = _registry(TracerEchoCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["tracer_echo"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+    )
+    assert contexts["tracer_echo"].author is None
+
+
 def test_selected_capability_without_slice_gets_model_defaults() -> None:
     registry = _registry(TracerEchoCapability())
     contexts = build_capability_contexts(

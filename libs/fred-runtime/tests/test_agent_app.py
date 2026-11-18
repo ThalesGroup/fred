@@ -48,12 +48,13 @@ from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
-from fred_core.security.delegation import DelegationConfig as CoreDelegationConfig
 from fred_core.security.delegation import (
+    AssertedUser,
     get_delegation_config,
     initialize_delegation,
     preserved_delegation,
 )
+from fred_core.security.delegation import DelegationConfig as CoreDelegationConfig
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
@@ -98,6 +99,23 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+
+
+def test_office_author_uses_only_verified_execution_subject() -> None:
+    user = KeycloakUser(
+        uid="verified-user",
+        username="verified-name",
+        roles=[],
+        first_name=" Ada ",
+        last_name=" Lovelace ",
+    )
+    delegated = AssertedUser(
+        uid="verified-user", client_id="delegate", run_id="run", agent_id="agent"
+    )
+
+    assert agent_app_module._verified_office_author(user) == "Ada Lovelace"
+    assert agent_app_module._verified_office_author(delegated) is None
+    assert agent_app_module._verified_office_author(None) is None
 
 
 @pytest.fixture(autouse=True)
