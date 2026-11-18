@@ -145,7 +145,7 @@ To prepare a template the agent understands well, see
 administrator chose for the whole platform (the form shows **Template set by
 the administrator** and the file name, see
 [Administration](/help/en/features/administration#the-platform-presentation-template));
-without one, the built-in Fred template. Uploading a template on the agent
+without one, the built-in template. Uploading a template on the agent
 always takes over.
 
 **Use a vision model** — Knowledge Flow's configured vision model looks at

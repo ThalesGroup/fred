@@ -156,7 +156,7 @@ Pour préparer un template que l'agent comprend bien, voir
 l'administrateur pour toute la plateforme (le formulaire affiche **Template
 défini par l'administrateur** et le nom du fichier, voir
 [Administration](/help/fr/features/administration#le-template-de-presentation-de-la-plateforme)) ;
-à défaut, le template Fred intégré. Déposer un template sur l'agent reprend
+à défaut, le template intégré. Déposer un template sur l'agent reprend
 toujours la main.
 
 **Utiliser un modèle de vision** — le modèle de vision configuré dans
