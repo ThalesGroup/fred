@@ -294,8 +294,9 @@
   }
 }
 
-/* Narrow banner: drop the highlights so the fixed height still fits. */
-@container (max-width: 900px) {
+/* Narrow banner: drop the highlights so the fixed height still fits.
+ * Stays under the advanced home column (828px) or they never show. */
+@container (max-width: 720px) {
   .banner {
     grid-template-columns: minmax(0, 1fr);
   }
