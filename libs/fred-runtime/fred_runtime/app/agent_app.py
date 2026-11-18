@@ -3585,7 +3585,13 @@ async def _write_turn_history(
     # 3. Terminal assistant message (from FinalRuntimeEvent). A turn whose only
     # output is a card (no text, no model name) still has to leave a row, or the
     # card it produced is lost exactly as before ui_parts were persisted.
-    if final_content or final_model or final_ui_parts:
+    if (
+        final_content
+        or final_model
+        or final_ui_parts
+        or final_token_usage is not None
+        or final_context_tokens is not None
+    ):
         messages.append(
             make_assistant_final(
                 session_id,

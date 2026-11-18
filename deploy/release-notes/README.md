@@ -41,7 +41,10 @@ libs/fred-pod/.venv/bin/python scripts/migration_guides.py generate --version X.
 Resolve coverage blockers before generating a guide. Review and commit the
 result in `releases/vX.Y.Z/migration.md`. Publication verifies the saved guide,
 version impact and paired code/chart tags before publishing images or charts.
-The workflow files and `scripts/migration_guides.py` define these checks.
+The workflow files and `scripts/migration_guides.py` define these checks. Both tagged
+release descriptions also include the source Alembic heads from
+`python3 scripts/alembic_release_inventory.py --version X.Y.Z`; this does not
+report deployed database state or the Control Plane SQLx schema.
 
 ## Fresh history boundary
 

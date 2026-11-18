@@ -116,13 +116,17 @@ class TabularController:
 
             Use exact query_alias values from describe_tabular_documents in FROM/JOIN.
             dataset_uids narrows the active selection; a workbook UID includes all its
-            tables. SQL must reference at least one dataset. Execution, memory, row and
-            dataset ceilings come from storage.tabular_store.query. Results stop at
-            row_limit, without pagination; truncated=true means rows is partial. Compute
-            totals and aggregates in SQL instead of inferring them from previews.
+            tables. SQL must reference at least one dataset. Execution, memory and
+            dataset ceilings come from storage.tabular_store.query. Omit max_rows for
+            the deployment default (500), pass JSON null for no tool-added row limit,
+            or a positive integer. SQL LIMIT remains effective. The character budget
+            (default 50,000) always applies and keeps complete rows. No pagination;
+            truncated=true means matching rows were omitted. Compute totals in SQL.
 
-            rows=[] with error=null is a successful query with zero matching rows and an
-            explicit success message. A zero count or null aggregate is still a row. Reuse
+            Returns sql_query, rows, truncated, row_limit, error, message and dataset
+            references. error=null indicates success; inspect message to distinguish
+            no matches from zero returned rows because the first row exceeds the
+            character budget. A zero count or null aggregate is still a row. Reuse
             successful results; inspect types and filters before changing an unexpectedly
             empty query instead of repeating it unchanged.
 

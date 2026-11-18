@@ -39,6 +39,7 @@ from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArti
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound, VisibleQueryRelation, scoped_column_diagnostic
 from knowledge_flow_backend.features.tabular.execution import DuckDBAbortHandle, close_duckdb_connection, open_duckdb_connection, run_duckdb_job
+from knowledge_flow_backend.features.tabular.query_result import QueryPreview, read_query_preview
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularColumnDescription,
@@ -580,12 +581,9 @@ class TabularService:
 
         allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
         query_config = self.tabular_config.query
-        effective_max_rows = min(
-            request.max_rows or query_config.default_max_rows,
-            query_config.max_rows,
-        )
+        effective_max_rows = request.max_rows if "max_rows" in request.model_fields_set else query_config.default_max_rows
 
-        def _job(handle: DuckDBAbortHandle) -> tuple[str, list[dict], bool, list[ResolvedDataset]]:
+        def _job(handle: DuckDBAbortHandle) -> tuple[str, QueryPreview, list[ResolvedDataset]]:
             connection = open_duckdb_connection(handle, config=query_config)
             try:
                 handle.raise_if_aborted()
@@ -600,20 +598,17 @@ class TabularService:
                 )
                 self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
                 handle.raise_if_aborted()
-                # One extra row tells a complete result from a truncated one without a second query.
-                limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows + 1}"
                 with _redacting_query_execution_errors(
                     diagnostic_relations=validated.diagnostic_relations,
                     mounted_columns={dataset.query_alias: [column.name for column in dataset.artifact.columns] for dataset in mounted_datasets},
                 ):
-                    rows_df = connection.execute(limited_query).df()
-                truncated = len(rows_df) > effective_max_rows
-                return validated.sql, dataframe_to_records(rows_df.head(effective_max_rows)), truncated, mounted_datasets
+                    preview = read_query_preview(connection, validated.sql, row_limit=effective_max_rows, max_output_chars=query_config.max_output_chars, handle=handle)
+                return validated.sql, preview, mounted_datasets
             finally:
                 close_duckdb_connection(handle, connection)
 
         started_at = time.perf_counter()
-        sql_query, rows, truncated, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
+        sql_query, preview, mounted_datasets = await run_duckdb_job(_job, config=query_config, operation="query")
 
         duration_ms = (time.perf_counter() - started_at) * 1000
         # The request context already carries user_id. Aliases are not logged: they
@@ -621,32 +616,26 @@ class TabularService:
         dataset_uids = [dataset.metadata.document_uid for dataset in mounted_datasets]
         logger.info(
             "tabular query rows=%s truncated=%s duration_ms=%.2f",
-            len(rows),
-            truncated,
+            len(preview.rows),
+            preview.truncated,
             duration_ms,
             extra={
                 "dataset_uids": dataset_uids,
                 "sql_sha256": hashlib.sha256(sql_query.encode("utf-8")).hexdigest(),
-                "rows": len(rows),
-                "truncated": truncated,
+                "rows": len(preview.rows),
+                "truncated": preview.truncated,
                 "row_limit": effective_max_rows,
                 "duration_ms": round(duration_ms, 2),
             },
         )
 
-        if truncated:
-            message = f"Partial result: only the first {effective_max_rows} rows are returned. Compute counts, totals and statistics with SQL aggregates, or filter further."
-        elif not rows:
-            message = "Query succeeded: 0 rows matched the conditions."
-        else:
-            message = None
         return RawSQLResponse(
             sql_query=sql_query,
-            rows=rows,
-            truncated=truncated,
+            rows=preview.rows,
+            truncated=preview.truncated,
             row_limit=effective_max_rows,
             error=None,
-            message=message,
+            message=preview.message,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )

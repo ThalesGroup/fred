@@ -21,7 +21,7 @@ import {
   toolSlug,
   type TraceEntry,
 } from "./traceUtils";
-import { tabularToolKind } from "./tabularTrace";
+import { isTabularQueryTool, tabularToolKind } from "./tabularTrace";
 import { isLocalExchangeId } from "../core/hooks/chatSseUtils";
 
 const ARGUMENTS: Record<string, string[]> = {
@@ -65,7 +65,7 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   if (!entry.result || !failure) return null;
   const name = toolName(entry.call);
   const slug = toolSlug(name);
-  const query = /^(?:mcp__knowledge_flow__)?query_tabular_documents(?:_\d+)?$/.test(name);
+  const query = isTabularQueryTool(name);
   const tabular = query || tabularToolKind(name) !== null;
   const conversationFile = ["read_conversation_file", "publish_conversation_file"].includes(name);
   const args = toolArgs(entry.call);
@@ -73,7 +73,15 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const displayed =
     tabular || conversationFile
       ? Object.fromEntries(
-          (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
+          (ARGUMENTS[slug] ?? [])
+            .filter((key) => key in args)
+            .map((key) => [
+              key,
+              displayArgument(
+                args[key],
+                key === "sql" && typeof args[key] === "string" ? { remaining: Infinity } : budget,
+              ),
+            ]),
         )
       : null;
   const sqlFailure = query ? asFailedSqlQueryResult(entry) : null;

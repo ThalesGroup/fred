@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
@@ -45,7 +47,12 @@ import {
   toolResultLatencyMs,
   toolResultOk,
 } from "../../../../../utils/traceUtils";
-import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/tabularTrace";
+import {
+  parseTabularTraceResult,
+  tabularToolKind,
+  previewTabularRows,
+  isTabularQueryTool,
+} from "../../../../../utils/tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
@@ -58,6 +65,7 @@ import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
 import { WebResearchToolDetail } from "./WebResearchToolDetail";
 import styles from "./TraceDetailDrawer.module.css";
+import tabularStyles from "./TabularToolDetail.module.css";
 
 interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
@@ -110,20 +118,39 @@ function TextDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-/** Curated view for the tabular/SQL tool: the executed query plus a row preview. */
-function SqlToolDetail({ data }: { data: SqlQueryResult }) {
+const SQL_ROW_PAGE_SIZE = 10;
+
+const SqlQueryBlock = memo(function SqlQueryBlock({ sql }: { sql: string }) {
   const { t } = useTranslation();
+  const formatted = useMemo(() => formatSqlForDisplay(sql), [sql]);
+  return (
+    <div className={styles.toolSection}>
+      <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
+      <CodeBlock code={formatted} copyText={sql} language="sql" />
+    </div>
+  );
+});
+
+/** Curated view for the tabular/SQL tool: the executed query plus a bounded preview. */
+const SqlToolDetail = memo(function SqlToolDetail({ data, content }: { data: SqlQueryResult; content?: string }) {
+  const { t } = useTranslation();
+  const [visibleRows, setVisibleRows] = useState(SQL_ROW_PAGE_SIZE);
   const rowCount = data.truncated
     ? t("rework.chatTrace.partialRows", { count: data.rows.length })
     : t("rework.chatTrace.rows", { count: data.rows.length });
-  const formattedQuery = formatSqlForDisplay(data.sql_query);
+  const responseMessage =
+    data.message === "Query executed successfully: 0 rows matched the conditions."
+      ? t("rework.chatTrace.emptyQuerySuccess")
+      : data.message;
+  const preview = useMemo(
+    () => previewTabularRows(data.rows, { allColumns: true, rowLimit: visibleRows }),
+    [data.rows, visibleRows],
+  );
+  const code = useMemo(() => JSON.stringify(preview.rows, null, 2), [preview]);
 
   return (
     <div className={styles.detail}>
-      <div className={styles.toolSection}>
-        <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
-        <CodeBlock code={formattedQuery} copyText={data.sql_query} language="sql" />
-      </div>
+      <SqlQueryBlock sql={data.sql_query} />
       <div className={styles.toolSection}>
         <div className={styles.sectionHeader}>
           <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlResponse")}</p>
@@ -133,14 +160,39 @@ function SqlToolDetail({ data }: { data: SqlQueryResult }) {
           <div className={styles.errorBox}>{data.error}</div>
         ) : (
           <>
-            {data.rows.length === 0 && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
-            <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" />
+            {data.rows.length === 0 && !responseMessage && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
+            <CodeBlock code={code} copyText={content} language="json" />
+            {visibleRows < data.rows.length && (
+              <Button
+                className={tabularStyles.showMore}
+                color="primary"
+                variant="text"
+                size="2xs"
+                type="button"
+                onClick={() => setVisibleRows((count) => Math.min(count + SQL_ROW_PAGE_SIZE, data.rows.length))}
+              >
+                {t("rework.chatTrace.tabular.showMoreRows", {
+                  count: Math.min(SQL_ROW_PAGE_SIZE, data.rows.length - visibleRows),
+                })}
+              </Button>
+            )}
+            {typeof responseMessage === "string" && responseMessage && <p>{responseMessage}</p>}
+            {(data.rows.length > preview.rows.length || preview.fieldsTruncated) && (
+              <p className={`${styles.metaInfo} ${styles.previewNotice}`}>
+                {t("rework.chatTrace.tabular.queryPreview", {
+                  count: preview.rows.length,
+                  total: data.rows.length,
+                  shortened: preview.fieldsTruncated ? t("rework.chatTrace.tabular.queryPreviewShortened") : "",
+                  copy: content !== undefined ? t("rework.chatTrace.tabular.queryPreviewCopy") : "",
+                })}
+              </p>
+            )}
           </>
         )}
       </div>
     </div>
   );
-}
+});
 
 /** Curated view for RAG/vector-search tools: the query plus retrieved sources. */
 function RagToolDetail({ data }: { data: RagSearchResult }) {
@@ -181,12 +233,7 @@ function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
   const argumentsToDisplay = typeof sql === "string" ? argumentsWithoutSql : detail.arguments;
   return (
     <div className={styles.detail}>
-      {typeof sql === "string" && (
-        <div className={styles.toolSection}>
-          <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
-          <CodeBlock code={formatSqlForDisplay(sql)} copyText={sql} language="sql" />
-        </div>
-      )}
+      {typeof sql === "string" && <SqlQueryBlock sql={sql} />}
       {detail.arguments && (typeof sql !== "string" || Object.keys(argumentsWithoutSql).length > 0) && (
         <div className={styles.toolSection}>
           <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.arguments")}</p>
@@ -233,6 +280,8 @@ function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  const data = useMemo(() => (entry.result ? parseToolResultContent(entry.result) : null), [entry.result]);
+  const sqlResult = useMemo(() => asSqlQueryResult(data), [data]);
   const failure = toolFailureDetail(entry);
   const webKind = webResearchToolKind(toolName(entry.call));
   const webResult = webKind && entry.result ? parseWebResearchResult(toolResultContent(entry.result)) : null;
@@ -270,9 +319,14 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
       <GenericToolDetail entry={entry} />
     );
   }
-  const data = entry.result ? parseToolResultContent(entry.result) : null;
-  const sqlResult = asSqlQueryResult(data);
-  if (sqlResult) return <SqlToolDetail data={sqlResult} />;
+  if (sqlResult)
+    return (
+      <SqlToolDetail
+        key={JSON.stringify([entry.call.session_id, entry.call.exchange_id, toolCallId(entry.call)])}
+        data={sqlResult}
+        content={isTabularQueryTool(toolName(entry.call)) ? toolResultContent(entry.result) : undefined}
+      />
+    );
   const ragResult = asRagSearchResult(data);
   if (ragResult) return <RagToolDetail data={ragResult} />;
   const name = toolName(entry.call);

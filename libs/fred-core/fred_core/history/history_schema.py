@@ -717,9 +717,7 @@ def make_tool_call(
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - carries no token figure (#2403): a tool call costs nothing by itself,
-      and the former ``token_usage`` argument carried the deciding model
-      call's whole prompt, making a free tool call look like a 17k one.
+    - model token usage is accounted for by the turn, not the tool call.
     """
     return ChatMessage(
         session_id=session_id,

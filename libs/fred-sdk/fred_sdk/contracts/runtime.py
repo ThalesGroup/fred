@@ -296,11 +296,6 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     )
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # NOTE (#2403): this event carries no token usage on purpose. It used to
-    # carry the usage of the model call that DECIDED the call, which the trace
-    # UI rendered on the tool row — reading as if the tool had consumed the
-    # whole prompt (17.5k tokens for a call that consumes none). A tool call
-    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):

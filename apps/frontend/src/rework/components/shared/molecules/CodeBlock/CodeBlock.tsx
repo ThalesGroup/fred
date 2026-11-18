@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -32,7 +32,7 @@ interface CodeBlockProps {
   hideCopy?: boolean;
 }
 
-export function CodeBlock({
+export const CodeBlock = memo(function CodeBlock({
   code,
   copyText,
   language,
@@ -63,7 +63,7 @@ export function CodeBlock({
       <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
         {!hideCopy && (
-          <button className={styles.copy} onClick={handleCopy} aria-label={t("common.copyCode")}>
+          <button type="button" className={styles.copy} onClick={handleCopy} aria-label={t("common.copyCode")}>
             {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
           </button>
         )}
@@ -94,4 +94,4 @@ export function CodeBlock({
       )}
     </div>
   );
-}
+});

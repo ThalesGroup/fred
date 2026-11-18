@@ -460,17 +460,17 @@ export type TabularDocumentDescriptionResponse = {
 export type RawSqlResponse = {
   /** Validated SQL before the server adds its outer result-row LIMIT. */
   sql_query: string;
-  /** JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows. */
+  /** JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows when non-null, also bounded by the character budget. */
   rows?: {
     [key: string]: any;
   }[];
-  /** True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates. */
+  /** True when matching rows were omitted by the row or character budget; compute counts and totals with SQL aggregates. */
   truncated?: boolean;
   /** Result-row limit applied to this query. */
   row_limit?: number | null;
   /** Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. */
   error?: string | null;
-  /** Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated. */
+  /** Tool-owned success explanation after row data: character truncation, row truncation, or no matching rows. Partial results are not execution errors. */
   message?: string | null;
   /** Document UUIDs of the mounted tables. A workbook UUID may appear more than once. */
   dataset_uids?: string[];
@@ -482,7 +482,7 @@ export type TabularQueryRequest = {
   sql: string;
   /** Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. */
   dataset_uids?: string[] | null;
-  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview. */
+  /** Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {

@@ -181,9 +181,8 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
 
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
 
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="failure"');
+    expect(html).toContain('aria-label="Execution time: 42ms"');
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
     expect(html).toContain('data-copy-text="SELECT amount_typo FROM d_sales"');
@@ -235,12 +234,11 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
     expect(html).toContain("SELECT\n  *\nFROM\n  d_sales\nWHERE\n  1 = 0");
     expect(html).toContain('data-copy-text="SELECT * FROM d_sales WHERE 1 = 0"');
     expect(html).toContain("Response");
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="success"');
+    expect(html).toContain('aria-label="Execution time: 12ms"');
     expect(html).toContain("Query executed successfully: 0 rows matched the conditions.");
     expect(html).toContain("0 rows");
-    expect(html).toContain('<pre data-language="json">[]</pre>');
+    expect(html).toMatch(/<pre data-language="json"[^>]*>\[\]<\/pre>/);
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(2);
   });
 
@@ -314,6 +312,17 @@ function tabularEntry(
 }
 
 describe("TraceDetailDrawer safe tabular diagnostics", () => {
+  it("keeps unrecognized envelope fields out of an unrelated tool's curated SQL view", () => {
+    const entry = tabularEntry("mcp__other__custom_query", {
+      sql_query: "SELECT amount FROM data",
+      rows: [{ amount: 1 }],
+      private_metadata: "do-not-copy-this-field",
+    });
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("SELECT");
+    expect(html).not.toContain("do-not-copy-this-field");
+    expect(html).not.toContain("tokenEstimates");
+  });
   it.each([
     "Exactly one SQL statement is allowed",
     "Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.",
@@ -898,5 +907,24 @@ describe("TraceDetailDrawer web research", () => {
     expect(renderToStaticMarkup(<TraceDetailDrawer entry={uncapped} onClose={() => undefined} />)).not.toContain(
       "quotaSearches",
     );
+  });
+});
+
+describe("TraceDetailDrawer SQL result limits", () => {
+  it.each([{ rows: [] }, { rows: [{ id: 1 }] }])("shows the tool explanation after row data for %j", ({ rows }) => {
+    const notice = "The data volume was limited to avoid saturating the model context.";
+    const entry = tabularEntry("query_tabular_documents", {
+      sql_query: "SELECT * FROM d_sales",
+      rows,
+      error: null,
+      message: notice,
+    });
+    for (const recorded of [entry, JSON.parse(JSON.stringify(entry)) as typeof entry]) {
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={recorded} onClose={() => undefined} />);
+      expect(html).toContain(notice);
+      expect(html.indexOf(notice)).toBeGreaterThan(html.indexOf('data-language="json"'));
+      expect(html).not.toContain("0 rows matched the conditions");
+      expect(html).toContain('data-status="success"');
+    }
   });
 });

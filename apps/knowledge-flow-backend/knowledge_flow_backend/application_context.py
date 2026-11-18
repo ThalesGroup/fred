@@ -139,7 +139,7 @@ class ApplicationContext:
                 tabular_engine=tabular_store.query.engine,
                 tabular_access=tabular_store.query.access_mode,
                 tabular_default_max_rows=tabular_store.query.default_max_rows,
-                tabular_max_rows=tabular_store.query.max_rows,
+                tabular_max_output_chars=tabular_store.query.max_output_chars,
                 tabular_presigned_ttl_seconds=tabular_store.query.internal_presigned_ttl_seconds,
             )
         except Exception:

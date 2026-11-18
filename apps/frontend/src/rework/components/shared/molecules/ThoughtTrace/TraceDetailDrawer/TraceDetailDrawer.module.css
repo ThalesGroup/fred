@@ -51,6 +51,10 @@
   font: var(--font-label-small);
 }
 
+.previewNotice {
+  margin: 0;
+}
+
 .statusBadge {
   border-radius: var(--radius-s);
   padding: var(--spacing-3xs) var(--spacing-xs);
