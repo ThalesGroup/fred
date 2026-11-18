@@ -80,7 +80,6 @@ from fred_capability_ppt_filler.images import (
 )
 from fred_capability_ppt_filler.parser import apply_kept_notes_to_slide
 from fred_capability_ppt_filler.pptx_archive import open_presentation
-from fred_capability_ppt_filler.pptx_author import set_deck_author
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
     list_image_anchors_on_slide,
@@ -657,7 +656,8 @@ def _build_filled_deck(
         apply_kept_notes_to_slide(slide)
 
     if author is not None:
-        set_deck_author(presentation, author)
+        presentation.core_properties.author = author[:255]
+        presentation.core_properties.last_modified_by = author[:255]
     buffer = io.BytesIO()
     presentation.save(buffer)
     return buffer.getvalue(), None

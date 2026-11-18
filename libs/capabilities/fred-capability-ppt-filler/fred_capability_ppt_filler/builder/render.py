@@ -82,7 +82,6 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.fill import BuildNoteCode, BuiltSlide
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.pptx_archive import open_presentation
-from fred_capability_ppt_filler.pptx_author import set_deck_author
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
 # Sub-bullets get narrower lines: this factor per level in the capacity estimate.
@@ -1711,7 +1710,8 @@ class _Renderer:
                 )
         _remove_slides(self.prs, original_ids)
         if author is not None:
-            set_deck_author(self.prs, author)
+            self.prs.core_properties.author = author[:255]
+            self.prs.core_properties.last_modified_by = author[:255]
         buffer = io.BytesIO()
         self.prs.save(buffer)
         preview = buffer

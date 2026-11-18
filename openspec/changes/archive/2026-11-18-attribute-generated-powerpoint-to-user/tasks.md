@@ -5,7 +5,7 @@
 
 ## 2. PowerPoint output
 
-- [x] 2.1 Add one PPTX core-property setter shared by the PowerPoint generation paths, with ID fallback at the tool boundary; verify a focused test reads both properties back from generated PPTX bytes and the source template remains unchanged.
+- [x] 2.1 Write PPTX core properties at each PowerPoint save point from the shared author string, with ID fallback at the tool boundary; verify focused tests read both properties back from generated PPTX bytes and the source template remains unchanged.
 - [x] 2.2 Apply attribution in PPT Filler's worker; verify focused fill tests for distinct author strings, delegated-ID fallback, and 255/256-character inputs. The shared formatter covers profile and username selection.
 - [x] 2.3 Apply attribution to PPT Builder's delivered deck; verify focused build tests for the same identity cases and that preview generation does not alter the downloaded PPTX metadata.
 
