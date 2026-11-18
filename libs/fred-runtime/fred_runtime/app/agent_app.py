@@ -180,7 +180,14 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
@@ -1285,6 +1292,8 @@ class _AgentExecuteRequest(BaseModel):
      "resume_payload": {"approved": true, "exchange_id": "..."}}
     ```
     """
+
+    _verified_user: KeycloakUser | None = PrivateAttr(default=None)
 
     agent_id: str | None = Field(default=None, min_length=1)
     agent_instance_id: str | None = Field(default=None, min_length=1)
@@ -2780,6 +2789,7 @@ async def _authorize_and_resolve(
         raise HTTPException(status_code=409, detail="run_already_admitted") from None
     try:
         internal_req = _to_internal_request(request)
+        internal_req._verified_user = _verified_keycloak_user(authenticated_user)
         internal_req.previously_pending_occurrence_ids = (
             previously_pending_occurrence_ids
         )
@@ -4787,6 +4797,12 @@ def _enforce_turn_options(
         ) from exc
 
 
+def _verified_keycloak_user(
+    user: KeycloakUser | AssertedUser | None,
+) -> KeycloakUser | None:
+    return user if isinstance(user, KeycloakUser) else None
+
+
 def _build_capability_block(
     capability_registry: CapabilityRegistry | None,
     tuning: AgentTuning | None,
@@ -4794,6 +4810,7 @@ def _build_capability_block(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     services: RuntimeServices,
     user_id: str | None,
+    verified_user: KeycloakUser | None = None,
     session_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
@@ -4891,6 +4908,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
+        author=verified_user,
         turn_options=turn_options,
         team_settings=team_settings,
     )
@@ -5567,6 +5585,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
+            verified_user=request._verified_user,
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
