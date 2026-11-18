@@ -45,6 +45,8 @@ from fred_sdk.contracts.runtime import (
     ToolProviderPort,
 )
 from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
@@ -101,6 +103,73 @@ async def test_geo_tool_is_available_without_agent_declaration() -> None:
         )
         assert result is not None
         assert result.ui_parts[0].type == "geo"
+
+
+def test_geo_description_stays_valid_when_runtime_name_changes() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+            capability_tool_names=("geo_render_points",),
+        )
+        geo = next(
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        )
+        assert geo.runtime_name == "geo_render_points_2"
+        assert "Call this tool" in geo.description
+
+
+@pytest.mark.asyncio
+async def test_new_local_builtin_is_discovered_without_agent_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.render"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Render sample output.",
+        local_handler=lambda payload: ToolInvocationResult(
+            tool_ref=tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
+        ),
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+    colliding_ref = "sample_render"
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        colliding_ref,
+        BuiltinToolSpec(
+            tool_ref=colliding_ref,
+            args_schema=BaseModel,
+            backend=BuiltinToolBackend.LOCAL,
+            default_description="Render another sample.",
+            local_handler=lambda _payload: ToolInvocationResult(tool_ref=colliding_ref),
+        ),
+    )
+
+    for declared in ((), (ToolRefRequirement(tool_ref=tool_ref),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        tools = resolver.resolve_tools()
+        matches = [tool for tool in tools if tool.tool_ref == tool_ref]
+        assert len(matches) == 1
+        assert matches[0].runtime_name == "sample_render"
+        assert (
+            next(tool for tool in tools if tool.tool_ref == colliding_ref).runtime_name
+            == "sample_render_2"
+        )
+        _, result = await matches[0].invoke({"value": 3})
+        assert result is not None
+        assert result.blocks[0].data == {"value": 3}
 
 
 def _provider_error_artifact() -> ToolInvocationResult:

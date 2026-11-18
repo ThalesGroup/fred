@@ -289,7 +289,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         local_handler=_render_geo_points,
         output_part=GeoPart,
         default_description=(
-            "Display locations on an interactive map in the chat. Call geo_render_points "
+            "Display locations on an interactive map in the chat. Call this tool "
             "with points=[{latitude: number, longitude: number, name?: string, "
             "properties?: {description?: string, ...}}, ...] and an optional title. "
             "Names appear beside points where space permits; scalar properties have a short hover preview and full details on click. "

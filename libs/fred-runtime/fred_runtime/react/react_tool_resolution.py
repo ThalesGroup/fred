@@ -206,7 +206,7 @@ class ReActRuntimeToolResolver:
             [r.tool_ref for r in self._declared_tool_refs],
         )
         specs: list[FredRuntimeToolSpec] = []
-        used_names: set[str] = set()
+        used_names: set[str] = set(self._capability_tool_names)
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
         if (
@@ -263,7 +263,7 @@ class ReActRuntimeToolResolver:
             tool_name = self._claim_runtime_name(
                 tool_ref=builtin_spec.tool_ref,
                 registered_runtime_name=None,
-                used_names=used_names | set(self._capability_tool_names),
+                used_names=used_names,
             )
             specs.append(
                 self._resolve_builtin_tool(

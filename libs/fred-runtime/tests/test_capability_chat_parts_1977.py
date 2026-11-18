@@ -39,6 +39,9 @@ from fred_runtime.capabilities.registry import BUILTIN_CHAT_PART_KINDS
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from pydantic import BaseModel, ValidationError
 
 DEMO_CARD = {"type": "tracer_card", "title": "Demo echo", "body": "HELLO"}
@@ -46,6 +49,11 @@ DEMO_CARD = {"type": "tracer_card", "title": "Demo echo", "body": "HELLO"}
 
 class _AlphaPart(BaseModel):
     type: Literal["alpha_part"] = "alpha_part"
+    value: int = 0
+
+
+class _LocalOutputPart(BaseModel):
+    type: Literal["local_output"] = "local_output"
     value: int = 0
 
 
@@ -104,6 +112,55 @@ def test_validate_folds_demo_part_into_ui_part_union() -> None:
     )
     assert isinstance(result.ui_parts[0], TracerCardPart)
     assert result.ui_parts[0].body == "HELLO"
+
+
+def test_builtin_output_part_joins_ui_part_union_at_boot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.render"
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        tool_ref,
+        BuiltinToolSpec(
+            tool_ref=tool_ref,
+            args_schema=BaseModel,
+            backend=BuiltinToolBackend.LOCAL,
+            default_description="Render sample output.",
+            output_part=_LocalOutputPart,
+        ),
+    )
+    try:
+        CapabilityRegistry().validate(env={})
+        result = ToolInvocationResult.model_validate(
+            {"tool_ref": tool_ref, "ui_parts": [{"type": "local_output", "value": 3}]}
+        )
+        assert isinstance(result.ui_parts[0], _LocalOutputPart)
+    finally:
+        rebuild_ui_part_union(())
+
+
+def test_builtin_output_part_kind_collision_fails_at_boot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _DuplicateLinkPart(BaseModel):
+        type: Literal["link"] = "link"
+
+    tool_ref = "sample.duplicate"
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        tool_ref,
+        BuiltinToolSpec(
+            tool_ref=tool_ref,
+            args_schema=BaseModel,
+            backend=BuiltinToolBackend.LOCAL,
+            default_description="Duplicate output kind.",
+            output_part=_DuplicateLinkPart,
+        ),
+    )
+    from fred_runtime.capabilities.errors import DuplicateChatPartKindError
+
+    with pytest.raises(DuplicateChatPartKindError, match="kind 'link'"):
+        CapabilityRegistry().validate(env={})
 
 
 # -- OpenAPI: the generated-types acceptance criterion --------------------------

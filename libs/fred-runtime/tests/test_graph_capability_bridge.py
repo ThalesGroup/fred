@@ -51,11 +51,15 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     RuntimeToolHandle,
+    ToolInvokerPort,
     ToolProviderPort,
     ToolResultRuntimeEvent,
 )
 from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain_core.tools import tool as lc_tool
+from pydantic import BaseModel
 
 
 @lc_tool("corpus_search", response_format="content_and_artifact")
@@ -664,6 +668,82 @@ def test_graph_executor_allows_geo_tool_without_agent_declaration() -> None:
         ).ui_parts
         == result.ui_parts
     )
+
+
+def test_graph_discovers_and_invokes_new_local_builtin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    tool_ref = "sample.render"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Render sample output.",
+        local_handler=lambda payload: ToolInvocationResult(
+            tool_ref=tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
+        ),
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+
+    services = RuntimeServices()
+    runtime = GraphRuntime(definition=_min_graph_agent_definition(), services=services)
+    executor = asyncio.run(runtime.build_executor(_binding()))
+    assert isinstance(executor, GraphExecutor)
+    allowed = executor._allowed_tool_refs  # pyright: ignore[reportPrivateUsage]
+    assert tool_ref in allowed
+    context = NodeContext(
+        binding=_binding(),
+        services=services,
+        model=None,
+        graph_agent_id="test.local",
+        node_id="local",
+        allowed_tool_refs=allowed,
+        runtime_tools={},
+        tuning_values={},
+        sink=lambda _event: None,
+    )
+    result = asyncio.run(context.invoke_tool(tool_ref, {"value": 3}))
+    assert result.blocks[0].data == {"value": 3}
+
+
+def test_graph_rejects_local_builtin_without_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.missing_handler"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Invalid local tool.",
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+
+    class RecordingInvoker(ToolInvokerPort):
+        called = False
+
+        async def invoke(self, request):  # noqa: ANN001, ANN201
+            self.called = True
+            return ToolInvocationResult(tool_ref=request.tool_ref)
+
+    invoker = RecordingInvoker()
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(tool_invoker=invoker),
+        model=None,
+        graph_agent_id="test.local",
+        node_id="local",
+        allowed_tool_refs=frozenset({tool_ref}),
+        runtime_tools={},
+        tuning_values={},
+        sink=lambda _event: None,
+    )
+    with pytest.raises(RuntimeError, match="has no handler"):
+        asyncio.run(context.invoke_tool(tool_ref, {}))
+    assert not invoker.called
 
 
 @pytest.mark.asyncio

@@ -194,9 +194,16 @@ class CapabilityRegistry:
         rebuild_ui_part_union((*_builtin_chat_parts(), *self.chat_parts()))
 
     def _validate_chat_part_kinds(self) -> None:
-        kind_owners: dict[str, str] = {
-            kind: "fred-sdk builtin UiPart" for kind in BUILTIN_CHAT_PART_KINDS
-        }
+        kind_owners: dict[str, str] = {}
+        for part in _builtin_chat_parts():
+            kind = chat_part_kind(part)
+            owner = kind_owners.get(kind)
+            if owner is not None:
+                raise DuplicateChatPartKindError(
+                    f"Chat-part kind '{kind}' declared by built-in {part.__name__} "
+                    f"is already contributed by {owner}. The UiPart union must stay unambiguous."
+                )
+            kind_owners[kind] = f"fred-sdk builtin {part.__name__}"
         for cap_id, capability in self._capabilities.items():
             for part in capability.manifest.chat_parts:
                 kind = chat_part_kind(part)

@@ -283,6 +283,12 @@ class SearchAgent(ReActAgent):
 declaration or tool invoker. Call it with a non-empty `points` list containing
 `latitude` and `longitude`; the result carries a typed `GeoPart` for the chat.
 
+SDK-owned rendering tools use `BuiltinToolSpec` with `backend=LOCAL`, a
+`local_handler` returning `ToolInvocationResult`, and an `output_part` model.
+ReAct, Deep, and Graph discover local specs from the built-in catalog without
+tool-specific runtime branches. At pod startup, the capability registry adds
+their output part types to `UiPart`; each part kind still needs a chat renderer.
+
 ---
 
 ## Testing your nodes offline
