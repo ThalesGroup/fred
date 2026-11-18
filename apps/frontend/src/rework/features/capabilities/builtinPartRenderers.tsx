@@ -135,7 +135,7 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
       }).addTo(map);
       const roadLayer = L.geoJSON(undefined, {
         interactive: false,
-        style: { color: "#c99669", weight: 1.15, opacity: 0.85 },
+        style: { color: "#b88c65", weight: 0.8, opacity: 0.5 },
       }).addTo(map);
       const cityLayer = L.geoJSON(undefined, {
         interactive: false,
