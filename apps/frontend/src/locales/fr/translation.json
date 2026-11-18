@@ -106,6 +106,10 @@
     "uploading": "Téléchargement en cours..."
   },
   "chat": {
+    "chart": {
+      "data": "Voir les données",
+      "unavailable": "Ce graphique ne peut pas être affiché."
+    },
     "options": {
       "libraries": "Bibliothèques",
       "loadingLibraries": "Chargement...",
@@ -2793,6 +2797,9 @@
           },
           "geo": {
             "geo_render_points": "Affichage de la carte"
+          },
+          "chart": {
+            "chart_render": "Affichage du graphique"
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",

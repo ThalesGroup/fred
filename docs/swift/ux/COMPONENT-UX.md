@@ -1190,6 +1190,16 @@ _(none yet)_
 
 ---
 
+### Native charts in chat (2026-11-18)
+
+A typed `ChartPart` appears inline with the assistant response. Bar, line,
+area, and pie views use Recharts and the same theme tokens as KPI charts;
+the requested table view shows the rows directly. Every plotted view offers
+the original rows in a semantic table under "View data" / "Voir les données".
+Long labels can wrap in the chart title and the table scrolls horizontally.
+Invalid saved chart parts show a short readable fallback. Plain Markdown
+tables and JSON remain text.
+
 ### `ChatInputBar`
 
 **Location:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
