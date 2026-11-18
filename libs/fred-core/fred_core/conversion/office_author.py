@@ -21,16 +21,20 @@ from fred_pod.security.structure import KeycloakUser
 
 class OfficeCoreProperties(Protocol):
     @property
-    def author(self) -> str: ...
+    def author(self) -> str:
+        raise NotImplementedError
 
     @author.setter
-    def author(self, value: str) -> None: ...
+    def author(self, value: str) -> None:
+        raise NotImplementedError
 
     @property
-    def last_modified_by(self) -> str: ...
+    def last_modified_by(self) -> str:
+        raise NotImplementedError
 
     @last_modified_by.setter
-    def last_modified_by(self, value: str) -> None: ...
+    def last_modified_by(self, value: str) -> None:
+        raise NotImplementedError
 
 
 def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
