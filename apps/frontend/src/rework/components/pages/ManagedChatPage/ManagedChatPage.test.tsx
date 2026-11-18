@@ -296,7 +296,21 @@ vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ Attachment
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
   SessionAttachmentsDrawer: () => null,
 }));
-vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({ DocumentScopePanel: () => null }));
+vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({
+  DocumentScopePanel: ({
+    boundLibraryIds,
+    configuredSelection,
+  }: {
+    boundLibraryIds: string[] | null;
+    configuredSelection: unknown;
+  }) => (
+    <div
+      data-testid="document-scope"
+      data-bound={JSON.stringify(boundLibraryIds)}
+      data-configured={JSON.stringify(configuredSelection)}
+    />
+  ),
+}));
 vi.mock("@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer", () => ({
   TraceDetailDrawer: ({ entry }: { entry: TraceEntry | null }) =>
     entry?.kind === "combo" ? (
@@ -1833,3 +1847,28 @@ it("refreshes conversation files after a Deep turn finishes and when the file pa
     fileRead.isUninitialized = true;
   }
 });
+
+it.each([{ folders: [] }, { folders: ["folder-a"] }])(
+  "displays the tabular configured folders, including an empty restriction (%j)",
+  ({ folders }) => {
+    chatValue = {
+      ...baseChatValue([]),
+      chatControls: [
+        {
+          capability_id: "mcp-knowledge-flow-mcp-tabular",
+          widget: "document_scope",
+          params: {
+            libraries: true,
+            documents: true,
+            bound_library_ids: folders,
+          },
+        },
+      ],
+    };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<ManagedChatPage />);
+    const panel = container.querySelector('[data-testid="document-scope"]');
+    expect(panel?.getAttribute("data-bound")).toBe(JSON.stringify(folders));
+    expect(panel?.getAttribute("data-configured")).toBe(JSON.stringify({ folderIds: folders, documentIds: [] }));
+  },
+);

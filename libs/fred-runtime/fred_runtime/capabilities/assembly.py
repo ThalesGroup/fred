@@ -213,20 +213,25 @@ def resolve_bound_library_ids(
     ceiling and the chat UI share one definition of "bound".
     """
 
-    bound: dict[str, None] = {}
+    bound: dict[str, None] | None = None
     for cap_id in capability_ids:
         result = evaluate_capability_chat_controls(
             registry,
             capability_id=cap_id,
             config_envelope=capability_config.get(cap_id),
         )
+        if result.error:
+            raise CapabilityConfigInvalidError(result.error)
         for control in result.controls:
             if control.widget != "document_scope":
                 continue
             params = DocumentScopeControlParams.model_validate(control.params or {})
-            for library_id in params.bound_library_ids or ():
-                bound.setdefault(library_id, None)
-    return list(bound) or None
+            if params.bound_library_ids is not None:
+                if bound is None:
+                    bound = {}
+                for library_id in params.bound_library_ids:
+                    bound.setdefault(library_id, None)
+    return list(bound) if bound is not None else None
 
 
 def validate_turn_options(

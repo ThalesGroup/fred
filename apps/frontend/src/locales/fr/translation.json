@@ -1246,6 +1246,10 @@
       },
       "tabular": {
         "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
+        "libraryBinding": {
+          "title": "Restreindre à des dossiers de documents",
+          "description": "Limiter les requêtes tabulaires aux dossiers sélectionnés. Une sélection vide n'autorise aucun document du corpus."
+        },
         "name": "Exploiter les fichiers tabulaires"
       }
     }

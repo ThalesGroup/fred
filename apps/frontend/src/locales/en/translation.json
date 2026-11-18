@@ -1246,6 +1246,10 @@
       },
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
+        "libraryBinding": {
+          "title": "Restrict to document folders",
+          "description": "Restrict tabular queries to the selected folders. An empty selection allows no corpus documents."
+        },
         "name": "Use tabular files"
       }
     }

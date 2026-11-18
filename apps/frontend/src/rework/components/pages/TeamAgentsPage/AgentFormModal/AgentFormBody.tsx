@@ -45,6 +45,7 @@ import {
   CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
+  CAP_TABULAR,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
@@ -310,6 +311,10 @@ export function AgentFormBody({
           disabled={isSubmitting}
         />
       );
+    }
+    if (pack.id === CAP_TABULAR) {
+      const capability = capabilities.find((entry) => entry.id === CAP_TABULAR);
+      return capability ? renderConfigForm(capability) : undefined;
     }
     // Team wiki: the capability's own `mode` field, read from the live manifest.
     if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {

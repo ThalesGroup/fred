@@ -188,6 +188,21 @@ async def test_discovery_preserves_union_intersection_empty_and_reset(published,
 
 
 @pytest.mark.asyncio
+async def test_conversation_library_limits_list_and_implicit_sql_datasets(published):
+    service = published.service(DocumentScope.from_ids([str(A)]))
+    docs = await service.list_documents(PERSON)
+    assert {UUID(doc.document_uid) for doc in docs} == {D1, D2}
+    alias = next(doc.tables[0].query_alias for doc in docs if doc.document_uid == str(D1))
+    result = await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select sum(amount) as total from {alias}"))
+    assert result.rows == [{"total": 20}]
+    assert not any(f"/{D3}/" in key for key in published.reads)
+    outside = build_default_query_alias(str(D3), f"{D3}.csv")
+    with pytest.raises(ValueError, match="unauthorized datasets"):
+        await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select * from {outside}"))
+    assert not any(f"/{D3}/" in key for key in published.reads)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["describe", "frame", "preview", "query", "search"])
 async def test_known_uuid_and_multi_dataset_cannot_escape_selection(published, operation):
     service = published.service(DocumentScope.from_ids([str(A)]))

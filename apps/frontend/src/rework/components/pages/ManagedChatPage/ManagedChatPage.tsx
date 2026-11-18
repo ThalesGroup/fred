@@ -644,8 +644,10 @@ function ManagedChatContent({
               : [],
           documentIds: Array.isArray(documentConfig.document_uids) ? documentConfig.document_uids : [],
         }
-      : null;
-  const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? [];
+      : documentScopeParams?.bound_library_ids != null
+        ? { folderIds: documentScopeParams.bound_library_ids, documentIds: [] }
+        : null;
+  const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? null;
 
   // Empty is a deliberate turn restriction too; only null inherits the agent.
   // This drives both the badge and reset action.

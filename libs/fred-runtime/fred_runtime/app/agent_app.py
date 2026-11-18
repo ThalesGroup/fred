@@ -1012,11 +1012,7 @@ def _build_runtime_services(
     )
     document_access_config = None
     effective_tuning = tuning if tuning is not None else settings.tuning
-    if effective_tuning and any(
-        key.startswith("managed-mcp:")
-        for key in (effective_tuning.selected_capability_ids or ())
-    ):
-        settings.managed_mcp_bindings = current_turn().binding.mcp_bindings
+    settings.managed_mcp_bindings = current_turn().binding.mcp_bindings
     if capability_registry is not None and "document_access" in capability_registry:
         stored = (
             effective_tuning.capability_config.get("document_access")
@@ -1113,11 +1109,28 @@ def _build_runtime_services(
         settings=settings,
         credentials=credential_provider,
     )
+    mcp_document_scope = document_scope
+    if capability_registry is not None:
+        mcp_document_scope = mcp_document_scope.intersect(
+            DocumentScope.from_ids(
+                resolve_bound_library_ids(
+                    capability_registry,
+                    capability_ids=[
+                        admitted.capability_id
+                        for admitted in settings.managed_mcp_bindings
+                        if admitted.capability_id in capability_registry
+                    ],
+                    capability_config=effective_tuning.capability_config
+                    if effective_tuning
+                    else {},
+                )
+            )
+        )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
-        document_scope=document_scope,
+        document_scope=mcp_document_scope,
     )
     workspace_fs = FredWorkspaceFs(binding=binding, credentials=credential_provider)
     handlers = (
