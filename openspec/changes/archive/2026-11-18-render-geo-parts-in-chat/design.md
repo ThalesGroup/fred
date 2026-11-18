@@ -11,13 +11,13 @@ See proposal.md. The SDK already defines `geo.render_points` and `GeoPart`, and 
 ## Decisions
 
 - ReAct and Deep add the existing built-in at tool resolution. Graph adds the same ref to its node allowlist and carries tool UI parts into the final event so chat history retains them. The point conversion runs in the SDK and works without an application tool invoker. Explicit declarations are not duplicated. An implicit ReAct tool gets a unique name if an existing provider or capability uses the default name.
-- The frontend loads Leaflet only for a typed `GeoPart`. It uses Leaflet directly because `react-leaflet` has a restriction-carrying license, while Leaflet itself uses BSD-2-Clause. The existing chip is a loading and error fallback.
-- GeoJSON properties become popup text through `textContent`; style values use a small validated set. The map supplies OpenStreetMap attribution with its raster tiles.
-- The no-LLM assistant's `markdown` scenario replaces its raw GeoJSON block with a typed `GeoPart` using the same sample data as its `geo` scenario.
+- The frontend bundles Leaflet with the chat renderer. It uses Leaflet directly because `react-leaflet` has a restriction-carrying license, while Leaflet itself uses BSD-2-Clause. The existing chip is an error fallback.
+- GeoJSON properties become popup text through `textContent`; style values use a small validated set. A bundled Natural Earth 1:110m country layer supplies geographic context without remote requests. The map displays Natural Earth attribution. The dataset is public domain (version 5.1.1) and is simplified for global context; streets are outside its scope.
+- The no-LLM assistant's `geo` scenario invokes the shared tool so its call and result are visible. Its `markdown` scenario replaces its raw GeoJSON block with a typed `GeoPart`.
 
 ## Risks / Trade-offs
 
-- Public OpenStreetMap tiles are an external service with usage limits. Map rendering requests tiles only when a geo part is shown; a high-volume deployment should use its own tile service or a provider suited to its traffic.
+- The compact offline basemap shows countries and borders, not street-level detail. Leaflet and the bundled world data load with the chat renderer so a later map needs no additional network request.
 - A malformed GeoJSON feature can make Leaflet reject the layer. The renderer catches that failure and leaves the typed summary visible.
 
 ## Migration Plan

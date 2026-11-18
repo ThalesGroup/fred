@@ -657,6 +657,8 @@
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",
+      "geoFeature": "Entité {{index}}",
+      "geoUnavailable": "La carte n'a pas pu être affichée. Les noms des entités restent accessibles ci-dessus.",
       "geoSummary_one": "Données cartographiques ({{count}} entité)",
       "geoSummary_other": "Données cartographiques ({{count}} entités)"
     },

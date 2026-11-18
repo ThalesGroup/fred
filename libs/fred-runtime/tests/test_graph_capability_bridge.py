@@ -692,6 +692,7 @@ async def test_graph_final_includes_geo_part_from_tool_result(
 
     async def fake_stream(*_args: object, **_kwargs: object):
         yield "custom", result
+        yield "custom", result
         yield "updates", {"__fred_complete__": {"message": "Map ready"}}
 
     monkeypatch.setattr(executor._compiled, "aget_state", fake_state)  # pyright: ignore[reportPrivateUsage]

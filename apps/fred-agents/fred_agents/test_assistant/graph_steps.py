@@ -50,6 +50,7 @@ from typing import Literal
 from fred_core.store import VectorSearchHit
 from fred_runtime.app import load_agent_pod_config
 from fred_sdk import (
+    TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     GraphNodeContext,
     GraphNodeResult,
@@ -1460,12 +1461,10 @@ async def geo_step(
     context: GraphNodeContext,
 ) -> StepResult:
     """
-    Emit a sample GeoJSON `FeatureCollection` as a `GeoPart` ui_part.
+    Exercise the shared map tool and its typed UI part without a model.
 
-    Exercises the typed `GeoPart`/`ui_parts` map rendering path end to end,
-    deterministically and without calling the `geo.render_points` builtin tool.
-
-    SSE events exercised: status (x2), assistant_delta, final (with ui_parts).
+    SSE events exercised: status (x2), tool_call, tool_result, assistant_delta,
+    final (with ui_parts).
     """
     delay = _delay_seconds(context)
 
@@ -1473,19 +1472,27 @@ async def geo_step(
     await asyncio.sleep(0.05 + delay)
     context.emit_status("geo", "Sending map data.")
 
+    result = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        {
+            "title": "Sample map",
+            "points": [
+                {"name": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+                {"name": "Berlin", "latitude": 52.52, "longitude": 13.405},
+            ],
+        },
+    )
+    if result.is_error:
+        raise RuntimeError("The sample map tool failed.")
     reply = (
-        "**Sample map.** Two pins (Paris, Berlin) and one styled polygon, "
-        "sent as a `GeoPart` ui_part and rendered below as an interactive map."
+        "**Sample map.** Two pins (Paris and Berlin), rendered as an interactive map."
     )
     context.emit_assistant_delta(reply)
-
-    geo_part = GeoPart(geojson=_GEO_SAMPLE, fit_bounds=True)
 
     return StepResult(
         state_update={
             "final_text": reply,
             "done_reason": "geo_complete",
-            "geo_parts": [geo_part.model_dump(mode="json")],
         }
     )
 

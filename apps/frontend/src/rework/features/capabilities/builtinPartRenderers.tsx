@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
-// of the part-renderer registry (#1977). Capability kinds come from plugins.
+// Renderers for the frozen base `UiPart` kinds (link, geo).
+// Capability kinds come from plugins.
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import offlineWorld from "./offlineWorld.json";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
@@ -47,66 +49,83 @@ function GeoSummaryChip({ features }: { features: number }) {
 function GeoPartRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const geo = part as unknown as GeoPart;
-  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
+  const featureList = Array.isArray(geo.geojson?.features) ? geo.geojson.features : [];
   const container = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
-    setReady(false);
-    let disposed = false;
-    let map: import("leaflet").Map | undefined;
-
-    async function mount() {
-      if (!container.current) return;
-      try {
-        const L = await import("leaflet");
-        if (disposed || !container.current) return;
-        map = L.map(container.current, { scrollWheelZoom: false });
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        }).addTo(map);
-        const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
-          pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7 }),
-          style: (feature) => {
-            const color = feature?.properties?.color;
-            const fillOpacity = feature?.properties?.fillOpacity;
-            return {
-              color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
-              fillOpacity: typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
-            };
-          },
-          onEachFeature: (feature, featureLayer) => {
-            const label = feature.properties?.[geo.popup_property || "name"];
-            if (typeof label === "string" || typeof label === "number") {
-              const content = document.createElement("span");
-              content.textContent = String(label);
-              featureLayer.bindPopup(content);
-            }
-          },
-        }).addTo(map);
-        const bounds = layer.getBounds();
-        if (bounds.isValid() && geo.fit_bounds !== false) map.fitBounds(bounds.pad(0.15), { maxZoom: 13 });
-        else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
-        else map.setView([0, 0], 2);
-        setReady(true);
-      } catch {
-        map?.remove();
-        map = undefined;
-      }
+    setStatus("loading");
+    if (!container.current) return;
+    let map: L.Map | undefined;
+    try {
+      map = L.map(container.current, { scrollWheelZoom: false });
+      map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
+      L.geoJSON(offlineWorld as Parameters<typeof L.geoJSON>[0], {
+        interactive: false,
+        style: { color: "#a7b9a8", weight: 1, fillColor: "#e9eee5", fillOpacity: 1 },
+      }).addTo(map);
+      const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
+        pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7 }),
+        style: (feature) => {
+          const color = feature?.properties?.color;
+          const fillOpacity = feature?.properties?.fillOpacity;
+          return {
+            color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
+            fillOpacity: typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
+          };
+        },
+        onEachFeature: (feature, featureLayer) => {
+          const label = feature.properties?.[geo.popup_property || "name"];
+          if (typeof label === "string" || typeof label === "number") {
+            const content = document.createElement("span");
+            content.textContent = String(label);
+            featureLayer.bindPopup(content);
+          }
+        },
+      }).addTo(map);
+      const bounds = layer.getBounds();
+      if (bounds.isValid() && geo.fit_bounds !== false) map.fitBounds(bounds.pad(0.15), { maxZoom: 13 });
+      else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
+      else map.setView([0, 0], 2);
+      setStatus("ready");
+    } catch {
+      map?.remove();
+      map = undefined;
+      setStatus("error");
     }
 
-    void mount();
     return () => {
-      disposed = true;
       map?.remove();
     };
   }, [geo.geojson, geo.fit_bounds, geo.popup_property]);
 
   return (
     <div className={styles.geoPanel}>
-      {!ready && <GeoSummaryChip features={features} />}
-      <div ref={container} className={styles.geoMap} role="region" aria-label={t("chatbot.uiParts.geoAria")} />
+      <details className={styles.geoDetails}>
+        <summary>
+          <GeoSummaryChip features={featureList.length} />
+        </summary>
+        <ol className={styles.geoFeatureList}>
+          {featureList.map((feature, index) => {
+            const label = feature.properties?.[geo.popup_property || "name"];
+            return (
+              <li key={index}>
+                {typeof label === "string" || typeof label === "number"
+                  ? label
+                  : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
+              </li>
+            );
+          })}
+        </ol>
+      </details>
+      {status === "error" && <p role="status">{t("chatbot.uiParts.geoUnavailable")}</p>}
+      <div
+        ref={container}
+        className={styles.geoMap}
+        role="region"
+        aria-busy={status === "loading"}
+        aria-label={t("chatbot.uiParts.geoAria")}
+      />
     </div>
   );
 }

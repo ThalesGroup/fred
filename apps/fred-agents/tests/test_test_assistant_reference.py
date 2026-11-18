@@ -238,9 +238,14 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
     final = next(event for event in result.events if event.get("kind") == "final")
 
     assert final["content"].startswith("**Sample map.**")
+    assert any(
+        event.get("kind") == "tool_call"
+        and event.get("tool_name") == "geo.render_points"
+        for event in result.events
+    )
     assert final["ui_parts"][0]["type"] == "geo"
     assert final["ui_parts"][0]["geojson"]["type"] == "FeatureCollection"
-    assert len(final["ui_parts"][0]["geojson"]["features"]) == 3
+    assert len(final["ui_parts"][0]["geojson"]["features"]) == 2
 
 
 @pytest.mark.asyncio

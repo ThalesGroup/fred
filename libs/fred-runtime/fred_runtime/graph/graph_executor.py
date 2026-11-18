@@ -566,18 +566,15 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             finish_reason=recorder.finish_reason,
         )
         if tool_ui_parts:
-            already_in_final = {part.model_dump_json() for part in final.ui_parts}
+            seen_parts = {part.model_dump_json() for part in final.ui_parts}
+            unique_parts: list[UiPart] = []
+            for part in tool_ui_parts:
+                identity = part.model_dump_json()
+                if identity not in seen_parts:
+                    unique_parts.append(part)
+                    seen_parts.add(identity)
             final = final.model_copy(
-                update={
-                    "ui_parts": (
-                        *final.ui_parts,
-                        *(
-                            part
-                            for part in tool_ui_parts
-                            if part.model_dump_json() not in already_in_final
-                        ),
-                    )
-                }
+                update={"ui_parts": (*final.ui_parts, *unique_parts)}
             )
         yield final
 

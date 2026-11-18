@@ -657,6 +657,8 @@
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
+      "geoFeature": "Feature {{index}}",
+      "geoUnavailable": "The map could not be displayed. Feature names remain available above.",
       "geoSummary_one": "Map data ({{count}} feature)",
       "geoSummary_other": "Map data ({{count}} features)"
     },

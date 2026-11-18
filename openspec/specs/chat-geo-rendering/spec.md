@@ -17,7 +17,12 @@ The runtime SHALL expose `geo.render_points` to ReAct, Deep, and Graph agents wi
 #### Scenario: Graph agent uses the shared tool
 
 - **WHEN** a Graph node calls `geo.render_points` without an agent-level tool declaration
-- **THEN** the runtime permits the call and includes the tool's typed UI part in the final response
+- **THEN** the runtime permits the call, emits the typed UI part with the tool result, and includes it in the final response when the turn completes without a pause
+
+#### Scenario: Graph agent pauses after a map tool call
+
+- **WHEN** a Graph node calls `geo.render_points` before requesting human input
+- **THEN** the awaiting-human event retains the typed UI part so the resumed chat exchange displays the map
 
 #### Scenario: Existing declaration
 
@@ -26,12 +31,17 @@ The runtime SHALL expose `geo.render_points` to ReAct, Deep, and Graph agents wi
 
 ### Requirement: Typed geographic content renders as a map
 
-The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an interactive map, with visible map attribution. Popup labels SHALL be treated as text. The chat SHALL leave GeoJSON contained only in message prose or a code block as text.
+The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an interactive map, with a bundled geographic basemap and visible map attribution. Map rendering SHALL work without network access after the application assets have loaded. Popup labels SHALL be treated as text, and feature labels SHALL remain accessible through a keyboard-operated list. The chat SHALL leave GeoJSON contained only in message prose or a code block as text.
 
 #### Scenario: No-LLM test assistant returns a map
 
 - **WHEN** the no-LLM test assistant completes its `geo` or `markdown` scenario
 - **THEN** its final `GeoPart` displays an interactive map with the emitted features
+
+#### Scenario: Network unavailable
+
+- **WHEN** the user opens a `GeoPart` after the frontend assets have loaded and external network access is unavailable
+- **THEN** the map, basemap, features, and attribution remain visible without a remote tile request
 
 #### Scenario: JSON code block remains text
 

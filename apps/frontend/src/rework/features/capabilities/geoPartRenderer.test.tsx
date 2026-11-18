@@ -20,7 +20,12 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { builtinPartRenderers } from "./builtinPartRenderers";
 
 const leaflet = vi.hoisted(() => {
-  const map = { fitBounds: vi.fn(), setView: vi.fn(), remove: vi.fn() };
+  const map = {
+    fitBounds: vi.fn(),
+    setView: vi.fn(),
+    remove: vi.fn(),
+    attributionControl: { addAttribution: vi.fn() },
+  };
   const bounds = { isValid: () => true, pad: vi.fn().mockReturnThis() };
   const layer = { addTo: vi.fn().mockReturnThis(), getBounds: () => bounds };
   return {
@@ -50,18 +55,26 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   const GeoRenderer = builtinPartRenderers.geo;
   const geojson = {
     type: "FeatureCollection",
-    features: [{ type: "Feature", geometry: { type: "Point", coordinates: [2.3522, 48.8566] } }],
+    features: [
+      { type: "Feature", geometry: { type: "Point", coordinates: [2.3522, 48.8566] }, properties: { name: "Paris" } },
+    ],
   };
 
   await act(async () => {
     root.render(<GeoRenderer part={{ type: "geo", geojson }} />);
   });
 
-  expect(leaflet.createMap).toHaveBeenCalledOnce();
+  await vi.waitFor(() => expect(leaflet.createMap).toHaveBeenCalledOnce());
+  expect(leaflet.geoJSON).toHaveBeenCalledTimes(2);
+  expect(leaflet.geoJSON.mock.calls[0][0].features).toHaveLength(177);
+  expect(leaflet.tileLayer).not.toHaveBeenCalled();
+  expect(leaflet.map.attributionControl.addAttribution).toHaveBeenCalledWith(expect.stringContaining("Natural Earth"));
   expect(leaflet.geoJSON).toHaveBeenCalledWith(geojson, expect.any(Object));
   expect(leaflet.map.fitBounds).toHaveBeenCalledOnce();
   expect(host.textContent).not.toContain("FeatureCollection");
-  const [, options] = leaflet.geoJSON.mock.calls[0] as unknown as [
+  expect(host.querySelector("details li")?.textContent).toBe("Paris");
+  expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false");
+  const [, options] = leaflet.geoJSON.mock.calls[1] as unknown as [
     unknown,
     {
       onEachFeature: (
@@ -80,11 +93,13 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   host.remove();
 });
 
-it("shows the summary again if updated GeoJSON cannot be drawn", async () => {
+it("keeps feature text available if updated GeoJSON cannot be drawn", async () => {
   const host = document.createElement("div");
   const root = createRoot(host);
   const GeoRenderer = builtinPartRenderers.geo;
   leaflet.geoJSON
+    .mockImplementationOnce(() => leaflet.layer)
+    .mockImplementationOnce(() => leaflet.layer)
     .mockImplementationOnce(() => leaflet.layer)
     .mockImplementationOnce(() => {
       throw new Error("Invalid GeoJSON");
@@ -93,12 +108,14 @@ it("shows the summary again if updated GeoJSON cannot be drawn", async () => {
   await act(async () => {
     root.render(<GeoRenderer part={{ type: "geo", geojson: { type: "FeatureCollection", features: [] } }} />);
   });
-  expect(host.textContent).not.toContain("chatbot.uiParts.geoSummary");
+  await vi.waitFor(() => expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false"));
 
   await act(async () => {
     root.render(<GeoRenderer part={{ type: "geo", geojson: { type: "FeatureCollection", features: [{}] } }} />);
   });
-  expect(host.textContent).toContain("chatbot.uiParts.geoSummary");
+  await vi.waitFor(() => expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false"));
+  expect(host.querySelector("[role=status]")?.textContent).toBe("chatbot.uiParts.geoUnavailable");
+  expect(host.querySelectorAll("details li")).toHaveLength(1);
 
   await act(async () => root.unmount());
 });
