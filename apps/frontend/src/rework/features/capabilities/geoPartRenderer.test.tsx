@@ -23,26 +23,51 @@ const leaflet = vi.hoisted(() => {
   const map = {
     fitBounds: vi.fn(),
     setView: vi.fn(),
+    on: vi.fn(),
+    getZoom: vi.fn(() => 9),
+    getBounds: vi.fn(() => ({
+      pad: vi.fn().mockReturnThis(),
+      getWest: () => 5.7,
+      getSouth: () => 42.9,
+      getEast: () => 6.2,
+      getNorth: () => 43.3,
+      contains: () => true,
+    })),
+    createPane: vi.fn(() => ({ style: {} })),
     remove: vi.fn(),
     attributionControl: { addAttribution: vi.fn() },
   };
   const bounds = { isValid: () => true, pad: vi.fn().mockReturnThis() };
-  const layer = { addTo: vi.fn().mockReturnThis(), getBounds: () => bounds };
+  const layer = {
+    addTo: vi.fn().mockReturnThis(),
+    addData: vi.fn().mockReturnThis(),
+    clearLayers: vi.fn().mockReturnThis(),
+    getBounds: () => bounds,
+  };
   return {
     map,
     layer,
     createMap: vi.fn(() => map),
     tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
+    imageOverlay: vi.fn(() => ({ addTo: vi.fn() })),
     geoJSON: vi.fn((_geojson?: unknown, _options?: unknown) => layer),
     circleMarker: vi.fn(),
+    marker: vi.fn(),
+    divIcon: vi.fn(),
+    canvas: vi.fn(() => ({})),
   };
 });
 
 vi.mock("leaflet", () => ({
   map: leaflet.createMap,
   tileLayer: leaflet.tileLayer,
+  imageOverlay: leaflet.imageOverlay,
   geoJSON: leaflet.geoJSON,
   circleMarker: leaflet.circleMarker,
+  marker: leaflet.marker,
+  divIcon: leaflet.divIcon,
+  canvas: leaflet.canvas,
+  CRS: { EPSG4326: { code: "EPSG:4326" } },
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
@@ -65,20 +90,48 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   });
 
   await vi.waitFor(() => expect(leaflet.createMap).toHaveBeenCalledOnce());
-  expect(leaflet.geoJSON).toHaveBeenCalledTimes(2);
+  expect(leaflet.geoJSON).toHaveBeenCalledTimes(6);
   const world = leaflet.geoJSON.mock.calls[0]?.[0] as { features: unknown[] };
-  expect(world.features).toHaveLength(177);
+  expect(world.features).toHaveLength(258);
   expect(leaflet.tileLayer).not.toHaveBeenCalled();
+  const roadsInView = leaflet.layer.addData.mock.calls[0]?.[0] as { features: unknown[] };
+  expect(roadsInView.features.length).toBeGreaterThan(0);
+  expect(roadsInView.features.length).toBeLessThan(100);
+  expect(leaflet.imageOverlay).toHaveBeenCalledWith(
+    expect.stringMatching(/^data:image\/webp;base64,/),
+    [
+      [-90, -180],
+      [90, 180],
+    ],
+    expect.objectContaining({ interactive: false }),
+  );
+  expect(leaflet.createMap).toHaveBeenCalledWith(
+    expect.any(HTMLElement),
+    expect.objectContaining({ preferCanvas: true }),
+  );
+  expect(leaflet.canvas).toHaveBeenCalledWith({ pane: "geoUserPoints" });
   expect(leaflet.map.attributionControl.addAttribution).toHaveBeenCalledWith(expect.stringContaining("Natural Earth"));
   expect(leaflet.geoJSON).toHaveBeenCalledWith(geojson, expect.any(Object));
-  expect(leaflet.map.fitBounds).toHaveBeenCalledOnce();
+  const cityOptions = leaflet.geoJSON.mock.calls[4]?.[1] as {
+    pointToLayer: (feature: { properties: { name: string } }, latlng: [number, number]) => unknown;
+  };
+  cityOptions.pointToLayer({ properties: { name: "<img>" } }, [43.12, 5.93]);
+  expect(leaflet.marker).toHaveBeenCalledWith(
+    [43.12, 5.93],
+    expect.objectContaining({ interactive: false, keyboard: false }),
+  );
+  expect(leaflet.divIcon.mock.calls[leaflet.divIcon.mock.calls.length - 1]?.[0]?.html).toContain("&lt;img&gt;");
+  expect(leaflet.map.fitBounds).toHaveBeenCalledWith(leaflet.layer.getBounds(), {
+    padding: [24, 24],
+    maxZoom: 13,
+  });
   expect(host.textContent).not.toContain("FeatureCollection");
   expect(host.querySelector("ol li")?.textContent).toBe("Paris");
   expect(host.querySelector("details summary")?.textContent).toBe("chatbot.uiParts.geoLocations");
   expect(host.querySelector("details")?.open).toBe(false);
   expect(host.textContent).not.toContain("feature");
   expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false");
-  const [, options] = leaflet.geoJSON.mock.calls[1] as unknown as [
+  const [, options] = leaflet.geoJSON.mock.calls[5] as unknown as [
     unknown,
     {
       onEachFeature: (
@@ -101,13 +154,12 @@ it("keeps feature text available if updated GeoJSON cannot be drawn", async () =
   const host = document.createElement("div");
   const root = createRoot(host);
   const GeoRenderer = builtinPartRenderers.geo;
-  leaflet.geoJSON
-    .mockImplementationOnce(() => leaflet.layer)
-    .mockImplementationOnce(() => leaflet.layer)
-    .mockImplementationOnce(() => leaflet.layer)
-    .mockImplementationOnce(() => {
+  leaflet.geoJSON.mockImplementation((data: unknown) => {
+    if ((data as { features?: { geometry?: unknown }[] } | undefined)?.features?.some((feature) => !feature.geometry)) {
       throw new Error("Invalid GeoJSON");
-    });
+    }
+    return leaflet.layer;
+  });
 
   await act(async () => {
     root.render(<GeoRenderer part={{ type: "geo", geojson: { type: "FeatureCollection", features: [] } }} />);

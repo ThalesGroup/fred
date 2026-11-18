@@ -1413,38 +1413,6 @@ async def think_step(
 
 # ── Step: geo ──────────────────────────────────────────────────────────────────
 
-_GEO_SAMPLE = {
-    "type": "FeatureCollection",
-    "features": [
-        {
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
-            "properties": {"name": "Paris"},
-        },
-        {
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [13.4050, 52.5200]},
-            "properties": {"name": "Berlin"},
-        },
-        {
-            "type": "Feature",
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [2.33, 48.85],
-                        [2.37, 48.85],
-                        [2.37, 48.87],
-                        [2.33, 48.87],
-                        [2.33, 48.85],
-                    ]
-                ],
-            },
-            "properties": {"name": "Test zone", "color": "#6366f1", "fillOpacity": 0.2},
-        },
-    ],
-}
-
 
 @typed_node(TestState)
 async def geo_step(
@@ -1459,25 +1427,27 @@ async def geo_step(
     """
     delay = _delay_seconds(context)
 
-    context.emit_status("geo", "Building a sample FeatureCollection.")
+    context.emit_status("geo", "Building a Toulon map.")
     await asyncio.sleep(0.05 + delay)
     context.emit_status("geo", "Sending map data.")
 
     result = await context.invoke_tool(
         TOOL_REF_GEO_RENDER_POINTS,
         {
-            "title": "Sample map",
+            "title": "Toulon and its bay",
             "points": [
-                {"name": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-                {"name": "Berlin", "latitude": 52.52, "longitude": 13.405},
+                {"name": "Toulon centre", "latitude": 43.1242, "longitude": 5.9306},
+                {"name": "Port de Toulon", "latitude": 43.1192, "longitude": 5.9261},
+                {"name": "Le Mourillon", "latitude": 43.1087, "longitude": 5.9486},
+                {"name": "Rade de Toulon", "latitude": 43.087, "longitude": 5.914},
+                {"name": "Au large de Toulon", "latitude": 43.079, "longitude": 5.958},
+                {"name": "Vers le cap Cépet", "latitude": 43.073, "longitude": 5.998},
             ],
         },
     )
     if result.is_error:
         raise RuntimeError("The sample map tool failed.")
-    reply = (
-        "**Sample map.** Two pins (Paris and Berlin), rendered as an interactive map."
-    )
+    reply = "**Toulon and its bay.** Six points around the city, the harbour and nearby sea."
     context.emit_assistant_delta(reply)
 
     return StepResult(

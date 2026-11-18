@@ -237,7 +237,7 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
     result = await _ExecutorDriver().send("s-geo", "geo")
     final = next(event for event in result.events if event.get("kind") == "final")
 
-    assert final["content"].startswith("**Sample map.**")
+    assert final["content"].startswith("**Toulon and its bay.**")
     assert any(
         event.get("kind") == "tool_call"
         and event.get("tool_name") == "geo.render_points"
@@ -245,7 +245,16 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
     )
     assert final["ui_parts"][0]["type"] == "geo"
     assert final["ui_parts"][0]["geojson"]["type"] == "FeatureCollection"
-    assert len(final["ui_parts"][0]["geojson"]["features"]) == 2
+    features = final["ui_parts"][0]["geojson"]["features"]
+    assert len(features) == 6
+    assert {feature["properties"]["name"] for feature in features} == {
+        "Toulon centre",
+        "Port de Toulon",
+        "Le Mourillon",
+        "Rade de Toulon",
+        "Au large de Toulon",
+        "Vers le cap Cépet",
+    }
 
 
 @pytest.mark.asyncio
