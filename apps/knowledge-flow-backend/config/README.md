@@ -59,7 +59,7 @@ and `vision_model`. With no `reranker_model`, document reranking uses the local
 CrossEncoder in the Knowledge Flow image. `crossencoder_model` continues to
 configure that local model.
 
-To use a remote indexed-results endpoint, configure the API deployment:
+To use a remote indexed-results endpoint, configure the API and worker deployments:
 
 ```yaml
 reranker_model:
@@ -69,11 +69,30 @@ reranker_model:
     base_url: https://models.example/v1
 ```
 
-Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge Flow's environment secret, not in YAML. The service calls `POST {base_url}/rerank` with `model`, `query`,
-`documents` and `top_n` and expects indexed `results` with `index` and
-`relevance_score`. A missing key prevents startup. An unavailable configured
+This provider calls `POST {base_url}/rerank` with `model`, `query`, `documents`
+and `top_n`, sends the key as a bearer token, and expects indexed `results`
+with `index` and `relevance_score`.
+
+For a positional predict endpoint, use the same configuration shape:
+
+```yaml
+reranker_model:
+  provider: predict
+  name: example-model
+  settings:
+    base_url: https://models.example/v1
+```
+
+This provider calls `POST {base_url}/models/example-model:predict` with only
+`query` and `documents`, sends the key in the `apikey` header, and expects a
+`predictions` array with one finite numeric score per document in input order.
+The configured `name` supplies the URL's model segment.
+
+Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge
+Flow's environment secret, not in YAML. A missing key prevents startup. An unavailable configured
 remote model produces a 503 for reranking requests; it does not switch to the
-local model. Remove `reranker_model` and restart the API to restore local
+local model. Remove `reranker_model` from API and worker configuration and
+restart both affected deployments to restore local
 reranking. The agent's advanced document access setting controls whether its
 search requests rerank; the model selection applies across the Knowledge Flow
 deployment.
