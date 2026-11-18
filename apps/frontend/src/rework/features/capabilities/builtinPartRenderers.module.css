@@ -72,8 +72,18 @@
   width: max-content;
   max-width: 180px;
   color: #253b45;
-  font: 600 11px/1.3 sans-serif;
+  font: 400 12px/1.3 sans-serif;
   white-space: normal;
+}
+
+.geoPointLabel .geoPointTitle {
+  font-weight: 400;
+}
+
+.geoPointLabel .geoPointSubtitle {
+  margin-top: 2px;
+  color: #536670;
+  font: 400 10px/1.25 sans-serif;
 }
 
 .geoPointLabel::before {

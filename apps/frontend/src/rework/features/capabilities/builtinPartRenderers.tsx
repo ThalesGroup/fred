@@ -120,11 +120,13 @@ function pointContent(label: string | undefined, details: [string, unknown][]) {
   const content = document.createElement("div");
   if (label) {
     const heading = document.createElement("strong");
+    heading.className = styles.geoPointTitle;
     heading.textContent = label;
     content.append(heading);
   }
   for (const [key, value] of details) {
     const row = document.createElement("div");
+    row.className = styles.geoPointSubtitle;
     row.textContent = key === "description" || key === "details" ? String(value) : `${key}: ${String(value)}`;
     content.append(row);
   }
@@ -133,6 +135,7 @@ function pointContent(label: string | undefined, details: [string, unknown][]) {
 
 function pointLabel(label: string) {
   const content = document.createElement("span");
+  content.className = styles.geoPointTitle;
   content.textContent = label;
   return content;
 }
