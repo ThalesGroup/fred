@@ -30,6 +30,7 @@ Trigger keywords (case-insensitive prefix match):
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word
   geo           → renders a sample GeoJSON FeatureCollection as a GeoPart ui_part
+  geo wide      → renders Paris, Toulon, and a Mediterranean point at a wider scale
   document      → search via the document_access capability's tool
                   (context.invoke_runtime_tool), then a HITL confirm/discard
                   gate on the top hit — degrades to a helpful message when the

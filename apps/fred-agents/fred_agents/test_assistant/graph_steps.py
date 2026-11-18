@@ -32,7 +32,7 @@ Scenario routing (handled by dispatch_step):
   "markdown"    → dispatch routes "markdown"     → markdown_step    → finalize
   "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
-  "geo"         → dispatch routes "geo"          → geo_step         → finalize
+  "geo" / "geo wide" → dispatch routes "geo"        → geo_step       → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
                   (HITL) → finalize
@@ -1426,28 +1426,42 @@ async def geo_step(
     final (with ui_parts).
     """
     delay = _delay_seconds(context)
+    wide = (
+        state.latest_user_text.lower().strip().startswith(("geo wide", "geo distant"))
+    )
+    if wide:
+        title = "Paris, Toulon and the Mediterranean"
+        points = [
+            {"name": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+            {"name": "Toulon", "latitude": 43.1242, "longitude": 5.9306},
+            {"name": "Mediterranean Sea", "latitude": 42.5, "longitude": 6.0},
+        ]
+        reply = "**Paris to the Mediterranean.** Three distant points across France and the sea."
+    else:
+        title = "Toulon and its bay"
+        points = [
+            {"name": "Toulon centre", "latitude": 43.1242, "longitude": 5.9306},
+            {"name": "Port de Toulon", "latitude": 43.1192, "longitude": 5.9261},
+            {"name": "Le Mourillon", "latitude": 43.1087, "longitude": 5.9486},
+            {"name": "Rade de Toulon", "latitude": 43.087, "longitude": 5.914},
+            {"name": "Au large de Toulon", "latitude": 43.079, "longitude": 5.958},
+            {"name": "Vers le cap Cépet", "latitude": 43.073, "longitude": 5.998},
+        ]
+        reply = "**Toulon and its bay.** Six points around the city, the harbour and nearby sea."
 
-    context.emit_status("geo", "Building a Toulon map.")
+    context.emit_status("geo", f"Building a map of {title}.")
     await asyncio.sleep(0.05 + delay)
     context.emit_status("geo", "Sending map data.")
 
     result = await context.invoke_tool(
         TOOL_REF_GEO_RENDER_POINTS,
         {
-            "title": "Toulon and its bay",
-            "points": [
-                {"name": "Toulon centre", "latitude": 43.1242, "longitude": 5.9306},
-                {"name": "Port de Toulon", "latitude": 43.1192, "longitude": 5.9261},
-                {"name": "Le Mourillon", "latitude": 43.1087, "longitude": 5.9486},
-                {"name": "Rade de Toulon", "latitude": 43.087, "longitude": 5.914},
-                {"name": "Au large de Toulon", "latitude": 43.079, "longitude": 5.958},
-                {"name": "Vers le cap Cépet", "latitude": 43.073, "longitude": 5.998},
-            ],
+            "title": title,
+            "points": points,
         },
     )
     if result.is_error:
         raise RuntimeError("The sample map tool failed.")
-    reply = "**Toulon and its bay.** Six points around the city, the harbour and nearby sea."
     context.emit_assistant_delta(reply)
 
     return StepResult(
@@ -1922,6 +1936,7 @@ _SCENARIO_TABLE = """\
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` interactive map |
+| `geo wide` | Paris, Toulon, and a Mediterranean point on a map fitted to distant locations (`geo distant` also works) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
 | `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |

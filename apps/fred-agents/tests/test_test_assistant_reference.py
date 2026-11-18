@@ -258,6 +258,25 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
 
 
 @pytest.mark.asyncio
+async def test_geo_wide_scenario_keeps_distant_points_in_one_typed_map() -> None:
+    result = await _ExecutorDriver().send("s-geo-wide", "geo wide")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert final["content"].startswith("**Paris to the Mediterranean.**")
+    assert any(
+        event.get("kind") == "tool_call"
+        and event.get("tool_name") == "geo.render_points"
+        for event in result.events
+    )
+    features = final["ui_parts"][0]["geojson"]["features"]
+    assert {feature["properties"]["name"] for feature in features} == {
+        "Paris",
+        "Toulon",
+        "Mediterranean Sea",
+    }
+
+
+@pytest.mark.asyncio
 async def test_markdown_scenario_keeps_maps_in_the_geo_scenario() -> None:
     result = await _ExecutorDriver().send("s-markdown", "markdown")
     final = next(event for event in result.events if event.get("kind") == "final")
