@@ -49,7 +49,8 @@ tool ref, argument model, description, `LOCAL` handler, and optional output
 part model. `geo.render_points` and `chart.render` use this declaration;
 ReAct, Deep, and Graph discover them without agent-specific registration or
 an application tool invoker. A Graph node can call them with
-`context.invoke_tool(tool_ref, payload)`.
+`context.invoke_tool(tool_ref, payload)`, and a Python-authored tool can call
+them with `ctx.invoke_tool(tool_ref, **payload)`.
 
 Add a new pure rendering tool by defining its Pydantic arguments and part,
 returning a `ToolInvocationResult` from its handler, and adding one catalog

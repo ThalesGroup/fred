@@ -234,6 +234,7 @@ async def test_invalid_chart_returns_tool_error_without_part() -> None:
     content, result = await chart_spec.invoke(
         {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]}
     )
+    assert result is not None
     assert result.is_error
     assert result.ui_parts == ()
     assert "x_key" in content

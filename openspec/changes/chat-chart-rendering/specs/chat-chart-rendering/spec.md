@@ -22,6 +22,10 @@ The runtime SHALL expose `chart.render` once to ReAct, Deep, and Graph agents wi
 - **WHEN** an agent explicitly declares `chart.render`
 - **THEN** the runtime offers exactly one callable chart tool
 
+#### Scenario: Python-authored tool call
+- **WHEN** a Python-authored tool calls `chart.render` through `ToolContext.invoke_tool`
+- **THEN** the same local handler returns a typed chart part or a validation error without a part
+
 ### Requirement: Bounded and faithful chart data
 
 `chart.render` SHALL accept a chart type, title, row objects, and column mapping without executing SQL or fetching data. It SHALL reject invalid mappings, non-finite numeric series, unsupported chart types, or inputs exceeding the published row and serialized-size limits rather than silently truncating or changing values. The returned chart part SHALL contain the validated rows needed to render the result.

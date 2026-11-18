@@ -20,7 +20,12 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
+from fred_sdk.support.builtins import (
+    TOOL_REF_CHART_RENDER,
+    TOOL_REF_GEO_RENDER_POINTS,
+    ChartPart,
+)
 
 
 class _Settings:
@@ -39,8 +44,7 @@ def runtime_context():
     set_runtime_context(None)
 
 
-@pytest.mark.asyncio
-async def test_authored_tool_context_can_invoke_local_builtin() -> None:
+def _authored_context() -> ToolContext:
     binding = BoundRuntimeContext(
         runtime_context=RuntimeContext(session_id="s-1", team_id="team-1"),
         portable_context=PortableContext(
@@ -56,7 +60,12 @@ async def test_authored_tool_context_can_invoke_local_builtin() -> None:
         _AuthorRuntime,
         SimpleNamespace(binding=binding, tool_invoker=invoker),
     )
-    context = ToolContext(runtime)
+    return ToolContext(runtime)
+
+
+@pytest.mark.asyncio
+async def test_authored_tool_context_can_invoke_local_builtin() -> None:
+    context = _authored_context()
 
     result = await context.invoke_tool(
         TOOL_REF_GEO_RENDER_POINTS,
@@ -86,3 +95,30 @@ async def test_authored_tool_context_can_invoke_local_builtin() -> None:
     assert invalid.is_error
     assert invalid.ui_parts == ()
     assert "points.0.latitude" in (invalid.blocks[0].text or "")
+
+
+@pytest.mark.asyncio
+async def test_authored_chart_call_and_validation_error() -> None:
+    rebuild_ui_part_union((ChartPart,))
+    try:
+        context = _authored_context()
+        result = await context.invoke_tool(
+            TOOL_REF_CHART_RENDER,
+            chart_type="bar",
+            title="Revenue",
+            rows=[{"label": "Q1", "value": 12}],
+            x_key="label",
+            y_keys=["value"],
+        )
+        invalid = await context.invoke_tool(
+            TOOL_REF_CHART_RENDER,
+            chart_type="bar",
+            title="Revenue",
+            rows=[{"label": "Q1"}],
+        )
+    finally:
+        rebuild_ui_part_union(())
+
+    assert result.ui_parts[0].type == "chart"
+    assert invalid.is_error
+    assert invalid.ui_parts == ()
