@@ -226,6 +226,8 @@ def test_chart_tool_is_available_once_with_or_without_declaration() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_chart_returns_tool_error_without_part() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
     chart_spec = next(
         spec
         for spec in _resolver().resolve_tools()
@@ -238,6 +240,28 @@ async def test_invalid_chart_returns_tool_error_without_part() -> None:
     assert result.is_error
     assert result.ui_parts == ()
     assert "x_key" in content
+
+    bound_tool = (
+        ReActToolBinder(runtime_tools=[chart_spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+    response = await bound_tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-chart",
+            "name": bound_tool.name,
+            "args": {
+                "chart_type": "bar",
+                "title": "Revenue",
+                "rows": [{"label": "Q1"}],
+            },
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "x_key" in str(response.content)
+    assert response.artifact is None
 
 
 def _provider_error_artifact() -> ToolInvocationResult:
