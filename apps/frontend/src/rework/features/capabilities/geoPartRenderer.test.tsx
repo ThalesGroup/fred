@@ -81,12 +81,16 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   const geojson = {
     type: "FeatureCollection",
     features: [
-      { type: "Feature", geometry: { type: "Point", coordinates: [2.3522, 48.8566] }, properties: { name: "Paris" } },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [2.3522, 48.8566] },
+        properties: { name: "Paris", description: "Capital of France" },
+      },
     ],
   };
 
   await act(async () => {
-    root.render(<GeoRenderer part={{ type: "geo", geojson }} />);
+    root.render(<GeoRenderer part={{ type: "geo", geojson, popup_property: "description" }} />);
   });
 
   await vi.waitFor(() => expect(leaflet.createMap).toHaveBeenCalledOnce());
@@ -126,7 +130,8 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
     maxZoom: 13,
   });
   expect(host.textContent).not.toContain("FeatureCollection");
-  expect(host.querySelector("ol li")?.textContent).toBe("Paris");
+  expect(host.querySelector("ol > li")?.firstChild?.textContent).toBe("Paris");
+  expect(host.querySelector("ol li ul li")?.textContent).toBe("Capital of France");
   expect(host.querySelector("details summary")?.textContent).toBe("chatbot.uiParts.geoLocations");
   expect(host.querySelector("details")?.open).toBe(false);
   expect(host.textContent).not.toContain("feature");
@@ -135,15 +140,75 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
     unknown,
     {
       onEachFeature: (
-        feature: { properties: { name: string } },
-        layer: { bindPopup: (content: HTMLElement) => void },
+        feature: {
+          geometry: { type: "Point"; coordinates: number[] };
+          properties: { name: string; description: string };
+        },
+        layer: {
+          bindPopup: (content: HTMLElement) => void;
+          bindTooltip: (content: HTMLElement, options: unknown) => void;
+          on: (event: string, handler: () => void) => void;
+          setTooltipContent: (content: HTMLElement | string) => void;
+        },
       ) => void;
     },
   ];
   const bindPopup = vi.fn();
-  options.onEachFeature({ properties: { name: "<img src=x onerror=alert(1)>" } }, { bindPopup });
-  expect(bindPopup.mock.calls[0][0].textContent).toBe("<img src=x onerror=alert(1)>");
+  const bindTooltip = vi.fn();
+  const on = vi.fn();
+  const setTooltipContent = vi.fn();
+  options.onEachFeature(
+    {
+      geometry: { type: "Point", coordinates: [1, 1] },
+      properties: { name: "<img src=x onerror=alert(1)>", description: "<script>alert(1)</script>" },
+    },
+    { bindPopup, bindTooltip, on, setTooltipContent },
+  );
+  expect(bindPopup.mock.calls[0][0].textContent).toBe("<img src=x onerror=alert(1)><script>alert(1)</script>");
   expect(bindPopup.mock.calls[0][0].innerHTML).toContain("&lt;img");
+  expect(bindPopup.mock.calls[0][0].innerHTML).toContain("&lt;script&gt;");
+  expect(bindTooltip).toHaveBeenCalledWith(
+    expect.any(HTMLElement),
+    expect.objectContaining({ permanent: true, interactive: false }),
+  );
+  expect(bindTooltip.mock.calls[0][0].textContent).toBe("<img src=x onerror=alert(1)>");
+  expect(bindTooltip.mock.calls[0][0].innerHTML).toContain("&lt;img");
+  const hover = on.mock.calls.find(([event]) => event === "mouseover")?.[1];
+  hover();
+  expect(setTooltipContent.mock.calls[0][0].textContent).toContain("<script>alert(1)</script>");
+  expect(setTooltipContent.mock.calls[0][0].innerHTML).toContain("&lt;script&gt;");
+  const unhover = on.mock.calls.find(([event]) => event === "mouseout")?.[1];
+  unhover();
+  expect(setTooltipContent.mock.calls[1][0].textContent).toBe("<img src=x onerror=alert(1)>");
+  expect(setTooltipContent.mock.calls[1][0].innerHTML).toContain("&lt;img");
+
+  const secondPopup = vi.fn();
+  const secondTooltip = vi.fn();
+  const secondOn = vi.fn();
+  const secondSetTooltipContent = vi.fn();
+  const longDescription = "A".repeat(300);
+  options.onEachFeature(
+    {
+      geometry: { type: "Point", coordinates: [2.3522, 48.8566] },
+      properties: { name: "Toulon", description: longDescription },
+    },
+    { bindPopup: secondPopup, bindTooltip: secondTooltip, on: secondOn, setTooltipContent: secondSetTooltipContent },
+  );
+  expect(secondPopup.mock.calls[0][0].textContent).toContain(longDescription);
+  expect(secondTooltip).toHaveBeenCalledOnce();
+  expect(secondTooltip.mock.calls[0][0].textContent).toBe("Toulon");
+  const secondHover = secondOn.mock.calls.find(([event]) => event === "mouseover")?.[1];
+  secondHover();
+  expect(secondSetTooltipContent.mock.calls[0][0].textContent.length).toBeLessThan(150);
+  const duplicateTooltip = vi.fn();
+  options.onEachFeature(
+    {
+      geometry: { type: "Point", coordinates: [2.3522, 48.8566] },
+      properties: { name: "Also Toulon", description: "Same location" },
+    },
+    { bindPopup: vi.fn(), bindTooltip: duplicateTooltip, on: vi.fn(), setTooltipContent: vi.fn() },
+  );
+  expect(duplicateTooltip).not.toHaveBeenCalled();
 
   await act(async () => root.unmount());
   expect(leaflet.map.remove).toHaveBeenCalledOnce();

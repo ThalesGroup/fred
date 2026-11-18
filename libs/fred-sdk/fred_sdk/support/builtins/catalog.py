@@ -180,13 +180,13 @@ class TracesSummarizeConversationToolArgs(BaseModel):
 class GeoPointArgs(BaseModel):
     name: str | None = Field(
         default=None,
-        description="Human-readable point label shown in map popups when available.",
+        description="Human-readable point label shown directly on the map when space permits; overrides properties.name.",
     )
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
     properties: dict[str, object] = Field(
         default_factory=dict,
-        description="Additional GeoJSON properties attached to the point.",
+        description="Optional scalar details (strings, numbers, booleans) shown as a short hover preview and in full on click, for example {'description': 'Home port'}. Styling keys color and fillOpacity are not shown as details.",
     )
 
 
@@ -277,8 +277,10 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         backend=BuiltinToolBackend.LOCAL_GEO,
         default_description=(
             "Display locations on an interactive map in the chat. Call geo_render_points "
-            "with points=[{latitude: number, longitude: number, name?: string}, ...] "
-            "and an optional title; use numeric coordinates in degrees and keep the "
+            "with points=[{latitude: number, longitude: number, name?: string, "
+            "properties?: {description?: string, ...}}, ...] and an optional title. "
+            "Names appear beside points where space permits; scalar properties have a short hover preview and full details on click. "
+            "Use numeric coordinates in degrees and keep the "
             "user-facing reply concise. The tool returns the renderable map, so do not "
             "copy its GeoJSON into the reply."
         ),

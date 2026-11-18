@@ -255,6 +255,14 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
         "Au large de Toulon",
         "Vers le cap Cépet",
     }
+    assert (
+        next(
+            feature
+            for feature in features
+            if feature["properties"]["name"] == "Port de Toulon"
+        )["properties"]["description"]
+        == "Home port"
+    )
 
 
 @pytest.mark.asyncio
@@ -274,6 +282,12 @@ async def test_geo_wide_scenario_keeps_distant_points_in_one_typed_map() -> None
         "Toulon",
         "Mediterranean Sea",
     }
+    assert (
+        next(
+            feature for feature in features if feature["properties"]["name"] == "Paris"
+        )["properties"]["description"]
+        == "Capital of France"
+    )
 
 
 @pytest.mark.asyncio

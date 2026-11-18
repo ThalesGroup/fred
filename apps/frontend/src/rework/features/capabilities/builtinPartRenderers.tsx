@@ -96,6 +96,47 @@ function getBasemap(): Basemap {
   return cachedBasemap;
 }
 
+function pointDetails(properties: Record<string, unknown>, popupProperty?: string) {
+  const details = Object.entries(properties).filter(
+    ([key, value]) =>
+      key !== "name" &&
+      key !== "color" &&
+      key !== "fillOpacity" &&
+      (typeof value === "string" || typeof value === "number" || typeof value === "boolean"),
+  );
+  return popupProperty
+    ? details.sort(([a], [b]) => Number(b === popupProperty) - Number(a === popupProperty))
+    : details;
+}
+
+function hoverDetails(details: [string, unknown][]) {
+  return details.slice(0, 2).map(([key, value]) => {
+    const text = String(value);
+    return [key, text.length > 120 ? `${text.slice(0, 119)}...` : text] as [string, string];
+  });
+}
+
+function pointContent(label: string | undefined, details: [string, unknown][]) {
+  const content = document.createElement("div");
+  if (label) {
+    const heading = document.createElement("strong");
+    heading.textContent = label;
+    content.append(heading);
+  }
+  for (const [key, value] of details) {
+    const row = document.createElement("div");
+    row.textContent = key === "description" || key === "details" ? String(value) : `${key}: ${String(value)}`;
+    content.append(row);
+  }
+  return content;
+}
+
+function pointLabel(label: string) {
+  const content = document.createElement("span");
+  content.textContent = label;
+  return content;
+}
+
 /** Render a typed GeoPart with Leaflet's browser API. */
 function GeoPartRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
@@ -162,6 +203,8 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
       const userPointPane = map.createPane("geoUserPoints");
       userPointPane.style.zIndex = "650";
       const userPointRenderer = L.canvas({ pane: "geoUserPoints" });
+      let pointIndex = 0;
+      const labelledCoordinates = new Set<string>();
       const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
         pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7, renderer: userPointRenderer }),
         style: (feature) => {
@@ -173,11 +216,32 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
           };
         },
         onEachFeature: (feature, featureLayer) => {
-          const label = feature.properties?.[geo.popup_property || "name"];
-          if (typeof label === "string" || typeof label === "number") {
-            const content = document.createElement("span");
-            content.textContent = String(label);
-            featureLayer.bindPopup(content);
+          const properties = feature.properties ?? {};
+          const rawLabel = properties.name;
+          const label = typeof rawLabel === "string" || typeof rawLabel === "number" ? String(rawLabel) : undefined;
+          const details = pointDetails(properties, geo.popup_property ?? undefined);
+          if (label || details.length) {
+            featureLayer.bindPopup(pointContent(label, details));
+          }
+          const pointCoordinates =
+            feature.geometry?.type === "Point" ? JSON.stringify(feature.geometry.coordinates) : undefined;
+          if (pointCoordinates && label && !labelledCoordinates.has(pointCoordinates)) {
+            labelledCoordinates.add(pointCoordinates);
+            const directions = ["right", "left", "top", "bottom"] as const;
+            const direction = directions[pointIndex++ % directions.length];
+            featureLayer.bindTooltip(pointLabel(label), {
+              permanent: true,
+              interactive: false,
+              direction,
+              offset: direction === "top" ? [0, -22] : direction === "bottom" ? [0, 22] : [6, 0],
+              className: styles.geoPointLabel,
+            });
+            if (details.length) {
+              featureLayer.on("mouseover", () =>
+                featureLayer.setTooltipContent(pointContent(label, hoverDetails(details))),
+              );
+              featureLayer.on("mouseout", () => featureLayer.setTooltipContent(pointLabel(label)));
+            }
           }
         },
       }).addTo(map);
@@ -247,12 +311,23 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
           <summary>{t("chatbot.uiParts.geoLocations")}</summary>
           <ol className={styles.geoFeatureList}>
             {featureList.map((feature, index) => {
-              const label = feature.properties?.[geo.popup_property || "name"];
+              const properties = feature.properties ?? {};
+              const label = properties.name;
+              const details = pointDetails(properties, geo.popup_property ?? undefined);
               return (
                 <li key={index}>
                   {typeof label === "string" || typeof label === "number"
                     ? label
                     : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
+                  {details.length > 0 && (
+                    <ul>
+                      {details.map(([key, value]) => (
+                        <li key={key}>
+                          {key === "description" || key === "details" ? String(value) : `${key}: ${String(value)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}

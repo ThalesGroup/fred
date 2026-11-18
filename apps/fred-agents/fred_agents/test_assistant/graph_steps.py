@@ -1432,19 +1432,39 @@ async def geo_step(
     if wide:
         title = "Paris, Toulon and the Mediterranean"
         points = [
-            {"name": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+            {
+                "name": "Paris",
+                "latitude": 48.8566,
+                "longitude": 2.3522,
+                "properties": {"description": "Capital of France"},
+            },
             {"name": "Toulon", "latitude": 43.1242, "longitude": 5.9306},
-            {"name": "Mediterranean Sea", "latitude": 42.5, "longitude": 6.0},
+            {
+                "name": "Mediterranean Sea",
+                "latitude": 42.5,
+                "longitude": 6.0,
+                "properties": {"description": "Off the coast near Toulon"},
+            },
         ]
         reply = "**Paris to the Mediterranean.** Three distant points across France and the sea."
     else:
         title = "Toulon and its bay"
         points = [
             {"name": "Toulon centre", "latitude": 43.1242, "longitude": 5.9306},
-            {"name": "Port de Toulon", "latitude": 43.1192, "longitude": 5.9261},
+            {
+                "name": "Port de Toulon",
+                "latitude": 43.1192,
+                "longitude": 5.9261,
+                "properties": {"description": "Home port"},
+            },
             {"name": "Le Mourillon", "latitude": 43.1087, "longitude": 5.9486},
             {"name": "Rade de Toulon", "latitude": 43.087, "longitude": 5.914},
-            {"name": "Au large de Toulon", "latitude": 43.079, "longitude": 5.958},
+            {
+                "name": "Au large de Toulon",
+                "latitude": 43.079,
+                "longitude": 5.958,
+                "properties": {"description": "Offshore point"},
+            },
             {"name": "Vers le cap Cépet", "latitude": 43.073, "longitude": 5.998},
         ]
         reply = "**Toulon and its bay.** Six points around the city, the harbour and nearby sea."

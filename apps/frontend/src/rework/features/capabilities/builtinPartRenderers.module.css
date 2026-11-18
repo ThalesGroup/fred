@@ -38,6 +38,11 @@
   font: var(--font-body-small);
 }
 
+.geoFeatureList ul {
+  padding-left: var(--spacing-l);
+  color: var(--on-surface-retreat);
+}
+
 .geoMap {
   border-radius: var(--radius-s);
   background: #dceaf0;
@@ -56,4 +61,21 @@
     -1px 0 #fff,
     0 -1px #fff;
   white-space: nowrap;
+}
+
+.geoPointLabel {
+  box-shadow: none;
+  border: 1px solid #d9e0e3;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 94%);
+  padding: 2px 5px;
+  width: max-content;
+  max-width: 180px;
+  color: #253b45;
+  font: 600 11px/1.3 sans-serif;
+  white-space: normal;
+}
+
+.geoPointLabel::before {
+  display: none;
 }

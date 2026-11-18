@@ -31,7 +31,7 @@ The runtime SHALL expose `geo.render_points` to ReAct, Deep, and Graph agents wi
 
 ### Requirement: Typed geographic content renders as a map
 
-The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an interactive map, with a bundled geographic basemap and visible map attribution. Map rendering SHALL work without network access after the application assets have loaded. Popup labels SHALL be treated as text, and feature labels SHALL remain accessible through a keyboard-operated list. The chat SHALL leave GeoJSON contained only in message prose or a code block as text.
+The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an interactive map, with a bundled geographic basemap and visible map attribution. Map rendering SHALL work without network access after the application assets have loaded. Point names SHALL appear beside their markers where space permits; all names SHALL remain available in a keyboard-operated list. Additional scalar properties SHALL appear as a short preview on hover and in full on click and in the list. All labels and details SHALL be treated as text. The chat SHALL leave GeoJSON contained only in message prose or a code block as text.
 
 #### Scenario: No-LLM test assistant returns a map
 
@@ -42,6 +42,11 @@ The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an i
 
 - **WHEN** the user opens a `GeoPart` after the frontend assets have loaded and external network access is unavailable
 - **THEN** the map, basemap, features, and attribution remain visible without a remote tile request
+
+#### Scenario: Point with additional information
+
+- **WHEN** an agent calls `geo.render_points` with a named point and additional `properties`
+- **THEN** the name is visible beside the point where space permits, the additional information appears on hover or click, and the list exposes the same information to keyboard users
 
 #### Scenario: JSON code block remains text
 

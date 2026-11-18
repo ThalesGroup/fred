@@ -40,7 +40,7 @@ def render_geo_points(payload: dict[str, object]) -> ToolInvocationResult:
             point_labels.append(name)
 
         properties = dict(point.properties)
-        if name is not None and "name" not in properties:
+        if name is not None:
             properties["name"] = name
 
         features.append(
