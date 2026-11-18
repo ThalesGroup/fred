@@ -495,7 +495,9 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
             services=RuntimeServices(),
             binding=binding,
         )
-        assert resolver.resolve_tools() == []
+        assert [spec.tool_ref for spec in resolver.resolve_tools()] == [
+            TOOL_REF_GEO_RENDER_POINTS
+        ]
 
     binding = _binding().model_copy(
         update={
@@ -508,7 +510,7 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
         services=RuntimeServices(),
         binding=binding,
     ).resolve_tools()
-    assert [spec.runtime_name for spec in specs] == ["ask_user"]
+    assert [spec.runtime_name for spec in specs] == ["ask_user", "geo_render_points"]
     bound = ReActToolBinder(
         runtime_tools=specs, tracer=None, binding=binding
     ).build_tools()

@@ -59,7 +59,7 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
-from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS, render_geo_points
+from fred_sdk.support.builtins import BuiltinToolBackend, get_builtin_tool_spec
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
@@ -481,8 +481,14 @@ class NodeContext:
             raise RuntimeError(
                 f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
             )
+        local_spec = get_builtin_tool_spec(tool_ref)
+        local_handler = (
+            local_spec.local_handler
+            if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL
+            else None
+        )
         tool_invoker = self.services.tool_invoker
-        if tool_invoker is None and tool_ref != TOOL_REF_GEO_RENDER_POINTS:
+        if tool_invoker is None and local_handler is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
 
         self.sink(
@@ -502,8 +508,8 @@ class NodeContext:
         ) as obs:
 
             async def invoke() -> ToolInvocationResult:
-                if tool_ref == TOOL_REF_GEO_RENDER_POINTS:
-                    return render_geo_points(payload)
+                if local_handler is not None:
+                    return local_handler(payload)
                 assert tool_invoker is not None
                 return await tool_invoker.invoke(
                     ToolInvocationRequest(

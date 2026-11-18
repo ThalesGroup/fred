@@ -66,7 +66,7 @@ from fred_sdk.graph.runtime import (
     GraphNodeContext,
     GraphNodeResult,
 )
-from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import BuiltinToolBackend, list_builtin_tool_specs
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
@@ -300,7 +300,11 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         allowed_tool_refs = {
             requirement.tool_ref for requirement in definition.declared_tool_refs
         }
-        allowed_tool_refs.add(TOOL_REF_GEO_RENDER_POINTS)
+        allowed_tool_refs.update(
+            spec.tool_ref
+            for spec in list_builtin_tool_specs()
+            if spec.backend == BuiltinToolBackend.LOCAL
+        )
         self._allowed_tool_refs = frozenset(allowed_tool_refs)
         self._nodes_by_id = {node.node_id: node for node in self._graph.nodes}
         self._state_model = definition.state_model()

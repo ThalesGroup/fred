@@ -48,11 +48,10 @@ from fred_sdk.contracts.models import ToolRefRequirement
 from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.support.authored_toolsets import get_authored_tool_spec
 from fred_sdk.support.builtins import (
-    TOOL_REF_GEO_RENDER_POINTS,
     BuiltinToolBackend,
     BuiltinToolSpec,
     get_builtin_tool_spec,
-    render_geo_points,
+    list_builtin_tool_specs,
 )
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
@@ -253,15 +252,16 @@ class ReActRuntimeToolResolver:
                     invoke=invoke_ask_user,
                 )
             )
-        if not any(
-            item.tool_ref == TOOL_REF_GEO_RENDER_POINTS
-            for item in self._declared_tool_refs
-        ):
-            requirement = ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS)
-            builtin_spec = get_builtin_tool_spec(TOOL_REF_GEO_RENDER_POINTS)
-            assert builtin_spec is not None
+        declared_refs = {item.tool_ref for item in self._declared_tool_refs}
+        for builtin_spec in list_builtin_tool_specs():
+            if (
+                builtin_spec.backend != BuiltinToolBackend.LOCAL
+                or builtin_spec.tool_ref in declared_refs
+            ):
+                continue
+            requirement = ToolRefRequirement(tool_ref=builtin_spec.tool_ref)
             tool_name = self._claim_runtime_name(
-                tool_ref=TOOL_REF_GEO_RENDER_POINTS,
+                tool_ref=builtin_spec.tool_ref,
                 registered_runtime_name=None,
                 used_names=used_names | set(self._capability_tool_names),
             )
@@ -439,12 +439,17 @@ class ReActRuntimeToolResolver:
                 args_schema=builtin_spec.args_schema,
             )
 
-        if backend == BuiltinToolBackend.LOCAL_GEO:
+        if backend == BuiltinToolBackend.LOCAL:
+            handler = builtin_spec.local_handler
+            if handler is None:
+                raise RuntimeError(
+                    f"Local built-in {requirement.tool_ref} has no handler."
+                )
 
-            async def invoke_geo(
+            async def invoke_local(
                 payload: dict[str, object],
             ) -> tuple[str, ToolInvocationResult]:
-                result = render_geo_points(payload)
+                result = handler(payload)
                 return render_tool_result(result), result
 
             return FredRuntimeToolSpec(
@@ -452,7 +457,7 @@ class ReActRuntimeToolResolver:
                 description=description,
                 args_schema=builtin_spec.args_schema,
                 tool_ref=requirement.tool_ref,
-                invoke=invoke_geo,
+                invoke=invoke_local,
             )
 
         raise RuntimeError(

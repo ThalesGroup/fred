@@ -104,11 +104,9 @@ from fred_sdk.contracts.runtime import (
     unwrap_run_stop_error,
 )
 from fred_sdk.support.builtins import (
-    TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
-    render_geo_points,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
@@ -935,7 +933,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
             TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
-            TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -1229,11 +1226,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
         )
-
-    def _invoke_geo_render_points(
-        self, request: ToolInvocationRequest
-    ) -> ToolInvocationResult:
-        return render_geo_points(request.payload)
 
 
 def _narrow_scope_ids(

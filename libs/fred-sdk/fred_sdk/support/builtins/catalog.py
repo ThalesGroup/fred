@@ -61,10 +61,13 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
 from pydantic import BaseModel, Field
+
+from fred_sdk.contracts.context import GeoPart, ToolInvocationResult
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
@@ -84,11 +87,11 @@ class BuiltinToolBackend(str, Enum):
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
       `traces.summarize_conversation`
-    - `LOCAL_GEO`: `geo.render_points`
+    - `LOCAL`: SDK-owned pure rendering tools
     """
 
     TOOL_INVOKER = "tool_invoker"
-    LOCAL_GEO = "local_geo"
+    LOCAL = "local"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -240,6 +243,14 @@ class BuiltinToolSpec:
     args_schema: type[BaseModel]
     backend: BuiltinToolBackend
     default_description: str
+    local_handler: Callable[[dict[str, object]], ToolInvocationResult] | None = None
+    output_part: type[BaseModel] | None = None
+
+
+def _render_geo_points(payload: dict[str, object]) -> ToolInvocationResult:
+    from .geo import render_geo_points
+
+    return render_geo_points(payload)
 
 
 _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
@@ -274,7 +285,9 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_GEO_RENDER_POINTS: BuiltinToolSpec(
         tool_ref=TOOL_REF_GEO_RENDER_POINTS,
         args_schema=GeoRenderPointsToolArgs,
-        backend=BuiltinToolBackend.LOCAL_GEO,
+        backend=BuiltinToolBackend.LOCAL,
+        local_handler=_render_geo_points,
+        output_part=GeoPart,
         default_description=(
             "Display locations on an interactive map in the chat. Call geo_render_points "
             "with points=[{latitude: number, longitude: number, name?: string, "
