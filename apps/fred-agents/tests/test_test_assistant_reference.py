@@ -249,13 +249,12 @@ async def test_geo_scenario_emits_typed_ui_part() -> None:
 
 
 @pytest.mark.asyncio
-async def test_markdown_scenario_displays_its_geojson_as_a_map() -> None:
+async def test_markdown_scenario_keeps_maps_in_the_geo_scenario() -> None:
     result = await _ExecutorDriver().send("s-markdown", "markdown")
     final = next(event for event in result.events if event.get("kind") == "final")
 
-    assert final["ui_parts"][0]["type"] == "geo"
-    assert len(final["ui_parts"][0]["geojson"]["features"]) == 3
-    assert '"type": "FeatureCollection"' not in final["content"]
+    assert not final.get("ui_parts")
+    assert "GeoJSON" not in final["content"]
 
 
 def test_http_driver_forwards_the_chat_choice_not_team_overrides(monkeypatch) -> None:

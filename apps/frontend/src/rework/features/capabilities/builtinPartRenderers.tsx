@@ -21,7 +21,6 @@ import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import offlineWorld from "./offlineWorld.json";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
-import Icon from "@shared/atoms/Icon/Icon";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
@@ -31,18 +30,6 @@ import styles from "./builtinPartRenderers.module.css";
 function LinkPartRenderer({ part }: UiPartRendererProps) {
   const link = part as unknown as LinkPart;
   return link.kind === "citation" ? <CitationLinkChip link={link} /> : <ArtifactLinkChip link={link} />;
-}
-
-function GeoSummaryChip({ features }: { features: number }) {
-  const { t } = useTranslation();
-  return (
-    <span className={styles.geoChip} role="note" aria-label={t("chatbot.uiParts.geoAria")}>
-      <span className={styles.geoIcon} aria-hidden>
-        <Icon category="outlined" type="map" />
-      </span>
-      {t("chatbot.uiParts.geoSummary", { count: features })}
-    </span>
-  );
 }
 
 /** Render a typed GeoPart with Leaflet's browser API. */
@@ -101,23 +88,6 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
 
   return (
     <div className={styles.geoPanel}>
-      <details className={styles.geoDetails}>
-        <summary>
-          <GeoSummaryChip features={featureList.length} />
-        </summary>
-        <ol className={styles.geoFeatureList}>
-          {featureList.map((feature, index) => {
-            const label = feature.properties?.[geo.popup_property || "name"];
-            return (
-              <li key={index}>
-                {typeof label === "string" || typeof label === "number"
-                  ? label
-                  : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
-              </li>
-            );
-          })}
-        </ol>
-      </details>
       {status === "error" && <p role="status">{t("chatbot.uiParts.geoUnavailable")}</p>}
       <div
         ref={container}
@@ -126,6 +96,23 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
         aria-busy={status === "loading"}
         aria-label={t("chatbot.uiParts.geoAria")}
       />
+      {featureList.length > 0 && (
+        <details className={styles.geoDetails} open={status === "error"}>
+          <summary>{t("chatbot.uiParts.geoLocations")}</summary>
+          <ol className={styles.geoFeatureList}>
+            {featureList.map((feature, index) => {
+              const label = feature.properties?.[geo.popup_property || "name"];
+              return (
+                <li key={index}>
+                  {typeof label === "string" || typeof label === "number"
+                    ? label
+                    : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
+                </li>
+              );
+            })}
+          </ol>
+        </details>
+      )}
     </div>
   );
 }

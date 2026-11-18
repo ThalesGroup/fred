@@ -66,7 +66,7 @@ from fred_sdk import (
 from fred_sdk import (
     finalize_step as _finalize_step,
 )
-from fred_sdk.contracts.context import GeoPart, ToolInvocationResult
+from fred_sdk.contracts.context import ToolInvocationResult
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -784,19 +784,13 @@ graph TD
 
 ---
 
-### 4 - GeoJSON (interactive map)
-
-The sample GeoJSON is delivered as a typed map below this message.
-
----
-
-### 5 — Inline math
+### 4 — Inline math
 
 The quadratic formula: $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$ for $ax^2 + bx + c = 0$.
 
 ---
 
-### 6 — Block math
+### 5 — Block math
 
 $$
 \\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}
@@ -804,7 +798,7 @@ $$
 
 ---
 
-### 7 — Details / collapsible
+### 6 — Details / collapsible
 
 :::details[Implementation notes]
 Rendered by `remark-directive`. Hidden by default; expands on click.
@@ -813,7 +807,7 @@ This is the canonical directive currently supported by `MarkdownRenderer`.
 
 ---
 
-### 8 — Aligned equation (multi-line)
+### 7 — Aligned equation (multi-line)
 
 $$
 \\begin{aligned}
@@ -824,7 +818,7 @@ $$
 
 ---
 
-### 9 — Markdown table with math
+### 8 — Markdown table with math
 
 | **Function**       | **Derivative**            | **Integral**             |
 |--------------------|---------------------------|--------------------------|
@@ -833,7 +827,7 @@ $$
 
 ---
 
-### 10 — Syntax-highlighted code block
+### 9 — Syntax-highlighted code block
 
 ```python
 def factorial(n: int) -> int:
@@ -846,7 +840,7 @@ print(factorial(5))  # Output: 120
 
 ---
 
-### 11 — Interactive checklist
+### 10 — Interactive checklist
 
 - [x] Test equation rendering
 - [ ] Verify collapsible block display
@@ -855,7 +849,7 @@ print(factorial(5))  # Output: 120
 
 ---
 
-### 12 — Secondary information block
+### 11 — Secondary information block
 
 :::details[Heads-up]
 This content is generated dynamically.
@@ -864,7 +858,7 @@ Equations may take **1-2 seconds** to appear when streaming is enabled.
 
 ---
 
-### 13 — ASCII chart inside a code block
+### 12 — ASCII chart inside a code block
 
 ````markdown
 ```text
@@ -882,13 +876,13 @@ Equations may take **1-2 seconds** to appear when streaming is enabled.
 
 ---
 
-### 14 — Emoji + inline math
+### 13 — Emoji + inline math
 
 ⚡ **Euler's formula**: $e^{i\\pi} + 1 = 0$ (often considered the most beautiful equation in mathematics!).
 
 ---
 
-### 15 — "Spoiler" block (collapsible with a punchy title)
+### 14 — "Spoiler" block (collapsible with a punchy title)
 
 :::details[🔍 Puzzle solution...]
 The answer is **42** (a classic programmer joke inspired by *The Hitchhiker's Guide to the Galaxy*).
@@ -903,7 +897,7 @@ $$
 
 ---
 
-### 16 — Complex combination (table + code + math)
+### 15 — Complex combination (table + code + math)
 
 | **Step** | **Code**                          | **Result**                 |
 |-----------|-----------------------------------|----------------------------|
@@ -920,7 +914,7 @@ plt.show()
 
 ---
 
-### 17 — Special characters and Unicode test
+### 16 — Special characters and Unicode test
 
 - **Math symbols**: ∀ ∃ ∵ ∴ ∈ ∉ ⊆ ⊂ ∪ ∩ ≅ ≈ ≠ ≤ ≥
 - **Arrows**: ⇒ ⇔ ⇐ ⇒ ↦ ⤳ ⇣
@@ -937,7 +931,7 @@ These examples cover:
 - Simulated dynamic content (delays).
 
 
-### 18 — Mindmap
+### 17 — Mindmap
 
 ```mindmap-json
 {
@@ -1155,8 +1149,8 @@ async def markdown_step(
     """
     Emit a static reply containing all rich content types the renderer must handle.
 
-    Content: fenced code (Python), Mermaid diagram, GFM table, typed GeoJSON
-    map, KaTeX inline math, KaTeX block math, :::details collapsible.
+    Content: fenced code (Python), Mermaid diagram, GFM table, KaTeX inline
+    math, KaTeX block math, :::details collapsible.
 
     SSE events exercised: status, assistant_delta × 2, final.
     The Mermaid fence is split across the two deltas (chunk 1 ends mid-block,
@@ -1181,9 +1175,6 @@ async def markdown_step(
         state_update={
             "final_text": _MARKDOWN_PAYLOAD,
             "done_reason": "markdown_complete",
-            "geo_parts": [
-                GeoPart(geojson=_GEO_SAMPLE, fit_bounds=True).model_dump(mode="json")
-            ],
         }
     )
 
@@ -1957,7 +1948,7 @@ _SCENARIO_TABLE = """\
 | `trace` | Status events + streamed text + inline citations [1][2][3] + mock sources + mock token usage |
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
-| `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
+| `markdown` | Rich text: code block, Mermaid, GFM table, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` interactive map |

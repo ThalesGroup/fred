@@ -33,7 +33,7 @@ const leaflet = vi.hoisted(() => {
     layer,
     createMap: vi.fn(() => map),
     tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
-    geoJSON: vi.fn(() => layer),
+    geoJSON: vi.fn((_geojson?: unknown, _options?: unknown) => layer),
     circleMarker: vi.fn(),
   };
 });
@@ -66,13 +66,17 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
 
   await vi.waitFor(() => expect(leaflet.createMap).toHaveBeenCalledOnce());
   expect(leaflet.geoJSON).toHaveBeenCalledTimes(2);
-  expect(leaflet.geoJSON.mock.calls[0][0].features).toHaveLength(177);
+  const world = leaflet.geoJSON.mock.calls[0]?.[0] as { features: unknown[] };
+  expect(world.features).toHaveLength(177);
   expect(leaflet.tileLayer).not.toHaveBeenCalled();
   expect(leaflet.map.attributionControl.addAttribution).toHaveBeenCalledWith(expect.stringContaining("Natural Earth"));
   expect(leaflet.geoJSON).toHaveBeenCalledWith(geojson, expect.any(Object));
   expect(leaflet.map.fitBounds).toHaveBeenCalledOnce();
   expect(host.textContent).not.toContain("FeatureCollection");
-  expect(host.querySelector("details li")?.textContent).toBe("Paris");
+  expect(host.querySelector("ol li")?.textContent).toBe("Paris");
+  expect(host.querySelector("details summary")?.textContent).toBe("chatbot.uiParts.geoLocations");
+  expect(host.querySelector("details")?.open).toBe(false);
+  expect(host.textContent).not.toContain("feature");
   expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false");
   const [, options] = leaflet.geoJSON.mock.calls[1] as unknown as [
     unknown,
@@ -115,7 +119,8 @@ it("keeps feature text available if updated GeoJSON cannot be drawn", async () =
   });
   await vi.waitFor(() => expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false"));
   expect(host.querySelector("[role=status]")?.textContent).toBe("chatbot.uiParts.geoUnavailable");
-  expect(host.querySelectorAll("details li")).toHaveLength(1);
+  expect(host.querySelectorAll("ol li")).toHaveLength(1);
+  expect(host.querySelector("details")?.open).toBe(true);
 
   await act(async () => root.unmount());
 });

@@ -35,7 +35,7 @@ The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an i
 
 #### Scenario: No-LLM test assistant returns a map
 
-- **WHEN** the no-LLM test assistant completes its `geo` or `markdown` scenario
+- **WHEN** the no-LLM test assistant completes its `geo` scenario
 - **THEN** its final `GeoPart` displays an interactive map with the emitted features
 
 #### Scenario: Network unavailable

@@ -14,25 +14,6 @@
  * limitations under the License.
  */
 
-.geoChip {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-low);
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  color: var(--on-surface);
-  font: var(--font-body-small);
-}
-
-.geoIcon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--on-surface-retreat);
-}
-
 .geoPanel {
   flex: 1 1 100%;
   min-width: 0;
@@ -40,7 +21,9 @@
 }
 
 .geoDetails {
-  margin-bottom: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .geoDetails summary {
