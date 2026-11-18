@@ -180,7 +180,14 @@ from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
@@ -1285,6 +1292,8 @@ class _AgentExecuteRequest(BaseModel):
      "resume_payload": {"approved": true, "exchange_id": "..."}}
     ```
     """
+
+    _verified_user: KeycloakUser | None = PrivateAttr(default=None)
 
     agent_id: str | None = Field(default=None, min_length=1)
     agent_instance_id: str | None = Field(default=None, min_length=1)
@@ -2780,6 +2789,7 @@ async def _authorize_and_resolve(
         raise HTTPException(status_code=409, detail="run_already_admitted") from None
     try:
         internal_req = _to_internal_request(request)
+        internal_req._verified_user = _verified_keycloak_user(authenticated_user)
         internal_req.previously_pending_occurrence_ids = (
             previously_pending_occurrence_ids
         )
@@ -4443,7 +4453,6 @@ async def _stream(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
@@ -4511,7 +4520,6 @@ async def _stream(
         definition,
         request,
         access_token=access_token,
-        verified_user=verified_user,
         team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -5157,7 +5165,6 @@ async def _iterate_runtime_event_payloads(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5190,7 +5197,6 @@ async def _iterate_runtime_event_payloads(
         definition,
         request,
         access_token,
-        verified_user=verified_user,
         team_id=team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -5316,7 +5322,6 @@ async def _iterate_runtime_event_payloads_inner(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5580,7 +5585,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
-            verified_user=verified_user,
+            verified_user=request._verified_user,
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
@@ -7466,7 +7471,6 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
-            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7612,7 +7616,6 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
-            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7843,7 +7846,6 @@ def _build_agent_router(
         stream = _stream(
             target.definition,
             internal_req,
-            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None if provider and provider.delegated else access_token,
             team_id=target.team_id,
             agent_instance_name=target.agent_instance_name,

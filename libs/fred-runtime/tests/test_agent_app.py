@@ -117,6 +117,15 @@ def test_office_author_uses_only_verified_execution_subject() -> None:
     assert agent_app_module._verified_keycloak_user(delegated) is None
     assert agent_app_module._verified_keycloak_user(None) is None
 
+    internal_req = agent_app_module._AgentExecuteRequest.model_validate(
+        {
+            "agent_id": "agent",
+            "message": "hello",
+            "_verified_user": user.model_dump(),
+        }
+    )
+    assert internal_req._verified_user is None
+
 
 @pytest.fixture(autouse=True)
 def _clear_runtime_context() -> Iterator[None]:
