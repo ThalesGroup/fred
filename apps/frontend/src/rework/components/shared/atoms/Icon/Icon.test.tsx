@@ -46,6 +46,8 @@ describe("Icon accessibility", () => {
     const icon = container.querySelector("span");
     expect(icon?.getAttribute("role")).toBe("img");
     expect(icon?.getAttribute("aria-label")).toBe("Search results");
+    expect(icon?.getAttribute("translate")).not.toBe("no");
+    expect(icon?.querySelector("span")?.getAttribute("translate")).toBe("no");
   });
 
   it("retains custom-icon compatibility without deriving a name", () => {
