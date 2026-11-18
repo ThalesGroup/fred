@@ -36,7 +36,8 @@ from typing import (
     cast,
 )
 
-from fred_core.conversion.office_author import OfficeAuthor, set_office_author
+from fred_core.conversion.office_author import set_office_author
+from fred_pod.security.structure import KeycloakUser
 from pptx.oxml.ns import qn
 from pptx.parts.chart import ChartPart
 from pptx.shapes.picture import Picture
@@ -1618,7 +1619,7 @@ class _Renderer:
         patterns: Sequence[Optional[Pattern]],
         numbers: Optional[Sequence[int]] = None,
         starts: Optional[Sequence[int]] = None,
-        author: OfficeAuthor | None = None,
+        author: KeycloakUser | str | None = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
@@ -2503,7 +2504,7 @@ def render_deck(
     numbers: Optional[Sequence[int]] = None,
     starts: Optional[Sequence[int]] = None,
     *,
-    author: OfficeAuthor | None = None,
+    author: KeycloakUser | str | None = None,
 ) -> RenderResult:
     """Render ``plan``, slide ``i`` on ``patterns[i]`` (CPU-bound; call off the event loop).
     ``numbers``: sent-plan numbers; ``starts`` continues a split list's numbering.

@@ -33,9 +33,6 @@ class OfficeCoreProperties(Protocol):
     def last_modified_by(self, value: str) -> None: ...
 
 
-OfficeAuthor = KeycloakUser | str
-
-
 def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
     """Use a complete profile name, then username, then the verified user ID."""
     if user is not None:
@@ -48,7 +45,9 @@ def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
     return fallback_user_id[:255]
 
 
-def set_office_author(properties: OfficeCoreProperties, author: OfficeAuthor) -> None:
+def set_office_author(
+    properties: OfficeCoreProperties, author: KeycloakUser | str
+) -> None:
     """Set the same bounded author on Word and PowerPoint core properties."""
     if isinstance(author, KeycloakUser):
         name = office_author_name(author, author.uid)

@@ -66,7 +66,6 @@ from fred_capability_ppt_filler.builder.render import (
 from fred_capability_ppt_filler.builder.tools import _issue_line, catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
-from fred_core.conversion.office_author import OfficeAuthor
 from fred_pod.security.structure import KeycloakUser
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -159,7 +158,7 @@ def _render(
     ],
 )
 def test_rendered_deck_uses_acting_author_without_changing_template(
-    author: OfficeAuthor, expected: str
+    author: KeycloakUser | str, expected: str
 ) -> None:
     plan, patterns = _deck(_on(_pattern("Title and Content"), title="Example"))
     template = Presentation(io.BytesIO(TEMPLATE))

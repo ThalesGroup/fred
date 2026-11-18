@@ -51,7 +51,6 @@ from fred_capability_ppt_filler.capability import (
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
-from fred_core.conversion.office_author import OfficeAuthor
 from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     CapabilityContext,
@@ -130,7 +129,7 @@ def _fill_tool(ctx):
     ],
 )
 def test_filled_deck_uses_acting_author_without_changing_template(
-    author: OfficeAuthor, expected: str
+    author: KeycloakUser | str, expected: str
 ) -> None:
     source = Presentation()
     source.slides.add_slide(source.slide_layouts[6])
