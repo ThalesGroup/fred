@@ -4443,7 +4443,7 @@ async def _stream(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    author: KeycloakUser | None = None,
+    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
@@ -4511,7 +4511,7 @@ async def _stream(
         definition,
         request,
         access_token=access_token,
-        author=author,
+        verified_user=verified_user,
         team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -4789,7 +4789,7 @@ def _enforce_turn_options(
         ) from exc
 
 
-def _verified_author_user(
+def _verified_keycloak_user(
     user: KeycloakUser | AssertedUser | None,
 ) -> KeycloakUser | None:
     return user if isinstance(user, KeycloakUser) else None
@@ -4802,7 +4802,7 @@ def _build_capability_block(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     services: RuntimeServices,
     user_id: str | None,
-    author: KeycloakUser | None = None,
+    verified_user: KeycloakUser | None = None,
     session_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
@@ -4900,7 +4900,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
-        author=author,
+        author=verified_user,
         turn_options=turn_options,
         team_settings=team_settings,
     )
@@ -5157,7 +5157,7 @@ async def _iterate_runtime_event_payloads(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    author: KeycloakUser | None = None,
+    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5190,7 +5190,7 @@ async def _iterate_runtime_event_payloads(
         definition,
         request,
         access_token,
-        author=author,
+        verified_user=verified_user,
         team_id=team_id,
         registry=registry,
         exchange_id=exchange_id,
@@ -5316,7 +5316,7 @@ async def _iterate_runtime_event_payloads_inner(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    author: KeycloakUser | None = None,
+    verified_user: KeycloakUser | None = None,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
@@ -5580,7 +5580,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
-            author=author,
+            verified_user=verified_user,
             session_id=ctx.get("session_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
@@ -7466,7 +7466,7 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
-            author=_verified_author_user(authenticated_user),
+            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7612,7 +7612,7 @@ def _build_agent_router(
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
-            author=_verified_author_user(authenticated_user),
+            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None
             if target.credential_provider and target.credential_provider.delegated
             else access_token,
@@ -7843,7 +7843,7 @@ def _build_agent_router(
         stream = _stream(
             target.definition,
             internal_req,
-            author=_verified_author_user(authenticated_user),
+            verified_user=_verified_keycloak_user(authenticated_user),
             access_token=None if provider and provider.delegated else access_token,
             team_id=target.team_id,
             agent_instance_name=target.agent_instance_name,
