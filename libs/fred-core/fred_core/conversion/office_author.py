@@ -16,6 +16,7 @@
 
 from typing import Protocol
 
+from fred_core.common.utils import user_display_name
 from fred_pod.security.structure import KeycloakUser
 
 
@@ -37,25 +38,14 @@ class OfficeCoreProperties(Protocol):
         raise NotImplementedError
 
 
-def office_author_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
-    """Use a complete profile name, then username, then the verified user ID."""
-    if user is not None:
-        first_name = (user.first_name or "").strip()
-        last_name = (user.last_name or "").strip()
-        if first_name and last_name:
-            return f"{first_name} {last_name}"[:255]
-        if user.username.strip():
-            return user.username[:255]
-    return fallback_user_id[:255]
-
-
 def set_office_author(
     properties: OfficeCoreProperties, author: KeycloakUser | str
 ) -> None:
     """Set the same bounded author on Word and PowerPoint core properties."""
     if isinstance(author, KeycloakUser):
-        name = office_author_name(author, author.uid)
+        name = user_display_name(author, author.uid)
     else:
-        name = office_author_name(None, author)
+        name = author
+    name = name[:255]
     properties.author = name
     properties.last_modified_by = name
