@@ -60,5 +60,11 @@ describe("Icon accessibility", () => {
     const icon = container.querySelector("span");
     expect(icon?.classList.contains("material-symbols-outlined")).toBe(true);
     expect(icon?.textContent).toBe("show_chart");
+    expect(icon?.getAttribute("translate")).toBe("no");
+  });
+
+  it("protects rounded icon names from translation", () => {
+    render(<Icon category="rounded" type="search" />);
+    expect(container.querySelector("span")?.getAttribute("translate")).toBe("no");
   });
 });

@@ -35,6 +35,7 @@ export function MaterialIcon({ type, filled, accessibleName }: MaterialIconProps
   return (
     <span
       className={classes}
+      translate="no"
       role={accessibleName ? "img" : undefined}
       aria-label={accessibleName}
       aria-hidden={accessibleName ? undefined : "true"}
@@ -70,6 +71,7 @@ export default function Icon({ category = "outlined", type, filled, accessibleNa
   return (
     <span
       className={classes}
+      translate="no"
       role={accessibleName ? "img" : undefined}
       aria-label={accessibleName}
       aria-hidden={accessibleName ? undefined : "true"}

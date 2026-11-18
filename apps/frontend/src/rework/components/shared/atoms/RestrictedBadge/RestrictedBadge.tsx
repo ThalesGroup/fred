@@ -21,7 +21,7 @@ interface RestrictedBadgeProps {
 export function RestrictedBadge({ label = "Restricted" }: RestrictedBadgeProps) {
   return (
     <span className={styles.badge} aria-label={label}>
-      <span className="material-symbols-outlined" aria-hidden>
+      <span className="material-symbols-outlined" aria-hidden translate="no">
         lock
       </span>
       <span className={styles.label}>{label}</span>

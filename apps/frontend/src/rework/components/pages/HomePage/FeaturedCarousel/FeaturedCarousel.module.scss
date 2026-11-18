@@ -16,7 +16,7 @@
 
 /* Advanced home "featured" banner: the team agents page card (AgentCard), larger.
  * It reads the theme color tokens like the card does; a theme recolors it by
- * redefining them on `article[aria-roledescription="slide"]`. */
+ * redefining them on `article[data-featured-slide]`. */
 
 .section {
   display: flex;

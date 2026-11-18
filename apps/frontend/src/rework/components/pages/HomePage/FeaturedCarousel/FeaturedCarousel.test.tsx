@@ -76,6 +76,17 @@ afterEach(() => {
 });
 
 describe("FeaturedCarousel", () => {
+  it("keeps theme selectors stable when role descriptions are translated", () => {
+    render(["a"]);
+    const carousel = container.querySelector<HTMLElement>("section[data-featured-carousel]");
+    const slide = container.querySelector<HTMLElement>("article[data-featured-slide]");
+    expect(carousel).not.toBeNull();
+    expect(slide).not.toBeNull();
+    carousel!.setAttribute("aria-roledescription", "carrousel");
+    slide!.setAttribute("aria-roledescription", "diapositive");
+    expect(container.querySelector("section[data-featured-carousel] article[data-featured-slide]")).toBe(slide);
+  });
+
   it("rotates on its own, in admin order, and loops", () => {
     render(["a", "b", "c"]);
     expect(shown()).toBe("Agent a");
