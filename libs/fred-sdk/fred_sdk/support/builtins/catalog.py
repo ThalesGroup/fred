@@ -275,7 +275,13 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         tool_ref=TOOL_REF_GEO_RENDER_POINTS,
         args_schema=GeoRenderPointsToolArgs,
         backend=BuiltinToolBackend.LOCAL_GEO,
-        default_description="Render one or more latitude/longitude points as a map.",
+        default_description=(
+            "Display locations on an interactive map in the chat. Call geo_render_points "
+            "with points=[{latitude: number, longitude: number, name?: string}, ...] "
+            "and an optional title; use numeric coordinates in degrees and keep the "
+            "user-facing reply concise. The tool returns the renderable map, so do not "
+            "copy its GeoJSON into the reply."
+        ),
     ),
 }
 
