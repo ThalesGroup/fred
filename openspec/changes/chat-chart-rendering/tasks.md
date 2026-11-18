@@ -22,7 +22,7 @@
 ## 4. Integration and review
 
 - [ ] 4.1 Run the affected offline suites and one root `make code-quality`, perform the required performance and full branch reviews against the actual target branch, obtain an independent read-only review, and record test results and finding dispositions in the PR.
-- [ ] 4.2 Reconcile the spec and design with the implementation, open the chart draft PR against the geo branch, and verify its diff contains only chart work and the reviewed shared contract.
+- [x] 4.2 Reconcile the spec and design with the implementation, open the chart draft PR against the geo branch, and verify its diff contains only chart work and the reviewed shared contract.
 
 ## Workflow follow-up
 
