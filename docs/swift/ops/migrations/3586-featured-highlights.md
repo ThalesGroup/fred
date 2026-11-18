@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "Only a frontend stylesheet breakpoint changes; no configuration keys or defaults change."
 no_action_reason: "Existing highlights are already stored and served; the fix takes effect with a normal frontend deployment."
+after: [home-featured-agents]
 ---
 ## Applicability
 
