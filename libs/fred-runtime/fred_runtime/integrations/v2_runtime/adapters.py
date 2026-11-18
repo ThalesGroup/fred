@@ -107,6 +107,8 @@ from fred_sdk.support.builtins import (
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    BuiltinToolBackend,
+    get_builtin_tool_spec,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
@@ -942,6 +944,11 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             if inspect.isawaitable(result):
                 return await result
             return result
+        spec = get_builtin_tool_spec(request.tool_ref)
+        if spec is not None and spec.backend == BuiltinToolBackend.LOCAL:
+            if spec.local_handler is None:
+                raise RuntimeError(f"Local built-in {request.tool_ref} has no handler.")
+            return spec.local_handler(request.payload)
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
 
     async def _invoke_knowledge_search(
