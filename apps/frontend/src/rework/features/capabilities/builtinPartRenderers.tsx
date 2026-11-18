@@ -15,7 +15,9 @@
 // Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
 // of the part-renderer registry (#1977). Capability kinds come from plugins.
 
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import "leaflet/dist/leaflet.css";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
@@ -41,11 +43,72 @@ function GeoSummaryChip({ features }: { features: number }) {
   );
 }
 
-/** Renders a `geo` part as a static feature-count chip. */
+/** Render a typed GeoPart with Leaflet's browser API. */
 function GeoPartRenderer({ part }: UiPartRendererProps) {
+  const { t } = useTranslation();
   const geo = part as unknown as GeoPart;
   const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
-  return <GeoSummaryChip features={features} />;
+  const container = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(false);
+    let disposed = false;
+    let map: import("leaflet").Map | undefined;
+
+    async function mount() {
+      if (!container.current) return;
+      try {
+        const L = await import("leaflet");
+        if (disposed || !container.current) return;
+        map = L.map(container.current, { scrollWheelZoom: false });
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
+        const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
+          pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7 }),
+          style: (feature) => {
+            const color = feature?.properties?.color;
+            const fillOpacity = feature?.properties?.fillOpacity;
+            return {
+              color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
+              fillOpacity: typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
+            };
+          },
+          onEachFeature: (feature, featureLayer) => {
+            const label = feature.properties?.[geo.popup_property || "name"];
+            if (typeof label === "string" || typeof label === "number") {
+              const content = document.createElement("span");
+              content.textContent = String(label);
+              featureLayer.bindPopup(content);
+            }
+          },
+        }).addTo(map);
+        const bounds = layer.getBounds();
+        if (bounds.isValid() && geo.fit_bounds !== false) map.fitBounds(bounds.pad(0.15), { maxZoom: 13 });
+        else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
+        else map.setView([0, 0], 2);
+        setReady(true);
+      } catch {
+        map?.remove();
+        map = undefined;
+      }
+    }
+
+    void mount();
+    return () => {
+      disposed = true;
+      map?.remove();
+    };
+  }, [geo.geojson, geo.fit_bounds, geo.popup_property]);
+
+  return (
+    <div className={styles.geoPanel}>
+      {!ready && <GeoSummaryChip features={features} />}
+      <div ref={container} className={styles.geoMap} role="region" aria-label={t("chatbot.uiParts.geoAria")} />
+    </div>
+  );
 }
 
 /**

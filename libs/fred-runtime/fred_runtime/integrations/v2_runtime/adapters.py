@@ -59,7 +59,6 @@ from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    GeoPart,
     JsonScalar,
     PortableContext,
     PortableEnvironment,
@@ -109,6 +108,7 @@ from fred_sdk.support.builtins import (
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    render_geo_points,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
@@ -1233,84 +1233,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     def _invoke_geo_render_points(
         self, request: ToolInvocationRequest
     ) -> ToolInvocationResult:
-        payload = request.payload
-        title_raw = payload.get("title")
-        title = (
-            title_raw.strip()
-            if isinstance(title_raw, str) and title_raw.strip()
-            else "Map results"
-        )
-        popup_property_raw = payload.get("popup_property")
-        popup_property = (
-            popup_property_raw.strip()
-            if isinstance(popup_property_raw, str) and popup_property_raw.strip()
-            else None
-        )
-        fit_bounds = bool(payload.get("fit_bounds", True))
-        raw_points = payload.get("points")
-        if not isinstance(raw_points, list) or not raw_points:
-            raise RuntimeError("geo.render_points requires a non-empty points list")
-
-        features: list[dict[str, object]] = []
-        point_labels: list[str] = []
-        for index, raw_point in enumerate(raw_points, start=1):
-            if not isinstance(raw_point, dict):
-                raise RuntimeError(
-                    f"geo.render_points point #{index} must be an object"
-                )
-
-            latitude = _coerce_float(raw_point.get("latitude"))
-            longitude = _coerce_float(raw_point.get("longitude"))
-            if latitude is None or longitude is None:
-                raise RuntimeError(
-                    f"geo.render_points point #{index} requires numeric latitude and longitude"
-                )
-
-            name_raw = raw_point.get("name")
-            name = (
-                name_raw.strip()
-                if isinstance(name_raw, str) and name_raw.strip()
-                else None
-            )
-            if name is not None:
-                point_labels.append(name)
-
-            properties_raw = raw_point.get("properties")
-            properties = (
-                dict(properties_raw) if isinstance(properties_raw, dict) else {}
-            )
-            if name is not None and "name" not in properties:
-                properties["name"] = name
-
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [longitude, latitude],
-                    },
-                    "properties": properties,
-                }
-            )
-
-        summary = _summarize_geo_points(
-            title=title, point_labels=point_labels, count=len(features)
-        )
-        geo_part = GeoPart(
-            geojson={"type": "FeatureCollection", "features": features},
-            popup_property=popup_property,
-            fit_bounds=fit_bounds,
-        )
-        return ToolInvocationResult(
-            tool_ref=request.tool_ref,
-            blocks=(
-                ToolContentBlock(
-                    kind=ToolContentKind.TEXT,
-                    text=summary,
-                ),
-            ),
-            ui_parts=(geo_part,),
-        )
+        return render_geo_points(request.payload)
 
 
 def _narrow_scope_ids(
@@ -2445,19 +2368,6 @@ async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext)
     return new_access_token
 
 
-def _coerce_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
-
-
 def _coerce_optional_string(value: object) -> str | None:
     if value is None or isinstance(value, bool):
         return None
@@ -2467,17 +2377,6 @@ def _coerce_optional_string(value: object) -> str | None:
     if isinstance(value, int | float):
         return None if value == 0 else str(value)
     return str(value)
-
-
-def _summarize_geo_points(*, title: str, point_labels: list[str], count: int) -> str:
-    if count <= 0:
-        return f"{title}: no points to display."
-    if point_labels:
-        preview = ", ".join(point_labels[:3])
-        if len(point_labels) > 3:
-            preview += ", ..."
-        return f"{title}: displaying {count} point(s) on the map ({preview})."
-    return f"{title}: displaying {count} point(s) on the map."
 
 
 def _positive_int(value: object, *, default: int, maximum: int | None = None) -> int:

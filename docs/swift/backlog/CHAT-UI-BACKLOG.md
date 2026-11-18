@@ -850,7 +850,7 @@ reintroduced from the legacy `frontend/src/components/chatbot` tree.
 ### 4.4 Follow-ups Outside This Slice
 
 - [ ] `LinkPart kind=download` rendering via `DownloadLinkBadge`
-- [ ] Geo/Map rendering (`GeoPart`)
+- [x] Geo/Map rendering (`GeoPart`) with Leaflet
 - [ ] Message expand/collapse for long messages
 - [ ] Thumbs feedback per message
 - [ ] PDF viewer integration
@@ -1370,15 +1370,15 @@ here to avoid the two copies drifting apart.
 
 ### 7.1 Current gaps
 
-The test agent covers SSE events (streaming, HITL, error, sources) and all FieldSpec form types.
-It does **not** exercise rich content rendering. No existing scenario produces:
+This section records the `markdown` scenario's coverage plan. The `geo` and
+`markdown` scenarios now both emit a typed `GeoPart` for an interactive map.
 
 | Content type                                          | Needed for              |
 | ----------------------------------------------------- | ----------------------- |
 | Fenced code block with language (`python`, `bash`, …) | Syntax highlighting     |
 | Mermaid diagram                                       | `Mermaid` renderer      |
 | GFM table                                             | Table rendering         |
-| GeoJSON `FeatureCollection`                           | Geo summary chip        |
+| Typed GeoJSON `FeatureCollection`                     | Interactive Leaflet map |
 | KaTeX inline math                                     | Math rendering          |
 | KaTeX block math                                      | Math rendering          |
 | `:::details` collapsible                              | remark-directive plugin |
@@ -1398,7 +1398,7 @@ example of each content type listed in §7.1.
 | Code        | A short Python function (5–8 lines), fenced ` ```python `                        |
 | Mermaid     | A 4-node flowchart (`graph TD`), fenced ` ```mermaid `                           |
 | Table       | 3 columns × 3 data rows, GFM pipe syntax                                         |
-| GeoJSON     | Inline JSON literal: `FeatureCollection` with 2 `Point` features and 1 `Polygon` |
+| GeoJSON     | Typed `GeoPart`: `FeatureCollection` with 2 `Point` features and 1 `Polygon` |
 | Math inline | One expression rendered with `$…$`                                               |
 | Math block  | One expression rendered with `$$…$$`                                             |
 | Details     | One `:::details[Title]` block wrapping a short paragraph                         |

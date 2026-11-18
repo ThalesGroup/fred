@@ -232,6 +232,27 @@ async def test_invoke_returns_the_output_model() -> None:
     assert output.content.startswith("Echo: echo invoke")
 
 
+@pytest.mark.asyncio
+async def test_geo_scenario_emits_typed_ui_part() -> None:
+    result = await _ExecutorDriver().send("s-geo", "geo")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert final["content"].startswith("**Sample map.**")
+    assert final["ui_parts"][0]["type"] == "geo"
+    assert final["ui_parts"][0]["geojson"]["type"] == "FeatureCollection"
+    assert len(final["ui_parts"][0]["geojson"]["features"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_markdown_scenario_displays_its_geojson_as_a_map() -> None:
+    result = await _ExecutorDriver().send("s-markdown", "markdown")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert final["ui_parts"][0]["type"] == "geo"
+    assert len(final["ui_parts"][0]["geojson"]["features"]) == 3
+    assert '"type": "FeatureCollection"' not in final["content"]
+
+
 def test_http_driver_forwards_the_chat_choice_not_team_overrides(monkeypatch) -> None:
     """The live driver sends what the frontend sends: prepare-execution's
     `chat_profile_id` is forwarded and the retired overrides are not."""

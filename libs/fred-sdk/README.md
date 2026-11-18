@@ -279,6 +279,10 @@ class SearchAgent(ReActAgent):
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 
+`geo.render_points` is available to ReAct, Deep, and Graph agents without a
+declaration or tool invoker. Call it with a non-empty `points` list containing
+`latitude` and `longitude`; the result carries a typed `GeoPart` for the chat.
+
 ---
 
 ## Testing your nodes offline

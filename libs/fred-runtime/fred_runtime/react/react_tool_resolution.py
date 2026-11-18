@@ -48,9 +48,11 @@ from fred_sdk.contracts.models import ToolRefRequirement
 from fred_sdk.contracts.runtime import RuntimeServices
 from fred_sdk.support.authored_toolsets import get_authored_tool_spec
 from fred_sdk.support.builtins import (
+    TOOL_REF_GEO_RENDER_POINTS,
     BuiltinToolBackend,
     BuiltinToolSpec,
     get_builtin_tool_spec,
+    render_geo_points,
 )
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
@@ -251,6 +253,26 @@ class ReActRuntimeToolResolver:
                     invoke=invoke_ask_user,
                 )
             )
+        if not any(
+            item.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+            for item in self._declared_tool_refs
+        ):
+            requirement = ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS)
+            builtin_spec = get_builtin_tool_spec(TOOL_REF_GEO_RENDER_POINTS)
+            assert builtin_spec is not None
+            tool_name = self._claim_runtime_name(
+                tool_ref=TOOL_REF_GEO_RENDER_POINTS,
+                registered_runtime_name=None,
+                used_names=used_names | set(self._capability_tool_names),
+            )
+            specs.append(
+                self._resolve_builtin_tool(
+                    requirement=requirement,
+                    tool_name=tool_name,
+                    description=builtin_spec.default_description,
+                    builtin_spec=builtin_spec,
+                )
+            )
         logger.debug(
             "[V2][TOOL_RESOLVER] resolved %d tool(s): %r",
             len(specs),
@@ -415,6 +437,22 @@ class ReActRuntimeToolResolver:
                 tool_name=tool_name,
                 description=description,
                 args_schema=builtin_spec.args_schema,
+            )
+
+        if backend == BuiltinToolBackend.LOCAL_GEO:
+
+            async def invoke_geo(
+                payload: dict[str, object],
+            ) -> tuple[str, ToolInvocationResult]:
+                result = render_geo_points(payload)
+                return render_tool_result(result), result
+
+            return FredRuntimeToolSpec(
+                runtime_name=tool_name,
+                description=description,
+                args_schema=builtin_spec.args_schema,
+                tool_ref=requirement.tool_ref,
+                invoke=invoke_geo,
             )
 
         raise RuntimeError(

@@ -83,10 +83,12 @@ class BuiltinToolBackend(str, Enum):
 
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
-      `traces.summarize_conversation`, `geo.render_points`
+      `traces.summarize_conversation`
+    - `LOCAL_GEO`: `geo.render_points`
     """
 
     TOOL_INVOKER = "tool_invoker"
+    LOCAL_GEO = "local_geo"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -272,7 +274,7 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_GEO_RENDER_POINTS: BuiltinToolSpec(
         tool_ref=TOOL_REF_GEO_RENDER_POINTS,
         args_schema=GeoRenderPointsToolArgs,
-        backend=BuiltinToolBackend.TOOL_INVOKER,
+        backend=BuiltinToolBackend.LOCAL_GEO,
         default_description="Render one or more latitude/longitude points as a map.",
     ),
 }

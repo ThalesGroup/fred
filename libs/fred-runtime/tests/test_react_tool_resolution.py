@@ -39,8 +39,12 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolRefRequirement
+from fred_sdk.contracts.runtime import (
+    RuntimeServices,
+    ToolProviderPort,
+)
+from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
 from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
@@ -74,6 +78,29 @@ def _resolver() -> ReActRuntimeToolResolver:
         services=RuntimeServices(),
         binding=_binding(),
     )
+
+
+@pytest.mark.asyncio
+async def test_geo_tool_is_available_without_agent_declaration() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        geo_specs = [
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        ]
+        assert len(geo_specs) == 1
+        assert geo_specs[0].runtime_name == "geo_render_points"
+        _, result = await geo_specs[0].invoke(
+            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]}
+        )
+        assert result is not None
+        assert result.ui_parts[0].type == "geo"
 
 
 def _provider_error_artifact() -> ToolInvocationResult:

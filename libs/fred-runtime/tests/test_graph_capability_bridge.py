@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Sequence
+from types import SimpleNamespace
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -35,6 +36,7 @@ from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    GeoPart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -44,12 +46,15 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import (
+    ExecutionConfig,
+    FinalRuntimeEvent,
     RuntimeEvent,
     RuntimeServices,
     RuntimeToolHandle,
     ToolProviderPort,
     ToolResultRuntimeEvent,
 )
+from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
 from langchain_core.tools import tool as lc_tool
 
 
@@ -619,6 +624,85 @@ def test_build_executor_merges_mcp_and_capability_tools() -> None:
     runtime_tools = executor._runtime_tools  # pyright: ignore[reportPrivateUsage]
     assert set(runtime_tools) == {"mcp_probe", "corpus_search"}
     assert runtime_tools["corpus_search"] is source_tool
+
+
+def test_graph_executor_allows_geo_tool_without_agent_declaration() -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    services = RuntimeServices()
+    runtime = GraphRuntime(
+        definition=_min_graph_agent_definition(),
+        services=services,
+    )
+    executor = asyncio.run(runtime.build_executor(_binding()))
+    assert isinstance(executor, GraphExecutor)
+    allowed = executor._allowed_tool_refs  # pyright: ignore[reportPrivateUsage]
+    assert allowed == frozenset({TOOL_REF_GEO_RENDER_POINTS})
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=services,
+        model=None,
+        graph_agent_id="test.geo",
+        node_id="geo",
+        allowed_tool_refs=allowed,
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_GEO_RENDER_POINTS,
+            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]},
+        )
+    )
+    assert result.ui_parts[0].type == "geo"
+    assert (
+        next(
+            event for event in events if isinstance(event, ToolResultRuntimeEvent)
+        ).ui_parts
+        == result.ui_parts
+    )
+
+
+@pytest.mark.asyncio
+async def test_graph_final_includes_geo_part_from_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    runtime = GraphRuntime(
+        definition=_min_graph_agent_definition(), services=RuntimeServices()
+    )
+    executor = await runtime.build_executor(_binding())
+    assert isinstance(executor, GraphExecutor)
+    geo = GeoPart(geojson={"type": "FeatureCollection", "features": []})
+    result = ToolResultRuntimeEvent(
+        sequence=0,
+        call_id="geo-call",
+        tool_name=TOOL_REF_GEO_RENDER_POINTS,
+        content="Map ready",
+        ui_parts=(geo,),
+    )
+
+    async def fake_state(_config: object) -> SimpleNamespace:
+        return SimpleNamespace(values={}, tasks=(), interrupts=())
+
+    async def fake_stream(*_args: object, **_kwargs: object):
+        yield "custom", result
+        yield "updates", {"__fred_complete__": {"message": "Map ready"}}
+
+    monkeypatch.setattr(executor._compiled, "aget_state", fake_state)  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(executor._compiled, "astream", fake_stream)  # pyright: ignore[reportPrivateUsage]
+    input_model = executor._definition.input_model()(message="Map Paris")  # pyright: ignore[reportPrivateUsage]
+    events = [
+        event
+        async for event in executor.stream(input_model, ExecutionConfig(session_id="s"))
+    ]
+    final = next(event for event in events if isinstance(event, FinalRuntimeEvent))
+    assert final.ui_parts == (geo,)
 
 
 def test_build_executor_raises_on_capability_mcp_name_collision() -> None:

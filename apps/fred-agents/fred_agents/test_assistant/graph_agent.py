@@ -440,8 +440,7 @@ class TestAssistantGraphAgent(GraphAgent):
         """
         Override to attach mock VectorSearchHit sources and token_usage when the
         trace scenario ran (SourcesPanel + token badge), and GeoPart ui_parts
-        when the geo scenario ran (feature-count summary chip rendering — the
-        interactive Leaflet map was removed from the frontend, PR #2067).
+        when the geo or markdown scenario ran (interactive map rendering).
         """
         assert isinstance(state, TestState)
         content = state.final_text or ""
