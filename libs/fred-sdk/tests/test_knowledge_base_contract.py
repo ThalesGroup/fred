@@ -915,7 +915,9 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
     assert (
         configuration.m2m.secret_env == configured["security"]["m2m"]["secret_env_var"]
     )
-    assert "secret" not in configuration.model_dump_json().replace("secret_env_var", "")
+    assert "secret" not in configuration.model_dump_json().replace(
+        "secret_env_var", ""
+    ).replace("secret_bindings", "")
 
 
 def test_pod_m2m_uses_oidc_endpoint_and_scope(
@@ -1057,3 +1059,155 @@ def test_a_knowledge_base_needs_one_package_for_its_form() -> None:
     assert kb_module.FieldSpec is models.FieldSpec
     assert kb_module.UIHints is models.UIHints
     assert kb_module.TuningValue is models.TuningValue
+
+
+def test_weaver_publishes_fields_and_resolves_credentials_only_inside_claim(
+    monkeypatch,
+):
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base.client import ControlPlaneClient
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    config = PodConfiguration.model_validate(_valid_configuration())
+    config.knowledge_base.protocol = "weaver"
+    config.knowledge_base.secret_bindings = {"share-access": "TEST_KB_PASSWORD"}
+    monkeypatch.setenv("TEST_KB_PASSWORD", "runtime-only-value")
+    client = ControlPlaneClient(config)
+    request = AsyncMock(return_value={})
+    monkeypatch.setattr(client, "_request", request)
+
+    async def execute():
+        await client.publish(KnowledgeBaseDeclaration.of(_declaration()))
+        body = request.call_args.kwargs["json"]
+        assert body["runtime_id"] == config.runtime_id
+        assert body["definitions"][0]["config_schema"]["fields"][1]["type"] == "secret"
+        request.return_value = {
+            "id": "run",
+            "definition_id": "acme.kb.http-markdown",
+            "instance_id": "instance",
+            "space_id": "space",
+            "folder_id": "folder",
+            "profile": "rich",
+            "config": {"base_url": "https://example.test"},
+            "credential_refs": {"token": "share-access"},
+        }
+        context = await client.claim_run("run")
+        assert isinstance(context, KnowledgeBaseRunContext)
+        assert context.configuration["token"] == "runtime-only-value"
+        assert context.configuration["profile"] == "rich"
+        result = KnowledgeBaseSyncResult(
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.complete,
+            summary="runtime-only-value",
+            metrics={
+                "password": "runtime-only-value",  # pragma: allowlist secret (test fixture)
+            },
+        )
+        await client.complete_run("run", result)
+        assert "runtime-only-value" not in json.dumps(request.call_args.kwargs["json"])
+        await client.worker_configuration("acme.kb.http-markdown")
+        assert request.call_args.kwargs["params"] == {
+            "runtime_id": config.runtime_id,
+            "definition_id": "acme.kb.http-markdown",
+        }
+        await client.aclose()
+
+    asyncio.run(execute())
+
+
+def test_weaver_claim_errors_retry_without_finishing_or_disclosing_details():
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base.worker import _build_weaver_activity
+    from temporalio.exceptions import ApplicationError
+
+    kb = _declaration()
+    handler = AsyncMock()
+    kb.synchronize(handler)
+    client = AsyncMock()
+    client.claim_run.side_effect = RuntimeError("sensitive-source-detail")
+    with pytest.raises(ApplicationError, match="admission unavailable") as raised:
+        asyncio.run(_build_weaver_activity(kb, client)("run"))
+    assert "sensitive-source-detail" not in str(raised.value)
+    assert not raised.value.non_retryable
+    handler.assert_not_awaited()
+    client.complete_run.assert_not_awaited()
+
+
+def test_weaver_handler_failure_is_reported_without_exception_text():
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base.worker import _build_weaver_activity
+
+    kb = _declaration()
+    handler = AsyncMock(side_effect=RuntimeError("sensitive-source-detail"))
+    kb.synchronize(handler)
+    client = AsyncMock()
+    client.claim_run.return_value = KnowledgeBaseRunContext(
+        definition_id=kb.id,
+        instance_id="instance",
+        run_id="run",
+        team_id="space",
+        library_id="folder",
+    )
+    assert asyncio.run(_build_weaver_activity(kb, client)("run")) == "failed"
+    result = client.complete_run.call_args.args[1]
+    assert result.outcome.value == "failed"
+    assert "sensitive-source-detail" not in result.model_dump_json()
+
+
+def test_weaver_workflow_failure_is_terminal_and_history_contains_only_run_id(
+    monkeypatch,
+):
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base import _workflow
+    from temporalio.exceptions import ApplicationError
+
+    execute = AsyncMock(return_value="failed")
+    monkeypatch.setattr(_workflow.workflow, "execute_activity", execute)
+    with pytest.raises(ApplicationError) as raised:
+        asyncio.run(_workflow.WeaverSynchronizeWorkflow().run("admitted-run"))
+    assert raised.value.non_retryable
+    assert execute.call_args.args == (
+        "fred_weaver_knowledge_base_synchronize",
+        "admitted-run",
+    )
+
+
+@pytest.mark.parametrize(
+    "state", [KnowledgeBaseRunOutcome.succeeded, KnowledgeBaseRunOutcome.failed]
+)
+def test_weaver_completed_run_retry_does_not_repeat_the_handler(state):
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base.worker import _build_weaver_activity
+
+    kb = _declaration()
+    handler = AsyncMock()
+    kb.synchronize(handler)
+    client = AsyncMock()
+    client.claim_run.return_value = state
+    assert asyncio.run(_build_weaver_activity(kb, client)("run")) == state.value
+    handler.assert_not_awaited()
+    client.complete_run.assert_not_awaited()
+
+
+def test_weaver_terminal_claim_needs_no_credentials(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from fred_sdk.knowledge_base.client import ControlPlaneClient
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
+
+    config = PodConfiguration.model_validate(_valid_configuration())
+    client = ControlPlaneClient(config)
+    monkeypatch.setattr(
+        client, "_request", AsyncMock(return_value={"state": "succeeded"})
+    )
+
+    async def claim():
+        assert await client.claim_run("run") == KnowledgeBaseRunOutcome.succeeded
+        await client.aclose()
+
+    asyncio.run(claim())

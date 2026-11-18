@@ -12,7 +12,7 @@ pub mod object_store;
 pub mod powerpoint;
 mod reads;
 mod upload;
-pub(crate) use upload::token_current;
+pub(crate) use upload::{SourceUpload, Spool, token_current};
 
 use crate::{
     domain::Permission,

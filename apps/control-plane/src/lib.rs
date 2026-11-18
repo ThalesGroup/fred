@@ -67,3 +67,7 @@ pub mod provisioning;
 pub mod blueprint;
 
 pub mod capability_preparation;
+
+pub mod knowledge_bases;
+
+mod field_values;

@@ -29,6 +29,7 @@ is a value nobody reviews in the ConfigMap beside the rest.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fred_pod.common import (
     ConfigFiles,
@@ -63,11 +64,13 @@ class MissingPodConfiguration(RuntimeError):
 class KnowledgeBaseSettings(BaseModel):
     """Where this pod publishes, and what it is allowed to publish under.
 
-    `prefix` is the dotted prefix this image owns — `fred.samples`. Every name
-    it publishes lives under it, Fred binds the prefix to this pod's client on
-    the first publication, and no other client may write there afterwards.
+    `prefix` bounds this image's declaration names. Swift binds that prefix to
+    the publishing client. Weaver instead requires a provisioned workload
+    identity and binds each definition to its runtime.
     """
 
+    protocol: Literal["swift", "weaver"] = "swift"
+    secret_bindings: dict[str, str] = Field(default_factory=dict)
     prefix: str = Field(min_length=1)
     control_plane_url: str = Field(min_length=1)
     # Optional: only a pod that ingests through Knowledge Flow needs it. One

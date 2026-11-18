@@ -46,6 +46,43 @@ into the shared chat history contract under the same configured base URL.
 No additional server or deployment is required. Apply migrations 0009 and 0010
 before startup; the latter indexes sessions awaiting retirement receipts.
 
+## Knowledge Base admission (reception pending)
+
+The HTTP/SDK admission boundary accepts managed mirrors in dedicated space folders;
+the Knowledge Base administration UI is not yet connected to it. Apply the complete
+migration chain to a fresh installation. Document storage, processing and Temporal
+must be configured. A source worker needs an explicit workload binding, not an
+HTTP agent endpoint:
+
+```yaml
+platform:
+  knowledge_bases:
+    workers:
+      webdav-knowledge-base:
+        issuer: https://identity.example/realms/app
+        client_id: kb-fred.webdav
+        audience: app
+    credentials:
+      - runtime_id: webdav-knowledge-base
+        space_id: 00000000-0000-0000-0000-000000000001
+        credential_binding: webdav-research
+```
+
+Use the actual issuer, audience, runtime and destination space. Credential bindings
+contain no secret: the connector's `knowledge_base.secret_bindings` maps each approved
+reference to an environment variable. Set its `knowledge_base.protocol: weaver` and
+Control Plane URL; the connector uses the ordinary SDK `publish` and `run` commands.
+Publishing creates an offer; enable that offer through existing organization and
+space policy before a space Owner creates an instance or starts a run.
+
+The generated [REST inventory](../../docs/architecture/A12-control-plane-api.md)
+lists definition, instance and run operations. Source configuration and destination
+are immutable; pause/interval changes govern subsequent runs. Pausing keeps stored
+content, and already admitted document processing can finish. This boundary does
+not enable manual replacement or reprocessing in Resources. See the
+[storage contract](../../docs/architecture/A9-documents.md#managed-mirror-admission)
+for publication, withdrawal and cleanup ownership.
+
 ## Metrics
 
 `app.metrics_port` opens an unauthenticated Prometheus `GET /metrics` listener,
@@ -544,17 +581,12 @@ No options alter identity or permission. Transport, endpoints, provider, credent
 retries, timeouts and reasoning are not instance options.
 When saving a changed recommendation or an options object, known output/context
 limits bound `max_tokens` for the recommendation, otherwise the organization default.
-A legacy-only profile prevents that implicit default resolution. Missing metadata
-adds no inferred capability. Prompt-dependent input/context budgets and actual
-provider support still require pod validation. The resolver separately diagnoses
+Missing metadata adds no inferred capability. Prompt-dependent input/context budgets
+and actual provider support still require pod validation. The resolver separately diagnoses
 option incompatibility for every candidate, including a possible fallback.
 
 Metadata-only edits, unchanged recommendations and explicit clears do not require
 successful discovery. Revocation, withdrawal or outage never rewrite a saved key.
-`recommended_chat_profile_id` remains in ordinary instance reads for diagnosis;
-new non-null writes return 422 `legacy_model_reselection_required`. Omission keeps
-it and explicit null clears it. Selecting a new composite key does not erase that
-history. No name conversion, synthetic profile or automatic migration exists.
 
 The existing authenticated `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime`
 route adds `models` and `agent.configuration_updated_at`. One read-only repeatable-read
@@ -579,8 +611,8 @@ bound `max_tokens`, even when the instance did not set an explicit override.
 Python's existing Mistral reasoning replay and transport guards remain active.
 
 `models.policy` includes revision, permitted and reasoning-enabled keys and explicit default/fallback;
-`recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
-saved settings. `offers` is the union of permitted keys and retained references.
+`recommendation` and `options` describe saved settings. `offers` is the union of
+permitted keys and retained references.
 Each entry separates `permitted`, `candidate`, `selectable`, typed diagnostics,
 known metadata and source/snapshot revisions and dates. A candidate requires known
 presence/chat, current source revision, enabled source, permission and compatible
@@ -592,8 +624,8 @@ disabled, revoked, unknown and obsolete-source references are not candidates.
 `model_catalog::instance::decide` is the single inference decision used by public
 preparation, trusted Python delegation and internal Rust admission. Selection is
 explicit choice, then instance recommendation, then organization default. A present
-unknown/forbidden choice is refused without substitution; legacy-only profiles
-require explicit re-selection. Fallback requires confirmed withdrawal and stays
+unknown/forbidden choice is refused without substitution. Fallback requires
+confirmed withdrawal and stays
 within the same source and its approved provisioning/account. A discovery outage
 alone, disabled source, revoked permission or missing credential never triggers it.
 
@@ -613,7 +645,6 @@ configuration revision and conversation attribution. Python pins it to `RunScope
 Rust retains it through the turn's tracing context. Neither runtime refreshes
 permissions between LLM calls. New admissions observe changes; admitted turns can
 finish, subject to local cancellation/deadlines and upstream credential rejection.
-The legacy profile remains diagnostic data, never a connection lookup key.
 
 ### Inference connection
 
@@ -951,9 +982,8 @@ Active capabilities return 422, other execution families 409.
 No unsupported control is replaced with a default or hidden tool selection.
 
 `models` projects the common catalog facts: recommendation, default/fallback, options,
-legacy diagnostic and composite offers with permission/candidate/selectable and
-effective reasoning-enabled facts,
-metadata and diagnostics. The DTO has no inference URL, connection or credential
+composite offers with permission/candidate/selectable and effective
+reasoning-enabled facts, metadata and diagnostics. The DTO has no inference URL, connection or credential
 binding. Its `inference` selection comes from the common decision, without certifying
 provider connectivity. A preparation is `Cache-Control: no-store` product data, never a grant or a replacement for M4.
 Session responses are also no-store.
@@ -984,9 +1014,17 @@ evaluate the person's admission and rights, and return `Cache-Control: no-store`
 Conversation deliverables share the `document` catalogue with source documents.
 `document` owns placement and the stable file identity; `document_content` owns
 immutable object keys, hashes and sizes. `document_current` projects the current
-primary content for existing readers. Source originals remain immutable and only
+primary content for existing readers. Content bytes remain immutable and only
 sources can enter Knowledge Flow processing. A preview references its exact primary
 content and disappears from current reads as soon as that primary is replaced.
+
+Source processing freezes `content_id`, `expected_content_id` and the nullable
+`expected_generation_id`; callbacks read those exact bytes and publication swaps
+content and generation together. Migration `0036_document_processing_content.sql`
+prepares replacement/reprocessing persistence and quota handling, but public
+processing admission still refuses a previous success. See the
+[storage/processing contract](../../docs/architecture/A9-documents.md#processing-behavior)
+for that boundary; it does not change conversation deliverable replacement.
 
 The conversation owner lists and downloads deliverables through
 `/spaces/{space}/sessions/{session}/files`. Listing, download, `write-target` and multipart write

@@ -61,7 +61,6 @@ beforeEach(() => {
         default: key("available"),
       },
       options: {},
-      requires_reselection: false,
       reasoning_default_on: [],
       offers: ["available", "forbidden"].map((model) => ({
         key: key(model),

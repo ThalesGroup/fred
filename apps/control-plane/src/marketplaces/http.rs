@@ -92,7 +92,7 @@ async fn marketplace_proposal_spaces(
         .map(|row| {
             let space: Space = row.into();
             let mut resource_kinds = vec![MarketplaceKind::Prompt, MarketplaceKind::Skill];
-            if crate::agent_instances::http::require_instance_space(space.kind).is_ok() {
+            if crate::agent_instances::require_instance_space(space.kind).is_ok() {
                 resource_kinds.push(MarketplaceKind::Agent);
             }
             ProposalSpace {

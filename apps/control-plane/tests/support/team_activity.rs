@@ -171,7 +171,7 @@ async fn team_activity_keeps_acknowledged_uploads_and_every_processing_attempt()
     let failed = Uuid::new_v4();
     let retry = Uuid::new_v4();
     for (id, retry_of, status) in [(failed, None, "failed"), (retry, Some(failed), "pending")] {
-        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,status,stage,workflow_id,submission,deadline_at,completed_at,error_code,retry_of,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'alice',$2,'fast',$3,'queued',$4,'{}',now()+interval '1 hour',case when $3='failed' then now() end,case when $3='failed' then 'worker_failed' end,$5,'{}',10,10,10)")
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,status,stage,workflow_id,submission,deadline_at,completed_at,error_code,retry_of,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id) select $1,$1,'alice',$2,'fast',$3,'queued',$4,'{}',now()+interval '1 hour',case when $3='failed' then now() end,case when $3='failed' then 'worker_failed' end,$5,'{}',10,10,10,current_content_id,current_content_id,published_generation from document where id=$2")
             .bind(id).bind(doc.id).bind(status).bind(id.to_string()).bind(retry_of).execute(&e.pool).await.unwrap();
     }
     let page = activity::list(&e.pool, "alice", team.id, ActivityQuery::default())

@@ -26,9 +26,9 @@ configuration:
   app:
     runtime_id: my-kb
   knowledge_base:
+    protocol: weaver
     prefix: my.kb
     control_plane_url: http://control-plane-backend:8222/control-plane/v1
-    knowledge_flow_url: http://knowledge-flow-backend:8000/knowledge-flow/v2
   security:
     m2m:
       realm_url: http://keycloak:8080/realms/app
@@ -39,9 +39,13 @@ configuration:
       host: temporal:7233
 ```
 
-Fred lets the pod declare itself only if its client owns the prefix: add one entry,
-keyed by the client, to `registrations.knowledgeBasePublishers` in the Fred chart's
-values, then upgrade Fred. The install prints it:
+For Weaver, provision the workload identity in Control Plane's
+`platform.knowledge_bases.workers`, keyed by `configuration.app.runtime_id`.
+The worker needs no HTTP agent endpoint. Organization and space capability policy
+then govern admission; see the [Control Plane procedure](../../../apps/control-plane/README.md#knowledge-base-admission-reception-pending).
+
+Existing Swift deployments keep `protocol: swift` (the SDK default), their
+`knowledge_flow_url` and the prefix registration:
 
 ```yaml
 registrations:
@@ -70,8 +74,8 @@ What the Fred platform must provide; the addresses go in `configuration`.
 
 - **Keycloak**, the platform's realm: the pod's own confidential client, with a service
   account holding `app/service_agent`.
-- **The Control Plane and Knowledge Flow** (`knowledge_base.control_plane_url`,
-  `knowledge_base.knowledge_flow_url`).
+- **Control Plane**, with document storage and processing configured for Weaver.
+  Only Swift uses `knowledge_base.knowledge_flow_url` for direct ingestion.
 - **Temporal** (`scheduler.temporal`).
 - Whatever source the pod reads (a share, a repository...): its settings are the pod's own,
   usually environment variables (`extraEnvVars`).

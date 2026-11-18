@@ -304,6 +304,16 @@ async fn hosted_applications_registration_governance_and_proxy() {
     assert_eq!(source["origin"], "application");
     assert_eq!(source["runtime_id"], Value::Null);
     assert_eq!(
+        source["capabilities"][0]["application_logical_name"],
+        "evaluation"
+    );
+    assert_eq!(source["capabilities"][0]["version"], "1.0.0");
+    assert!(
+        source["capabilities"][0]["descriptor"]
+            .get("application_logical_name")
+            .is_none()
+    );
+    assert_eq!(
         source["capabilities"][0]["descriptor"]["kind"],
         "application"
     );

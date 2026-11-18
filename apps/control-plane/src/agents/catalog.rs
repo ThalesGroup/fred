@@ -44,6 +44,7 @@ pub struct CatalogObservation {
 pub struct StoredCapability {
     pub source_id: String,
     pub capability_id: String,
+    pub application_logical_name: Option<String>,
     pub version: String,
     pub descriptor: Json<Value>,
     /// Technical offer availability, independent of business authorization.
@@ -71,6 +72,7 @@ impl CatalogSnapshot {
                 valid_key(&offer.capability_id)
                     && !offer.capability_id.starts_with("managed-mcp:")
                     && !offer.capability_id.starts_with("application:")
+                    && !offer.capability_id.starts_with("knowledge-base:")
                     && valid_key(&offer.version),
                 "invalid capability identity or version"
             );
@@ -137,7 +139,7 @@ pub async fn replace(
         .bind(runtime_id)
         .execute(&mut *conn)
         .await?;
-    sqlx::query("update capability_offer set advertised = false where source_id = $1")
+    sqlx::query("update capability_offer set advertised = false where source_id = $1 and capability_id not like 'knowledge-base:%'")
         .bind(runtime_id)
         .execute(&mut *conn)
         .await?;
@@ -203,8 +205,10 @@ pub async fn capabilities<'e>(
     space_id: Uuid,
 ) -> sqlx::Result<Vec<StoredCapability>> {
     sqlx::query_as(
-        "select source_id, capability_id, version, descriptor, advertised
-         from capability_offer o where source_id = $1 and (connection_id is null or exists (select 1 from mcp_connection c join space s on s.id=c.space_id where c.id=o.connection_id and c.space_id=$2 and s.deletion_id is null)) order by capability_id",
+        "select o.source_id, o.capability_id, a.logical_name as application_logical_name,
+                o.version, o.descriptor, o.advertised
+         from capability_offer o left join application a on a.id = o.application_id
+         where o.source_id = $1 and (o.connection_id is null or exists (select 1 from mcp_connection c join space s on s.id=c.space_id where c.id=o.connection_id and c.space_id=$2 and s.deletion_id is null)) order by o.capability_id",
     )
     .bind(runtime_id)
     .bind(space_id)

@@ -15,6 +15,11 @@ own extraction and output algorithms. Upload-only requires no ingestion service;
 optional processing dispatches the existing `ProcessPush` workflow through Temporal.
 Control Plane owns document placement; Knowledge Flow has no separate tag catalog.
 
+`document` retains identity and placement, `document_content` immutable bytes,
+and `document.current_content_id` the current primary content. Processing binds
+to an exact content row; `document.published_generation` selects the visible
+derived result. `document_current` is the existing joined read view.
+
 A folder has one immutable space and at most one parent in that space. Paths
 contain UUIDs, not display names. Renaming changes one label without rewriting
 descendants or permissions. Sibling folder names are unique. Document placement
@@ -26,7 +31,7 @@ The owning space is the authorization boundary. Folders and documents have no
 individual grants or permission lists. Increasing their number adds no role rows.
 Folder depth is limited to 15 independently of the space hierarchy.
 
-Every request requires personal admission, a direct role in the space's organization
+Human requests require personal admission, a direct role in the space's organization
 and current space authority. Members and effective editors/analysts read; effective
 editors write. Admin and owner titles confer no content access. Personal
 spaces inherit no organization or team authority. The
@@ -37,6 +42,9 @@ Mutations recheck in the SQL transaction holding the organization lock.
 Uploads do so twice: when reserving quota/name and when publishing verified content.
 Token expiry and current CGU acceptance are rechecked at both boundaries. Request
 body and object-storage IO take place outside that lock.
+
+The separate [managed-mirror admission](#managed-mirror-admission) binds a source
+worker to a durable run and destination, without giving it a person's roles.
 
 ## Navigation and folder lifecycle
 
@@ -115,7 +123,7 @@ Originals and derived artifacts share one configured S3 bucket:
 
 ```text
 <bucket>/  # app-content-documents in k3d
-  <document_id>/input/<original_filename>
+  <content_id>/input/<original_filename>
   <document_id>/output/<installation_id>/<processing_id>/<generation_id>/<artifact>
 ```
 
@@ -124,8 +132,9 @@ An optional single-label `prefix` precedes both document roots; the factory uses
 an empty prefix. `installation_id` is the persisted `document_storage.namespace`.
 The original also carries S3 metadata `fred-installation=<installation_id>`:
 cleanup never deletes an unknown or foreign installation's object. The document
-UUID is also its internal upload journal ID; the browser request key is different.
-Read `document.object_key` for the exact key. SQL records the storage binding and
+UUID equals its first content/upload ID. A replacement allocates a new content
+and upload ID while retaining the document identity; the request key is separate.
+Read `document_content.object_key` for the exact key. SQL records the storage binding and
 refuses changed coordinates at startup. Knowledge Flow owns no catalog tables or Alembic migrations.
 
 Generation directories below `output` are the justified layout difference:
@@ -135,11 +144,12 @@ Original paths and the bucket name need no rename for this layout.
 
 `Acme`, `Research` and `Papers` are display names, never S3 path components. The
 folder UUID/path lives in PostgreSQL and the worker descriptor, not the object
-key. Derived generations isolate activity attempts. Their manifests live in
-`document_processing.generations` and the published `document_processing.manifest`;
-there is no required S3 `manifest.json`. Artifact presence alone is not publication.
+key. Derived generations isolate activity attempts. `generation` and `artifact`
+store their committed output inventory; the manifest is assembled from these rows.
+`document.published_generation` selects the published inventory. There is no
+required S3 `manifest.json`. Artifact presence alone is not publication.
 
-The source definitions are [original keys](../../apps/control-plane/src/documents/mod.rs)
+The source definitions are [original keys](../../apps/control-plane/src/documents/upload.rs)
 and [upload identity](../../apps/control-plane/src/documents/upload.rs),
 [derived prefixes](../../apps/control-plane/src/processing/store.rs), and
 [generation artifact storage](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/artifacts.py).
@@ -266,8 +276,25 @@ Transitions: [admission and claims](../../apps/control-plane/src/processing/stor
 An upload with a profile publishes the original and its processing intent in one
 transaction. An editor can also process a stored-only document or explicitly retry
 a failed attempt without another file transfer. One active attempt and one linked
-successor per failure prevent competing starts. Each attempt freezes the Python
-worker's exported policy and profile settings. Original quota is charged once.
+successor per failure prevent competing starts. Each attempt freezes its source
+content, publication snapshot, Python policy and profile settings. Original quota
+is charged once. Public admission still refuses a document with a successful
+attempt; the schema's ability to retain several successes does not expose
+reprocessing or replacement to users.
+
+The [processing-content migration](../../apps/control-plane/migrations/0036_document_processing_content.sql)
+prepares those internal transitions. `content_id` and `expected_content_id` are
+non-null, immutable references to content owned by the same document.
+`expected_generation_id` is a nullable compare-and-swap snapshot, not a foreign
+key that retains an obsolete generation. Workers read the key, size and digest
+of `content_id`, independently of the document's current content.
+
+A replacement candidate reuses `document_upload`: its `stored` receipt keeps
+positive growth reserved until processing becomes terminal. Successful publication
+changes current content and generation atomically only if both expected values
+still match. Failure retains the previous publication, releases the reservation
+and schedules candidate cleanup. The managed-mirror boundary below consumes this
+foundation; human source-replacement admission remains unavailable.
 
 The dispatcher, a background task of `control-plane serve`, is woken when an
 admission commits and otherwise polls. It leases due SQL intents, never-delivered
@@ -288,10 +315,13 @@ Vector projections use OpenSearch or pgvector.
 
 Preparation, extraction and indexing claim monotonically fenced generations.
 Manager verifies artifact sizes/hashes before the final guarded transaction checks
-current actor access and CGU and publishes the manifest. A stale activity cannot
+current actor access and CGU and publishes the content/generation pair. A stale activity cannot
 replace a committed stage or terminal outcome. Cleanup journals bounded vector
-identifiers and objects, repeats sweeps for late writes, and preserves originals
-and published generations of active documents. Once processing is terminal and
+identifiers and objects, repeats sweeps for late writes, and preserves current originals
+and published generations of active documents. Content used or expected by an
+active processing attempt is also protected. Superseding a publication rearms
+the previous generation's cleanup, including one already marked cleaned after
+its excess vector ordinals were removed. Once processing is terminal and
 all its leases have expired for 60 seconds, purging a retired document removes
 all its vectors and all its derived objects for the installation, never the
 original. A cleanup report whose mode does not match the document's retirement
@@ -302,6 +332,45 @@ Existing File/Raw preview modes read authenticated manager endpoints, with nativ
 PDF range support. Raw previews cap browser text at 8 MiB; protected local images
 use authenticated Blob URLs. Remote images, active HTML, diagrams and local links
 cannot bypass those controls. Published previews require current read authority.
+
+## Managed-mirror admission
+
+This is the Control Plane and SDK contract for source workers; the Knowledge Base
+administration UI remains outside the integrated Weaver journey. A mirror occupies
+one dedicated root folder in a space. Readers use the ordinary document catalogue
+and content authorization. Human uploads, child folders and manual changes to the
+managed source are refused; pausing collection retains readable content.
+
+The [KB admission module](../../apps/control-plane/src/knowledge_bases/mod.rs)
+reuses capability offers and organization/local policy. An explicitly bound workload
+publishes its definitions; a space Owner configures an instance and admits a run.
+`kb_definition` binds source ownership and its field declaration, `kb_instance`
+binds immutable configuration and placement, and `kb_run` records admitted scope
+and durable delivery. `kb_source_document` relates a source key to the existing
+document identity. These tables carry collection facts, not another document store
+or permission graph.
+
+SQL permits only one active run per instance. Dispatch uses leased SQL claims and
+the existing Temporal delivery mechanism. A run freezes its destination and
+configuration; pausing the instance affects later admissions. A terminal run cannot
+submit new source mutations, while document processing already admitted can finish.
+Deleted destinations remain unavailable. Configuration stores credential references
+approved for that worker and space; the worker resolves environment values in memory.
+Secrets do not enter the SQL configuration or Temporal input/history.
+
+The [source document boundary](../../apps/control-plane/src/knowledge_bases/documents.rs)
+reuses quota reservations, immutable content, upload receipts and processing.
+Replacement keeps the current publication until the new content and generation
+commit together. The recorded source version advances only with that publication;
+failed processing remains retryable and does not mark a source version synchronized.
+Source withdrawal uses the existing document retirement and physical cleanup path.
+
+The [SDK](../../libs/fred-sdk/fred_sdk/knowledge_base/) selects the explicit Weaver
+protocol for this boundary. WebDAV collection compares the complete source inventory
+with the paged SQL mapping, verifies the downloaded source version and submits
+explicit withdrawals. A partial inventory or an include/exclude filter cannot by
+itself prove that a source file disappeared. No connector-local catalogue decides
+which documents belong to the mirror.
 
 ## Documents authored in a conversation
 

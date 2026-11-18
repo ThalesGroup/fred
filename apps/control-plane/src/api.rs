@@ -582,6 +582,7 @@ async fn rename_folder(
     let (mut tx, _) =
         spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
+    crate::knowledge_bases::documents::require_manual_folder(&mut *tx, id).await?;
     db::rename_folder(&mut *tx, id, &spaces::folder_name(&req.name)?).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -1221,6 +1222,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::mcp_connections::routes())
         .merge(crate::applications::routes())
         .merge(crate::capability_preparation::routes())
+        .merge(crate::knowledge_bases::routes())
         .merge(crate::agent_instances::http::routes())
         .merge(crate::prompts::http::routes())
         .merge(crate::skills::http::routes())

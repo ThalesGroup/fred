@@ -431,9 +431,9 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         <EntityIdentity
           name={offerName(offer)}
           icon={toIconType(offer.descriptor.icon, "tune")}
-          sourceId={offer.capability_id}
+          sourceId={offer.origin === "application" ? offer.application_logical_name : offer.capability_id}
           runtimeId={offer.runtime_id ?? undefined}
-          version={offer.descriptor.public_version}
+          version={offer.origin === "application" ? offer.version : offer.descriptor.public_version}
           dimmed={!offer.advertised}
         />
       ) : column.field === "health" ? (

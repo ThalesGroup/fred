@@ -1033,7 +1033,7 @@ async fn concurrent_put_skill_accepts_only_one_expected_revision() {
     tokio::pin!(replacements);
     tokio::select! {
         result = &mut replacements => panic!("replacements bypassed the row guard: {result:?}"),
-        () = wait_for_content_waiters(&e.pool, "^(select revision from skill|select id from space|insert into skill)") => {}
+        () = wait_for_content_waiters(&e.pool, "^(select skill_id, revision from skill|select id from space|insert into skill)") => {}
     }
     gate.rollback().await.unwrap();
     let (a, b) = replacements.await;
@@ -1043,4 +1043,115 @@ async fn concurrent_put_skill_accepts_only_one_expected_revision() {
         saved["files"],
         files(if a.0 == 204 { "Left" } else { "Right" })
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn put_skill_cannot_replace_a_recreated_package_with_the_same_revision() {
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let root = format!("/spaces/{}/skills", team.id);
+    let files = |text: &str| json!({"SKILL.md":format!("---\nname: sample\ndescription: Sample\nlicense: MIT\n---\n{text}")});
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &root,
+            json!({"name":"sample","files":files("Original")})
+        )
+        .await
+        .0,
+        204
+    );
+    let (_, rows) = request(&app, &identity, Some("alice"), "GET", &root, Value::Null).await;
+    let original = rows[0]["skill_id"].as_str().unwrap();
+    let path = format!("{root}/{original}");
+    // A PUT with no revision must remain an update, never become a create.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &path,
+            json!({"files":files("Unversioned")})
+        )
+        .await
+        .0,
+        409
+    );
+
+    let mut gate = e.pool.begin().await.unwrap();
+    let blocker: i32 = sqlx::query_scalar("select pg_backend_pid()")
+        .fetch_one(&mut *gate)
+        .await
+        .unwrap();
+    sqlx::query("select id from space where id=$1 for no key update")
+        .bind(team.id)
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let replacement = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &path,
+        json!({"expected_revision":rows[0]["revision"],"files":files("Stale edit")}),
+    );
+    tokio::pin!(replacement);
+    tokio::select! {
+        result = &mut replacement => panic!("PUT bypassed the space budget guard: {result:?}"),
+        waited = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("select exists(select 1 from pg_stat_activity where datname=current_database()
+                    and $1=any(pg_blocking_pids(pid)) and query like 'select id from space%for no key update')")
+                    .bind(blocker).fetch_one(&e.pool).await.unwrap();
+                if waiting { break; }
+                tokio::task::yield_now().await;
+            }
+        }) => waited.expect("PUT must reach its space budget guard"),
+    }
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "DELETE", &path, Value::Null)
+            .await
+            .0,
+        204
+    );
+    // Run the real POST save path in the transaction holding the budget gate.
+    // The replacement deliberately has the same name AND content revision.
+    let original_files = serde_json::from_value(files("Original")).unwrap();
+    control_plane::skills::save(
+        &mut gate,
+        team.id,
+        "alice",
+        "sample",
+        &original_files,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    gate.commit().await.unwrap();
+    let result = replacement.await;
+    assert_eq!(result.0, 409, "{result:?}");
+    let (_, rows) = request(&app, &identity, Some("alice"), "GET", &root, Value::Null).await;
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_ne!(rows[0]["skill_id"], original);
+    let new_path = format!("{root}/{}", rows[0]["skill_id"].as_str().unwrap());
+    let (_, saved) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &new_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(saved["files"], files("Original"));
 }

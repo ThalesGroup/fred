@@ -1622,7 +1622,6 @@
       "scopeUnavailable": "Cet espace est indisponible ou vous n’y avez pas accès.",
       "modelProfile": "Modèle recommandé",
       "modelUnavailable": "La sélection de modèles n'est pas encore raccordée dans ce formulaire. Les réglages enregistrés sont conservés.",
-      "legacyModelReselection": "Cet ancien profil est conservé pour diagnostic uniquement. Une re-sélection explicite d'un modèle plateforme est nécessaire ; ce formulaire conserve la référence.",
       "errors": {
         "unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",
         "forbidden": "Vous n’avez pas les droits nécessaires pour cette opération.",

@@ -151,7 +151,6 @@ export function ReasoningChip({
   const displayLabel = current
     ? offerLabel(current)
     : ((chatProfileId && savedChoiceLabel(chatProfileId)) ??
-      effectiveModel?.legacy_profile_id ??
       (retainedKey
         ? `${retainedKey.upstream_model_id} (${retainedKey.source_id})`
         : rows.length

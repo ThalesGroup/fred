@@ -113,7 +113,7 @@ pub async fn preview(
     query: PreviewQuery,
     headers: HeaderMap,
 ) -> AppResult<Response> {
-    let document = if let Some(session_id) = query.session_id {
+    if let Some(session_id) = query.session_id {
         let document = db::pipeline_document(&state.pool, id).await?;
         let belongs: bool = sqlx::query_scalar("select exists(select 1 from document_current where id=$1 and session_id=$2 and deletion_id is null)")
             .bind(id).bind(session_id).fetch_one(&state.pool).await?;
@@ -121,34 +121,34 @@ pub async fn preview(
             return Err(AppError::NotFound);
         }
         crate::sessions::require_owner(&state.pool, actor, document.space_id, session_id).await?;
-        document
     } else {
         let document = db::document(&state.pool, id).await?;
         crate::authorization::authorize(&state.pool, actor, document.space_id, Permission::Read)
             .await
             .map_err(crate::documents::dependency_error)?;
-        document
-    };
+    }
     let storage = state.content.as_ref().ok_or_else(unavailable)?;
-    if query.artifact == "native" && document.name.to_lowercase().ends_with(".pdf") {
-        let key: String = sqlx::query_scalar(
-            "select object_key from document_current where id=$1 and deletion_id is null",
+    if query.artifact == "native" {
+        let (key, name, size): (String, String, i64) = sqlx::query_as(
+            "select object_key,name,size from document_current where id=$1 and deletion_id is null",
         )
         .bind(id)
         .fetch_one(&state.pool)
         .await?;
-        if !key.starts_with(&storage.prefix) {
-            return Err(unavailable());
+        if name.to_lowercase().ends_with(".pdf") {
+            if !key.starts_with(&storage.prefix) {
+                return Err(unavailable());
+            }
+            return stream(
+                storage,
+                &storage.objects,
+                &key,
+                size,
+                "application/pdf",
+                headers,
+            )
+            .await;
         }
-        return stream(
-            storage,
-            &storage.objects,
-            &key,
-            document.size,
-            "application/pdf",
-            headers,
-        )
-        .await;
     }
     let processing = state.processing.as_ref().ok_or_else(unavailable)?;
     let path = match query.artifact.as_str() {

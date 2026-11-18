@@ -159,7 +159,13 @@ async fn original(
     }
     p.authorize_actor(&r).await?;
     p.originals
-        .stream_original(crate::db::pipeline_document(&p.pool, r.summary.document_id).await?)
+        .stream_file(
+            r.summary.document_id,
+            &r.object_key,
+            &r.name,
+            r.size,
+            &r.original_sha256,
+        )
         .await
 }
 #[utoipa::path(get,path="/documents/{id}/preview",params(("id"=Uuid,Path),super::preview::PreviewQuery),responses((status=200,content((super::preview::MetadataPreview = "application/json"),(String = "text/plain"))),(status=206,body=String,content_type="text/plain"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=416,body=crate::error::ErrorBody)))]

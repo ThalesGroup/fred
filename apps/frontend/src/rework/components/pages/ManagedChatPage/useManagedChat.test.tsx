@@ -807,7 +807,6 @@ describe("useManagedChat — session write reliability", () => {
       hostModels = {
         default: null,
         fallback: null,
-        legacy_profile_id: null,
         recommendation: null,
         offers: [
           {
@@ -822,7 +821,6 @@ describe("useManagedChat — session write reliability", () => {
           },
         ],
         options: {},
-        requires_reselection: false,
       };
       mount();
       act(() => latest.setInput("question"));
@@ -839,7 +837,6 @@ describe("useManagedChat — session write reliability", () => {
     hostModels = {
       default: key,
       fallback: null,
-      legacy_profile_id: null,
       recommendation: null,
       offers: [
         {
@@ -854,7 +851,6 @@ describe("useManagedChat — session write reliability", () => {
         },
       ],
       options: {},
-      requires_reselection: false,
     };
     mount();
     act(() => latest.setInput("question"));

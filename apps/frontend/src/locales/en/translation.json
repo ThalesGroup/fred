@@ -1622,7 +1622,6 @@
       "scopeUnavailable": "This space is unavailable or you do not have access.",
       "modelProfile": "Recommended model",
       "modelUnavailable": "Model selection is not yet connected in this form. Saved model settings are preserved.",
-      "legacyModelReselection": "This saved profile is a diagnostic reference only. Explicit re-selection of a platform model is required; this form preserves the reference.",
       "errors": {
         "unauthorized": "Your session has expired. Please sign in again.",
         "forbidden": "You do not have permission for this operation.",

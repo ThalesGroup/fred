@@ -21,6 +21,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { CapabilityInventoryOffer } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -29,6 +30,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
+  application: undefined as CapabilityInventoryOffer | undefined,
   drawer: undefined as
     | undefined
     | { organizationId: string; runtimeId?: string; capability: { id: string; route_base_url?: string } | null },
@@ -82,13 +84,22 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 vi.mock("./OrganizationCapabilities", () => ({
   OrganizationCapabilities: ({
     capabilityColumns,
+    origin,
   }: {
+    origin?: string;
     capabilityColumns: import("@shared/molecules/DataTable/LocalizedDataTable").DataTableColumn<
       import("../../../../../slices/controlPlane/controlPlaneOpenApi").CapabilityInventoryOffer
     >[];
   }) => (
     <>
       <p>organization-offers</p>
+      {origin === "application" && h.application && (
+        <section data-testid="application-row">
+          {capabilityColumns.map((column) => (
+            <div key={column.label}>{column.cellRenderer?.(h.application!)}</div>
+          ))}
+        </section>
+      )}
       {capabilityColumns
         .filter((c) => c.label === "rework.admin.capabilities.col.settings")
         .map((c) => (
@@ -148,6 +159,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  h.application = undefined;
   h.list = { data: undefined, isLoading: false, isError: false };
   container = document.createElement("div");
   document.body.append(container);
@@ -193,6 +205,41 @@ describe("FeaturesPage states", () => {
 });
 
 describe("FeaturesPage catalog rows", () => {
+  it("shows the application key and offer version without its technical identifier", () => {
+    h.application = {
+      source_id: "$applications",
+      origin: "application",
+      runtime_id: null,
+      route_base_url: null,
+      capability_id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
+      application_logical_name: "evaluation",
+      version: "1.3.0",
+      advertised: true,
+      default_on: true,
+      unusable_instances: [],
+      descriptor: {
+        id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
+        name: "Evaluation",
+        kind: "application",
+        description: "Evaluation service",
+        icon: "science",
+        version: "1.3.0",
+      },
+    };
+    act(() => root.render(<FeaturesPage organizationId="O1" />));
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
+      element.textContent?.endsWith("kindFilter.app"),
+    );
+    expect(tab).toBeDefined();
+    act(() => tab!.click());
+    const row = container.querySelector('[data-testid="application-row"]');
+    expect(row?.textContent).toContain("Evaluation");
+    expect(row?.textContent).toContain("evaluation");
+    expect(row?.textContent).toContain("v1.3.0");
+    expect(container.innerHTML).not.toContain(h.application.capability_id);
+    expect(container.innerHTML).not.toContain("74c7ac76-1e22-4512-8f79-6beaa37dfafc");
+  });
+
   it("renders each Knowledge Base with its enabled-team count and a disabled manage action", () => {
     const html = renderKnowledgeBases([cap({ id: "kb", enabled_team_ids: ["nb"] })]);
 

@@ -91,6 +91,7 @@ async fn capability_browser_route_uses_approved_ingress() {
         .find(|offer| offer["capability_id"] == "tool")
         .unwrap();
     assert_eq!(tool["route_base_url"], "/fixture-pod/capabilities/tool");
+    assert!(tool.get("application_logical_name").is_none());
     assert!(tool["descriptor"].get("route_base_url").is_none());
 }
 
@@ -575,5 +576,130 @@ async fn space_skills_homonyms_keep_distinct_identity_content_and_owner() {
     assert_eq!(
         admitted.files[&format!("/skills/{}/references/mermaid.md", ids[1])],
         "Team reference"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn skill_scope_bounds_apply_only_to_supported_execution_families() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Editor, "alice").await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Pod agent")).await;
+    let native = template_id(org.id, "control-plane", fred_rust_agent::AGENT_ID);
+    control_plane::authorization::set_agent_default_on(
+        &mut e.pool.acquire().await.unwrap(),
+        org.id,
+        native,
+        true,
+    )
+    .await
+    .unwrap();
+    let ralph = create(&app, &identity, team.id, creation(native, "Ralph")).await;
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &format!("/spaces/{}/skills/packages/graph/install", team.id),
+            Value::Null
+        )
+        .await
+        .0,
+        204
+    );
+
+    // Both public preparation and the admission resolver use the same aptitude.
+    for category in ["react", "deep", "graph"] {
+        catalog.state.lock().await.templates[0]["kind"] = json!(category);
+        for (method, suffix) in [("POST", "prepare-execution"), ("GET", "runtime")] {
+            let (status, result) = request(
+                &app,
+                &identity,
+                Some("alice"),
+                method,
+                &format!("{}/{suffix}", item(team.id, &instance)),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(status, 200, "{category}: {result}");
+            if category == "graph" {
+                assert!(result["skills"].is_null());
+            } else {
+                assert_eq!(result["skills"]["skills"].as_array().unwrap().len(), 1);
+            }
+        }
+    }
+    // Each space is within its own bound, while the inherited scope reaches 65.
+    for (space, count) in [(org.id, 40), (team.id, 24)] {
+        sqlx::query("insert into skill(skill_id, space_id, name, summary, files, revision, created_by, updated_by)
+            select gen_random_uuid(), $1, 'fixture-' || n,
+                jsonb_build_object('name', 'fixture-' || n, 'description', 'Fixture',
+                    'builtin', false, 'user_invocable', true, 'disable_model_invocation', false),
+                jsonb_build_object('SKILL.md', 'Fixture'), repeat('a',64), 'alice', 'alice'
+            from generate_series(1, $2::int) n")
+            .bind(space).bind(count).execute(&e.pool).await.unwrap();
+    }
+    for category in ["react", "deep", "graph"] {
+        catalog.state.lock().await.templates[0]["kind"] = json!(category);
+        for (method, suffix) in [("POST", "prepare-execution"), ("GET", "runtime")] {
+            let (status, result) = request(
+                &app,
+                &identity,
+                Some("alice"),
+                method,
+                &format!("{}/{suffix}", item(team.id, &instance)),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(
+                status,
+                if category == "graph" { 200 } else { 409 },
+                "{category}: {result}"
+            );
+            if category == "graph" {
+                assert!(result["skills"].is_null());
+            }
+        }
+    }
+    catalog.state.lock().await.templates = json!([]);
+    for (method, suffix) in [("POST", "prepare-execution"), ("GET", "runtime")] {
+        let (status, result) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            method,
+            &format!("{}/{suffix}", item(team.id, &instance)),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 409, "{result}");
+        assert_eq!(result["code"], "agent_template_unavailable");
+    }
+    let calls = catalog.state.lock().await.calls;
+    for (method, suffix) in [("POST", "prepare-execution"), ("GET", "runtime")] {
+        let (status, result) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            method,
+            &format!("{}/{suffix}", item(team.id, &ralph)),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        assert!(result["skills"].is_null());
+        assert!(result.get("skill_files").is_none());
+    }
+    assert_eq!(
+        catalog.state.lock().await.calls,
+        calls,
+        "Ralph never discovers remote pods"
     );
 }

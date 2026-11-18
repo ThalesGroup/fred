@@ -62,10 +62,10 @@ sees and uses its spaces only through the roles held there. Signing in creates n
 attachment, and platform administration roles are separate from organization
 membership.
 
-The UI lists the person's accessible working spaces. It was designed for one
-organization per person: the personal-space entry on Home and the organization
-administration area still use the first organization listed. Choosing among
-several organizations is not offered yet.
+The profile menu selects the working organization when several are available.
+Home and organization-scoped pages use that shared context to show accessible
+spaces and the corresponding personal-space entry. Choosing an organization
+changes navigation, not permissions.
 
 ## Personal spaces
 

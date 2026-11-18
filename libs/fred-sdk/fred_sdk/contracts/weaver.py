@@ -293,8 +293,6 @@ class RuntimeModels(ResolverFact):
     default: ModelOfferKey | None
     recommendation: ModelOfferKey | None
     options: ModelOptions
-    legacy_profile_id: str | None
-    requires_reselection: bool
     offers: tuple[RuntimeModelOffer, ...]
     reasoning_default_on: tuple[ModelOfferKey, ...]
 

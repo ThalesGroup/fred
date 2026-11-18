@@ -643,3 +643,129 @@ def test_an_explicit_empty_source_tag_is_sent_not_replaced(monkeypatch):
     asyncio.run(publisher.publish(relative_path="docs/a.md", content=b"# A"))
 
     assert fred.calls[0][2]["data"]["source_tag"] == ""
+
+
+def test_weaver_inventory_pages_preserve_current_and_active_pending(monkeypatch):
+    fred = _Fred().answers(
+        "GET",
+        (
+            200,
+            {
+                "items": [
+                    {
+                        "source_key": "a",
+                        "current_version": "old",
+                        "pending_version": "new",
+                        "processing": {"status": "running"},
+                    }
+                ],
+                "next_cursor": "a",
+            },
+        ),
+        (
+            200,
+            {
+                "items": [
+                    {
+                        "source_key": "b",
+                        "current_version": "old",
+                        "pending_version": "bad",
+                        "processing": {"status": "failed"},
+                    },
+                    {
+                        "source_key": "c",
+                        "current_version": None,
+                        "processing": {"status": "failed"},
+                    },
+                ],
+                "next_cursor": None,
+            },
+        ),
+    )
+    fred.install(monkeypatch)
+    config = _configuration()
+    config.knowledge_base.protocol = "weaver"
+    publisher = DocumentPublisher(config, library_id=LIBRARY, run_id="run-1")
+    assert asyncio.run(publisher.documents()) == {"a": "new", "b": "old", "c": None}
+    assert fred.calls[1][2]["params"] == {"cursor": "a"}
+    assert all("knowledge-base-runs/run-1/documents" in call[1] for call in fred.calls)
+
+
+def test_weaver_upload_receipt_and_idempotence_are_run_scoped(monkeypatch):
+    receipt = {
+        "task_id": TASK,
+        "state": "pending",
+        "document_id": "doc-1",
+        "error_code": None,
+    }
+    fred = _Fred().answers("POST", (202, receipt))
+    fred.install(monkeypatch)
+    config = _configuration()
+    config.knowledge_base.protocol = "weaver"
+    publisher = DocumentPublisher(config, library_id=LIBRARY, run_id="run-1")
+
+    async def publish():
+        first = await publisher.publish(
+            relative_path="a.md", content=b"a", version="v1"
+        )
+        await publisher.publish(relative_path="a.md", content=b"a", version="v1")
+        await publisher.publish(relative_path="a.md", content=b"b", version="v2")
+        return first
+
+    handle = asyncio.run(publish())
+    assert handle.task_id == TASK
+    assert handle.document_uid == "doc-1"
+    assert fred.calls[0][2]["params"] == {"source_key": "a.md", "source_version": "v1"}
+    keys = [call[2]["headers"]["Idempotency-Key"] for call in fred.calls]
+    assert keys[0] == keys[1] != keys[2]
+
+
+def test_weaver_refuses_arbitrary_folder_without_admission():
+    config = _configuration()
+    config.knowledge_base.protocol = "weaver"
+    with pytest.raises(ValueError, match="admitted run"):
+        DocumentPublisher(config, library_id=LIBRARY)
+
+
+def test_weaver_upload_wire_is_one_safe_file_with_uuid_and_version():
+    from uuid import UUID
+
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        UUID(request.headers["Idempotency-Key"])
+        assert request.url.params["source_key"] in {"folder/a.md", "other/a.md"}
+        assert request.url.params["source_version"].startswith("sha256:")
+        body = request.content
+        assert body.count(b"Content-Disposition:") == 1
+        assert b'name="file";' in body
+        assert b'filename="folder/' not in body
+        assert b'filename="other/' not in body
+        return httpx.Response(
+            202,
+            json={
+                "task_id": TASK,
+                "state": "pending",
+                "document_id": "doc",
+                "error_code": None,
+            },
+        )
+
+    config = _configuration()
+    config.knowledge_base.protocol = "weaver"
+
+    async def publish():
+        publisher = DocumentPublisher(config, library_id=LIBRARY, run_id="run")
+        await publisher._client.aclose()
+        publisher._client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        async with publisher:
+            await publisher.publish(relative_path="folder/a.md", content=b"a")
+            await publisher.publish(relative_path="other/a.md", content=b"a")
+
+    asyncio.run(publish())
+    filenames = [
+        request.content.split(b'filename="')[1].split(b'"')[0] for request in requests
+    ]
+    assert filenames[0] != filenames[1]
+    assert all(name.endswith(b"a.md") and len(name) <= 255 for name in filenames)

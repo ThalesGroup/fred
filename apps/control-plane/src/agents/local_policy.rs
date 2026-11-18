@@ -113,6 +113,19 @@ async fn space_capability_policies(
                 inventory::OfferOrigin::Pod,
             )
         })
+        .chain(
+            s.agent_catalog
+                .knowledge_bases
+                .workers
+                .keys()
+                .filter(|runtime| {
+                    !s.agent_catalog
+                        .runtime_catalog_sources
+                        .iter()
+                        .any(|source| &source.runtime_id == *runtime)
+                })
+                .map(|runtime| (runtime.clone(), true, inventory::OfferOrigin::Pod)),
+        )
         .chain(std::iter::once((
             crate::mcp_connections::SOURCE_ID.into(),
             true,

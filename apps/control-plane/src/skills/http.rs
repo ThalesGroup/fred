@@ -180,6 +180,9 @@ async fn put_skill(
 ) -> AppResult<StatusCode> {
     let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space, Permission::Write).await?;
+    let expected = body.expected_revision.as_deref().ok_or_else(|| {
+        AppError::Conflict("Skill revision required; reload before replacing the package".into())
+    })?;
     let name: String =
         sqlx::query_scalar("select name from skill where space_id=$1 and skill_id=$2")
             .bind(space)
@@ -193,7 +196,7 @@ async fn put_skill(
         &user.uid,
         &name,
         &body.files,
-        body.expected_revision.as_deref(),
+        Some((skill_id, expected)),
         false,
     )
     .await?;

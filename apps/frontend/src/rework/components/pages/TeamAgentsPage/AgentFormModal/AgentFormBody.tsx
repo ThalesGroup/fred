@@ -95,8 +95,6 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Retained legacy reference for display only; never a model resolution key. */
-  recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -140,7 +138,6 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
-  recommendedChatProfileId,
   recommendedModel,
   onRecommendedModelChange,
   tuningFieldValues,
@@ -451,9 +448,6 @@ export function AgentFormBody({
                   onChange={onRecommendedModelChange}
                   disabled={isSubmitting}
                 />
-                {recommendedChatProfileId && !recommendedModel && (
-                  <p role="status">{t("rework.weaverAgents.legacyModelReselection")}</p>
-                )}
                 {renderFieldList(generalFields)}
               </>
             )}

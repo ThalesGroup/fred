@@ -346,6 +346,92 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.provisioningUpload,
       }),
     }),
+    publish: build.mutation<PublishApiResponse, PublishApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-definitions/publish`,
+        method: "POST",
+        body: queryArg.publishDefinitions,
+      }),
+    }),
+    context: build.query<ContextApiResponse, ContextApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}` }),
+    }),
+    claimKnowledgeBaseRun: build.mutation<ClaimKnowledgeBaseRunApiResponse, ClaimKnowledgeBaseRunApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/claim`, method: "POST" }),
+    }),
+    complete: build.mutation<CompleteApiResponse, CompleteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/complete`,
+        method: "POST",
+        body: queryArg.completeRun,
+      }),
+    }),
+    catalogue: build.query<CatalogueApiResponse, CatalogueApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/documents`,
+        params: {
+          cursor: queryArg.cursor,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    uploadKnowledgeBaseDocument: build.mutation<
+      UploadKnowledgeBaseDocumentApiResponse,
+      UploadKnowledgeBaseDocumentApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/documents`,
+        method: "POST",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          source_key: queryArg.sourceKey,
+          source_version: queryArg.sourceVersion,
+        },
+      }),
+    }),
+    retract: build.mutation<RetractApiResponse, RetractApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/documents`,
+        method: "DELETE",
+        params: {
+          source_key: queryArg.sourceKey,
+        },
+      }),
+    }),
+    outcome: build.query<OutcomeApiResponse, OutcomeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-base-runs/${queryArg.id}/documents/tasks/${queryArg.task}`,
+      }),
+    }),
+    binding: build.query<BindingApiResponse, BindingApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/worker`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          definition_id: queryArg.definitionId,
+        },
+      }),
+    }),
+    update: build.mutation<UpdateApiResponse, UpdateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/${queryArg.id}`,
+        method: "PATCH",
+        body: queryArg.updateInstance,
+      }),
+    }),
+    knowledgeBaseRuns: build.query<KnowledgeBaseRunsApiResponse, KnowledgeBaseRunsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/knowledge-bases/${queryArg.id}/runs` }),
+    }),
+    startKnowledgeBaseRun: build.mutation<StartKnowledgeBaseRunApiResponse, StartKnowledgeBaseRunApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/knowledge-bases/${queryArg.id}/runs`,
+        method: "POST",
+        body: queryArg.startRun,
+      }),
+    }),
     me: build.query<MeApiResponse, MeApiArg>({
       query: () => ({ url: `/control-plane/v1/me` }),
     }),
@@ -785,6 +871,19 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.sourceId}`,
         method: "PUT",
         body: queryArg.replaceSpaceCapabilityPolicy,
+      }),
+    }),
+    definitions: build.query<DefinitionsApiResponse, DefinitionsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-base-definitions` }),
+    }),
+    list: build.query<ListApiResponse, ListApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases` }),
+    }),
+    create: build.mutation<CreateApiResponse, CreateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases`,
+        method: "POST",
+        body: queryArg.createInstance,
       }),
     }),
     marketplaceInstallation: build.query<MarketplaceInstallationApiResponse, MarketplaceInstallationApiArg>({
@@ -1603,6 +1702,68 @@ export type ImportBlueprintApiResponse = /** status 200 Success */ Report;
 export type ImportBlueprintApiArg = {
   provisioningUpload: ProvisioningUpload;
 };
+export type PublishApiResponse = unknown;
+export type PublishApiArg = {
+  publishDefinitions: PublishDefinitions;
+};
+export type ContextApiResponse = /** status 200 undefined */ KnowledgeBaseRun;
+export type ContextApiArg = {
+  id: string;
+};
+export type ClaimKnowledgeBaseRunApiResponse = /** status 200 undefined */ KnowledgeBaseRun;
+export type ClaimKnowledgeBaseRunApiArg = {
+  id: string;
+};
+export type CompleteApiResponse = unknown;
+export type CompleteApiArg = {
+  id: string;
+  completeRun: CompleteRun;
+};
+export type CatalogueApiResponse = /** status 200 undefined */ Catalogue;
+export type CatalogueApiArg = {
+  id: string;
+  cursor?: string;
+  limit?: number;
+};
+export type UploadKnowledgeBaseDocumentApiResponse = /** status 200 undefined */
+  | KnowledgeBaseDocumentReceipt
+  | /** status 202 undefined */ KnowledgeBaseDocumentReceipt;
+export type UploadKnowledgeBaseDocumentApiArg = {
+  id: string;
+  "Idempotency-Key": string;
+  sourceKey: string;
+  sourceVersion: string;
+  fileUpload: FileUpload;
+};
+export type RetractApiResponse = unknown;
+export type RetractApiArg = {
+  id: string;
+  sourceKey: string;
+};
+export type OutcomeApiResponse = /** status 200 undefined */ KnowledgeBaseDocumentReceipt;
+export type OutcomeApiArg = {
+  id: string;
+  task: string;
+};
+export type BindingApiResponse = /** status 200 undefined */ KnowledgeBaseWorkerBinding;
+export type BindingApiArg = {
+  runtimeId: string;
+  definitionId: string;
+};
+export type UpdateApiResponse = /** status 200 undefined */ KnowledgeBaseInstance;
+export type UpdateApiArg = {
+  id: string;
+  updateInstance: UpdateInstance;
+};
+export type KnowledgeBaseRunsApiResponse = /** status 200 undefined */ KnowledgeBaseRun[];
+export type KnowledgeBaseRunsApiArg = {
+  id: string;
+};
+export type StartKnowledgeBaseRunApiResponse = /** status 202 undefined */ KnowledgeBaseRun;
+export type StartKnowledgeBaseRunApiArg = {
+  id: string;
+  startRun: StartRun;
+};
 export type MeApiResponse = /** status 200 Success */ Me;
 export type MeApiArg = void;
 export type MarketplaceProposalSpacesApiResponse = /** status 200 undefined */ ProposalSpacePage;
@@ -1978,6 +2139,19 @@ export type ReplaceSpaceCapabilityPolicyApiArg = {
   spaceId: string;
   sourceId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
+};
+export type DefinitionsApiResponse = /** status 200 undefined */ AvailableKnowledgeBaseDefinition[];
+export type DefinitionsApiArg = {
+  spaceId: string;
+};
+export type ListApiResponse = /** status 200 undefined */ KnowledgeBaseInstance[];
+export type ListApiArg = {
+  spaceId: string;
+};
+export type CreateApiResponse = /** status 201 undefined */ KnowledgeBaseInstance;
+export type CreateApiArg = {
+  spaceId: string;
+  createInstance: CreateInstance;
 };
 export type MarketplaceInstallationApiResponse = /** status 200 undefined */ InstallationReceipt;
 export type MarketplaceInstallationApiArg = {
@@ -3254,6 +3428,77 @@ export type Report = {
 export type ProvisioningUpload = {
   file: Blob;
 };
+export type Definition = {
+  config_schema: any;
+  description: string;
+  icon?: string;
+  id: string;
+  name: string;
+  version: string;
+};
+export type PublishDefinitions = {
+  definitions: Definition[];
+  runtime_id: string;
+};
+export type KnowledgeBaseRun = {
+  config: object;
+  credential_refs: object;
+  deadline_at: string;
+  definition_id: string;
+  error_code?: string | null;
+  folder_id: string;
+  id: string;
+  instance_id: string;
+  profile: string;
+  result?: object | null;
+  runtime_id: string;
+  space_id: string;
+  state: string;
+};
+export type CompleteRun = {
+  error_code?: string | null;
+  result: any;
+};
+export type SourceDocument = {
+  current_version?: string | null;
+  document_id?: string | null;
+  error_code?: string | null;
+  pending_version?: string | null;
+  processing?: Summary | null;
+  source_key: string;
+};
+export type Catalogue = {
+  items: SourceDocument[];
+  next_cursor?: string | null;
+};
+export type KnowledgeBaseDocumentReceipt = {
+  document_id: string;
+  error_code?: string | null;
+  state: ProcessingStatus;
+  task_id: string;
+};
+export type KnowledgeBaseWorkerBinding = {
+  installation_id: string;
+  task_queue: string;
+};
+export type KnowledgeBaseInstance = {
+  config: object;
+  credential_refs: object;
+  definition_id: string;
+  folder_id: string;
+  id: string;
+  interval_seconds?: number | null;
+  paused: boolean;
+  profile: string;
+  space_id: string;
+};
+export type UpdateInstance = {
+  interval_seconds?: number | null;
+  paused: boolean;
+};
+export type StartRun = {
+  request_key: string;
+};
 export type PlatformRole = "platform_admin" | "platform_observer" | "feature_manager" | "prompt_editor";
 export type Me = {
   platform_roles: PlatformRole[];
@@ -3350,7 +3595,7 @@ export type CapabilityFieldDescription = {
   type: CapabilityFieldType;
 };
 export type CapabilityExecutionModel = "react" | "graph";
-export type PodCapabilityKind = "tool" | "application";
+export type PodCapabilityKind = "tool" | "application" | "knowledge_base";
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
@@ -3384,6 +3629,8 @@ export type AffectedAgentInstance = {
 export type CapabilityInventoryOffer = {
   /** Native offer present in its snapshot, or managed connection ready for execution. */
   advertised: boolean;
+  /** Immutable application key from the registry; absent for other origins. */
+  application_logical_name?: string | null;
   capability_id: string;
   /** Enabled for every space of this organization. */
   default_on: boolean;
@@ -3901,8 +4148,6 @@ export type ManagedAgentInstanceSummary = {
   model_options?: ModelOptions | null;
   preparation_error: string | null;
   preparation_state: string;
-  /** Diagnostic only; requires explicit re-selection if no recommended_model is saved. */
-  recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
   role: string;
   selected_capability_ids?: string[] | null;
@@ -3966,8 +4211,6 @@ export type CreateAgentInstanceRequest = {
   logical_name?: string | null;
   model_options?: ModelOptions | null;
   powerpoint?: FileChange | null;
-  /** Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. */
-  recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
   role?: string | null;
   /** Canonical UUID returned by this space's template catalog. */
@@ -4005,8 +4248,6 @@ export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
   model_options?: ModelOptions | null;
   powerpoint?: FileChange | null;
-  /** Omitted keeps the recommendation; null clears it; other values return 422. */
-  recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
   role?: string | null;
   status?: AgentInstanceStatus | null;
@@ -4034,7 +4275,6 @@ export type ChatControlDescriptor = {
 export type ExecutionTransport = "sse";
 export type ModelPreparationErrorCode =
   | "selection_missing"
-  | "reselection_required"
   | "offer_unknown"
   | "offer_forbidden"
   | "offer_unavailable"
@@ -4065,12 +4305,9 @@ export type PreparationModelOffer = {
 export type PreparationModels = {
   default: ModelOfferKey | null;
   fallback: ModelOfferKey | null;
-  /** A retained diagnostic only, never a selectable profile. */
-  legacy_profile_id: string | null;
   offers: PreparationModelOffer[];
   options: ModelOptions;
   recommendation: ModelOfferKey | null;
-  requires_reselection: boolean;
 };
 export type SkillAvailability = "available" | "disabled" | "unavailable";
 export type SkillSummary = PackageSummary & {
@@ -4113,7 +4350,7 @@ export type ExecutionPreparation = {
   supports_ui_parts: boolean;
 };
 export type RuntimeAgent = {
-  /** Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
+  /** Saved tuning, including model offer selection and invocation options.
     No refresh from the catalog; fields, values and capability envelopes are preserved. */
   configuration: any;
   configuration_revision: number;
@@ -4181,8 +4418,6 @@ export type RuntimeModelOffer = {
 };
 export type RuntimeModels = {
   default: ModelOfferKey | null;
-  /** Diagnostic only. Never an alternative resolution key. */
-  legacy_profile_id?: string | null;
   /** Union of permitted keys and retained recommendation/default/fallback references. */
   offers: RuntimeModelOffer[];
   options: ModelOptions;
@@ -4190,7 +4425,6 @@ export type RuntimeModels = {
   /** Local preference; never exceeds the organization reasoning ceiling. */
   reasoning_default_on: ModelOfferKey[];
   recommendation?: ModelOfferKey | null;
-  requires_reselection: boolean;
 };
 export type RuntimeSpace = {
   id: string;
@@ -4293,6 +4527,21 @@ export type ReplaceSpaceCapabilityPolicy = {
   expected_revision: number;
   permitted_ids: string[];
   restricted: boolean;
+};
+export type AvailableKnowledgeBaseDefinition = {
+  credential_bindings: string[];
+  definition: Definition;
+  runtime_id: string;
+};
+export type CreateInstance = {
+  config: any;
+  credential_refs?: {
+    [key: string]: string;
+  };
+  definition_id: string;
+  interval_seconds?: number | null;
+  name: string;
+  profile: string;
 };
 export type McpToolChanges = {
   added: string[];
@@ -4763,6 +5012,23 @@ export const {
   useHealthQuery,
   useLazyHealthQuery,
   useImportBlueprintMutation,
+  usePublishMutation,
+  useContextQuery,
+  useLazyContextQuery,
+  useClaimKnowledgeBaseRunMutation,
+  useCompleteMutation,
+  useCatalogueQuery,
+  useLazyCatalogueQuery,
+  useUploadKnowledgeBaseDocumentMutation,
+  useRetractMutation,
+  useOutcomeQuery,
+  useLazyOutcomeQuery,
+  useBindingQuery,
+  useLazyBindingQuery,
+  useUpdateMutation,
+  useKnowledgeBaseRunsQuery,
+  useLazyKnowledgeBaseRunsQuery,
+  useStartKnowledgeBaseRunMutation,
   useMeQuery,
   useLazyMeQuery,
   useMarketplaceProposalSpacesQuery,
@@ -4868,6 +5134,11 @@ export const {
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
+  useDefinitionsQuery,
+  useLazyDefinitionsQuery,
+  useListQuery,
+  useLazyListQuery,
+  useCreateMutation,
   useMarketplaceInstallationQuery,
   useLazyMarketplaceInstallationQuery,
   useMcpConnectionsQuery,

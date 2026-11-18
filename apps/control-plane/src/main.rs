@@ -299,7 +299,7 @@ async fn serve(config: Config) -> Result<()> {
         None => None,
     };
     let app = api::router(
-        state,
+        state.clone(),
         &config.app.base_url,
         &config.security.authorized_origins,
     );
@@ -363,6 +363,17 @@ async fn serve(config: Config) -> Result<()> {
             tokio::select! {
                 _ = stopping => Ok(()),
                 _ = control_plane::capability_preparation::dispatch::run(pool, settings) => anyhow::bail!("capability dispatcher stopped"),
+            }
+        }));
+    }
+    {
+        let kb_state = state.clone();
+        let stopping = stopping.clone();
+        let settings = config.scheduler.lifecycle.temporal.clone();
+        tasks.push(Box::pin(async move {
+            tokio::select! {
+                _ = stopping => Ok(()),
+                _ = control_plane::knowledge_bases::dispatch::run(kb_state, settings) => anyhow::bail!("knowledge base dispatcher stopped"),
             }
         }));
     }

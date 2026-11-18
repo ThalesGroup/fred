@@ -155,7 +155,6 @@ beforeEach(() => {
           models: {
             default: null,
             recommendation: null,
-            requires_reselection: false,
             offers: [],
             options: {},
             reasoning_default_on: [],

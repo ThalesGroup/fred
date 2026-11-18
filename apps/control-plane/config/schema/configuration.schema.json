@@ -481,6 +481,48 @@
       ],
       "type": "object"
     },
+    "KnowledgeBaseConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "credentials": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeBaseCredentialBinding"
+          },
+          "type": "array"
+        },
+        "workers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkerIdentity"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "KnowledgeBaseCredentialBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "credential_binding": {
+          "type": "string"
+        },
+        "runtime_id": {
+          "type": "string"
+        },
+        "space_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_id",
+        "space_id",
+        "credential_binding"
+      ],
+      "type": "object"
+    },
     "LifecycleConfig": {
       "additionalProperties": false,
       "properties": {
@@ -888,6 +930,9 @@
             "$ref": "#/$defs/InferenceCredentialBinding"
           },
           "type": "array"
+        },
+        "knowledge_bases": {
+          "$ref": "#/$defs/KnowledgeBaseConfig"
         },
         "knowledge_flow_url": {
           "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",

@@ -159,12 +159,18 @@ impl Processing {
             spaces::authorized_mutation(&self.pool, actor, document.space_id, Permission::Write)
                 .await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
+        crate::knowledge_bases::documents::require_manual_document(&mut *tx, id).await?;
         let document: Document = sqlx::query_as(
             "select * from document_current where id=$1 and deletion_id is null for update",
         )
         .bind(id)
         .fetch_one(&mut *tx)
         .await?;
+        if sqlx::query_scalar::<_, bool>("select exists(select 1 from document_processing where document_id=$1 and status in ('pending','running'))")
+            .bind(id).fetch_one(&mut *tx).await?
+        {
+            return Err(conflict("processing_exists"));
+        }
         let vectors: i64 = sqlx::query_scalar("select coalesce(cardinality(g.vector_ordinals),0)::bigint from document d left join generation g on g.id=d.published_generation where d.id=$1")
             .bind(id)
             .fetch_one(&mut *tx)

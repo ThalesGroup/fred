@@ -61,11 +61,9 @@ const preparation: ExecutionPreparation = {
   models: {
     default: null,
     fallback: null,
-    legacy_profile_id: null,
     offers: [],
     options: {},
     recommendation: null,
-    requires_reselection: false,
   },
   supports_streaming: true,
   chat_controls: [],

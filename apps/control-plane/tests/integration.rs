@@ -27,12 +27,16 @@ use control_plane::{
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
+#[path = "support/agent_catalog_resilience.rs"]
+mod agent_catalog_resilience;
 #[path = "support/content_bucket.rs"]
 mod content_bucket;
 #[path = "support/document_storage.rs"]
 mod document_storage;
 #[path = "support/environment.rs"]
 mod environment;
+#[path = "support/knowledge_bases.rs"]
+mod knowledge_bases;
 #[path = "support/sql_boundary.rs"]
 mod sql_boundary;
 use environment::{Env, env, named_space};

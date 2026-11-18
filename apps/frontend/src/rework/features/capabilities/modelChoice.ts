@@ -29,7 +29,6 @@ export function parseModelChoice(value: string): ModelOfferKey {
   return { source_id: key[0], upstream_model_id: key[1] };
 }
 export function recommendedModelRow(models: PreparationModels | undefined): PreparationModelOffer | undefined {
-  if (models?.requires_reselection && models.legacy_profile_id) return undefined;
   const key = models?.recommendation ?? models?.default;
   return key ? models?.offers.find((row) => modelChoiceKey(row.key) === modelChoiceKey(key)) : undefined;
 }

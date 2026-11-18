@@ -49,14 +49,14 @@
     "when": "BEFORE INSERT OR DELETE / ROW"
   },
   {
-    "comment": "effect: schedule cleanup of retired or superseded file contents",
+    "comment": "effect: schedule retired contents and superseded generation cleanup",
     "function": "retire_document_contents",
     "table": "document",
     "trigger": "document_contents_retirement",
     "when": "AFTER UPDATE / ROW"
   },
   {
-    "comment": "assertion: consistency - published owned current content and fixed source identity",
+    "comment": "assertion: consistency - live owned content and atomic exact-content source publication",
     "function": "protect_document_current",
     "table": "document",
     "trigger": "document_current_valid",
@@ -75,6 +75,13 @@
     "table": "document",
     "trigger": "document_updates_account",
     "when": "AFTER UPDATE / STATEMENT"
+  },
+  {
+    "comment": "assertion: consistency - managed source placement and name are immutable",
+    "function": "protect_kb_source_placement",
+    "table": "document",
+    "trigger": "kb_source_placement",
+    "when": "BEFORE UPDATE / ROW"
   },
   {
     "comment": "assertion: immutability - content bytes and publication; no current-content cleanup",
@@ -98,11 +105,32 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - managed source cannot move or receive manual moves",
+    "function": "protect_kb_source_placement",
+    "table": "document_move",
+    "trigger": "kb_source_move",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "effect: release replacement growth reservation and schedule failed candidate cleanup",
+    "function": "finish_processing_content",
+    "table": "document_processing",
+    "trigger": "document_processing_content_finished",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - processing identity and terminal outcome",
     "function": "protect_processing_identity",
     "table": "document_processing",
     "trigger": "document_processing_identity",
     "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - immutable processing run and source content",
+    "function": "protect_kb_document_scope",
+    "table": "document_processing",
+    "trigger": "kb_processing_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - ingestion only accepts source documents",
@@ -117,6 +145,20 @@
     "table": "document_upload",
     "trigger": "document_upload_account",
     "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - source uploads reserve initial bytes or replacement growth",
+    "function": "require_source_reservation",
+    "table": "document_upload",
+    "trigger": "document_upload_source_reservation",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - immutable source transfer bound to its run",
+    "function": "protect_kb_document_scope",
+    "table": "document_upload",
+    "trigger": "kb_upload_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - upload target matches its declared destination",
@@ -138,6 +180,41 @@
     "table": "folder",
     "trigger": "folder_pending_uploads",
     "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - authenticated definition owner",
+    "function": "protect_kb_identity",
+    "table": "kb_definition",
+    "trigger": "kb_definition_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - managed mirror owns an empty dedicated root folder",
+    "function": "require_kb_folder",
+    "table": "kb_instance",
+    "trigger": "kb_instance_folder",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "assertion: immutability - managed mirror source and placement",
+    "function": "protect_kb_identity",
+    "table": "kb_instance",
+    "trigger": "kb_instance_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - admitted run scope and terminal outcome",
+    "function": "protect_kb_identity",
+    "table": "kb_run",
+    "trigger": "kb_run_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - source identity, placement and published version",
+    "function": "protect_kb_document_scope",
+    "table": "kb_source_document",
+    "trigger": "kb_source_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: immutability - marketplace identity and successive publication versions",

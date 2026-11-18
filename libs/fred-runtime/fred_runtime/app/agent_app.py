@@ -1766,7 +1766,6 @@ async def _resolve_agent_instance(
                 )
             if isinstance(problem, dict) and problem.get("code") in {
                 "model_selection_missing",
-                "model_reselection_required",
                 "model_offer_unknown",
                 "model_offer_forbidden",
                 "model_offer_unavailable",
