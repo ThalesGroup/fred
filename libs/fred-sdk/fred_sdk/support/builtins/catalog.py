@@ -65,9 +65,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-from fred_sdk.contracts.context import GeoPart, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    GeoPart,
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
@@ -245,6 +250,29 @@ class BuiltinToolSpec:
     default_description: str
     local_handler: Callable[[dict[str, object]], ToolInvocationResult] | None = None
     output_part: type[BaseModel] | None = None
+
+    def invoke_local(self, payload: dict[str, object]) -> ToolInvocationResult:
+        if self.backend != BuiltinToolBackend.LOCAL or self.local_handler is None:
+            raise RuntimeError(f"Built-in {self.tool_ref} has no local handler.")
+        try:
+            return self.local_handler(payload)
+        except ValidationError as exc:
+            return ToolInvocationResult(
+                tool_ref=self.tool_ref,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.TEXT,
+                        text=self.validation_error_text(exc),
+                    ),
+                ),
+                is_error=True,
+            )
+
+    def validation_error_text(self, exc: ValidationError) -> str:
+        first_error = exc.errors(include_input=False)[0]
+        location = ".".join(str(part) for part in first_error["loc"])
+        detail = f"{location}: {first_error['msg']}" if location else first_error["msg"]
+        return f"Invalid arguments for {self.tool_ref}: {detail[:300]}"
 
 
 def _render_geo_points(payload: dict[str, object]) -> ToolInvocationResult:

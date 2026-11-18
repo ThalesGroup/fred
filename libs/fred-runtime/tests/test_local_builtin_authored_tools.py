@@ -64,3 +64,11 @@ async def test_authored_tool_context_can_invoke_local_builtin() -> None:
 
     assert result.tool_ref == TOOL_REF_GEO_RENDER_POINTS
     assert result.ui_parts[0].type == "geo"
+
+    invalid = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        points=[{"latitude": 91, "longitude": 2}],
+    )
+    assert invalid.is_error
+    assert invalid.ui_parts == ()
+    assert "points.0.latitude" in (invalid.blocks[0].text or "")

@@ -746,6 +746,37 @@ def test_graph_rejects_local_builtin_without_handler(
     assert not invoker.called
 
 
+def test_invalid_geo_emits_tool_error_without_part() -> None:
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(),
+        model=None,
+        graph_agent_id="test.geo",
+        node_id="geo",
+        allowed_tool_refs=frozenset({TOOL_REF_GEO_RENDER_POINTS}),
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_GEO_RENDER_POINTS,
+            {"points": [{"latitude": 91, "longitude": 2}]},
+        )
+    )
+
+    tool_result = next(
+        event for event in events if isinstance(event, ToolResultRuntimeEvent)
+    )
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert tool_result.is_error
+    assert tool_result.ui_parts == ()
+    assert "points.0.latitude" in tool_result.content
+
+
 @pytest.mark.asyncio
 async def test_graph_final_includes_geo_part_from_tool_result(
     monkeypatch: pytest.MonkeyPatch,

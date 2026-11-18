@@ -52,3 +52,15 @@ def test_geo_uses_shared_local_builtin_contract() -> None:
     assert spec.local_handler is not None
     result = spec.local_handler({"points": [{"latitude": 1, "longitude": 2}]})
     assert isinstance(result.ui_parts[0], GeoPart)
+
+
+def test_invalid_local_geo_call_returns_tool_error_without_part() -> None:
+    spec = get_builtin_tool_spec(TOOL_REF_GEO_RENDER_POINTS)
+    assert spec is not None
+
+    result = spec.invoke_local({"points": [{"latitude": 91, "longitude": 2}]})
+
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert result.blocks[0].text is not None
+    assert "points.0.latitude" in result.blocks[0].text

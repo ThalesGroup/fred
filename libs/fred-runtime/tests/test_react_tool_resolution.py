@@ -105,6 +105,41 @@ async def test_geo_tool_is_available_without_agent_declaration() -> None:
         assert result.ui_parts[0].type == "geo"
 
 
+@pytest.mark.asyncio
+async def test_invalid_geo_call_is_recoverable_tool_result() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    spec = next(
+        spec
+        for spec in _resolver().resolve_tools()
+        if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+    )
+    payload = {"points": [{"latitude": 91, "longitude": 2}]}
+    content, result = await spec.invoke(payload)
+    assert result is not None
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert "points.0.latitude" in content
+
+    bound_tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+    response = await bound_tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-geo",
+            "name": bound_tool.name,
+            "args": payload,
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "points.0.latitude" in str(response.content)
+    assert response.artifact is None
+
+
 def test_geo_description_stays_valid_when_runtime_name_changes() -> None:
     for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
         resolver = ReActRuntimeToolResolver(

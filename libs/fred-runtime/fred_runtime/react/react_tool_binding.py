@@ -345,6 +345,7 @@ class ReActToolBinder:
                 description=spec.description,
                 args_schema=cast(Any, spec.args_schema),
                 response_format="content_and_artifact",
+                handle_validation_error=spec.validation_error_handler or False,
                 metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
             ),
             mcp_server_id=spec.mcp_server_id,

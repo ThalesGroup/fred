@@ -482,13 +482,13 @@ class NodeContext:
                 f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
             )
         local_spec = get_builtin_tool_spec(tool_ref)
-        local_handler = None
+        local_builtin = None
         if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL:
-            local_handler = local_spec.local_handler
-            if local_handler is None:
+            if local_spec.local_handler is None:
                 raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
+            local_builtin = local_spec
         tool_invoker = self.services.tool_invoker
-        if tool_invoker is None and local_handler is None:
+        if tool_invoker is None and local_builtin is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
 
         self.sink(
@@ -508,8 +508,8 @@ class NodeContext:
         ) as obs:
 
             async def invoke() -> ToolInvocationResult:
-                if local_handler is not None:
-                    return local_handler(payload)
+                if local_builtin is not None:
+                    return local_builtin.invoke_local(payload)
                 assert tool_invoker is not None
                 return await tool_invoker.invoke(
                     ToolInvocationRequest(

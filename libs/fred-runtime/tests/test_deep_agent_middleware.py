@@ -399,6 +399,44 @@ def _fake_definition() -> ReActAgentDefinition:
 
 
 @pytest.mark.asyncio
+async def test_deep_binds_local_tool_and_returns_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    tools = cast(list, captured["tools"])
+    geo_tools = [tool for tool in tools if tool.name == "geo_render_points"]
+    assert len(geo_tools) == 1
+    response = await geo_tools[0].ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-geo",
+            "name": geo_tools[0].name,
+            "args": {"points": [{"latitude": 91, "longitude": 2}]},
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "points.0.latitude" in str(response.content)
+    assert response.artifact is None
+
+
+@pytest.mark.asyncio
 async def test_deep_build_executor_wires_observability_middleware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -946,9 +946,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             return result
         spec = get_builtin_tool_spec(request.tool_ref)
         if spec is not None and spec.backend == BuiltinToolBackend.LOCAL:
-            if spec.local_handler is None:
-                raise RuntimeError(f"Local built-in {request.tool_ref} has no handler.")
-            return spec.local_handler(request.payload)
+            return spec.invoke_local(request.payload)
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
 
     async def _invoke_knowledge_search(

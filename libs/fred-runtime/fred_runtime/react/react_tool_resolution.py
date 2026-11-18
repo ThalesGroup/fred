@@ -55,7 +55,7 @@ from fred_sdk.support.builtins import (
 )
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
@@ -129,6 +129,7 @@ class FredRuntimeToolSpec:
     invoke: RuntimeToolInvoke
     trace_span_name: str = "tool.invoke"
     build_trace_attributes: RuntimeToolTraceAttrs = field(default=lambda payload: {})
+    validation_error_handler: Callable[[ValidationError], str] | None = None
     # Originating MCP catalog server id, `None` for built-in/registered/declared
     # tools (never MCP-sourced). Lets the ReAct prompt group its tool listing
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
@@ -440,8 +441,7 @@ class ReActRuntimeToolResolver:
             )
 
         if backend == BuiltinToolBackend.LOCAL:
-            handler = builtin_spec.local_handler
-            if handler is None:
+            if builtin_spec.local_handler is None:
                 raise RuntimeError(
                     f"Local built-in {requirement.tool_ref} has no handler."
                 )
@@ -449,7 +449,7 @@ class ReActRuntimeToolResolver:
             async def invoke_local(
                 payload: dict[str, object],
             ) -> tuple[str, ToolInvocationResult]:
-                result = handler(payload)
+                result = builtin_spec.invoke_local(payload)
                 return render_tool_result(result), result
 
             return FredRuntimeToolSpec(
@@ -458,6 +458,7 @@ class ReActRuntimeToolResolver:
                 args_schema=builtin_spec.args_schema,
                 tool_ref=requirement.tool_ref,
                 invoke=invoke_local,
+                validation_error_handler=builtin_spec.validation_error_text,
             )
 
         raise RuntimeError(
