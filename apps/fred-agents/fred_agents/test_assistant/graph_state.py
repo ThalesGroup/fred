@@ -20,7 +20,7 @@ Every branch is keyword-driven so developers can exercise every SSE event type
 running pod. Model-backed branches (model, assist) fall back to fixed text when
 no model is bound; tests bind `mock_llm.MockChatModel`.
 
-Trigger keywords (case-insensitive prefix match):
+Trigger keywords (case-insensitive; geo matches exactly):
   echo          → simple echo reply with status events
   hitl confirm  → two-option confirmation
   hitl choice   → four-option question with descriptions
@@ -29,8 +29,7 @@ Trigger keywords (case-insensitive prefix match):
   trace         → status events + streamed analytical text + mock sources
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word
-  geo           → renders a sample GeoJSON FeatureCollection as a GeoPart ui_part
-  geo wide      → renders Paris, Toulon, and a Mediterranean point at a wider scale
+  geo           → renders Paris, Toulon, and a Mediterranean point as a GeoPart ui_part
   document      → search via the document_access capability's tool
                   (context.invoke_runtime_tool), then a HITL confirm/discard
                   gate on the top hit — degrades to a helpful message when the

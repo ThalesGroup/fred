@@ -120,9 +120,9 @@ from .graph_steps import (
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
-    "Send a message starting with one of these keywords to trigger a scenario:\n"
+    "Send a message starting with one of these keywords (send geo alone):\n"
     "  echo | model | planning | hitl confirm | hitl choice | hitl text | hitl comment | "
-    "trace | error | think | markdown | mermaid | long | geo | geo wide | document\n\n"
+    "trace | error | think | markdown | mermaid | long | geo | document\n\n"
     "Any other message shows this help menu."
 )
 
