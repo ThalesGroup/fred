@@ -28,6 +28,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_SSE_FRAMES,
     TRACE_RESUME_HEADER,
     TRACE_SEGMENT_HEADER,
+    OtlpTraceSpan,
     TraceAdmission,
     TraceAdmissionReconciliation,
     TraceAdmissionRequest,
@@ -971,6 +972,25 @@ async def get_conversation_trace_history(
     if current is None or not current.visible or current.consent != reference.consent:
         raise HTTPException(403, "trace_history_access_denied")
     return result
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/spans/{exchange_id}",
+    operation_id="list_conversation_trace_spans",
+)
+async def list_conversation_trace_spans(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    container: Container,
+    _user: Operator,
+    response: Response,
+) -> list[OtlpTraceSpan]:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "trace_conversation_not_found")
+    return await store.otel_spans(session_id, exchange_id)
 
 
 @router.get(

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { type ReactElement, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -24,6 +24,7 @@ import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/cont
 import {
   type ConversationTraceDetail,
   type ConversationTraceTurn,
+  type OtlpTraceSpan,
   type TraceHttpAttempt,
   type TraceModelCall,
   type TraceToolCall,
@@ -50,9 +51,16 @@ type Call =
   | { kind: "llm"; ref: string; attempt?: TraceHttpAttempt; model?: TraceModelCall }
   | { kind: "tool"; ref: string; tool: TraceToolCall };
 
+type CallNode = { call: Call; children: CallNode[] };
+
 const refresh = { refetchOnMountOrArgChange: true, refetchOnFocus: true };
 
-function turnCalls(attempts: TraceHttpAttempt[], models: TraceModelCall[], tools: TraceToolCall[]): Call[] {
+function turnCalls(
+  attempts: TraceHttpAttempt[],
+  models: TraceModelCall[],
+  tools: TraceToolCall[],
+  spans: OtlpTraceSpan[],
+): { calls: Call[]; roots: CallNode[] } {
   const modelByCall = new Map(models.map((model) => [model.call_id, model]));
   const callsWithHttp = new Set(attempts.map(({ call_id }) => call_id));
   const modelCalls = [
@@ -72,6 +80,10 @@ function turnCalls(attempts: TraceHttpAttempt[], models: TraceModelCall[], tools
         callId: model.call_id,
       })),
   ];
+  if (spans.length) {
+    const calls: Call[] = [...modelCalls, ...tools.map((tool) => ({ kind: "tool" as const, ref: tool.ref, tool }))];
+    return { calls, roots: spanTree(calls, spans) };
+  }
   const lastRefByCall = new Map(modelCalls.map(({ callId, ref }) => [callId, ref]));
   const toolsByRequest = new Map<string | undefined, Call[]>();
   for (const tool of tools) {
@@ -81,10 +93,73 @@ function turnCalls(attempts: TraceHttpAttempt[], models: TraceModelCall[], tools
     siblings.push({ kind: "tool", ref: tool.ref, tool });
     toolsByRequest.set(ref, siblings);
   }
-  return [
+  const calls = [
     ...modelCalls.flatMap((call) => [call, ...(toolsByRequest.get(call.ref) ?? [])]),
     ...(toolsByRequest.get(undefined) ?? []),
   ];
+  return { calls, roots: calls.map((call) => ({ call, children: [] })) };
+}
+
+function spanTree(calls: Call[], spans: OtlpTraceSpan[]): CallNode[] {
+  const modelCalls = new Map<string, Call[]>();
+  const tools = new Map<string, Call>();
+  for (const call of calls) {
+    if (call.kind === "tool") {
+      tools.set(call.ref, call);
+    } else {
+      const id = call.attempt?.call_id ?? call.model?.call_id;
+      if (id) {
+        const attempts = modelCalls.get(id) ?? [];
+        attempts.push(call);
+        modelCalls.set(id, attempts);
+      }
+    }
+  }
+  const key = (traceId: string, spanId: string) => `${traceId}:${spanId}`;
+  const byId = new Map(spans.map((span) => [key(span.traceId, span.spanId), span]));
+  const ordered = [...spans].sort((a, b) => {
+    const left = a.startTimeUnixNano;
+    const right = b.startTimeUnixNano;
+    return left.length - right.length || left.localeCompare(right);
+  });
+  const displayed = new Set<string>();
+  const bySpan = new Map<string, CallNode[]>();
+  for (const span of ordered) {
+    const attributes = new Map(span.attributes?.map(({ key, value }) => [key, value.stringValue]));
+    const toolRef = attributes.get("fred.evidence.ref");
+    const modelId = attributes.get("fred.call.id");
+    const tool = toolRef ? tools.get(toolRef) : undefined;
+    const matches = tool ? [tool] : modelId ? (modelCalls.get(modelId) ?? []) : [];
+    const nodes = matches.flatMap((call) => {
+      if (displayed.has(call.ref)) return [];
+      displayed.add(call.ref);
+      return [{ call, children: [] }];
+    });
+    if (nodes.length) bySpan.set(key(span.traceId, span.spanId), nodes);
+  }
+
+  const roots: CallNode[] = [];
+  for (const [id, nodes] of bySpan) {
+    let span = byId.get(id);
+    let parent: CallNode | undefined;
+    const visited = new Set([id]);
+    // Runtime spans with no visible call can still carry the parent relationship.
+    while (span?.parentSpanId) {
+      const ancestor = key(span.traceId, span.parentSpanId);
+      if (visited.has(ancestor)) {
+        parent = undefined;
+        break;
+      }
+      visited.add(ancestor);
+      parent ??= bySpan.get(ancestor)?.at(-1);
+      span = byId.get(ancestor);
+    }
+    (parent?.children ?? roots).push(...nodes);
+  }
+  for (const call of calls) {
+    if (!displayed.has(call.ref)) roots.push({ call, children: [] });
+  }
+  return roots;
 }
 
 function useTurnCalls(sessionId: string | undefined, turn?: ConversationTraceTurn) {
@@ -93,11 +168,13 @@ function useTurnCalls(sessionId: string | undefined, turn?: ConversationTraceTur
   const http = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(args, refresh);
   const models = enhancedControlPlaneApi.useListConversationTraceModelCallsQuery(args, refresh);
   const tools = enhancedControlPlaneApi.useListConversationTraceToolCallsQuery(args, refresh);
+  const spans = enhancedControlPlaneApi.useListConversationTraceSpansQuery(args, refresh);
   return {
-    calls: turnCalls(
+    ...turnCalls(
       http.isError ? [] : (http.currentData ?? []),
       models.isError ? [] : (models.currentData ?? []),
       tools.isError ? [] : (tools.currentData ?? []),
+      spans.isError ? [] : (spans.currentData ?? []),
     ),
     loading: [http, models, tools].some((query) => query.isFetching && !query.currentData),
     failed: http.isError || models.isError || tools.isError,
@@ -377,8 +454,42 @@ function TurnTreeLinks({
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const elapsed = traceElapsedFormatter(i18n.language);
   const inactive = useTurnCalls(sessionId, metadata ? undefined : turn);
-  const { calls, loading, failed } = metadata ?? inactive;
+  const { calls, roots, loading, failed } = metadata ?? inactive;
   const search = (ref?: string, view?: string) => ({ search: callSearch(turn.exchange_id, ref, view).toString() });
+
+  function renderCall({ call, children }: CallNode): ReactElement {
+    const model = call.kind === "llm";
+    const name = model
+      ? (call.attempt?.model ?? call.model?.model ?? t("http.modelCall"))
+      : (call.tool.tool_name ?? t("tool.unnamed"));
+    const duration = model ? call.attempt?.duration_ms : call.tool.duration_ms;
+    const detail = model ? t("llm") : t(`tool.sources.${call.tool.source}`);
+    const attempts = call.kind === "tool" ? call.tool.http_attempts : undefined;
+    const status = model ? call.attempt?.status : attempts?.[attempts.length - 1]?.status;
+    return (
+      <li key={call.ref}>
+        <Link
+          className={styles.callLink}
+          to={search(call.ref)}
+          preventScrollReset
+          aria-current={call.ref === selectedRef ? "true" : undefined}
+        >
+          <Icon category="outlined" type={model ? "smart_toy" : "build"} />
+          <span className={styles.callLabel}>
+            <strong>{name}</strong>
+            <span>{duration == null ? detail : detail + " · " + elapsed(duration)}</span>
+          </span>
+          {status != null && (
+            <span className={styles.callStatus} data-failed={status >= 400}>
+              {status}
+            </span>
+          )}
+        </Link>
+        {children.length > 0 && <ul>{children.map(renderCall)}</ul>}
+      </li>
+    );
+  }
+
   return (
     <>
       {failed && (
@@ -392,37 +503,7 @@ function TurnTreeLinks({
         </p>
       )}
       <ul>
-        {calls.map((call) => {
-          const model = call.kind === "llm";
-          const name = model
-            ? (call.attempt?.model ?? call.model?.model ?? t("http.modelCall"))
-            : (call.tool.tool_name ?? t("tool.unnamed"));
-          const duration = model ? call.attempt?.duration_ms : call.tool.duration_ms;
-          const detail = model ? t("llm") : t(`tool.sources.${call.tool.source}`);
-          const attempts = call.kind === "tool" ? call.tool.http_attempts : undefined;
-          const status = model ? call.attempt?.status : attempts?.[attempts.length - 1]?.status;
-          return (
-            <li key={call.ref}>
-              <Link
-                className={styles.callLink}
-                to={search(call.ref)}
-                preventScrollReset
-                aria-current={call.ref === selectedRef ? "true" : undefined}
-              >
-                <Icon category="outlined" type={model ? "smart_toy" : "build"} />
-                <span className={styles.callLabel}>
-                  <strong>{name}</strong>
-                  <span>{duration == null ? detail : detail + " · " + elapsed(duration)}</span>
-                </span>
-                {status != null && (
-                  <span className={styles.callStatus} data-failed={status >= 400}>
-                    {status}
-                  </span>
-                )}
-              </Link>
-            </li>
-          );
-        })}
+        {roots.map(renderCall)}
         <li>
           <Link
             className={styles.callLink}

@@ -268,6 +268,9 @@ class ToolExecution:
                     if tool is None:
                         result = await invoke()
                     else:
+                        if span is not None:
+                            with suppress(Exception):
+                                span.set_attribute("fred.evidence.ref", tool.ref)
                         try:
                             result = await invoke()
                         except GraphBubbleUp:

@@ -1864,6 +1864,11 @@ const injectedRtkApi = api.injectEndpoints({
         }),
       },
     ),
+    listConversationTraceSpans: build.query<ListConversationTraceSpansApiResponse, ListConversationTraceSpansApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/spans/${queryArg.exchangeId}`,
+      }),
+    }),
     listConversationTraceHttpAttempts: build.query<
       ListConversationTraceHttpAttemptsApiResponse,
       ListConversationTraceHttpAttemptsApiArg
@@ -4066,6 +4071,11 @@ export type GetConversationTraceHistoryApiArg = {
   exchangeId: string;
   afterRank?: number;
   limit?: number;
+};
+export type ListConversationTraceSpansApiResponse = /** status 200 Successful Response */ OtlpTraceSpan[];
+export type ListConversationTraceSpansApiArg = {
+  sessionId: string;
+  exchangeId: string;
 };
 export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 Successful Response */ TraceHttpAttempt[];
 export type ListConversationTraceHttpAttemptsApiArg = {
@@ -7311,6 +7321,22 @@ export type TraceHistoryTranscript = {
   messages: ChatMessage[];
   next_rank?: number | null;
 };
+export type OtlpTraceStringValue = {
+  stringValue: string;
+};
+export type OtlpTraceAttribute = {
+  key: "fred.call.id" | "fred.evidence.ref" | "fred.capture.ref" | "fred.session.id" | "fred.exchange.id";
+  value: OtlpTraceStringValue;
+};
+export type OtlpTraceSpan = {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTimeUnixNano: string;
+  endTimeUnixNano: string;
+  attributes?: OtlpTraceAttribute[];
+};
 export type TraceHttpFailureStage = "response_headers" | "response_body" | "http_status";
 export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
 export type TraceHttpAttempt = {
@@ -7580,6 +7606,7 @@ export type TraceFinalization = {
   sse?: TraceSseSegment | null;
   model_calls?: TraceModelIndex[];
   tool_calls?: TraceToolCall[];
+  otel_spans?: OtlpTraceSpan[];
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -8620,6 +8647,8 @@ export const {
   useLazyGetConversationTraceHistoryAccessQuery,
   useGetConversationTraceHistoryQuery,
   useLazyGetConversationTraceHistoryQuery,
+  useListConversationTraceSpansQuery,
+  useLazyListConversationTraceSpansQuery,
   useListConversationTraceHttpAttemptsQuery,
   useLazyListConversationTraceHttpAttemptsQuery,
   useGetConversationTraceHttpAccessQuery,

@@ -196,6 +196,7 @@ class NodeContext:
     _last_finish_reason: str | None = None
     # Pauses asked so far in this run of the node; see request_human_input.
     _pauses: int = 0
+    trace_parent: Span | None = None
 
     def record_model_metadata(
         self,
@@ -773,6 +774,7 @@ class NodeContext:
                 services=self.services,
                 binding=self.binding,
                 name="v2.graph.await_human",
+                parent=self.trace_parent,
                 attributes={
                     "agent_id": self.graph_agent_id,
                     "node_id": self.node_id,
@@ -819,6 +821,7 @@ def _observe(
         services=ctx.services,
         binding=ctx.binding,
         name=span_name,
+        parent=ctx.trace_parent,
         attributes={
             "agent_id": ctx.graph_agent_id,
             "node_id": ctx.node_id,
@@ -884,6 +887,7 @@ def _start_runtime_span(
     binding: BoundRuntimeContext,
     name: str,
     attributes: Mapping[str, str | int | float | bool | None] | None = None,
+    parent: Span | None = None,
 ):
     tracer = services.tracer
     if tracer is None:
@@ -895,9 +899,17 @@ def _start_runtime_span(
         span_attributes.update(dict(attributes))
     try:
         span = tracer.start_span(
-            name=name, context=binding.portable_context, attributes=span_attributes
+            name=name,
+            context=binding.portable_context,
+            attributes=span_attributes,
+            parent=parent,
         )
-        attach_capture_reference(span, root=name == "v2.graph.node")
+        call_id = span_attributes.get("llm_call_id")
+        attach_capture_reference(
+            span,
+            root=name == "v2.graph.node",
+            call_id=call_id if isinstance(call_id, str) else None,
+        )
         return span
     except Exception:
         # Tracing must never fail a turn.

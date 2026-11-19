@@ -21,6 +21,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic.alias_generators import to_camel
 
 from fred_core.history.history_schema import ChatMessage, TraceFailureCategory
 
@@ -32,6 +33,7 @@ TraceId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 SpanId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{16}$")]
 TraceRank = Annotated[int, Field(ge=0, lt=2**31)]
 MAX_TRACE_CALL_IDS = 128
+MAX_TRACE_SPANS = 256
 TRACE_DEFAULT_SAMPLING = 100
 TRACE_DEFAULT_RETENTION_DAYS = 30
 TRACE_DEFAULT_STORAGE_BYTES = 20_000_000_000
@@ -552,6 +554,51 @@ class TraceFinalizationFacts(BaseModel):
     discarded: bool = False
 
 
+class OtlpTraceStringValue(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    string_value: CallIdentifier
+
+
+class OtlpTraceAttribute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: Literal[
+        "fred.call.id",
+        "fred.evidence.ref",
+        "fred.capture.ref",
+        "fred.session.id",
+        "fred.exchange.id",
+    ]
+    value: OtlpTraceStringValue
+
+
+class OtlpTraceSpan(BaseModel):
+    """The bounded, content-free subset of the OTLP/JSON Span message."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    trace_id: TraceId
+    span_id: SpanId
+    parent_span_id: SpanId | Literal[""] = ""
+    name: CallIdentifier
+    start_time_unix_nano: Annotated[str, StringConstraints(pattern=r"^[0-9]{1,20}$")]
+    end_time_unix_nano: Annotated[str, StringConstraints(pattern=r"^[0-9]{1,20}$")]
+    attributes: Annotated[list[OtlpTraceAttribute], Field(max_length=5)] = Field(
+        default_factory=list
+    )
+
+
 class TraceAdmissionReconciliation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -575,3 +622,6 @@ class TraceFinalization(TraceFinalizationFacts):
     tool_calls: Annotated[
         list[TraceToolCall], Field(max_length=TRACE_MAX_TOOL_CALLS)
     ] = Field(default_factory=list)
+    otel_spans: Annotated[list[OtlpTraceSpan], Field(max_length=MAX_TRACE_SPANS)] = (
+        Field(default_factory=list)
+    )

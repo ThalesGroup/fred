@@ -5443,6 +5443,13 @@ Trace turns are one-to-many with different read and retention rules from
 owner, agent instance, and runtime binding through a foreign key and scoped
 admission, without copying conversation content.
 
+New captures can include bounded OTLP JSON span records on the existing turn
+row. The inspector uses span parent IDs to group model and tool executions,
+including calls within a Deep `task`. HTTP attempts and other evidence retain
+their existing references and access checks. Captures with no span records
+remain readable with their original call ordering. Current consent and evidence
+availability come from Control Plane's catalog and runtime access checks.
+
 ### Catalog search, title authorization, and ordering
 
 The catalog defaults to any recorded terminal failure. It displays the most

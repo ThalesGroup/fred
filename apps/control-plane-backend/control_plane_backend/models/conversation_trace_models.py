@@ -186,6 +186,9 @@ class ConversationTraceTurnRow(Base):
     sse_segments: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
     model_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
     tool_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
+    otel_spans: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON, deferred=True
+    )
     trace_id: Mapped[str | None] = mapped_column(String(32))
     span_id: Mapped[str | None] = mapped_column(String(16))
     segment_receipts: Mapped[list[TraceSegmentReceipt] | None] = mapped_column(

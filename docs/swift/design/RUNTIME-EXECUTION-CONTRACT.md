@@ -7480,6 +7480,13 @@ current eligibility and a writable owner session. Each segment has its own
 publication receipt and consent boundary based on the history it committed.
 Managed JSON can collect provider stream evidence when available.
 
+The runtime uses the same OpenTelemetry span and parent IDs for Fred's
+capture and Langfuse export. Fred retains a bounded set of OTLP JSON span
+records with safe operation metadata and opaque evidence references. Fred's
+conversation sampling controls admission and Langfuse's trace sampling controls
+export. An admitted turn can record spans with export disabled. HTTP bodies,
+SSE frames, and model and tool payloads use the private evidence store.
+
 An eligible admission skips a held PostgreSQL flush fence immediately. The
 runtime records `flush_in_progress` on its admission counter and latency timer.
 The existing response and diagnostic consent rules still apply.

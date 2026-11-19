@@ -51,6 +51,8 @@ from fred_core.conversation_trace import (
     TRACE_BINDING_SESSION_HEADER,
     TRACE_BINDING_WORKLOAD_HEADER,
     TRACE_SEGMENT_HEADER,
+    OtlpTraceSpan,
+    TraceFinalization,
     TraceOutcome,
 )
 from fred_core.filesystem.local_filesystem import LocalFilesystem
@@ -2571,6 +2573,53 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
         finally:
             release.set()
             await client.drain()
+
+
+@pytest.mark.asyncio
+async def test_trace_finalization_can_publish_to_an_older_control_plane(
+    tmp_path,
+) -> None:
+    posted: list[dict] = []
+
+    def receive(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        posted.append(payload)
+        if "otel_spans" in payload:
+            return httpx.Response(
+                422,
+                json={
+                    "detail": [
+                        {"type": "extra_forbidden", "loc": ["body", "otel_spans"]}
+                    ]
+                },
+            )
+        return httpx.Response(204)
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        try:
+            result = TraceFinalization(
+                outcome=TraceOutcome.COMPLETED,
+                duration_ms=5,
+                otel_spans=[
+                    OtlpTraceSpan(
+                        trace_id="1" * 32,
+                        span_id="2" * 16,
+                        name="agent.stream",
+                        start_time_unix_nano="1",
+                        end_time_unix_nano="2",
+                    )
+                ],
+            )
+            assert await client.finalize("capture", result) is True
+        finally:
+            await client.drain()
+    assert len(posted) == 2
+    assert posted[0].pop("otel_spans") == [result.otel_spans[0].model_dump(mode="json")]
+    assert posted[0] == posted[1]
 
 
 @pytest.mark.asyncio

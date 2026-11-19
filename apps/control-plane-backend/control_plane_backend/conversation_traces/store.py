@@ -23,11 +23,13 @@ from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    MAX_TRACE_SPANS,
     TRACE_MAX_HTTP_ATTEMPTS,
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TRACE_MAX_TOOL_CALLS,
     TRACE_MAX_TURN_SEGMENTS,
+    OtlpTraceSpan,
     TraceAdmission,
     TraceAdmissionReconciliation,
     TraceAdmissionRequest,
@@ -71,7 +73,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import aliased, defer, load_only
+from sqlalchemy.orm import aliased, defer, load_only, undefer
 
 from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.catalog import (
@@ -745,7 +747,7 @@ class ConversationTraceStore:
                 if storage is not None:
                     capacity.abandon(storage)
                 return False
-            row = await session.scalar(
+            turn_query = (
                 select(ConversationTraceTurnRow)
                 .where(
                     ConversationTraceTurnRow.capture_id == capture_id,
@@ -753,6 +755,11 @@ class ConversationTraceStore:
                 )
                 .with_for_update()
             )
+            if result.otel_spans:
+                turn_query = turn_query.options(
+                    undefer(ConversationTraceTurnRow.otel_spans)
+                )
+            row = await session.scalar(turn_query)
             if row is None:
                 if storage is not None:
                     capacity.abandon(storage)
@@ -848,6 +855,20 @@ class ConversationTraceStore:
             )
             row.model_calls = _by_observed_rank(model_calls) or None
             row.tool_calls = _by_observed_rank(tool_calls) or None
+            if result.otel_spans:
+                spans = {
+                    (item["traceId"], item["spanId"]): item
+                    for item in row.otel_spans or []
+                }
+                for span in result.otel_spans:
+                    key = (span.trace_id, span.span_id)
+                    if key in spans:
+                        continue
+                    if len(spans) == MAX_TRACE_SPANS:
+                        row.http_availability = TraceAvailability.PARTIAL
+                        break
+                    spans[key] = span.model_dump(mode="json")
+                row.otel_spans = list(spans.values())
             if (
                 result.http_incomplete
                 or row.http_availability == TraceAvailability.PARTIAL
@@ -885,6 +906,18 @@ class ConversationTraceStore:
                 )
             )
         return [TraceHttpAttempt.model_validate(item) for item in attempts or []]
+
+    async def otel_spans(
+        self, session_id: str, exchange_id: str
+    ) -> list[OtlpTraceSpan]:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            spans = await session.scalar(
+                select(turn.otel_spans).where(
+                    turn.session_id == session_id, turn.exchange_id == exchange_id
+                )
+            )
+        return [OtlpTraceSpan.model_validate(item) for item in spans or []]
 
     async def sse_segments(
         self, session_id: str, exchange_id: str

@@ -52,6 +52,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
+    OtlpTraceSpan,
     TraceAdmissionRequest,
     TraceFinalization,
     TraceHistoryBoundary,
@@ -73,6 +74,17 @@ _ADMIN = "/admin/conversation-traces"
 _INGEST = "/internal/runtimes/fred-agents/conversation-traces"
 _AGENT = {"x-test-principal": "agentic"}
 _READER = {"x-test-principal": "reader"}
+
+
+def _otel_span(span_id: str, *, parent: str = "") -> OtlpTraceSpan:
+    return OtlpTraceSpan(
+        trace_id="1" * 32,
+        span_id=span_id,
+        parent_span_id=parent,
+        name="agent.stream",
+        start_time_unix_nano="1",
+        end_time_unix_nano="2",
+    )
 
 
 def _sse_segment(rank: int) -> TraceSseSegment:
@@ -404,6 +416,10 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             "duration_ms": 20,
             "turn_number": 2,
             "call_ids": ["call-1"],
+            "otel_spans": [
+                _otel_span("2" * 16).model_dump(mode="json"),
+                _otel_span("3" * 16, parent="2" * 16).model_dump(mode="json"),
+            ],
             "sse": lane.model_dump(mode="json"),
             "storage": {
                 "publication_id": failed_reservation["publication_id"],
@@ -417,6 +433,12 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (
             await client.put(f"{_INGEST}/{capture_id}", headers=_AGENT, json=failed)
         ).status_code == 204
+        spans_path = f"{_ADMIN}/session/spans/{admission['exchange_id']}"
+        assert (await client.get(spans_path)).status_code == 403
+        spans = await client.get(spans_path, headers=_READER)
+        assert spans.status_code == 200
+        assert spans.headers["Cache-Control"] == "no-store"
+        assert spans.json() == failed["otel_spans"]
         tool = TraceToolCall(
             ref=uuid4().hex,
             call_id="tool-call-1",
@@ -453,6 +475,11 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
         ).status_code == 204
+        assert (
+            await client.get(
+                f"{_ADMIN}/session/spans/{later['exchange_id']}", headers=_READER
+            )
+        ).json() == []
 
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
@@ -626,6 +653,7 @@ async def test_filtered_capture_resumes_only_an_existing_exchange(
         segment_id=opening.segment_id,
         outcome=TraceOutcome.PAUSED,
         duration_ms=10,
+        otel_spans=[_otel_span("2" * 16)],
     )
     assert await store.finalize("fred-agents", opening.capture_id, pause)
 
@@ -664,8 +692,14 @@ async def test_filtered_capture_resumes_only_an_existing_exchange(
         segment_id=resume.segment_id,
         outcome=TraceOutcome.COMPLETED,
         duration_ms=10,
+        otel_spans=[_otel_span("3" * 16, parent="2" * 16)],
     )
     assert await store.finalize("fred-agents", resume.capture_id, done)
+    assert await store.finalize("fred-agents", resume.capture_id, done)
+    assert await store.otel_spans("session", "exchange") == [
+        *pause.otel_spans,
+        *done.otel_spans,
+    ]
     assert await store.flush_captures() == 1
     assert (
         await store.admit("fred-agents", turn, segment_id=uuid4(), resuming=True)

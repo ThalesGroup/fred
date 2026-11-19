@@ -214,7 +214,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                         },
                         parent=active_agent_span.get(),
                     )
-                    attach_capture_reference(span)
+                    attach_capture_reference(span, call_id=observation.call_id)
                     for key, value in sizes.items():
                         span.set_attribute(key, value)
                     captures_content = self._tracer.captures_content

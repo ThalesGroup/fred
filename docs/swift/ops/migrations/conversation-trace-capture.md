@@ -49,6 +49,10 @@ Control Plane revision `60cbb822db04` adds a partial index and two nullable
 columns for recent degradation on captured turns. A replica can report
 degradation even when another replica holds the storage accounting row.
 
+Revision `2da6fa199e5e` adds nullable OTLP span metadata to existing trace
+turns. Upgrade all Control Plane replicas before deploying the corresponding
+Fred Agents runtime and frontend. Existing captures need no backfill.
+
 Deploy the Control Plane API before the updated Runtime. The new Runtime
 uses the caller's credential with the product lifecycle API for managed
 history. Managed history fails closed while that API is unreachable. Control
@@ -95,6 +99,12 @@ Pause a captured turn and resume it on another runtime replica while storage
 writes are delayed. Verify the terminal status appears first and both timeline
 segments appear after storage recovers. A grant through the pause can read its
 evidence while the resumed segment stays masked.
+
+With Langfuse export disabled, run a captured Deep turn that starts two
+parallel `task` calls, each invoking the same tool. Verify each tool appears
+under its own task in the inspector and the existing call links still open
+their evidence. With export enabled for the turn, verify the exported spans
+use the same span and parent IDs. Older captures remain readable.
 
 Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there. If upgrading from an earlier trace build, verify that an earlier invalid occurrence retained before the upgrade still links from a later shared call.
 

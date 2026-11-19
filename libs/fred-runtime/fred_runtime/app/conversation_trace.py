@@ -33,9 +33,13 @@ import httpx
 from fastapi import HTTPException
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    MAX_TRACE_SPANS,
     TRACE_ADMISSION_STATUS_HEADER,
     TRACE_RESUME_HEADER,
     TRACE_SEGMENT_HEADER,
+    OtlpTraceAttribute,
+    OtlpTraceSpan,
+    OtlpTraceStringValue,
     TraceAdmission,
     TraceAdmissionReconciliation,
     TraceAdmissionRequest,
@@ -74,6 +78,8 @@ from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.model.http_capture import active_http_capture
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.trace import format_span_id, format_trace_id
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
@@ -194,6 +200,13 @@ def is_trace_capture_active() -> bool:
     return _ACTIVE_CAPTURE.get() is not None
 
 
+def current_span_capture() -> ManagedTurnCapture | None:
+    capture = _ACTIVE_CAPTURE.get()
+    if capture and capture.capture_id and capture.http and not capture.http.closed:
+        return capture
+    return None
+
+
 def note_stream_failure(exc: Exception) -> None:
     capture = _ACTIVE_CAPTURE.get()
     if capture is not None and capture.http is not None:
@@ -202,14 +215,22 @@ def note_stream_failure(exc: Exception) -> None:
         )
 
 
-def attach_capture_reference(span: SpanPort, *, root: bool = False) -> None:
+def attach_capture_reference(
+    span: SpanPort, *, root: bool = False, call_id: str | None = None
+) -> None:
     capture = _ACTIVE_CAPTURE.get()
     if capture is None:
         return
     with suppress(Exception):
         if capture.capture_id is not None:
             span.set_attribute("fred.capture.ref", capture.capture_id)
+        if call_id := safe_identifier(call_id):
+            span.set_attribute("fred.call.id", call_id)
         if root:
+            if capture.session_id is not None:
+                span.set_attribute("fred.session.id", capture.session_id)
+            if capture.exchange_id is not None:
+                span.set_attribute("fred.exchange.id", capture.exchange_id)
             capture.note_span(span)
 
 
@@ -888,6 +909,8 @@ class ConversationTraceClient:
                         stream_offset_ms=admission.stream_offset_ms,
                         segment_id=admission.segment_id,
                         history_rank=history_rank,
+                        session_id=session_id,
+                        exchange_id=exchange_id,
                     )
         except asyncio.CancelledError:
             status = "cancelled"
@@ -938,9 +961,16 @@ class ConversationTraceClient:
             exclude = (
                 {"segment_id", "evidence_pending"}
                 if result.segment_id is None
-                else None
+                else set()
             )
-            if result.sse is not None or result.model_calls or result.tool_calls:
+            if not result.otel_spans:
+                exclude.add("otel_spans")
+            if (
+                result.sse is not None
+                or result.model_calls
+                or result.tool_calls
+                or result.otel_spans
+            ):
                 payload = await asyncio.get_running_loop().run_in_executor(
                     self._serialization_pool,
                     lambda: result.model_dump_json(exclude=exclude),
@@ -948,24 +978,54 @@ class ConversationTraceClient:
             else:
                 payload = result.model_dump_json(exclude=exclude)
             url = f"{self._url}/{quote(capture_id, safe='')}"
-            return await self._commit_index(url, payload, timeout=0.75)
+            return await self._commit_index(
+                url,
+                payload,
+                timeout=0.75,
+                without_spans=(
+                    lambda: result.model_dump_json(exclude=exclude | {"otel_spans"})
+                )
+                if result.otel_spans
+                else None,
+            )
         except Exception:
             logger.debug("event=conversation_trace.finalization_unavailable")
             return None
 
     async def _commit_index(
-        self, url: str, payload: str, *, timeout: float
+        self,
+        url: str,
+        payload: str,
+        *,
+        timeout: float,
+        without_spans: Callable[[], str] | None = None,
     ) -> bool | None:
         try:
             with anyio.fail_after(timeout):
-                response = await self._client.put(
-                    url,
-                    content=payload,
-                    headers={"Content-Type": "application/json"},
-                    auth=self._auth
-                    if self._auth is not None
-                    else httpx.USE_CLIENT_DEFAULT,
-                )
+
+                async def put(body: str) -> httpx.Response:
+                    return await self._client.put(
+                        url,
+                        content=body,
+                        headers={"Content-Type": "application/json"},
+                        auth=self._auth
+                        if self._auth is not None
+                        else httpx.USE_CLIENT_DEFAULT,
+                    )
+
+                response = await put(payload)
+                if without_spans is not None and response.status_code == 422:
+                    errors = response.json().get("detail", [])
+                    if any(
+                        error.get("type") == "extra_forbidden"
+                        and error.get("loc") == ["body", "otel_spans"]
+                        for error in errors
+                    ):
+                        # An older replica can still publish the evidence indexes.
+                        legacy = await asyncio.get_running_loop().run_in_executor(
+                            self._serialization_pool, without_spans
+                        )
+                        response = await put(legacy)
                 if response.status_code == 409:
                     return False
                 response.raise_for_status()
@@ -991,6 +1051,9 @@ class ManagedTurnCapture:
     call_ids: dict[str, None] = field(default_factory=dict)
     trace_id: str | None = None
     span_id: str | None = None
+    session_id: str | None = None
+    exchange_id: str | None = None
+    otel_spans: list[OtlpTraceSpan] = field(default_factory=list)
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     checkpoint_write: CheckpointWriteObservation | None = None
     uncertain_admission: TraceAdmissionRequest | None = None
@@ -1007,6 +1070,50 @@ class ManagedTurnCapture:
             self.trace_id = trace_id
         if self.span_id is None and span_id and _SPAN_ID.fullmatch(span_id):
             self.span_id = span_id
+
+    def note_otel_span(self, span: ReadableSpan) -> None:
+        attributes = span.attributes or {}
+        if attributes.get("fred.capture.ref") != self.capture_id:
+            return
+        if len(self.otel_spans) >= MAX_TRACE_SPANS:
+            if self.http is not None:
+                self.http.incomplete = True
+            return
+        context, name = span.context, safe_identifier(span.name)
+        if (
+            not context
+            or not context.is_valid
+            or not name
+            or span.start_time is None
+            or span.end_time is None
+        ):
+            return
+        self.otel_spans.append(
+            OtlpTraceSpan(
+                trace_id=format_trace_id(context.trace_id),
+                span_id=format_span_id(context.span_id),
+                parent_span_id=format_span_id(span.parent.span_id)
+                if span.parent
+                else "",
+                name=name,
+                start_time_unix_nano=str(span.start_time),
+                end_time_unix_nano=str(span.end_time),
+                attributes=[
+                    OtlpTraceAttribute(
+                        key=key, value=OtlpTraceStringValue(string_value=value)
+                    )
+                    for key in (
+                        "fred.capture.ref",
+                        "fred.call.id",
+                        "fred.evidence.ref",
+                        "fred.session.id",
+                        "fred.exchange.id",
+                    )
+                    if isinstance(raw := attributes.get(key), str)
+                    and (value := safe_identifier(raw)) is not None
+                ],
+            )
+        )
 
     def note_event(self, event: dict[str, Any]) -> None:
         kind = event.get("kind")
@@ -1088,6 +1195,7 @@ class ManagedTurnCapture:
             discarded=self.discarded,
             segment_id=self.segment_id,
             http_incomplete=self.http is None,
+            otel_spans=self.otel_spans,
             degradation=(
                 TraceDegradation.STORAGE
                 if self.client.artifacts is None
@@ -1116,7 +1224,9 @@ class ManagedTurnCapture:
             if self.segment_id is not None:
                 self.client.submit_facts(
                     self.capture_id,
-                    result.model_copy(deep=True, update={"evidence_pending": True}),
+                    result.model_copy(
+                        update={"evidence_pending": True, "otel_spans": []}
+                    ).model_copy(deep=True),
                     lookup,
                 )
             self.client.submit_http(
