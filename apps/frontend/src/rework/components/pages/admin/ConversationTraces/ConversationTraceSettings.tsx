@@ -3,7 +3,7 @@
 
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import Switch from "@shared/atoms/Switch/Switch";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { formatBytes } from "@shared/utils/formatBytes";
@@ -18,9 +18,9 @@ import { TraceDeleteButton } from "./TraceDeleteButton";
 
 const BYTES_PER_GB = 1_000_000_000;
 const LIMITS = [
-  { key: "sampling_percent", label: "sampling", min: 0, max: 100, step: 1 },
-  { key: "retention_days", label: "retention", min: 1, max: 3650, step: 1 },
   { key: "storage_cap_bytes", label: "storageCap", min: 1 / BYTES_PER_GB, max: 10_000, step: "any" },
+  { key: "retention_days", label: "retention", min: 1, max: 3650, step: 1 },
+  { key: "sampling_percent", label: "sampling", min: 0, max: 100, step: 1 },
 ] as const;
 type LimitKey = (typeof LIMITS)[number]["key"];
 
@@ -32,18 +32,21 @@ function parseLimit(input: string, field: (typeof LIMITS)[number]) {
   return field.key === "storage_cap_bytes" ? Math.round(value * BYTES_PER_GB) : value;
 }
 
-export default function ConversationTraceSettings({ onFlushed }: { onFlushed: () => void }) {
+export default function ConversationTraceSettings({
+  settings,
+  onClose,
+  onFlushed,
+}: {
+  settings: ReturnType<typeof useGetConversationTraceSettingsQuery>;
+  onClose: () => void;
+  onFlushed: () => void;
+}) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const help = useId();
   const [draft, setDraft] = useState<Partial<Record<LimitKey, string>>>({});
   const [saveError, setSaveError] = useState(false);
-  const settings = useGetConversationTraceSettingsQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    pollingInterval: 5000,
-    skipPollingIfUnfocused: true,
-  });
   const [saveSettings, saveState] = useSetConversationTraceSettingsMutation();
-  const data = settings.currentData;
+  const data = settings.isError ? undefined : settings.currentData;
   const changed: ConversationTraceSettingsUpdate = {};
   let invalid = false;
   const fields = LIMITS.map((field) => {
@@ -74,89 +77,96 @@ export default function ConversationTraceSettings({ onFlushed }: { onFlushed: ()
   }
 
   return (
-    <section className={styles.captureSettings} aria-label={t("captureSettings")}>
-      <div className={styles.captureSettingsHeader}>
-        <div>
-          <h2>{t("captureSettings")}</h2>
-          <p id={help}>{t("captureHelp")}</p>
+    <Dialog
+      open
+      title={t("captureSettings")}
+      confirmLabel={t("saveLimits")}
+      onConfirm={() => void save(changed, true)}
+      confirmDisabled={!data || invalid || !Object.keys(changed).length || saveState.isLoading}
+      cancelLabel={t("closeSettings")}
+      onCancel={() => {
+        if (!saveState.isLoading) onClose();
+      }}
+      dismissible={!saveState.isLoading}
+    >
+      <div className={styles.dialogFields}>
+        <div className={styles.settingLine}>
+          <span>{t("enableCapture")}</span>
+          <Switch
+            role="switch"
+            aria-label={t("captureSettings")}
+            aria-describedby={help}
+            checked={data?.enabled ?? false}
+            disabled={!data || saveState.isLoading}
+            onChange={(event) => void save({ enabled: event.currentTarget.checked }, false)}
+          />
         </div>
-        <Switch
-          role="switch"
-          aria-label={t("captureSettings")}
-          aria-describedby={help}
-          checked={data?.enabled ?? false}
-          disabled={!data || saveState.isLoading}
-          onChange={(event) => void save({ enabled: event.currentTarget.checked }, false)}
-        />
-      </div>
-      {settings.isError && (
-        <p role="alert" className={styles.error}>
-          {t("settingsLoadError")}
-        </p>
-      )}
-      {saveError && (
-        <p role="alert" className={styles.error}>
-          {t("settingsSaveError")}
-        </p>
-      )}
-      {data && (
-        <>
-          <form
-            className={styles.captureLimits}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!invalid && Object.keys(changed).length > 0 && !saveState.isLoading) void save(changed, true);
-            }}
-          >
-            {fields.map((field) => (
-              <TextInput
-                key={field.key}
-                label={t(field.label)}
-                type="number"
-                min={field.min}
-                max={field.max}
-                step={field.step}
-                value={field.value}
-                size="small"
-                compact={!field.invalid}
-                showCharacterCount={false}
+        <p id={help}>{t("captureHelp")}</p>
+        {settings.isError && (
+          <p role="alert" className={styles.error}>
+            {t("settingsLoadError")}
+          </p>
+        )}
+        {saveError && (
+          <p role="alert" className={styles.error}>
+            {t("settingsSaveError")}
+          </p>
+        )}
+        {data && (
+          <>
+            <div className={styles.storageUsage}>
+              <strong>{t("storageUsage")}</strong>
+              <span>
+                {t("storageUsedOfCap", {
+                  used: formatBytes(data.used_bytes, i18n.language, "decimal"),
+                  cap: formatBytes(data.storage_cap_bytes, i18n.language, "decimal"),
+                })}
+              </span>
+              <meter
+                aria-label={t("storageUsage")}
+                max={data.storage_cap_bytes}
+                value={Math.min(data.used_bytes, data.storage_cap_bytes)}
+              />
+              <span>{t("reservedCapacity", { size: formatBytes(data.reserved_bytes, i18n.language, "decimal") })}</span>
+              <span className={data.degraded ? styles.error : undefined} role="status">
+                {data.degradation_reason ? t(`degradation.${data.degradation_reason}`) : t("captureHealthy")}
+              </span>
+            </div>
+            <div className={styles.settingsInputs}>
+              {fields.map((field) => (
+                <TextInput
+                  key={field.key}
+                  label={t(field.label)}
+                  type="number"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={field.value}
+                  size="medium"
+                  compact={!field.invalid}
+                  showCharacterCount={false}
+                  disabled={saveState.isLoading}
+                  error={field.invalid ? t(`${field.label}Invalid`) : undefined}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setDraft((previous) => ({ ...previous, [field.key]: value }));
+                  }}
+                />
+              ))}
+            </div>
+            <div className={styles.captureActions}>
+              <TraceDeleteButton
+                mode="flush"
                 disabled={saveState.isLoading}
-                error={field.invalid ? t(`${field.label}Invalid`) : undefined}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setDraft((previous) => ({ ...previous, [field.key]: value }));
+                onDeleted={() => {
+                  void settings.refetch();
+                  onFlushed();
                 }}
               />
-            ))}
-            <Button
-              type="submit"
-              size="small"
-              color="primary"
-              variant="filled"
-              disabled={invalid || !Object.keys(changed).length || saveState.isLoading}
-            >
-              {t("saveLimits")}
-            </Button>
-          </form>
-          <div className={styles.captureUsage}>
-            <span>{t("storedCapacity", { size: formatBytes(data.used_bytes, i18n.language, "decimal") })}</span>
-            <span>{t("reservedCapacity", { size: formatBytes(data.reserved_bytes, i18n.language, "decimal") })}</span>
-            <span className={data.degraded ? styles.error : undefined} role="status">
-              {data.degradation_reason ? t(`degradation.${data.degradation_reason}`) : t("captureHealthy")}
-            </span>
-          </div>
-          <div className={styles.captureActions}>
-            <TraceDeleteButton
-              mode="flush"
-              disabled={saveState.isLoading}
-              onDeleted={() => {
-                void settings.refetch();
-                onFlushed();
-              }}
-            />
-          </div>
-        </>
-      )}
-    </section>
+            </div>
+          </>
+        )}
+      </div>
+    </Dialog>
   );
 }

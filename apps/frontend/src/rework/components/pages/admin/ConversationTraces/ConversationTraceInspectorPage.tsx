@@ -12,298 +12,502 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import Icon from "@shared/atoms/Icon/Icon";
+import Chip from "@shared/atoms/Chip/Chip";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
-import { ConversationTraceHttp } from "./ConversationTraceHttp";
+import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  type ConversationTraceDetail,
+  type ConversationTraceTurn,
+  type TraceHttpAttempt,
+  type TraceModelCall,
+  type TraceToolCall,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { ConversationTraceModelCall } from "./ConversationTraceHttp";
+import { ConversationTraceSse } from "./ConversationTraceSse";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
-import { ConversationTraceTool, ConversationTraceToolTree } from "./ConversationTraceTool";
+import { ConversationTraceTool } from "./ConversationTraceTool";
 import { RecordTraceConsent } from "./RecordTraceConsent";
 import { TraceDeleteButton } from "./TraceDeleteButton";
 import { TraceExportButton } from "./TraceExportButton";
 import {
-  useGetConversationTraceQuery,
-  useListConversationTraceToolCallsQuery,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import {
   TRACE_LIST_PATH,
   TRACE_TRANSLATION_PREFIX,
+  TraceFact,
   TraceIdentifier,
   TraceOutcomeBadge,
   TracePageButtons,
-  useTracePagination,
+  traceElapsedFormatter,
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
 
-export default function ConversationTraceInspectorPage() {
-  const { sessionId } = useParams();
-  const [params] = useSearchParams();
-  const exchange = params.get("turn") ?? undefined;
-  const rank = params.get("rank");
-  const call = params.get("view") === "langchain" ? (params.get("call") ?? undefined) : undefined;
-  const cursor =
-    rank && /^[0-9]{1,10}$/.test(rank) && +rank > 0 && +rank < 2 ** 31 ? String(+rank - 1) + "|_" : undefined;
-  return (
-    <ConversationTraceInspector
-      key={sessionId + "|" + params.toString()}
-      sessionId={sessionId}
-      initialExchange={exchange}
-      initialCall={call}
-      initialCursor={cursor}
-    />
-  );
+type Call =
+  | { kind: "llm"; ref: string; attempt?: TraceHttpAttempt; model?: TraceModelCall }
+  | { kind: "tool"; ref: string; tool: TraceToolCall };
+
+const refresh = { refetchOnMountOrArgChange: true, refetchOnFocus: true };
+
+function turnCalls(attempts: TraceHttpAttempt[], models: TraceModelCall[], tools: TraceToolCall[]): Call[] {
+  const modelByCall = new Map(models.map((model) => [model.call_id, model]));
+  const callsWithHttp = new Set(attempts.map(({ call_id }) => call_id));
+  const modelCalls = [
+    ...attempts.map((attempt) => ({
+      kind: "llm" as const,
+      ref: attempt.ref,
+      attempt,
+      model: modelByCall.get(attempt.call_id),
+      callId: attempt.call_id,
+    })),
+    ...models
+      .filter((model) => !callsWithHttp.has(model.call_id))
+      .map((model) => ({
+        kind: "llm" as const,
+        ref: model.ref,
+        model,
+        callId: model.call_id,
+      })),
+  ];
+  const lastRefByCall = new Map(modelCalls.map(({ callId, ref }) => [callId, ref]));
+  const toolsByRequest = new Map<string | undefined, Call[]>();
+  for (const tool of tools) {
+    const request = tool.model_calls?.find(({ relation }) => relation === "requested");
+    const ref = request ? lastRefByCall.get(request.call_id) : undefined;
+    const siblings = toolsByRequest.get(ref) ?? [];
+    siblings.push({ kind: "tool", ref: tool.ref, tool });
+    toolsByRequest.set(ref, siblings);
+  }
+  return [
+    ...modelCalls.flatMap((call) => [call, ...(toolsByRequest.get(call.ref) ?? [])]),
+    ...(toolsByRequest.get(undefined) ?? []),
+  ];
 }
 
-function ConversationTraceInspector({
-  sessionId,
-  initialExchange,
-  initialCall,
-  initialCursor,
-}: {
-  sessionId: string | undefined;
-  initialExchange?: string;
-  initialCall?: string;
-  initialCursor?: string;
-}) {
+function useTurnCalls(sessionId: string | undefined, turn?: ConversationTraceTurn) {
+  const args =
+    sessionId && turn && turn.availability !== "history_only" ? { sessionId, exchangeId: turn.exchange_id } : skipToken;
+  const http = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(args, refresh);
+  const models = enhancedControlPlaneApi.useListConversationTraceModelCallsQuery(args, refresh);
+  const tools = enhancedControlPlaneApi.useListConversationTraceToolCallsQuery(args, refresh);
+  return {
+    calls: turnCalls(
+      http.isError ? [] : (http.currentData ?? []),
+      models.isError ? [] : (models.currentData ?? []),
+      tools.isError ? [] : (tools.currentData ?? []),
+    ),
+    loading: [http, models, tools].some((query) => query.isFetching && !query.currentData),
+    failed: http.isError || models.isError || tools.isError,
+  };
+}
+
+function pageCursor(params: URLSearchParams) {
+  const cursor = params.get("cursor");
+  if (cursor) {
+    const separator = cursor.indexOf("|");
+    const rank = cursor.slice(0, separator);
+    const exchange = cursor.slice(separator + 1);
+    if (
+      separator > 0 &&
+      /^[0-9]{1,10}$/.test(rank) &&
+      +rank < 2 ** 31 &&
+      exchange.length >= 1 &&
+      exchange.length <= 255
+    ) {
+      return cursor;
+    }
+  }
+  const rank = params.get("rank");
+  if (rank && /^[0-9]{1,10}$/.test(rank) && +rank > 0 && +rank < 2 ** 31) {
+    return String(+rank - 1) + "|_";
+  }
+}
+
+export default function ConversationTraceInspectorPage() {
+  const { sessionId } = useParams();
+  return <ConversationTraceInspector key={sessionId} sessionId={sessionId} />;
+}
+
+function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
-  const [selectedExchange, setSelectedExchange] = useState(initialExchange);
-  const [selectedToolRef, setSelectedToolRef] = useState<string>();
-  const [focusedModel, setFocusedModel] = useState<{ exchange: string; call: string; revision: number }>();
-  const modelSection = useRef<HTMLDivElement>(null);
-  const toolSection = useRef<HTMLDivElement>(null);
-  const pager = useTracePagination(initialCursor);
-  const trace = useGetConversationTraceQuery(sessionId ? { sessionId, cursor: pager.cursor } : skipToken, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-  });
-  const conversation = trace.currentData;
-  const turn =
-    conversation?.turns.find(({ exchange_id }) => exchange_id === selectedExchange) ?? conversation?.turns[0];
-  const tools = useListConversationTraceToolCallsQuery(
-    turn && turn.availability !== "history_only" && sessionId ? { sessionId, exchangeId: turn.exchange_id } : skipToken,
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+  const [params, setParams] = useSearchParams();
+  const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
+  const [previousPages, setPreviousPages] = useState(new Map<string, string | undefined>());
+  const cursor = pageCursor(params);
+  const trace = enhancedControlPlaneApi.useGetConversationTraceQuery(
+    sessionId ? { sessionId, cursor } : skipToken,
+    refresh,
   );
-  const toolCalls = tools.currentData ?? [];
-  const selectedTool = toolCalls.find(({ ref }) => ref === selectedToolRef) ?? toolCalls[0];
+  const conversation = trace.isError ? undefined : trace.currentData;
+  const requestedTurn = params.get("turn");
+  const recentTurns = conversation?.turns.slice().reverse();
+  const turn = requestedTurn
+    ? conversation?.turns.find(({ exchange_id }) => exchange_id === requestedTurn)
+    : (recentTurns?.find((item) => item.outcome === "failed" || item.failure_category) ?? recentTurns?.[0]);
+  const callData = useTurnCalls(sessionId, turn);
+  const { calls, loading: loadingCalls } = callData;
+  const requestedCall = params.get("call");
+  const view = params.get("view");
+  const selectedCall = requestedCall
+    ? (calls.find(({ ref }) => requestedCall === ref) ??
+      calls.find(
+        (call) =>
+          call.kind === "llm" &&
+          (requestedCall === call.model?.ref ||
+            requestedCall === call.model?.call_id ||
+            requestedCall === call.attempt?.call_id),
+      ))
+    : (calls.find((call) => call.kind === "llm" && (call.attempt?.status ?? 0) >= 400) ?? calls[0]);
+  const showTurn = view === "history" || !selectedCall;
+  const turnTimeline = view === "sse" && !requestedCall && turn?.availability !== "history_only";
   const cutoff = conversation?.consent_cutoff;
   const conversationAccess = conversation?.local_content_access
     ? t("localAccess")
     : cutoff
       ? t("sharedThrough", { number: cutoff.turn_number })
-      : t("masked");
-  const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "medium" });
-  const duration = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
+      : t("noneShared");
+  const time = new Intl.DateTimeFormat(i18n.language, { timeStyle: "medium" });
   const missing = trace.isError && "status" in trace.error && trace.error.status === 404;
+
+  function callSearch(exchange: string, ref?: string, tab?: string) {
+    const next = new URLSearchParams(params);
+    next.set("turn", exchange);
+    if (ref) next.set("call", ref);
+    else next.delete("call");
+    if (tab) next.set("view", tab);
+    else next.delete("view");
+    return next;
+  }
+
+  function selectPage(anchor?: string) {
+    setParams(anchor ? { cursor: anchor } : {}, { preventScrollReset: true });
+  }
+
+  const pager = {
+    cursor,
+    next: (anchor: string) => {
+      setPreviousPages((pages) => new Map(pages).set(anchor, cursor));
+      selectPage(anchor);
+    },
+    previous: () => selectPage(cursor ? previousPages.get(cursor) : undefined),
+  };
+
+  function selectView(tab: string) {
+    if (turn && selectedCall) {
+      setParams(callSearch(turn.exchange_id, selectedCall.ref, tab), { replace: true, preventScrollReset: true });
+    }
+  }
+
+  const breadcrumb = (
+    <Link className={styles.back} to={TRACE_LIST_PATH}>
+      <Icon category="outlined" type="arrow_back" />
+      {t("title")}
+    </Link>
+  );
 
   return (
     <div className={styles.page}>
       <PageHeader
-        title={conversation?.title || t("maskedConversation")}
+        title={conversation?.title || (conversation ? t("maskedConversation") : t("title"))}
         subtitle={conversation?.agent_display_name}
-        breadcrumb={
-          <Link className={styles.link} to={TRACE_LIST_PATH}>
-            {t("title")}
-          </Link>
+        breadcrumb={breadcrumb}
+        actions={
+          conversation && (
+            <div className={styles.chips}>
+              <TraceExportButton single sessionIds={[conversation.session_id]} />
+              {conversation.retained_after_delete ? (
+                <Chip label={t("retainedAfterDelete")} />
+              ) : (
+                <RecordTraceConsent
+                  conversation={conversation}
+                  selectedExchange={turn?.exchange_id}
+                  onConflict={() => void trace.refetch()}
+                />
+              )}
+              <TraceDeleteButton
+                mode="selected"
+                single
+                sessionIds={[conversation.session_id]}
+                onDeleted={() => navigate(TRACE_LIST_PATH)}
+              />
+            </div>
+          )
         }
       />
       {trace.isError ? (
-        <p role="alert" className={styles.error}>
-          {t(missing ? "notFound" : "inspectorError")}
-        </p>
-      ) : conversation ? (
-        <>
-          <div className={styles.conversationSummary}>
-            <div>
-              <span>{t("conversationId")}</span>
-              <TraceIdentifier label={t("conversationId")} value={conversation.session_id} />
-            </div>
-            <div>
-              <span>{t("teamId")}</span>
-              <TraceIdentifier label={t("teamId")} value={conversation.team_id} />
-            </div>
-            <span className={styles.outcome}>{conversationAccess}</span>
-            {conversation.retained_after_delete ? (
-              <span>{t("retainedAfterDelete")}</span>
-            ) : (
-              <RecordTraceConsent
-                conversation={conversation}
-                selectedExchange={turn?.exchange_id}
-                onConflict={() => void trace.refetch()}
-              />
-            )}
-            <TraceDeleteButton
-              mode="selected"
-              single
-              sessionIds={[conversation.session_id]}
-              onDeleted={() => navigate(TRACE_LIST_PATH)}
-            />
-            <TraceExportButton single sessionIds={[conversation.session_id]} />
-          </div>
-          {turn ? (
-            <div className={styles.inspector}>
-              <section className={styles.turns} aria-label={t("turns")}>
-                <h2>{t("turns")}</h2>
-                <ul>
-                  {conversation.turns.map((item) => (
-                    <li key={item.exchange_id}>
-                      <button
-                        type="button"
-                        className={styles.turnButton}
-                        aria-pressed={item.exchange_id === turn.exchange_id}
-                        onClick={() => {
-                          if (item.exchange_id !== turn.exchange_id) {
-                            setSelectedToolRef(undefined);
-                            setFocusedModel(undefined);
-                          }
-                          setSelectedExchange(item.exchange_id);
-                        }}
-                      >
-                        <strong>
-                          {item.turn_number ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn")}
-                        </strong>
-                        <time dateTime={item.started_at}>{date.format(new Date(item.started_at))}</time>
-                        <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
-                        {item.availability === "history_only" && <small>{t("evidence.history_only")}</small>}
-                        {(cutoff || conversation.local_content_access) && (
-                          <small>{t(`access.${item.access ?? "masked"}`)}</small>
-                        )}
-                      </button>
-                      {item.exchange_id === turn.exchange_id && (
-                        <ConversationTraceToolTree
-                          calls={toolCalls}
-                          activeRef={selectedTool?.ref}
-                          unavailable={tools.isError}
-                          onSelect={(ref) => {
-                            setSelectedToolRef(ref);
-                            toolSection.current?.focus();
-                          }}
-                        />
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <TracePageButtons pager={pager} nextCursor={conversation.next_cursor} disabled={trace.isFetching} />
-              </section>
-              <section className={styles.turnDetail} aria-label={t("turnSummary")}>
-                <header>
-                  <h2>{t("turnSummary")}</h2>
-                  <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} />
-                </header>
-                <dl>
-                  <dt>{t("availability")}</dt>
-                  <dd>{t(`evidence.${turn.availability}`)}</dd>
-                  <dt>{t("startedAt")}</dt>
-                  <dd>
-                    <time dateTime={turn.started_at}>{date.format(new Date(turn.started_at))}</time>
-                  </dd>
-                  <dt>{t("duration")}</dt>
-                  <dd>{turn.duration_ms != null ? duration.format(turn.duration_ms) : t("unavailable")}</dd>
-                  <dt>{t("exchangeId")}</dt>
-                  <dd>
-                    <TraceIdentifier label={t("exchangeId")} value={turn.exchange_id} />
-                  </dd>
-                  {turn.support_error_ref &&
-                    !turn.reported_failures?.some(
-                      ({ support_error_ref }) => support_error_ref === turn.support_error_ref,
-                    ) && (
-                      <>
-                        <dt>{t("supportErrorRef")}</dt>
-                        <dd>
-                          <TraceIdentifier label={t("supportErrorRef")} value={turn.support_error_ref} />
-                        </dd>
-                      </>
-                    )}
-                  {turn.reported_failures?.map(({ support_error_ref, failure_category }) => (
-                    <div key={support_error_ref}>
-                      <dt>{t("supportErrorRef")}</dt>
-                      <dd>
-                        <TraceIdentifier label={t("supportErrorRef")} value={support_error_ref} />
-                        <TraceOutcomeBadge outcome={failure_category ?? "failed"} />
-                      </dd>
-                    </div>
-                  ))}
-                  {turn.trace_id && (
-                    <>
-                      <dt>{t("traceId")}</dt>
-                      <dd>
-                        <TraceIdentifier label={t("traceId")} value={turn.trace_id} />
-                      </dd>
-                    </>
-                  )}
-                  {turn.span_id && (
-                    <>
-                      <dt>{t("spanId")}</dt>
-                      <dd>
-                        <TraceIdentifier label={t("spanId")} value={turn.span_id} />
-                      </dd>
-                    </>
-                  )}
-                  {turn.call_ids.length > 0 && (
-                    <>
-                      <dt>{t("callIds")}</dt>
-                      <dd>
-                        <ul className={styles.calls}>
-                          {turn.call_ids.map((id) => (
-                            <li key={id}>
-                              <TraceIdentifier label={t("callId")} value={id} />
-                            </li>
-                          ))}
-                        </ul>
-                      </dd>
-                    </>
-                  )}
-                </dl>
-                {selectedTool && !tools.isError && (
-                  <div ref={toolSection} tabIndex={-1}>
-                    <ConversationTraceTool
-                      key={selectedTool.ref}
-                      sessionId={conversation.session_id}
-                      turn={turn}
-                      tool={selectedTool}
-                      cutoffRank={cutoff?.last_rank}
-                      onModelCall={(call) => {
-                        setFocusedModel((previous) => ({
-                          exchange: turn.exchange_id,
-                          call,
-                          revision: (previous?.revision ?? 0) + 1,
-                        }));
-                        modelSection.current?.focus();
-                      }}
-                    />
-                  </div>
-                )}
-                <div ref={modelSection} tabIndex={-1}>
-                  <ConversationTraceHttp
-                    key={turn.exchange_id + "|" + (focusedModel?.revision ?? "")}
-                    sessionId={conversation.session_id}
-                    turn={turn}
-                    cutoffRank={cutoff?.last_rank}
-                    initialCallId={
-                      focusedModel?.exchange === turn.exchange_id
-                        ? focusedModel.call
-                        : turn.exchange_id === initialExchange
-                          ? initialCall
-                          : undefined
-                    }
-                  />
-                </div>
-                <ConversationTraceHistory key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
-              </section>
-            </div>
-          ) : (
-            <p role="status" className={styles.empty}>
-              {t("historyUnavailable")}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className={styles.empty} role="status">
+        missing ? (
+          <PageEmptyState message={t("notFound")} icon="search" />
+        ) : (
+          <p role="alert" className={styles.error}>
+            {t("inspectorError")}
+          </p>
+        )
+      ) : !conversation ? (
+        <p role="status" className={styles.empty}>
           {t("loading")}
         </p>
+      ) : conversation.turns.length === 0 && !cursor ? (
+        <PageEmptyState message={t("historyUnavailable")} icon="search" />
+      ) : (
+        <div className={styles.inspector}>
+          <nav className={styles.tree} aria-label={t("callTree")}>
+            <header>
+              <h2>{t("callTree")}</h2>
+              <p>{conversationAccess}</p>
+            </header>
+            {conversation.turns.map((item, index) => {
+              const current = item.exchange_id === turn?.exchange_id;
+              // Keep the opening fan-out bounded on long conversations.
+              const open = expandedTurns[item.exchange_id] ?? (current || index < 3);
+              return (
+                <section className={styles.treeTurn} key={item.exchange_id}>
+                  <h3>
+                    <button
+                      type="button"
+                      className={styles.turnToggle}
+                      aria-expanded={open}
+                      onClick={() => setExpandedTurns((previous) => ({ ...previous, [item.exchange_id]: !open }))}
+                    >
+                      <Icon category="outlined" type={open ? "expand_more" : "chevron_right"} />
+                      <strong>
+                        {item.turn_number != null ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn")}
+                      </strong>
+                      {item.access !== "shared" && item.access !== "local" && <Icon category="outlined" type="lock" />}
+                      <time dateTime={item.started_at}>{time.format(new Date(item.started_at))}</time>
+                    </button>
+                  </h3>
+                  <div className={styles.turnOutcome}>
+                    <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
+                    {item.availability !== "captured" && <small>{t(`evidence.${item.availability}`)}</small>}
+                  </div>
+                  {open && (
+                    <TurnTreeLinks
+                      sessionId={conversation.session_id}
+                      turn={item}
+                      metadata={current ? callData : undefined}
+                      selectedRef={current && !showTurn && !turnTimeline ? selectedCall?.ref : undefined}
+                      selectedView={
+                        current && (showTurn || turnTimeline) && !requestedCall
+                          ? turnTimeline
+                            ? "sse"
+                            : "history"
+                          : undefined
+                      }
+                      callSearch={callSearch}
+                    />
+                  )}
+                </section>
+              );
+            })}
+            <TracePageButtons pager={pager} nextCursor={conversation.next_cursor} disabled={trace.isFetching} />
+          </nav>
+          {!turn ? (
+            <p className={styles.evidence} role="status">
+              {t("turnUnavailable")}
+            </p>
+          ) : loadingCalls && view !== "history" && (!requestedCall || !selectedCall) ? (
+            <p className={styles.evidence} role="status">
+              {t("loadingCalls")}
+            </p>
+          ) : requestedCall && !selectedCall ? (
+            <p className={styles.evidence} role="status">
+              {t("callUnavailable")}
+            </p>
+          ) : turnTimeline && turn.availability !== "history_only" ? (
+            <article className={styles.evidence}>
+              <ConversationTraceSse
+                key={turn.exchange_id}
+                sessionId={conversation.session_id}
+                turn={turn}
+                cutoffRank={cutoff?.last_rank}
+              />
+            </article>
+          ) : showTurn || !selectedCall ? (
+            <TurnEvidence key={turn.exchange_id} conversation={conversation} turn={turn} />
+          ) : selectedCall.kind === "tool" ? (
+            <ConversationTraceTool
+              key={selectedCall.ref}
+              sessionId={conversation.session_id}
+              turn={turn}
+              tool={selectedCall.tool}
+              cutoffRank={cutoff?.last_rank}
+              view={view}
+              onView={selectView}
+              onModelCall={(call) =>
+                setParams(callSearch(turn.exchange_id, call, "langchain"), { preventScrollReset: true })
+              }
+            />
+          ) : (
+            <ConversationTraceModelCall
+              key={selectedCall.ref}
+              sessionId={conversation.session_id}
+              turn={turn}
+              attempt={selectedCall.attempt}
+              model={selectedCall.model}
+              cutoffRank={cutoff?.last_rank}
+              view={view}
+              onView={selectView}
+            />
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+function TurnTreeLinks({
+  sessionId,
+  turn,
+  metadata,
+  selectedRef,
+  selectedView,
+  callSearch,
+}: {
+  sessionId: string;
+  turn: ConversationTraceTurn;
+  metadata?: ReturnType<typeof useTurnCalls>;
+  selectedRef?: string;
+  selectedView?: "sse" | "history";
+  callSearch: (exchange: string, ref?: string, tab?: string) => URLSearchParams;
+}) {
+  const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const elapsed = traceElapsedFormatter(i18n.language);
+  const inactive = useTurnCalls(sessionId, metadata ? undefined : turn);
+  const { calls, loading, failed } = metadata ?? inactive;
+  const search = (ref?: string, view?: string) => ({ search: callSearch(turn.exchange_id, ref, view).toString() });
+  return (
+    <>
+      {failed && (
+        <p role="status" className={styles.treeStatus}>
+          {t("callsUnavailable")}
+        </p>
+      )}
+      {loading && (
+        <p role="status" className={styles.treeStatus}>
+          {t("loadingCalls")}
+        </p>
+      )}
+      <ul>
+        {calls.map((call) => {
+          const model = call.kind === "llm";
+          const name = model
+            ? (call.attempt?.model ?? call.model?.model ?? t("http.modelCall"))
+            : (call.tool.tool_name ?? t("tool.unnamed"));
+          const duration = model ? call.attempt?.duration_ms : call.tool.duration_ms;
+          const detail = model ? t("llm") : t(`tool.sources.${call.tool.source}`);
+          const attempts = call.kind === "tool" ? call.tool.http_attempts : undefined;
+          const status = model ? call.attempt?.status : attempts?.[attempts.length - 1]?.status;
+          return (
+            <li key={call.ref}>
+              <Link
+                className={styles.callLink}
+                to={search(call.ref)}
+                preventScrollReset
+                aria-current={call.ref === selectedRef ? "true" : undefined}
+              >
+                <Icon category="outlined" type={model ? "smart_toy" : "build"} />
+                <span className={styles.callLabel}>
+                  <strong>{name}</strong>
+                  <span>{duration == null ? detail : detail + " · " + elapsed(duration)}</span>
+                </span>
+                {status != null && (
+                  <span className={styles.callStatus} data-failed={status >= 400}>
+                    {status}
+                  </span>
+                )}
+              </Link>
+            </li>
+          );
+        })}
+        <li>
+          <Link
+            className={styles.callLink}
+            to={search(undefined, "history")}
+            preventScrollReset
+            aria-current={selectedView === "history" ? "true" : undefined}
+          >
+            <Icon category="outlined" type="description" />
+            <span className={styles.callLabel}>{t("savedHistory")}</span>
+          </Link>
+        </li>
+        {!loading && calls.every((call) => call.kind === "tool") && turn.availability !== "history_only" && (
+          <li>
+            <Link
+              className={styles.callLink}
+              to={search(undefined, "sse")}
+              preventScrollReset
+              aria-current={selectedView === "sse" ? "true" : undefined}
+            >
+              <Icon category="outlined" type="show_chart" />
+              <span className={styles.callLabel}>{t("http.sseTab")}</span>
+            </Link>
+          </li>
+        )}
+      </ul>
+    </>
+  );
+}
+
+function TurnEvidence({ conversation, turn }: { conversation: ConversationTraceDetail; turn: ConversationTraceTurn }) {
+  const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "medium" });
+  return (
+    <article className={styles.evidence} aria-label={t("turnSummary")}>
+      <header className={styles.evidenceHeader}>
+        <h2>{turn.turn_number != null ? t("turnNumber", { number: turn.turn_number }) : t("capturedTurn")}</h2>
+        <div className={styles.chips}>
+          <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} />
+          <Chip label={t(`evidence.${turn.availability}`)} />
+          <Chip label={t(`access.${turn.access ?? "masked"}`)} />
+        </div>
+      </header>
+      <dl className={styles.callSummary}>
+        <TraceFact label={t("startedAt")}>
+          <time dateTime={turn.started_at}>{date.format(new Date(turn.started_at))}</time>
+        </TraceFact>
+        <TraceFact label={t("duration")}>
+          {turn.duration_ms != null ? traceElapsedFormatter(i18n.language)(turn.duration_ms) : t("unavailable")}
+        </TraceFact>
+        {[
+          ["conversationId", conversation.session_id],
+          ["teamId", conversation.team_id],
+          ["exchangeId", turn.exchange_id],
+          ["traceId", turn.trace_id],
+          ["spanId", turn.span_id],
+          [
+            "supportErrorRef",
+            turn.reported_failures?.some(({ support_error_ref }) => support_error_ref === turn.support_error_ref)
+              ? null
+              : turn.support_error_ref,
+          ],
+        ].map(
+          ([label, id]) =>
+            id &&
+            label && (
+              <TraceFact key={label} label={t(label)}>
+                <TraceIdentifier label={t(label)} value={id} />
+              </TraceFact>
+            ),
+        )}
+        {turn.reported_failures?.map(({ support_error_ref, failure_category }) => (
+          <TraceFact key={support_error_ref} label={t("supportErrorRef")}>
+            <TraceIdentifier label={t("supportErrorRef")} value={support_error_ref} />
+            <TraceOutcomeBadge outcome={failure_category ?? "failed"} />
+          </TraceFact>
+        ))}
+        {turn.call_ids.length > 0 && (
+          <TraceFact label={t("callIds")}>
+            {turn.call_ids.map((id) => (
+              <TraceIdentifier key={id} label={t("callId")} value={id} />
+            ))}
+          </TraceFact>
+        )}
+      </dl>
+      <ConversationTraceHistory sessionId={conversation.session_id} turn={turn} />
+    </article>
   );
 }

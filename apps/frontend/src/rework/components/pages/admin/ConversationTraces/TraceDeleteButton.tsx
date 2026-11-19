@@ -63,7 +63,7 @@ export function TraceDeleteButton(props: DeleteProps) {
           setTarget(ids);
         }}
       >
-        {label}
+        {isFlush || props.single ? label : t("deleteShort")}
       </Button>
       <ConfirmationDialog
         open={target !== null}

@@ -15,19 +15,24 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
+import Chip from "@shared/atoms/Chip/Chip";
+import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
 import type {
   ConversationTraceTurn,
-  TraceCheckpointStatus,
   TraceHttpAttempt,
   TraceHttpBody,
+  TraceModelCall,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   TRACE_TRANSLATION_PREFIX,
+  TraceEvidenceTabs,
+  TraceFact,
   TraceIdentifier,
+  TraceMaskedEvidence,
   canReadTraceArtifact,
   downloadTraceBytes,
+  traceElapsedFormatter,
   traceBytes,
 } from "./traceControls";
 import { ConversationTraceModel } from "./ConversationTraceModel";
@@ -92,9 +97,9 @@ function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: st
   ) : json ? (
     <TraceJson code={json} label={label} copyText={text} />
   ) : (
-    <pre className={styles.httpText} tabIndex={0} aria-label={label}>
-      {text}
-    </pre>
+    <div className={styles.rawBody} tabIndex={0} aria-label={label}>
+      <CodeBlock code={text} language="text" highlight={false} />
+    </div>
   );
 }
 
@@ -129,17 +134,14 @@ function HttpPayload({
         )}
       </header>
       {Object.keys(headers).length > 0 && (
-        <details>
-          <summary>{t("headers")}</summary>
-          <dl>
-            {Object.entries(headers).map(([name, value]) => (
-              <div className={styles.httpHeader} key={name}>
-                <dt>{name}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
+        <dl className={styles.httpHeaders} aria-label={t("headers")}>
+          {Object.entries(headers).map(([name, value]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
       {body?.complete === false && body.data.length > 0 && <p>{t("partialBody")}</p>}
       {body ? (
@@ -151,110 +153,120 @@ function HttpPayload({
   );
 }
 
-function AttemptEvidence({
-  sessionId,
-  exchangeId,
-  attempt,
-}: {
-  sessionId: string;
-  exchangeId: string;
-  attempt: TraceHttpAttempt;
-}) {
-  const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  const [expanded, setExpanded] = useState(false);
-  const evidence = enhancedControlPlaneApi.useGetConversationTraceHttpEvidenceQuery(
-    expanded ? { sessionId, exchangeId, ref: attempt.ref } : skipToken,
+function useHttpEvidence(
+  sessionId: string,
+  turn: ConversationTraceTurn,
+  attempt: TraceHttpAttempt | undefined,
+  cutoffRank: number | undefined,
+) {
+  const shared = attempt && canReadTraceArtifact(turn, cutoffRank, attempt.observed_through_rank);
+  const query = enhancedControlPlaneApi.useGetConversationTraceHttpEvidenceQuery(
+    attempt && shared && attempt.completeness !== "unavailable"
+      ? { sessionId, exchangeId: turn.exchange_id, ref: attempt.ref }
+      : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  const exchange = evidence.isError ? undefined : evidence.currentData;
+  if (!attempt) return { status: "unavailable" } as const;
+  if (!shared) return { status: "masked" } as const;
+  if (query.isError || attempt.completeness === "unavailable") return { status: "unavailable" } as const;
+  if (!query.currentData || query.isFetching) return { status: "loading" } as const;
+  return { status: "ready", exchange: query.currentData } as const;
+}
+
+function HttpEvidence({
+  evidence,
+  remoteTool = false,
+}: {
+  evidence: ReturnType<typeof useHttpEvidence>;
+  remoteTool?: boolean;
+}) {
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  if (evidence.status === "masked") return <TraceMaskedEvidence message={t("masked")} />;
+  if (evidence.status === "loading") return <p role="status">{t("loading")}</p>;
+  if (evidence.status !== "ready") return <p>{t("unavailable")}</p>;
+  const { exchange } = evidence;
   return (
-    <>
-      <Button
-        type="button"
-        size="2xs"
-        variant="text"
-        color="on-surface"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {t(expanded ? "hide" : "view")}
-      </Button>
-      {expanded &&
-        (evidence.isError ? (
-          <p role="alert">{t("unavailable")}</p>
-        ) : exchange ? (
-          <div className={styles.httpContent}>
-            <code className={styles.httpTarget}>
-              {exchange.method} {exchange.target}
-            </code>
-            <HttpPayload
-              label={t(attempt.tool_ref != null ? "toolRequest" : "request")}
-              side="request"
-              remoteTool={attempt.tool_ref != null}
-              headers={exchange.request_headers}
-              body={exchange.request_body}
-            />
-            <HttpPayload
-              label={t(attempt.tool_ref != null ? "toolResponse" : "response")}
-              side="response"
-              remoteTool={attempt.tool_ref != null}
-              headers={exchange.response_headers}
-              body={exchange.response_body}
-            />
-          </div>
-        ) : (
-          <p role="status">{t("loading")}</p>
-        ))}
-    </>
+    <div className={styles.httpContent}>
+      {remoteTool && (
+        <code className={styles.httpTarget}>
+          {exchange.method} {exchange.target}
+        </code>
+      )}
+      <HttpPayload
+        label={t(remoteTool ? "toolRequest" : "request")}
+        side="request"
+        remoteTool={remoteTool}
+        headers={exchange.request_headers}
+        body={exchange.request_body}
+      />
+      <HttpPayload
+        label={t(remoteTool ? "toolResponse" : "response")}
+        side="response"
+        remoteTool={remoteTool}
+        headers={exchange.response_headers}
+        body={exchange.response_body}
+      />
+    </div>
+  );
+}
+
+export function TraceHttpStatus({ status }: { status: number | null | undefined }) {
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  return (
+    <Chip
+      label={status == null ? t("noStatus") : t("statusBadge", { status })}
+      tone={status != null && status >= 400 ? "error" : "default"}
+    />
   );
 }
 
 export function TraceHttpAttemptSummary({
-  active,
+  attempt,
+  turn,
+  model,
   provider = false,
-  checkpointStatus,
 }: {
-  active: TraceHttpAttempt;
+  attempt?: TraceHttpAttempt;
+  turn: ConversationTraceTurn;
+  model?: TraceModelCall;
   provider?: boolean;
-  checkpointStatus?: TraceCheckpointStatus;
 }) {
-  const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
-  const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  const stage = attempt?.failure_stage;
+  const callId = attempt?.call_id ?? model?.call_id;
   return (
-    <dl>
-      {provider && (
-        <>
-          <dt>{t("model")}</dt>
-          <dd>{active.model ?? t("unavailable")}</dd>
-        </>
+    <dl className={styles.callSummary}>
+      <TraceFact label={t("failureStage")}>
+        {stage ? t(`stage.${stage}`) : attempt ? t("noFailure") : t("unavailable")}
+      </TraceFact>
+      <TraceFact label={t("execution")}>
+        {attempt && (
+          <div>
+            {provider && attempt.release
+              ? t("releaseAttempt", { release: attempt.release, attempt: attempt.attempt })
+              : t("attempt", { number: attempt.attempt })}
+          </div>
+        )}
+        {provider && <div>{attempt?.model ?? model?.model ?? t("unavailable")}</div>}
+      </TraceFact>
+      <TraceFact label={t(provider ? "captureState" : "completeness")}>
+        {t(`completenessValue.${attempt?.completeness ?? model?.completeness ?? "unavailable"}`)}
+        {provider && <div>{t(`checkpoint.${turn.checkpoint_status ?? "unknown"}`)}</div>}
+      </TraceFact>
+      {callId && (
+        <TraceFact label={t("callId")}>
+          <TraceIdentifier label={t("callId")} value={callId} />
+        </TraceFact>
       )}
-      <dt>{t("httpStatus")}</dt>
-      <dd>{active.status ?? t("noStatus")}</dd>
-      <dt>{t("duration")}</dt>
-      <dd>{milliseconds.format(active.duration_ms)}</dd>
-      <dt>{t("failureStage")}</dt>
-      <dd>{active.failure_stage ? t(`stage.${active.failure_stage}`) : t("noFailure")}</dd>
-      {provider && (
-        <>
-          <dt>{t("release")}</dt>
-          <dd>{active.release ?? t("unavailable")}</dd>
-          <dt>{t("checkpointStatus")}</dt>
-          <dd>{t(`checkpoint.${checkpointStatus ?? "unknown"}`)}</dd>
-        </>
+      {turn.trace_id && provider && (
+        <TraceFact label={t("traceId")}>
+          <TraceIdentifier label={t("traceId")} value={turn.trace_id} />
+        </TraceFact>
       )}
-      <dt>{t("completeness")}</dt>
-      <dd>{t(`completenessValue.${active.completeness}`)}</dd>
-      <dt>{t("callId")}</dt>
-      <dd>
-        <TraceIdentifier label={t("callId")} value={active.call_id} />
-      </dd>
-      {active.upstream_id && (
-        <>
-          <dt>{t("upstreamId")}</dt>
-          <dd>
-            <TraceIdentifier label={t("upstreamId")} value={active.upstream_id} />
-          </dd>
-        </>
+      {attempt?.upstream_id && (
+        <TraceFact label={t("upstreamId")}>
+          <TraceIdentifier label={t("upstreamId")} value={attempt.upstream_id} />
+        </TraceFact>
       )}
     </dl>
   );
@@ -271,118 +283,70 @@ export function TraceHttpAttemptEvidence({
   attempt: TraceHttpAttempt;
   cutoffRank?: number;
 }) {
-  const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  if (!canReadTraceArtifact(turn, cutoffRank, attempt.observed_through_rank)) return <p>{t("masked")}</p>;
-  if (attempt.completeness === "unavailable") return <p>{t("unavailable")}</p>;
-  return <AttemptEvidence key={attempt.ref} sessionId={sessionId} exchangeId={turn.exchange_id} attempt={attempt} />;
+  const evidence = useHttpEvidence(sessionId, turn, attempt, cutoffRank);
+  return <HttpEvidence evidence={evidence} remoteTool />;
 }
 
-export function ConversationTraceHttp({
+export function ConversationTraceModelCall({
   sessionId,
   turn,
+  attempt,
+  model,
   cutoffRank,
-  initialCallId,
+  view,
+  onView,
 }: {
   sessionId: string;
   turn: ConversationTraceTurn;
+  attempt?: TraceHttpAttempt;
+  model?: TraceModelCall;
   cutoffRank?: number;
-  initialCallId?: string;
+  view: string | null;
+  onView: (tab: string) => void;
 }) {
-  const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  const [selected, setSelected] = useState(initialCallId);
-  const [view, setView] = useState(initialCallId ? 1 : 0);
-  const metadata = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(
-    turn.availability === "history_only" ? skipToken : { sessionId, exchangeId: turn.exchange_id },
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
-  );
-  const modelMetadata = enhancedControlPlaneApi.useListConversationTraceModelCallsQuery(
-    turn.availability === "history_only" ? skipToken : { sessionId, exchangeId: turn.exchange_id },
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
-  );
-  const attempts = metadata.currentData ?? [];
-  const models = modelMetadata.currentData ?? [];
-  const selectedModel = models.find((model) => model.ref === selected || model.call_id === selected);
-  const active =
-    attempts.find((attempt) => attempt.ref === selected || attempt.call_id === selectedModel?.call_id) ??
-    (selectedModel ? undefined : attempts[0]);
-  const activeModel =
-    selectedModel ?? models.find((model) => model.call_id === active?.call_id) ?? (active ? undefined : models[0]);
-  if (turn.availability === "history_only") return null;
-  if (!active && !activeModel) {
-    return metadata.isLoading || modelMetadata.isLoading ? null : (
-      <ConversationTraceSse sessionId={sessionId} turn={turn} cutoffRank={cutoffRank} />
-    );
-  }
-  const groups = new Map<string, TraceHttpAttempt[]>();
-  for (const attempt of attempts) {
-    const group = groups.get(attempt.call_id) ?? [];
-    group.push(attempt);
-    groups.set(attempt.call_id, group);
-  }
+  const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
+  const tabs = [
+    { key: "http", label: t("exchangeTab") },
+    { key: "langchain", label: t("langchainTab") },
+    { key: "sse", label: t("sseTab") },
+  ];
+  const preferred =
+    turn.failure_category === "stream_interrupted" || turn.failure_category === "timeout_or_connection"
+      ? "sse"
+      : attempt
+        ? "http"
+        : "langchain";
+  const tab = tabs.find(({ key }) => key === view)?.key ?? preferred;
+  const evidence = useHttpEvidence(sessionId, turn, tab === "http" ? attempt : undefined, cutoffRank);
   return (
-    <section className={styles.history} aria-label={t("evidenceTitle")}>
-      <h3>{t("evidenceTitle")}</h3>
-      <div className={styles.httpAttempts}>
-        {Array.from(groups, ([callId, group]) => (
-          <div className={styles.httpAttemptGroup} key={callId}>
-            <div>{group[0]?.model ?? t("modelCall")}</div>
-            <div className={styles.httpAttemptButtons}>
-              {group.map((item) => (
-                <Button
-                  key={item.ref}
-                  type="button"
-                  size="2xs"
-                  variant={item.ref === active?.ref ? "filled" : "outlined"}
-                  color={item.ref === active?.ref ? "primary" : "on-surface"}
-                  aria-pressed={item.ref === active?.ref}
-                  onClick={() => setSelected(item.ref)}
-                >
-                  {t("attempt", { number: item.attempt })}
-                  {" · "}
-                  {item.status ?? t("noStatus")}
-                </Button>
-              ))}
-            </div>
+    <article className={styles.evidence} aria-label={t("evidenceTitle")}>
+      <header className={styles.evidenceHeader}>
+        <div>
+          <h2>{attempt?.model ?? model?.model ?? t("modelCall")}</h2>
+          {evidence.status === "ready" && (
+            <p>
+              <code className={styles.httpTarget}>
+                {evidence.exchange.method} {evidence.exchange.target}
+              </code>
+            </p>
+          )}
+        </div>
+        {attempt && (
+          <div className={styles.chips}>
+            <TraceHttpStatus status={attempt.status} />
+            <Chip label={traceElapsedFormatter(i18n.language)(attempt.duration_ms)} />
           </div>
-        ))}
-        {models
-          .filter((model) => !groups.has(model.call_id))
-          .map((model) => (
-            <Button
-              key={model.ref}
-              type="button"
-              size="2xs"
-              variant={model.ref === activeModel?.ref ? "filled" : "outlined"}
-              color={model.ref === activeModel?.ref ? "primary" : "on-surface"}
-              aria-pressed={model.ref === activeModel?.ref}
-              onClick={() => {
-                setSelected(model.ref);
-                setView(1);
-              }}
-            >
-              {model.model ?? t("modelCall")}
-            </Button>
-          ))}
-      </div>
-      {active && <TraceHttpAttemptSummary active={active} provider checkpointStatus={turn.checkpoint_status} />}
-      <ButtonGroup
-        items={[{ label: t("exchangeTab") }, { label: t("langchainTab") }, { label: t("sseTab") }]}
-        size="2xs"
-        color="primary"
-        variant="tabs"
-        aria-label={t("evidenceTabs")}
-        selectedIndex={view}
-        onSelectedIndexChange={setView}
-      />
-      {view === 2 ? (
-        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={active?.ref} cutoffRank={cutoffRank} />
-      ) : view === 1 ? (
-        <ConversationTraceModel sessionId={sessionId} turn={turn} model={activeModel} cutoffRank={cutoffRank} />
-      ) : !active ? (
-        <p>{t("unavailable")}</p>
+        )}
+      </header>
+      <TraceHttpAttemptSummary attempt={attempt} turn={turn} model={model} provider />
+      <TraceEvidenceTabs label={t("evidenceTabs")} tabs={tabs} selected={tab} onSelect={onView} />
+      {tab === "sse" ? (
+        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={attempt?.ref} cutoffRank={cutoffRank} />
+      ) : tab === "langchain" ? (
+        <ConversationTraceModel sessionId={sessionId} turn={turn} model={model} cutoffRank={cutoffRank} />
       ) : (
-        <TraceHttpAttemptEvidence sessionId={sessionId} turn={turn} attempt={active} cutoffRank={cutoffRank} />
+        <HttpEvidence evidence={evidence} />
       )}
-    </section>
+    </article>
   );
 }

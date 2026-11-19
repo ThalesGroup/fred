@@ -4,6 +4,7 @@
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import Button from "@shared/atoms/Button/Button";
+import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -16,7 +17,13 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SseWindow, { type SseRange } from "./SseWindow";
 import { formatTraceJson } from "./formatTraceJson";
-import { TRACE_TRANSLATION_PREFIX, canReadTraceArtifact, downloadTraceBytes, traceBytes } from "./traceControls";
+import {
+  TRACE_TRANSLATION_PREFIX,
+  canReadTraceArtifact,
+  downloadTraceBytes,
+  traceElapsedFormatter,
+  traceBytes,
+} from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -79,7 +86,7 @@ export function TraceSseFramePayload({
   );
   if (!shared) return <p>{t("masked")}</p>;
   if (!canRead || response.isError) return <p>{t("frameUnavailable")}</p>;
-  if (!response.currentData) return <p role="status">{t("loading")}</p>;
+  if (!response.currentData || response.isFetching) return <p role="status">{t("loading")}</p>;
 
   const original = response.currentData.data;
   const raw = new TextDecoder("utf-8", { ignoreBOM: true }).decode(traceBytes(original));
@@ -111,9 +118,9 @@ export function TraceSseFramePayload({
       {json && !showRaw ? (
         <TraceJson code={json} label={t("frame")} copyText={data} />
       ) : (
-        <pre className={styles.httpText} tabIndex={0} aria-label={t("frame")}>
-          {raw}
-        </pre>
+        <div className={styles.rawBody} tabIndex={0} aria-label={t("frame")}>
+          <CodeBlock code={raw} language="text" highlight={false} />
+        </div>
       )}
     </>
   );
@@ -157,16 +164,31 @@ function SseTrack({
   }
   return (
     <section className={styles.sseTrack} data-track={source} aria-label={t(source)}>
-      <strong>{t(source)}</strong>
-      <div className={styles.sseStats}>
-        <span>{t("availability." + presence)}</span>
-        {first && (
-          <span>{t("frameCount", { count: lanes.reduce((total, { stream }) => total + stream.frame_count, 0) })}</span>
-        )}
-        {lastEvent != null && <span>{t("lastAt", { time: elapsed(lastEvent) })}</span>}
-        {gap && <span className={styles.sseGapLabel}>{t("gap", { duration: elapsed(gap[1] - gap[0]) })}</span>}
-        {last && <span>{t("ended", { reason: t("ending." + last.ending), time: elapsed(last.end_ms) })}</span>}
-        {first && last && <span>{t("lifetime", { duration: elapsed(last.end_ms - first.started_ms) })}</span>}
+      <div className={styles.trackHeader}>
+        <strong>{t(source)}</strong>
+        <div className={styles.sseStats}>
+          {presence !== "captured" && <span>{t("availability." + presence)}</span>}
+          {first && presence !== "empty" && (
+            <span>
+              {t("frameCount", { count: lanes.reduce((total, { stream }) => total + stream.frame_count, 0) })}
+            </span>
+          )}
+          {lanes.map((lane) =>
+            lane.stream.headers_ms != null ? (
+              <SseHeaders
+                key={lane.stream.ref}
+                lane={lane}
+                sessionId={sessionId}
+                exchangeId={exchangeId}
+                label={t("headersAt", { time: elapsed(lane.stream.headers_ms) })}
+              />
+            ) : null,
+          )}
+          {lastEvent != null && <span>{t("lastAt", { time: elapsed(lastEvent) })}</span>}
+          {gap && <span className={styles.sseGapLabel}>{t("gap", { duration: elapsed(gap[1] - gap[0]) })}</span>}
+          {last && <span>{t("ended", { reason: t("ending." + last.ending), time: elapsed(last.end_ms) })}</span>}
+          {first && last && <span>{t("lifetime", { duration: elapsed(last.end_ms - first.started_ms) })}</span>}
+        </div>
       </div>
       {first && (
         <div className={styles.ssePlot}>
@@ -181,15 +203,24 @@ function SseTrack({
             <div key={stream.ref}>
               {stream.headers_ms != null && inView(stream.headers_ms) && (
                 <span
-                  className={styles.sseBoundary}
+                  className={styles.headerMark}
+                  title={t("headersAt", { time: elapsed(stream.headers_ms) })}
                   style={{ left: percent(stream.headers_ms) + "%" }}
                   aria-hidden="true"
                 />
               )}
               {inView(stream.end_ms) && (
                 <span
-                  className={styles.sseBoundary}
-                  data-end
+                  className={styles.endMark}
+                  title={t("ended", { reason: t("ending." + stream.ending), time: elapsed(stream.end_ms) })}
+                  data-failed={[
+                    "failed",
+                    "timeout",
+                    "watchdog_timeout",
+                    "truncated",
+                    "transport_error",
+                    "http_rejected",
+                  ].includes(stream.ending)}
                   style={{ left: percent(stream.end_ms) + "%" }}
                   aria-hidden="true"
                 />
@@ -213,17 +244,6 @@ function SseTrack({
               />
             ))}
         </div>
-      )}
-      {lanes.map((lane) =>
-        lane.stream.headers_ms != null ? (
-          <SseHeaders
-            key={lane.stream.ref}
-            lane={lane}
-            sessionId={sessionId}
-            exchangeId={exchangeId}
-            label={t("headersAt", { time: elapsed(lane.stream.headers_ms) })}
-          />
-        ) : null,
       )}
     </section>
   );
@@ -270,9 +290,9 @@ function SseHeaders({
       ) : Object.keys(headers).length === 0 ? (
         <p>{t("headersEmpty")}</p>
       ) : (
-        <dl>
+        <dl className={styles.httpHeaders}>
           {Object.entries(headers).map(([name, value]) => (
-            <div key={name} className={styles.httpHeader}>
+            <div key={name}>
               <dt>{name}</dt>
               <dd>{value}</dd>
             </div>
@@ -295,6 +315,7 @@ function Timeline({
   const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
   const [range, setRange] = useState<SseRange>();
   const [selected, setSelected] = useState<string>();
+  const [focused, setFocused] = useState<string>();
   const points = {
     provider: trackFrames("provider", lanes.provider),
     outgoing: trackFrames("outgoing", lanes.outgoing),
@@ -303,11 +324,15 @@ function Timeline({
   const end = Math.max(1, ...[...lanes.provider, ...lanes.outgoing].map(({ stream }) => stream.end_ms));
   const view = range ?? { start: 0, end };
   const visible = events.filter(({ frame }) => frame.at_ms >= view.start && frame.at_ms <= view.end);
-  const active = visible.find((event) => event.key === selected);
-  const seconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "second", maximumFractionDigits: 3 });
-  const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
-  const elapsed = (ms: number) => (ms >= 1000 ? seconds.format(ms / 1000) : milliseconds.format(ms));
+  const active = visible.find((event) => event.key === selected) ?? visible[0];
+  const focusable = visible.find((event) => event.key === focused) ?? active;
+  const elapsed = traceElapsedFormatter(i18n.language);
   const kinds = new Set(events.map(({ frame }) => frame.kind));
+
+  function selectFrame(key: string) {
+    setSelected(key);
+    setFocused(key);
+  }
 
   function fit() {
     const arrivals = events.filter(({ frame }) => frame.kind !== "done" && frame.kind !== "error");
@@ -320,67 +345,118 @@ function Timeline({
 
   return (
     <>
-      <header className={styles.sseControls}>
-        <span>{t("turnElapsed", { duration: elapsed(end) })}</span>
-        <div className={styles.sseControls}>
-          <Button type="button" size="2xs" variant="text" color="on-surface" onClick={fit} disabled={!events.length}>
-            {t("fit")}
-          </Button>
-          <Button type="button" size="2xs" variant="text" color="on-surface" onClick={() => setRange(undefined)}>
-            {t("reset")}
-          </Button>
-        </div>
-      </header>
-      {trackSources.map((source) => (
-        <SseTrack
-          key={source}
-          source={source}
-          lanes={lanes[source]}
-          sessionId={sessionId}
-          exchangeId={exchangeId}
-          events={points[source]}
-          view={view}
-          selected={selected}
-          select={setSelected}
-          elapsed={elapsed}
-        />
-      ))}
-      <div className={styles.sseLegend}>
-        {eventKinds
-          .filter((kind) => kinds.has(kind))
-          .map((kind) => (
-            <span key={kind}>
-              <i data-kind={kind} aria-hidden="true" />
-              {t("kind." + kind)}
+      <div className={styles.timelineCard}>
+        <div className={styles.timelineToolbar}>
+          <div className={styles.sseLegend}>
+            {eventKinds
+              .filter((kind) => kinds.has(kind))
+              .map((kind) => (
+                <span key={kind}>
+                  <i data-kind={kind} aria-hidden="true" />
+                  {t("kind." + kind)}
+                </span>
+              ))}
+            <span>
+              <i className={styles.legendGap} aria-hidden="true" />
+              {t("longestGap")}
             </span>
+          </div>
+          <div className={styles.chips}>
+            <Button type="button" size="small" variant="text" color="primary" onClick={fit} disabled={!events.length}>
+              {t("fit")}
+            </Button>
+            <Button type="button" size="small" variant="text" color="primary" onClick={() => setRange(undefined)}>
+              {t("reset")}
+            </Button>
+          </div>
+        </div>
+        <div className={styles.chartGroup}>
+          {trackSources.map((source) => (
+            <SseTrack
+              key={source}
+              source={source}
+              lanes={lanes[source]}
+              sessionId={sessionId}
+              exchangeId={exchangeId}
+              events={points[source]}
+              view={view}
+              selected={active?.key}
+              select={selectFrame}
+              elapsed={elapsed}
+            />
           ))}
-      </div>
-      <SseWindow value={view} endMs={end} onChange={setRange} elapsed={elapsed} />
-      {visible.length > 0 && (
-        <label className={styles.sseEventSelect}>
-          {t("event")}
-          <select value={active?.key ?? ""} onChange={(event) => setSelected(event.target.value)}>
-            <option value="">{t("chooseEvent")}</option>
-            {visible.map((event) => (
-              <option key={event.key} value={event.key}>
-                {t(event.source)} /{" "}
-                {t("eventAt", { kind: t("kind." + event.frame.kind), time: elapsed(event.frame.at_ms) })}
-              </option>
+          <div className={styles.axis} aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((step) => (
+              <span key={step}>{elapsed(view.start + ((view.end - view.start) * step) / 4)}</span>
             ))}
-          </select>
-        </label>
-      )}
-      {active && (
-        <TraceSseFramePayload
-          key={active.key}
-          sessionId={sessionId}
-          exchangeId={exchangeId}
-          refId={active.ref}
-          index={active.index}
-          shared={active.shared}
-          stored={active.frame.offset != null}
-        />
-      )}
+          </div>
+        </div>
+        <SseWindow value={view} endMs={end} onChange={setRange} elapsed={elapsed} />
+      </div>
+      <div className={styles.frameDetails}>
+        <section aria-label={t("frameList")}>
+          <h3>{t("frameList")}</h3>
+          {visible.length ? (
+            <ul
+              className={styles.frames}
+              onKeyDown={(event) => {
+                if (!(event.target instanceof HTMLButtonElement)) return;
+                const item = event.target.closest("li");
+                const target =
+                  event.key === "ArrowDown"
+                    ? item?.nextElementSibling
+                    : event.key === "ArrowUp"
+                      ? item?.previousElementSibling
+                      : event.key === "Home"
+                        ? event.currentTarget.firstElementChild
+                        : event.key === "End"
+                          ? event.currentTarget.lastElementChild
+                          : null;
+                if (!target) return;
+                event.preventDefault();
+                target.querySelector("button")?.focus();
+              }}
+            >
+              {visible.map((event) => (
+                <li key={event.key}>
+                  <button
+                    type="button"
+                    aria-pressed={active?.key === event.key}
+                    tabIndex={focusable?.key === event.key ? 0 : -1}
+                    onFocus={() => setFocused(event.key)}
+                    onClick={() => selectFrame(event.key)}
+                  >
+                    <i data-kind={event.frame.kind} aria-hidden="true" />
+                    <span>{elapsed(event.frame.at_ms)}</span>
+                    <span>{t("kind." + event.frame.kind)}</span>
+                    <small>{t(event.source)}</small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.help}>{t("noFramesInRange")}</p>
+          )}
+        </section>
+        {active && (
+          <section aria-label={t("frame")}>
+            <h3>{t("frame")}</h3>
+            <p className={styles.help}>
+              {t(active.source)} /{" "}
+              {t("eventAt", { kind: t("kind." + active.frame.kind), time: elapsed(active.frame.at_ms) })}
+            </p>
+            <TraceSseFramePayload
+              key={active.key}
+              sessionId={sessionId}
+              exchangeId={exchangeId}
+              refId={active.ref}
+              index={active.index}
+              shared={active.shared}
+              stored={active.frame.offset != null}
+            />
+          </section>
+        )}
+      </div>
     </>
   );
 }
@@ -416,7 +492,12 @@ export function ConversationTraceSse({
   };
   return (
     <section className={styles.sseTimeline} aria-label={t("title")}>
-      <h4>{t("title")}</h4>
+      <div className={styles.sectionHeading}>
+        <div>
+          <h2>{t("title")}</h2>
+          <p>{t("description")}</p>
+        </div>
+      </div>
       {metadata.isError ? (
         <p role="alert">{t("unavailable")}</p>
       ) : metadata.isLoading ? (

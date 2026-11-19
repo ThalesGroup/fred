@@ -1596,7 +1596,7 @@
         "outcome": {
           "http_5xx": "Upstream HTTP 5xx",
           "http_429": "HTTP 429 rate limit",
-          "http_400": "HTTP 400 bad request",
+          "http_400": "HTTP 400",
           "http_other_4xx": "Other HTTP 4xx",
           "stream_interrupted": "Stream interrupted",
           "timeout_or_connection": "Timeout or connection",
@@ -1643,6 +1643,13 @@
           "modelLink": {
             "requested": "Requested by model call {{id}}",
             "received": "Result read by model call {{id}}"
+          },
+          "traceId": "Trace ID",
+          "completeness": "Capture completeness",
+          "completenessValue": {
+            "complete": "Complete",
+            "partial": "Partial",
+            "unavailable": "Unavailable"
           }
         },
         "model": {
@@ -1678,7 +1685,7 @@
           "langchainTab": "LangChain",
           "title": "Model HTTP exchange",
           "exchangeTab": "HTTP exchange",
-          "sseTab": "SSE",
+          "sseTab": "SSE stream",
           "evidenceTabs": "Model call evidence",
           "modelCall": "Model call",
           "attempt": "Attempt {{number}}",
@@ -1691,8 +1698,8 @@
           "release": "Fred release",
           "checkpointStatus": "Turn checkpoint",
           "checkpoint": {
-            "persisted": "SQL write confirmed during this turn",
-            "not_observed": "No SQL write observed",
+            "persisted": "Checkpoint saved",
+            "not_observed": "No checkpoint write observed",
             "unconfigured": "Persistent checkpoint storage is disabled",
             "unknown": "Unknown"
           },
@@ -1724,16 +1731,20 @@
             "complete": "Complete",
             "partial": "Partial",
             "unavailable": "Unavailable"
-          }
+          },
+          "execution": "Execution",
+          "statusBadge": "HTTP {{status}}",
+          "captureState": "Turn capture",
+          "releaseAttempt": "Fred {{release}} / attempt {{attempt}}"
         },
         "sse": {
           "title": "SSE timeline",
-          "provider": "Provider SSE",
-          "outgoing": "Fred SSE",
+          "provider": "Provider to Fred",
+          "outgoing": "Fred to client",
           "unavailable": "No SSE timeline is available for this turn.",
           "loading": "Loading SSE evidence...",
           "turnElapsed": "Turn clock spans {{duration}}",
-          "fit": "Fit arrivals",
+          "fit": "Fit data events",
           "reset": "Reset zoom",
           "frameCount": "Frames {{count}}",
           "headersAt": "Headers at {{time}}",
@@ -1785,14 +1796,37 @@
             "done": "Terminal",
             "error": "Error",
             "other": "Other"
-          }
+          },
+          "description": "Compare provider arrivals and the events Fred sent on the same turn clock.",
+          "longestGap": "Longest silence",
+          "frameList": "Events in window",
+          "noFramesInRange": "No events in this time window."
         },
         "evidence": {
           "captured": "Evidence captured",
           "history_only": "History only",
           "metadata_only": "Metadata only",
           "partial": "Partial evidence"
-        }
+        },
+        "settings": "Capture settings",
+        "closeSettings": "Close",
+        "captureOn": "Capture on",
+        "captureOff": "Capture off",
+        "storageUsage": "Storage usage",
+        "pageCount_one": "{{count}} conversation on this page",
+        "pageCount_other": "{{count}} conversations on this page",
+        "callTree": "Turns and calls",
+        "noneShared": "No turns shared",
+        "loadingCalls": "Loading calls...",
+        "callsUnavailable": "Some call metadata could not be loaded.",
+        "maskedEvidence": "Content is masked",
+        "turnUnavailable": "This turn is unavailable on this page.",
+        "callUnavailable": "This call is unavailable for the selected turn.",
+        "llm": "LLM",
+        "enableCapture": "Enable capture",
+        "exportShort": "Export",
+        "deleteShort": "Delete",
+        "storageUsedOfCap": "{{used}} of {{cap}}"
       },
       "capabilities": {
         "title": "Features",

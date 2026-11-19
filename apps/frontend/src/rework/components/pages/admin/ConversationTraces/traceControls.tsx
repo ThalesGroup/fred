@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useCopyConfirmation } from "@core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -68,7 +69,7 @@ export function TracePageButtons({
   nextCursor,
   disabled,
 }: {
-  pager: ReturnType<typeof useTracePagination>;
+  pager: Pick<ReturnType<typeof useTracePagination>, "cursor" | "previous" | "next">;
   nextCursor: string | null;
   disabled: boolean;
 }) {
@@ -128,6 +129,68 @@ export function TraceIdentifier({ label, value }: { label: string; value: string
         }}
       />
       {copyFailed && <span role="alert">{t("copyFailed")}</span>}
+    </div>
+  );
+}
+
+export function traceElapsedFormatter(language: string) {
+  const seconds = new Intl.NumberFormat(language, { style: "unit", unit: "second", maximumFractionDigits: 3 });
+  const milliseconds = new Intl.NumberFormat(language, {
+    style: "unit",
+    unit: "millisecond",
+    maximumFractionDigits: 0,
+  });
+  return (ms: number) => (ms >= 1000 ? seconds.format(ms / 1000) : milliseconds.format(ms));
+}
+
+export function TraceFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+export function TraceEvidenceTabs<T extends string>({
+  label,
+  tabs,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  tabs: { key: T; label: string }[];
+  selected: T;
+  onSelect: (tab: T) => void;
+}) {
+  return (
+    <div className={styles.tabs} role="group" aria-label={label}>
+      {tabs.map(({ key, label: text }) => (
+        <Button
+          key={key}
+          type="button"
+          size="small"
+          color="primary"
+          variant={selected === key ? "filled" : "text"}
+          aria-pressed={selected === key}
+          onClick={() => onSelect(key)}
+        >
+          {text}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+export function TraceMaskedEvidence({ message }: { message: string }) {
+  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  return (
+    <div className={styles.masked}>
+      <Icon category="outlined" type="lock" />
+      <div>
+        <h3>{t("maskedEvidence")}</h3>
+        <p>{message}</p>
+      </div>
     </div>
   );
 }

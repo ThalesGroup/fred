@@ -6164,13 +6164,13 @@ The catalog reuses the Analytics team and time controls and fetches filtered
 and sorted pages from Control Plane.
 
 An authorized title appears above the agent instance name. Without current
-title consent, the row shows a neutral conversation label. The capture
-switch explains what happens to turns already admitted.
+title consent, the row shows a neutral conversation label. The header shows
+the deployment's capture status and opens the capture settings dialog.
 
-The inspector retains the main navigation rail and uses the rest of the
-workspace for its turn list and detail pane. Outcome and evidence
-availability are distinct. Operators can copy the conversation, exchange,
-and available trace, span, and call identifiers.
+The inspector retains the main navigation rail. Its turn and call tree opens
+one call in the evidence pane, with saved history available under each turn.
+Turn outcomes and evidence availability have separate labels. Operators can
+copy the conversation, exchange, and available trace, span, and call IDs.
 
 The conversation owner's Debug panel explains which saved turns and
 content they can share with support. It shows the active cutoff and makes
@@ -6180,20 +6180,19 @@ open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
 
-Model calls group their recorded HTTP attempts beneath the selected turn.
-The HTTP status and failure stage describe an individual attempt, and the
-turn header retains its own terminal outcome. The model attempt summary
-also shows whether Fred confirmed a root SQL checkpoint write during the turn.
-The reader can inspect safe attempt details while masked. With consent, they
-can open request and response
-panels and distinguish empty, unavailable, and truncated bodies. JSON can be
-folded and the recorded body bytes can be downloaded.
+The call tree shows individual HTTP attempts under each turn. The evidence
+header shows the selected attempt's status and duration. The summary includes
+the failure stage, release, capture completeness, checkpoint, and copyable
+IDs. With consent, the HTTP tab shows stacked request and response panels
+with headers, foldable JSON, and downloads of the original body bytes.
+The panels distinguish empty, unavailable, and truncated bodies.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing stream
 on the turn clock. Both lanes show header and terminal timings, last frame,
 and longest observed silence. The common zoom window supports independent edge
-resizing and middle panning with pointer or keyboard controls. An event picker
-also exposes dense arrivals to keyboard users. Masked readers see the timeline
+resizing and middle panning with pointer or keyboard controls. The event list
+and payload sit below the chart. Use the arrow keys to move through the list
+and Enter to inspect an event. Masked readers see the timeline
 and categories. An authorized reader can expand a lane's header timing to
 inspect the captured header values, or view or download a selected original
 frame. An early provider rejection can expose headers before any frame arrives.
@@ -6205,7 +6204,8 @@ from unavailable evidence. The tab shows the normalization result and
 provides links to the original provider frame and the earliest matching
 retained turn when available.
 
-The selected turn expands its tool calls in the turn list. Each tool shows
+Tool calls appear under their turn, following the requesting model call
+when that link is available. Each tool shows
 its source, individual attempt and outcome, call ID, and links to matching
 model requests and results. The evidence pane opens to tool input, actual
 output, and any matching result captured in the model input. Remote tools
@@ -6216,10 +6216,12 @@ remains visible when content is masked.
 
 ### Conversation trace capture settings
 
-The trace catalog settings show the deployment switch, sampling percentage,
+The capture settings dialog shows the deployment switch, sampling percentage,
 retention days, and the decimal GB storage limit. The limit form validates the
 whole percentage, day range, and positive storage limit before saving.
-Retained and in-flight reserved bytes are shown separately. The status line
+The storage meter shows retained bytes against the cap, with in-flight
+reserved bytes listed separately. The capture switch explains what happens
+to turns already admitted. The status line
 reports capacity, queue, or storage degradation so operators can see when
 evidence may be missing.
 
@@ -6238,7 +6240,7 @@ The inspector identifies a retained chat and omits its consent editor.
 When the catalog page anchor changes, the list returns to the first page
 with the operator's filters and selection still in place.
 
-Export conversation in the inspector and Export selected in the catalog
+Export in the inspector and catalog
 open the same ZIP dialog. Metadata only is selected initially. Operators
 can explicitly choose Metadata and shared content to include the
 evidence covered by each selected conversation's current consent.

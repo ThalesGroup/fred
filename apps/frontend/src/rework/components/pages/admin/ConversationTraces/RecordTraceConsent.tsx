@@ -5,7 +5,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
-import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
+import Select from "@shared/molecules/Select/Select";
 import type {
   ConversationTraceDetail,
   TraceHistoryBoundary,
@@ -23,7 +24,7 @@ export function RecordTraceConsent({
   selectedExchange?: string;
   onConflict: () => void;
 }) {
-  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [exchange, setExchange] = useState<string>();
   const [decision, setDecision] = useState<{ choices: TraceHistoryBoundary[]; version: string | null }>();
   const [note, setNote] = useState("");
@@ -41,6 +42,7 @@ export function RecordTraceConsent({
       : [],
   );
   const selected = decision?.choices.find(({ exchange_id }) => exchange_id === exchange);
+  const time = new Intl.DateTimeFormat(i18n.language, { timeStyle: "medium" });
 
   async function confirm() {
     if (!decision || !selected || error || saving.isLoading || !note.trim()) return;
@@ -67,7 +69,8 @@ export function RecordTraceConsent({
   return (
     <div>
       <Button
-        color="secondary"
+        color="primary"
+        icon={{ category: "outlined", type: "check_circle" }}
         size="small"
         variant="outlined"
         disabled={available.length === 0}
@@ -86,47 +89,9 @@ export function RecordTraceConsent({
       </Button>
       {recorded && <p role="status">{t("manual.recorded")}</p>}
       {decision && (
-        <ConfirmationDialog
+        <Dialog
           open
           title={t("manual.action")}
-          message={t("manual.description")}
-          details={
-            <div className={styles.recordConsentFields}>
-              <label>
-                {t("manual.cutoff")}
-                <select
-                  value={selected?.exchange_id ?? ""}
-                  disabled={saving.isLoading}
-                  onChange={(event) => setExchange(event.target.value)}
-                >
-                  {!selected && (
-                    <option value="" disabled>
-                      {t("manual.chooseCutoff")}
-                    </option>
-                  )}
-                  {decision.choices.map(({ exchange_id, turn_number }) => (
-                    <option value={exchange_id} key={exchange_id}>
-                      {t("turnNumber", { number: turn_number })}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <TextArea
-                label={t("manual.source")}
-                description={t("manual.sourceHelp")}
-                required
-                maxLength={2000}
-                value={note}
-                disabled={saving.isLoading}
-                onChange={(event) => setNote(event.target.value)}
-              />
-              {error && (
-                <p className={styles.error} role="alert">
-                  {t("manual.error")}
-                </p>
-              )}
-            </div>
-          }
           confirmLabel={t("manual.action")}
           cancelLabel={t("manual.cancel")}
           confirmDisabled={!selected || !note.trim() || error || saving.isLoading}
@@ -137,7 +102,38 @@ export function RecordTraceConsent({
             setDecision(undefined);
             setNote("");
           }}
-        />
+        >
+          <div className={styles.dialogFields}>
+            <p>{t("manual.description")}</p>
+            <Select
+              label={t("manual.cutoff")}
+              size="medium"
+              value={selected?.exchange_id}
+              disabled={saving.isLoading}
+              placeholder={t("manual.chooseCutoff")}
+              onChange={setExchange}
+              options={decision.choices.map(({ exchange_id, turn_number, started_at }) => ({
+                key: exchange_id,
+                value: exchange_id,
+                label: t("turnNumber", { number: turn_number }) + " / " + time.format(new Date(started_at)),
+              }))}
+            />
+            <TextArea
+              label={t("manual.source")}
+              description={t("manual.sourceHelp")}
+              required
+              maxLength={2000}
+              value={note}
+              disabled={saving.isLoading}
+              onChange={(event) => setNote(event.target.value)}
+            />
+            {error && (
+              <p className={styles.error} role="alert">
+                {t("manual.error")}
+              </p>
+            )}
+          </div>
+        </Dialog>
       )}
     </div>
   );

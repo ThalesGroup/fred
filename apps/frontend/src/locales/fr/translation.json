@@ -1596,7 +1596,7 @@
         "outcome": {
           "http_5xx": "HTTP 5xx en amont",
           "http_429": "HTTP 429 limite de débit",
-          "http_400": "HTTP 400 requête incorrecte",
+          "http_400": "HTTP 400",
           "http_other_4xx": "Autres HTTP 4xx",
           "stream_interrupted": "Flux interrompu",
           "timeout_or_connection": "Délai ou connexion",
@@ -1643,6 +1643,13 @@
           "modelLink": {
             "requested": "Demandé par l'appel au modèle {{id}}",
             "received": "Résultat lu par l'appel au modèle {{id}}"
+          },
+          "traceId": "Identifiant de trace",
+          "completeness": "Complétude de la capture",
+          "completenessValue": {
+            "complete": "Complète",
+            "partial": "Partielle",
+            "unavailable": "Indisponible"
           }
         },
         "model": {
@@ -1678,7 +1685,7 @@
           "langchainTab": "LangChain",
           "title": "Échange HTTP du modèle",
           "exchangeTab": "Échange HTTP",
-          "sseTab": "SSE",
+          "sseTab": "Flux SSE",
           "evidenceTabs": "Données de l'appel au modèle",
           "modelCall": "Appel du modèle",
           "attempt": "Tentative {{number}}",
@@ -1691,8 +1698,8 @@
           "release": "Version de Fred",
           "checkpointStatus": "Point de reprise du tour",
           "checkpoint": {
-            "persisted": "Écriture SQL confirmée pendant ce tour",
-            "not_observed": "Aucune écriture SQL observée",
+            "persisted": "Point de reprise enregistré",
+            "not_observed": "Aucune écriture du point de reprise observée",
             "unconfigured": "Stockage persistant des points de reprise désactivé",
             "unknown": "Inconnu"
           },
@@ -1724,16 +1731,20 @@
             "complete": "Complètes",
             "partial": "Partielles",
             "unavailable": "Indisponibles"
-          }
+          },
+          "execution": "Exécution",
+          "statusBadge": "HTTP {{status}}",
+          "captureState": "Capture du tour",
+          "releaseAttempt": "Fred {{release}} / tentative {{attempt}}"
         },
         "sse": {
           "title": "Chronologie SSE",
-          "provider": "SSE fournisseur",
-          "outgoing": "SSE Fred",
+          "provider": "Du fournisseur à Fred",
+          "outgoing": "De Fred au client",
           "unavailable": "Aucune chronologie SSE disponible pour ce tour.",
           "loading": "Chargement des données SSE...",
           "turnElapsed": "Chronologie du tour sur {{duration}}",
-          "fit": "Ajuster aux arrivées",
+          "fit": "Ajuster aux événements",
           "reset": "Réinitialiser le zoom",
           "frameCount": "Trames {{count}}",
           "headersAt": "En-têtes à {{time}}",
@@ -1785,14 +1796,37 @@
             "done": "Fin",
             "error": "Erreur",
             "other": "Autre"
-          }
+          },
+          "description": "Comparez les événements reçus du fournisseur et ceux envoyés par Fred sur la même échelle de temps.",
+          "longestGap": "Silence le plus long",
+          "frameList": "Événements dans la fenêtre",
+          "noFramesInRange": "Aucun événement dans cette fenêtre."
         },
         "evidence": {
           "captured": "Données enregistrées",
           "history_only": "Historique uniquement",
           "metadata_only": "Métadonnées seules",
           "partial": "Données partielles"
-        }
+        },
+        "settings": "Paramètres de capture",
+        "closeSettings": "Fermer",
+        "captureOn": "Capture active",
+        "captureOff": "Capture inactive",
+        "storageUsage": "Utilisation du stockage",
+        "pageCount_one": "{{count}} conversation sur cette page",
+        "pageCount_other": "{{count}} conversations sur cette page",
+        "callTree": "Tours et appels",
+        "noneShared": "Aucun tour partagé",
+        "loadingCalls": "Chargement des appels...",
+        "callsUnavailable": "Certaines métadonnées des appels sont indisponibles.",
+        "maskedEvidence": "Contenu masqué",
+        "turnUnavailable": "Ce tour est indisponible sur cette page.",
+        "callUnavailable": "Cet appel est indisponible pour le tour sélectionné.",
+        "llm": "LLM",
+        "enableCapture": "Activer la capture",
+        "exportShort": "Exporter",
+        "deleteShort": "Supprimer",
+        "storageUsedOfCap": "{{used}} sur {{cap}}"
       },
       "capabilities": {
         "title": "Fonctionnalités",

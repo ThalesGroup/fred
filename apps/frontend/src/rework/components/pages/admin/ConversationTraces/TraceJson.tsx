@@ -25,7 +25,7 @@ const traceEditorTheme = EditorView.theme({
     color: "var(--on-surface)",
     background: "var(--surface-container-low)",
   },
-  ".cm-scroller": { overflow: "auto", maxHeight: "34lh" },
+  ".cm-scroller": { overflow: "auto", maxHeight: "32lh" },
   ".cm-content": { padding: "var(--spacing-xs) 0" },
   ".cm-gutters": {
     color: "var(--on-surface-retreat)",

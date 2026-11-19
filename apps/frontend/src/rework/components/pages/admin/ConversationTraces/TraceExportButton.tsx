@@ -84,10 +84,10 @@ export function TraceExportButton({
     <>
       <Button
         type="button"
-        color="secondary"
+        color="on-surface"
         size="small"
         variant="outlined"
-        icon={{ category: "outlined", type: "download" }}
+        icon={single ? undefined : { category: "outlined", type: "download" }}
         disabled={disabled || !sessionIds.length}
         onClick={() => {
           setMode("metadata_only");
@@ -95,7 +95,7 @@ export function TraceExportButton({
           setTargets(sessionIds);
         }}
       >
-        {t(single ? "exportConversation" : "exportSelected")}
+        {t("exportShort")}
       </Button>
       <ConfirmationDialog
         open={targets !== null}

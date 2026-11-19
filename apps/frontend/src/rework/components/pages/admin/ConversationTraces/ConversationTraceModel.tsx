@@ -14,7 +14,7 @@ import type {
   TraceNormalization,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { TraceSseFramePayload } from "./ConversationTraceSse";
-import { TRACE_TRANSLATION_PREFIX, canReadTraceArtifact } from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, TraceMaskedEvidence, canReadTraceArtifact } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -66,7 +66,7 @@ function Normalization({
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const [frameIndex, setFrameIndex] = useState<number>();
   return (
-    <div className={styles.httpPayload}>
+    <div className={styles.normalizationDetails}>
       <p>{t("normalizationAttempt", { number, status: t("normalization." + attempt.status) })}</p>
       {attempt.partial && <p>{t("partialNormalization")}</p>}
       {attempt.rewrites.length > 0 && (
@@ -129,9 +129,9 @@ export function ConversationTraceModel({
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
   if (!model || (canRead && model.completeness === "unavailable") || query.isError) return <p>{t("unavailable")}</p>;
-  if (!canRead) return <p>{t("masked")}</p>;
+  if (!canRead) return <TraceMaskedEvidence message={t("masked")} />;
   const evidence = query.currentData;
-  if (!evidence) return <p role="status">{t("loading")}</p>;
+  if (!evidence || query.isFetching) return <p role="status">{t("loading")}</p>;
   return (
     <div className={styles.httpContent}>
       <section aria-label={t("normalizationTitle")} className={styles.httpPayload}>
@@ -154,7 +154,8 @@ export function ConversationTraceModel({
             {evidence.origins.map((origin) => (
               <li key={origin.exchange_id + origin.call_id}>
                 <Link
-                  className={styles.link}
+                  className={styles.back}
+                  preventScrollReset
                   to={{
                     search: new URLSearchParams({
                       turn: origin.exchange_id,
