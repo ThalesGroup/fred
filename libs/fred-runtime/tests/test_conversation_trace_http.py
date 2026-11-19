@@ -722,10 +722,15 @@ def test_provider_sse_cannot_infer_completion_from_unterminated_frame() -> None:
 
 @pytest.mark.parametrize("retained", [True, False])
 @pytest.mark.parametrize("clean_eof", [True, False])
-def test_vertex_gemini_stop_preserves_bytes_timing_and_stream_end(
-    retained: bool, clean_eof: bool
+@pytest.mark.parametrize(
+    "reason", ["STOP", "MAX_TOKENS", "SAFETY", "MALFORMED_FUNCTION_CALL"]
+)
+def test_vertex_gemini_finish_preserves_bytes_timing_and_stream_end(
+    retained: bool, clean_eof: bool, reason: str
 ) -> None:
-    terminal = b'data: {"candidates":[{"finishReason" : "STOP"}]}\r\n\r\n'
+    terminal = (
+        'data: {"candidates":[{"finishReason" : "' + reason + '"}]}\r\n\r\n'
+    ).encode()
     lane = RecordedSseLane(
         uuid4().hex, SseBudget(started=100.0, bytes=len(terminal) if retained else 0), 0
     )
@@ -746,6 +751,19 @@ def test_vertex_gemini_stop_preserves_bytes_timing_and_stream_end(
         if retained and clean_eof
         else TraceSseAvailability.PARTIAL
     )
+
+
+def test_vertex_gemini_unspecified_finish_is_not_terminal() -> None:
+    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0)
+    lane.feed(
+        b'data: {"candidates":[{"finishReason":"FINISH_REASON_UNSPECIFIED"}]}\n\n',
+        101.0,
+    )
+    lane.finish(102.0, TraceSseEnding.CLOSED)
+    lane.prepare_provider()
+
+    assert lane.ending == TraceSseEnding.CLOSED
+    assert lane.frames[0].kind == TraceSseKind.OTHER
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,9 @@ from fred_sdk.contracts.runtime import RuntimeEventKind
 _MAX_NUMBER = 2**31 - 1
 _LINE_END = re.compile(rb"\r\n?|\n")
 _TERMINAL_VALUES = (b"[DONE]", b'"message_stop"', b'"response.completed"')
-_VERTEX_STOP = re.compile(rb'"finishReason"\s*:\s*"STOP"')
+_VERTEX_FINISH = re.compile(
+    rb'"finishReason"\s*:\s*"(?!FINISH_REASON_UNSPECIFIED")[A-Z_]+"'
+)
 _ANTHROPIC_BLOCK_KINDS = {
     "text": TraceSseKind.TEXT,
     "text_delta": TraceSseKind.TEXT,
@@ -88,12 +90,10 @@ def provider_kind(frame: bytearray) -> TraceSseKind:
         return TraceSseKind.ERROR
     # The Vertex Gemini adapter consumes the first candidate in each chunk.
     candidates = event.get("candidates")
-    if (
-        isinstance(candidates, list)
-        and candidates
-        and _dict(candidates[0]).get("finishReason") == "STOP"
-    ):
-        return TraceSseKind.DONE
+    if isinstance(candidates, list) and candidates:
+        reason = _dict(candidates[0]).get("finishReason")
+        if isinstance(reason, str) and reason not in ("", "FINISH_REASON_UNSPECIFIED"):
+            return TraceSseKind.DONE
     choices = event.get("choices")
     for choice in choices if isinstance(choices, list) else ():
         delta = _dict(_dict(choice).get("delta"))
@@ -222,7 +222,7 @@ class RecordedSseLane:
                 and 0 < len(self._pending) <= self.budget.terminal_bytes
                 and (
                     any(marker in self._pending for marker in _TERMINAL_VALUES)
-                    or _VERTEX_STOP.search(self._pending) is not None
+                    or _VERTEX_FINISH.search(self._pending) is not None
                 )
             ):
                 self.budget.terminal_bytes -= len(self._pending)

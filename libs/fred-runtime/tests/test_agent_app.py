@@ -2308,7 +2308,8 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("receipt_status", "metric_status"), [(204, "committed"), (409, "fenced")]
+    ("receipt_status", "metric_status"),
+    [([204], "committed"), ([409, 204], "committed"), ([409, 409], "fenced")],
 )
 async def test_lost_admission_ack_finishes_with_facts_only(
     tmp_path, monkeypatch, receipt_status, metric_status
@@ -2323,7 +2324,7 @@ async def test_lost_admission_ack_finishes_with_facts_only(
         if request.url.path.endswith("/admit"):
             # The server saw the segment, but the ordinary turn never gets its capture ID.
             await asyncio.Future()
-        return httpx.Response(receipt_status)
+        return httpx.Response(receipt_status[len(calls) - 2])
 
     from fred_runtime.app import conversation_trace
 
@@ -2351,7 +2352,12 @@ async def test_lost_admission_ack_finishes_with_facts_only(
             started=monotonic(),
         )
         await client.drain()
-    admission, recovery = calls
+    admission, recovery, *retried = calls
+    assert len(retried) == len(receipt_status) - 1
+    assert all(
+        retry.url == recovery.url and retry.content == recovery.content
+        for retry in retried
+    )
     assert recovery.method == "PUT"
     assert recovery.url.path.endswith(
         f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
