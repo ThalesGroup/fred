@@ -151,7 +151,8 @@ function spanTree(calls: Call[], spans: OtlpTraceSpan[]): CallNode[] {
         break;
       }
       visited.add(ancestor);
-      parent ??= bySpan.get(ancestor)?.at(-1);
+      const parentNodes = bySpan.get(ancestor);
+      parent ??= parentNodes?.[parentNodes.length - 1];
       span = byId.get(ancestor);
     }
     (parent?.children ?? roots).push(...nodes);
