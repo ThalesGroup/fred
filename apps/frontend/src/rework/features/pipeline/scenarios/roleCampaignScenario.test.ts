@@ -27,6 +27,7 @@ const ROLE_ROUTES: Array<{ id: string; path: string; roles: PlatformRoleRelation
   { id: "announcements", path: "/admin/platform/announcements", roles: [] },
   { id: "import-export", path: "/import-export/stats", roles: [] },
   { id: "observation", path: "/kpi/presets/sessions_over_time", roles: ["platform_observer"] },
+  { id: "analytics-user-filter", path: "/kpi/user-filter", roles: ["platform_observer"] },
   { id: "trace-settings", path: "/admin/conversation-traces/settings", roles: ["trace_reader"] },
 ];
 
@@ -425,7 +426,21 @@ describe("automatic two-account role campaign", () => {
     expect(f.state.roles).toEqual(["prompt_editor"]);
     expect(f.state.journal).toBeNull();
   });
-  it.each(["/users", "/kpi/presets/sessions_over_time"])("detects trace reader overreach on %s", async (route) => {
+  it("still verifies Trace Reader isolation when the KPI store is disabled", async () => {
+    const f = fake();
+    const preset = `${CP}/kpi/presets/sessions_over_time`;
+    f.state.inject = (path) => {
+      if (new URL(path, "http://local").pathname === preset) return { status: 503, body: null };
+    };
+    const steps = await run(f);
+    expect(steps.filter((step) => step.status === "skipped").map((step) => step.id)).toEqual(["platform-2-access"]);
+    expect(steps.find((step) => step.id === "platform-3-no-admin")?.status).toBe("passed");
+    expect(steps.filter((step) => step.status === "failed")).toEqual([]);
+    expect(
+      f.state.calls.filter((call) => new URL(call.path, "http://local").pathname === preset).map((call) => call.token),
+    ).toEqual([TARGET, ADMIN]);
+  });
+  it.each(["/users", "/kpi/user-filter"])("detects trace reader overreach on %s", async (route) => {
     const f = fake();
     f.state.inject = (path, token) => {
       if (

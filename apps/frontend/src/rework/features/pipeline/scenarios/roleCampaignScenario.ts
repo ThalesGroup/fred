@@ -500,8 +500,9 @@ export async function roleCampaignScenario(
             const response = await deps.request(`${CP}/users`, targetToken);
             assertAccess(response.status, false, "/users");
             if (role === "trace_reader") {
-              const analytics = await deps.request(analyticsProbePath(), targetToken);
-              assertAccess(analytics.status, false, ANALYTICS_PROBE);
+              const analyticsRoute = "/kpi/user-filter";
+              const analytics = await deps.request(`${CP}${analyticsRoute}`, targetToken);
+              assertAccess(analytics.status, false, analyticsRoute);
             }
             return { value: true };
           },
