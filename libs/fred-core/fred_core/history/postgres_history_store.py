@@ -49,18 +49,30 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import MetaData, and_, delete, func, or_, select, text, update
+from sqlalchemy import (
+    MetaData,
+    and_,
+    case,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
-from fred_core.history.history_models import SessionHistoryRow
+from fred_core.history.history_models import SessionHistoryRow, SessionTraceIncidentRow
 from fred_core.history.history_schema import (
     Channel,
     ChatMessage,
     ChatMetadata,
     MessagePart,
     Role,
+    TraceFailureCategory,
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
@@ -191,16 +203,10 @@ def _serialize_history_payload(
 
 
 def history_metadata() -> MetaData:
-    """
-    Return a ``MetaData`` holding only the ``session_history`` table.
-
-    Why this is scoped rather than ``Base.metadata``:
-    - ``SessionHistoryRow`` shares ``Base`` with tables owned by other backends
-      (users, session, teammetadata); creating from ``Base.metadata`` would
-      quietly materialize those too
-    """
+    """Limit the test metadata to the tables owned by the runtime history store."""
     metadata = MetaData()
     SessionHistoryRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
+    SessionTraceIncidentRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
     return metadata
 
 
@@ -415,26 +421,44 @@ class PostgresHistoryStore(BaseHistoryStore):
     @staticmethod
     def _trace_boundaries(session_id: str, user_id: str):
         row = SessionHistoryRow
-        first_rank = func.min(row.rank)
+        incident = SessionTraceIncidentRow
+        retained = select(
+            row.exchange_id,
+            row.rank.label("first_rank"),
+            row.rank.label("last_rank"),
+            row.timestamp.label("started_at"),
+            literal(1).label("has_history"),
+        ).where(
+            row.session_id == session_id,
+            row.user_id == user_id,
+            row.rank >= 0,
+            row.exchange_id.is_not(None),
+            row.exchange_id != "",
+            row.delivery_state.is_distinct_from("pending"),
+        )
+        proofs = select(
+            incident.exchange_id,
+            incident.first_rank,
+            incident.last_rank,
+            incident.started_at,
+            literal(0).label("has_history"),
+        ).where(incident.session_id == session_id, incident.user_id == user_id)
+        exchanges = retained.union_all(proofs).subquery().c
+        first_rank = func.min(exchanges.first_rank)
         return (
             select(
-                row.exchange_id.label("exchange_id"),
+                exchanges.exchange_id,
                 first_rank.label("first_rank"),
-                func.max(row.rank).label("last_rank"),
-                func.min(row.timestamp).label("started_at"),
+                func.max(case((exchanges.has_history == 1, exchanges.last_rank))).label(
+                    "last_rank"
+                ),
+                func.min(exchanges.started_at).label("started_at"),
+                func.max(exchanges.has_history).label("has_history"),
                 func.row_number()
-                .over(order_by=(first_rank, row.exchange_id))
+                .over(order_by=(first_rank, exchanges.exchange_id))
                 .label("turn_number"),
             )
-            .where(
-                row.session_id == session_id,
-                row.user_id == user_id,
-                row.rank >= 0,
-                row.exchange_id.is_not(None),
-                row.exchange_id != "",
-                row.delivery_state.is_distinct_from("pending"),
-            )
-            .group_by(row.exchange_id)
+            .group_by(exchanges.exchange_id)
             .subquery()
         )
 
@@ -444,7 +468,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         from fred_core.conversation_trace import TraceHistoryBoundary
 
         turns = self._trace_boundaries(session_id, user_id)
-        query = select(turns).order_by(turns.c.turn_number.desc()).limit(1)
+        query = (
+            select(turns)
+            .where(turns.c.has_history == 1)
+            .order_by(turns.c.turn_number.desc())
+            .limit(1)
+        )
         if exchange_id is not None:
             query = query.where(turns.c.exchange_id == exchange_id)
         async with use_session(self._sessions) as session:
@@ -462,7 +491,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         from fred_core.conversation_trace import TraceHistoryBoundary
 
         turns = self._trace_boundaries(session_id, user_id)
-        query = select(turns).order_by(turns.c.turn_number).limit(limit)
+        query = (
+            select(turns)
+            .where(turns.c.has_history == 1)
+            .order_by(turns.c.turn_number)
+            .limit(limit)
+        )
         if after is not None:
             rank, exchange_id = after
             query = query.where(
@@ -475,6 +509,85 @@ class PostgresHistoryStore(BaseHistoryStore):
             rows = (await session.execute(query)).mappings().all()
         return [TraceHistoryBoundary.model_validate(row) for row in rows]
 
+    async def record_trace_incident(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        agent_instance_id: str,
+        first_rank: int,
+        started_at: datetime,
+        failure: ChatMessage,
+    ) -> None:
+        """Persist a trusted terminal boundary before attempting the transcript write."""
+        from fred_core.conversation_trace import (
+            TraceHistoryBoundary,
+            TraceHistoryIncident,
+        )
+
+        error_ref = failure.metadata.support_error_ref
+        if error_ref is None:
+            return
+        row = SessionHistoryRow
+        receipt = SessionTraceIncidentRow
+        exchange_id = failure.exchange_id
+        async with self._sessions.begin() as session:
+            await self._lock_conversation(session, session_id)
+            # A managed opening is saved before execution. Its history is the
+            # ownership anchor and prevents a late terminal write after erasure.
+            owned_history = select(row.session_id).where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.agent_instance_id == agent_instance_id,
+            )
+            if not await session.scalar(select(owned_history.exists())):
+                return
+            boundaries = self._trace_boundaries(session_id, user_id)
+            turns = boundaries.c
+            previous = (
+                await session.execute(
+                    select(boundaries).where(turns.exchange_id == exchange_id)
+                )
+            ).one_or_none()
+            if previous is not None:
+                first_rank = min(first_rank, previous.first_rank)
+                turn_number = previous.turn_number
+                started_at = min(started_at, _normalize_ts(previous.started_at))
+            else:
+                earlier = (
+                    select(func.count())
+                    .select_from(boundaries)
+                    .where(
+                        or_(
+                            turns.first_rank < first_rank,
+                            and_(
+                                turns.first_rank == first_rank,
+                                turns.exchange_id < exchange_id,
+                            ),
+                        )
+                    )
+                )
+                turn_number = (await session.scalar(earlier) or 0) + 1
+            incident = TraceHistoryIncident(
+                cutoff=TraceHistoryBoundary(
+                    exchange_id=exchange_id,
+                    first_rank=first_rank,
+                    last_rank=failure.rank,
+                    turn_number=turn_number,
+                    started_at=started_at,
+                ),
+                support_error_ref=error_ref,
+                failure_category=failure.metadata.trace_failure_category,
+            )
+            insert = _dialect_insert(self._engine)(receipt).values(
+                session_id=session_id,
+                user_id=user_id,
+                support_error_ref=incident.support_error_ref,
+                failure_category=incident.failure_category,
+                **incident.cutoff.model_dump(),
+            )
+            await session.execute(insert.on_conflict_do_nothing())
+
     async def trace_history_incident(
         self, session_id: str, user_id: str, support_error_ref: str
     ) -> TraceHistoryIncident | None:
@@ -484,6 +597,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         )
 
         row = SessionHistoryRow
+        receipt = SessionTraceIncidentRow
         turns = self._trace_boundaries(session_id, user_id)
         query = (
             select(
@@ -510,6 +624,19 @@ class PostgresHistoryStore(BaseHistoryStore):
             .limit(1)
         )
         async with use_session(self._sessions) as session:
+            stored = await session.get(
+                receipt, (session_id, user_id, support_error_ref)
+            )
+            if stored is not None:
+                return TraceHistoryIncident(
+                    cutoff=TraceHistoryBoundary.model_validate(
+                        stored, from_attributes=True
+                    ),
+                    support_error_ref=stored.support_error_ref,
+                    failure_category=TraceFailureCategory(stored.failure_category)
+                    if stored.failure_category is not None
+                    else None,
+                )
             boundary = (await session.execute(query)).mappings().first()
         if boundary is None:
             return None
@@ -612,12 +739,17 @@ class PostgresHistoryStore(BaseHistoryStore):
         Returns the number of rows removed (0 when session not found or not owned).
         """
         async with use_session(self._sessions, session) as s:
+            await self._lock_conversation(s, session_id)
             where = [SessionHistoryRow.session_id == session_id]
+            incident = SessionTraceIncidentRow
+            incident_scope = [incident.session_id == session_id]
             if user_id is not None:
                 where.append(SessionHistoryRow.user_id == user_id)
+                incident_scope.append(incident.user_id == user_id)
             count_row = await s.execute(select(func.count()).where(*where))
             count: int = count_row.scalar() or 0
             await s.execute(delete(SessionHistoryRow).where(*where))
+            await s.execute(delete(incident).where(*incident_scope))
             await s.commit()
             return count
 
@@ -676,13 +808,27 @@ class PostgresHistoryStore(BaseHistoryStore):
             # base = 0 for a new session, or MAX+1 for an existing one
         """
         async with use_session(self._sessions, session) as s:
-            result = await s.execute(
-                select(func.max(SessionHistoryRow.rank)).where(
-                    SessionHistoryRow.session_id == session_id
+            row = SessionHistoryRow
+            incident = SessionTraceIncidentRow
+            history_rank, incident_rank = (
+                await s.execute(
+                    select(
+                        select(func.max(row.rank))
+                        .where(row.session_id == session_id)
+                        .scalar_subquery(),
+                        select(func.max(incident.last_rank))
+                        .where(incident.session_id == session_id)
+                        .scalar_subquery(),
+                    )
                 )
+            ).one()
+        return (
+            max(
+                (rank for rank in (history_rank, incident_rank) if rank is not None),
+                default=-1,
             )
-            max_rank = result.scalar()
-        return 0 if max_rank is None else max_rank + 1
+            + 1
+        )
 
     async def _lock_conversation(self, session: AsyncSession, session_id: str) -> None:
         if self._engine.dialect.name == "postgresql":
@@ -1020,14 +1166,14 @@ class PostgresHistoryStore(BaseHistoryStore):
         self, session_id: str, user_id: str, exchange_id: str, start_rank: int
     ) -> int:
         """Number an exchange using retained history, including uncaptured turns."""
-        row = SessionHistoryRow
+        boundaries = self._trace_boundaries(session_id, user_id)
         async with use_session(self._sessions) as session:
             prior_exchanges = await session.scalar(
-                select(func.count(row.exchange_id.distinct())).where(
-                    row.session_id == session_id,
-                    row.user_id == user_id,
-                    row.rank < start_rank,
-                    row.exchange_id != exchange_id,
+                select(func.count())
+                .select_from(boundaries)
+                .where(
+                    boundaries.c.first_rank < start_rank,
+                    boundaries.c.exchange_id != exchange_id,
                 )
             )
         return (prior_exchanges or 0) + 1

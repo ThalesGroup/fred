@@ -24,7 +24,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `c1a4bf6de820`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+Apply the Control Plane migrations through `c1a4bf6de820`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
 
 Revision `4eea63270bc1` adds an indexed row per explicit incident report to
 support search, expiry, and deletion through the existing session lifecycle.
@@ -39,11 +39,28 @@ catalog. Upgrade Control Plane before Fred Agents to enable independent
 pause and resume publications and the fresh runtime-binding sampling decision.
 Older clients retain the combined finalization protocol during rollout.
 
+Deploy the Control Plane API before the updated Runtime. The new Runtime
+uses the caller's credential with the product lifecycle API for managed
+history. Managed history fails closed while that API is unreachable. Control
+Plane still accepts the prior trace workload visibility request during the
+rollout. Deploy the updated frontend after all runtimes have the new
+managed-execution guard.
+
+Apply runtime migration `b34a0d59ef71` before starting the updated Runtime.
+It adds a table for terminal support references and their immutable cutoffs
+with the same session erasure lifecycle as chat history. Ordinary history
+rows and earlier terminal references remain readable without backfill.
+This migration also applies to local SQLite databases.
+
 ## Validation
 
 Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent unshared conversation does not appear. From the owner's Debug panel, share through a saved turn, confirm support can read that turn, then withdraw access and verify it is denied.
 
 With capture off, trigger a terminal error and dismiss the sharing dialog. Check that no entry appears. Share the error and verify the failed catalog lists it as History only with the same support reference. Record consent received outside Fred for a retained turn and verify the audit event identifies the operator and grant without the source note.
+
+On an isolated runtime, fail the terminal transcript insert and share the
+error. Verify that the failed turn's transcript is unavailable, earlier
+shared history remains available, and subsequent turns stay outside the grant.
 
 Share a second terminal error in the same conversation. Check that the catalog finds the conversation under either support reference and that the inspector shows both reports on their respective turns. Withdraw consent and check that the history-only reports disappear.
 
@@ -68,7 +85,7 @@ Export a mixed selection in both modes. Metadata only should contain the manifes
 
 ## Rollback
 
-Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog tables in place if the evidence must be retained during rollback. The migration downgrades drop the catalog, its settings, and consent records.
+Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog and terminal reference tables in place if the evidence must be retained during rollback. The Control Plane migration downgrades drop the catalog, its settings, and consent records. Downgrading the runtime migration drops independently saved terminal references and preserves the conversation messages.
 
 ## Limitations
 

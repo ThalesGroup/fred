@@ -219,7 +219,10 @@ class PodApplicationContext:
         routes traffic to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8
         (dated entries) for the incidents this closes.
         """
-        from fred_core.history.history_models import SessionHistoryRow
+        from fred_core.history.history_models import (
+            SessionHistoryRow,
+            SessionTraceIncidentRow,
+        )
         from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
         from fred_core.sql.schema_guard import require_tables
@@ -266,7 +269,10 @@ class PodApplicationContext:
             # not hours later as an UndefinedTableError mid-turn (#2137).
             await require_tables(
                 engine,
-                [SessionHistoryRow.__tablename__],
+                [
+                    SessionHistoryRow.__tablename__,
+                    SessionTraceIncidentRow.__tablename__,
+                ],
                 component="fred-runtime",
                 migrate_command=_MIGRATE_COMMAND,
                 version_table=_RUNTIME_VERSION_TABLE,

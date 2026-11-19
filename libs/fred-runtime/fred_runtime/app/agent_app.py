@@ -4247,6 +4247,34 @@ async def _write_turn_history(
     if not messages:
         return delivered_rank
 
+    if agent_instance_id is not None and isinstance(
+        history_store, PostgresHistoryStore
+    ):
+        failure = next(
+            (
+                message
+                for message in messages
+                if message.metadata.support_error_ref is not None
+            ),
+            None,
+        )
+        if failure is not None:
+            try:
+                await history_store.record_trace_incident(
+                    session_id=session_id,
+                    user_id=user_id,
+                    agent_instance_id=agent_instance_id,
+                    first_rank=base_rank,
+                    started_at=min(message.timestamp for message in messages),
+                    failure=failure,
+                )
+            except Exception as exc:
+                # A failed proof write leaves the existing saved-error path available.
+                logger.warning(
+                    "event=trace_incident_write_failed error_type=%s",
+                    type(exc).__name__,
+                )
+
     try:
         await history_store.save(
             session_id=session_id,

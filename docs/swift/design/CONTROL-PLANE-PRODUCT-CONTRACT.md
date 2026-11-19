@@ -5490,9 +5490,12 @@ Shared deployments default capture off and enforce role and turn consent.
 
 The conversation owner opens and confirms a report at
 `/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`. Control
-Plane resolves the reference against the bound runtime's saved terminal error
-and verifies its exact cutoff and consent version on confirmation. An active
-report contributes a failed catalog entry even without a capture. Each
+Plane resolves the reference against the bound runtime's recorded terminal
+error and verifies its exact cutoff and consent version on confirmation.
+Runtime records the support reference and cutoff independently of the chat
+messages. If the messages from the failed turn are missing, the inspector
+shows its transcript as unavailable and can still read earlier shared history.
+An active report contributes a failed catalog entry even without a capture. Each
 explicit report keeps its own support reference and category across extensions
 of the active grant. The catalog shows the most recent failure and can find
 any reported reference or category. The inspector lists the reports for the

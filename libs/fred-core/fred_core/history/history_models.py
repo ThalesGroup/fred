@@ -97,3 +97,24 @@ class SessionHistoryRow(Base):
     metadata_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
     message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     delivery_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+
+class SessionTraceIncidentRow(Base):
+    """Runtime-issued terminal evidence that can survive a failed transcript write."""
+
+    __tablename__ = "session_trace_incidents"
+    __table_args__ = (
+        Index("ix_session_trace_incidents_rank", "session_id", "last_rank"),
+    )
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    support_error_ref: Mapped[str] = mapped_column(String(32), primary_key=True)
+    exchange_id: Mapped[str] = mapped_column(String, nullable=False)
+    first_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    failure_category: Mapped[str | None] = mapped_column(String(64), nullable=True)

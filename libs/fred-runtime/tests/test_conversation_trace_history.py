@@ -37,6 +37,8 @@ from fred_core.security.oidc import get_current_user_or_service, require_own_cre
 from fred_runtime.app import agent_app
 from fred_runtime.app.conversation_trace_history import router
 from fred_runtime.app.dependencies import get_pod_container
+from fred_runtime.migrations import upgrade_sqlite_database
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -237,3 +239,83 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
             ).status_code == 403
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tmp_path):
+    database = tmp_path / "history.sqlite"
+    upgrade_sqlite_database(database)
+    writer_engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    reader_engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    try:
+        writer = PostgresHistoryStore(writer_engine)
+        reader = PostgresHistoryStore(reader_engine)
+        await writer.save(
+            "session",
+            [make_user_text("session", "earlier", 0, "Earlier history")],
+            "owner",
+            agent_instance_id="managed",
+        )
+        async with writer_engine.begin() as conn:
+            await conn.execute(
+                text("""
+                CREATE TRIGGER reject_terminal_history BEFORE INSERT ON session_history
+                WHEN NEW.channel = 'error'
+                BEGIN SELECT RAISE(ABORT, 'test terminal history failure'); END
+            """)
+            )
+
+        error_ref = "1" * 32
+        await agent_app._write_turn_history(
+            session_id="session",
+            user_id="owner",
+            agent_instance_id="managed",
+            exchange_id="failed",
+            request_message="Unpersisted input",
+            payloads=[
+                {
+                    "kind": "execution_error",
+                    "message": "Terminal error",
+                    "support_error_ref": error_ref,
+                }
+            ],
+            history_store=writer,
+            base_rank=await writer.next_rank("session"),
+        )
+        incident = await reader.trace_history_incident("session", "owner", error_ref)
+        assert incident is not None
+        assert incident.cutoff.exchange_id == "failed"
+        assert incident.cutoff.turn_number == 2
+        assert (incident.cutoff.first_rank, incident.cutoff.last_rank) == (1, 2)
+        assert (
+            await reader.trace_history_incident("session", "other", error_ref) is None
+        )
+        assert await reader.trace_history_incident("session", "owner", "2" * 32) is None
+        assert await reader.trace_boundary("session", "owner", "failed") is None
+
+        next_rank = await reader.next_rank("session")
+        assert next_rank == 3
+        await reader.save(
+            "session",
+            [make_user_text("session", "later", next_rank, "Later private turn")],
+            "owner",
+            agent_instance_id="managed",
+        )
+        turns = await reader.trace_history_page(
+            "session", "owner", limit=10, after=None
+        )
+        assert [(turn.exchange_id, turn.turn_number) for turn in turns] == [
+            ("earlier", 1),
+            ("later", 3),
+        ]
+        assert (
+            await writer.trace_history_incident("session", "owner", error_ref)
+            == incident
+        )
+        await reader.delete_session("session")
+        assert (
+            await writer.trace_history_incident("session", "owner", error_ref) is None
+        )
+    finally:
+        await reader_engine.dispose()
+        await writer_engine.dispose()
