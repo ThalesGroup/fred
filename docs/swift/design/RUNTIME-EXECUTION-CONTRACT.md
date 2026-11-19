@@ -7718,5 +7718,7 @@ file writes use the same persisted fence. PostgreSQL writers fail closed on
 an exclusive fence lock, and erasure retries through the existing purge
 queue if it cannot close the fence within one second. An admitted
 conversation-file write keeps its bounded SQL slot until the storage
-operation finishes, including when the request is canceled. The purge runs
-after earlier writes drain and later writes cannot recreate deleted data.
+operation finishes at the storage client, including when the request is
+canceled. The purge runs after those operations drain, and the closed fence
+rejects new managed writes. An ordinary cloud storage timeout can leave the
+remote result unknown.
