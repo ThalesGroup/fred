@@ -72,6 +72,13 @@ the new owner delete behavior.
 
 Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent unshared conversation does not appear. From the owner's Debug panel, share through a saved turn, confirm support can read that turn, then withdraw access and verify it is denied.
 
+In Administration, run **Test roles and isolation** from Self-test with a
+dedicated account. The trace reader should be able to read conversation trace
+settings, and access to platform Analytics and user administration should be
+denied. The normal report has 154 steps, including recovery, with at most one
+extra interruption step (155 total). Recovery restores the test account's
+original grants, including any Platform Access Manager grant.
+
 With capture off, trigger a terminal error and dismiss the sharing dialog. Check that no entry appears. Share the error and verify the failed catalog lists it as History only with the same support reference. Record consent received outside Fred for a retained turn and verify the audit event identifies the operator and grant without the source note.
 
 On an isolated runtime, fail the terminal transcript insert and share the
