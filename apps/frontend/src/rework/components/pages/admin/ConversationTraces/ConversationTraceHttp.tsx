@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 
 import { skipToken } from "@reduxjs/toolkit/query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
@@ -32,6 +32,7 @@ import {
 } from "./traceControls";
 import { ConversationTraceModel } from "./ConversationTraceModel";
 import { ConversationTraceSse } from "./ConversationTraceSse";
+import { formatTraceJson } from "./formatTraceJson";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -40,7 +41,7 @@ const previewBytes = 4 * 1024 * 1024;
 
 async function previewText(data: string, encoding: string | undefined): Promise<string> {
   const bytes = traceBytes(data);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   if (!encoding || encoding === "identity" || bytes.length === 0) {
     return decoder.decode(bytes);
   }
@@ -81,14 +82,7 @@ function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: st
     };
   }, [body.data, encoding]);
 
-  let json: string | undefined;
-  if (text) {
-    try {
-      json = JSON.stringify(JSON.parse(text), null, 2);
-    } catch {
-      // Plain text and partial JSON remain readable as received.
-    }
-  }
+  const json = useMemo(() => (text ? formatTraceJson(text) : undefined), [text]);
   return text === undefined ? (
     <p role="status">{t("loading")}</p>
   ) : text === null ? (
@@ -96,7 +90,7 @@ function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: st
   ) : text.length === 0 ? (
     <p>{t(body.complete ? "emptyBody" : "partialBody")}</p>
   ) : json ? (
-    <TraceJson code={json} label={label} />
+    <TraceJson code={json} label={label} copyText={text} />
   ) : (
     <pre className={styles.httpText} tabIndex={0} aria-label={label}>
       {text}

@@ -73,17 +73,14 @@ export default function SearchableCheckboxPicker<T extends string>({
 
   useEffect(() => {
     if (!isOpen) return;
-    const outside = (event: MouseEvent) => {
+    const dismissOutside = (event: Event) => {
       if (!container.current?.contains(event.target as Node)) setIsOpen(false);
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", escape);
+    document.addEventListener("mousedown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
     return () => {
-      document.removeEventListener("mousedown", outside);
-      document.removeEventListener("keydown", escape);
+      document.removeEventListener("mousedown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
     };
   }, [isOpen]);
 
@@ -117,7 +114,17 @@ export default function SearchableCheckboxPicker<T extends string>({
   );
 
   return (
-    <div className={styles.container} ref={container} data-open={isOpen}>
+    <div
+      className={styles.container}
+      ref={container}
+      data-open={isOpen}
+      onKeyDown={(event) => {
+        if (!isOpen || event.defaultPrevented || event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      }}
+    >
       <button
         ref={trigger}
         type="button"

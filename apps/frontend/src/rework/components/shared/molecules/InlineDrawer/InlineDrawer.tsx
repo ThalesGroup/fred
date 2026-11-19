@@ -22,6 +22,7 @@ import { isTopmostModal } from "../../utils/Portal";
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
+  label?: string;
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
   minWidth?: number;
   maxWidth?: number;
@@ -196,7 +197,7 @@ export function InlineDrawer({
             className={styles.resizeHandle}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize panel"
+            aria-label={resizable?.label ?? "Resize panel"}
             {...resize.handleProps}
           />
         )}

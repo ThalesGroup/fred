@@ -719,6 +719,8 @@
     },
     "debugRaw": {
       "title": "Débogage",
+      "closePanel": "Fermer le panneau",
+      "resizePanel": "Redimensionner le panneau",
       "scopeAria": "Portée des messages",
       "scope": {
         "lastExchange": "Dernier échange",

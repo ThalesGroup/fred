@@ -34,6 +34,7 @@
   &:hover {
     border-color: var(--outline);
     background: var(--surface-container-highest);
+    color: var(--on-surface);
   }
 
   .container[data-open="true"] & {
@@ -64,6 +65,7 @@
   padding: var(--spacing-s);
   width: 340px;
   max-width: calc(100vw - 2 * var(--spacing-m));
+  color: var(--on-surface);
 }
 
 .list {
@@ -86,6 +88,7 @@
 
   &:hover {
     background: var(--state-on-surface-hover);
+    color: var(--on-surface);
   }
 }
 
@@ -95,6 +98,7 @@
 
   &:hover {
     background: var(--secondary-container);
+    color: var(--on-secondary-container);
   }
 }
 

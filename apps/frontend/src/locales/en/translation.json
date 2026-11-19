@@ -719,6 +719,8 @@
     },
     "debugRaw": {
       "title": "Debug",
+      "closePanel": "Close panel",
+      "resizePanel": "Resize panel",
       "scopeAria": "Message scope",
       "scope": {
         "lastExchange": "Last exchange",

@@ -46,12 +46,16 @@
   flex-wrap: nowrap;
 }
 .captureLimits {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(7.5rem, 12rem)) auto;
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
   gap: var(--spacing-s);
   margin-block: var(--spacing-m);
+}
+.captureLimits > :not(button) {
+  flex: 1 1 9rem;
+  min-width: 0;
+  max-width: 12rem;
 }
 .captureLimits > button {
   align-self: center;
@@ -67,11 +71,6 @@
   display: flex;
   justify-content: flex-end;
   margin-top: var(--spacing-s);
-}
-@media (max-width: 670px) {
-  .captureLimits {
-    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  }
 }
 .filters,
 .pager {
@@ -309,6 +308,7 @@
   border-radius: var(--radius-s);
   background: var(--surface-container-low);
   padding: var(--spacing-m);
+  color: var(--on-surface);
 }
 
 .httpPayload h4 {
@@ -383,6 +383,7 @@
   background: var(--surface-container-low);
   padding: var(--spacing-s);
   min-width: 0;
+  color: var(--on-surface);
 }
 
 .sseTrack[data-track="outgoing"] {
@@ -518,12 +519,14 @@
   border-radius: var(--radius-xs);
   background: var(--surface-container-high);
   height: 1.5rem;
+  color: var(--on-surface);
 }
 
 .rangeSelection {
   position: absolute;
   inset-block: 0;
   background: var(--primary-container);
+  color: var(--on-primary-container);
 }
 
 .rangeGrip {

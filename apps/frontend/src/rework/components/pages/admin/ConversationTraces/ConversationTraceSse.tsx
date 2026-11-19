@@ -14,6 +14,7 @@ import type {
   TraceSseSegment,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SseWindow, { type SseRange } from "./SseWindow";
+import { formatTraceJson } from "./formatTraceJson";
 import { TRACE_TRANSLATION_PREFIX, canReadTraceArtifact, downloadTraceBytes, traceBytes } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
@@ -87,12 +88,7 @@ export function TraceSseFramePayload({
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).replace(/^ /, ""))
     .join("\n");
-  let json: string | undefined;
-  try {
-    json = JSON.stringify(JSON.parse(data), null, 2);
-  } catch {
-    // SSE also carries comments, sentinels and incomplete transport frames.
-  }
+  const json = formatTraceJson(data);
   return (
     <>
       <div className={styles.sseControls}>
@@ -112,7 +108,7 @@ export function TraceSseFramePayload({
         </Button>
       </div>
       {json && !showRaw ? (
-        <TraceJson code={json} label={t("frame")} />
+        <TraceJson code={json} label={t("frame")} copyText={data} />
       ) : (
         <pre className={styles.httpText} tabIndex={0} aria-label={t("frame")}>
           {raw}

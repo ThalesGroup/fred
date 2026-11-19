@@ -139,8 +139,8 @@ export default function ConversationTraceSettings({ onFlushed }: { onFlushed: ()
             </Button>
           </form>
           <div className={styles.captureUsage}>
-            <span>{t("storedCapacity", { size: formatBytes(data.used_bytes, i18n.language) })}</span>
-            <span>{t("reservedCapacity", { size: formatBytes(data.reserved_bytes, i18n.language) })}</span>
+            <span>{t("storedCapacity", { size: formatBytes(data.used_bytes, i18n.language, "decimal") })}</span>
+            <span>{t("reservedCapacity", { size: formatBytes(data.reserved_bytes, i18n.language, "decimal") })}</span>
             <span className={data.degraded ? styles.error : undefined} role="status">
               {data.degradation_reason ? t(`degradation.${data.degradation_reason}`) : t("captureHealthy")}
             </span>

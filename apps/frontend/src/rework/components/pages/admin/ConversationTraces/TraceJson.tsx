@@ -24,9 +24,8 @@ const traceEditorTheme = EditorView.theme({
     fontSize: "0.8125rem",
     color: "var(--on-surface)",
     background: "var(--surface-container-low)",
-    maxHeight: "34lh",
   },
-  ".cm-scroller": { overflow: "auto" },
+  ".cm-scroller": { overflow: "auto", maxHeight: "34lh" },
   ".cm-content": { padding: "var(--spacing-xs) 0" },
   ".cm-gutters": {
     color: "var(--on-surface-retreat)",
@@ -41,10 +40,18 @@ const traceEditorTheme = EditorView.theme({
   },
 });
 
-export default function TraceJson({ code, label }: { code: string; label: string }) {
+export default function TraceJson({
+  code,
+  label,
+  copyText = code,
+}: {
+  code: string;
+  label: string;
+  copyText?: string;
+}) {
   const { t, i18n } = useTranslation();
   const host = useRef<HTMLDivElement>(null);
-  const [copiedCode, setCopiedCode] = useState<string>();
+  const [copiedText, setCopiedText] = useState<string>();
   const foldLabel = t("rework.admin.conversationTraces.http.foldJson");
   const unfoldLabel = t("rework.admin.conversationTraces.http.unfoldJson");
 
@@ -87,10 +94,10 @@ export default function TraceJson({ code, label }: { code: string; label: string
           color="on-surface"
           aria-label={t("common.copyCode")}
           onClick={async () => {
-            if (await writeRichClipboard("", code)) setCopiedCode(code);
+            if (await writeRichClipboard("", copyText)) setCopiedText(copyText);
           }}
         >
-          {copiedCode === code ? t("common.copied") : t("common.copy")}
+          {copiedText === copyText ? t("common.copied") : t("common.copy")}
         </Button>
       </div>
       <div ref={host} />
