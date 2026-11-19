@@ -30,6 +30,7 @@ from uuid import uuid4
 
 import httpx
 import httpx2
+from aiohttp import ClientPayloadError
 from fred_core.conversation_trace import (
     TRACE_HEADER_VALUE_BYTES,
     TRACE_HTTP_CHUNK_BYTES,
@@ -56,7 +57,7 @@ from fred_core.conversation_trace import (
     TraceToolSource,
 )
 from fred_core.filesystem.structures import BaseFilesystem
-from fred_core.model.http_capture import HttpAttempt
+from fred_core.model.http_capture import HttpAttempt, HttpRequest
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
 
@@ -81,6 +82,7 @@ _REQUEST_IDS = (
     "x-correlation-id",
     "request-id",
     "x-amzn-requestid",
+    "x-goog-request-id",
 )
 _RESPONSE_HEADERS = _REQUEST_HEADERS.union(
     _REQUEST_IDS, {"retry-after", "date", "cache-control", "x-accel-buffering"}
@@ -119,9 +121,14 @@ def safe_identifier(value: str | None) -> str | None:
 
 
 def _sse_ending(error: Exception | None) -> TraceSseEnding:
-    if isinstance(error, httpx.TimeoutException):
+    if isinstance(
+        error, (httpx.TimeoutException, httpx2.TimeoutException, TimeoutError)
+    ):
         return TraceSseEnding.TIMEOUT
-    if isinstance(error, httpx.RemoteProtocolError):
+    if isinstance(
+        error,
+        (httpx.RemoteProtocolError, httpx2.RemoteProtocolError, ClientPayloadError),
+    ):
         return TraceSseEnding.TRUNCATED
     return (
         TraceSseEnding.TRANSPORT_ERROR if error is not None else TraceSseEnding.CLOSED
@@ -506,7 +513,7 @@ class ModelHttpCapture:
                     else TraceModelOutputState.COMPLETE
                 )
 
-    def begin(self, request: httpx.Request) -> HttpAttempt | None:
+    def begin(self, request: HttpRequest) -> HttpAttempt | None:
         self.attempts += 1
         return self.buffer.begin_http(
             request, call_id=self.call_id, number=self.attempts, model=self.model

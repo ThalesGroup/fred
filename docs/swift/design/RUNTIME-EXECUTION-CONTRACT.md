@@ -7496,14 +7496,22 @@ exchange selector to validate an operator's selected retained boundary.
 
 ### Model HTTP exchange evidence (2026-11-19)
 
-The shared HTTPX model transport captures serialized requests and raw response
-bytes before stream normalization while a managed model call has an admitted
-capture. Each transport attempt has its own index, status, correlation ID, and
-completion state. Successful responses are observed as the SDK reads them. A
-discarded async error response gets up to 150 ms and the remaining turn byte
-budget before close. This covers OpenAI-compatible and Azure chat, including
-Mistral through the existing OpenAI-compatible binding. SDK-owned transports
-outside the shared stack can still appear with model call metadata.
+During an admitted managed model call, Fred observes serialized requests before
+stream normalization. Coverage includes OpenAI-compatible and Azure chat,
+native Anthropic, Vertex Gemini, Vertex Model Garden's Mistral, Llama and
+Anthropic models, and Ollama. Each observed transport attempt has its own index,
+status, correlation ID, and completion state. HTTPX supplies response bytes
+before content decoding. The Gemini SDK's aiohttp reader supplies response
+bytes after its own HTTP decompression. Its optional google-auth
+`AuthorizedSession` and `AsyncAuthorizedSession` mTLS paths retain model call
+metadata and lack HTTP or provider SSE evidence.
+
+Successful responses are observed as the SDK reads them. A discarded
+async HTTPX error response gets up to 150 ms and the remaining turn byte
+budget before close. Provider SSE is captured from SSE responses only.
+Ollama NDJSON is available in the HTTP response evidence. An SDK that closes
+at the SSE terminal marker before observing EOF can leave a partial HTTP
+body alongside a completed SSE lane.
 
 An admitted turn buffers at most 2 MiB and 64 HTTP attempts. Per-pod capacity
 is limited to 32 buffers and two background publishers. The existing private
