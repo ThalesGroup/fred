@@ -242,10 +242,10 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
           if (label || details.length) {
             featureLayer.bindPopup(pointContent(label, details));
           }
-          const pointCoordinates =
-            feature.geometry?.type === "Point" ? JSON.stringify(feature.geometry.coordinates) : undefined;
-          if (pointCoordinates && label && !labelledCoordinates.has(pointCoordinates)) {
-            labelledCoordinates.add(pointCoordinates);
+          const pointCoordinates = feature.geometry?.type === "Point" ? feature.geometry.coordinates : undefined;
+          const coordinateKey = pointCoordinates ? JSON.stringify(pointCoordinates) : undefined;
+          if (coordinateKey && label && !labelledCoordinates.has(coordinateKey)) {
+            labelledCoordinates.add(coordinateKey);
             const directions = ["right", "left", "top", "bottom"] as const;
             const direction = directions[pointIndex++ % directions.length];
             featureLayer.bindTooltip(pointLabel(label), {
@@ -255,10 +255,14 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
               offset: direction === "top" ? [0, -22] : direction === "bottom" ? [0, 22] : [6, 0],
               className: styles.geoPointLabel,
             });
-            if (details.length) {
-              featureLayer.on("mouseover", () =>
-                featureLayer.setTooltipContent(pointContent(label, hoverDetails(details))),
-              );
+            const [longitude, latitude] = pointCoordinates;
+            const hoverPreview = details.length
+              ? hoverDetails(details)
+              : Number.isFinite(latitude) && Number.isFinite(longitude)
+                ? ([["lat", `${latitude.toFixed(4)}°, lon ${longitude.toFixed(4)}°`]] as [string, string][])
+                : [];
+            if (hoverPreview.length) {
+              featureLayer.on("mouseover", () => featureLayer.setTooltipContent(pointContent(label, hoverPreview)));
               featureLayer.on("mouseout", () => featureLayer.setTooltipContent(pointLabel(label)));
             }
           }

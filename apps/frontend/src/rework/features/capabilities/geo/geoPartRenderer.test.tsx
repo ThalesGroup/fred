@@ -143,7 +143,7 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
       onEachFeature: (
         feature: {
           geometry: { type: "Point"; coordinates: number[] };
-          properties: { name: string; description: string };
+          properties: { name: string; description?: string };
         },
         layer: {
           bindPopup: (content: HTMLElement) => void;
@@ -201,6 +201,23 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   const secondHover = secondOn.mock.calls.find(([event]) => event === "mouseover")?.[1];
   secondHover();
   expect(secondSetTooltipContent.mock.calls[0][0].textContent.length).toBeLessThan(150);
+
+  const plainLayer = {
+    bindPopup: vi.fn(),
+    bindTooltip: vi.fn(),
+    on: vi.fn(),
+    setTooltipContent: vi.fn(),
+  };
+  options.onEachFeature(
+    { geometry: { type: "Point", coordinates: [5.928, 43.1242] }, properties: { name: "Toulon" } },
+    plainLayer,
+  );
+  expect(plainLayer.bindTooltip.mock.calls[0][0].textContent).toBe("Toulon");
+  plainLayer.on.mock.calls.find(([event]) => event === "mouseover")?.[1]();
+  expect(plainLayer.setTooltipContent.mock.calls[0][0].textContent).toBe("Toulonlat: 43.1242°, lon 5.9280°");
+  plainLayer.on.mock.calls.find(([event]) => event === "mouseout")?.[1]();
+  expect(plainLayer.setTooltipContent.mock.calls[1][0].textContent).toBe("Toulon");
+
   const duplicateTooltip = vi.fn();
   options.onEachFeature(
     {
