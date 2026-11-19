@@ -210,7 +210,7 @@
 
 /* Compact field tier — 2rem/32px (#2298). `xs` is the shared 32px "compact
  * field" size (also what Select's `xs` already is); the former 24px `xs` moved
- * to `2xs` below and its call sites were migrated. Used by the Home nav-panel
+ * to `2xs` below and its call sites were migrated. Used by the organization nav-panel
  * search, which needs a field smaller than `small` (40px). Tighter metrics than
  * the taller tiers: 8px edge padding, 8px icon→text gap, body-medium text. */
 .input[data-size="xs"] {

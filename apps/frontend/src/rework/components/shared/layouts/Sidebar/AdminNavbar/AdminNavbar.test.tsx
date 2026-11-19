@@ -23,6 +23,9 @@ const h = vi.hoisted(() => ({
   platformOwner: true,
   organizationOwner: true,
   supervision: true,
+  adminId: undefined as string | undefined,
+  selectOrganization: vi.fn(),
+  selectWorkingOrganization: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -47,7 +50,8 @@ vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
       allowed: h.supervision,
       offered: h.supervision,
       organizations,
-      organization: organizations[0],
+      organization: organizations.find((space) => space.id === h.adminId) ?? organizations[0],
+      selectOrganization: h.selectOrganization,
     };
   },
 }));
@@ -63,13 +67,18 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
     refetch: vi.fn(),
   }),
 }));
+// The working organization is another choice: the admin header must never read or change it.
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    organizationId: "org-3",
+    organization: { id: "org-3", name: "Initech" },
+    selectOrganization: h.selectWorkingOrganization,
+  }),
+}));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
   useManagerPlatformAdmin: () => ({ isAdmin: h.platformOwner }),
 }));
 
-vi.mock("@core/hooks/useWorkingOrganization", () => ({
-  useWorkingOrganization: () => ({ organization: h.spaces?.find((space) => space.kind === "organization") }),
-}));
 import AdminNavbar from "./AdminNavbar";
 
 const ACME = [
@@ -88,7 +97,9 @@ let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  Object.assign(h, { spaces: [], platformOwner: true, organizationOwner: true, supervision: true });
+  Object.assign(h, { spaces: [], platformOwner: true, organizationOwner: true, supervision: true, adminId: undefined });
+  h.selectOrganization.mockClear();
+  h.selectWorkingOrganization.mockClear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -120,47 +131,84 @@ const render = (path: string) =>
 const hrefs = () => [...host.querySelectorAll("nav a, a")].map((a) => a.getAttribute("href"));
 const path = () => host.querySelector("[data-path]")?.textContent;
 const trigger = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
+
+const THREE_ORGANIZATIONS = [
+  ...ACME,
+  { kind: "organization", name: "Globex", roles: ["organization_admin"], id: "org-2" },
+  { kind: "organization", name: "Initech", roles: ["owner"], id: "org-3" },
+  { kind: "organization", name: "Hidden", roles: ["member", "analyst"], id: "org-4" },
+];
 
 describe("AdminNavbar", () => {
-  it("shows the working organization read-only, even with access to several organizations", () => {
-    h.platformOwner = false;
-    h.spaces = [...ACME, { kind: "organization", name: "Globex", roles: ["owner"], id: "org-2" }];
-    render("/admin/features");
-    expect(host.textContent).toContain("Acme");
-    expect(host.textContent).not.toContain("Globex");
-    expect(trigger()).toBeNull();
-    expect(hrefs()).toContain("/admin/supervision");
-    expect(hrefs()).toContain("/admin/features");
-    expect(hrefs()).not.toContain("/admin/organizations");
+  it("offers the platform and every administrable organization, with the current one checked", () => {
+    h.spaces = THREE_ORGANIZATIONS;
+    h.adminId = "org-2";
+    render("/admin/supervision");
+    act(() => trigger()!.click());
+    expect(items()).toHaveLength(4);
+    ["rework.sidebar.admin.spaces.platform", "Acme", "Globex", "Initech"].forEach((label, index) =>
+      expect(items()[index].textContent).toContain(label),
+    );
+    expect(host.textContent).not.toContain("Hidden");
+    expect(items().map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "false", "true", "false"]);
+    expect(document.activeElement).toBe(items()[2]);
   });
 
-  it("keeps a link between platform administration and the active organization's administration", () => {
+  it("administers an organization other than the working one without changing it", () => {
+    h.spaces = THREE_ORGANIZATIONS;
+    render("/admin/supervision");
+    expect(trigger()!.textContent).toContain("Acme");
+    expect(trigger()!.textContent).not.toContain("Initech");
+    act(() => trigger()!.click());
+    act(() => items()[2].click());
+    expect(h.selectOrganization).toHaveBeenCalledWith("org-2");
+    expect(h.selectWorkingOrganization).not.toHaveBeenCalled();
+    expect(path()).toBe("/admin/supervision");
+  });
+
+  it("has no switch link between spaces", () => {
     h.spaces = ACME;
     render("/admin/features");
-    act(() => host.querySelector<HTMLAnchorElement>('a[href="/admin/organizations"]')!.click());
-    expect(path()).toBe("/admin/organizations");
-    expect(hrefs()).toEqual(["/admin", ...PLATFORM_PAGES]);
-    expect(trigger()).toBeNull();
-    act(() => host.querySelector<HTMLAnchorElement>('a[href="/admin"]')!.click());
+    expect(hrefs()).not.toContain("/admin/organizations");
+    render("/admin/organizations");
+    expect(hrefs()).not.toContain("/admin");
+  });
+
+  it("offers multiple organizations without platform rights and selects one", () => {
+    h.platformOwner = false;
+    h.spaces = [...ACME, { kind: "organization", name: "Globex", roles: ["organization_admin"], id: "org-2" }];
+    render("/admin/supervision");
+    act(() => trigger()!.click());
+    expect(items()).toHaveLength(2);
+    expect(items()[0].textContent).toContain("Acme");
+    expect(items()[1].textContent).toContain("Globex");
+    act(() => items()[1].click());
+    expect(h.selectOrganization).toHaveBeenCalledWith("org-2");
+    expect(path()).toBe("/admin/supervision");
+  });
+
+  it("re-enters the guarded landing when changing organization from an Owner page", () => {
+    h.spaces = [...ACME, { kind: "organization", name: "Globex", roles: ["organization_admin"], id: "org-2" }];
+    render("/admin/features");
+    act(() => trigger()!.click());
+    act(() => items()[2].click());
+    expect(h.selectOrganization).toHaveBeenCalledWith("org-2");
     expect(path()).toBe("/admin");
   });
 
-  it("does not offer organization administration to a platform-only user", () => {
-    h.organizationOwner = false;
-    h.supervision = false;
+  it("lists only platform pages in the platform space", () => {
+    h.spaces = ACME;
     render("/admin/organizations");
-    expect(hrefs()).not.toContain("/admin");
-    expect(host.textContent).toContain("rework.sidebar.admin.platformTitle");
-    expect(trigger()).toBeNull();
+    expect(hrefs()).toEqual(PLATFORM_PAGES);
   });
 
-  it.each(["organization", "team", "project"])("offers self-tests to a platform admin owning a %s", (kind) => {
+  it.each(["organization", "team", "project"])("offers self-tests for a platform admin owning a %s", (kind) => {
     h.spaces = [{ kind, name: "Owned space", roles: ["owner"], id: "owned" }];
     h.organizationOwner = false;
     render("/admin/organizations");
     expect(hrefs()).toContain("/admin/self-test");
   });
-
   it.each([[], ["member"], ["editor"], ["analyst"], ["organization_admin"]].map((roles) => ({ roles })))(
     "hides self-tests without ownership ($roles)",
     ({ roles }) => {
@@ -169,17 +217,135 @@ describe("AdminNavbar", () => {
       expect(hrefs()).not.toContain("/admin/self-test");
     },
   );
-
-  it("excludes personal-space ownership from self-tests", () => {
+  it("excludes personal-space ownership", () => {
     h.spaces = [{ kind: "personal", name: "Personal", roles: ["owner"], id: "personal" }];
     render("/admin/organizations");
     expect(hrefs()).not.toContain("/admin/self-test");
   });
-
   it("hides self-tests from an owner without platform administration", () => {
     h.platformOwner = false;
     h.spaces = ACME;
     render("/admin/organizations");
     expect(hrefs()).not.toContain("/admin/self-test");
+  });
+
+  it("lists only organization pages in the organization space", () => {
+    h.spaces = ACME;
+    render("/admin/features");
+    expect(hrefs()[0]).toBe("/admin/supervision");
+    expect(hrefs()).toContain("/admin/features");
+    expect(hrefs().filter((href) => PLATFORM_PAGES.includes(href!))).toEqual([]);
+  });
+
+  it("names the platform space read-only for a platform admin only", () => {
+    render("/admin/organizations");
+    expect(trigger()).toBeNull();
+    expect(host.querySelector("h2")?.textContent).toBe("rework.sidebar.admin.platformTitle");
+    expect(host.textContent).toContain("rework.sidebar.admin.title");
+  });
+
+  it("names the organization space without a switcher for an organization admin only", () => {
+    h.spaces = ACME;
+    h.platformOwner = false;
+    render("/admin/features");
+    expect(trigger()).toBeNull();
+    expect(host.querySelector("h2")?.textContent).toBe("Acme");
+    expect(host.textContent).toContain("rework.sidebar.admin.title");
+  });
+
+  it("keeps the section line and an empty name line before the name is known", () => {
+    h.spaces = undefined;
+    h.platformOwner = false;
+    render("/admin/features");
+    expect(host.querySelector("h2")?.textContent).toBe("");
+    expect(host.textContent).not.toContain("rework.sidebar.admin.platformTitle");
+  });
+
+  it("shows the switcher on the current space for a person with both spaces", () => {
+    h.spaces = ACME;
+    render("/admin/organizations");
+    expect(trigger()!.textContent).toContain("rework.sidebar.admin.title");
+    expect(trigger()!.textContent).toContain("rework.sidebar.admin.platformTitle");
+    render("/admin/features");
+    expect(trigger()!.textContent).toContain("rework.sidebar.admin.title");
+    expect(trigger()!.textContent).toContain("Acme");
+    expect(host.querySelector("h2")?.contains(trigger())).toBe(true);
+  });
+
+  it("keeps the switcher while the supervision check refetches", () => {
+    h.spaces = ACME;
+    h.organizationOwner = false;
+    h.supervision = false;
+    render("/admin/organizations");
+    expect(trigger()).not.toBeNull();
+  });
+
+  it("shows no switcher to a plain organization member", () => {
+    h.spaces = [{ kind: "organization", name: "Acme", roles: ["member"], id: "org-1" }];
+    h.organizationOwner = false;
+    h.supervision = false;
+    render("/admin/organizations");
+    expect(trigger()).toBeNull();
+  });
+
+  it("labels each group and moves between spaces with the arrow, Home and End keys", () => {
+    h.spaces = ACME;
+    render("/admin/features");
+    act(() => trigger()!.click());
+    const groups = [...host.querySelectorAll('[role="menu"] [role="group"]')];
+    expect(groups.map((group) => document.getElementById(group.getAttribute("aria-labelledby")!)?.textContent)).toEqual(
+      ["rework.sidebar.admin.platformTitle", "rework.sidebar.admin.spaces.organizations"],
+    );
+    const press = (key: string) =>
+      act(() => {
+        (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      });
+    expect(document.activeElement).toBe(items()[1]);
+    press("ArrowDown");
+    expect(document.activeElement).toBe(items()[0]);
+    press("ArrowUp");
+    expect(document.activeElement).toBe(items()[1]);
+    press("Home");
+    expect(document.activeElement).toBe(items()[0]);
+    press("End");
+    expect(document.activeElement).toBe(items()[1]);
+    press("Tab");
+    expect(items()).toEqual([]);
+  });
+
+  it("lists both spaces, with the roles held in the organization, and focuses the current one", () => {
+    h.spaces = ACME;
+    render("/admin/features");
+    act(() => trigger()!.click());
+    expect(items()[0].textContent).toContain("rework.sidebar.admin.spaces.platform");
+    expect(items()[1].textContent).toContain(
+      "Acmerework.supervision.roleNames.organization_admin, rework.supervision.roleNames.owner",
+    );
+    expect(items().map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+    expect(document.activeElement).toBe(items()[1]);
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(items()).toEqual([]);
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("changes space only from the switcher and gives focus back to it", () => {
+    h.spaces = ACME;
+    render("/admin/features");
+    act(() => trigger()!.click());
+    act(() => items()[0].click());
+    expect(path()).toBe("/admin/organizations");
+    expect(hrefs()).toEqual(PLATFORM_PAGES);
+    expect(document.activeElement).toBe(trigger());
+    act(() => trigger()!.click());
+    act(() => items()[1].click());
+    expect(path()).toBe("/admin");
+  });
+
+  it("stays put when the current space is picked again", () => {
+    h.spaces = ACME;
+    render("/admin/organizations");
+    act(() => trigger()!.click());
+    act(() => items()[0].click());
+    expect(path()).toBe("/admin/organizations");
   });
 });

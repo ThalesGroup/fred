@@ -39,7 +39,7 @@ export type ButtonVariant = "filled" | "tonal" | "outlined" | "text";
  * 2rem/32px on TextInput and Select but buttons express 32px through `small`.
  * `2xs` (added #2298) is the 1.5rem/24px tier that used to be called `xs` on
  * Button/IconButton/ButtonGroupItem/TextInput; those call sites were migrated so
- * `xs` could become the 32px "compact field" tier the Home nav-panel search
+ * `xs` could become the 32px "compact field" tier the organization nav-panel search
  * needs. A component only needs to implement the sizes it actually offers — not
  * every value maps to a rule in every component.
  */
@@ -68,6 +68,8 @@ export const materialIcons = [
   "home",
   "people",
   "groups",
+  "domain",
+  "sort",
   "database",
   "settings",
   "widgets",

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-/* Shell: rail and nav panel sit on the app background; the page lives in one rounded
+/* Shell: the nav panel sits on the app background; the page lives in one rounded
  * surface card, the only part that scrolls, unless it draws its own. The mode follows the input device: a fine
  * pointer keeps compact values, a coarse one gets touch margins; under 768px the card
- * goes edge to edge between the section panel and a bottom bar (Sidebar.module.scss). */
+ * goes edge to edge under the section panel (Sidebar.module.scss). */
 .mainLayout {
   display: flex;
   background-color: var(--surface-container);
@@ -42,17 +42,12 @@
   /* Page layers stay inside the card, so the user menu (z-index 10) opening over it wins. */
   isolation: isolate;
   /* The card owns the page inset; a page that must fill the card opts out. */
-  padding: var(--spacing-l);
+  padding: var(--spacing-m);
   min-width: 0;
   /* Without min-height:0 a full-height page cannot shrink below its content, so a
    * tall table would grow the card instead of scrolling inside its own box. */
   min-height: 0;
   overflow: auto;
-}
-
-/* Without a nav panel the card keeps its margin next to the rail. */
-.sidebar:not(:has([data-nav-panel])) + .content {
-  margin-left: var(--spacing-s);
 }
 
 .content:has([data-shell-inset="none"]) {
@@ -79,10 +74,6 @@
     margin: var(--spacing-m) var(--spacing-m) var(--spacing-m) 0;
     border-radius: var(--radius-m);
   }
-
-  .sidebar:not(:has([data-nav-panel])) + .content {
-    margin-left: var(--spacing-m);
-  }
 }
 
 @media (max-width: 767px) {
@@ -90,8 +81,7 @@
     flex-direction: column;
   }
 
-  /* Rail and panel become direct items of this column so they can sit on either side
-   * of the card: panel above, bottom bar below. */
+  /* The panel becomes a direct item of this column, above the card. */
   .sidebar {
     display: contents;
   }
@@ -100,10 +90,5 @@
     order: 1;
     margin: 0;
     border-radius: 0;
-    padding: var(--spacing-m);
-  }
-
-  .sidebar:not(:has([data-nav-panel])) + .content {
-    margin-left: 0;
   }
 }

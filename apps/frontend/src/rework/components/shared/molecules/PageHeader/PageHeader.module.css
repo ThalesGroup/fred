@@ -24,20 +24,12 @@
    hidden; the negative `top` lets most of the top inset scroll away once pinned. */
 .sticky {
   position: sticky;
-  top: calc(var(--spacing-s) - var(--spacing-l));
+  top: calc(var(--spacing-s) - var(--spacing-m));
   z-index: 10;
-  margin: calc(-1 * var(--spacing-l)) calc(-1 * var(--spacing-l)) calc(-1 * var(--spacing-s));
+  margin: calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-s));
   background: var(--surface-main);
-  padding: var(--spacing-l) var(--spacing-l) var(--spacing-s);
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
   color: var(--on-surface);
-}
-
-@media (max-width: 767px) {
-  .sticky {
-    top: calc(var(--spacing-s) - var(--spacing-m));
-    margin: calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-s));
-    padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
-  }
 }
 
 .breadcrumb {
@@ -49,16 +41,13 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  /* Top, not center: taller actions must not push the title down. */
+  align-items: flex-start;
   gap: var(--spacing-m);
 }
 
 .tabs {
   display: flex;
-}
-
-.headerWithSubtitle {
-  align-items: flex-start;
 }
 
 .titleBlock {
@@ -72,13 +61,17 @@
   min-width: 0;
 }
 
-.title {
+/* Two classes deep so a page's own `p`/`h1` rules cannot restyle the shared header. */
+.titleRow .title {
   margin: 0;
+  overflow: hidden;
   color: var(--on-surface);
   font: var(--font-title-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.subtitle {
+.titleBlock .subtitle {
   margin: var(--spacing-2xs) 0 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

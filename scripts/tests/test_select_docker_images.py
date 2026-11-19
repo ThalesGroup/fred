@@ -75,7 +75,6 @@ class SelectionTest(unittest.TestCase):
 
     def test_library_outside_knowledge_flow_skips_it(self):
         for path in (
-            "libs/fred-sdk/fred_sdk/x.py",
             "libs/fred-runtime/pyproject.toml",
             "libs/capabilities/fred-capability-documents/a.py",
             "apps/fred-agents/dockerfiles/Dockerfile-prod",
@@ -90,6 +89,7 @@ class SelectionTest(unittest.TestCase):
         for path in (
             "libs/fred-core/fred_core/a.py",
             "libs/fred-pod/pyproject.toml",
+            "libs/fred-sdk/fred_sdk/x.py",
             "scripts/download_models.py",
             "developer_tools/benchmarks/pdf_ingestion.py",
             "developer_tools/benchmarks/pdf_image_smoke.py",

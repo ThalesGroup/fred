@@ -10,15 +10,15 @@ export default function TeamLandingPage() {
   const { t } = useTranslation();
   const content = useSpaceAccess(teamId, "read");
   const manage = useSpaceAccess(teamId, "manage");
-  const spaces = useMySpacesQuery(undefined, { skip: !content.allowed });
+  const spaces = useMySpacesQuery();
+  // The organization's panel is Home: its old landing keeps bookmarks working.
+  if (!spaces.isError && spaces.currentData?.some((item) => item.id === teamId && item.kind === "organization"))
+    return <Navigate to="/home" replace />;
   if (content.error || manage.error || (content.allowed && spaces.isError))
-    return <p role="alert">{t("rework.manager.unavailable")}</p>;
-  if (!content.settled || !manage.settled || (content.allowed && !spaces.currentData))
-    return <p role="status">{t("common.loading")}</p>;
-  if (content.allowed) {
-    const space = spaces.currentData?.find((item) => item.id === teamId);
-    return <Navigate to={`/team/${teamId}/${space?.kind === "organization" ? "resources" : "agents"}`} replace />;
-  }
+    return <span role="alert">{t("rework.manager.unavailable")}</span>;
+  if (!content.settled || !manage.settled || (!spaces.currentData && !spaces.isError))
+    return <span role="status">{t("common.loading")}</span>;
+  if (content.allowed) return <Navigate to={`/team/${teamId}/agents`} replace />;
   if (manage.allowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
-  return <p role="alert">{t("rework.spaceMembers.forbidden")}</p>;
+  return <span role="alert">{t("rework.spaceMembers.forbidden")}</span>;
 }

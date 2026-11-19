@@ -54,19 +54,24 @@ vi.mock("../../../../features/announcements/usePatchNoteHistory", () => ({
   },
 }));
 vi.mock("@shared/molecules/PatchNoteDialog/PatchNoteDialog", () => ({ PatchNoteDialog: () => null }));
-vi.mock("react-router-dom", () => ({ useNavigate: () => identity.navigate }));
+vi.mock("react-router-dom", () => ({ useNavigate: () => identity.navigate, useHref: (to: string) => to }));
+vi.mock("./AdminConsoleMenuItem", () => ({
+  AdminConsoleMenuItem: () => <button role="menuitem">rework.mainNav.adminConsole</button>,
+  AdminConsoleLink: ({ to }: { to: string }) => <button role="menuitem">{`rework.mainNav.adminConsole:${to}`}</button>,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
-vi.mock("@core/hooks/useWorkingOrganization", () => ({
-  useWorkingOrganization: () => ({
+vi.mock("@core/hooks/useWorkingOrganization", () => {
+  const working = () => ({
     organizationId: identity.workingId,
     organization: identity.choices.find((item) => item.id === identity.workingId),
     organizations: identity.choices,
     selectOrganization: identity.selectOrganization,
-  }),
-}));
+  });
+  return { useWorkingOrganization: working, useOptionalWorkingOrganization: working };
+});
 
 import UserProfile from "./UserProfile";
 
@@ -144,6 +149,23 @@ it("opens the shared profile after admission with initial keyboard focus", () =>
   expect(container!.querySelector('[role="menu"]')).toBeNull();
   expect(container!.textContent).not.toContain("rework.profileMenu.whatsNew");
 });
+it("offers the Help Center and the admin console only after admission", () => {
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  mount();
+  // The help pages sit behind admission: before it, the menu keeps logout only.
+  expect(container!.textContent).not.toContain("rework.mainNav.helpCenter");
+  expect(container!.textContent).not.toContain("rework.mainNav.adminConsole");
+  act(() => root!.render(<UserProfile admitted />));
+  const help = [...container!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((node) =>
+    node.textContent?.includes("rework.mainNav.helpCenter"),
+  )!;
+  act(() => help.click());
+  expect(open).toHaveBeenCalledWith("/help", "_blank");
+  act(() => container!.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+  expect(container!.textContent).toContain("rework.mainNav.adminConsole");
+  act(() => root!.render(<UserProfile admitted platformOnly />));
+  expect(container!.textContent).toContain("rework.mainNav.adminConsole:/admin/organizations");
+});
 it("exposes configured external support only after admission", () => {
   identity.support = "https://support.example.test";
   const open = vi.spyOn(window, "open").mockReturnValue(null);
@@ -186,10 +208,10 @@ it("offers the only organization choice in the profile, then returns to Home", (
   expect(container!.querySelector('[role="menu"]')).toBeNull();
 });
 
-it("shows one organization read-only and no organization before admission", () => {
+it("hides the working organization section for a single organization and before admission", () => {
   mount();
-  expect(container!.textContent).not.toContain("Acme");
+  expect(container!.textContent).not.toContain("rework.profileMenu.workingOrganization");
   act(() => root!.render(<UserProfile admitted />));
-  expect(container!.textContent).toContain("Acme");
+  expect(container!.textContent).not.toContain("rework.profileMenu.workingOrganization");
   expect(container!.querySelector('[role="menuitemradio"]')).toBeNull();
 });

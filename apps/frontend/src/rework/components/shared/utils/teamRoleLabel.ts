@@ -23,3 +23,10 @@ export function teamRoleLabel(roles: readonly string[], t: (key: string) => stri
     ? t("rework.teamRoles.team_member")
     : heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
 }
+
+/** Caption under a space header: roles beyond plain membership, which goes without saying. */
+export function spaceRolesCaption(roles: readonly string[], t: (key: string) => string): string | undefined {
+  // The technical organization admin is not a business role: it never reads as one here.
+  const extra = roles.filter((role) => role !== "member" && role !== "organization_admin");
+  return extra.length > 0 ? teamRoleLabel(extra, t) : undefined;
+}

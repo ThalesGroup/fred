@@ -10,6 +10,7 @@ import { KeyCloakService } from "../../../../security/KeycloakService";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import Icon from "@shared/atoms/Icon/Icon";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { RoleChips } from "@shared/molecules/TeamRoleChips/TeamRoleChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
@@ -19,12 +20,12 @@ import { normalizeApiError } from "@core/errors/normalizeApiError";
 import {
   useMySpacesQuery,
   useSpaceMembersQuery,
-  useSpaceMemberCandidatesQuery,
   useGrantMutation,
   useRevokeMutation,
   useRemoveSpaceMemberMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import AddSpaceMembersDialog, { memberLabel, SPACE_ROLES } from "./AddSpaceMembersDialog";
 import styles from "./TeamSettingsPage.module.scss";
 import TeamInviteLinkDialog from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamInviteLinkDialog/TeamInviteLinkDialog";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters";
@@ -32,11 +33,7 @@ import TeamActivity from "./TeamActivity";
 import { SpaceOffers } from "./SpaceOffers";
 import { SpaceModels } from "./SpaceModels";
 
-const ROLES: Role[] = ["owner", "editor", "analyst", "member"];
-const userLabel = ({ user }: SpaceMember) => {
-  const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
-  return name ? `${name} (${user.username ?? user.id})` : (user.username ?? user.id);
-};
+const userLabel = ({ user }: SpaceMember) => memberLabel(user);
 
 /** Governance only: existing Weaver grants/revocations, never implicit content access. */
 export default function TeamSettingsPage() {
@@ -65,19 +62,13 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
   const [searchDraft, setSearchDraft] = useState("");
   const [removingMember, setRemovingMember] = useState<{ id: string; name: string }>();
   const [remove, removal] = useRemoveSpaceMemberMutation();
-  const [candidates, setCandidates] = useState(false);
-  const listingCandidates = candidates && access.allowed;
+  const [adding, setAdding] = useState(false);
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const after = cursors[cursors.length - 1];
-  const roster = useSpaceMembersQuery(
+  const query = useSpaceMembersQuery(
     { id: spaceId, after, search: search || undefined },
-    { skip: !canRead || listingCandidates, refetchOnMountOrArgChange: true },
+    { skip: !canRead || space?.kind === "organization", refetchOnMountOrArgChange: true },
   );
-  const eligible = useSpaceMemberCandidatesQuery(
-    { id: spaceId, after, search: search || undefined },
-    { skip: !access.allowed || !candidates, refetchOnMountOrArgChange: true },
-  );
-  const query = listingCandidates ? eligible : roster;
   const [grant, granting] = useGrantMutation();
   const [revoke, revoking] = useRevokeMutation();
   const [error, setError] = useState<string>();
@@ -119,29 +110,32 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
       setRemovingMember(undefined);
     }
   };
+  // The control plane manages members of teams and projects only, not of an organization yet.
+  if (space?.kind === "organization")
+    return (
+      <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
+        <PageHeader title={t("rework.spaceMembers.title", { name: space.name })} />
+        <span className={styles.notice} role="status">
+          {t("rework.spaceMembers.organizationUnavailable")}
+        </span>
+      </div>
+    );
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
       <PageHeader
         title={t("rework.spaceMembers.title", { name: space?.name ?? "" })}
         titleAction={
           <>
+            {/* Not a button: a plain icon whose explanation shows on hover or focus. */}
             <Tooltip
-              content={
-                <span className={styles.modelsHelp}>
-                  {t(
-                    access.offered || access.allowed
-                      ? "rework.spaceMembers.separation"
-                      : "rework.spaceMembers.readOnly",
-                  )}
-                </span>
-              }
+              content={t(
+                access.offered || access.allowed ? "rework.spaceMembers.separation" : "rework.spaceMembers.readOnly",
+              )}
+              asChild
             >
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "info" }}
-                aria-label={t("rework.spaceMembers.help")}
-              />
+              <span className={styles.titleInfo} tabIndex={0}>
+                <Icon category="outlined" type="info" />
+              </span>
             </Tooltip>
             {canRead && (
               <IconButtonMenu<"refresh" | "leave">
@@ -150,7 +144,6 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                   size: "small",
                   icon: { category: "outlined", type: "more_vert" },
                   "aria-label": t("rework.teamSettings.members.moreActions"),
-                  title: t("rework.teamSettings.members.moreActions"),
                 }}
                 options={[
                   {
@@ -198,16 +191,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                   placeholder={t("rework.teamSettings.members.search.placeholder")}
                   ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
                   clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
-                  size="small"
-                />
-                <IconButton
-                  variant="icon"
-                  size="small"
-                  type="submit"
-                  icon={{ category: "outlined", type: "search" }}
-                  aria-label={t("rework.spaceMembers.search")}
-                  title={t("rework.spaceMembers.search")}
-                  disabled={busy}
+                  size="xs"
                 />
               </form>
               {access.allowed && space?.kind === "team" && (
@@ -215,25 +199,18 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                   {t("rework.teamSettings.members.inviteLink.title")}
                 </Button>
               )}
-              {access.allowed && (
+              {access.allowed && (space?.kind === "team" || space?.kind === "project") && (
                 <Button
                   color="primary"
                   variant="filled"
                   size="small"
                   disabled={busy}
                   onClick={() => {
-                    setCandidates(!candidates);
-                    setSearch("");
-                    setSearchDraft("");
-                    setCursors([undefined]);
                     setError(undefined);
+                    setAdding(true);
                   }}
                 >
-                  {t(
-                    candidates
-                      ? "rework.spaceMembers.roster"
-                      : "rework.teamSettings.members.addMembersDialog.buttonLabel",
-                  )}
+                  {t("rework.teamSettings.members.addMembersDialog.buttonLabel")}
                 </Button>
               )}
             </>
@@ -241,6 +218,9 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
         }
       />
       {inviteOpen && access.allowed && <TeamInviteLinkDialog teamId={spaceId} onClose={() => setInviteOpen(false)} />}
+      {adding && access.allowed && (space?.kind === "team" || space?.kind === "project") && (
+        <AddSpaceMembersDialog spaceId={spaceId} kind={space.kind} onClose={() => setAdding(false)} />
+      )}
       <ConfirmationDialog
         open={!!removingMember}
         criticalAction
@@ -268,7 +248,6 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
       ) : (
         <>
           {search && <p>{t("rework.spaceMembers.searchPages")}</p>}
-          {listingCandidates && <p>{t("rework.spaceMembers.eligibility")}</p>}
           {query.isError ? (
             <p role="alert">{t("rework.manager.unavailable")}</p>
           ) : !page ? (
@@ -301,7 +280,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                     cellRenderer: (member) => (
                       <RoleChips
                         size="small"
-                        options={ROLES.map((role) => ({
+                        options={SPACE_ROLES.map((role) => ({
                           key: role,
                           label: t(`rework.manager.roles.${role}`),
                           held: member.roles.includes(role),
@@ -312,7 +291,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                       />
                     ),
                   },
-                  ...(access.allowed && !listingCandidates
+                  ...(access.allowed
                     ? [
                         {
                           label: t("rework.spaceMembers.actions"),

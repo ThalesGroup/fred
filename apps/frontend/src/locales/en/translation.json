@@ -2311,6 +2311,7 @@
         "until": "To"
       },
       "title": "Analytics",
+      "subtitle": "Platform activity and usage over the selected period.",
       "topTeams": {
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
@@ -2440,6 +2441,11 @@
       "estimates": "Estimated impact",
       "staticFactors": "Static model factors from the Fred catalog, not measurements or billing. EUR uses the configured display rate, not a live market rate."
     },
+    "teamProjects": {
+      "title": "Projects",
+      "subtitle": "The team projects you are a member of.",
+      "empty": "No projects to display."
+    },
     "teamUsage": {
       "projectPageTitle": "Project usage",
       "personalSkillsSectionTitle": "My skill usage",
@@ -2494,6 +2500,7 @@
       "title": "Tasks"
     },
     "back": "Back",
+    "backTo": "Back to {{name}}",
     "bootstrap": {
       "continue": "Continue",
       "connectedAs": "Connected as {{username}}. This account will become the platform administrator.",
@@ -2864,20 +2871,16 @@
       "uploadFailedDetail": "Please try again in a moment."
     },
     "home": {
-      "organizationSpace": "Organization workspace",
-      "yourSpaces": "Your spaces",
       "personalSpace": "My personal space",
-      "personalSpaceDescription": "Your private workspace",
       "title": "Home",
       "organizationOf": "Organization of {{name}}",
-      "projectsOf": "Projects in {{name}}",
-      "spaceLocation": "Space hierarchy",
       "noSpaces": "No teams or projects to display.",
-      "searchPlaceholder": "Search teams or projects",
+      "noTeams": "No teams to display.",
+      "searchPlaceholder": "Search teams",
       "searchClear": "Clear search",
-      "yourTeams": "Your teams and projects",
+      "yourTeams": "Your teams",
       "sort": {
-        "aria": "Sort teams and projects",
+        "aria": "Sort teams",
         "recent": "Recently viewed",
         "alpha": "Alphabetical"
       },
@@ -2987,15 +2990,14 @@
       }
     },
     "mainNav": {
-      "ariaLabel": "Main navigation",
-      "home": "Home",
       "marketplace": "Marketplace",
       "helpCenter": "Help Center",
       "adminConsole": "Technical console"
     },
     "profileMenu": {
       "workingOrganization": "Working organization",
-      "noWorkingOrganization": "No working organization",
+      "noOrganization": "You are not a member of any organization yet.",
+      "organizationsUnavailable": "Your organizations could not be loaded. Reload the page.",
       "organizationLink": "This resource belongs to {{name}}.",
       "continueInOrganization": "Continue in {{name}}",
       "contactSupport": "Contact support",
@@ -3328,7 +3330,12 @@
           "uiSettings": "User interface"
         },
         "platformTitle": "Platform",
-        "title": "Administration"
+        "title": "Administration",
+        "spaces": {
+          "switch": "Switch administration space",
+          "platform": "Platform administration",
+          "organizations": "My organizations"
+        }
       },
       "chatList": {
         "answerReady": "Answer ready",
@@ -3362,7 +3369,8 @@
           "apps": "Apps",
           "resources": "Resources",
           "wiki": "Wiki",
-          "knowledgeBases": "Knowledge Bases"
+          "knowledgeBases": "Knowledge Bases",
+          "projects": "Projects"
         },
         "spaceLabel": "Space",
         "userTeam": "Personal space"
@@ -3657,6 +3665,7 @@
     },
     "platformRoles": {
       "title": "Platform roles",
+      "subtitle": "Manage the users who hold a platform role",
       "holders": {
         "title": "Current role holders",
         "empty": "No platform roles granted yet.",
@@ -3875,6 +3884,7 @@
         "parameters": "Settings",
         "leaveTeam": "Leave team",
         "members": "Members",
+        "closeSettings": "Close settings",
         "settings": "Settings",
         "activity": "Activity",
         "usage": "Usage",
@@ -4266,6 +4276,7 @@
         "themePebble": "Pebble",
         "uiThemeAria": "UI theme",
         "interfaceTitle": "Interface: theme and mode",
+        "languageTitle": "Interface: language",
         "languageAria": "Language",
         "saveFailed": "Could not save display preference",
         "saveFailedDetail": "Your previous choice has been restored. Please try again."
@@ -4351,6 +4362,7 @@
     },
     "platformPrompt": {
       "title": "Platform prompts",
+      "pageSubtitle": "Manage the prompts used across the platform",
       "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
       "editor": {
         "title": "Global prompt",
@@ -5077,6 +5089,7 @@
     },
     "organizations": {
       "title": "Organizations",
+      "subtitle": "Create the platform's organizations and choose their owners.",
       "existing": "Existing organizations",
       "empty": "No organizations yet.",
       "loadFailed": "Unable to load organizations.",
@@ -5120,7 +5133,7 @@
     },
     "provisioning": {
       "title": "Provisioning",
-      "description": "Import users, organizations, teams, projects and their roles from a provisioning ZIP.",
+      "description": "Import user, team and project data",
       "bundle": "Provisioning bundle",
       "choose": "Choose a ZIP or drop it here",
       "format": "Provisioning ZIP, up to 50 MiB.",
@@ -5326,10 +5339,22 @@
       "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
-      "help": "Understand roles",
+      "organizationUnavailable": "Managing an organization's members is not available yet. For now, members are managed team by team.",
+      "add": {
+        "eligibility": {
+          "team": "You can add people who already have access to the organization, then choose their roles.",
+          "project": "You can add people who already have access to the team, then choose their roles."
+        },
+        "pendingListHeader": "People to add",
+        "alreadyMember": "Already a member",
+        "searching": "Searching…",
+        "noMatch": "No one found",
+        "searchFailed": "The search failed. Try again.",
+        "more": "More people match: refine your search",
+        "roleRequired": "Choose at least one role for each person."
+      },
       "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
       "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
-      "search": "Search",
       "searchPages": "Search scans eligible people. Use Next to continue, including after a page with no matches.",
       "actions": "Actions",
       "remove": "Remove",
@@ -5338,8 +5363,6 @@
       "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
       "title": "Manage {{name}}",
       "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each button immediately adds or removes one role.",
-      "roster": "Current members",
-      "eligibility": "These people hold a direct content role in the parent organization or team. Select each role to grant on this space. Existing roles are shown; no role is added automatically.",
       "person": "Person",
       "refresh": "Refresh",
       "empty": "No people on this page.",

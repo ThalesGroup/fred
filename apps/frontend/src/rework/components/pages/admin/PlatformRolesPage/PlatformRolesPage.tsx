@@ -203,7 +203,7 @@ export default function PlatformRolesPage() {
 
   return (
     <div className={styles.platformRolesPage}>
-      <PageHeader title={t("rework.platformRoles.title")} />
+      <PageHeader title={t("rework.platformRoles.title")} subtitle={t("rework.platformRoles.subtitle")} />
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>{t("rework.platformRoles.holders.title")}</h2>
         {holdersContent()}

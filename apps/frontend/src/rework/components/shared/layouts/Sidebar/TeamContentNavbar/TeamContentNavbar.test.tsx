@@ -94,7 +94,7 @@ vi.mock("@core/hooks/useSpaceAccess", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string, o?: { name?: string }) => (o?.name ? `${key}:${o.name}` : key) }),
 }));
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }) => <a href={to}>{children}</a>,
@@ -454,16 +454,15 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
 });
 
 // The owner-only Nova exercise must render the same role as the Home team list.
-it.each([["owner"], ["editor", "owner"]])("shows Weaver roles without falling back to member: %j", (...roles) => {
+it("captions roles beyond plain membership under the header", () => {
   h.pathname = "/team/team-1/agents";
-  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles }];
   try {
+    h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member", "owner", "editor"] }];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain("rework.teamRoles.team_owner");
+    expect(html).toContain("rework.teamRoles.team_owner · rework.teamRoles.team_editor");
     expect(html).not.toContain("rework.teamRoles.team_member");
-    if (roles.includes("editor")) {
-      expect(html).toContain("rework.teamRoles.team_owner · rework.teamRoles.team_editor");
-    }
+    h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member"] }];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("rework.teamRoles");
   } finally {
     h.memberships = [];
   }
@@ -477,7 +476,6 @@ it("gives an owner the Weaver settings entry without reading content or conversa
   try {
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).toContain("rework.teamSettings.navigation.settings");
-    expect(html).toContain("rework.teamRoles.team_owner");
     expect(html).not.toContain("data-chat-list");
     expect(html).not.toContain('href="/team/team-1/agents"');
     h.pathname = "/team/team-1/settings/members";
@@ -506,41 +504,76 @@ it.each(["organization", "team", "project"])("offers the same prompts entry for 
   expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/prompts"');
 });
 
-it("shows the project kind and its organization/team breadcrumb from current memberships", () => {
+it("goes back from a project to its team, and to the organization once the team is out of reach", () => {
   h.memberships = [
     { id: "org", kind: "organization", name: "Acme", roles: ["member"] },
     { id: "research", kind: "team", name: "Research", organization_id: "org", roles: ["member"] },
     { id: "team-1", kind: "project", name: "Atlas", organization_id: "org", parent_id: "research", roles: ["member"] },
   ];
-  const container = document.createElement("div");
-  container.innerHTML = renderToStaticMarkup(<TeamContentNavbar />);
-  const breadcrumb = container.querySelector('nav[aria-label="rework.home.spaceLocation"]')!;
-  expect(Array.from(breadcrumb.querySelectorAll("button")).map((button) => button.textContent)).toEqual([
-    "Acme",
-    "Research",
-  ]);
-  expect(breadcrumb.querySelector('[aria-current="page"]')?.textContent).toBe("Atlas");
-  expect(container.textContent).toContain("rework.userSettings.spaceKinds.project");
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(html).toContain("rework.backTo:Research");
+  expect(html).toContain("rework.userSettings.spaceKinds.project");
   h.memberships = h.memberships.filter((space) => space.id !== "research");
-  expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("Research");
+  expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("rework.backTo:Acme");
 });
 
-it("offers only member projects of the current team", () => {
+it("goes back from a team to its organization, and from settings to the space they configure", () => {
   h.memberships = [
-    { id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["member"] },
-    { id: "atlas", kind: "project", name: "Atlas", organization_id: "org", parent_id: "team-1", roles: ["member"] },
-    {
-      id: "other",
-      kind: "project",
-      name: "Other project",
-      organization_id: "org",
-      parent_id: "another-team",
-      roles: ["member"],
-    },
+    { id: "org", kind: "organization", name: "Acme", roles: ["member"] },
+    { id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["owner"] },
   ];
-  const html = renderToStaticMarkup(<TeamContentNavbar />);
-  expect(html).toContain('href="/team/atlas"');
-  expect(html).not.toContain('href="/team/other"');
+  expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain("rework.backTo:Acme");
+  h.pathname = "/team/team-1/settings/members";
+  const settings = renderToStaticMarkup(<TeamContentNavbar />);
+  // The quiet link up stays on top; leaving settings comes after the header.
+  expect(settings.indexOf("rework.backTo:Acme")).toBeGreaterThan(-1);
+  expect(settings.indexOf("rework.teamSettings.navigation.closeSettings")).toBeGreaterThan(
+    settings.indexOf("Research"),
+  );
+  expect(settings).not.toContain(">rework.teamSettings.navigation.settings<");
+});
+
+describe("TeamContentNavbar — the projects entry", () => {
+  const research = { id: "team-1", kind: "team", name: "Research", organization_id: "org", roles: ["member"] };
+  const atlas = {
+    id: "atlas",
+    kind: "project",
+    name: "Atlas",
+    organization_id: "org",
+    parent_id: "team-1",
+    roles: ["member"],
+  };
+  beforeEach(() => {
+    h.pathname = "/team/team-1/resources";
+    h.canRead = true;
+    h.canManage = false;
+  });
+
+  it("opens the team's projects page right after its agents, instead of listing projects in the panel", () => {
+    h.memberships = [research, atlas];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    const agents = html.indexOf('href="/team/team-1/agents"');
+    const projects = html.indexOf('href="/team/team-1/projects"');
+    expect(agents).toBeGreaterThan(-1);
+    expect(projects).toBeGreaterThan(agents);
+    expect(projects).toBeLessThan(html.indexOf('href="/team/team-1/resources"'));
+    expect(html).not.toContain('href="/team/atlas"');
+  });
+
+  it("keeps the entry for a project member without team content access", () => {
+    h.canRead = false;
+    h.memberships = [research, atlas];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/projects"');
+    h.memberships = [research];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/projects"');
+  });
+
+  it("never offers projects in a project's panel", () => {
+    h.memberships = [{ ...atlas, id: "team-1", parent_id: "research" }];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/resources"');
+    expect(html).not.toContain("/projects");
+  });
 });
 
 describe("TeamContentNavbar collective usage", () => {
@@ -570,7 +603,9 @@ describe("TeamContentNavbar collective usage", () => {
       container
         .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
         .click();
-      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings" : "usage"}`);
+      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings/members" : "usage"}`, {
+        state: { focusPanel: true },
+      });
       h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";
       flushSync(() => root.render(<TeamContentNavbar />));
       const links = container.querySelectorAll('a[href="/team/team-1/usage"]');

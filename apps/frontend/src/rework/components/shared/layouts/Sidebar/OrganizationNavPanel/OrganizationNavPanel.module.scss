@@ -23,14 +23,23 @@
   min-height: 0;
 }
 
-.spaces {
-  padding: var(--spacing-xs);
+/* Never shrink the gear below its footprint when the organization name is long. */
+.settingsButton {
+  display: flex;
+  flex-shrink: 0;
+}
 
-  > h3 {
-    margin: 0 var(--spacing-xs) var(--spacing-2xs);
-    color: var(--on-surface-retreat);
-    font: var(--font-body-small);
-  }
+.personalSpace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+}
+
+.notice {
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .teamList {
@@ -52,13 +61,13 @@
 
 .teamListHeaderLabel {
   color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+  font: var(--font-body-medium);
 }
 
 /* The search field is revealed on demand: it overlays the whole header row
  * (label + button) rather than occupying its own line, so opening it doesn't
  * shift the list. Opaque background = the sidebar's own, to mask what's under
- * it. Same horizontal inset as the personal space and the sort dropdown. */
+ * it. Same horizontal inset as the personal space. */
 .searchOverlay {
   display: flex;
   position: absolute;
@@ -78,39 +87,20 @@
   }
 }
 
-/* Sort dropdown — same horizontal inset and width as the search field above. */
-.teamSort {
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
+.teamListActions {
+  display: flex;
+  align-items: center;
 }
 
-/* The team list fills the remaining height and scrolls on overflow.
- * `scrollbar-gutter: stable` reserves the (thin, global) scrollbar track so the
- * rows never reflow horizontally the moment the scrollbar appears — the width
- * stays constant whether or not it is scrolling. */
+/* The team list fills the remaining height and scrolls on overflow. */
 .scroll {
   flex: 1;
   margin: 0;
-  padding: 0 var(--spacing-xs);
+  padding: 0;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-gutter: stable;
-  list-style: none;
-}
-
-.teamRow {
-  display: flex;
-  align-items: center;
-
-  > a {
-    flex: 1;
-    min-width: 0;
-  }
-}
-
-.projects {
-  margin: 0 0 var(--spacing-xs) var(--spacing-m);
-  border-left: 1px solid var(--outline-muted);
-  padding: 0 0 0 var(--spacing-xs);
+  /* No reserved gutter: rows match the items above until the list actually scrolls. */
+  scrollbar-width: thin;
   list-style: none;
 }
 

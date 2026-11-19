@@ -43,6 +43,7 @@ export default function PlatformPromptPage() {
     <div className={styles.page}>
       <PageHeader
         title={t("rework.platformPrompt.title")}
+        subtitle={t("rework.platformPrompt.pageSubtitle")}
         tabs={
           <ButtonGroup
             size="small"

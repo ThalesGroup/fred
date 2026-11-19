@@ -2311,6 +2311,7 @@
         "until": "Jusqu'à"
       },
       "title": "Analytiques",
+      "subtitle": "Activité et usage de la plateforme sur la période choisie.",
       "topTeams": {
         "empty": "Aucune conversation d'équipe sur cette période.",
         "title": "Équipes avec le plus de conversations",
@@ -2440,6 +2441,11 @@
       "estimates": "Impact estimé",
       "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
+    "teamProjects": {
+      "title": "Projets",
+      "subtitle": "Les projets de l'équipe dont vous êtes membre.",
+      "empty": "Aucun projet à afficher."
+    },
     "teamUsage": {
       "projectPageTitle": "Consommation du projet",
       "personalSkillsSectionTitle": "Mon utilisation des skills",
@@ -2494,6 +2500,7 @@
       "title": "Tâches"
     },
     "back": "Retour",
+    "backTo": "Retour à {{name}}",
     "bootstrap": {
       "continue": "Continuer",
       "connectedAs": "Connecté en tant que {{username}}. Ce compte deviendra administrateur de la plateforme.",
@@ -2864,20 +2871,16 @@
       "uploadFailedDetail": "Veuillez réessayer dans un instant."
     },
     "home": {
-      "organizationSpace": "Espace de l'organisation",
-      "yourSpaces": "Vos espaces",
       "personalSpace": "Mon espace personnel",
-      "personalSpaceDescription": "Votre espace privé",
       "title": "Accueil",
       "organizationOf": "Organisation de {{name}}",
-      "projectsOf": "Projets de {{name}}",
-      "spaceLocation": "Rattachement de l'espace",
       "noSpaces": "Aucune équipe ni aucun projet à afficher.",
-      "searchPlaceholder": "Rechercher une équipe ou un projet",
+      "noTeams": "Aucune équipe à afficher.",
+      "searchPlaceholder": "Rechercher une équipe",
       "searchClear": "Effacer la recherche",
-      "yourTeams": "Vos équipes et projets",
+      "yourTeams": "Vos équipes",
       "sort": {
-        "aria": "Trier les équipes et projets",
+        "aria": "Trier les équipes",
         "recent": "Récemment consultées",
         "alpha": "Ordre alphabétique"
       },
@@ -2987,15 +2990,14 @@
       }
     },
     "mainNav": {
-      "ariaLabel": "Navigation principale",
-      "home": "Accueil",
       "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
       "adminConsole": "Console technique"
     },
     "profileMenu": {
       "workingOrganization": "Organisation de travail",
-      "noWorkingOrganization": "Aucune organisation de travail",
+      "noOrganization": "Vous ne faites partie d'aucune organisation pour le moment.",
+      "organizationsUnavailable": "Impossible de charger vos organisations. Rechargez la page.",
       "organizationLink": "Cette ressource appartient à {{name}}.",
       "continueInOrganization": "Continuer dans {{name}}",
       "contactSupport": "Contacter le support",
@@ -3328,7 +3330,12 @@
           "uiSettings": "Interface utilisateur"
         },
         "platformTitle": "Plateforme",
-        "title": "Administration"
+        "title": "Administration",
+        "spaces": {
+          "switch": "Changer d'espace d'administration",
+          "platform": "Administration de la plateforme",
+          "organizations": "Mes organisations"
+        }
       },
       "chatList": {
         "answerReady": "Réponse prête",
@@ -3362,7 +3369,8 @@
           "apps": "Apps",
           "resources": "Ressources",
           "wiki": "Wiki",
-          "knowledgeBases": "Bases de connaissance"
+          "knowledgeBases": "Bases de connaissance",
+          "projects": "Projets"
         },
         "spaceLabel": "Espace",
         "userTeam": "Espace personnel"
@@ -3657,6 +3665,7 @@
     },
     "platformRoles": {
       "title": "Rôles plateforme",
+      "subtitle": "Gérez les utilisateurs ayant un rôle plateforme",
       "holders": {
         "title": "Détenteurs actuels",
         "empty": "Aucun rôle plateforme attribué pour le moment.",
@@ -3875,6 +3884,7 @@
         "parameters": "Paramètres",
         "leaveTeam": "Quitter l'équipe",
         "members": "Membres",
+        "closeSettings": "Fermer les paramètres",
         "settings": "Paramètres",
         "activity": "Activité",
         "usage": "Consommation",
@@ -4266,6 +4276,7 @@
         "themePebble": "Galet",
         "uiThemeAria": "Thème graphique",
         "interfaceTitle": "Interface : thème et mode",
+        "languageTitle": "Interface : langue",
         "languageAria": "Langue",
         "saveFailed": "Impossible d'enregistrer la préférence d'affichage",
         "saveFailedDetail": "Votre choix précédent a été rétabli. Réessayez."
@@ -4351,6 +4362,7 @@
     },
     "platformPrompt": {
       "title": "Prompts plateforme",
+      "pageSubtitle": "Gérez les prompts utilisés à l'échelle de la plateforme",
       "subtitle": "Les deux blocs communs à toute la plateforme que chaque agent reçoit, dans l'ordre où le modèle les lit : les instructions livrées avec la plateforme, puis votre prompt global. Viennent ensuite les règles des outils et les instructions propres à chaque agent.",
       "editor": {
         "title": "Prompt global",
@@ -5077,6 +5089,7 @@
     },
     "organizations": {
       "title": "Organisations",
+      "subtitle": "Créez les organisations de la plateforme et choisissez leurs responsables.",
       "existing": "Organisations existantes",
       "empty": "Aucune organisation pour le moment.",
       "loadFailed": "Impossible de charger les organisations.",
@@ -5120,7 +5133,7 @@
     },
     "provisioning": {
       "title": "Provisioning",
-      "description": "Importez les utilisateurs, les organisations, les équipes, les projets et leurs rôles depuis un ZIP de provisioning.",
+      "description": "Importez des données utilisateurs, d'équipe et de projets",
       "bundle": "Bundle de provisioning",
       "choose": "Choisir un ZIP ou le déposer ici",
       "format": "ZIP de provisioning, 50 Mio maximum.",
@@ -5326,10 +5339,22 @@
       "usageUnavailable": "Usage indisponible"
     },
     "spaceMembers": {
-      "help": "Comprendre les rôles",
+      "organizationUnavailable": "La gestion des membres d'une organisation n'est pas encore disponible. Elle se fait pour l'instant équipe par équipe.",
+      "add": {
+        "eligibility": {
+          "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation, puis choisir leurs rôles.",
+          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe, puis choisir leurs rôles."
+        },
+        "pendingListHeader": "Personnes à ajouter",
+        "alreadyMember": "Déjà membre",
+        "searching": "Recherche…",
+        "noMatch": "Aucune personne trouvée",
+        "searchFailed": "La recherche a échoué. Réessayez.",
+        "more": "D'autres personnes correspondent : précisez la recherche",
+        "roleRequired": "Choisissez au moins un rôle pour chaque personne."
+      },
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
-      "search": "Rechercher",
       "searchPages": "La recherche parcourt les personnes autorisées. Utilisez Suivant pour poursuivre, y compris après une page sans résultat.",
       "actions": "Actions",
       "remove": "Retirer",
@@ -5338,8 +5363,6 @@
       "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
       "title": "Gérer {{name}}",
       "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
-      "roster": "Membres actuels",
-      "eligibility": "Ces personnes ont un rôle de contenu direct dans l'organisation ou l'équipe parente. Sélectionnez chaque rôle à leur attribuer dans cet espace. Les rôles existants sont affichés ; aucun rôle n'est ajouté automatiquement.",
       "person": "Personne",
       "refresh": "Actualiser",
       "empty": "Aucune personne sur cette page.",

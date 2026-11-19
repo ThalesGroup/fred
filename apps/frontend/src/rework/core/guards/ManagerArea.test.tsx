@@ -45,7 +45,6 @@ vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin:
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => <div>{children}</div> }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 import ManagerArea from "./ManagerArea";
-import MainNavBar from "@shared/layouts/Sidebar/MainNavBar/MainNavBar";
 import AdminNavbar from "@shared/layouts/Sidebar/AdminNavbar/AdminNavbar";
 vi.mock("@hooks/useUserCapabilities.ts", () => ({
   useUserCapabilities: () => {
@@ -196,7 +195,6 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
   act(() =>
     root.render(
       <MemoryRouter initialEntries={["/admin/organizations"]}>
-        <MainNavBar platformOnly />
         <AdminNavbar platformArea />
       </MemoryRouter>,
     ),
@@ -208,7 +206,6 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
     "/admin/monitor",
     "/admin/self-test",
   ]);
-  expect(host.textContent).not.toContain("rework.mainNav.home");
 });
 
 it("keeps a failed authority check blocked while retry is pending with cached data", () => {

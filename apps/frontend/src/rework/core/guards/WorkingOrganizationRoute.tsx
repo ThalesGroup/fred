@@ -20,8 +20,8 @@ export default function WorkingOrganizationRoute({
   const { t } = useTranslation();
   const teamId = matchPath("/team/:teamId/*", pathname)?.params.teamId;
   const catalogue = pathname.startsWith("/marketplace/") ? new URLSearchParams(search).get("catalogue") : null;
-  const scoped =
-    /^\/(home|team|marketplace)(\/|$)/.test(pathname) || /^\/admin\/(features|supervision)\/?$/.test(pathname);
+  // Admin pages follow their own administered organization, not the working one.
+  const scoped = /^\/(home|team|marketplace)(\/|$)/.test(pathname);
   if (!scoped) return children;
   if (context.loading) return silent ? null : <Spinner size={20} />;
   if (context.error || !context.organizationId)

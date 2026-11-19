@@ -35,6 +35,12 @@ describe("SpaceHeader", () => {
     unmount();
   });
 
+  it("places a trailing action beside the read-only heading", () => {
+    const { host, unmount } = render(<SpaceHeader eyebrow="Acme" title="Acme" action={<button>gear</button>} />);
+    expect(host.querySelector("h2")?.parentElement?.nextElementSibling?.textContent).toBe("gear");
+    unmount();
+  });
+
   it("drops the small line without a space", () => {
     const { host, unmount } = render(<SpaceHeader title="Home" />);
     expect(host.querySelector("h2")?.previousElementSibling).toBeNull();

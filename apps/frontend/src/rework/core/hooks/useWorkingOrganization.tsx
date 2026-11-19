@@ -80,6 +80,11 @@ function SessionOrganization({ children }: PropsWithChildren) {
   return <WorkingOrganizationContext.Provider value={context}>{children}</WorkingOrganizationContext.Provider>;
 }
 
+/** For surfaces that also render before admission, outside the provider. */
+export function useOptionalWorkingOrganization() {
+  return useContext(WorkingOrganizationContext);
+}
+
 export function useWorkingOrganization() {
   const context = useContext(WorkingOrganizationContext);
   if (!context) throw new Error("Working organization provider missing");

@@ -143,3 +143,15 @@
   flex-wrap: wrap;
   gap: var(--spacing-s);
 }
+
+.titleInfo {
+  display: inline-flex;
+  color: var(--on-surface-muted);
+  font-size: 1.25rem;
+}
+
+.notice {
+  display: block;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

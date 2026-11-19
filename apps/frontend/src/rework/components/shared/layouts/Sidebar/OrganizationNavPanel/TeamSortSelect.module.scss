@@ -18,35 +18,14 @@
   position: relative;
 }
 
-.triggerWrap {
-  position: relative;
-}
-
-/* Chevron overlaid on the right of the read-only TextInput; clicks fall through
- * to the field below. */
-.chevron {
-  display: flex;
-  position: absolute;
-  /* Centre on the 2rem field only — TextInput also renders an empty
-   * `.information` line below, so `top: 50%` would sit too low. */
-  top: 1rem;
-  right: var(--spacing-xs);
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--on-surface-muted);
-  font-size: 1.25rem;
-}
-
-/* Listbox anchored directly below the trigger, matching its width; overlays the
- * team list below (which never clips it — it's not a child of the scroll area).
- * TextInput reserves a trailing `.information` line, so pull the menu up to sit
- * right under the field box instead of under that empty line. */
+/* Listbox under the button, right-aligned with it; overlays the team list below
+ * (which never clips it, being outside its scroll area). */
 .menuAnchor {
   position: absolute;
-  top: calc(2rem + var(--spacing-3xs));
+  top: calc(100% + var(--spacing-3xs));
   right: 0;
-  left: 0;
   z-index: 20;
+  width: 12rem;
 }
 
 /* Option row — mirrors MenuPopover's `.item` metrics, but with this select's own

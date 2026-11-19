@@ -14,62 +14,14 @@
  * limitations under the License.
  */
 
-/* The main nav panel: the second column, whose content swaps with the
- * mainNavBar selection (team, Home, marketplace, admin). All four panels share
- * this width, or the column jumps when switching modes. */
+/* A nav panel: its content swaps with the section (organization, team, marketplace,
+ * admin). All four panels share this width, or the column jumps when switching. */
 .mainNavPanel {
   display: flex;
   flex-direction: column;
   width: 254px;
   height: 100%;
   min-height: 0;
-}
-
-.breadcrumb {
-  padding: var(--spacing-xs) var(--spacing-xs) 0;
-}
-
-.projects {
-  margin: var(--spacing-s) var(--spacing-xs) 0;
-  border-top: 1px solid var(--outline-muted);
-  padding-top: var(--spacing-xs);
-
-  > p {
-    margin: 0 var(--spacing-xs);
-    color: var(--on-surface-retreat);
-    font: var(--font-body-small);
-    overflow-wrap: anywhere;
-  }
-}
-
-/* Team panel header: flat, on the panel's own background. Labels on the left,
- * settings gear on the right, vertically centred. */
-.teamPanelHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-3xs) var(--spacing-m);
-  min-height: 48px;
-  color: var(--on-surface);
-}
-
-/* Left column: the identity row (avatar + kicker/name) above the roles line.
- * min-width: 0 lets the inner labels ellipsize instead of pushing the gear off
- * the row. */
-.teamPanelHeaderText {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  min-width: 0;
-}
-
-/* Avatar + title (kicker/name) on one row. */
-.teamPanelIdentity {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  min-width: 0;
 }
 
 /* Team avatar: custom image or initials tile, fixed 28×28, 4px corners. */
@@ -81,44 +33,6 @@
   object-fit: cover;
 }
 
-/* Stacked kicker / name, gap 0. */
-.teamPanelTitle {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 0;
-}
-
-.teamPanelKicker {
-  overflow: hidden;
-  color: var(--on-surface-muted);
-  font: var(--font-label-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teamPanelName {
-  overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teamPanelRoles {
-  overflow: hidden;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Never shrink the gear below its 2rem footprint when the team name is long. */
-.teamPanelSettingsButton {
-  display: flex;
-  flex-shrink: 0;
-}
-
 .navigationContainer {
   display: flex;
   flex-direction: column;
@@ -126,9 +40,13 @@
   min-height: 0;
 }
 
-/* "Back" out of team settings, above the settings section menu. */
+/* "Retour à …" on top of the panel: the button's own height is its only vertical space. */
 .settings-back-container {
   display: flex;
-  margin-top: var(--spacing-xs);
-  padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-2xs);
+  padding: 0 var(--spacing-2xs);
+  min-width: 0;
+}
+
+.closeSettings {
+  justify-content: center;
 }

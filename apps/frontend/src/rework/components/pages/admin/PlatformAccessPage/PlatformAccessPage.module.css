@@ -3,9 +3,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  margin: 0 auto;
   width: 100%;
-  max-width: 1080px;
   overflow: auto;
   font: var(--font-body-medium);
 }

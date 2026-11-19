@@ -14,42 +14,33 @@
  * limitations under the License.
  */
 
-/* Rail on the left (primary navigation on top, user avatar at the bottom), the
- * nav panel beside it on the app background. Both stay in flow at every width:
- * a coarse pointer widens the rail to the labelled touch rail, and under 768px
- * the rail becomes a bottom bar and the panel a strip above the page. */
+/* The nav panel on the app background: the section's panel, then the profile card at
+ * its bottom. Under 768px the panel becomes a strip above the page. */
 .sidebar-container {
   display: flex;
   height: 100%;
 }
 
-.rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border-right: 1px solid var(--outline-muted);
-  padding-bottom: var(--spacing-s);
-  width: 48px;
-  height: 100%;
-}
-
-.main-nav-bar-container {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-}
-
-.user-profile-container {
-  width: 100%;
-}
-
 .nav-panel-card {
   display: flex;
   flex-direction: column;
-  margin: var(--spacing-xs) 0;
+  margin: var(--spacing-xs);
   border-radius: var(--radius-s);
   background-color: var(--surface-container);
   min-height: 0;
+}
+
+.nav-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Bottom of the card even when the panel is absent (loading, onboarding). */
+.user-profile-container {
+  margin-top: auto;
+  padding: var(--spacing-xs);
 }
 
 /* Collapsed from the chat header; stays mounted so its state survives. */
@@ -81,33 +72,9 @@
   }
 }
 
-@media (pointer: coarse) {
-  .rail {
-    width: 80px;
-  }
-}
-
 @media (max-width: 767px) {
   .sidebar-container {
     display: contents;
-  }
-
-  .rail {
-    flex-direction: row;
-    order: 2;
-    border-top: 1px solid var(--outline-muted);
-    border-right: none;
-    padding: 0 var(--spacing-xs);
-    width: 100%;
-    height: auto;
-  }
-
-  .main-nav-bar-container {
-    flex: 1;
-  }
-
-  .user-profile-container {
-    width: auto;
   }
 
   /* The section's pages run as a horizontal row above the page; long lists (teams,
@@ -120,7 +87,7 @@
   }
 
   /* Container-qualified so it beats each panel's own width whatever the load order. */
-  .sidebar-container .nav-panel-card > * {
+  .sidebar-container .nav-panel-body > * {
     width: 100%;
   }
 }
