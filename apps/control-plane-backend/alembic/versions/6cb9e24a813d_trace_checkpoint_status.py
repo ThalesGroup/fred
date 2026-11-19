@@ -10,8 +10,8 @@ Revises: 4eea63270bc1
 import sqlalchemy as sa
 from alembic import op
 
-revision = "6cb9e24a813d"
-down_revision = "4eea63270bc1"
+revision = "6cb9e24a813d"  # pragma: allowlist secret
+down_revision = "4eea63270bc1"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

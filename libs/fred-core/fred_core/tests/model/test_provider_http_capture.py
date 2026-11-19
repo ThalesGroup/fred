@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+from base64 import b64encode
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -205,6 +206,7 @@ async def test_sdk_owned_httpx_streams(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "mock-native-key")
     credentials = _Credentials()
     static_credential = f"fixture-{provider}-{family}"
+    basic_auth_user = f"fixture-{provider}-user"
     settings: dict[str, Any] = {}
     if provider.startswith("vertex-ai"):
         settings.update(
@@ -216,7 +218,11 @@ async def test_sdk_owned_httpx_streams(
         # The pinned Anthropic Messages API rejects legacy sampling keywords.
         settings.update(access_token=static_credential, temperature=None)
     elif provider == "ollama":
-        settings["base_url"] = "http://local-user:local-password@127.0.0.1:11434"
+        settings["base_url"] = str(
+            httpx.URL("http://127.0.0.1:11434").copy_with(
+                username=basic_auth_user, password=static_credential
+            )
+        )
     elif provider == "vertex-ai":
         # This SDK setting selects its HTTPX fallback even when aiohttp is installed.
         settings["client_args"] = {
@@ -264,6 +270,11 @@ async def test_sdk_owned_httpx_streams(
             assert credentials.refreshes >= 2
         if family == "anthropic":
             assert request.headers[auth_header] == f"Bearer {static_credential}"
+        if provider == "ollama":
+            encoded = b64encode(
+                f"{basic_auth_user}:{static_credential}".encode()
+            ).decode()
+            assert request.headers[auth_header] == f"Basic {encoded}"
         assert attempt.response is not None
         assert attempt.response.headers["x-request-id"] == "upstream-123"
         assert attempt.body == wire_body

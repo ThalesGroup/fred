@@ -13,8 +13,8 @@ from uuid import uuid4
 import sqlalchemy as sa
 from alembic import op
 
-revision = "78961f25bd30"
-down_revision = "2f0ac7d34e61"
+revision = "78961f25bd30"  # pragma: allowlist secret
+down_revision = "2f0ac7d34e61"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

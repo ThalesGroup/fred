@@ -22,8 +22,8 @@ Revises: 07e91c5a42d8
 import sqlalchemy as sa
 from alembic import op
 
-revision = "5ed9514a7602"
-down_revision = "07e91c5a42d8"
+revision = "5ed9514a7602"  # pragma: allowlist secret
+down_revision = "07e91c5a42d8"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

@@ -19,7 +19,7 @@ def test_sqlite_migration_backfills_only_active_incident_reports(
     config.set_main_option("script_location", str(app_dir / "alembic"))
     database = str(tmp_path / "control_plane.sqlite3")
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database}")
-    command.upgrade(config, "83adb40b71f5")
+    command.upgrade(config, "83adb40b71f5")  # pragma: allowlist secret
 
     boundary = {
         "exchange_id": "failed-turn",
@@ -85,7 +85,7 @@ def test_sqlite_migration_backfills_only_active_incident_reports(
                 ],
             )
 
-        command.upgrade(config, "4eea63270bc1")
+        command.upgrade(config, "4eea63270bc1")  # pragma: allowlist secret
 
         incidents = sa.Table(
             "conversation_trace_incident", metadata, autoload_with=engine

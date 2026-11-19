@@ -6,8 +6,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "83adb40b71f5"
-down_revision = "76b1a93d8c57"
+revision = "83adb40b71f5"  # pragma: allowlist secret
+down_revision = "76b1a93d8c57"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
