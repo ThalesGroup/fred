@@ -169,26 +169,6 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
     expect(folderToggle("Sub")).not.toBeNull();
   });
-
-  it("copies the folder name from its row menu", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-    const row = folderToggle("CIR").closest('[class*="datatable-row"]');
-    if (!row) throw new Error("folder row not rendered");
-    const moreButton = row.querySelector('button[aria-label="rework.resources.action.more"]');
-    if (!moreButton) throw new Error("folder menu not rendered");
-    act(() => {
-      moreButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    const item = [...document.querySelectorAll('[role="presentation"] li')].find((el) =>
-      el.textContent?.includes("rework.resources.action.copyName"),
-    );
-    if (!item) throw new Error("copy name action not rendered");
-    await act(async () => {
-      item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(writeText).toHaveBeenCalledExactlyOnceWith("CIR");
-  });
 });
 
 /** Native events carry no dataTransfer in happy-dom; graft the shape React reads.

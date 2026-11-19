@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Copy resource names and open folders from their rows"
+title: "Select resource names and open folders from their rows"
 impact: none
 configuration: none
 configuration_reason: "Only frontend interaction and translation changes; no configuration keys or defaults change."
