@@ -12,15 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Document-reading pair (DOCREAD-01): `DocumentVerbatimCapability` (verbatim
-paginated read) and `DocumentExtractCapability` (exhaustive extraction), both on
-the shared `DocumentMarkdownPort`. Covers: registration + boot invariant, the
-admin-gated `team_scope` default, the pure pagination contract, the per-page
-continuation footer that structurally prevents the summarize "half answer"
-failure, the config page cap (default + hard bound), a missing-port loud failure,
-and transport-error shaping.
-"""
+"""Paginated document reading, server-side extraction and their error handling."""
 
 from __future__ import annotations
 
@@ -353,10 +345,14 @@ async def test_extract_reports_empty_result_clearly() -> None:
 
 
 @pytest.mark.asyncio
-async def test_extract_flags_truncation() -> None:
+@pytest.mark.parametrize("extraction,item_count", [("- x", 1), ("", 0)])
+async def test_extract_flags_truncation(extraction: str, item_count: int) -> None:
     port = _FakeExtractionPort(
         DocumentExtractionResult(
-            document_uid=_DOC, extraction="- x", item_count=1, truncated=True
+            document_uid=_DOC,
+            extraction=extraction,
+            item_count=item_count,
+            truncated=True,
         )
     )
     cap = DocumentExtractCapability()
@@ -370,6 +366,7 @@ async def test_extract_flags_truncation() -> None:
         {"document_uid": _DOC, "what_to_extract": "x"},
     )
     assert "middle content may be omitted" in msg.content
+    assert msg.artifact.blocks[0].text == msg.content
 
 
 @pytest.mark.asyncio
@@ -524,8 +521,10 @@ async def test_a_file_name_is_refused_before_any_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+@pytest.mark.parametrize("extract", [False, True], ids=["read", "extract"])
 async def test_read_authority_loss_escapes_instead_of_becoming_an_artifact(
     wrapped: bool,
+    extract: bool,
 ) -> None:
     stop = AuthorityLostError()
     error: Exception = stop
@@ -537,14 +536,21 @@ async def test_read_authority_loss_escapes_instead_of_becoming_an_artifact(
                 raise DocumentPortCallError("port wrapper") from exc
             except DocumentPortCallError as wrapper:
                 error = wrapper
-    port = _FakeMarkdownPort(error=error)
-    cap = DocumentVerbatimCapability()
-    ctx = build_capability_context(
-        cap, identity=_identity(), services=_services(port), config={}
+    cap = DocumentExtractCapability() if extract else DocumentVerbatimCapability()
+    services = (
+        _extract_services(_FakeExtractionPort(error=error))
+        if extract
+        else _services(_FakeMarkdownPort(error=error))
     )
-
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=services, config={}
+    )
+    name = "extract_from_document" if extract else "read_document"
+    args = {"document_uid": _DOC}
+    if extract:
+        args["what_to_extract"] = "requirements"
     with pytest.raises(AuthorityLostError):
-        await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
+        await _invoke(cap, ctx, name, args)
 
 
 @pytest.mark.asyncio
@@ -700,4 +706,24 @@ async def test_a_platform_failure_tells_the_model_which_setting_and_not_the_requ
     assert "document storage" in msg.content
     assert "not a problem with the user's request" in msg.content
     assert "KF_ARTIFACT_ACCESS_KEY" in msg.content
+
+
+@pytest.mark.asyncio
+async def test_extraction_server_failure_is_an_error_not_no_matches() -> None:
+    cap = DocumentExtractCapability()
+    port = _FakeExtractionPort(
+        error=DocumentPortCallError("Internal Server Error", status_code=500)
+    )
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_extract_services(port), config={}
+    )
+    msg = await _invoke(
+        cap,
+        ctx,
+        "extract_from_document",
+        {"document_uid": _DOC, "what_to_extract": "deadlines"},
+    )
+    assert msg.artifact.failure is not None
+    assert "Internal Server Error" not in msg.content
+    assert "No items matching" not in msg.content
     assert msg.artifact.blocks[0].text == msg.content

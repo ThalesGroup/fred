@@ -3545,3 +3545,113 @@ cancellation and interruption guarantees when comparing simpler alternatives.
 The implementation scope and architectural cost should have been made clearer
 during lot supervision. Passing tests and prior reviews do not settle minimality.
 This follow-up is deferred at Dimi's request; no further refactor is included.
+
+
+## 26. Swift integration - 19 November 2026
+
+### Pinned integration scope
+
+Dimi authorized two local merges in order: latest Swift into `weaver`, then
+`weaver` into `gap/global-prompt`. No push or deployment is requested. The
+checkout started clean on `weaver`; its base is `2956efdd1b4bdf0328cd7e1e5f91c0aabea18cb3`.
+The last integrated Swift bound is `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`,
+verified as the second parent of merge `976f8f1b723868a2743c633b71d6cecd9cf407c8`.
+Fetch confirmed the new target `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`. The second merge destination is
+`gap/global-prompt` at `bbc5f9426`. Its committed section 25 includes the deferred
+architecture concern about InferenceAuthority; preserve that note on integration.
+
+Swift-to-Weaver merge `b30a94144eae8b4114869a50a5c209486be16f68` is committed.
+Its parents are the Weaver base above and the pinned Swift target, which is now
+the verified integrated Swift bound. The separate Swift checkout is on an
+unrelated feature branch and was left untouched. The subsequent integration into
+`gap/global-prompt` preserves its organization prompts and section 25.
+
+### Decisions and incoming inventory
+
+- `f3edaebac`: README license link already correct in Weaver; retain its README.
+- `c37d6d5fc`: adapt predict reranking to the existing API-owned reranker and
+  configuration. Do not restore worker model selection or removed vector routes.
+- `2345799c0`, `b44254b77`: advanced home, featured agents and question launcher.
+  Dimi explicitly rejected deferral: port at organization level. Management uses
+  direct organization Owner rights; visibility and
+  selection must not introduce inherited team access. Dimi confirmed selecting only already-accessible team/project agents and
+  per-viewer filtering. Do not invent a default team, new role or global governance path.
+- `91e2f5248`: neutral Help Center branding; keep Weaver capability limitations.
+- `6d78409bf`: share Office author metadata selection; preserve verified profile
+  provenance, no invented user name for AssertedUser and no duplicate render path.
+- `113163480`, `1774ae140`: HTML language and browser-translation protections.
+- `c4403b52a`: retain Weaver package/chart versions 5.0.0, dependency bounds and
+  lockfiles. Incoming differences there are release-only version/uv-format churn.
+- `b2c9b9834`, `f1efa83fc`: direct attachment reading with continued pagination,
+  explicit coverage limitations, document-tool descriptions and extraction
+  failures. Preserve scoped Weaver document access and structured failures.
+  Swift fast-ingest UI warning persistence has no equivalent response contract
+  in Weaver: this upload-toast/preview subfeature remains deferred.
+
+### Integration receipt
+
+Retired Control Plane Python, platform-ops, docs/swift and OpenSpec paths remain
+removed, including incoming new files. Version-only files retain the Weaver
+parent. Python integration preserves Weaver authority and rendering paths while
+adapting the incoming behavior. Attachment uploads retain CP/Temporal ownership;
+old fast-ingest API calls were not restored. Both merge parents were inspected;
+no Alembic or Temporal worker registration changes were introduced.
+
+### Organization home implementation checkpoint
+
+Dimi confirmed that the Owner selects only already-accessible team/project agents,
+and each viewer sees only agents they can already use. Implemented in the existing
+CP authorization model, with no inherited permissions or default-team concept:
+`organization_home.rs`, migration `0040_organization_home.sql`, generated client,
+and the incoming home presentation/settings components. Owner settings have their
+own `/admin/home-settings` route; existing global theme settings stay unchanged.
+The existing home recent-agent component still used retired Swift APIs; it now
+renders the same scoped response, using retained own conversations followed by
+accessible suggestions. No history or grant is copied into a new store.
+
+Migration 0040 intentionally leaves 0039 available for the already committed
+organization-prompt migration on `gap/global-prompt`. These are fresh-install
+branches; no live database or migration history was changed. The new relational
+references enforce same-organization team/project placement and cascade on agent
+or organization deletion. Settings writes reuse the organization transaction lock;
+reads use a coherent snapshot and the existing direct-role relation.
+
+Generated CP/KF clients and KF/chart configuration schemas were refreshed. The
+migration chain initialized on disposable PostgreSQL; SQL diagram and trigger
+catalogue were regenerated. Python syntax/duplicate-declaration scan is clean.
+Root quality reached the frontend after passing the preceding 17 components;
+a frontend format change was corrected and its full quality gate passed. CP and
+frontend final rechecks passed. New scoped SQL/HTTP
+regression is compiled by CP quality, but application test suites have NOT been
+executed. No browser or real provider acceptance is claimed.
+
+Recovery snapshot directory:
+`/home/dimi/Documents/ChatGPT/Work/weaver-merge-recovery-2026-11-19`.
+It contains versioned-worktree bytes and Git merge/index metadata with verified
+SHA-256 hashes, excluding environment files and caches. The initial snapshot is
+historical; `combined-merge-state.tar.gz` preserves the resolved second merge
+before its commit. Use Git commits and the actual working tree when resuming.
+Do not restore over newer work. Current Git status and this section take precedence
+over temporary helper scripts, which describe edits already applied.
+
+The second merge into `gap/global-prompt` has resolved its navigation and test
+conflicts by preserving both features. The combined CP client, SQL references and
+API inventory have been regenerated; the combined migration chain initializes on
+disposable PostgreSQL. Final `make -o migration-tests code-quality` passed all 18 components on the
+combined result. The `migration-tests` prerequisite was deliberately excluded;
+no application test campaign was run for these merges. Ten release notes passed
+`migration_guides.py check-pr --base 2956efdd1 --worktree`; generated reference
+freshness, local links, Python duplicate declarations and diff checks passed.
+The second merge joins `bbc5f9426` and `b30a94144`; its actual SHA is the merge
+commit containing this receipt. Section 25 and its deferred architecture assessment
+are preserved. No push, deployment, live-data change or provider call occurred. Developer acceptance of the home journey and
+real-provider behavior remains pending. The Swift upload-toast/preview warning
+gap remains deferred: no CP truncation contract was invented to imitate fast-ingest.
+
+Incremental Swift delta on the prompt branch (excluding documentation): production
++2831/-341, tests +1217/-35, generated +136/-4, configuration/locales +148/-16.
+Most additions are the requested Swift home presentation/settings components;
+Weaver replaces legacy recent-agent API consumption and reuses its organization
+roles, transaction locks, agent placement, conversations and shared UI components.
+No parallel permissions service, default team or runtime authority refactor was
+introduced by this merge.

@@ -46,6 +46,8 @@ describe("Icon accessibility", () => {
     const icon = container.querySelector("span");
     expect(icon?.getAttribute("role")).toBe("img");
     expect(icon?.getAttribute("aria-label")).toBe("Search results");
+    expect(icon?.getAttribute("translate")).not.toBe("no");
+    expect(icon?.querySelector("span")?.getAttribute("translate")).toBe("no");
   });
 
   it("retains custom-icon compatibility without deriving a name", () => {
@@ -53,5 +55,18 @@ describe("Icon accessibility", () => {
     const icon = container.querySelector("span");
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
     expect(icon?.hasAttribute("aria-label")).toBe(false);
+  });
+
+  it("protects outlined icon names from translation", () => {
+    render(<Icon category="outlined" type="show_chart" />);
+    const icon = container.querySelector("span");
+    expect(icon?.classList.contains("material-symbols-outlined")).toBe(true);
+    expect(icon?.textContent).toBe("show_chart");
+    expect(icon?.getAttribute("translate")).toBe("no");
+  });
+
+  it("protects rounded icon names from translation", () => {
+    render(<Icon category="rounded" type="search" />);
+    expect(container.querySelector("span")?.getAttribute("translate")).toBe("no");
   });
 });

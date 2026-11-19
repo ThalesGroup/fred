@@ -66,6 +66,7 @@ from fred_capability_ppt_filler.builder.render import (
 from fred_capability_ppt_filler.builder.tools import _issue_line, catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes
+from fred_pod.security.structure import KeycloakUser
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -136,6 +137,53 @@ def _render(
     plan, patterns = _deck(*slides)
     result = render_deck(template, inventory, plan, patterns, images)
     return result, Presentation(io.BytesIO(result.pptx))
+
+
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        (
+            KeycloakUser(
+                uid="ada",
+                username="ada",
+                roles=[],
+                first_name=" Ada ",
+                last_name=" Lovelace ",
+            ),
+            "Ada Lovelace",
+        ),
+        ("Grace Hopper", "Grace Hopper"),
+        ("b" * 256, "b" * 255),
+        ("delegated-user", "delegated-user"),
+    ],
+)
+def test_rendered_deck_uses_acting_author_without_changing_template(
+    author: KeycloakUser | str, expected: str
+) -> None:
+    plan, patterns = _deck(_on(_pattern("Title and Content"), title="Example"))
+    template = Presentation(io.BytesIO(TEMPLATE))
+    template.core_properties.author = "Template creator"
+    template.core_properties.last_modified_by = "Template editor"
+    source = io.BytesIO()
+    template.save(source)
+
+    result = render_deck(
+        source.getvalue(),
+        INVENTORY,
+        plan,
+        patterns,
+        author=author,
+    )
+
+    properties = Presentation(io.BytesIO(result.pptx)).core_properties
+    assert properties.author == expected
+    assert properties.last_modified_by == expected
+    preview_properties = Presentation(io.BytesIO(result.preview_pptx)).core_properties
+    assert preview_properties.author == expected
+    assert preview_properties.last_modified_by == expected
+    source_properties = Presentation(io.BytesIO(source.getvalue())).core_properties
+    assert source_properties.author == "Template creator"
+    assert source_properties.last_modified_by == "Template editor"
 
 
 def test_layout_pattern_fills_title_and_levelled_bullets():

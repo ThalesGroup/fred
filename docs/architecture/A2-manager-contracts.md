@@ -116,6 +116,8 @@ application path writes it yet.
 | 2. Cross-row consistency | `kb_source_document` | `kb_source_scope` / `protect_kb_document_scope` | BEFORE INSERT OR UPDATE / ROW | source identity, placement and published version |
 | 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | MCP offer authorization stays in its owning organization |
+| 2. Cross-row consistency | `organization_home_agent` | `organization_home_agent_placement` / `protect_organization_home_agent` | BEFORE INSERT OR UPDATE / ROW | home agents belong to teams or projects of the same organization |
+| 2. Cross-row consistency | `organization_home_settings` | `home_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | home settings belong to an organization |
 | 2. Cross-row consistency | `organization_model_initialization` | `model_initialization_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model initialization belongs to an organization |
 | 2. Cross-row consistency | `organization_model_policy` | `model_policy_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model policy belongs to an organization |
 | 2. Cross-row consistency | `organization_model_source` | `model_source_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model source belongs to an organization |

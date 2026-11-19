@@ -776,6 +776,27 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.proposalDecisionRequest,
       }),
     }),
+    organizationHome: build.query<OrganizationHomeApiResponse, OrganizationHomeApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home` }),
+    }),
+    organizationHomeCandidates: build.query<OrganizationHomeCandidatesApiResponse, OrganizationHomeCandidatesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-candidates`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    organizationHomeSettings: build.query<OrganizationHomeSettingsApiResponse, OrganizationHomeSettingsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings` }),
+    }),
+    setOrganizationHome: build.mutation<SetOrganizationHomeApiResponse, SetOrganizationHomeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings`,
+        method: "PUT",
+        body: queryArg.setOrganizationHomeRequest,
+      }),
+    }),
     getCommonPromptSettings: build.query<GetCommonPromptSettingsApiResponse, GetCommonPromptSettingsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/common` }),
     }),
@@ -2093,6 +2114,24 @@ export type DecideMarketplaceProposalApiArg = {
   marketplaceSpaceId: string;
   proposalId: string;
   proposalDecisionRequest: ProposalDecisionRequest;
+};
+export type OrganizationHomeApiResponse = /** status 200 undefined */ HomeShowcase;
+export type OrganizationHomeApiArg = {
+  organizationId: string;
+};
+export type OrganizationHomeCandidatesApiResponse = /** status 200 undefined */ HomeAgentPage;
+export type OrganizationHomeCandidatesApiArg = {
+  organizationId: string;
+  after?: string;
+};
+export type OrganizationHomeSettingsApiResponse = /** status 200 undefined */ OrganizationHomeSettings;
+export type OrganizationHomeSettingsApiArg = {
+  organizationId: string;
+};
+export type SetOrganizationHomeApiResponse = unknown;
+export type SetOrganizationHomeApiArg = {
+  organizationId: string;
+  setOrganizationHomeRequest: SetOrganizationHomeRequest;
 };
 export type GetCommonPromptSettingsApiResponse = /** status 200 undefined */ CommonPromptSettings;
 export type GetCommonPromptSettingsApiArg = {
@@ -4201,6 +4240,54 @@ export type ProposalDecisionRequest = {
   expected_publication_version: number;
   reason?: string | null;
 };
+export type HomeAgent = {
+  agent_instance_id: string;
+  description?: string | null;
+  display_name: string;
+  role: string;
+  space_id: string;
+  space_name: string;
+  template_id: string;
+};
+export type FeaturedHomeAgent = {
+  agent: HomeAgent;
+  badge?: string | null;
+  highlights: string[];
+};
+export type HomeLayout = "classic" | "advanced";
+export type HomeShowcase = {
+  ask_agent?: HomeAgent | null;
+  featured: FeaturedHomeAgent[];
+  layout: HomeLayout;
+  recent_agents: HomeAgent[];
+};
+export type HomeAgentPage = {
+  items: HomeAgent[];
+  next_cursor: string | null;
+};
+export type AdminHomeAgent = {
+  agent?: HomeAgent | null;
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type OrganizationHomeSettings = {
+  ask_agent?: AdminHomeAgent | null;
+  featured: AdminHomeAgent[];
+  layout: HomeLayout;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type SetOrganizationHomeRequest = {
+  ask_agent_instance_id?: string | null;
+  featured: FeaturedAgentEntry[];
+  layout: HomeLayout;
+};
 export type RuntimePromptDefaults = {
   creation_assistant_prompt?: string | null;
   creation_assistant_prompt_revised_at?: string | null;
@@ -5263,6 +5350,13 @@ export const {
   useLazyMarketplaceProposalQuery,
   useCancelMarketplaceProposalMutation,
   useDecideMarketplaceProposalMutation,
+  useOrganizationHomeQuery,
+  useLazyOrganizationHomeQuery,
+  useOrganizationHomeCandidatesQuery,
+  useLazyOrganizationHomeCandidatesQuery,
+  useOrganizationHomeSettingsQuery,
+  useLazyOrganizationHomeSettingsQuery,
+  useSetOrganizationHomeMutation,
   useGetCommonPromptSettingsQuery,
   useLazyGetCommonPromptSettingsQuery,
   usePutCommonPromptSettingsMutation,

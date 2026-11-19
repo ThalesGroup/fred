@@ -258,9 +258,9 @@ class DocumentSummarizeCapability(
             """Summarize the content of one already identified document.
 
             Discover its uid first if it is not available in context. A fresh
-            model reads the whole document (using map-reduce for large documents)
-            and returns the summary. Use read_document for exact wording and
-            extract_from_document for exhaustive extraction.
+            model produces a selective overview (using map-reduce for large
+            documents). Use read_document to check source wording and
+            extract_from_document to collect information matching a criterion.
 
             `document_uid` MUST be the document's opaque uid, not its name or
             title. Get it from a prior search_documents hit's 'uid' field, from
@@ -272,8 +272,7 @@ class DocumentSummarizeCapability(
             to the user — always refer to the document by its display name.
 
             Pass `instruction` to steer the summary: focus area, what to look
-            for, audience, tone, desired length — e.g. "focus on financial risks
-            and list every action item". Without it, you get a generic abstract.
+            for, audience, tone, desired length — e.g. "summarize the main financial risks". Without it, you get a generic abstract.
 
             `max_chars` bounds the returned summary length; raise it for a more
             detailed summary, lower it for a terse one. Leave it unset to use

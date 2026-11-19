@@ -23,6 +23,7 @@ import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.t
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
+import HomeSettingsSection from "@components/pages/admin/UiSettingsPage/HomeSettingsSection";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
@@ -354,6 +355,14 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/home-settings",
+        element: (
+          <Protected requires="features">
+            <HomeSettingsSection />
           </Protected>
         ),
       },

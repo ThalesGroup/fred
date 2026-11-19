@@ -154,14 +154,29 @@ pas : l'agent décide selon votre demande.
 - **Recherche** — trouve les passages les plus pertinents et répond à partir
   d'eux. Rapide, et le bon réflexe pour « que sait-on sur X ? ». Elle ne remonte
   que ce qu'elle juge pertinent, donc **elle peut manquer des éléments**.
-- **Lecture mot à mot** — lit le texte exact, dans l'ordre, quand vous voulez le
-  libellé précis d'un passage.
-- **Extraction** — parcourt le document entier et liste tout ce qui correspond,
-  sans rien omettre. La plus lente, la plus exhaustive.
-- **Résumé** — un aperçu court, volontairement non exhaustif.
+- **Lire** - consulte le texte extrait du fichier, par portions. La conversion
+  ou l'OCR peut perdre des détails ; ces portions ne sont pas les pages du PDF.
+- **Résumer** - produit un aperçu court et sélectionne les points principaux.
+  Certains détails sont volontairement omis.
+- **Extraire** - recherche les informations demandées dans les portions du
+  document, puis réunit les résultats en retirant les doublons. Cela ne garantit
+  ni de tout retrouver ni de compter chaque occurrence. Si une portion échoue,
+  la demande signale un échec, jamais une absence d'information. Au-delà de la
+  limite de taille, seuls le début et la fin sont traités et un avertissement
+  accompagne le résultat, même s'il est vide.
 
-> **Si rien ne doit être oublié, dites-le** : « liste _toutes_ les échéances ».
-> L'agent passe alors par l'extraction plutôt que par la recherche.
+Sur un même **contrat de maintenance**, trois demandes illustrent la différence :
+
+| Demande                                                    | Résultat attendu                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| « Cite la clause de résiliation. »                         | Le libellé du passage dans le texte extrait.                             |
+| « Résume ce contrat en deux phrases. »                     | Une synthèse des points principaux, sans tous les détails.               |
+| « Relève les échéances, les actions et les responsables. » | Une liste structurée des éléments trouvés, avec les limites éventuelles. |
+
+Exprimez votre besoin : l'agent choisit l'outil. Les packs **Pièces jointes** et
+**Documents de l'équipe** les regroupent déjà ; la vue **Avancé** permet de les
+régler séparément. La confirmation avant résumé ou extraction est activée par
+défaut et peut être réglée sur l'agent.
 
 Un document jamais utilisé ? Voir
 [Problèmes courants](/help/fr/troubleshooting/common-problems).

@@ -45,6 +45,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -280,6 +281,7 @@ def build_capability_contexts(
     capability_config: Mapping[str, StoredCapabilityConfig | Mapping[str, Any]],
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, CapabilityContext[Any, Any]]:
@@ -317,6 +319,7 @@ def build_capability_contexts(
             capability,
             identity=identity,
             services=services,
+            author=author,
             config=config,
             turn_options=options.get(cap_id),
             team_settings=settings.get(cap_id),
@@ -329,6 +332,7 @@ def build_capability_context(
     *,
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     config: BaseModel | Mapping[str, Any] | None = None,
     turn_options: BaseModel | Mapping[str, Any] | None = None,
     team_settings: BaseModel | Mapping[str, Any] | None = None,
@@ -349,6 +353,7 @@ def build_capability_context(
         turn_options=_validated_slice(capability.TurnOptionsModel, turn_options),
         team_settings=_validated_slice(capability.TeamSettingsModel, team_settings),
         services=services,
+        author=author,
     )
 
 

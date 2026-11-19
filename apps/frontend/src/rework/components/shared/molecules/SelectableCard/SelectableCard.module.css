@@ -37,9 +37,9 @@
 }
 
 .card[data-selected="true"] {
-  border: 1px solid var(--primary);
-  background: var(--primary-container);
-  color: var(--on-primary-container);
+  border: 1px solid var(--secondary);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
 }
 
 .card:focus-visible {
@@ -62,7 +62,7 @@
 }
 
 .card[data-selected="true"] .description {
-  color: var(--on-primary-container);
+  color: var(--on-secondary-container);
 }
 
 /* Icon variant: the icon on the left, title and description stacked beside it. */
@@ -80,7 +80,7 @@
 }
 
 .card[data-selected="true"] .icon {
-  color: var(--on-primary-container);
+  color: var(--on-secondary-container);
 }
 
 .text {

@@ -19,6 +19,7 @@ const ORGANIZATION_ROUTES = new Set([
   "/admin/features",
   "/admin/supervision",
   "/admin/platform-prompt",
+  "/admin/home-settings",
   "/unauthorized",
 ]);
 

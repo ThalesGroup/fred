@@ -181,7 +181,7 @@
     },
     "document_summarize": {
       "name": "Résumer un document",
-      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
+      "description": "Produire une synthèse des points principaux d'un document, en laissant de côté les détails.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -194,18 +194,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Verbatim document",
-      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "name": "Lire le texte d'un document",
+      "description": "Lire le texte extrait du fichier, par portions, pour vérifier un passage. La fidélité dépend de la conversion du fichier.",
       "fields": {
         "page_max_chars": {
-          "title": "Longueur de page",
-          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+          "title": "Longueur de portion",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque portion de texte renvoyée. Ce ne sont pas les pages du fichier original."
         }
       }
     },
     "document_extract": {
-      "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "name": "Extraire des informations d'un document",
+      "description": "Relever les informations demandées dans le texte du document, par exemple les échéances. Des éléments peuvent être manqués ; les limites de traitement sont signalées.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -709,6 +709,9 @@
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
+      "notice": "Pièce jointe : {{name}}",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. Fred ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",
@@ -2984,6 +2987,24 @@
         "unavailableSpace": "Espace indisponible",
         "truncated": "Les 5 premières entrées sont affichées. Les compteurs portent sur toutes les données enregistrées.",
         "observed": "Conversations créées dans la période et encore conservées. Messages et classements : exécutions observées, erreurs et reprises comprises, titres exclus. L'historique peut être incomplet ; les anciens événements sans organisation identifiable sont exclus, y compris de la comparaison."
+      },
+      "advanced": {
+        "featuredTitle": "À la une",
+        "pause": "Mettre en pause le défilement",
+        "play": "Reprendre le défilement",
+        "previous": "Agent précédent",
+        "next": "Agent suivant",
+        "slideLabel": "{{position}} sur {{count}} : {{name}}",
+        "show": "Afficher {{name}}",
+        "proposedBy": "Proposé par {{team}}",
+        "chat": "Discuter",
+        "chatWith": "Discuter avec {{name}}",
+        "highlightsTitle": "Ce qu'il fait pour vous",
+        "allAgents": "Tous les agents",
+        "askTitle": "Une question ? Demandez à l'agent : {{name}}",
+        "askPlaceholder": "Posez votre question à {{name}}…",
+        "askLabel": "Votre question à {{name}}",
+        "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },
     "mainNav": {
@@ -4347,7 +4368,51 @@
       "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
       "lastUpdated": "Modifié par {{who}} le {{when}}",
       "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",
-      "unknownAuthor": "un administrateur"
+      "unknownAuthor": "un administrateur",
+      "home": {
+        "title": "Page d'accueil",
+        "layoutLabel": "Accueil proposé aux utilisateurs",
+        "layouts": {
+          "classic": "Accueil simple",
+          "advanced": "Accueil avancé"
+        },
+        "layoutHints": {
+          "classic": "Message d'accueil, recherche et agents proposés.",
+          "advanced": "Ajoute la bannière « À la une » et un champ de question adressé à l'agent de votre choix."
+        },
+        "featuredLabel": "Agents à la une",
+        "featuredHint": "Agents des équipes et projets de cette organisation auxquels vous avez accès, dans l’ordre d’affichage. {{max}} au maximum. Chaque utilisateur ne voit que les agents qu’il peut utiliser.",
+        "askLabel": "Agent du champ question",
+        "askHint": "Reçoit les questions posées depuis l'accueil avancé. Sans agent, le champ est masqué.",
+        "askNone": "Aucun (champ masqué)",
+        "empty": "Aucun agent à la une.",
+        "unavailable": "Masqué",
+        "moveUp": "Monter {{name}}",
+        "moveDown": "Descendre {{name}}",
+        "remove": "Retirer {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Facultatif, par exemple « Nouveau ».",
+        "highlightsLabel": "Ce qu'il fait pour vous",
+        "highlightsHint": "Facultatif. Un point par ligne, {{max}} au plus, {{length}} caractères chacun.",
+        "highlightsError": {
+          "count": "{{max}} points au plus.",
+          "length": "{{length}} caractères au plus par point."
+        },
+        "addLabel": "Agent à ajouter",
+        "addPlaceholder": "Choisir un agent",
+        "searchPlaceholder": "Rechercher un agent",
+        "noMatch": "Aucun agent trouvé",
+        "noCandidate": "Aucun autre agent accessible dans cette organisation",
+        "add": "Ajouter",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saved": "Page d'accueil enregistrée",
+        "saveFailed": "La page d'accueil n'a pas été enregistrée",
+        "loadFailed": "Impossible de charger les réglages de la page d'accueil. Rechargez la page.",
+        "subtitle": "Choisissez l’accueil et les agents mis en avant dans cette organisation. Les droits d’accès aux agents restent inchangés.",
+        "unavailableHint": "Indisponible : agent désactivé, retiré, en préparation ou devenu inaccessible.",
+        "unsaved": "Modifications non enregistrées"
+      }
     },
     "platformPrompt": {
       "title": "Prompts de l'organisation",

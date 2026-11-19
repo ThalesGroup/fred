@@ -36,6 +36,8 @@ from typing import (
     cast,
 )
 
+from fred_core.conversion.office_author import set_office_author
+from fred_pod.security.structure import KeycloakUser
 from pptx.oxml.ns import qn
 from pptx.parts.chart import ChartPart
 from pptx.shapes.picture import Picture
@@ -1617,6 +1619,7 @@ class _Renderer:
         patterns: Sequence[Optional[Pattern]],
         numbers: Optional[Sequence[int]] = None,
         starts: Optional[Sequence[int]] = None,
+        author: KeycloakUser | str | None = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
@@ -1708,6 +1711,8 @@ class _Renderer:
                     "agenda."
                 )
         _remove_slides(self.prs, original_ids)
+        if author is not None:
+            set_office_author(self.prs.core_properties, author)
         buffer = io.BytesIO()
         self.prs.save(buffer)
         preview = buffer
@@ -2498,6 +2503,8 @@ def render_deck(
     images: Optional[Mapping[str, PreparedImage]] = None,
     numbers: Optional[Sequence[int]] = None,
     starts: Optional[Sequence[int]] = None,
+    *,
+    author: KeycloakUser | str | None = None,
 ) -> RenderResult:
     """Render ``plan``, slide ``i`` on ``patterns[i]`` (CPU-bound; call off the event loop).
     ``numbers``: sent-plan numbers; ``starts`` continues a split list's numbering.
@@ -2505,7 +2512,7 @@ def render_deck(
     presentation = open_presentation(template_bytes)
     try:
         return _Renderer(presentation, inventory, images or {}).render(
-            plan, patterns, numbers, starts
+            plan, patterns, numbers, starts, author
         )
     except ValueError as exc:
         raise RenderError(

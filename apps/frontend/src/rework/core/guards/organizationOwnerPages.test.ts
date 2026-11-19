@@ -26,11 +26,16 @@ describe("organizationOwnerPages", () => {
       "/admin/supervision",
       "/admin/platform-prompt",
       "/admin/features",
+      "/admin/home-settings",
     ]);
   });
 
   it("lists only the pages the person may open, in menu order", () => {
-    expect(paths({ canManageFeatures: true })).toEqual(["/admin/platform-prompt", "/admin/features"]);
+    expect(paths({ canManageFeatures: true })).toEqual([
+      "/admin/platform-prompt",
+      "/admin/features",
+      "/admin/home-settings",
+    ]);
     expect(paths({ canAdmin: true }, true, true)).toEqual([
       "/admin/supervision",
       "/admin/teams",

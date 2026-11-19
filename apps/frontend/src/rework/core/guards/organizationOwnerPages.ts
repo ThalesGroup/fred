@@ -69,6 +69,12 @@ const PAGES: OrganizationAdminPage[] = [
     requires: "features",
   },
   {
+    to: "/admin/home-settings",
+    labelKey: "rework.uiSettings.home.title",
+    icon: { category: "outlined", type: "home", filled: false },
+    requires: "features",
+  },
+  {
     to: "/admin/migration",
     labelKey: "rework.sidebar.admin.menu.migration",
     icon: { category: "outlined", type: "sync_alt", filled: false },
