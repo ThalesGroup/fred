@@ -382,6 +382,26 @@ cannot unblock a stalled read; the bound is `httpfs`'s own retry defaults
 (~2 min worst case against a 30s `query_timeout_seconds`), not a deployment
 setting, since the remote path can't be exercised offline to tighten it.
 
+### Reading conversation attachments
+
+For questions about identified text attachments, agents prefer `read_document`
+and follow its offsets as needed. The existing Knowledge Flow read path joins
+all owned stored fragments in page order; it does not select RAG hits. Summary
+and extraction tools operate on this same retained text. Search remains useful
+for locating passages, but selected hits cannot establish exhaustive coverage or
+absence. If direct reading is unavailable or reading stops early, the agent
+must explain that limit. Tool choice remains model-driven, not a forced full
+read on every turn.
+
+Fast text ingestion still defaults to 60,000 characters. Conversion may lose
+original-file details; direct reading cannot recover discarded content. When
+stored metadata reports truncation, the read starts with an incomplete-document
+notice. Upload feedback and the persisted attachment preview disclose the same
+limit. A shortened UI preview is labelled separately; for CSV/Excel it does not
+imply that the queryable dataset is incomplete. Existing attachments without a
+truncation flag cannot be diagnosed retrospectively. No full-file prompt
+injection, new storage or configuration is involved.
+
 ### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
 
 CSV files attached to a conversation (`POST /fast/ingest`) receive a
