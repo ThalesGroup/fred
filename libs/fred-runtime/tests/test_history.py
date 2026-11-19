@@ -574,9 +574,40 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     assert messages[2].role == Role.system
     assert messages[2].channel == Channel.error
     assert "timeout" in messages[2].parts[0].text
+    assert messages[2].metadata.extras == {"platform_written": True}
 
     assert messages[3].role == Role.assistant
     assert messages[3].channel == Channel.final
+
+
+def test_write_turn_history_marks_the_execution_error_sentence() -> None:
+    """The stored crash row says the platform wrote its text for the person.
+
+    A reader shows a marked row verbatim, whatever its language or whether it
+    carries a support reference; an unmarked row predates the sentence.
+    """
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+    sentence = "Le fournisseur du modèle est injoignable. Réessayez dans un instant."
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s-error",
+            user_id="alice",
+            request_message="q",
+            payloads=[{"kind": "execution_error", "message": sentence}],
+            history_store=store,
+        )
+    )
+
+    (error,) = [
+        m for m in store.save.call_args.kwargs["messages"] if m.channel == Channel.error
+    ]
+    assert error.parts[0].text == sentence
+    assert error.metadata.extras == {"platform_written": True}
 
 
 def test_write_turn_history_records_choice_text_and_occurrence_separately() -> None:
@@ -1259,7 +1290,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                 PlatformSkills.from_directory(
                     str(
                         Path(__file__).resolve().parents[3]
-                        / "apps/control-plane/skills"
+                        / "apps/control-plane/skill-packs/en"
                     ),
                     builtin=True,
                 )
@@ -1457,7 +1488,7 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
                 PlatformSkills.from_directory(
                     str(
                         Path(__file__).resolve().parents[3]
-                        / "apps/control-plane/skills"
+                        / "apps/control-plane/skill-packs/en"
                     ),
                     builtin=True,
                 )

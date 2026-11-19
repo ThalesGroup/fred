@@ -814,7 +814,8 @@
       "hitlQuestionsChanged": "The pending questions have changed. Your answers were not applied. Reopen the conversation to load the current questions.",
       "hitlConflict": "Your answer could not be applied because the conversation is busy or has changed. Please try again, or reopen the conversation if the problem persists.",
       "toolApprovalSaveFailedSummary": "Approval not saved",
-      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
+      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved.",
+      "agentErrorSummary": "Agent error"
     },
     "hitlOtherAnswerPlaceholder": "Other",
     "hitlOtherAnswerWithText": "Other: {{answer}}",
@@ -2513,6 +2514,38 @@
     },
     "cancel": "Cancel",
     "chatTrace": {
+      "readDocument": {
+        "documentLabel": "Reading {{name}}",
+        "folderLabel": "Reading the folder {{name}}",
+        "document": "Document",
+        "folder": "Folder",
+        "unnamed": "Name not shown in this trace"
+      },
+      "conversationFile": {
+        "labels": {
+          "ls": "Listing {{name}}",
+          "read_file": "Reading {{name}}",
+          "write_file": "Writing {{name}}",
+          "edit_file": "Editing {{name}}",
+          "glob": "Finding files matching {{name}}",
+          "grep": "Searching files for “{{name}}”",
+          "concat_files": "Combining files into {{name}}",
+          "read_conversation_file": "Retrieving {{name}}",
+          "publish_conversation_file": "Delivering {{name}}"
+        },
+        "file": "File",
+        "folder": "Folder",
+        "pattern": "Pattern",
+        "text": "Text searched",
+        "files": "Files searched",
+        "output": "Output file",
+        "inputs": "Combined files",
+        "delivered": "Delivered as",
+        "source": "Workspace file",
+        "size": "Size written",
+        "lines": "Lines requested",
+        "storedResult": "a stored tool result"
+      },
       "documentTree": {
         "metadataFor": "Metadata for {{name}}",
         "truncated": "Truncated",
@@ -2697,6 +2730,7 @@
           "grep": "Searching files",
           "execute": "Running a command",
           "concat_files": "Combining files",
+          "list_conversation_files": "Listing conversation files",
           "task": "Delegating work to an assistant",
           "write_todos": "Updating the plan"
         },
@@ -2736,27 +2770,7 @@
       "failure": {
         "arguments": "Call arguments:",
         "error": "Error:",
-        "invalid_arguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
-        "not_approved": "Call declined by the user.",
-        "authentication_required": "Authentication was refused. Restore authentication before retrying.",
-        "resource_unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
-        "scope_refused": "This call targeted documents outside the selection of this conversation, so nothing was read.",
-        "rate_limited": "The service request limit was reached. Wait for the limit to reset before retrying.",
-        "misconfigured": "A dependency refused the platform configuration. This is a configuration problem, not a problem with your request: an administrator must correct it.",
-        "service_busy": "The service is temporarily unavailable or at capacity. Try again later.",
-        "timeout": "The operation exceeded its time budget. Narrow the request before retrying.",
-        "service_error": "The service could not complete this operation. Try again later; contact support if the problem persists.",
         "unexpected": "This step failed unexpectedly. Try again; contact support if the problem persists.",
-        "platform": {
-          "misconfigured": "{{origin}} refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
-          "service_busy": "{{origin}} is unreachable. This is a platform availability problem, not a problem with your request: try again later; if it persists, an administrator must check this service."
-        },
-        "origin": {
-          "knowledge_flow": "Knowledge Flow",
-          "object_storage": "The document storage",
-          "search_index": "The search index",
-          "database": "The database"
-        },
         "setting": "Setting to check:",
         "settingOwner": "(Knowledge Flow)",
         "httpStatus": "HTTP status {{status}}",
@@ -5121,12 +5135,14 @@
       "networkError": "The result could not be received.",
       "replay": "Some changes may already be applied. Correct the cause, then explicitly import the same bundle again.",
       "completed": "Import completed",
-      "additive": "Re-importing preserves existing identities, spaces and roles, and adds the declarations in the bundle. Existing passwords remain unchanged.",
+      "additive": "Re-importing preserves existing identities, spaces, roles and skills, and adds the declarations in the bundle. Existing passwords and skills already present remain unchanged.",
       "counts": {
         "identities_resolved": "Identities resolved",
         "identities_created": "Identities created",
         "spaces_reconciled": "Spaces reconciled",
-        "grants_acknowledged": "Grants acknowledged"
+        "grants_acknowledged": "Grants acknowledged",
+        "skills_created": "Skills created",
+        "skills_kept": "Skills kept"
       }
     },
     "manager": {
@@ -5383,16 +5399,23 @@
     "spaceSkills": {
       "title": "Skills",
       "scope": "This catalog belongs to the selected space. Conversations also use skills in parent spaces you can read directly.",
-      "empty": "No skills installed in this space.",
-      "defaults": "Provided skills",
-      "installExplanation": "Install an independent package in this space. Its contents can then be managed here.",
-      "install": "Install",
+      "empty": "No skills in this space.",
       "remove": "Remove",
       "removeConfirm": "Remove {{name}} from this space?",
       "edit": "Edit files",
       "save": "Save package",
       "cancel": "Cancel",
-      "failed": "The operation failed. Check the package format and reload if it changed."
+      "failed": "The operation failed. Check the package format and reload if it changed.",
+      "new": "New skill",
+      "create": "Create skill",
+      "name": "Name",
+      "nameHint": "Lowercase letters, digits and hyphens, for example meeting-notes. It cannot be changed later.",
+      "description": "Description",
+      "instructions": "Instructions (Markdown)",
+      "filePath": "New file path",
+      "filePathHint": "Text resource such as references/guide.md (.md, .txt, .json, .yaml, .yml, .csv).",
+      "addFile": "Add file",
+      "removeFile": "Remove this file"
     },
     "localMarketplace": {
       "savedProposals": "Submissions to check",

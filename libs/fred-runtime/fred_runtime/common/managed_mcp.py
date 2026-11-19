@@ -57,17 +57,23 @@ class ManagedMcpError(UserFacingExecutionError, ValueError):
             if isinstance(binding, McpTabularBinding)
             else "MCP"
         )
-        nature = (
-            "is unavailable"
+        sentences = (
+            {
+                "en": "{component} is unavailable.",
+                "fr": "{component} est indisponible.",
+            }
             if code
             in {
                 "mcp_inventory_empty",
                 "mcp_connection_unavailable",
                 "mcp_tool_unavailable",
             }
-            else "configuration was refused"
+            else {
+                "en": "{component} configuration was refused.",
+                "fr": "La configuration {component} a été refusée.",
+            }
         )
-        super().__init__(f"{component} {nature}.", internal_message=code)
+        super().__init__(sentences, code, component=component)
 
 
 def credential_headers(

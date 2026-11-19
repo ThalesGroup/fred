@@ -83,6 +83,7 @@ from pydantic import BaseModel, Field
 from fred_capability_documents.document_read_common import (
     DOCUMENT_UID_DESCRIPTION,
     document_scope_refusal,
+    document_uid_refusal,
 )
 
 _KF_SERVICE = "Knowledge Flow"
@@ -287,6 +288,14 @@ class DocumentSummarizeCapability(
                     "not available on this execution path."
                 )
 
+            refusal = document_uid_refusal(
+                tool_ref="summarize_document",
+                action="summarize the document",
+                document_uid=document_uid,
+            )
+            if refusal is not None:
+                return refusal
+
             effective_max_chars = resolve_summarize_max_chars(summarize_cap, max_chars)
             started = time.monotonic()
             try:
@@ -312,18 +321,17 @@ class DocumentSummarizeCapability(
                     elapsed_s=time.monotonic() - started,
                     document_uid=document_uid,
                 )
-                # 403/404 almost always means the model passed something that
-                # is not a document uid — a file NAME, a stale/foreign uid, or
-                # a FOLDER's tag id from a list_document_tree folder line
-                # (observed live, issue #2244) — the backend fails closed on
-                # unknown resources. Tell the model how to recover instead of
-                # letting it give up and echo the error.
+                # A non-UUID value is refused before the call, so a 403/404
+                # here means a well-formed uid that is not a readable document:
+                # a stale/foreign uid or a FOLDER's tag id from a
+                # list_document_tree folder line (observed live, issue #2244).
+                # Tell the model how to recover instead of letting it give up.
                 if getattr(exc, "status_code", None) in (403, 404):
                     message += (
-                        " Likely cause: document_uid was not a document's "
-                        "opaque uid. If you passed a file name, resolve the "
-                        "uid first: it is in the conversation's attached-files "
-                        "list (the bracketed value after the file name), in a "
+                        " Likely cause: document_uid was not the uid of a "
+                        "readable document. Use a document's uid: it is in the "
+                        "conversation's attached-files list (the bracketed "
+                        "value after the file name), in a "
                         "search hit's 'uid' field, or a document entry's 'uid' "
                         "field in list_document_tree. A 'folder_id' identifies "
                         "a folder, not a document - summarize each "

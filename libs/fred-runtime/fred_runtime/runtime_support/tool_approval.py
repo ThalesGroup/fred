@@ -31,6 +31,8 @@ from fred_sdk.contracts.runtime import (
     PendingToolCall,
 )
 
+from fred_runtime.execution_errors import localize
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,11 +54,40 @@ def _truncate_for_human_review(value: object, *, max_chars: int = 1200) -> str:
     return rendered[: max_chars - 3] + "..."
 
 
-def _is_french_language(language: str | None) -> bool:
-
-    if language is None:
-        return False
-    return language.strip().lower().replace("_", "-").startswith("fr")
+_APPROVAL = {
+    "en": {
+        "question_one": "The agent wants to execute {names}. "
+        "This may modify state, trigger an external action, or consume a "
+        "large number of tokens. Do you want to continue?",
+        "question_many": "The agent wants to execute {count} actions: {names}. "
+        "These may modify state, trigger external actions, or consume a "
+        "large number of tokens. Do you want to continue?",
+        "title_one": "Confirm tool execution",
+        "title_many": "Confirm {count} tool executions",
+        "proceed": "Accept",
+        "proceed_one": "Run this tool now.",
+        "proceed_many": "Run these tools now.",
+        "cancel": "Reject",
+        "cancel_one": "Do not run this tool; let the agent replan.",
+        "cancel_many": "Do not run these tools; let the agent replan.",
+    },
+    "fr": {
+        "question_one": "L'agent souhaite exécuter « {names} ». "
+        "Cette action peut modifier un état, déclencher une action externe "
+        "ou consommer beaucoup de tokens. Voulez-vous continuer ?",
+        "question_many": "L'agent souhaite exécuter {count} actions : {names}. "
+        "Ces actions peuvent modifier un état, déclencher des actions externes "
+        "ou consommer beaucoup de tokens. Voulez-vous continuer ?",
+        "title_one": "Confirmer l'exécution de l'outil",
+        "title_many": "Confirmer l'exécution de {count} outils",
+        "proceed": "Accepter",
+        "proceed_one": "Exécuter cet outil maintenant.",
+        "proceed_many": "Exécuter ces outils maintenant.",
+        "cancel": "Refuser",
+        "cancel_one": "Ne pas exécuter cet outil et laisser l'agent se replanifier.",
+        "cancel_many": "Ne pas exécuter ces outils et laisser l'agent se replanifier.",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -70,25 +101,6 @@ class GatedToolCall:
 def _humanize_tool_name(name: str) -> str:
 
     return name.replace("_", " ").strip().title()
-
-
-def _single_call_question(call: GatedToolCall, *, is_fr: bool) -> str:
-    if call.question:
-        return call.question
-    display_name = _humanize_tool_name(call.tool_name)
-    if is_fr:
-        return (
-            f"L'agent souhaite exécuter « {display_name} ». "
-            "Cette action peut modifier un état, déclencher une action externe "
-            "ou consommer beaucoup de tokens. "
-            "Voulez-vous continuer ?"
-        )
-    return (
-        f"The agent wants to execute {display_name}. "
-        "This may modify state, trigger an external action, or consume a "
-        "large number of tokens. "
-        "Do you want to continue?"
-    )
 
 
 def _describe_batch(calls: Sequence[GatedToolCall]) -> str:
@@ -105,23 +117,6 @@ def _describe_batch(calls: Sequence[GatedToolCall]) -> str:
     )
 
 
-def _batch_question(calls: Sequence[GatedToolCall], *, is_fr: bool) -> str:
-    names = _describe_batch(calls)
-    if is_fr:
-        return (
-            f"L'agent souhaite exécuter {len(calls)} actions : {names}. "
-            "Ces actions peuvent modifier un état, déclencher des actions externes "
-            "ou consommer beaucoup de tokens. "
-            "Voulez-vous continuer ?"
-        )
-    return (
-        f"The agent wants to execute {len(calls)} actions: {names}. "
-        "These may modify state, trigger external actions, or consume a "
-        "large number of tokens. "
-        "Do you want to continue?"
-    )
-
-
 def build_tool_approval_request(
     *,
     binding: BoundRuntimeContext,
@@ -135,7 +130,8 @@ def build_tool_approval_request(
             "least one call needs approval."
         )
 
-    is_fr = _is_french_language(binding.runtime_context.language)
+    texts = localize(_APPROVAL, binding.runtime_context.language)
+    count = "one" if len(calls) == 1 else "many"
     pending_calls = tuple(
         PendingToolCall(
             tool_call_id=call.tool_call_id or "",
@@ -144,58 +140,24 @@ def build_tool_approval_request(
         )
         for call in calls
     )
-    question = (
-        _single_call_question(calls[0], is_fr=is_fr)
-        if len(calls) == 1
-        else _batch_question(calls, is_fr=is_fr)
+    own_question = calls[0].question if len(calls) == 1 else None
+    question = own_question or texts[f"question_{count}"].format(
+        count=len(calls), names=_describe_batch(calls)
     )
-
-    if is_fr:
-        title = (
-            "Confirmer l'exécution de l'outil"
-            if len(calls) == 1
-            else f"Confirmer l'exécution de {len(calls)} outils"
-        )
-        choices = (
-            HumanChoiceOption(
-                id="proceed",
-                label="Accepter",
-                description="Exécuter cet outil maintenant."
-                if len(calls) == 1
-                else "Exécuter ces outils maintenant.",
-                default=True,
-            ),
-            HumanChoiceOption(
-                id="cancel",
-                label="Refuser",
-                description="Ne pas exécuter cet outil et laisser l'agent se replanifier."
-                if len(calls) == 1
-                else "Ne pas exécuter ces outils et laisser l'agent se replanifier.",
-            ),
-        )
-    else:
-        title = (
-            "Confirm tool execution"
-            if len(calls) == 1
-            else f"Confirm {len(calls)} tool executions"
-        )
-        choices = (
-            HumanChoiceOption(
-                id="proceed",
-                label="Accept",
-                description="Run this tool now."
-                if len(calls) == 1
-                else "Run these tools now.",
-                default=True,
-            ),
-            HumanChoiceOption(
-                id="cancel",
-                label="Reject",
-                description="Do not run this tool; let the agent replan."
-                if len(calls) == 1
-                else "Do not run these tools; let the agent replan.",
-            ),
-        )
+    title = texts[f"title_{count}"].format(count=len(calls))
+    choices = (
+        HumanChoiceOption(
+            id="proceed",
+            label=texts["proceed"],
+            description=texts[f"proceed_{count}"],
+            default=True,
+        ),
+        HumanChoiceOption(
+            id="cancel",
+            label=texts["cancel"],
+            description=texts[f"cancel_{count}"],
+        ),
+    )
 
     return HumanInputRequest(
         stage="tool_approval",

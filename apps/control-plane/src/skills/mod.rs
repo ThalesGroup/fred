@@ -14,7 +14,6 @@ use std::collections::BTreeMap;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-mod defaults;
 pub mod http;
 pub(crate) mod package;
 use package::Files;

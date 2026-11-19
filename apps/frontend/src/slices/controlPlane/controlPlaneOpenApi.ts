@@ -571,9 +571,6 @@ const injectedRtkApi = api.injectEndpoints({
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
     }),
-    defaultSkills: build.query<DefaultSkillsApiResponse, DefaultSkillsApiArg>({
-      query: () => ({ url: `/control-plane/v1/skills/defaults` }),
-    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -1225,12 +1222,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createSkill,
       }),
     }),
-    installSkill: build.mutation<InstallSkillApiResponse, InstallSkillApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/packages/${queryArg.name}/install`,
-        method: "POST",
-      }),
-    }),
     skillScope: build.query<SkillScopeApiResponse, SkillScopeApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills/scope` }),
     }),
@@ -1867,8 +1858,6 @@ export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ Pow
 export type PowerpointUploadReceiptApiArg = {
   requestKey: string;
 };
-export type DefaultSkillsApiResponse = /** status 200 undefined */ PackageSummary[];
-export type DefaultSkillsApiArg = void;
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
   createSpace: CreateSpace;
@@ -2438,11 +2427,6 @@ export type CreateSkillApiResponse = unknown;
 export type CreateSkillApiArg = {
   spaceId: string;
   createSkill: CreateSkill;
-};
-export type InstallSkillApiResponse = unknown;
-export type InstallSkillApiArg = {
-  spaceId: string;
-  name: string;
 };
 export type SkillScopeApiResponse = /** status 200 undefined */ SkillCatalog;
 export type SkillScopeApiArg = {
@@ -3423,6 +3407,10 @@ export type Report = {
   grants_acknowledged: number;
   identities_created: number;
   identities_resolved: number;
+  /** Declared skills absent from their space, created by this import. */
+  skills_created: number;
+  /** Declared skills already present by name; never replaced, even if edited. */
+  skills_kept: number;
   spaces_reconciled: number;
 };
 export type ProvisioningUpload = {
@@ -3878,14 +3866,6 @@ export type PowerPointFile = {
   /** Stored means attached in CP, not prepared or activated in the pod. */
   status: PowerPointFileStatus;
 };
-export type PackageSummary = {
-  argument_hint?: string | null;
-  builtin: boolean;
-  description: string;
-  disable_model_invocation: boolean;
-  name: string;
-  user_invocable: boolean;
-};
 export type CreateSpace = {
   kind: SpaceKind;
   name: string;
@@ -4310,6 +4290,14 @@ export type PreparationModels = {
   recommendation: ModelOfferKey | null;
 };
 export type SkillAvailability = "available" | "disabled" | "unavailable";
+export type PackageSummary = {
+  argument_hint?: string | null;
+  builtin: boolean;
+  description: string;
+  disable_model_invocation: boolean;
+  name: string;
+  user_invocable: boolean;
+};
 export type SkillSummary = PackageSummary & {
   skill_id: string;
   space_id: string;
@@ -5067,8 +5055,6 @@ export const {
   useUpdateApplicationMutation,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
-  useDefaultSkillsQuery,
-  useLazyDefaultSkillsQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useUpdateTeamParametersMutation,
@@ -5203,7 +5189,6 @@ export const {
   useListSkillsQuery,
   useLazyListSkillsQuery,
   useCreateSkillMutation,
-  useInstallSkillMutation,
   useSkillScopeQuery,
   useLazySkillScopeQuery,
   usePreviewSkillQuery,

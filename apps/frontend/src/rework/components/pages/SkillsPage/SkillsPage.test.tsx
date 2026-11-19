@@ -4,9 +4,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import SkillsPage from "./SkillsPage";
+import SkillsPage, { skillDocument } from "./SkillsPage";
 
-const h = vi.hoisted(() => ({ read: true, write: false, install: vi.fn(), refetch: vi.fn() }));
+const h = vi.hoisted(() => ({ read: true, write: false, create: vi.fn(), refetch: vi.fn() }));
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ teamId: "space-1" }),
   useSearchParams: () => [new URLSearchParams()],
@@ -26,9 +26,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useListSkillsQuery: () => ({ currentData: [], refetch: h.refetch }),
-  useDefaultSkillsQuery: () => ({ currentData: [{ name: "graph", description: "Diagrams" }] }),
   useGetSkillQuery: () => ({}),
-  useInstallSkillMutation: () => [(args: unknown) => ({ unwrap: () => h.install(args) }), {}],
+  useCreateSkillMutation: () => [(args: unknown) => ({ unwrap: () => h.create(args) }), {}],
   useDeleteSkillMutation: () => [vi.fn(), {}],
   usePutSkillMutation: () => [vi.fn(), {}],
 }));
@@ -38,7 +37,7 @@ beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   h.read = true;
   h.write = false;
-  h.install.mockReset();
+  h.create.mockReset();
   h.refetch.mockReset();
   container = document.createElement("div");
   document.body.append(container);
@@ -54,24 +53,46 @@ describe("space-owned skill catalog", () => {
     act(() => root.render(<SkillsPage />));
     expect(container.textContent).toContain("Organization");
     expect(container.textContent).toContain("rework.spaceSkills.empty");
-    expect(container.textContent).not.toContain("rework.spaceSkills.installExplanation");
+    expect(container.textContent).not.toContain("rework.spaceSkills.new");
   });
-  it("installs explicitly into the selected space and refreshes its catalog", async () => {
+  it("creates a package in the selected space from plain fields and refreshes its catalog", async () => {
     h.write = true;
-    h.install.mockResolvedValue(undefined);
+    h.create.mockResolvedValue(undefined);
     act(() => root.render(<SkillsPage />));
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent === "rework.spaceSkills.install",
-    );
-    expect(button).toBeDefined();
-    await act(async () => button!.click());
-    expect(h.install).toHaveBeenCalledWith({ spaceId: "space-1", name: "graph" });
+    const button = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find((b) => b.textContent === label)!;
+    await act(async () => button("rework.spaceSkills.new").click());
+    const type = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+      const prototype = Object.getPrototypeOf(element) as object;
+      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const [name, description] = Array.from(container.querySelectorAll("input"));
+    await act(async () => {
+      type(name, "meeting-notes");
+      type(description, "Notes: decisions and actions");
+      type(container.querySelector("textarea")!, "# Notes\n\nList the decisions.");
+    });
+    await act(async () => button("rework.spaceSkills.create").click());
+    expect(h.create).toHaveBeenCalledWith({
+      spaceId: "space-1",
+      createSkill: {
+        name: "meeting-notes",
+        files: {
+          "SKILL.md": skillDocument("meeting-notes", "Notes: decisions and actions", "# Notes\n\nList the decisions."),
+        },
+      },
+    });
     expect(h.refetch).toHaveBeenCalledOnce();
+  });
+  it("quotes the description so YAML punctuation stays text", () => {
+    expect(skillDocument("example", ' Use: "quotes" ', "Body")).toBe(
+      '---\nname: example\ndescription: "Use: \\"quotes\\""\n---\n\nBody\n',
+    );
   });
   it("does not present content to a caller without reading rights", () => {
     h.read = false;
     act(() => root.render(<SkillsPage />));
     expect(container.textContent).toContain("rework.spaceMembers.forbidden");
-    expect(container.textContent).not.toContain("Diagrams");
   });
 });

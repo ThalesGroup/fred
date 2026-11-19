@@ -1232,6 +1232,14 @@ async fn preparation_uses_live_runtime_hitl_support_and_defaults_to_false() {
             request(&app, &identity, Some("alice"), "POST", &path, Value::Null).await;
         assert_eq!(status, 200, "{prepared}");
         assert_eq!(prepared["supports_hitl"], advertised.unwrap_or(false));
+        // The ask_user toggle follows the HITL resume path, on by default.
+        let ask_user = json!({"capability_id": "platform", "widget": "ask_user_toggle", "params": {"default": true}});
+        let expected = if advertised == Some(true) {
+            json!([ask_user])
+        } else {
+            json!([])
+        };
+        assert_eq!(prepared["chat_controls"], expected);
     }
 }
 

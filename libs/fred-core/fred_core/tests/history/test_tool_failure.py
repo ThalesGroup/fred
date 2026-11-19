@@ -71,5 +71,20 @@ def test_a_tool_result_part_carries_its_failure_and_none_on_success() -> None:
         "status": 500,
         "origin": None,
         "setting": None,
+        "reason": None,
+        "message": None,
     }
     assert ToolResultPart(call_id="c2", content="ok").failure is None
+
+
+def test_a_row_stored_before_the_sentence_still_loads() -> None:
+    stored = (
+        '{"type":"tool_result","call_id":"c1","content":"Could not read the '
+        'document.","failure":{"code":"resource_unavailable","status":404},'
+        '"latency_ms":77}'
+    )
+    part = ToolResultPart.model_validate_json(stored)
+    assert part.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=404
+    )
+    assert part.failure is not None and part.failure.message is None

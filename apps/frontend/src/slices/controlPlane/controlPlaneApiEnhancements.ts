@@ -451,7 +451,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     deleteSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    installSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    createSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     listPrompts(endpoint) {
       const query = endpoint.query!;
       endpoint.keepUnusedDataFor = 0;

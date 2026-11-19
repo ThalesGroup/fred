@@ -323,18 +323,28 @@ async fn prepare_execution(
         headers.get(header::AUTHORIZATION),
     )
     .await;
+    let platform_control = |widget: &str, default: bool| ChatControlDescriptor {
+        capability_id: "platform".into(),
+        widget: widget.into(),
+        params: Some(std::collections::BTreeMap::from([(
+            "default".into(),
+            serde_json::json!(default),
+        )])),
+    };
     if models.offers.iter().any(|offer| offer.reasoning_enabled) {
-        chat_controls.push(ChatControlDescriptor {
-            capability_id: "platform".into(),
-            widget: "reasoning_toggle".into(),
-            params: Some(std::collections::BTreeMap::from([(
-                "default".into(),
-                serde_json::json!(models.offers.iter().any(|offer| {
-                    Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
-                        && offer.reasoning_default_on
-                })),
-            )])),
-        });
+        chat_controls.push(platform_control(
+            "reasoning_toggle",
+            models.offers.iter().any(|offer| {
+                Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
+                    && offer.reasoning_default_on
+            }),
+        ));
+    }
+    // A question needs the HITL resume path; without it no control is sent and
+    // the runtime does not mount ask_user.
+    let supports_hitl = !embedded && template.supports_hitl;
+    if supports_hitl {
+        chat_controls.push(platform_control("ask_user_toggle", true));
     }
     let result = ExecutionPreparation {
         agent_configuration_revision: current.configuration_revision,
@@ -346,7 +356,7 @@ async fn prepare_execution(
         execute_stream_url: format!("{base}/agents/execute/stream"),
         messages_url_template: Some(format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
-        supports_hitl: !embedded && template.supports_hitl,
+        supports_hitl,
         supports_ui_parts: !embedded,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,

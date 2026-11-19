@@ -215,6 +215,8 @@ def resolve_bound_library_ids(
 
     bound: dict[str, None] | None = None
     for cap_id in capability_ids:
+        # An id the pod lacks raises the user-facing UnknownCapabilityError.
+        registry.capability(cap_id)
         result = evaluate_capability_chat_controls(
             registry,
             capability_id=cap_id,

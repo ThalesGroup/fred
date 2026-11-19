@@ -423,10 +423,10 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const handleChatError = useCallback(
     (msg: string, code?: string) => {
       if (code === "agent_configuration_changed") setConfigurationRefused(true);
-      showError({ summary: "Agent error", detail: msg });
+      showError({ summary: t("chatbot.errors.agentErrorSummary"), detail: msg });
       refetchSessionRef.current();
     },
-    [showError],
+    [showError, t],
   );
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the

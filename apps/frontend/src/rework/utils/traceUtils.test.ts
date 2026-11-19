@@ -17,6 +17,7 @@ import { beforeAll, describe, it, expect } from "vitest";
 import type { ChatMessage, ToolFailure } from "../../slices/runtime/runtimeOpenApi";
 import en from "../../locales/en/translation.json";
 import { toolFailureDetail } from "./toolFailureTrace";
+import { stripDocumentUids } from "./documentTreeTrace";
 import fr from "../../locales/fr/translation.json";
 import {
   skillLoadOf,
@@ -24,6 +25,7 @@ import {
   asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
+  conversationFileFacts,
   formatLatencyMs,
   genericToolPayload,
   groupTraceEntries,
@@ -37,9 +39,10 @@ import {
   isSummarizeDocumentTool,
   parseToolResultContent,
   primaryTextForEntry,
+  readDocumentTarget,
+  resolveTraceDocument,
   secondaryTextForEntry,
   statusForEntry,
-  stripDocumentUids,
   textOf,
   toolDiscriminator,
   totalLatencyMs,
@@ -406,22 +409,20 @@ describe("categorized tool labels", () => {
 
   const translate = (key: string): string => instances.fr.t(key);
 
-  it.each(["en", "fr"] as const)("localizes safe failure causes and recovery advice in %s", (language) => {
+  it.each(["en", "fr"] as const)("keeps the runtime's failure sentence and localizes the labels in %s", (language) => {
     const [entry] = groupTraceEntries([
       toolCallMsg("failed", "describe_tabular_documents", { document_uids: ["invalid-id"] }),
       toolResultMsg("failed", "Authentication must be restored before retrying.", false, undefined, {
         code: "authentication_required",
         status: 401,
+        message: "La demande d'authentification a été refusée.",
       }),
     ]);
     if (entry.kind !== "combo") throw new Error("Expected paired tool messages");
     const detail = toolFailureDetail(entry);
     expect(detail?.arguments).toEqual({ document_uids: ["invalid-id"] });
     expect(detail?.status).toBe(401);
-    const cause = instances[language].t(detail!.errorKey);
-    // The status has one source, the structured failure; no phrase repeats it.
-    expect(cause).not.toContain("HTTP");
-    expect(cause).toMatch(/before retrying|avant de réessayer/i);
+    expect(detail?.message).toBe("La demande d'authentification a été refusée.");
     for (const field of Object.keys(en.rework.chatTrace.failure)) {
       const key = `rework.chatTrace.failure.${field}`;
       expect(instances[language].t(key)).not.toBe(key);
@@ -1763,3 +1764,153 @@ it.each(["/skills/meeting-minutes/references//model.md", "skills/meeting-minutes
     });
   },
 );
+
+describe("read_document names its target from earlier authorized results", () => {
+  const DOC = "75742dda-0000-4000-8000-000000000001";
+  const FOLDER = "052a0000-0000-4000-8000-000000000002";
+  const tree = [
+    JSON.stringify({ folder: "Research" }),
+    "  " + JSON.stringify({ folder: "public-tender", folder_id: FOLDER }),
+    "    " +
+      JSON.stringify({
+        uid: DOC,
+        name: "01-consultation-overview.md",
+        mime: "text/markdown",
+        added_to_kb: "2026-11-18T09:00:00Z",
+      }),
+  ].join("\n");
+  const listing = [toolCallMsg("tree", "list_document_tree"), toolResultMsg("tree", tree)];
+  const reading = (uid: string) =>
+    groupTraceEntries([
+      ...listing,
+      toolCallMsg("read", "read_document", { document_uid: uid }),
+      toolResultMsg("read", "Text"),
+    ]);
+  const english = i18next.createInstance();
+  beforeAll(async () => {
+    await english.init({ lng: "en", resources: { en: { translation: en } } });
+  });
+  const translate = (key: string, values?: Record<string, unknown>) => english.t(key, values);
+
+  it("resolves documents and folders from the tree, without exposing the id", () => {
+    const entries = reading(DOC);
+    expect(resolveTraceDocument(entries, DOC, "read")).toEqual({
+      kind: "document",
+      name: "01-consultation-overview.md",
+      folder: "Research/public-tender",
+    });
+    expect(resolveTraceDocument(entries, FOLDER, "read")).toEqual({
+      kind: "folder",
+      name: "public-tender",
+      folder: "Research",
+    });
+    expect(resolveTraceDocument(entries, DOC, "tree")).toBeNull();
+    expect(entryLabel(entries[1], translate, entries)).toBe("Reading 01-consultation-overview.md");
+    const folder = reading(FOLDER);
+    expect(entryLabel(folder[1], translate, folder)).toBe("Reading the folder public-tender");
+  });
+
+  it("keeps the generic label when the id was never listed", () => {
+    const entries = reading("unknown-uid");
+    expect(entries[1].kind === "combo" && readDocumentTarget(entries[1], entries)).toBeNull();
+    expect(entryLabel(entries[1], translate, entries)).toBe("Reading a document");
+    expect(entryLabel(entries[1], translate)).toBe("Reading a document");
+  });
+
+  it("resolves search hits and tabular listings, the nearest earlier result winning", () => {
+    const hits = { query: "tender", hits: [{ uid: DOC, title: "Consultation overview", content: "x", score: 1 }] };
+    const tabular = [{ document_uid: DOC, document_name: "Budget.xlsx", kind: "spreadsheet", tables: [] }];
+    const entries = groupTraceEntries([
+      ...listing,
+      toolCallMsg("search", "search_documents"),
+      toolResultMsg("search", JSON.stringify(hits)),
+      toolCallMsg("read-1", "read_document", { document_uid: DOC }),
+      toolCallMsg("tabular", "list_tabular_documents"),
+      toolResultMsg("tabular", JSON.stringify(tabular)),
+      toolCallMsg("read-2", "read_document", { document_uid: DOC }),
+    ]);
+    expect(resolveTraceDocument(entries, DOC, "read-1")?.name).toBe("Consultation overview");
+    expect(resolveTraceDocument(entries, DOC, "read-2")?.name).toBe("Budget.xlsx");
+  });
+
+  it("resolves from an earlier turn of the conversation", () => {
+    const previous = listing.map((message) => ({ ...message, exchange_id: "e0" }));
+    const entries = groupTraceEntries([...previous, toolCallMsg("read", "read_document", { document_uid: DOC })]);
+    expect(resolveTraceDocument(entries, DOC, "read")?.name).toBe("01-consultation-overview.md");
+  });
+});
+
+describe("conversation filesystem steps", () => {
+  const english = i18next.createInstance();
+  const french = i18next.createInstance();
+  beforeAll(async () => {
+    // As the app's i18n: React escapes, interpolation does not.
+    const interpolation = { escapeValue: false };
+    await english.init({ lng: "en", interpolation, resources: { en: { translation: en } } });
+    await french.init({ lng: "fr", interpolation, resources: { fr: { translation: fr } } });
+  });
+  const call = (name: string, args: Record<string, unknown> = {}) => ({
+    kind: "combo" as const,
+    call: toolCallMsg("fs", name, args),
+    result: toolResultMsg("fs", "     1\tsecret,row"),
+  });
+
+  it.each([
+    ["write_file", { file_path: "/outputs/compliance-matrix.csv", content: "a" }, "Writing compliance-matrix.csv"],
+    ["read_file", { file_path: "/notes.md" }, "Reading notes.md"],
+    ["edit_file", { file_path: "/notes.md", old_string: "a", new_string: "b" }, "Editing notes.md"],
+    ["ls", { path: "/outputs/" }, "Listing outputs"],
+    ["glob", { pattern: "*.csv" }, "Finding files matching *.csv"],
+    ["concat_files", { paths: ["/a.md", "/b.md"], output_path: "/report.md" }, "Combining files into report.md"],
+    ["publish_conversation_file", { workspace_path: "/r.md", path: "reports/r.md" }, "Delivering r.md"],
+  ])("names the subject of %s from its arguments", (name, args, expected) => {
+    expect(entryLabel(call(name, args), (key, values) => english.t(key, values))).toBe(expected);
+  });
+
+  it("localizes the named label and keeps the generic one without a path", () => {
+    const write = call("write_file", { file_path: "/compliance-matrix.csv" });
+    expect(entryLabel(write, (key, values) => french.t(key, values))).toBe("Écriture : compliance-matrix.csv");
+    expect(entryLabel(call("write_file"), (key, values) => english.t(key, values))).toBe("Creating a file");
+    expect(entryLabel(call("ls", { path: "/" }), (key, values) => english.t(key, values))).toBe("Listing files");
+  });
+
+  it("names a stored tool result by a phrase, never its call id", () => {
+    for (const file_path of ["/.deep/large_tool_results/call_abc123", "/large_tool_results/call_abc123"]) {
+      const read = call("read_file", { file_path });
+      expect(entryLabel(read, (key, values) => english.t(key, values))).toBe("Reading a stored tool result");
+      expect(entryLabel(read, (key, values) => french.t(key, values))).toBe("Lecture : un résultat d'outil conservé");
+    }
+    expect(
+      entryLabel(call("ls", { path: "/.deep/large_tool_results/" }), (key, values) => english.t(key, values)),
+    ).toBe("Listing large_tool_results");
+  });
+
+  it("labels the delivered-file listing, which has no facts", () => {
+    const list = call("list_conversation_files", { limit: 100 });
+    expect(entryLabel(list, (key, values) => english.t(key, values))).toBe("Listing conversation files");
+    expect(entryLabel(list, (key, values) => french.t(key, values))).toBe("Liste des fichiers de la conversation");
+    expect(conversationFileFacts(list)).toEqual([]);
+  });
+
+  it("states paths and simple facts from the arguments, never the file text", () => {
+    expect(conversationFileFacts(call("write_file", { file_path: "/m.csv", content: "é,1" }))).toEqual([
+      { label: "file", values: ["/m.csv"] },
+      { label: "size", bytes: 4 },
+    ]);
+    expect(conversationFileFacts(call("read_file", { file_path: "/m.csv", offset: 10, limit: 20 }))).toEqual([
+      { label: "file", values: ["/m.csv"] },
+      { label: "lines", values: ["11–30"] },
+    ]);
+    expect(conversationFileFacts(call("grep", { pattern: "TODO", glob: "*.md" }))).toEqual([
+      { label: "text", values: ["TODO"] },
+      { label: "files", values: ["*.md"] },
+    ]);
+    expect(
+      conversationFileFacts(call("read_conversation_file", { document_id: "doc-uid", workspace_path: "/r.md" })),
+    ).toEqual([{ label: "file", values: ["/r.md"] }]);
+    expect(JSON.stringify(conversationFileFacts(call("edit_file", { file_path: "/m", old_string: "x" })))).not.toMatch(
+      /secret|"x"/,
+    );
+    expect(conversationFileFacts(call("mcp__other__read_file", { file_path: "/m.csv" }))).toBeNull();
+  });
+});

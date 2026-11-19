@@ -2107,7 +2107,35 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 9); // Alice and Bob already exist.
     assert_eq!(report["spaces_reconciled"], 5);
+    assert_eq!(report["skills_created"], 14);
+    assert_eq!(report["skills_kept"], 0);
     let acme = named_space(&e.pool, None, "Acme").await.unwrap().unwrap();
+    // A provisioned package is ordinary space content: an edit survives replay.
+    let skills: Vec<(String, bool)> = sqlx::query_as(
+        "select name, (summary->>'builtin')::bool from skill where space_id=$1 order by name",
+    )
+    .bind(acme.id)
+    .fetch_all(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        skills,
+        [
+            "analyze-data",
+            "compare-options",
+            "graph",
+            "grill-me",
+            "grounded-research",
+            "meeting-minutes",
+            "summarize-document"
+        ]
+        .map(|name| (name.to_owned(), true))
+    );
+    sqlx::query("update skill set revision=repeat('e', 64) where space_id=$1 and name='graph'")
+        .bind(acme.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     let research = named_space(&e.pool, Some(acme.id), "Research")
         .await
         .unwrap()
@@ -2157,6 +2185,15 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 0);
+    assert_eq!(report["skills_created"], 0);
+    assert_eq!(report["skills_kept"], 14);
+    let revision: String =
+        sqlx::query_scalar("select revision from skill where space_id=$1 and name='graph'")
+            .bind(acme.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(revision, "e".repeat(64));
     assert_eq!(
         named_space(&e.pool, None, "Acme")
             .await

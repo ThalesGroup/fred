@@ -47,7 +47,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     HitlGateRequest,
 )
-from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
+from fred_sdk.contracts.context import FailureReason, ToolFailure, ToolFailureCode
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
@@ -60,6 +60,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 _ENTRY_POINT_VALUE = (
     "fred_capability_documents.document_summarize:DocumentSummarizeCapability"
 )
+_DOC = "7d0c5f6e-2b1a-4c3d-9e8f-0a1b2c3d4e5f"
 
 
 def _identity() -> CapabilityIdentity:
@@ -76,7 +77,7 @@ class _FakeSummarizePort(DocumentSummarizePort):
     ) -> None:
         self.calls: list[dict[str, Any]] = []
         self._result = result or DocumentSummaryResult(
-            document_uid="u1", summary="the summary"
+            document_uid=_DOC, summary="the summary"
         )
         self._error = error
 
@@ -251,11 +252,11 @@ async def test_summarize_tool_passes_instruction_and_returns_summary() -> None:
         cap,
         ctx,
         "summarize_document",
-        {"document_uid": "u1", "instruction": "focus on risks"},
+        {"document_uid": _DOC, "instruction": "focus on risks"},
     )
 
     call = summarize_port.calls[0]
-    assert call["document_uid"] == "u1"
+    assert call["document_uid"] == _DOC
     assert call["instruction"] == "focus on risks"
     # No caller request, no config cap → built-in default.
     assert call["max_chars"] == DEFAULT_SUMMARIZE_MAX_CHARS
@@ -281,17 +282,17 @@ async def test_summarize_config_cap_is_default_and_hard_bound() -> None:
 
     # Caller asks for more than the cap → clamped down to it.
     await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u1", "max_chars": 4000}
+        cap, ctx, "summarize_document", {"document_uid": _DOC, "max_chars": 4000}
     )
     assert summarize_port.calls[0]["max_chars"] == 1000
 
     # Caller asks for nothing → the cap is the default.
-    await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": "u1"})
+    await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": _DOC})
     assert summarize_port.calls[1]["max_chars"] == 1000
 
     # Caller asks under the cap → honored verbatim.
     await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u1", "max_chars": 600}
+        cap, ctx, "summarize_document", {"document_uid": _DOC, "max_chars": 600}
     )
     assert summarize_port.calls[2]["max_chars"] == 600
 
@@ -321,13 +322,13 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
     )
 
     message = await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "diff_main_swift.md"}
+        cap, ctx, "summarize_document", {"document_uid": _DOC}
     )
 
     assert message.artifact.failure == ToolFailure(
         code=ToolFailureCode.resource_unavailable, status=403
     )
-    assert "opaque uid" in message.content
+    assert "uid of a readable document" in message.content
     assert "list_document_tree" in message.content
     # Distinguish the current tree's document references from folder records.
     assert "folder_id" in message.content
@@ -364,9 +365,7 @@ async def test_summarize_authority_loss_escapes_instead_of_becoming_an_artifact(
     )
 
     with pytest.raises(AuthorityLostError):
-        await _invoke_named_tool(
-            cap, ctx, "summarize_document", {"document_uid": "u-42"}
-        )
+        await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": _DOC})
 
 
 @pytest.mark.asyncio
@@ -383,12 +382,12 @@ async def test_summarize_timeout_failure_names_the_document() -> None:
     )
 
     message = await _invoke_named_tool(
-        cap, ctx, "summarize_document", {"document_uid": "u-42"}
+        cap, ctx, "summarize_document", {"document_uid": _DOC}
     )
 
     assert message.artifact.failure == ToolFailure(code=ToolFailureCode.timeout)
     assert "timed out" in message.content
-    assert "document_uid=u-42" in message.content
+    assert f"document_uid={_DOC}" in message.content
 
 
 @pytest.mark.asyncio
@@ -404,7 +403,30 @@ async def test_missing_document_summarize_port_fails_loud() -> None:
     )
 
     with pytest.raises(RuntimeError, match="document_summarize"):
-        await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": "u"})
+        await _invoke_named_tool(cap, ctx, "summarize_document", {"document_uid": _DOC})
+
+
+@pytest.mark.asyncio
+async def test_summarize_refuses_a_file_name_before_any_call() -> None:
+    summarize_port = _FakeSummarizePort()
+    cap = DocumentSummarizeCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_services(summarize=summarize_port),
+        config={},
+    )
+
+    message = await _invoke_named_tool(
+        cap, ctx, "summarize_document", {"document_uid": "diff_main_swift.md"}
+    )
+
+    assert summarize_port.calls == []
+    assert message.artifact.failure == ToolFailure(
+        code=ToolFailureCode.invalid_arguments,
+        reason=FailureReason.not_a_document_uid,
+    )
+    assert "Could not summarize the document" in message.content
 
 
 def test_config_model_accepts_empty() -> None:

@@ -86,7 +86,14 @@ export default function ProvisioningPage() {
               <h2>{t("rework.provisioning.completed")}</h2>
               <dl className={styles.counts}>
                 {(
-                  ["identities_resolved", "identities_created", "spaces_reconciled", "grants_acknowledged"] as const
+                  [
+                    "identities_resolved",
+                    "identities_created",
+                    "spaces_reconciled",
+                    "grants_acknowledged",
+                    "skills_created",
+                    "skills_kept",
+                  ] as const
                 ).map((key) => (
                   <div key={key}>
                     <dt>{t(`rework.provisioning.counts.${key}`)}</dt>

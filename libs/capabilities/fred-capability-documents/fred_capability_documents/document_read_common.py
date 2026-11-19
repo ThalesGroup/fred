@@ -40,8 +40,10 @@ Doctrine (RFC §3.5, §3.8, §10), identical to `document_summarize`:
 from __future__ import annotations
 
 import time
+from uuid import UUID
 
 from fred_sdk.contracts.context import (
+    FailureReason,
     ToolContentBlock,
     ToolContentKind,
     ToolFailure,
@@ -107,6 +109,39 @@ class DocumentReadConfig(BaseModel):
     page_max_chars: int | None = Field(default=None, ge=200, le=50_000)
 
 
+def document_uid_refusal(
+    *, tool_ref: str, action: str, document_uid: str
+) -> tuple[str, ToolInvocationResult] | None:
+    """Refuse, before any call, a value that cannot be a document uid.
+
+    Document uids are UUIDs, the type Knowledge Flow parses them as; anything
+    else would come back as an unreadable document and mislead both the model
+    and the person. None when the value is a uid.
+    """
+
+    try:
+        UUID(document_uid)
+    except ValueError:
+        message = (
+            f"Could not {action}: the supplied document_uid is not a document uid; "
+            "it looks like a file name, title, path or shortened uid. Nothing was "
+            "read. Call this tool again with the exact 'uid' of the document entry "
+            "in the document tree, of a search hit or of an attachment, copied "
+            "unchanged; never a 'folder_id', a file name or a Workspace path. Do "
+            "not repeat the uid to the user."
+        )
+        failure = ToolFailure(
+            code=ToolFailureCode.invalid_arguments,
+            reason=FailureReason.not_a_document_uid,
+        )
+        return message, ToolInvocationResult(
+            tool_ref=tool_ref,
+            failure=failure,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+        )
+    return None
+
+
 def document_tool_failure(
     *,
     tool_ref: str,
@@ -147,12 +182,17 @@ def document_tool_failure(
     if platform:
         message = f"Could not {action} (document_uid={document_uid}): {platform}"
     elif status_code in (403, 404):
+        # Knowledge Flow fails closed alike on an unknown, an out-of-scope and a
+        # folder id, so the cause is named as possible, never asserted.
         message = (
-            f"Could not {action}: the document is unavailable with the supplied "
-            f"identifier (HTTP {status_code}). Use the exact opaque uid from "
-            "the document tree, a search hit's 'uid' field, or the conversation's "
-            "attached-files list, not a file name or Workspace path. If you used "
-            "a name or path, correct the argument using a discovered uid. "
+            f"Could not {action}: no readable document matches the supplied "
+            f"identifier (HTTP {status_code}). Use the exact opaque uid of a "
+            "document entry in the document tree, a search hit's 'uid' field, or "
+            "the conversation's attached-files list, not a file name or Workspace "
+            "path. A 'folder_id' designates a folder, never a document: to read "
+            "a folder's documents, list that folder_id in the document tree and "
+            "use each document's 'uid'. If you used a name, path or folder_id, "
+            "correct the argument using a discovered document uid. "
             "If the uid is already correct, report that the document could not "
             "be read and continue with accessible sources. This does not establish "
             "whether the document exists. Do not repeat the uid to the user."
@@ -258,8 +298,13 @@ async def read_document_page(
             "this execution path."
         )
 
-    started = time.monotonic()
     action = "extract from the document" if exhaustive else "read the document"
+    refusal = document_uid_refusal(
+        tool_ref=tool_ref, action=action, document_uid=document_uid
+    )
+    if refusal is not None:
+        return refusal
+    started = time.monotonic()
     try:
         result = await port.fetch_markdown(
             document_uid, offset=offset, max_chars=max_chars

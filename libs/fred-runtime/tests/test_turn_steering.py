@@ -142,12 +142,15 @@ async def test_runtime_steering_gate_reaches_middleware_binding(monkeypatch, ena
                 "steering_enabled": "true",
             },
         )
-        with active_turn("test.graph", session="s"), pytest.raises(BindingCaptured):
-            await anext(
+        # Service setup runs inside the turn's error boundary, so the probe's
+        # exception comes back as the turn's error event.
+        with active_turn("test.graph", session="s"):
+            event = await anext(
                 agent_app_module._iterate_runtime_event_payloads_inner(
                     _UnusedGraph(), request, steering_enabled=enabled
                 )
             )
+        assert event["kind"] == "execution_error"
         assert captured["binding"].portable_context.baggage.get("steering_enabled") == (
             "true" if enabled else None
         )

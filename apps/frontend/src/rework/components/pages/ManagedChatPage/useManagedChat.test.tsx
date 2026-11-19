@@ -385,6 +385,15 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.agentConfigurationChanged).toBe(false);
   });
 
+  it("titles an agent error toast in the user's language and keeps the runtime's sentence", () => {
+    mount();
+    act(() => capturedOnError?.("Le fournisseur du modèle est injoignable."));
+    expect(showErrorMock).toHaveBeenCalledExactlyOnceWith({
+      summary: "chatbot.errors.agentErrorSummary",
+      detail: "Le fournisseur du modèle est injoignable.",
+    });
+  });
+
   beforeEach(() => {
     abortTurn("session-1");
     historyToLoad = undefined;

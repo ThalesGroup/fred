@@ -701,7 +701,7 @@ async def test_tabular_only_turn_assembles_admitted_tools_or_fails(
     from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
     from fred_core.documents.transport import DocumentAccessContext
     from fred_runtime.app import agent_app
-    from fred_runtime.app.execution_diagnostics import report_execution_error
+    from fred_runtime.execution_diagnostics import report_execution_error
     from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
     from fred_sdk.contracts.models import AgentTuning
     from test_deep_agent_dispatch import _DeepAgent, _ReActAgent

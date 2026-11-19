@@ -46,8 +46,9 @@ _MIN_USEFUL_WAIT_S = 1.0
 class ProviderRateLimitError(RuntimeError):
     """Raised when a model call stays rate-limited after every retry.
 
-    Its message reaches the user as the turn's `execution_error`, so it names
-    the condition in plain language instead of leaking provider JSON.
+    Its message stays internal: the turn's `execution_error` sentence comes
+    from the chained 429, which `report_execution_error` reads from the failed
+    model call.
     """
 
     def __init__(self, *, attempts: int, elapsed_s: float) -> None:

@@ -36,7 +36,7 @@ def test_metadata_admission_revocation_and_replica_drift(
     monkeypatch, tmp_path, deep, project
 ):
     source = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     graph = next(s for s in source.catalog.skills if s.name == "graph")
@@ -149,7 +149,7 @@ def test_graph_execution_ignores_unused_skill_drift_but_refuses_selection(
     monkeypatch, tmp_path
 ):
     source = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     graph = next(s for s in source.catalog.skills if s.name == "graph")

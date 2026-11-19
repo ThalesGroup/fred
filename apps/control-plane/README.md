@@ -220,19 +220,26 @@ Management reads the exact owning space. `spaces::authorized_mutation` applies
 Write permission and the organization mutation lock, as for prompts. Creator
 identity is provenance, not authority. Space deletion cascades to its packages.
 
-The seven Swift packages (`analyze-data`, `compare-options`, `graph`, `grill-me`,
-`grounded-research`, `meeting-minutes`, `summarize-document`) live in `skills/`.
-Their instructions, references, MIT attribution and license were preserved from
-Swift `d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`. Fresh installations expose these
-installation templates at `/skills/defaults`; nothing is activated automatically.
-Installing creates an independent space-owned package. Subsequent distribution
-updates do not overwrite space edits.
+The binary ships no skill. Distributed packages are data, in language packs under
+`skill-packs/<language>/<name>/`: `en` holds the seven Swift packages
+(`analyze-data`, `compare-options`, `graph`, `grill-me`, `grounded-research`,
+`meeting-minutes`, `summarize-document`), whose instructions, references, MIT
+attribution and license were preserved from Swift
+`d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`; `fr` translates all seven with
+the same names and invocation controls. A deployment
+installs one pack per organization; there is no runtime translation.
+
+A [provisioning bundle](#import-a-provisioning-bundle) places packages in declared
+spaces, creating each one absent by name and never replacing a present one, edited or
+not. A provisioned package is ordinary space content marked `builtin`; an edit makes
+it the space's own. Writers otherwise create packages in the space's Skills page,
+where the Control Plane validates the same contract. Nothing is activated without
+an import or a writer's action.
 
 `/spaces/{id}/skills` lists owned packages and accepts POST creation.
 GET/PUT/DELETE on `/{skill_id}` manages an existing package by its immutable UUID
-and owning space. POST `/packages/{name}/install` installs a supplied template.
-PUT includes the expected content revision and replaces all files atomically.
-`/scope` and `/scope/{skill_id}` expose the shared readable scope.
+and owning space. PUT includes the expected content revision and replaces all files
+atomically. `/scope` and `/scope/{skill_id}` expose the shared readable scope.
 
 A skill's logical name is a label, not its execution identity. Homonyms in
 readable spaces remain separate catalog entries, with their UUID and owning space.
@@ -250,7 +257,7 @@ capability inventory or tool-offer policies; tool authorization remains separate
 
 The packages pass [Agent Skills](https://agentskills.io/specification) reference
 validator `skills-ref` 0.1.0 at revision
-`83021e2be457a9b6679148719c1f6074f0ad975e` (`skills-ref validate skills/<name>`).
+`83021e2be457a9b6679148719c1f6074f0ad975e` (`skills-ref validate skill-packs/<language>/<name>`).
 Fred supports ASCII skill names, UTF-8 `.md`, `.txt`, `.json`, `.yaml`, `.yml` and
 `.csv` resources, at most 64 skills, 128 files/package, 64 KiB/file and 4 MiB per
 space/admitted snapshot. Binary assets and script execution are unsupported.
@@ -1152,8 +1159,15 @@ The default output is `apps/control-plane/target/demo-provisioning-bundle.zip`
 (path from the repository root). Both entry points delegate to the same packager.
 
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
-`teams.json` and `projects.json`. The manifest declares `format_version: 2`,
-`users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
+`teams.json` and `projects.json`, plus an optional `skills.json`. The manifest
+declares `format_version: 2`, `users_schema_version: 2`, `source_platform: "swift"`.
+The data files are arrays. A `skills.json` entry is
+`{"space": "<declared ref>", "name": "<skill>", "files": {"SKILL.md": "...", "references/x.md": "..."}}`:
+its package must satisfy the [space skills](#space-skills) contract, once per space
+and name. A Control Plane without this support rejects the file as `not_yet_supported`.
+The packager builds it from an optional `skill_packs.json` in the fixture directory,
+`[{"space": "<ref>", "pack": "<directory relative to the fixture>", "skills": ["<name>"]}]`;
+the demo installs `en` in Acme and `fr` in Globex.
 The demo's people, spaces and roles are listed once in
 [Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
@@ -1185,6 +1199,8 @@ whitespace or control characters. Noncanonical names and known new-user email
 conflicts are rejected before any provisioning writes. All space roles are explicit: admin alone grants no content
 access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
+Declared skills are installed in the same transaction as the spaces; replay reports
+present ones as kept (`skills_kept`) and never rewrites them.
 Success returns JSON counts only after completion. A failed run reports a safe
 phase and acknowledgment counts; correct the cause and replay with a valid token.
 There is no cross-system rollback, so failure does not prove absence of effects.

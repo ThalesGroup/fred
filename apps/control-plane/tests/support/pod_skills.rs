@@ -2,6 +2,34 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
 
+/// A distributed package, created through the ordinary space API.
+fn package(name: &str) -> Value {
+    fn walk(
+        root: &std::path::Path,
+        at: &std::path::Path,
+        files: &mut serde_json::Map<String, Value>,
+    ) {
+        for entry in std::fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, files);
+            } else {
+                let key = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('\\', "/");
+                files.insert(key, std::fs::read_to_string(&path).unwrap().into());
+            }
+        }
+    }
+    let root = std::path::Path::new("skill-packs/en").join(name);
+    let mut files = serde_json::Map::new();
+    walk(&root, &root, &mut files);
+    json!({"name": name, "files": files})
+}
+
 fn inventory() -> Value {
     json!({"complete":true,"capabilities":[{"id":"tool","name":"Tool","description":"A tool","icon":"tune","version":"1","kind":"tool"}], "template_capabilities":[]})
 }
@@ -112,30 +140,22 @@ async fn space_skills_use_shared_scope_atomic_packages_and_direct_rights() {
         let identity = &identity;
         async move { request(app, identity, Some(actor), method, &path, body).await }
     };
-    let (status, defaults) = call("alice", "GET", "/skills/defaults".into(), Value::Null).await;
-    assert_eq!(status, 200, "{defaults}");
-    assert_eq!(defaults.as_array().unwrap().len(), 7);
     assert_eq!(
         call("alice", "GET", org_path.clone(), Value::Null).await.1,
         json!([])
     );
     assert_eq!(
-        call(
-            "alice",
-            "POST",
-            format!("{org_path}/packages/graph/install"),
-            Value::Null
-        )
-        .await
-        .0,
+        call("alice", "POST", org_path.clone(), package("graph"))
+            .await
+            .0,
         204
     );
     assert_eq!(
         call(
             "alice",
             "POST",
-            format!("{team_path}/packages/meeting-minutes/install"),
-            Value::Null
+            team_path.clone(),
+            package("meeting-minutes")
         )
         .await
         .0,
@@ -199,14 +219,9 @@ async fn space_skills_use_shared_scope_atomic_packages_and_direct_rights() {
     grant(&e, org.id, Role::Member, "bob").await;
     grant(&e, team.id, Role::Analyst, "bob").await;
     assert_eq!(
-        call(
-            "bob",
-            "POST",
-            format!("{team_path}/packages/graph/install"),
-            Value::Null
-        )
-        .await
-        .0,
+        call("bob", "POST", team_path.clone(), package("graph"))
+            .await
+            .0,
         403
     );
     // Owner is governance, not an override for reading/editing content.
@@ -360,15 +375,8 @@ async fn space_skills_share_the_four_space_kinds_contract() {
         (&personal, "grill-me", 1),
     ] {
         let path = format!("/spaces/{}/skills", space.id);
-        let (status, body) = request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &format!("{path}/packages/{name}/install"),
-            Value::Null,
-        )
-        .await;
+        let (status, body) =
+            request(&app, &identity, Some("alice"), "POST", &path, package(name)).await;
         assert_eq!(status, 204, "{body}");
         let (status, owned) =
             request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
@@ -431,8 +439,8 @@ async fn space_skills_homonyms_keep_distinct_identity_content_and_owner() {
                 &identity,
                 Some("alice"),
                 "POST",
-                &format!("{root}/packages/graph/install"),
-                Value::Null
+                &root,
+                package("graph")
             )
             .await
             .0,
@@ -607,8 +615,8 @@ async fn skill_scope_bounds_apply_only_to_supported_execution_families() {
             &identity,
             Some("alice"),
             "POST",
-            &format!("/spaces/{}/skills/packages/graph/install", team.id),
-            Value::Null
+            &format!("/spaces/{}/skills", team.id),
+            package("graph")
         )
         .await
         .0,

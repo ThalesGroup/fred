@@ -284,9 +284,9 @@ vi.mock("../../../core/hooks/useUploadWarningAcknowledgement", () => ({
 
 vi.mock("@shared/molecules/SessionTitleEditor/SessionTitleEditor", () => ({ SessionTitleEditor: () => null }));
 vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
-  AgentTodoPanel: ({ sessionId, todos }: { sessionId: string; todos: { content: string }[] }) => (
+  AgentTodoPanel: ({ sessionId, todos }: { sessionId: string; todos: { content: string; status: string }[] }) => (
     <div data-testid="agent-todo-panel" data-session-id={sessionId}>
-      {todos.map((todo) => todo.content).join("|")}
+      {todos.map((todo) => `${todo.status}:${todo.content}`).join("|")}
     </div>
   ),
 }));
@@ -490,6 +490,19 @@ describe("ManagedChatPage agent todo panel", () => {
     expect(html).not.toContain("First plan");
     expect(html.indexOf('data-testid="thread"')).toBeLessThan(html.indexOf('data-testid="agent-todo-panel"'));
     expect(html.indexOf('data-testid="agent-todo-panel"')).toBeLessThan(html.indexOf('data-testid="composer"'));
+  });
+
+  it("presents the active step as in progress only while the turn runs", () => {
+    const messages = [todoCall([{ content: "Current plan", status: "in_progress" }])];
+
+    chatValue = { ...baseChatValue(messages), waitResponse: true };
+    expect(renderToStaticMarkup(<ManagedChatPage />)).toContain("in_progress:Current plan");
+
+    chatValue = baseChatValue(messages);
+    const stopped = renderToStaticMarkup(<ManagedChatPage />);
+    expect(stopped).toContain("pending:Current plan");
+    expect(stopped).toContain("rework.agentTodoPanel.status.pending: Current plan");
+    expect(stopped).not.toContain("rework.agentTodoPanel.status.in_progress");
   });
 
   it("removes the panel when the final answer settles its only remaining task", () => {

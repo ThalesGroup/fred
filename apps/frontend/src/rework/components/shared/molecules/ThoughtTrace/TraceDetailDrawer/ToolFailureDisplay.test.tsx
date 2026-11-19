@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ToolFailure, ToolFailureCode } from "../../../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, ToolFailure } from "../../../../../../slices/runtime/runtimeOpenApi";
 import en from "../../../../../../locales/en/translation.json";
 import fr from "../../../../../../locales/fr/translation.json";
 import type { TraceEntry } from "../../../../../utils/traceUtils";
@@ -41,22 +41,9 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-const failures = en.rework.chatTrace.failure;
-
-// `Record<ToolFailureCode, …>`: a code added to the contract without a message fails to compile.
-const EXPECTED: Record<ToolFailureCode, string> = {
-  invalid_arguments: failures.invalid_arguments,
-  not_approved: "Call declined by the user.",
-  authentication_required: failures.authentication_required,
-  resource_unavailable: failures.resource_unavailable,
-  scope_refused: failures.scope_refused,
-  rate_limited: failures.rate_limited,
-  misconfigured: failures.misconfigured,
-  service_busy: failures.service_busy,
-  timeout: failures.timeout,
-  service_error: failures.service_error,
-  unexpected: failures.unexpected,
-};
+const fallback = en.rework.chatTrace.failure.unexpected;
+// The runtime's sentence, in the person's language; the browser never writes it.
+const RUNTIME_SENTENCE = "Le service n'a pas pu terminer cette opération. Réessayez plus tard.";
 
 function message(overrides: Partial<ChatMessage>): ChatMessage {
   return {
@@ -111,17 +98,31 @@ async function openDrawer(value: TraceEntry) {
 }
 
 describe("tool failure message", () => {
-  it.each(Object.entries(EXPECTED) as [ToolFailureCode, string][])(
-    "shows the %s message from the code alone",
-    async (code, expected) => {
-      await openDrawer(entry("summarize_document", "model-facing text that is never shown", { code }));
-      expect(host.textContent).toContain(expected);
-      expect(host.textContent).not.toContain("model-facing text");
-    },
-  );
+  const failed = (failure: ToolFailure) =>
+    entry("summarize_document", "model-facing text that is never shown", failure);
+
+  it("shows the runtime's sentence verbatim in the row and the drawer", async () => {
+    const value = failed({ code: "service_error", message: RUNTIME_SENTENCE });
+    await openDrawer(value);
+    expect(host.textContent).toContain(RUNTIME_SENTENCE);
+    expect(host.textContent).not.toContain("model-facing text");
+
+    await act(async () => root.render(<TraceEntryRow entry={value} />));
+    expect(host.textContent).toContain(RUNTIME_SENTENCE);
+    expect(host.textContent).not.toContain("model-facing text");
+  });
+
+  it("shows one generic sentence for a row stored before the runtime wrote one", async () => {
+    const value = failed({ code: "authentication_required" });
+    await openDrawer(value);
+    expect(host.textContent).toContain(fallback);
+
+    await act(async () => root.render(<TraceEntryRow entry={value} />));
+    expect(host.textContent).toContain(fallback);
+  });
 
   it("has the same failure keys in French and English", () => {
-    expect(Object.keys(fr.rework.chatTrace.failure).sort()).toEqual(Object.keys(failures).sort());
+    expect(Object.keys(fr.rework.chatTrace.failure).sort()).toEqual(Object.keys(en.rework.chatTrace.failure).sort());
   });
 
   it("shows the HTTP status once, from the structured failure", async () => {
@@ -131,7 +132,12 @@ describe("tool failure message", () => {
   });
 
   it("presents a declined call as a decision, without a support reference", async () => {
-    await openDrawer(entry("summarize_document", "Tool execution was not approved.", { code: "not_approved" }));
+    await openDrawer(
+      entry("summarize_document", "Tool execution was not approved.", {
+        code: "not_approved",
+        message: "Call declined by the user.",
+      }),
+    );
     expect(host.textContent).toContain("Call declined by the user.");
     expect(host.textContent).not.toContain("Reference:");
     expect(host.querySelector('[class*="errorBox"]')).toBeNull();
@@ -145,31 +151,19 @@ describe("platform failure reported by Knowledge Flow", () => {
     status: 502,
     origin: "object_storage",
     setting: "KF_ARTIFACT_ACCESS_KEY",
+    message: RUNTIME_SENTENCE,
   };
 
   it.each([
-    [
-      "en",
-      en,
-      "The document storage refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
-      "Setting to check: KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)",
-      "HTTP status 502",
-    ],
-    [
-      "fr",
-      fr,
-      "Le stockage de documents a refusé les identifiants de Knowledge Flow. C'est un problème de configuration de la plateforme, pas de votre demande : un administrateur doit corriger la configuration de Knowledge Flow.",
-      "Réglage à vérifier : KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)",
-      "Statut HTTP 502",
-    ],
-  ])("says the component, the nature and the setting in %s", async (_lang, catalogue, sentence, setting, status) => {
+    ["en", en, "Setting to check: KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)", "HTTP status 502"],
+    ["fr", fr, "Réglage à vérifier : KF_ARTIFACT_ACCESS_KEY (Knowledge Flow)", "Statut HTTP 502"],
+  ])("adds the setting to correct, then the status, in %s", async (_lang, catalogue, setting, status) => {
     locale.catalogue = catalogue;
     await openDrawer(entry("read_document", "model-facing text that is never shown", refusedKey));
     const text = host.textContent?.replace(/\s+/g, " ") ?? "";
-    expect(text).toContain(sentence);
     expect(text).toContain(setting);
     expect(text).toContain(status);
-    expect(text.indexOf(sentence)).toBeLessThan(text.indexOf(setting));
+    expect(text.indexOf(RUNTIME_SENTENCE)).toBeLessThan(text.indexOf(setting));
     expect(text.indexOf(setting)).toBeLessThan(text.indexOf(status));
     expect(text.indexOf(status)).toBeLessThan(text.indexOf("exchange-7f3a"));
     const settingCode = [...host.querySelectorAll("code")].find(
@@ -178,11 +172,8 @@ describe("platform failure reported by Knowledge Flow", () => {
     expect(settingCode?.className).toContain("failureSetting");
   });
 
-  it("names an unreachable dependency without blaming the request", async () => {
+  it("names no setting when Knowledge Flow reported none", async () => {
     await openDrawer(entry("read_document", "", { code: "service_busy", status: 503, origin: "search_index" }));
-    expect(host.textContent).toContain(
-      "The search index is unreachable. This is a platform availability problem, not a problem with your request",
-    );
     expect(host.textContent).not.toContain("Setting to check");
   });
 });
@@ -211,7 +202,7 @@ describe("query_tabular_documents SQL view", () => {
     );
     expect(host.textContent?.replace(/\s+/g, " ")).toContain("SELECT amount_typo FROM d_sales");
     expect(host.textContent).toContain('Referenced column "amount_typo" not found in FROM clause!');
-    expect(host.textContent).not.toContain(failures.invalid_arguments);
+    expect(host.textContent).not.toContain(fallback);
   });
 
   it("stays closed for another code, even with an SQL engine text", async () => {
@@ -219,11 +210,11 @@ describe("query_tabular_documents SQL view", () => {
       entry(
         "query_tabular_documents",
         "Binder Error: private engine dump",
-        { code: "service_error" },
+        { code: "service_error", message: RUNTIME_SENTENCE },
         { sql: "SELECT 1" },
       ),
     );
-    expect(host.textContent).toContain(failures.service_error);
+    expect(host.textContent).toContain(RUNTIME_SENTENCE);
     expect(host.textContent).not.toContain("private engine dump");
   });
 });
@@ -237,11 +228,11 @@ describe("result text never classifies", () => {
     const value = entry("describe_tabular_documents", formerPhrase, null);
     await openDrawer(value);
     expect(host.textContent).toContain("Success");
-    expect(host.textContent).not.toContain(failures.authentication_required);
+    expect(host.textContent).not.toContain(fallback);
     expect(host.textContent).not.toContain("Reference:");
 
     await act(async () => root.render(<TraceEntryRow entry={value} />));
-    expect(host.textContent).not.toContain(failures.authentication_required);
+    expect(host.textContent).not.toContain(fallback);
     expect(host.querySelector('[aria-label="error"]')).toBeNull();
   });
 });

@@ -42,6 +42,8 @@ const report: ImportBlueprintApiResponse = {
   identities_created: 15,
   spaces_reconciled: 4,
   grants_acknowledged: 44,
+  skills_created: 0,
+  skills_kept: 0,
 };
 
 function setup(reply: unknown, status = 200) {

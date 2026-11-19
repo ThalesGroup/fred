@@ -1,6 +1,8 @@
 # Demo provisioning fixture and dependent tests
 
-These five JSON files are the checked-in demo input to `make bundle-demo`.
+These five JSON files are the checked-in demo input to `make bundle-demo`;
+`skill_packs.json` adds the seven distributed skills to each organization,
+from the English pack for Acme and the French pack for Globex.
 The generated ZIP is also used by specific regression tests. Their fixed user,
 space and request counts describe this fixture, not limits of the importer.
 Other bundles are supported when they follow the provisioning contract.

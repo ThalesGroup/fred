@@ -1179,9 +1179,12 @@ export type ToolFailureCode =
   | "service_error"
   | "unexpected";
 export type FailureOrigin = "knowledge_flow" | "object_storage" | "search_index" | "database";
+export type FailureReason = "not_a_document_uid";
 export type ToolFailure = {
   code: ToolFailureCode;
+  message?: string | null;
   origin?: FailureOrigin | null;
+  reason?: FailureReason | null;
   setting?: string | null;
   status?: number | null;
 };

@@ -55,6 +55,7 @@ from pydantic import BaseModel
 from fred_capability_documents.document_read_common import (
     document_scope_refusal,
     document_tool_failure,
+    document_uid_refusal,
 )
 
 
@@ -142,6 +143,14 @@ class DocumentExtractCapability(
                     "extract_from_document: RuntimeServices.document_extraction "
                     "is not available on this execution path."
                 )
+
+            refusal = document_uid_refusal(
+                tool_ref="extract_from_document",
+                action="extract from the document",
+                document_uid=document_uid,
+            )
+            if refusal is not None:
+                return refusal
 
             started = time.monotonic()
             try:

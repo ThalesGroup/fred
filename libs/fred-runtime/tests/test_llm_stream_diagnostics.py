@@ -17,7 +17,7 @@ import httpx2
 import pytest
 from fred_core.kpi import BaseKPIWriter
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.llm_diagnostics import (
     LlmObservation,
@@ -303,7 +303,13 @@ async def test_provider_rejection_in_call_and_support_logs(
     (terminal,) = terminal_records(caplog)
     support = next(r for r in caplog.records if hasattr(r, "error_ref"))
     (failure,) = support.llm_failures
-    assert support.error_ref in message
+    if status >= 500:
+        # A provider outage is the user's to retry: no reference, no body.
+        assert message.startswith("The model provider is temporarily unavailable")
+        assert f"HTTP {status})" in message
+        assert support.error_ref not in message
+    else:
+        assert support.error_ref in message
     assert failure["llm_call_id"] == terminal.llm_call_id
     assert failure["error_code"] == terminal.error_code == "provider_http_error"
     assert failure["http_status"] == terminal.http_status == status
@@ -354,7 +360,12 @@ async def test_real_stream_faults(mode, code, chunks, caplog):
                 logging.getLogger("test.support"), caught.value, "execution"
             )
             support = next(r for r in caplog.records if hasattr(r, "error_ref"))
-            assert support.error_ref in message
+            assert support.error_ref not in message
+            assert (
+                "did not answer in time" in message
+                if code == "stream_idle_timeout"
+                else "temporarily unavailable" in message
+            )
             assert (
                 support.llm_failures[0]["llm_call_id"]
                 == terminal_records(caplog)[0].llm_call_id

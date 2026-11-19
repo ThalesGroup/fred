@@ -105,6 +105,8 @@ async def test_invalid_write_history_survives_without_mutating_live_arguments(
         "status": None,
         "origin": None,
         "setting": None,
+        "reason": None,
+        "message": None,
     }
     assert [m.rank for m in messages] == [0, 1, 2]
     assert call.model_dump(mode="json") == before

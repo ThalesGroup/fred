@@ -22,21 +22,31 @@ import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
 import { HitlChoiceRecap } from "../../HitlAnswerSummary/HitlChoiceRecap";
 import { hitlAnswerSummaryForTool } from "@rework/utils/hitlAnswerSummary";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
-import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
+import type {
+  ConversationFileFact,
+  RagSearchResult,
+  SqlQueryResult,
+  TraceDocumentRef,
+  TraceEntry,
+} from "../../../../../utils/traceUtils";
 import {
   PHASE_LABELS,
   asRagSearchResult,
   asSqlQueryResult,
+  conversationFileFacts,
   detailTextForEntry,
+  displayedFilePath,
   entryLabel,
   formatLatencyMs,
-  findTabularDocumentName,
   genericToolPayload,
   inactiveHitlStatus,
   isDocumentTreeTool,
+  isReadDocumentTool,
   isSummarizeDocumentTool,
   parseToolResultContent,
   phaseKeyForEntry,
+  readDocumentTarget,
+  resolveTraceDocument,
   sourceForEntry,
   statusForEntry,
   thoughtExtras,
@@ -58,6 +68,7 @@ import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
 import { executionFailureText, toolFailureDetail, type ToolFailureDetail } from "../../../../../utils/toolFailureTrace";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { formatBytes } from "@shared/utils/formatBytes";
 import { useCopyConfirmation } from "../../../../../core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "../../../../../utils/clipboardUtils";
 import { historicalDocumentTreeText, parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
@@ -71,6 +82,8 @@ interface TraceDetailDrawerProps {
   /** The entry to inspect, or null when the panel is closed. */
   entry: TraceEntry | null;
   messages?: ChatMessage[];
+  /** The conversation's entries, which name the documents a step targeted. */
+  entries?: TraceEntry[];
   onClose: () => void;
 }
 
@@ -215,6 +228,42 @@ function SummarizeDocumentDetail({ text }: { text: string }) {
   );
 }
 
+/** Curated view for read_document: what was read, never its text or uid. */
+function ReadDocumentDetail({ target }: { target: TraceDocumentRef | null }) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.detail}>
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t(`rework.chatTrace.readDocument.${target?.kind ?? "document"}`)}</p>
+        <p className={styles.detailTitle}>{target?.name ?? t("rework.chatTrace.readDocument.unnamed")}</p>
+        {target?.folder && <p className={styles.metaInfo}>{target.folder}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Curated view for conversation filesystem tools: what the call named, never the file text. */
+function ConversationFileDetail({ facts }: { facts: ConversationFileFact[] }) {
+  const { t, i18n } = useTranslation();
+  return (
+    <div className={styles.detail}>
+      {facts.map((fact) => (
+        <div key={fact.label} className={styles.toolSection}>
+          <p className={styles.sectionLabel}>{t(`rework.chatTrace.conversationFile.${fact.label}`)}</p>
+          {("bytes" in fact
+            ? [formatBytes(fact.bytes, i18n.language)]
+            : fact.values.map((value) => displayedFilePath(value, t))
+          ).map((value, index) => (
+            <p key={index} className={styles.detailTitle}>
+              {value}
+            </p>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
   const { t } = useTranslation();
@@ -243,7 +292,7 @@ function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
       <div className={styles.toolSection}>
         <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.error")}</p>
         <div className={detail.declined ? styles.declinedBox : styles.errorBox}>
-          {detail.error ?? t(detail.errorKey, detail.originKey ? { origin: t(detail.originKey) } : undefined)}
+          {detail.error ?? detail.message ?? t("rework.chatTrace.failure.unexpected")}
         </div>
         {detail.setting && (
           <p className={styles.failureMeta}>
@@ -279,7 +328,15 @@ function FailedToolDetail({ detail }: { detail: ToolFailureDetail }) {
 }
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
-function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+function ToolDetail({
+  entry,
+  entries,
+  messages,
+}: {
+  entry: Extract<TraceEntry, { kind: "combo" }>;
+  entries: TraceEntry[];
+  messages?: ChatMessage[];
+}) {
   const data = useMemo(() => (entry.result ? parseToolResultContent(entry.result) : null), [entry.result]);
   const sqlResult = useMemo(() => asSqlQueryResult(data), [data]);
   const failure = toolFailureDetail(entry);
@@ -310,8 +367,8 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
         key={toolCallId(entry.call)}
         data={tabular}
         documentName={
-          tabular.kind === "markdown" && messages
-            ? findTabularDocumentName(messages, tabular.documentUid, toolCallId(entry.call))
+          tabular.kind === "markdown"
+            ? (resolveTraceDocument(entries, tabular.documentUid, toolCallId(entry.call))?.name ?? null)
             : null
         }
       />
@@ -319,6 +376,8 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
       <GenericToolDetail entry={entry} />
     );
   }
+  const fileFacts = conversationFileFacts(entry);
+  if (fileFacts) return <ConversationFileDetail facts={fileFacts} />;
   if (sqlResult)
     return (
       <SqlToolDetail
@@ -330,6 +389,7 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   const ragResult = asRagSearchResult(data);
   if (ragResult) return <RagToolDetail data={ragResult} />;
   const name = toolName(entry.call);
+  if (isReadDocumentTool(name)) return <ReadDocumentDetail target={readDocumentTarget(entry, entries)} />;
   if (entry.result && isSummarizeDocumentTool(name)) {
     return <SummarizeDocumentDetail text={toolResultContent(entry.result)} />;
   }
@@ -347,10 +407,10 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   return <GenericToolDetail entry={entry} />;
 }
 
-/** Safe runtime explanation and support reference, preserved in history. */
+/** The platform's sentence for the person, preserved in history. */
 function ErrorDetail({ entry }: { entry: TraceEntry }) {
   const { t } = useTranslation();
-  const text = executionFailureText(detailTextForEntry(entry)) ?? t("rework.chatTrace.failure.unexpected");
+  const text = executionFailureText(entry) ?? t("rework.chatTrace.failure.unexpected");
   return (
     <div className={styles.detail}>
       <div className={styles.errorDetailBox}>{text}</div>
@@ -358,9 +418,9 @@ function ErrorDetail({ entry }: { entry: TraceEntry }) {
   );
 }
 
-export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawerProps) {
+export function TraceDetailDrawer({ entry, messages, entries = [], onClose }: TraceDetailDrawerProps) {
   const { t } = useTranslation();
-  const label = entry ? entryLabel(entry, (key) => t(key)) : "";
+  const label = entry ? entryLabel(entry, (key, values) => t(key, values), entries) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
     entry?.kind === "combo"
@@ -397,7 +457,7 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
         (isError ? (
           <ErrorDetail entry={entry} />
         ) : entry.kind === "combo" ? (
-          <ToolDetail entry={entry} messages={messages} />
+          <ToolDetail entry={entry} entries={entries} messages={messages} />
         ) : (
           <TextDetail entry={entry} />
         ))}

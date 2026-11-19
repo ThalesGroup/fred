@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
+import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
@@ -13,9 +14,8 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useListSkillsQuery,
-  useDefaultSkillsQuery,
+  useCreateSkillMutation,
   useGetSkillQuery,
-  useInstallSkillMutation,
   useDeleteSkillMutation,
   usePutSkillMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -38,16 +38,14 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
   const read = useSpaceAccess(spaceId, "read");
   const write = useSpaceAccess(spaceId, "write");
   const list = useListSkillsQuery({ spaceId }, { skip: !read.allowed, refetchOnMountOrArgChange: true });
-  const defaults = useDefaultSkillsQuery(undefined, { skip: !write.allowed });
   const [params] = useSearchParams();
   const [selected, setSelected] = useState<string | undefined>(params.get("resource") ?? undefined);
   const detail = useGetSkillQuery(
     { spaceId, skillId: selected ?? "" },
     { skip: !selected || !read.allowed, refetchOnMountOrArgChange: true },
   );
-  const [install, installing] = useInstallSkillMutation();
   const [remove, removing] = useDeleteSkillMutation();
-  const busy = installing.isLoading || removing.isLoading;
+  const busy = removing.isLoading;
   const [error, setError] = useState(false);
   const { showConfirmationDialog } = useConfirmationDialog();
   const mutate = async (action: () => Promise<unknown>) => {
@@ -130,31 +128,96 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
             ))}
         </>
       )}
-      {write.allowed && (
-        <section>
-          <h2>{t("rework.spaceSkills.defaults")}</h2>
-          <p>{t("rework.spaceSkills.installExplanation")}</p>
-          {defaults.isError && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
-          <ul className={styles.list}>
-            {defaults.currentData?.map((skill) => (
-              <li key={skill.name}>
-                <strong>{skill.name}</strong>
-                <p>{skill.description}</p>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  disabled={busy || !list.currentData || list.currentData.some((s) => s.name === skill.name)}
-                  onClick={() => void mutate(() => install({ spaceId, name: skill.name }).unwrap())}
-                >
-                  {t("rework.spaceSkills.install")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {write.allowed && read.allowed && list.currentData && (
+        <NewSkill
+          spaceId={spaceId}
+          onCreated={async () => {
+            await list.refetch();
+          }}
+        />
       )}
     </div>
+  );
+}
+
+/** Agent Skills frontmatter from plain fields; the Control Plane validates the package. */
+export function skillDocument(name: string, description: string, instructions: string) {
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${instructions.trim()}\n`;
+}
+
+function NewSkill({ spaceId, onCreated }: { spaceId: string; onCreated: () => Promise<void> }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [error, setError] = useState(false);
+  const [create, creating] = useCreateSkillMutation();
+  if (!open)
+    return (
+      <div className={styles.actions}>
+        <Button size="small" variant="outlined" color="primary" onClick={() => setOpen(true)}>
+          {t("rework.spaceSkills.new")}
+        </Button>
+      </div>
+    );
+  return (
+    <section>
+      <h2>{t("rework.spaceSkills.new")}</h2>
+      {error && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
+      <TextInput
+        label={t("rework.spaceSkills.name")}
+        explanation={t("rework.spaceSkills.nameHint")}
+        value={name}
+        onChange={(event) => setName(event.target.value.trim())}
+      />
+      <TextInput
+        label={t("rework.spaceSkills.description")}
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <TextArea
+        label={t("rework.spaceSkills.instructions")}
+        aria-label={t("rework.spaceSkills.instructions")}
+        value={instructions}
+        onChange={(event) => setInstructions(event.target.value)}
+      />
+      <div className={styles.actions}>
+        <Button
+          size="small"
+          variant="filled"
+          color="primary"
+          disabled={creating.isLoading || !name || !description.trim() || !instructions.trim()}
+          onClick={async () => {
+            setError(false);
+            try {
+              await create({
+                spaceId,
+                createSkill: { name, files: { "SKILL.md": skillDocument(name, description, instructions) } },
+              }).unwrap();
+              await onCreated();
+              setOpen(false);
+              setName("");
+              setDescription("");
+              setInstructions("");
+            } catch {
+              setError(true);
+            }
+          }}
+        >
+          {t("rework.spaceSkills.create")}
+        </Button>
+        <Button
+          size="small"
+          variant="text"
+          color="primary"
+          disabled={creating.isLoading}
+          onClick={() => setOpen(false)}
+        >
+          {t("rework.spaceSkills.cancel")}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -180,13 +243,15 @@ function SkillFiles({
   const [path, setPath] = useState("SKILL.md");
   const [draft, setDraft] = useState(files);
   const [editing, setEditing] = useState(false);
+  const [newPath, setNewPath] = useState("");
   const [error, setError] = useState(false);
   const [save, saving] = usePutSkillMutation();
+  const shown = editing ? draft : files;
   return (
     <section>
       <h2>{name}</h2>
       <div className={styles.actions}>
-        {Object.keys(files).map((file) => (
+        {Object.keys(shown).map((file) => (
           <Button size="small" key={file} variant="text" color="primary" onClick={() => setPath(file)}>
             {file}
           </Button>
@@ -194,14 +259,50 @@ function SkillFiles({
       </div>
       {error && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
       {editing ? (
-        <TextArea
-          label={path}
-          value={draft[path]}
-          onChange={(event) => setDraft({ ...draft, [path]: event.target.value })}
-          aria-label={path}
-        />
+        <>
+          <TextArea
+            label={path}
+            value={draft[path] ?? ""}
+            onChange={(event) => setDraft({ ...draft, [path]: event.target.value })}
+            aria-label={path}
+          />
+          <div className={styles.actions}>
+            <TextInput
+              label={t("rework.spaceSkills.filePath")}
+              explanation={t("rework.spaceSkills.filePathHint")}
+              value={newPath}
+              onChange={(event) => setNewPath(event.target.value.trim())}
+            />
+            <Button
+              size="small"
+              variant="text"
+              color="primary"
+              disabled={!newPath || newPath in draft}
+              onClick={() => {
+                setDraft({ ...draft, [newPath]: "" });
+                setPath(newPath);
+                setNewPath("");
+              }}
+            >
+              {t("rework.spaceSkills.addFile")}
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color="error"
+              disabled={path === "SKILL.md"}
+              onClick={() => {
+                const { [path]: _removed, ...rest } = draft;
+                setDraft(rest);
+                setPath("SKILL.md");
+              }}
+            >
+              {t("rework.spaceSkills.removeFile")}
+            </Button>
+          </div>
+        </>
       ) : (
-        <MarkdownRenderer text={draft[path]} fullWidth localLinksAsText />
+        <MarkdownRenderer text={files[path] ?? ""} fullWidth localLinksAsText />
       )}
       {proposing && revision && (
         <MarketplaceProposalDialog
@@ -228,6 +329,7 @@ function SkillFiles({
             disabled={saving.isLoading}
             onClick={() => {
               setDraft(files);
+              if (editing && !(path in files)) setPath("SKILL.md");
               setEditing(!editing);
             }}
           >

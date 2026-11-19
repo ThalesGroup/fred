@@ -32,6 +32,8 @@ const FILES: [&str; 5] = [
     "teams.json",
     "projects.json",
 ];
+/// Optional: Agent Skills packages created in declared spaces when absent.
+const SKILLS: &str = "skills.json";
 
 #[derive(Debug, thiserror::Error)]
 pub enum InputError {
@@ -76,6 +78,19 @@ pub(crate) struct SpaceDeclaration {
     pub parent: Option<usize>,
     pub roles: BTreeMap<String, Vec<Role>>,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSkill {
+    space: String,
+    name: String,
+    files: crate::skills::package::Files,
+}
+pub(crate) struct SkillDeclaration {
+    /// Index of the owning declared space.
+    pub space: usize,
+    pub name: String,
+    pub files: crate::skills::package::Files,
+}
 pub(crate) struct Entry {
     pub identity: User,
     pub platform: BTreeSet<PlatformRole>,
@@ -85,6 +100,8 @@ pub struct Bundle {
     pub(crate) users: Vec<Entry>,
     /// Parent-first order; parent indices refer only to this bundle.
     pub(crate) spaces: Vec<SpaceDeclaration>,
+    /// Validated packages, unique per space; installation never replaces one.
+    pub(crate) skills: Vec<SkillDeclaration>,
 }
 fn name(value: &str) -> bool {
     !value.trim().is_empty() && !value.chars().any(char::is_control)
@@ -111,7 +128,7 @@ impl Bundle {
             return Err(Unsupported);
         }
         // Bound central-directory allocation and reject duplicates before zip's name map
-        // can collapse them. ZIP64/multidisk are outside this five-small-files format.
+        // can collapse them. ZIP64/multidisk are outside this small-files format.
         let count = check_directory(bytes)?;
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| Invalid)?;
         if archive.len() != count {
@@ -250,7 +267,29 @@ impl Bundle {
                 });
             }
         }
-        Ok(Self { users, spaces })
+        let mut skills = Vec::new();
+        let mut declared = BTreeSet::new();
+        if let Some(bytes) = files.get(SKILLS) {
+            let raw: Vec<RawSkill> = json(bytes)?;
+            for raw in raw {
+                let space = *references.get(&raw.space).ok_or(Invalid)?;
+                crate::skills::package::validate(&raw.name, &raw.files, true)
+                    .map_err(|_| Invalid)?;
+                if !declared.insert((space, raw.name.clone())) {
+                    return Err(Invalid);
+                }
+                skills.push(SkillDeclaration {
+                    space,
+                    name: raw.name,
+                    files: raw.files,
+                });
+            }
+        }
+        Ok(Self {
+            users,
+            spaces,
+            skills,
+        })
     }
 }
 
@@ -288,7 +327,7 @@ fn check_directory(bytes: &[u8]) -> Result<usize, InputError> {
     if count != u16_at(end + 8)? {
         return Err(Invalid);
     }
-    if count > FILES.len() {
+    if count > FILES.len() + 1 {
         return Err(Unsupported);
     }
     let mut at = u32_at(end + 16)?;
@@ -306,7 +345,7 @@ fn check_directory(bytes: &[u8]) -> Result<usize, InputError> {
         if filename.contains(['/', '\\']) || !names.insert(filename) {
             return Err(Invalid);
         }
-        if !FILES.contains(&filename) {
+        if !FILES.contains(&filename) && filename != SKILLS {
             return Err(Unsupported);
         }
         // A local header must describe the same entry as the directory. zip uses
@@ -505,6 +544,49 @@ mod tests {
             Err(InputError::Unsupported)
         ));
     }
+    #[test]
+    fn optional_skills_are_validated_packages_owned_by_declared_spaces() {
+        let package = |name: &str| serde_json::json!({"SKILL.md": format!("---\nname: {name}\ndescription: Example\n---\nBody")});
+        let mut f = files();
+        let skills = serde_json::json!([
+            {"space":"org","name":"graph","files":package("graph")},
+            {"space":"team","name":"graph","files":package("graph")},
+            {"space":"project","name":"grill-me","files":package("grill-me")},
+        ]);
+        f.insert(SKILLS.into(), serde_json::to_vec(&skills).unwrap());
+        let b = Bundle::parse(&pack(&f, zip::CompressionMethod::Deflated)).unwrap();
+        let owners: Vec<_> = b
+            .skills
+            .iter()
+            .map(|s| (s.space, s.name.as_str()))
+            .collect();
+        assert_eq!(owners, [(0, "graph"), (1, "graph"), (2, "grill-me")]);
+        assert!(
+            Bundle::parse(&pack(&files(), zip::CompressionMethod::Stored))
+                .unwrap()
+                .skills
+                .is_empty()
+        );
+        for skills in [
+            serde_json::json!([{"space":"absent","name":"graph","files":package("graph")}]),
+            serde_json::json!([{"space":"org","name":"graph","files":package("other")}]),
+            serde_json::json!([{"space":"org","name":"Graph","files":package("Graph")}]),
+            serde_json::json!([{"space":"org","name":"graph","files":{"SKILL.md":"no frontmatter"}}]),
+            serde_json::json!([{"space":"org","name":"graph","files":{"SKILL.md":package("graph")["SKILL.md"],"run.py":"x"}}]),
+            serde_json::json!([{"space":"org","name":"graph","files":package("graph")},{"space":"org","name":"graph","files":package("graph")}]),
+            serde_json::json!([{"space":"org","name":"graph","files":package("graph"),"replace":true}]),
+        ] {
+            let mut f = files();
+            f.insert(SKILLS.into(), serde_json::to_vec(&skills).unwrap());
+            assert!(
+                matches!(
+                    Bundle::parse(&pack(&f, zip::CompressionMethod::Stored)),
+                    Err(InputError::Invalid)
+                ),
+                "{skills}"
+            );
+        }
+    }
     // Proves: I11, I18
     #[test]
     fn invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input() {
@@ -687,6 +769,53 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn demo_bundle_provisions_one_language_pack_per_organization() {
+        let output = std::env::temp_dir().join(format!("demo {}.zip", uuid::Uuid::new_v4()));
+        let status = std::process::Command::new("make")
+            .arg("bundle-demo")
+            .env("DEMO_BUNDLE_FILE", &output)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let b = Bundle::parse(&std::fs::read(&output).unwrap()).unwrap();
+        std::fs::remove_file(output).unwrap();
+        let declared: Vec<_> = b
+            .skills
+            .iter()
+            .map(|s| (b.spaces[s.space].name.as_str(), s.name.as_str()))
+            .collect();
+        let expected: Vec<_> = ["Acme", "Globex"]
+            .into_iter()
+            .flat_map(|org| {
+                [
+                    "analyze-data",
+                    "compare-options",
+                    "graph",
+                    "grill-me",
+                    "grounded-research",
+                    "meeting-minutes",
+                    "summarize-document",
+                ]
+                .map(|name| (org, name))
+            })
+            .collect();
+        assert_eq!(declared, expected);
+        for skill in &b.skills {
+            let pack = if b.spaces[skill.space].name == "Acme" {
+                "en"
+            } else {
+                "fr"
+            };
+            let expected = crate::skills::package::tests::read_pack(
+                &std::path::Path::new("skill-packs")
+                    .join(pack)
+                    .join(&skill.name),
+            );
+            assert_eq!(skill.files, expected, "{pack}/{}", skill.name);
         }
     }
 

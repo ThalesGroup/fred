@@ -180,6 +180,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     SessionTitleRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
+    ToolResultRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillInvocation
@@ -203,7 +204,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.authorization import is_allowed, require_permission
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.app.history_access import (
     authorize_history_read,
     readable_history_sessions,
@@ -289,6 +290,7 @@ from fred_runtime.runtime_support.hitl_batch import (
 )
 from fred_runtime.runtime_support.session_fence import SessionWritesPending
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_runtime.runtime_support.tool_execution import describe_failure
 from fred_runtime.runtime_support.turn_steering import turn_messages
 
 from ..common.structures import AgentSettingsLike
@@ -3047,6 +3049,7 @@ async def _rank_runtime_event(
     session_id: str | None,
     user_id: str,
     exchange_id: str,
+    language: str | None = None,
 ) -> dict[str, Any]:
     if ranker is None:
         return payload
@@ -3087,7 +3090,7 @@ async def _rank_runtime_event(
             if scope is not None:
                 scope.fail_event_receipt(receipt_key, exc)
             if isinstance(exc, ActiveTurnLost):
-                return RuntimeErrorEvent(message=exc.user_message).model_dump(
+                return RuntimeErrorEvent(message=exc.user_message(language)).model_dump(
                     mode="json"
                 )
             raise
@@ -3553,6 +3556,11 @@ async def _write_turn_history(
                             )
                         )
                     ],
+                    # The platform wrote this sentence for the person: a reader
+                    # shows it verbatim. Rows stored before may hold raw errors.
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"platform_written": True}}
+                    ),
                 )
             )
 
@@ -4051,6 +4059,7 @@ async def _stream(
                         session_id=session_id,
                         user_id=user_id,
                         exchange_id=exchange_id,
+                        language=ctx.get("language"),
                     )
                     collected.append(payload)
                     if payload.get("kind") in {"final", "execution_error"}:
@@ -4086,9 +4095,9 @@ async def _stream(
                         )
                     )
                 except ActiveTurnLost as exc:
-                    terminal = RuntimeErrorEvent(message=exc.user_message).model_dump(
-                        mode="json"
-                    )
+                    terminal = RuntimeErrorEvent(
+                        message=exc.user_message(ctx.get("language"))
+                    ).model_dump(mode="json")
                     collected.append(terminal)
                 finally:
                     history_write = (write_start, time.monotonic())
@@ -4424,7 +4433,11 @@ class HitlResumeAlreadyClaimedError(UserFacingExecutionError):
 
     def __init__(self, internal_message: str) -> None:
         super().__init__(
-            "This HITL request is already being resumed.", internal_message
+            {
+                "en": "This HITL request is already being resumed.",
+                "fr": "Cette demande est déjà en cours de reprise.",
+            },
+            internal_message,
         )
 
 
@@ -4784,7 +4797,9 @@ async def _iterate_runtime_event_payloads(
         except ActiveTurnLost as exc:
             outcome = "failed"
             logger.error("event=active_turn outcome=stopped reason=lease_lost")
-            yield RuntimeErrorEvent(message=exc.user_message).model_dump(mode="json")
+            yield RuntimeErrorEvent(
+                message=exc.user_message((request.context or {}).get("language"))
+            ).model_dump(mode="json")
         except asyncio.CancelledError:
             outcome = "cancelled"
             if owns_run_record:
@@ -4989,48 +5004,53 @@ async def _iterate_runtime_event_payloads_inner(
 
     current_turn().check_context(runtime_context, definition.agent_id)
 
-    conversation_filesystem = _build_conversation_filesystem(binding)
-    services = _build_runtime_services(
-        definition,
-        binding,
-        tuning=tuning,
-        document_scope=request._document_scope,
-        turn_options=getattr(request, "turn_options", None),
-        registry=registry,
-        access_token=access_token,
-        capability_registry=capability_registry,
-        credential_provider=credential_provider,
-        conversation_filesystem=conversation_filesystem,
-        bound_library_ids=_instance_bound_library_ids(
-            capability_registry, tuning, definition
-        ),
-    )
-    if not ctx.get("session_id"):
-        # A one-shot call, such as an evaluation, has no conversation, and only
-        # conversations created by the Control Plane own stored checkpoints.
-        services = replace(services, checkpointer=InMemorySaver())
-    if owns_run_record and current_turn().binding.title is not None:
-        request._title_task = asyncio.create_task(
-            generate_session_title(request.message, binding=binding, services=services)
-        )
-        register_run_child(request._title_task)
-    # session_id drives LangGraph checkpointing: the agent resumes its graph
-    # state on every turn. Falls back to request_id for one-shot calls so
-    # LangGraph's checkpointer invariant (thread_id required internally) is met.
-    execution_config = ExecutionConfig(
-        session_id=ctx.get("session_id") or request_id,
-        pending_message_id=request.pending_message_id,
-        interrupt_id=request.interrupt_id,
-        resume_payload=request.resume_payload,
-        invocation_turns=getattr(request, "invocation_turns", ()),
-        interrupted_action=request.interrupted_action,
-        interruption_id=request.interruption_id,
-    )
-
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     error_phase = "capability_setup"
     owner_token = set_owner_execution(owns_run_record)
     try:
+        # Inside the try: resolving the instance's bound libraries raises a
+        # named CapabilityError on unknown ids or invalid stored config, which
+        # must surface as a runtime error event, not an HTTP 500.
+        conversation_filesystem = _build_conversation_filesystem(binding)
+        services = _build_runtime_services(
+            definition,
+            binding,
+            tuning=tuning,
+            document_scope=request._document_scope,
+            turn_options=getattr(request, "turn_options", None),
+            registry=registry,
+            access_token=access_token,
+            capability_registry=capability_registry,
+            credential_provider=credential_provider,
+            conversation_filesystem=conversation_filesystem,
+            bound_library_ids=_instance_bound_library_ids(
+                capability_registry, tuning, definition
+            ),
+        )
+        if not ctx.get("session_id"):
+            # A one-shot call, such as an evaluation, has no conversation, and only
+            # conversations created by the Control Plane own stored checkpoints.
+            services = replace(services, checkpointer=InMemorySaver())
+        if owns_run_record and current_turn().binding.title is not None:
+            request._title_task = asyncio.create_task(
+                generate_session_title(
+                    request.message, binding=binding, services=services
+                )
+            )
+            register_run_child(request._title_task)
+        # session_id drives LangGraph checkpointing: the agent resumes its graph
+        # state on every turn. Falls back to request_id for one-shot calls so
+        # LangGraph's checkpointer invariant (thread_id required internally) is met.
+        execution_config = ExecutionConfig(
+            session_id=ctx.get("session_id") or request_id,
+            pending_message_id=request.pending_message_id,
+            interrupt_id=request.interrupt_id,
+            resume_payload=request.resume_payload,
+            invocation_turns=getattr(request, "invocation_turns", ()),
+            interrupted_action=request.interrupted_action,
+            interruption_id=request.interruption_id,
+        )
+
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
         # invalid stored config — surfaced below as a runtime error event
@@ -5120,12 +5140,7 @@ async def _iterate_runtime_event_payloads_inner(
                 )
             request._hitl_resume_started = request.resume_payload is not None
             async for event in executor.stream(graph_input, execution_config):
-                payload = event.model_dump(mode="json")
-                if not isinstance(payload, dict):
-                    raise RuntimeError(
-                        "RuntimeEvent payload must serialize to a JSON object."
-                    )
-                yield payload
+                yield _event_payload(event, runtime_context.language)
             if graph_claim is not None:
                 await graph_claim.consume()
         else:
@@ -5219,12 +5234,7 @@ async def _iterate_runtime_event_payloads_inner(
                         ),
                     ):
                         _mark_run_terminal(credential_provider)
-                    payload = event.model_dump(mode="json")
-                    if not isinstance(payload, dict):
-                        raise RuntimeError(
-                            "RuntimeEvent payload must serialize to a JSON object."
-                        )
-                    yield payload
+                    yield _event_payload(event, runtime_context.language)
             finally:
                 if owns_run_record:
                     _mark_run_terminal(credential_provider)
@@ -5249,7 +5259,9 @@ async def _iterate_runtime_event_payloads_inner(
     except Exception as exc:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
-        message = report_execution_error(logger, exc, error_phase)
+        message = report_execution_error(
+            logger, exc, error_phase, language=runtime_context.language
+        )
         yield RuntimeErrorEvent(message=message).model_dump(mode="json")
     finally:
         if owns_run_record:
@@ -5263,6 +5275,20 @@ async def _iterate_runtime_event_payloads_inner(
             set_owner_execution(False)
         if runtime is not None:
             await complete_cleanup(runtime.dispose())
+
+
+def _event_payload(event: RuntimeEvent, language: str | None) -> dict[str, Any]:
+    """Serialize one runtime event as the stream and the history receive it.
+
+    Every runtime's tool results pass here, so a failure gains the person's
+    sentence once, in the run's language.
+    """
+
+    if isinstance(event, ToolResultRuntimeEvent) and event.failure is not None:
+        event = event.model_copy(
+            update={"failure": describe_failure(event.failure, language)}
+        )
+    return event.model_dump(mode="json")
 
 
 def _terminal_execute_payload(
@@ -6678,6 +6704,7 @@ def _build_agent_router(
                                 session_id=session_id,
                                 user_id=user_id_str,
                                 exchange_id=exchange_id,
+                                language=(internal_req.context or {}).get("language"),
                             )
                         )
             finally:
@@ -6718,9 +6745,11 @@ def _build_agent_router(
                         )
                     except ActiveTurnLost as exc:
                         payloads.append(
-                            RuntimeErrorEvent(message=exc.user_message).model_dump(
-                                mode="json"
-                            )
+                            RuntimeErrorEvent(
+                                message=exc.user_message(
+                                    (internal_req.context or {}).get("language")
+                                )
+                            ).model_dump(mode="json")
                         )
             _emit_turn_completed(
                 container,
@@ -6845,6 +6874,7 @@ def _build_agent_router(
                                 session_id=session_id,
                                 user_id=user_id_str,
                                 exchange_id=exchange_id,
+                                language=(internal_req.context or {}).get("language"),
                             )
                         )
                 eval_session_id = session_id or str(uuid4())
@@ -6884,9 +6914,11 @@ def _build_agent_router(
                         )
                     except ActiveTurnLost as exc:
                         payloads.append(
-                            RuntimeErrorEvent(message=exc.user_message).model_dump(
-                                mode="json"
-                            )
+                            RuntimeErrorEvent(
+                                message=exc.user_message(
+                                    (internal_req.context or {}).get("language")
+                                )
+                            ).model_dump(mode="json")
                         )
             _emit_turn_completed(
                 container,

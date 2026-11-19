@@ -481,7 +481,9 @@ class NodeErrorRuntimeEvent(RuntimeEventBase):
 
     Fields:
     - `node_id`: the node that raised
-    - `error_message`: str(exc) — a short technical description
+    - `error_message`: the platform's sentence for the person, in their
+      language, shown verbatim; never the exception text, which only the
+      fallback node receives, in its state
     - `routed_to`: the node the runtime is routing to next (the on_error target)
     """
 
@@ -561,12 +563,12 @@ class RuntimeErrorEvent(RuntimeEventBase):
 
     SSE client guidance:
     - Treat `execution_error` as a terminal event: no `final` will follow.
-    - Display `message` as a technical error detail (not as assistant content).
+    - Display `message` verbatim as an error (not as assistant content): it is
+      the platform's sentence for the person, in their language, and never
+      carries upstream error detail.
     - The stream closes after this event is delivered.
     - `reason` is set only when the platform itself ended the run. It is absent
       for a crash, so a client that ignores it behaves exactly as before.
-      When it is set, `message` is a platform-owned sentence that never carries
-      upstream error detail.
     """
 
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR

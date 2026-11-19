@@ -1,0 +1,28 @@
+[
+  {
+    "space": "acme",
+    "pack": "../../../../skill-packs/en",
+    "skills": [
+      "analyze-data",
+      "compare-options",
+      "graph",
+      "grill-me",
+      "grounded-research",
+      "meeting-minutes",
+      "summarize-document"
+    ]
+  },
+  {
+    "space": "globex",
+    "pack": "../../../../skill-packs/fr",
+    "skills": [
+      "analyze-data",
+      "compare-options",
+      "graph",
+      "grill-me",
+      "grounded-research",
+      "meeting-minutes",
+      "summarize-document"
+    ]
+  }
+]

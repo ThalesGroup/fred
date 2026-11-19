@@ -442,6 +442,7 @@ async def test_steering_delivery_waiting_for_sql_refuses_replaced_owner(
             session_id=session_id,
             user_id="u",
             exchange_id="old-exchange",
+            language="fr",
         )
 
     try:
@@ -462,7 +463,8 @@ async def test_steering_delivery_waiting_for_sql_refuses_replaced_owner(
                 assert not old.lost
             result = await asyncio.wait_for(task, 3)
             assert result["kind"] == "execution_error"
-            assert "expired or was lost" in result["message"]
+            # The lost lease is reported in the run's language.
+            assert "a expiré ou a été perdu" in result["message"]
             with pytest.raises(ActiveTurnLost):
                 await receipt
         assert await steering_history.get(session_id) == [before]
