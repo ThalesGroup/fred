@@ -230,6 +230,7 @@ export function DocumentLibraryScopePicker({
               <span
                 className={`${styles.expandIcon} material-symbols-outlined ${expandable ? "" : styles.expandIconHidden}`}
                 aria-hidden
+                translate="no"
               >
                 {isExpanded ? "expand_more" : "chevron_right"}
               </span>

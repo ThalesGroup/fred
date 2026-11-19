@@ -424,8 +424,8 @@ x-kf-storage: &kf-storage
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
       # Set both options for HTTPS Parquet reads against a private CA.
       # Mount the CA bundle in the Knowledge Flow container before enabling them.
       duckdb_ca_cert_file: null
@@ -1601,9 +1601,9 @@ applications:
       vision_worker_client_id: agentic
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
-      # Optional remote reranker for the API's document search. Set the same
-      # provider/name/settings shape as other models and provide the named key
-      # in knowledge-flow-backend-env. Null keeps the image CrossEncoder.
+      # Optional remote reranker for document search. Use provider rerank for
+      # indexed results or predict for positional scores. Provide the key in
+      # knowledge-flow-backend-env. Null keeps the image CrossEncoder.
       reranker_model: null
       storage:         *kf-storage
       integrations:

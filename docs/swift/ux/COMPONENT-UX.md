@@ -70,6 +70,28 @@ successful empty state and partial history failure have separate messages. A
 partial failure preserves suggestions. Reopening home refreshes permissions
 and ranking. Legacy conversations have no inferred activity date.
 
+### Advanced home
+
+**Locations:** `src/rework/components/pages/HomePage/` (`AdvancedQuickAccess`,
+`FeaturedCarousel`, `HomeAskBox`, `SectionMarker`) and
+`admin/UiSettingsPage/HomeSettingsSection.tsx`.
+**Status:** Functional; visual review pending.
+
+Chosen in Administration > Interface (simple or advanced home, platform-wide).
+Only the "Quick access" tab changes: theme logo greeting (no subtitle), a
+"Featured" banner (7 s rotation, paused on hover/focus and under reduced
+motion, pause/previous/next/dots), a text-only question field for the agent the
+admin picks (hidden when none, the chat composer's send button), then the
+unchanged home agent selection as team agents page cards (`AgentCard`,
+read-only) in rows of three with a centered last row. The content and the bar
+(tabs left, search right) are 828 px wide. The banner is a large agent card
+(shared `AgentChatButton`) on a sliding track: off-screen slides are inert and
+shrink/fade, edge copies keep the wrap going the same way, no motion under
+reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
+icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
+`--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
+agent names and visibility refresh while an edit is in progress.
+
 
 ### Platform skills presentation and administration
 
@@ -872,6 +894,29 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
   tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
+  a JSON response preview with the existing syntax colors, initially limited to ten rows
+  with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
+  preview limits and complete-copy behavior; copy actions retain the complete
+  recorded SQL and response. SQL is shown in full with its existing formatting and
+  syntax colors, without a character limit or long-query preview notice. The drawer
+  retains the status and duration badges. Full-context model token counters are
+  not displayed as individual tool consumption, and the former model-usage
+  explanation paragraph is omitted. No token count is estimated or replaced by
+  zero when the tool API reports none. Model billing and conversation context
+  totals are unchanged. A small localized action below the JSON reveals the next ten
+  recorded rows (or the actual remainder) and disappears when exhausted. This does
+  not re-run SQL or fetch additional database rows. Expansion resets on changing
+  calls or reopening; unrelated streaming retains it and reuses the preview.
+  Dedicated model-call attribution extraction, transport and persistence for the
+  abandoned tool-token feature are removed; old history remains readable.
+
+- **Tool-owned SQL result notices (2026-11-13)** - SQL details preserve the tool's
+  English result message after row data, including truncation that returns zero
+  rows. Historical empty results without a message retain their localized empty
+  success text. Result limits are specified in
+  [Tabular Query Safety](../../../openspec/specs/tabular-query-safety/spec.md).
 
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same
@@ -3947,6 +3992,11 @@ _(none — all prior issues resolved below)_
 ---
 
 ### `SessionAttachmentsDrawer`
+
+Upload notices distinguish missing stored text from a shortened preview, using
+existing toast feedback and a leading note in the persisted preview. See
+[Reading conversation attachments](../design/DESIGN.md#reading-conversation-attachments)
+for agent behavior and conversion limits.
 
 **Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
 **Status:** `Functional`

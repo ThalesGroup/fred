@@ -374,6 +374,11 @@ operations:
     required_permission: authenticated; team.can_use_team_agents for non-personal results, caller-owned personal space
   - service: control-plane
     method: GET
+    path: /control-plane/v1/me/home
+    review_status: pending_review
+    required_permission: authenticated # Home mode and admin-featured agents, filtered to enabled, unsuspended agents of default teams where the caller has team.can_use_team_agents.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/me/inactive-sessions
     review_status: pending_review
     required_permission: pending_review
@@ -1204,6 +1209,16 @@ operations:
     path: /control-plane/v1/admin/platform/ui-settings
     review_status: pending_review
     required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/home
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Home mode, featured agents with availability, and default-team agents an admin can add.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/home
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces mode and featured list (10 max, unique, badge 20 chars, 4 highlights of 80); unknown agent 422. Emits audit event platform.home.updated.
   - service: control-plane
     method: GET
     path: /control-plane/v1/admin/marketplace-settings

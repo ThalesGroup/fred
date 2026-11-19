@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -21,10 +20,10 @@ import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
 import { isPreparing } from "@core/hooks/useTeamAgentInstances.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import type { OptionModel } from "@models/Option.model.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import AgentChatButton from "./AgentChatButton.tsx";
 import styles from "./AgentCard.module.scss";
 import TeamMarketplaceState from "./TeamMarketplaceState.tsx";
 
@@ -156,19 +155,6 @@ export default function AgentCard({
     </div>
   );
 
-  const chatButton = (
-    <Button
-      color="primary"
-      variant="outlined"
-      size="medium"
-      icon={{ category: "outlined", type: "reviews" }}
-      className={styles.chatButton}
-      disabled={!isEnabled}
-    >
-      {t("rework.agentCard.chat")}
-    </Button>
-  );
-
   const handleMoreMenuSelect = (action: MoreMenuAction) => {
     if (action === "edit") onEdit();
     else if (action === "toggle") {
@@ -296,13 +282,9 @@ export default function AgentCard({
               <Icon category="outlined" type="info" accessibleName={t("rework.agentCard.tooltip.label")} />
             </span>
           </Tooltip>
-          {isEnabled && teamId ? (
-            <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
-              {chatButton}
-            </Link>
-          ) : (
-            chatButton
-          )}
+          <AgentChatButton
+            to={isEnabled && teamId ? `/team/${teamId}/managed-chat/${instance.agent_instance_id}` : undefined}
+          />
         </div>
       </div>
 

@@ -39,6 +39,7 @@ from typing import Any
 
 import pytest
 from _tracer_capability import TracerEchoCapability, TracerEchoConfig
+from fred_pod.security.structure import KeycloakUser
 from fred_runtime.capabilities import (
     CapabilityRegistry,
     build_capability_agent_block,
@@ -252,6 +253,42 @@ def test_exact_selection_builds_typed_contexts() -> None:
     greeter_config = contexts["greeter"].config
     assert isinstance(greeter_config, GreeterConfigV2)
     assert greeter_config.greeting == "yo"  # upgraded from the v1 shape
+
+
+def test_author_reaches_only_trusted_capability_context() -> None:
+    registry = _registry(TracerEchoCapability())
+    user = KeycloakUser(
+        uid="verified-user",
+        username="verified-name",
+        roles=[],
+        first_name="Ada",
+        last_name="Lovelace",
+    )
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["tracer_echo"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+        author=user,
+    )
+
+    context = contexts["tracer_echo"]
+    assert context.author is user
+    assert "Ada Lovelace" not in repr(context)
+    assert "author" not in CapabilityIdentity.model_json_schema()["properties"]
+
+
+def test_missing_author_keeps_capability_context_compatible() -> None:
+    registry = _registry(TracerEchoCapability())
+    contexts = build_capability_contexts(
+        registry,
+        selected_capability_ids=["tracer_echo"],
+        capability_config={},
+        identity=_identity(),
+        services=RuntimeServices(),
+    )
+    assert contexts["tracer_echo"].author is None
 
 
 def test_selected_capability_without_slice_gets_model_defaults() -> None:

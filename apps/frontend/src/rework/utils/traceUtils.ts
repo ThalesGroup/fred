@@ -20,6 +20,7 @@ import type {
   ToolResultPart,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
+import type { RawSqlResponse } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
@@ -419,10 +420,8 @@ export function formatLatencyMs(ms: number | null): string {
 // doesn't match one of these stays redacted in the drawer (raw content from an
 // unrecognized tool must not be shown to end users) — these two are common and
 // specifically useful enough to justify a dedicated, richer view.
-export type SqlQueryResult = {
-  sql_query: string;
+export type SqlQueryResult = Pick<RawSqlResponse, "sql_query" | "error" | "message"> & {
   rows: Record<string, unknown>[];
-  error?: string | null;
 };
 
 export type RagSearchResult = {

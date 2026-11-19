@@ -937,14 +937,14 @@ class TabularQueryConfig(BaseModel):
         description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads.",
     )
     default_max_rows: int = Field(
-        default=200,
+        default=500,
         ge=1,
         description="Default preview row limit applied when callers omit max_rows.",
     )
-    max_rows: int = Field(
-        default=1000,
-        ge=1,
-        description="Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
+    max_output_chars: int = Field(
+        default=50000,
+        ge=2,
+        description="Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
     )
     max_concurrent_queries: int = Field(
         default=2,
@@ -985,6 +985,13 @@ class TabularQueryConfig(BaseModel):
         ge=1,
         description="Maximum datasets one request may mount or scan. Backstop for searches and for queries whose referenced-relation set is still too large.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_retired_row_ceiling(cls, values: object) -> object:
+        if isinstance(values, dict) and "max_rows" in values:
+            raise ValueError("query.max_rows is no longer supported. Use query.max_output_chars to bound result data.")
+        return values
 
 
 class TabularStoreConfig(BaseModel):
@@ -1109,17 +1116,24 @@ class ObservabilityConfig(BaseModel):
 
 
 class RerankerSettings(BaseModel):
-    """Settings for Knowledge Flow's indexed-results rerank endpoint."""
+    """Settings for a remote reranker endpoint."""
 
     model_config = ConfigDict(extra="forbid")
     base_url: AnyHttpUrl
+
+    @field_validator("base_url")
+    @classmethod
+    def require_path_only_base_url(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        if value.query is not None or value.fragment is not None:
+            raise ValueError("reranker base_url must not have a query or fragment")
+        return value
 
 
 class RerankerModelConfiguration(BaseModel):
     """Configure a remote reranker with the usual provider/name/settings shape."""
 
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["rerank"]
+    provider: Literal["rerank", "predict"]
     name: str = Field(min_length=1)
     settings: RerankerSettings
 
@@ -1142,7 +1156,7 @@ class Configuration(BaseModel):
     crossencoder_model: Optional[ModelConfiguration] = None
     reranker_model: Optional[RerankerModelConfiguration] = Field(
         default=None,
-        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+        description="Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used.",
     )
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(

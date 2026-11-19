@@ -1,3 +1,27 @@
+**v3.13.0** - 2026-11-18
+
+- **Summary**
+
+  Administrators can set up a home page with featured agents and a question box. Table query results are easier to inspect, and generated presentations show the correct author.
+
+- **Features**
+
+  - Set up an advanced home page with featured agents, highlights and a question box (#3573)
+
+- **Improvements**
+
+  - Read larger table query results and expand recorded rows as needed (#3527, #3537)
+  - Use a compatible remote prediction model to rank document search results (#3574)
+  - Show the acting user's name as the author of generated presentations (#3580)
+
+- **Bug Fixes**
+
+  - Keep interface icons visible during browser translation (#3584)
+
+- **Deployment note**
+
+  Deployments with custom table-query settings or carousel themes need the changes in the operator guide. The advanced home and remote reranker can be enabled separately.
+
 **v3.12.0** - 2026-11-16
 
 - **Summary**
