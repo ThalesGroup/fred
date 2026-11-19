@@ -21,15 +21,21 @@ from fred_runtime.app.execution_diagnostics import (
     TurnFailureTelemetry,
     report_execution_error,
 )
+from fred_runtime.react.middleware.rate_limit_retry import (
+    ProviderRateLimitError,
+    RateLimitRetryMiddleware,
+)
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.llm_diagnostics import (
     MODEL_ID_METADATA,
     MODEL_ROUTE_METADATA,
     LlmObservation,
     LlmProgressCallback,
+    attach_failure,
     classify_error,
     failed_calls,
 )
+from fred_runtime.runtime_support.tool_execution import TOOL_FAILURE_MARKER
 from fred_sdk.contracts.context import BoundRuntimeContext
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.callbacks import BaseCallbackHandler
@@ -475,10 +481,6 @@ async def test_native_deep_children_are_isolated(caplog):
 async def test_native_child_exhaustion_reports_the_child_route(monkeypatch):
     from deepagents import create_deep_agent
     from deepagents.backends import StateBackend
-    from fred_runtime.react.middleware.rate_limit_retry import (
-        ProviderRateLimitError,
-        RateLimitRetryMiddleware,
-    )
 
     kpi = Mock(spec=BaseKPIWriter)
     child_observer = middleware(kpi, "child")
@@ -552,6 +554,56 @@ async def test_nested_timeout_and_bounded_failure_walk():
     assert failed_calls(group) == ([], True)
 
 
+@pytest.mark.parametrize("leading_reason", [None, "internal_or_unknown"])
+async def test_terminal_reason_uses_first_specific_model_failure(leading_reason):
+    unknown = ValueError("synthetic model failure")
+    attach_failure(unknown, {"llm_call_id": "unknown"}, leading_reason)
+    read_timeout = httpx.ReadTimeout("synthetic stream timeout")
+    attach_failure(read_timeout, {"llm_call_id": "stream"}, "stream_interrupted")
+    later_timeout = TimeoutError("synthetic timeout before a response")
+    attach_failure(later_timeout, {"llm_call_id": "later"}, "timeout_or_connection")
+    terminal = ExceptionGroup("model failures", [unknown, read_timeout, later_timeout])
+    failure = TurnFailureTelemetry()
+    failure.record(terminal, "execution")
+    assert failure.reason == "stream_interrupted"
+
+
+@pytest.mark.parametrize(
+    ("terminal_error", "phase", "expected"),
+    [
+        (
+            ProviderRateLimitError(attempts=4, elapsed_s=8),
+            "capability_setup",
+            "http_429",
+        ),
+        (httpx.ReadTimeout("synthetic timeout"), "execution", "timeout_or_connection"),
+        (
+            ValueError("synthetic setup failure"),
+            "capability_setup",
+            "tool_or_capability",
+        ),
+        (ValueError("synthetic failure"), "execution", "internal_or_unknown"),
+    ],
+)
+async def test_terminal_reason_falls_back_after_unknown_model_failure(
+    terminal_error, phase, expected
+):
+    unknown = ValueError("synthetic model failure")
+    attach_failure(unknown, {"llm_call_id": "unknown"}, "internal_or_unknown")
+    terminal = ExceptionGroup("turn failure", [unknown, terminal_error])
+    failure = TurnFailureTelemetry()
+    failure.record(terminal, phase)
+    assert failure.reason == expected
+
+
+async def test_terminal_reason_uses_tool_origin_before_transport_fallback():
+    timeout = httpx.ReadTimeout("synthetic tool timeout")
+    setattr(timeout, TOOL_FAILURE_MARKER, True)
+    failure = TurnFailureTelemetry()
+    failure.record(timeout, "execution")
+    assert failure.reason == "tool_or_capability"
+
+
 @pytest.mark.parametrize("delegated", [False, True])
 async def test_diagnostics_remain_content_free(delegated, caplog):
     from fred_core.security.delegation import DelegationConfig
@@ -591,7 +643,6 @@ async def test_diagnostics_remain_content_free(delegated, caplog):
 
 
 async def test_existing_retry_produces_distinct_attempts(monkeypatch, caplog):
-    from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
     from openai import RateLimitError
 
     caplog.set_level(logging.INFO)

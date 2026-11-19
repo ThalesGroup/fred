@@ -332,10 +332,14 @@ def attach_failure(
 
 
 def observed_failure_reason(exc: BaseException) -> FailureReason | None:
+    """Return the first specific model failure attached to the exception chain."""
     chain, _ = exception_chain(exc)
     for current in chain:
         failure = getattr(current, "_fred_llm_failure", None)
-        if isinstance(failure, LlmFailure) and failure.reason is not None:
+        if isinstance(failure, LlmFailure) and failure.reason not in (
+            None,
+            "internal_or_unknown",
+        ):
             return failure.reason
     return None
 

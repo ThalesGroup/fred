@@ -26,6 +26,24 @@ from fred_runtime.runtime_support.llm_diagnostics import (
 from fred_runtime.runtime_support.tool_execution import TOOL_FAILURE_MARKER
 
 
+def classify_terminal_failure(exc: Exception, phase: str) -> FailureReason:
+    """Classify the exception that ended the turn using its attached evidence."""
+    observed = observed_failure_reason(exc)
+    if observed is not None:
+        return observed
+
+    chain, _ = exception_chain(exc)
+    if any(isinstance(error, ProviderRateLimitError) for error in chain):
+        return "http_429"
+    if phase == "capability_setup" or any(
+        isinstance(error, (CapabilityError, ToolException, ToolInvocationError))
+        or getattr(error, TOOL_FAILURE_MARKER, False) is True
+        for error in chain
+    ):
+        return "tool_or_capability"
+    return invocation_failure_reason(classify_error(exc))
+
+
 @dataclass
 class TurnFailureTelemetry:
     """Private to one recorded turn, outside the event and history payloads."""
@@ -33,21 +51,7 @@ class TurnFailureTelemetry:
     reason: FailureReason = "internal_or_unknown"
 
     def record(self, exc: Exception, phase: str) -> None:
-        observed = observed_failure_reason(exc)
-        if observed is not None and observed != "internal_or_unknown":
-            self.reason = observed
-            return
-        chain, _ = exception_chain(exc)
-        if any(isinstance(error, ProviderRateLimitError) for error in chain):
-            self.reason = "http_429"
-        elif phase == "capability_setup" or any(
-            isinstance(error, (CapabilityError, ToolException, ToolInvocationError))
-            or getattr(error, TOOL_FAILURE_MARKER, False) is True
-            for error in chain
-        ):
-            self.reason = "tool_or_capability"
-        else:
-            self.reason = invocation_failure_reason(classify_error(exc))
+        self.reason = classify_terminal_failure(exc, phase)
 
 
 def report_execution_error(logger: logging.Logger, exc: Exception, phase: str) -> str:
