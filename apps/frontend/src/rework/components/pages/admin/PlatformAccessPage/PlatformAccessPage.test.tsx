@@ -48,6 +48,14 @@ const state = vi.hoisted(() => ({
   bulk: vi.fn((_arg: { grantPlatformAccessUsers: { user_ids: string[] } }) => ({ unwrap: async () => undefined })),
   importT0: vi.fn(() => ({ unwrap: async () => undefined })),
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
+  refetchUsers: vi.fn(),
+  refetchPending: vi.fn(),
+  pending: [] as { email: string; granted_by: string; granted_at: string }[],
+  countQueries: vi.fn(),
+  pickedEmails: [] as string[],
+  revokeUsers: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 2 }) })),
+  addEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => undefined })),
+  removeEmail: vi.fn((_arg: unknown) => ({ unwrap: async () => ({ removed_count: 1 }) })),
 }));
 // Keys only, plus the team names a string is given so grouped lines can be told apart.
 vi.mock("react-i18next", () => ({
@@ -90,8 +98,9 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   usePlatformAccessUsersQuery: (args: unknown, options: unknown) => {
     state.searchUsers(args, options);
     // As RTK Query does: nothing while skipped, and no current data while another page or search loads.
-    if ((options as { skip: boolean }).skip) return { isFetching: false, isError: false };
+    if ((options as { skip: boolean }).skip) return { isFetching: false, isError: false, refetch: state.refetchUsers };
     return {
+      refetch: state.refetchUsers,
       isFetching: state.usersFetching,
       isError: state.usersError,
       data: { total: 1, items: [{ user_id: "old", username: "Previous search", sources: [] }] },
@@ -118,6 +127,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useSetPlatformFilteringMutation: () => [state.filter],
   useGrantPlatformUsersMutation: () => [state.bulk],
   useRevokePlatformUserMutation: () => [state.revoke],
+  useRevokePlatformUsersMutation: () => [state.revokeUsers],
+  usePlatformAccessPendingEmailsQuery: (_args: unknown, options: { skip: boolean }) =>
+    options.skip ? { refetch: state.refetchPending } : { data: state.pending, refetch: state.refetchPending },
+  usePlatformAccessOverlapCountsQuery: (args: unknown, options: { skip: boolean }) => {
+    state.countQueries(args, options);
+    return options.skip ? {} : { currentData: { rule: 4, whitelist_only: 7, unknown: 2 } };
+  },
+  useAddPlatformPendingEmailMutation: () => [state.addEmail],
+  useRemovePlatformPendingEmailsMutation: () => [state.removeEmail],
   useImportPlatformT0Mutation: () => [state.importT0],
   useSetPlatformTeamMutation: () => [state.setTeam],
   useGeneratePlatformLinkMutation: () => [vi.fn()],
@@ -145,11 +163,11 @@ vi.mock("./PlatformAccessAddUsersDialog", () => ({
     open: boolean;
     busy: boolean;
     onClose: () => void;
-    onConfirm: (ids: string[]) => void;
+    onConfirm: (ids: string[], emails: string[]) => void;
   }) =>
     open ? (
       <div data-testid="add-users-dialog" data-busy={busy}>
-        <button type="button" onClick={() => onConfirm(state.picked)}>
+        <button type="button" onClick={() => onConfirm(state.picked, state.pickedEmails)}>
           Confirm selection
         </button>
         <button type="button" onClick={onClose}>
@@ -189,6 +207,8 @@ beforeEach(() => {
   state.previewFetching = false;
   state.previewError = false;
   state.configured = true;
+  state.pending = [];
+  state.pickedEmails = [];
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   host = document.createElement("div");
@@ -296,12 +316,113 @@ it("tells an empty whitelist apart from a search without match", () => {
   expect(panel.textContent).not.toContain("rework.platformAccess.emptyWhitelist");
 });
 
-it("offers removal only, without row selection or a bulk bar", () => {
+const usersPanel = () => host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
+const checkboxes = () => [...usersPanel().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+const lastUsersQuery = () => state.searchUsers.mock.lastCall![0] as Record<string, unknown>;
+const chip = (key: string) =>
+  [...usersPanel().querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent?.includes(key))!;
+const twoUsers = () => {
+  state.users = [
+    { user_id: "a", username: "Alice", email: null, sources: [{ kind: "manual" }] },
+    { user_id: "b", username: "Bob", email: null, sources: [{ kind: "manual" }] },
+  ];
+  state.usersTotal = 240;
+};
+
+it("starts each row with a checkbox and keeps the per-row removal", () => {
   render("");
-  const panel = host.querySelector<HTMLElement>('[id$="-users-panel"]')!;
-  expect(panel.querySelector('input[type="checkbox"]')).toBeNull();
+  // Header plus one per row.
+  expect(checkboxes()).toHaveLength(2);
   expect(pageButton("rework.platformAccess.remove")).toBeDefined();
-  expect(host.textContent).not.toContain("alice@example.org");
+  expect(host.textContent).not.toContain("rework.platformAccess.selection.count");
+});
+
+it("selects every matching row across pages from the header, then removes all but the unchecked one", async () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[0].click());
+  expect(checkboxes().every((box) => box.checked)).toBe(true);
+  act(() => checkboxes()[2].click());
+  expect(checkboxes()[0].indeterminate).toBe(true);
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.revokeUsers).toHaveBeenCalledWith({
+    revokePlatformAccessUsers: { all_matching: true, query: "", overlap: null, excluded_ids: ["b"] },
+  });
+  expect(state.success).toHaveBeenCalledWith({ summary: "rework.platformAccess.bulkRemove.done" });
+  expect(checkboxes().some((box) => box.checked)).toBe(false);
+});
+
+it("removes only the rows checked one by one", async () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.revokeUsers).toHaveBeenCalledWith({ revokePlatformAccessUsers: { user_ids: ["a"] } });
+});
+
+it("filters by access overlap, restarts at page one and clears the selection", () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.overlapFilter.rule").click());
+  expect(lastUsersQuery()).toMatchObject({ overlap: "rule", offset: 0, exceptionsOnly: true });
+  expect(checkboxes().some((box) => box.checked)).toBe(false);
+  act(() => chip("rework.platformAccess.overlapFilter.unknown").click());
+  expect(lastUsersQuery()).toMatchObject({ overlap: "unknown", offset: 0 });
+  act(() => chip("rework.platformAccess.overlapFilter.all").click());
+  expect(lastUsersQuery()).not.toHaveProperty("overlap");
+});
+
+it("switches the table to emails waiting for a first sign-in, and removes one or a selection", async () => {
+  state.pending = [
+    { email: "jane@example.org", granted_by: "admin", granted_at: "2026-11-13T10:00:00Z" },
+    { email: "paul@example.org", granted_by: "admin", granted_at: "2026-11-12T10:00:00Z" },
+  ];
+  render("");
+  expect(usersPanel().textContent).not.toContain("jane@example.org");
+  expect(chip("rework.platformAccess.overlapFilter.pending").textContent).toContain("2");
+  act(() => chip("rework.platformAccess.overlapFilter.pending").click());
+  // People are not requested while the pending emails are shown.
+  expect(state.searchUsers.mock.lastCall![1]).toEqual({ skip: true });
+  expect(usersPanel().textContent).toContain("jane@example.org");
+  const row = [...usersPanel().querySelectorAll<HTMLElement>('[class*="datatable-row"]')].find((node) =>
+    node.textContent?.includes("jane@example.org"),
+  )!;
+  const remove = [...row.querySelectorAll("button")].find(
+    (node) => node.textContent === "rework.platformAccess.remove",
+  )!;
+  await act(async () => remove.click());
+  expect(state.removeEmail).toHaveBeenCalledWith({
+    removePlatformAccessPendingEmails: { emails: ["jane@example.org"] },
+  });
+  act(() => checkboxes()[0].click());
+  act(() => checkboxes()[1].click());
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.removeEmail).toHaveBeenLastCalledWith({
+    removePlatformAccessPendingEmails: { emails: ["paul@example.org"] },
+  });
+  expect(state.revokeUsers).not.toHaveBeenCalled();
+});
+
+it("whitelists typed emails alongside selected people", async () => {
+  state.pickedEmails = ["jane@example.org"];
+  render("");
+  act(() => addUsersButton().click());
+  await act(async () => pageButton("Confirm selection").click());
+  expect(state.bulk).toHaveBeenCalledWith({ grantPlatformAccessUsers: { user_ids: ["first", "second"] } });
+  expect(state.addEmail).toHaveBeenCalledWith({ addPlatformAccessPendingEmail: { email: "jane@example.org" } });
 });
 
 it("shows when and how each individual access was added, and one chip detailing the other access", () => {
@@ -341,6 +462,8 @@ it("shows when and how each individual access was added, and one chip detailing 
     (node) => node.textContent,
   );
   expect(headers).toEqual([
+    // The selection column's header holds only the select-all checkbox.
+    "",
     "rework.teamSettings.members.table.identifiant",
     "rework.teamSettings.members.table.firstName",
     "rework.teamSettings.members.table.lastName",
@@ -354,7 +477,8 @@ it("shows when and how each individual access was added, and one chip detailing 
       node.textContent?.includes(name),
     )!;
   const cells = (name: string) => [...row(name).querySelectorAll<HTMLElement>(`:scope > [class*="datatable-cell"]`)];
-  const [, , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
+  // The selection checkbox comes first.
+  const [, , , , aliceDate, aliceOrigin, aliceOthers] = cells("Alice");
   expect(aliceDate.textContent).toBe(new Date("2026-03-04T10:20:30Z").toLocaleString("en"));
   expect(aliceOrigin.textContent).toBe("rework.platformAccess.origin.manual");
   // One chip whatever the number of other sources, focusable, named with the whole list.
@@ -384,7 +508,7 @@ it("shows when and how each individual access was added, and one chip detailing 
   });
 
   // Only the groups that apply are listed, and a team without a name never shows its identifier.
-  const chloe = cells("Chloe")[5].querySelector<HTMLElement>('[role="note"]')!;
+  const chloe = cells("Chloe")[6].querySelector<HTMLElement>('[role="note"]')!;
   expect(chloe.getAttribute("aria-label")).toBe("rework.platformAccess.otherAccess.summary");
   expect(state.translated).toHaveBeenCalledWith("rework.platformAccess.otherAccess.summary", {
     details: "rework.platformAccess.otherAccess.free[rework.platformAccess.otherAccess.unnamedTeam]",
@@ -394,7 +518,7 @@ it("shows when and how each individual access was added, and one chip detailing 
     expect.objectContaining({ details: expect.stringContaining("open-uid") }),
   );
 
-  const [, , , bobDate, bobOrigin, bobOthers] = cells("Bob");
+  const [, , , , bobDate, bobOrigin, bobOthers] = cells("Bob");
   expect(bobDate.textContent).toBe(new Date("2025-12-31T08:00:00Z").toLocaleString("en"));
   expect(bobOrigin.textContent).toBe("rework.platformAccess.origin.t0");
   // Nothing else grants access: the cell is empty, without chip or marker.
@@ -623,7 +747,7 @@ it("keeps user controls in Users and team authorization in Teams", () => {
   const teamPanel = host.querySelector<HTMLElement>('[id$="-teams-panel"]')!;
   expect(userPanel.textContent).toContain("rework.platformAccess.remove");
   expect(userPanel.textContent).toContain("rework.platformAccess.addUsers");
-  expect(userPanel.textContent).toContain("rework.platformAccess.t0Import");
+  expect(userPanel.querySelector('[aria-label="rework.platformAccess.moreActions"]')).not.toBeNull();
   expect(userPanel.hidden).toBe(false);
   expect(teamPanel.hidden).toBe(true);
   openTab("teams");
@@ -742,15 +866,23 @@ it("preserves the rule draft, the search and the page across tabs without mutati
   expect(state.revoke).not.toHaveBeenCalled();
   expect(state.importT0).not.toHaveBeenCalled();
 });
-it("reduces the completed import to a discreet status without an import action", () => {
-  state.completed = true;
+const moreMenu = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.moreActions"]')!;
+const menuOptions = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+it("keeps the import in the more menu, next to the add button, and runs it from there", async () => {
   render();
-  expect(host.querySelector('[role="status"]')?.textContent).toContain("rework.platformAccess.t0Done");
-  expect(host.textContent).not.toContain("rework.platformAccess.t0Hint");
-  expect(
-    [...host.querySelectorAll("button")].some((node) => node.textContent === "rework.platformAccess.t0Import"),
-  ).toBe(false);
+  expect(addUsersButton().textContent).toContain("rework.platformAccess.addUsers");
+  expect(addUsersButton().nextElementSibling?.contains(moreMenu())).toBe(true);
+  act(() => moreMenu().click());
+  const option = menuOptions().find((node) => node.textContent?.includes("rework.platformAccess.t0Import"))!;
+  act(() => option.click());
+  // Never on the click alone: a dialog states how many accounts it adds first.
   expect(state.importT0).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("rework.platformAccess.t0Confirm.message");
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (node) => node.textContent === "rework.platformAccess.t0Confirm.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.importT0).toHaveBeenCalledTimes(1);
 });
 
 it("says so when a search matches no user and shows progress while searching", () => {
@@ -1048,15 +1180,45 @@ it("shows a supported page size and lets the administrator change it", () => {
   expect(state.filter).not.toHaveBeenCalled();
 });
 
-it("offers the small refresh action after completion with filtering on or off", () => {
+it("offers the reimport from the more menu after completion, with filtering on or off", () => {
   state.completed = true;
   act(() => root.render(<PlatformAccessPage />));
   openTab("users");
-  const action = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.t0Refresh.title"]')!;
-  expect(action().disabled).toBe(false);
-  expect(action().title).toBe("rework.platformAccess.t0Refresh.title");
+  expect(moreMenu().disabled).toBe(false);
+  act(() => moreMenu().click());
+  const labels = menuOptions().map((node) => node.textContent);
+  expect(labels).toEqual(["rework.platformAccess.t0Import"]);
   expect(state.importT0).not.toHaveBeenCalled();
   state.filteringEnabled = true;
   act(() => root.render(<PlatformAccessPage />));
-  expect(action().disabled).toBe(false);
+  expect(moreMenu().disabled).toBe(false);
+});
+
+it("explains an empty filter with its own empty state, and offers adding only on an empty whitelist", () => {
+  state.users = [];
+  render("");
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.emptyHint");
+  const addButtons = () =>
+    [...usersPanel().querySelectorAll("button")].filter((node) =>
+      node.textContent?.includes("rework.platformAccess.addUsers"),
+    );
+  // The toolbar's button and the empty state's.
+  expect(addButtons()).toHaveLength(2);
+  act(() => chip("rework.platformAccess.overlapFilter.unknown").click());
+  expect(addButtons()).toHaveLength(1);
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.unknown.title");
+  expect(usersPanel().textContent).toContain("rework.platformAccess.emptyState.unknown.hint");
+  expect(usersPanel().textContent).not.toContain("rework.platformAccess.emptyState.emptyHint");
+});
+
+it("shows how many people each cleanup chip lists, counted once per search", () => {
+  render("");
+  expect(chip("rework.platformAccess.overlapFilter.rule").textContent).toContain("4");
+  expect(chip("rework.platformAccess.overlapFilter.whitelistOnly").textContent).toContain("7");
+  expect(chip("rework.platformAccess.overlapFilter.unknown").textContent).toContain("2");
+  const calls = state.countQueries.mock.calls.length;
+  act(() => pageButton("2")?.click());
+  search("bo");
+  expect(state.countQueries.mock.lastCall).toEqual([{ query: "bo" }, { skip: false }]);
+  expect(state.countQueries.mock.calls.length).toBeGreaterThan(calls);
 });
