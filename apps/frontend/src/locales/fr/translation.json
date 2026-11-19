@@ -1485,6 +1485,9 @@
         },
         "http": {
           "title": "Échange HTTP du modèle",
+          "exchangeTab": "Échange HTTP",
+          "sseTab": "SSE",
+          "evidenceTabs": "Données de l'appel au modèle",
           "modelCall": "Appel du modèle",
           "attempt": "Tentative {{number}}",
           "noStatus": "Aucun en-tête de réponse",
@@ -1522,8 +1525,66 @@
             "unavailable": "Indisponibles"
           }
         },
+        "sse": {
+          "title": "Chronologie SSE",
+          "provider": "SSE fournisseur",
+          "outgoing": "SSE Fred",
+          "unavailable": "Aucune chronologie SSE disponible pour ce tour.",
+          "loading": "Chargement des données SSE...",
+          "turnElapsed": "Chronologie du tour sur {{duration}}",
+          "fit": "Ajuster aux arrivées",
+          "reset": "Réinitialiser le zoom",
+          "frameCount": "Trames {{count}}",
+          "headersAt": "En-têtes à {{time}}",
+          "lastAt": "Dernière trame à {{time}}",
+          "gap": "Plus long silence de {{duration}}",
+          "ended": "{{reason}} à {{time}}",
+          "lifetime": "Durée observée de {{duration}}",
+          "eventAt": "{{kind}} à {{time}}",
+          "event": "Événement enregistré",
+          "chooseEvent": "Sélectionner un événement",
+          "zoomWindow": "Fenêtre de zoom commune",
+          "zoomStart": "Redimensionner le début de la fenêtre de zoom",
+          "zoomEnd": "Redimensionner la fin de la fenêtre de zoom",
+          "zoomPan": "Déplacer la fenêtre de zoom",
+          "windowBounds": "{{start}} à {{end}}",
+          "dragWindowHelp": "Faites glisser les bords pour redimensionner ou le centre pour déplacer. Les touches fléchées fonctionnent sur chaque commande.",
+          "frame": "Contenu de la trame SSE",
+          "viewRaw": "Voir la trame originale",
+          "viewJson": "Voir le JSON",
+          "download": "Télécharger la trame originale",
+          "masked": "Le consentement pour cette partie du tour est nécessaire pour lire la trame originale.",
+          "frameUnavailable": "La trame originale est indisponible.",
+          "availability": {
+            "captured": "Enregistré",
+            "empty": "Aucune trame",
+            "partial": "Données partielles",
+            "unavailable": "Indisponible"
+          },
+          "ending": {
+            "completed": "Terminé",
+            "failed": "Échec",
+            "paused": "En attente de saisie",
+            "closed": "Fermeture sans trame de fin",
+            "timeout": "Délai du transport dépassé",
+            "watchdog_timeout": "Arrêt par Fred après un silence prolongé du fournisseur",
+            "truncated": "Transport HTTP tronqué",
+            "transport_error": "Erreur de transport",
+            "http_rejected": "Rejet HTTP avant le flux",
+            "not_sse": "Réponse sans SSE"
+          },
+          "kind": {
+            "text": "Texte",
+            "reasoning": "Raisonnement",
+            "tool": "Outil",
+            "status": "Statut",
+            "done": "Fin",
+            "error": "Erreur",
+            "other": "Autre"
+          }
+        },
         "evidence": {
-          "captured": "Échange HTTP enregistré",
+          "captured": "Données enregistrées",
           "history_only": "Historique uniquement",
           "metadata_only": "Métadonnées seules",
           "partial": "Données partielles"

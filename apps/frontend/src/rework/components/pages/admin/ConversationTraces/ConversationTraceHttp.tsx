@@ -15,34 +15,23 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import type {
   ConversationTraceTurn,
   TraceHttpAttempt,
   TraceHttpBody,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { TRACE_TRANSLATION_PREFIX, TraceIdentifier } from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, TraceIdentifier, downloadTraceBytes, traceBytes } from "./traceControls";
+import { ConversationTraceSse } from "./ConversationTraceSse";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
 const prefix = `${TRACE_TRANSLATION_PREFIX}.http`;
 const previewBytes = 4 * 1024 * 1024;
 
-function originalBytes(data: string): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(atob(data), (character) => character.charCodeAt(0));
-}
-
-function downloadBody(data: string, side: string) {
-  const url = URL.createObjectURL(new Blob([originalBytes(data)], { type: "application/octet-stream" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `provider-${side}.bin`;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 async function previewText(data: string, encoding: string | undefined): Promise<string> {
-  const bytes = originalBytes(data);
+  const bytes = traceBytes(data);
   const decoder = new TextDecoder("utf-8", { fatal: true });
   if (!encoding || encoding === "identity" || bytes.length === 0) {
     return decoder.decode(bytes);
@@ -129,7 +118,7 @@ function HttpPayload({
             size="2xs"
             variant="text"
             color="on-surface"
-            onClick={() => downloadBody(body.data, side)}
+            onClick={() => downloadTraceBytes(body.data, "provider-" + side + ".bin")}
           >
             {t("downloadOriginal")}
           </Button>
@@ -214,9 +203,18 @@ function AttemptEvidence({
   );
 }
 
-export function ConversationTraceHttp({ sessionId, turn }: { sessionId: string; turn: ConversationTraceTurn }) {
+export function ConversationTraceHttp({
+  sessionId,
+  turn,
+  cutoffRank,
+}: {
+  sessionId: string;
+  turn: ConversationTraceTurn;
+  cutoffRank?: number;
+}) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
   const [selected, setSelected] = useState<string>();
+  const [view, setView] = useState(0);
   const metadata = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(
     turn.availability === "history_only" ? skipToken : { sessionId, exchangeId: turn.exchange_id },
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
@@ -225,7 +223,11 @@ export function ConversationTraceHttp({ sessionId, turn }: { sessionId: string; 
   const active = attempts.find((attempt) => attempt.ref === selected) ?? attempts[0];
   if (turn.availability === "history_only") return null;
   if (metadata.isError) return <p role="alert">{t("unavailable")}</p>;
-  if (!active) return null;
+  if (!active) {
+    return metadata.isLoading ? null : (
+      <ConversationTraceSse sessionId={sessionId} turn={turn} cutoffRank={cutoffRank} />
+    );
+  }
   const groups = new Map<string, TraceHttpAttempt[]>();
   for (const attempt of attempts) {
     const group = groups.get(attempt.call_id) ?? [];
@@ -286,7 +288,22 @@ export function ConversationTraceHttp({ sessionId, turn }: { sessionId: string; 
           </>
         )}
       </dl>
-      {turn.access === "shared" || turn.access === "local" ? (
+      <ButtonGroup
+        items={[{ label: t("exchangeTab") }, { label: t("sseTab") }]}
+        size="2xs"
+        color="primary"
+        variant="tabs"
+        aria-label={t("evidenceTabs")}
+        selectedIndex={view}
+        onSelectedIndexChange={setView}
+      />
+      {view === 1 ? (
+        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={active.ref} cutoffRank={cutoffRank} />
+      ) : turn.access === "local" ||
+        (turn.access === "shared" &&
+          cutoffRank != null &&
+          active.observed_through_rank != null &&
+          active.observed_through_rank <= cutoffRank) ? (
         active.completeness === "unavailable" ? (
           <p>{t("unavailable")}</p>
         ) : (

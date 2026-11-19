@@ -21,6 +21,8 @@ from uuid import uuid4
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TRACE_MAX_HTTP_ATTEMPTS,
+    TRACE_MAX_SSE_SEGMENTS,
+    TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
     TraceFinalization,
@@ -28,6 +30,8 @@ from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceOutcome,
+    TraceSseAvailability,
+    TraceSseSegment,
 )
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import and_, func, literal, or_, select, union_all
@@ -91,6 +95,15 @@ def _consent_version(row: ConversationTraceConsentRow | None) -> str | None:
     return f"{row.grant_id}:revoked" if row.revoked_at is not None else row.grant_id
 
 
+def _sse_refs(segments: list[dict[str, object]]) -> set[str]:
+    return {
+        ref
+        for item in segments
+        if isinstance(lane := item.get("outgoing"), dict)
+        and isinstance(ref := lane.get("ref"), str)
+    }
+
+
 @dataclass(frozen=True)
 class TraceConversationReference:
     session_id: str
@@ -145,7 +158,7 @@ class ConversationTraceStore:
 
     async def admit(
         self, runtime_id: str, request: TraceAdmissionRequest
-    ) -> str | None:
+    ) -> TraceAdmission | None:
         async with use_session(self._sessions) as session:
             settings = await session.get(ConversationTraceSettingsRow, _SETTINGS_ID)
             if not (
@@ -175,14 +188,25 @@ class ConversationTraceStore:
             )
             if agent_name is None:
                 return None
-            existing_id = await session.scalar(
-                select(ConversationTraceTurnRow.capture_id).where(
-                    ConversationTraceTurnRow.session_id == request.session_id,
-                    ConversationTraceTurnRow.exchange_id == request.exchange_id,
+            existing = (
+                await session.execute(
+                    select(
+                        ConversationTraceTurnRow.capture_id,
+                        ConversationTraceTurnRow.started_at,
+                    ).where(
+                        ConversationTraceTurnRow.session_id == request.session_id,
+                        ConversationTraceTurnRow.exchange_id == request.exchange_id,
+                    )
                 )
-            )
-            if existing_id is not None:
-                return existing_id
+            ).one_or_none()
+            if existing is not None:
+                offset = int(
+                    (utcnow() - _utc(existing.started_at)).total_seconds() * 1000
+                )
+                return TraceAdmission(
+                    capture_id=existing.capture_id,
+                    stream_offset_ms=max(0, min(offset, 2**31 - 1)),
+                )
             capture_id = str(uuid4())
             session.add(
                 ConversationTraceTurnRow(
@@ -194,7 +218,7 @@ class ConversationTraceStore:
                     history_rank=request.history_rank,
                 )
             )
-            return capture_id
+            return TraceAdmission(capture_id=capture_id)
 
     async def can_write(self, runtime_id: str, capture_id: str) -> bool:
         row = ConversationTraceTurnRow
@@ -248,7 +272,10 @@ class ConversationTraceStore:
                 accepted = (
                     {a["ref"] for a in (row.http_attempts or [])} if row else set()
                 )
-                return all(item.ref in accepted for item in result.http_attempts)
+                accepted_sse = _sse_refs(row.sse_segments or []) if row else set()
+                return all(item.ref in accepted for item in result.http_attempts) and (
+                    result.sse is None or result.sse.outgoing.ref in accepted_sse
+                )
             if result.discarded:
                 if row.completed_at is None:
                     await session.delete(row)
@@ -271,10 +298,19 @@ class ConversationTraceStore:
                 item for item in result.http_attempts if item.ref not in already
             ]
             combined = [*previous, *(item.model_dump(mode="json") for item in incoming)]
-            if len(combined) > TRACE_MAX_HTTP_ATTEMPTS:
+            sse_segments = row.sse_segments or []
+            if result.sse is not None and result.sse.outgoing.ref not in _sse_refs(
+                sse_segments
+            ):
+                sse_segments = [*sse_segments, result.sse.model_dump(mode="json")]
+            if (
+                len(combined) > TRACE_MAX_HTTP_ATTEMPTS
+                or len(sse_segments) > TRACE_MAX_SSE_SEGMENTS
+            ):
                 row.http_availability = TraceAvailability.PARTIAL
                 return False
             row.http_attempts = combined or None
+            row.sse_segments = sse_segments or None
             if (
                 result.http_incomplete
                 or row.http_availability == TraceAvailability.PARTIAL
@@ -282,9 +318,16 @@ class ConversationTraceStore:
                     item.completeness != TraceHttpCompleteness.COMPLETE
                     for item in incoming
                 )
+                or (
+                    result.sse is not None
+                    and any(
+                        lane.availability == TraceSseAvailability.PARTIAL
+                        for lane in (result.sse.outgoing, *result.sse.provider)
+                    )
+                )
             ):
                 row.http_availability = TraceAvailability.PARTIAL
-            elif combined:
+            elif combined or sse_segments:
                 row.http_availability = TraceAvailability.CAPTURED
             return True
 
@@ -299,6 +342,18 @@ class ConversationTraceStore:
                 )
             )
         return [TraceHttpAttempt.model_validate(item) for item in attempts or []]
+
+    async def sse_segments(
+        self, session_id: str, exchange_id: str
+    ) -> list[TraceSseSegment]:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            segments = await session.scalar(
+                select(turn.sse_segments).where(
+                    turn.session_id == session_id, turn.exchange_id == exchange_id
+                )
+            )
+        return [TraceSseSegment.model_validate(item) for item in segments or []]
 
     async def reference(self, session_id: str) -> TraceConversationReference | None:
         active = ConversationTraceConsentRow
@@ -577,7 +632,7 @@ class ConversationTraceStore:
         turn = ConversationTraceTurnRow
         query = (
             select(turn)
-            .options(defer(turn.http_attempts))
+            .options(defer(turn.http_attempts), defer(turn.sse_segments))
             .where(turn.session_id == reference.session_id)
             .order_by(turn.history_rank, turn.exchange_id)
             .limit(limit + 1)

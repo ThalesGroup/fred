@@ -191,6 +191,7 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.conversation_trace import note_stream_failure
 from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -2662,7 +2663,7 @@ def _mark_run_terminal(credentials: OutboundCredentialProvider | None) -> None:
 
 
 def _stream_finisher(
-    stream: AsyncGenerator[str, None],
+    stream: AsyncGenerator[str | bytes, None],
     credentials: OutboundCredentialProvider | None,
     cleanup_unstarted: Callable[[], Awaitable[None]] | None = None,
 ) -> BackgroundTask:
@@ -2692,6 +2693,14 @@ def _stream_finisher(
 class _RunStreamingResponse(StreamingResponse):
     """Runs its `background` however the response ends. Starlette skips it when
     the response raises or is cancelled, and a run must not outlive its response."""
+
+    on_headers: Callable[[float], None] | None = None
+
+    async def stream_response(self, send: Send) -> None:
+        # Starlette sends the headers before advancing the body iterator.
+        if self.on_headers is not None:
+            self.on_headers(time.monotonic())
+        await super().stream_response(send)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         finish, self.background = self.background, None
@@ -4478,7 +4487,8 @@ async def _stream(
     exchange_id: str | None = None,
     prewritten_initial: bool = False,
     on_start: Callable[[], None] | None = None,
-) -> AsyncGenerator[str, None]:
+    headers_at: Callable[[], float | None] | None = None,
+) -> AsyncGenerator[str | bytes, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
 
@@ -4519,6 +4529,11 @@ async def _stream(
             history_rank=trace_history_rank,
         )
     turn_start = time.monotonic()
+    if capture is not None and capture.http is not None:
+        emitted_headers = headers_at() if headers_at is not None else None
+        capture.http.start_stream(
+            emitted_headers or turn_start, capture.stream_offset_ms
+        )
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
     # carry the same value.  Standalone no-security default: "personal".
@@ -4570,7 +4585,15 @@ async def _stream(
                 collected.append(payload)
                 if capture is not None:
                     capture.note_event(payload)
-                yield _sse(json.dumps(payload, ensure_ascii=False))
+                frame = _sse(json.dumps(payload, ensure_ascii=False))
+                if capture is None or capture.http is None:
+                    yield frame
+                else:
+                    outgoing = frame.encode("utf-8")
+                    yield outgoing
+                    # StreamingResponse resumes this generator after handing the frame to ASGI.
+                    kind = payload.get("kind")
+                    capture.http.emit(outgoing, kind if isinstance(kind, str) else "")
     finally:
         try:
             await complete_cleanup(payloads.aclose())
@@ -5809,6 +5832,7 @@ async def _iterate_runtime_event_payloads_inner(
     except Exception as exc:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
+        note_stream_failure(exc)
         message = report_execution_error(logger, exc, error_phase)
         yield RuntimeErrorEvent(message=message).model_dump(mode="json")
     finally:
@@ -7857,6 +7881,11 @@ def _build_agent_router(
             raise
         provider = target.credential_provider
         stream_started = False
+        headers_sent_at: float | None = None
+
+        def note_headers(at: float) -> None:
+            nonlocal headers_sent_at
+            headers_sent_at = at
 
         def mark_stream_started() -> None:
             nonlocal stream_started
@@ -7900,12 +7929,16 @@ def _build_agent_router(
             exchange_id=exchange_id,
             prewritten_initial=prewritten_initial,
             on_start=mark_stream_started,
+            headers_at=lambda: headers_sent_at,
         )
-        return _RunStreamingResponse(
+        response = _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
             background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
+        if internal_req.agent_instance_id:
+            response.on_headers = note_headers
+        return response
 
     return router
 

@@ -31,7 +31,15 @@ class HttpAttempt(Protocol):
 
     def headers(self, response: httpx.Response) -> None: ...
     def chunk(self, data: bytes) -> None: ...
-    def finish(self, *, body_complete: bool, failed: bool = False) -> None: ...
+    def finish(
+        self,
+        *,
+        body_complete: bool,
+        failed: bool = False,
+        error: Exception | None = None,
+    ) -> None: ...
+    def sse_chunk(self, data: bytes) -> None: ...
+    def finish_sse(self, error: Exception | None = None) -> None: ...
 
 
 class HttpCapture(Protocol):
@@ -54,6 +62,8 @@ def observe_http_response(
     attempt.headers(response)
     if response.is_stream_consumed:
         attempt.chunk(response.content)
+        attempt.sse_chunk(response.content)
+        attempt.finish_sse()
         attempt.finish(body_complete=True)
     elif asynchronous and isinstance(response.stream, httpx.AsyncByteStream):
         response.stream = _AsyncObservedStream(

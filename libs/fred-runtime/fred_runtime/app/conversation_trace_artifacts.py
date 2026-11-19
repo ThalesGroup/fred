@@ -37,10 +37,14 @@ from fred_core.conversation_trace import (
     TraceHttpCompleteness,
     TraceHttpEvidence,
     TraceHttpFailureStage,
+    TraceSseEnding,
+    TraceSseFrame,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.model.http_capture import HttpAttempt
 from pydantic import BaseModel, Field
+
+from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
 
 _MAX_COUNT = 2**31 - 1
 _MAX_CHUNKS = TRACE_HTTP_TURN_BYTES // TRACE_HTTP_CHUNK_BYTES
@@ -64,6 +68,16 @@ def _headers(source: httpx.Headers, allow: frozenset[str]) -> dict[str, str]:
 
 def safe_identifier(value: str | None) -> str | None:
     return value if value and _IDENT.fullmatch(value) else None
+
+
+def _sse_ending(error: Exception | None) -> TraceSseEnding:
+    if isinstance(error, httpx.TimeoutException):
+        return TraceSseEnding.TIMEOUT
+    if isinstance(error, httpx.RemoteProtocolError):
+        return TraceSseEnding.TRUNCATED
+    return (
+        TraceSseEnding.TRANSPORT_ERROR if error is not None else TraceSseEnding.CLOSED
+    )
 
 
 @dataclass(slots=True)
@@ -101,6 +115,8 @@ class RecordedHttpAttempt:
     method: str
     target: str
     request_headers: dict[str, str]
+    sse: RecordedSseLane | None = None
+    streams_sse: bool = False
     started: float = field(default_factory=monotonic)
     ended: float | None = None
     response_headers: dict[str, str] = field(default_factory=dict)
@@ -119,6 +135,15 @@ class RecordedHttpAttempt:
     def headers(self, response: httpx.Response) -> None:
         self.status = response.status_code
         self.response_headers = _headers(response.headers, _RESPONSE_HEADERS)
+        if self.sse is not None:
+            self.sse.headers_ms = self.buffer.sse.at(monotonic())
+            self.streams_sse = response.is_success and (
+                response.headers.get("content-type", "")
+                .split(";", 1)[0]
+                .strip()
+                .lower()
+                == "text/event-stream"
+            )
 
     def chunk(self, data: bytes) -> None:
         with self.buffer.lock:
@@ -127,14 +152,45 @@ class RecordedHttpAttempt:
                     data, self.buffer.remaining
                 )
 
-    def finish(self, *, body_complete: bool, failed: bool = False) -> None:
+    def finish(
+        self,
+        *,
+        body_complete: bool,
+        failed: bool = False,
+        error: Exception | None = None,
+    ) -> None:
         if self.ended is None:
             self.ended = monotonic()
             self.response_complete = body_complete
             self.failed = failed
+            if self.sse is not None and not self.streams_sse:
+                if self.status is None:
+                    ending = _sse_ending(error)
+                elif self.status >= 400:
+                    ending = TraceSseEnding.HTTP_REJECTED
+                else:
+                    ending = TraceSseEnding.NOT_SSE
+                self.sse.finish(self.ended, ending)
+
+    def sse_chunk(self, data: bytes) -> None:
+        if self.sse is None or not self.streams_sse:
+            return
+        with self.buffer.lock:
+            if not self.buffer.closed and self.sse.end_ms is None:
+                self.sse.feed(data, monotonic())
+
+    def finish_sse(self, error: Exception | None = None) -> None:
+        if self.sse is not None and self.streams_sse:
+            with self.buffer.lock:
+                if not self.buffer.closed:
+                    self.sse.finish(monotonic(), _sse_ending(error))
 
     def summary(
-        self, release: str | None, *, stored: bool, observed_through_rank: int | None = None
+        self,
+        release: str | None,
+        *,
+        stored: bool,
+        observed_through_rank: int | None = None,
     ) -> TraceHttpAttempt:
         stage = None
         if self.status is None:
@@ -186,10 +242,28 @@ class HttpTurnBuffer:
     remaining: int = TRACE_HTTP_TURN_BYTES
     closed: bool = False
     incomplete: bool = False
+    sse: SseBudget = field(default_factory=SseBudget)
+    outgoing: RecordedSseLane | None = None
+
+    def start_stream(self, headers_at: float, offset_ms: int) -> None:
+        self.sse.started = headers_at
+        self.sse.offset_ms = offset_ms
+        self.outgoing = RecordedSseLane(
+            uuid4().hex, self.sse, offset_ms, headers_ms=offset_ms
+        )
+
+    def emit(self, data: bytes, kind: str) -> None:
+        with self.lock:
+            if self.outgoing is not None and not self.closed:
+                self.outgoing.emitted(data, kind, monotonic())
 
     def close(self) -> list[RecordedHttpAttempt]:
         with self.lock:
             self.closed = True
+            now = monotonic()
+            for attempt in self.attempts:
+                if attempt.sse is not None:
+                    attempt.sse.finish(now, TraceSseEnding.CLOSED)
             return self.attempts
 
 
@@ -220,6 +294,10 @@ class ModelHttpCapture:
                 target,
                 _headers(request.headers, _REQUEST_HEADERS),
             )
+            if self.buffer.outgoing is not None:
+                attempt.sse = RecordedSseLane(
+                    attempt.ref, self.buffer.sse, self.buffer.sse.at(attempt.started)
+                )
             self.buffer.attempts.append(attempt)
             try:
                 data = request.content
@@ -334,3 +412,31 @@ class TraceHttpArtifactStore:
     async def erase(self, session_id: str, ref: str | None = None) -> None:
         path = _session_path(session_id)
         await self._filesystem.delete(f"{path}/{ref}" if ref is not None else path)
+
+    async def write_sse(
+        self, session_id: str, lane: RecordedSseLane, *, create_prefix: bool
+    ) -> None:
+        if not lane.raw:
+            return
+        prefix = f"{_session_path(session_id)}/{lane.ref}"
+        if create_prefix:
+            await self._filesystem.mkdir(prefix)
+        for index, start in enumerate(range(0, len(lane.raw), TRACE_HTTP_CHUNK_BYTES)):
+            data = bytes(memoryview(lane.raw)[start : start + TRACE_HTTP_CHUNK_BYTES])
+            await self._filesystem.write(f"{prefix}/sse-{index}", data)
+
+    async def read_sse(
+        self, session_id: str, ref: str, offset: int, size: int
+    ) -> TraceSseFrame:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        start, end = offset, offset + size
+        data = bytearray()
+        for index in range(
+            start // TRACE_HTTP_CHUNK_BYTES, (end - 1) // TRACE_HTTP_CHUNK_BYTES + 1
+        ):
+            chunk = await self._filesystem.read(f"{prefix}/sse-{index}")
+            base = index * TRACE_HTTP_CHUNK_BYTES
+            data.extend(chunk[max(0, start - base) : end - base])
+        if len(data) != size:
+            raise ValueError("Incomplete SSE frame")
+        return TraceSseFrame(data=b64encode(data).decode("ascii"))

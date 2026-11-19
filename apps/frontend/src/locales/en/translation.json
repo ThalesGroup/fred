@@ -1485,6 +1485,9 @@
         },
         "http": {
           "title": "Model HTTP exchange",
+          "exchangeTab": "HTTP exchange",
+          "sseTab": "SSE",
+          "evidenceTabs": "Model call evidence",
           "modelCall": "Model call",
           "attempt": "Attempt {{number}}",
           "noStatus": "No response headers",
@@ -1522,8 +1525,66 @@
             "unavailable": "Unavailable"
           }
         },
+        "sse": {
+          "title": "SSE timeline",
+          "provider": "Provider SSE",
+          "outgoing": "Fred SSE",
+          "unavailable": "No SSE timeline is available for this turn.",
+          "loading": "Loading SSE evidence...",
+          "turnElapsed": "Turn clock spans {{duration}}",
+          "fit": "Fit arrivals",
+          "reset": "Reset zoom",
+          "frameCount": "Frames {{count}}",
+          "headersAt": "Headers at {{time}}",
+          "lastAt": "Last frame at {{time}}",
+          "gap": "Longest silence {{duration}}",
+          "ended": "{{reason}} at {{time}}",
+          "lifetime": "Observed lifetime {{duration}}",
+          "eventAt": "{{kind}} at {{time}}",
+          "event": "Captured event",
+          "chooseEvent": "Select an event",
+          "zoomWindow": "Shared timeline zoom window",
+          "zoomStart": "Resize the start of the zoom window",
+          "zoomEnd": "Resize the end of the zoom window",
+          "zoomPan": "Pan the zoom window",
+          "windowBounds": "{{start}} to {{end}}",
+          "dragWindowHelp": "Drag the edges to resize or the middle to pan. The arrow keys work on each control.",
+          "frame": "SSE frame content",
+          "viewRaw": "View original frame",
+          "viewJson": "View JSON",
+          "download": "Download original frame",
+          "masked": "Reading the original frame requires consent for this part of the turn.",
+          "frameUnavailable": "The original frame is unavailable.",
+          "availability": {
+            "captured": "Captured",
+            "empty": "No frames",
+            "partial": "Partial evidence",
+            "unavailable": "Unavailable"
+          },
+          "ending": {
+            "completed": "Completed",
+            "failed": "Failed",
+            "paused": "Paused for input",
+            "closed": "Closed without a terminal frame",
+            "timeout": "Transport timeout",
+            "watchdog_timeout": "Fred stopped after a provider silence timeout",
+            "truncated": "HTTP transport truncated",
+            "transport_error": "Transport error",
+            "http_rejected": "HTTP rejected before streaming",
+            "not_sse": "Response was not SSE"
+          },
+          "kind": {
+            "text": "Text",
+            "reasoning": "Reasoning",
+            "tool": "Tool",
+            "status": "Status",
+            "done": "Terminal",
+            "error": "Error",
+            "other": "Other"
+          }
+        },
         "evidence": {
-          "captured": "HTTP exchange captured",
+          "captured": "Evidence captured",
           "history_only": "History only",
           "metadata_only": "Metadata only",
           "partial": "Partial evidence"

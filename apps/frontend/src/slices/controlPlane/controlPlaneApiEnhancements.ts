@@ -127,6 +127,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
     },
+    getConversationTraceSseFrame: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },

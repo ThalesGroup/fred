@@ -9,7 +9,11 @@ import re
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
-from fred_core.model.http_capture import observe_http_response, start_http_attempt
+from fred_core.model.http_capture import (
+    HttpAttempt,
+    observe_http_response,
+    start_http_attempt,
+)
 from prometheus_client import Counter
 
 NORMALIZE_TOOL_CALL_IDS_SETTING = "normalize_streamed_tool_call_ids"
@@ -201,46 +205,81 @@ def _stream_response(
 
 
 class _NormalizedStream(httpx.SyncByteStream):
-    def __init__(self, upstream: httpx.Response) -> None:
+    def __init__(
+        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+    ) -> None:
         self._upstream = upstream
+        self._normalize = normalize
+        self._attempt = attempt
 
     def __iter__(self) -> Iterator[bytes]:
-        events = _ToolCallEvents()
+        events = _ToolCallEvents() if self._normalize else None
         try:
             for chunk in self._upstream.iter_bytes():
-                yield from events.feed(chunk)
-            yield from events.finish()
+                if self._attempt is not None:
+                    self._attempt.sse_chunk(chunk)
+                if events is None:
+                    yield chunk
+                else:
+                    yield from events.feed(chunk)
+            if events is not None:
+                yield from events.finish()
+        except Exception as exc:
+            if self._attempt is not None:
+                self._attempt.finish_sse(exc)
+            raise
         finally:
             self.close()
 
     def close(self) -> None:
-        self._upstream.close()
+        try:
+            self._upstream.close()
+        finally:
+            if self._attempt is not None:
+                self._attempt.finish_sse()
 
 
 class _AsyncNormalizedStream(httpx.AsyncByteStream):
-    def __init__(self, upstream: httpx.Response) -> None:
+    def __init__(
+        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+    ) -> None:
         self._upstream = upstream
-        self._iterator = self._iterate(upstream)
+        self._normalize = normalize
+        self._attempt = attempt
+        self._iterator = self._iterate()
 
     def __aiter__(self) -> AsyncIterator[bytes]:
         # The SDK can resume at [DONE] to drain an HTTP/1.1 connection.
         return self._iterator
 
-    @staticmethod
-    async def _iterate(upstream: httpx.Response) -> AsyncIterator[bytes]:
-        events = _ToolCallEvents()
+    async def _iterate(self) -> AsyncIterator[bytes]:
+        events = _ToolCallEvents() if self._normalize else None
         try:
-            async for chunk in upstream.aiter_bytes():
-                for frame in events.feed(chunk):
+            async for chunk in self._upstream.aiter_bytes():
+                if self._attempt is not None:
+                    self._attempt.sse_chunk(chunk)
+                if events is None:
+                    yield chunk
+                else:
+                    for frame in events.feed(chunk):
+                        yield frame
+            if events is not None:
+                for frame in events.finish():
                     yield frame
-            for frame in events.finish():
-                yield frame
+        except Exception as exc:
+            if self._attempt is not None:
+                self._attempt.finish_sse(exc)
+            raise
         finally:
-            await upstream.aclose()
+            await self.aclose()
 
     async def aclose(self) -> None:
         # HTTPX's default transport shields pool cleanup from cancellation.
-        await self._upstream.aclose()
+        try:
+            await self._upstream.aclose()
+        finally:
+            if self._attempt is not None:
+                self._attempt.finish_sse()
 
 
 class ToolCallIdTransport(httpx.BaseTransport):
@@ -252,14 +291,18 @@ class ToolCallIdTransport(httpx.BaseTransport):
         attempt = start_http_attempt(request)
         try:
             response = self._upstream.handle_request(request)
-        except Exception:
+        except Exception as exc:
             if attempt is not None:
-                attempt.finish(body_complete=False, failed=True)
+                attempt.finish(body_complete=False, failed=True, error=exc)
             raise
         if attempt is not None:
             observe_http_response(response, attempt, asynchronous=False)
-        if normalize and _is_streamed_success(response):
-            return _stream_response(request, response, _NormalizedStream(response))
+        if (normalize or attempt is not None) and _is_streamed_success(response):
+            return _stream_response(
+                request,
+                response,
+                _NormalizedStream(response, normalize=normalize, attempt=attempt),
+            )
         return response
 
     def close(self) -> None:
@@ -275,14 +318,18 @@ class AsyncToolCallIdTransport(httpx.AsyncBaseTransport):
         attempt = start_http_attempt(request)
         try:
             response = await self._upstream.handle_async_request(request)
-        except Exception:
+        except Exception as exc:
             if attempt is not None:
-                attempt.finish(body_complete=False, failed=True)
+                attempt.finish(body_complete=False, failed=True, error=exc)
             raise
         if attempt is not None:
             observe_http_response(response, attempt, asynchronous=True)
-        if normalize and _is_streamed_success(response):
-            return _stream_response(request, response, _AsyncNormalizedStream(response))
+        if (normalize or attempt is not None) and _is_streamed_success(response):
+            return _stream_response(
+                request,
+                response,
+                _AsyncNormalizedStream(response, normalize=normalize, attempt=attempt),
+            )
         return response
 
     async def aclose(self) -> None:

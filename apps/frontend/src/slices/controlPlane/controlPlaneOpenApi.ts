@@ -1838,6 +1838,36 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    listConversationTraceSseSegments: build.query<
+      ListConversationTraceSseSegmentsApiResponse,
+      ListConversationTraceSseSegmentsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceSseAccess: build.query<
+      GetConversationTraceSseAccessApiResponse,
+      GetConversationTraceSseAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceSseFrame: build.query<
+      GetConversationTraceSseFrameApiResponse,
+      GetConversationTraceSseFrameApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
     getTraceCaptureWritable: build.query<GetTraceCaptureWritableApiResponse, GetTraceCaptureWritableApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/writable`,
@@ -3831,6 +3861,26 @@ export type GetConversationTraceHttpEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+};
+export type ListConversationTraceSseSegmentsApiResponse = /** status 200 Successful Response */ TraceSseSegment[];
+export type ListConversationTraceSseSegmentsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceSseAccessApiResponse = /** status 200 Successful Response */ TraceSseArtifactAccess;
+export type GetConversationTraceSseAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
+};
+export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetConversationTraceSseFrameApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
 };
 export type GetTraceCaptureWritableApiResponse = /** status 200 Successful Response */ boolean;
 export type GetTraceCaptureWritableApiArg = {
@@ -6922,8 +6972,55 @@ export type TraceHttpEvidence = {
   request_body?: TraceHttpBody | null;
   response_body?: TraceHttpBody | null;
 };
+export type TraceSseAvailability = "captured" | "empty" | "partial" | "unavailable";
+export type TraceSseEnding =
+  | "completed"
+  | "failed"
+  | "paused"
+  | "closed"
+  | "timeout"
+  | "watchdog_timeout"
+  | "truncated"
+  | "transport_error"
+  | "http_rejected"
+  | "not_sse";
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
+};
+export type TraceSseLane = {
+  ref: string;
+  started_ms: number;
+  headers_ms: number | null;
+  end_ms: number;
+  last_event_ms: number | null;
+  longest_gap: [number, number] | null;
+  availability: TraceSseAvailability;
+  ending: TraceSseEnding;
+  frame_count: number;
+  frames: TraceSseEvent[];
+};
+export type TraceSseSegment = {
+  observed_through_rank: number | null;
+  outgoing: TraceSseLane;
+  provider: TraceSseLane[];
+};
+export type TraceSseArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  offset: number;
+  size: number;
+};
+export type TraceSseFrame = {
+  encoding?: "base64";
+  data: string;
+};
 export type TraceAdmission = {
   capture_id: string;
+  stream_offset_ms?: number;
 };
 export type TraceAdmissionRequest = {
   session_id: string;
@@ -6942,6 +7039,7 @@ export type TraceFinalization = {
   discarded?: boolean;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
+  sse?: TraceSseSegment | null;
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -7979,6 +8077,12 @@ export const {
   useLazyGetConversationTraceHttpAccessQuery,
   useGetConversationTraceHttpEvidenceQuery,
   useLazyGetConversationTraceHttpEvidenceQuery,
+  useListConversationTraceSseSegmentsQuery,
+  useLazyListConversationTraceSseSegmentsQuery,
+  useGetConversationTraceSseAccessQuery,
+  useLazyGetConversationTraceSseAccessQuery,
+  useGetConversationTraceSseFrameQuery,
+  useLazyGetConversationTraceSseFrameQuery,
   useGetTraceCaptureWritableQuery,
   useLazyGetTraceCaptureWritableQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,

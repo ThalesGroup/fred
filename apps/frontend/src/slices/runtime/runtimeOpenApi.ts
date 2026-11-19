@@ -267,6 +267,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-http/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -529,6 +534,13 @@ export type GetTraceHttpEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+};
+export type GetTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetTraceSseFrameApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -1472,6 +1484,10 @@ export type TraceHttpEvidence = {
   target: string;
   version?: 1;
 };
+export type TraceSseFrame = {
+  data: string;
+  encoding?: "base64";
+};
 export type SkillDetail = {
   content: string;
   revision: string;
@@ -1750,6 +1766,8 @@ export const {
   useLazyGetTraceHistoryTranscriptQuery,
   useGetTraceHttpEvidenceQuery,
   useLazyGetTraceHttpEvidenceQuery,
+  useGetTraceSseFrameQuery,
+  useLazyGetTraceSseFrameQuery,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

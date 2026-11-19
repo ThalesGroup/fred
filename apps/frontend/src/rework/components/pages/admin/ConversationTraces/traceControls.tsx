@@ -24,6 +24,19 @@ import styles from "./ConversationTraces.module.css";
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
 export const TRACE_TRANSLATION_PREFIX = "rework.admin.conversationTraces";
 
+export function traceBytes(data: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(data), (character) => character.charCodeAt(0));
+}
+
+export function downloadTraceBytes(data: string, name: string) {
+  const url = URL.createObjectURL(new Blob([traceBytes(data)], { type: "application/octet-stream" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function useTracePagination() {
   const [pages, setPages] = useState<string[]>([]);
   return {

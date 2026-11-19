@@ -165,6 +165,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId: string | undefin
                   key={`http-${turn.exchange_id}`}
                   sessionId={conversation.session_id}
                   turn={turn}
+                  cutoffRank={cutoff?.last_rank}
                 />
                 <ConversationTraceHistory key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
               </section>

@@ -7492,3 +7492,18 @@ a separate trace prefix. The runtime authorizes a requested attempt through
 Control Plane before reading bytes and again before returning them. Transport
 headers use an explicit diagnostic allowlist. Request targets omit userinfo
 and query strings.
+
+### Comparing SSE arrivals and emissions (2026-11-19)
+
+Provider frames are observed after HTTP content decoding and before tool-call
+normalization. Fred outgoing frames are recorded after the exact serialized
+bytes are handed to ASGI. Both lanes share a monotonic execution clock. A
+resumed execution uses the catalog's offset from the turn's original admission.
+
+Each streamed segment keeps up to 512 timing markers and 512 KiB of frame bytes.
+Lanes retain the last observation and longest silence when the frame budget is
+exhausted. A provider close can be independent of the terminal event Fred
+emitted. If Fred's model watchdog interrupts a silent response, the outgoing
+lane records the watchdog while the provider lane records the close it observed.
+Original frames are fetched by reference and byte range from the private
+evidence prefix under the saved rank and consent checks.

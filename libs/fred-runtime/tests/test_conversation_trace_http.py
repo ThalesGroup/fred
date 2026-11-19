@@ -16,7 +16,9 @@
 import asyncio
 from base64 import b64decode
 from collections.abc import AsyncIterator
+from gzip import compress
 from pathlib import Path
+from time import monotonic
 from uuid import uuid4
 
 import httpx
@@ -25,6 +27,8 @@ from fred_core.conversation_trace import (
     TRACE_HTTP_TURN_BYTES,
     TraceHttpCompleteness,
     TraceHttpFailureStage,
+    TraceSseEnding,
+    TraceSseKind,
 )
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.model.http_capture import active_http_capture
@@ -34,6 +38,7 @@ from fred_runtime.app.conversation_trace_artifacts import (
     ModelHttpCapture,
     TraceHttpArtifactStore,
 )
+from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
 
 
 class BodyStream(httpx.AsyncByteStream):
@@ -43,6 +48,78 @@ class BodyStream(httpx.AsyncByteStream):
     async def __aiter__(self) -> AsyncIterator[bytes]:
         for chunk in self.chunks:
             yield chunk
+
+
+@pytest.mark.asyncio
+async def test_sse_frames_precede_normalization_and_survive_content_decoding(
+    tmp_path: Path,
+):
+    first = (
+        b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,'
+        b'"id":"call-original","function":{"name":"echo","arguments":""}}]}}]}\r\n\r\n'
+    )
+    second = (
+        b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,'
+        b'"id":"null","function":{"arguments":"{}"}}]}}]}\r\n\r\n'
+    )
+    done = b"data: [DONE]\r\n\r\n"
+    encoded = compress(first + second + done)
+    buffer = HttpTurnBuffer()
+    buffer.start_stream(monotonic(), 3000)
+    token = active_http_capture.set(
+        ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=AsyncToolCallIdTransport(
+                httpx.MockTransport(
+                    lambda _: httpx.Response(
+                        200,
+                        headers={
+                            "content-type": "text/event-stream",
+                            "content-encoding": "gzip",
+                        },
+                        stream=BodyStream([encoded[:17], encoded[17:]]),
+                    )
+                )
+            ),
+        ) as client:
+            response = await client.post(
+                "https://provider.example/v1/chat/completions", content=b"{}"
+            )
+    finally:
+        active_http_capture.reset(token)
+    assert b'"id":null' in response.content
+    (attempt,) = buffer.close()
+    assert attempt.sse is not None
+    assert b"".join(attempt.response_body.chunks) == encoded
+    lane = attempt.sse.summary(stored=True)
+    assert lane.ending == TraceSseEnding.COMPLETED
+    assert lane.started_ms >= 3000
+    assert [frame.kind for frame in lane.frames] == [
+        TraceSseKind.TOOL,
+        TraceSseKind.TOOL,
+        TraceSseKind.DONE,
+    ]
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    await store.write_sse("session", attempt.sse, create_prefix=True)
+    for frame, original in zip(lane.frames, [first, second, done], strict=True):
+        assert frame.offset is not None
+        persisted = await store.read_sse("session", lane.ref, frame.offset, frame.size)
+        assert b64decode(persisted.data) == original
+
+
+def test_partial_sse_keeps_exact_line_endings_and_separates_gap_from_lifetime():
+    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0, headers_ms=0)
+    lane.feed(b": keepalive\r\n\r", 100.125)
+    lane.feed(b"\ndata: other\n", 100.25)
+    lane.feed(b"\n", 100.5)
+    lane.finish(220.5, TraceSseEnding.TRUNCATED)
+    info = lane.summary(stored=True)
+    assert info.end_ms == 120_500
+    assert info.longest_gap == (500, 120_500)
+    assert [frame.at_ms for frame in info.frames] == [125, 500]
+    assert lane.raw == b": keepalive\r\n\r\ndata: other\n\n"
 
 
 @pytest.mark.asyncio

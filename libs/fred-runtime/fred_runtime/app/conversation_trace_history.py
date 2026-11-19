@@ -17,10 +17,12 @@ import anyio
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fred_core import KeycloakUser
 from fred_core.conversation_trace import (
+    TRACE_MAX_SSE_FRAMES,
     TraceHistoryAccess,
     TraceHistoryBoundary,
     TraceHistoryTranscript,
     TraceHttpEvidence,
+    TraceSseFrame,
     is_local_trace_request,
 )
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -195,4 +197,38 @@ async def get_trace_http_evidence(
         raise HTTPException(503, "trace_http_unavailable") from exc
     if access != await client.http_access(session_id, exchange_id, ref, authorization):
         raise HTTPException(403, "trace_http_access_denied")
+    return result
+
+
+@router.get(
+    "/{session_id}/trace-sse/{exchange_id}/{ref}/{index}",
+    operation_id="get_trace_sse_frame",
+)
+async def get_trace_sse_frame(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+    index: Annotated[int, Path(ge=0, lt=TRACE_MAX_SSE_FRAMES)],
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceSseFrame:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_sse_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    access = await client.sse_access(session_id, exchange_id, ref, index, authorization)
+    if access.local_content_access and not _allows_local_trace(container, request):
+        raise HTTPException(403, "trace_sse_access_denied")
+    try:
+        with anyio.fail_after(5):
+            result = await client.read_sse(session_id, ref, access)
+    except Exception as exc:
+        raise HTTPException(503, "trace_sse_unavailable") from exc
+    if access != await client.sse_access(
+        session_id, exchange_id, ref, index, authorization
+    ):
+        raise HTTPException(403, "trace_sse_access_denied")
     return result

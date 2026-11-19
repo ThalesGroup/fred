@@ -6173,3 +6173,11 @@ turn header retains its own terminal outcome. The reader can inspect safe
 attempt details while masked. With consent, they can open request and response
 panels and distinguish empty, unavailable, and truncated bodies. JSON can be
 folded and the recorded body bytes can be downloaded.
+
+The SSE tab aligns the selected provider attempt with Fred's outgoing stream
+on the turn clock. Both lanes show header and terminal timings, last frame,
+and longest observed silence. The common zoom window supports independent edge
+resizing and middle panning with pointer or keyboard controls. An event picker
+also exposes dense arrivals to keyboard users. Masked readers see the timeline
+and categories, and an authorized reader can view or download the selected
+original frame.

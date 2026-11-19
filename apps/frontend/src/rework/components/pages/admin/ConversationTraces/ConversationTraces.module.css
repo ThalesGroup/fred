@@ -252,3 +252,246 @@
   align-items: center;
   color: var(--on-surface-retreat);
 }
+
+.sseTimeline {
+  display: grid;
+  gap: var(--spacing-s);
+  margin-block-start: var(--spacing-s);
+  min-width: 0;
+}
+
+.sseTimeline h4 {
+  margin: 0;
+}
+
+.sseControls,
+.sseStats,
+.sseLegend,
+.rangeLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs) var(--spacing-s);
+}
+
+.sseControls,
+.rangeLegend {
+  justify-content: space-between;
+}
+
+.sseTrack {
+  --lane-color: var(--primary);
+  display: grid;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s);
+  min-width: 0;
+}
+
+.sseTrack[data-track="outgoing"] {
+  --lane-color: var(--tertiary);
+}
+
+.sseTrack > strong {
+  color: var(--lane-color);
+}
+
+.sseStats,
+.sseLegend,
+.rangeLegend {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.sseGapLabel {
+  border-radius: var(--radius-xs);
+  background: var(--warning-container);
+  padding-inline: var(--spacing-xs);
+  color: var(--on-warning-container);
+}
+
+.ssePlot {
+  position: relative;
+  margin-inline: 0.5rem;
+  border-block-end: 1px solid var(--lane-color);
+  background-image: linear-gradient(to right, var(--outline-muted) 1px, transparent 1px);
+  background-size: 25% 100%;
+  height: 2rem;
+}
+
+.sseGap {
+  position: absolute;
+  opacity: 0.8;
+  inset-block: 0;
+  background: repeating-linear-gradient(135deg, var(--warning-container) 0 5px, transparent 5px 10px);
+}
+
+.sseBoundary {
+  position: absolute;
+  inset-block: 0;
+  background: var(--lane-color);
+  width: 2px;
+}
+
+.sseBoundary[data-end] {
+  border-inline-start: 2px dashed var(--lane-color);
+  background: transparent;
+  width: 0;
+}
+
+.sseDot,
+.sseLegend i {
+  --event-color: var(--outline);
+  border: 1px solid var(--surface-container);
+  border-radius: 100%;
+  background: var(--event-color);
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+.sseDot {
+  position: absolute;
+  top: 50%;
+  translate: -50% -50%;
+  z-index: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sseDot:hover,
+.sseDot[aria-pressed="true"] {
+  z-index: 2;
+  outline: 2px solid var(--on-surface);
+  outline-offset: 2px;
+}
+
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="text"] {
+  --event-color: var(--primary);
+}
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="reasoning"] {
+  --event-color: var(--tertiary);
+}
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="tool"] {
+  --event-color: var(--warning);
+}
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="status"] {
+  --event-color: var(--secondary);
+}
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="done"] {
+  --event-color: var(--success);
+}
+.sseTimeline :is(.sseDot, .sseLegend i)[data-kind="error"] {
+  --event-color: var(--error);
+}
+
+.sseLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.sseEventSelect {
+  display: grid;
+  gap: var(--spacing-2xs);
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.sseEventSelect select {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-low);
+  padding: var(--spacing-xs);
+  width: 100%;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.windowControl {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin-block-start: var(--spacing-2xs);
+}
+
+.rangeRail {
+  position: relative;
+  margin-inline: 0.625rem;
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  height: 1.5rem;
+}
+
+.rangeSelection {
+  position: absolute;
+  inset-block: 0;
+  background: var(--primary-container);
+}
+
+.rangeGrip {
+  position: absolute;
+  inset-block: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.rangeGrip:focus-visible {
+  z-index: 2;
+  outline: 2px solid var(--outline);
+  outline-offset: 1px;
+}
+
+.rangeGrip[data-grip="pan"] {
+  cursor: grab;
+  inset-inline: 0;
+  border-block: 1px solid var(--primary);
+}
+
+.rangeGrip[data-grip="pan"]:active {
+  cursor: grabbing;
+}
+
+.rangeGrip[data-grip="pan"]::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
+  background: var(--primary);
+  width: 0.875rem;
+  height: 0.375rem;
+  content: "";
+}
+
+.rangeGrip:is([data-grip="start"], [data-grip="end"]) {
+  display: grid;
+  place-items: center;
+  cursor: ew-resize;
+  background: var(--primary);
+  width: 0.625rem;
+  color: var(--on-primary);
+}
+
+.rangeGrip:is([data-grip="start"], [data-grip="end"])::after {
+  border-inline: 1px solid currentColor;
+  width: 4px;
+  height: 0.625rem;
+  content: "";
+}
+
+.rangeGrip[data-grip="start"] {
+  right: 100%;
+  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+}
+
+.rangeGrip[data-grip="end"] {
+  left: 100%;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+
+.rangeLegend {
+  flex-wrap: wrap;
+}

@@ -38,6 +38,7 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHttpAttempt,
     TraceHttpCompleteness,
+    TraceSseSegment,
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from pydantic import ValidationError
@@ -47,6 +48,27 @@ _ADMIN = "/admin/conversation-traces"
 _INGEST = "/internal/runtimes/fred-agents/conversation-traces"
 _AGENT = {"x-test-principal": "agentic"}
 _READER = {"x-test-principal": "reader"}
+
+
+def _sse_segment(rank: int) -> TraceSseSegment:
+    return TraceSseSegment.model_validate(
+        {
+            "observed_through_rank": rank,
+            "outgoing": {
+                "ref": uuid4().hex,
+                "started_ms": 0,
+                "headers_ms": 0,
+                "end_ms": 20,
+                "last_event_ms": 19,
+                "longest_gap": [0, 19],
+                "availability": "captured",
+                "ending": "failed",
+                "frame_count": 1,
+                "frames": [{"at_ms": 19, "kind": "error", "size": 8, "offset": 0}],
+            },
+            "provider": [],
+        }
+    )
 
 
 def test_trace_local_development_is_explicit_and_rejects_shared_profiles():
@@ -174,6 +196,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             "duration_ms": 20,
             "turn_number": 2,
             "call_ids": ["call-1"],
+            "sse": _sse_segment(10).model_dump(mode="json"),
         }
         assert (
             await client.put(f"{_INGEST}/{capture_id}", headers=_READER, json=failed)
@@ -202,6 +225,15 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert first["agent_display_name"] == "Synthetic assistant"
         assert [turn["turn_number"] for turn in first["turns"]] == [2]
         assert first["turns"][0]["call_ids"] == ["call-1"]
+        timeline = f"{_ADMIN}/session/sse/{admission['exchange_id']}"
+        masked = await client.get(timeline, headers=_READER)
+        assert masked.json() == [failed["sse"]]
+        assert "data" not in masked.json()[0]["outgoing"]["frames"][0]
+        assert (await client.get(timeline)).status_code == 403
+        outgoing = masked.json()[0]["outgoing"]
+        assert (
+            await client.get(f"{timeline}/{outgoing['ref']}/0", headers=_READER)
+        ).status_code == 403
         second = await client.get(
             f"{_ADMIN}/session",
             headers=_READER,
@@ -355,7 +387,7 @@ async def test_owner_share_catalog_extension_and_revocation(
 
 
 @pytest.mark.asyncio
-async def test_http_content_consent_excludes_new_attempt_in_same_exchange():
+async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
     persisted = [
         TraceHttpAttempt(
             ref=uuid4().hex,
@@ -395,6 +427,7 @@ async def test_http_content_consent_excludes_new_attempt_in_same_exchange():
         reference=AsyncMock(return_value=reference),
         capture_start_rank=AsyncMock(return_value=1),
         http_attempts=AsyncMock(return_value=persisted),
+        sse_segments=AsyncMock(return_value=[_sse_segment(4), _sse_segment(5)]),
         local_development=False,
     )
     app = FastAPI()
@@ -422,3 +455,17 @@ async def test_http_content_consent_excludes_new_attempt_in_same_exchange():
         masked = await client.get(f"{_ADMIN}/session/http/exchange", headers=_READER)
         assert masked.status_code == 200
         assert len(masked.json()) == 2
+        segments = await client.get(f"{_ADMIN}/session/sse/exchange", headers=_READER)
+        assert segments.status_code == 200
+        for segment, expected in zip(segments.json(), (200, 403), strict=True):
+            response = await client.get(
+                f"{_ADMIN}/session/sse-access",
+                headers=_READER,
+                params={
+                    "exchange_id": "exchange",
+                    "runtime_id": "fred-agents",
+                    "ref": segment["outgoing"]["ref"],
+                    "index": 0,
+                },
+            )
+            assert response.status_code == expected

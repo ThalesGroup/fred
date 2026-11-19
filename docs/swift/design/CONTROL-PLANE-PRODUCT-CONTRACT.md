@@ -5474,3 +5474,12 @@ saved end rank observed by its runtime execution, so resuming an exchange
 does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
+
+### SSE timeline and original frames
+
+`GET /admin/conversation-traces/{session_id}/sse/{exchange_id}` returns bounded
+timing and event categories for the selected turn. Each streamed execution
+segment includes one outgoing lane and provider lanes keyed by HTTP attempt
+reference. A frame read at `/sse/{exchange_id}/{ref}/{index}` requires the
+registered runtime and current consent through the segment's saved end rank.
+Control Plane and the runtime recheck access after reading the frame.

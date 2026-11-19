@@ -22,7 +22,7 @@ from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from time import monotonic
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import quote
 
 import anyio
@@ -38,6 +38,10 @@ from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpEvidence,
     TraceOutcome,
+    TraceSseArtifactAccess,
+    TraceSseEnding,
+    TraceSseFrame,
+    TraceSseSegment,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -49,7 +53,7 @@ from fred_core.security.backend_to_backend_auth import (
 )
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace_artifacts import (
@@ -58,11 +62,14 @@ from fred_runtime.app.conversation_trace_artifacts import (
     TraceHttpArtifactStore,
     safe_identifier,
 )
+from fred_runtime.app.conversation_trace_sse import RecordedSseLane
+from fred_runtime.runtime_support.llm_diagnostics import classify_error
 
 logger = logging.getLogger(__name__)
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 _TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_ID = re.compile(r"^[0-9a-f]{16}$")
+_Access = TypeVar("_Access", bound=BaseModel)
 _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
     "conversation_trace_capture", default=None
 )
@@ -89,6 +96,14 @@ def capture_model_http(call_id: str, model: str | None) -> Iterator[None]:
 
 def is_trace_capture_active() -> bool:
     return _ACTIVE_CAPTURE.get() is not None
+
+
+def note_stream_failure(exc: Exception) -> None:
+    capture = _ACTIVE_CAPTURE.get()
+    if capture is not None and capture.http is not None:
+        capture.watchdog_timeout = (
+            classify_error(exc).get("error_code") == "stream_idle_timeout"
+        )
 
 
 def attach_capture_reference(span: SpanPort, *, root: bool = False) -> None:
@@ -142,6 +157,15 @@ class ConversationTraceClient:
         assert self.artifacts is not None
         async with self._http_readers:
             return await self.artifacts.read(session_id, ref)
+
+    async def read_sse(
+        self, session_id: str, ref: str, access: TraceSseArtifactAccess
+    ) -> TraceSseFrame:
+        assert self.artifacts is not None
+        async with self._http_readers:
+            return await self.artifacts.read_sse(
+                session_id, ref, access.offset, access.size
+            )
 
     def _new_http_buffer(self) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
@@ -212,6 +236,7 @@ class ConversationTraceClient:
                 if permitted is False:
                     return
                 summaries: list[TraceHttpAttempt] = []
+                lanes = []
                 # Keep order and cap per-pod in-flight writes across all turns.
                 deadline = monotonic() + 8
                 for attempt in attempts:
@@ -234,8 +259,35 @@ class ConversationTraceClient:
                             observed_through_rank=observed_through_rank,
                         )
                     )
+                    if attempt.sse is not None:
+                        lane_stored = await self._publish_sse_lane(
+                            session_id,
+                            attempt.sse,
+                            create_prefix=not stored,
+                            permitted=bool(permitted),
+                            deadline=deadline,
+                        )
+                        if lane_stored and attempt.sse.raw and not stored:
+                            refs.append(attempt.ref)
+                        lanes.append(attempt.sse.summary(stored=lane_stored))
                 result.http_attempts = summaries
                 result.http_incomplete = buffer.incomplete
+                if buffer.outgoing is not None:
+                    lane = buffer.outgoing
+                    stored = await self._publish_sse_lane(
+                        session_id,
+                        lane,
+                        create_prefix=True,
+                        permitted=bool(permitted),
+                        deadline=deadline,
+                    )
+                    if stored and lane.raw:
+                        refs.append(lane.ref)
+                    result.sse = TraceSseSegment(
+                        observed_through_rank=observed_through_rank,
+                        outgoing=lane.summary(stored=stored),
+                        provider=lanes,
+                    )
                 published = await self.finalize(capture_id, result)
                 # A definitive rejection fences erasure and duplicate finalizations.
                 # A lost response can still mean the index committed.
@@ -244,26 +296,87 @@ class ConversationTraceClient:
         finally:
             self._http_turns -= 1
 
+    async def _publish_sse_lane(
+        self,
+        session_id: str,
+        lane: RecordedSseLane,
+        *,
+        create_prefix: bool,
+        permitted: bool,
+        deadline: float,
+    ) -> bool:
+        if not lane.raw:
+            return True
+        if not permitted or self.artifacts is None or deadline <= monotonic():
+            return False
+        try:
+            with anyio.fail_after(max(0, deadline - monotonic())):
+                await self.artifacts.write_sse(
+                    session_id, lane, create_prefix=create_prefix
+                )
+        except Exception:
+            logger.warning("event=conversation_trace.sse_artifact_write_failed")
+            if create_prefix:
+                await self._erase_attempts(session_id, [lane.ref])
+            return False
+        return True
+
     async def http_access(
         self, session_id: str, exchange_id: str, ref: str, authorization: str
     ) -> TraceHttpArtifactAccess:
+        return await self._artifact_access(
+            "http", session_id, exchange_id, ref, authorization, TraceHttpArtifactAccess
+        )
+
+    async def sse_access(
+        self,
+        session_id: str,
+        exchange_id: str,
+        ref: str,
+        index: int,
+        authorization: str,
+    ) -> TraceSseArtifactAccess:
+        return await self._artifact_access(
+            "sse",
+            session_id,
+            exchange_id,
+            ref,
+            authorization,
+            TraceSseArtifactAccess,
+            index=index,
+        )
+
+    async def _artifact_access(
+        self,
+        kind: str,
+        session_id: str,
+        exchange_id: str,
+        ref: str,
+        authorization: str,
+        decoder: type[_Access],
+        *,
+        index: int | None = None,
+    ) -> _Access:
         key = quote(session_id, safe="")
+        params: dict[str, str | int] = {
+            "runtime_id": self._runtime_id,
+            "exchange_id": exchange_id,
+            "ref": ref,
+        }
+        if index is not None:
+            params["index"] = index
         try:
             response = await self._client.get(
-                f"{self._control_plane_url}/admin/conversation-traces/{key}/http-access",
+                f"{self._control_plane_url}/admin/conversation-traces/{key}/{kind}-access",
                 headers={"Authorization": authorization},
-                params={
-                    "runtime_id": self._runtime_id,
-                    "exchange_id": exchange_id,
-                    "ref": ref,
-                },
+                params=params,
             )
             if response.status_code in {401, 403, 404}:
-                raise HTTPException(403, "trace_http_access_denied")
+                raise HTTPException(403, f"trace_{kind}_access_denied")
             response.raise_for_status()
-            return TraceHttpArtifactAccess.model_validate_json(response.content)
+            return decoder.model_validate_json(response.content)
         except (httpx.HTTPError, ValueError) as exc:
-            raise HTTPException(503, "trace_http_unavailable") from exc
+            raise HTTPException(503, f"trace_{kind}_unavailable") from exc
 
     async def history_access(
         self, session_id: str, authorization: str, exchange_id: str | None = None
@@ -315,7 +428,10 @@ class ConversationTraceClient:
                 if raw is not None:
                     admission = TraceAdmission.model_validate(raw)
                     return ManagedTurnCapture(
-                        admission.capture_id, self, http=self._new_http_buffer()
+                        admission.capture_id,
+                        self,
+                        http=self._new_http_buffer(),
+                        stream_offset_ms=admission.stream_offset_ms,
                     )
         except Exception:
             logger.debug("event=conversation_trace.admission_unavailable")
@@ -347,6 +463,8 @@ class ManagedTurnCapture:
     outcome: TraceOutcome = TraceOutcome.UNKNOWN
     discarded: bool = False
     http: HttpTurnBuffer | None = None
+    stream_offset_ms: int = 0
+    watchdog_timeout: bool = False
     call_ids: dict[str, None] = field(default_factory=dict)
     trace_id: str | None = None
     span_id: str | None = None
@@ -405,11 +523,17 @@ class ManagedTurnCapture:
         duration_ms = min(int((monotonic() - started) * 1000), 2**31 - 1)
         turn_number = None
         observed_through_rank = None
+        has_stream = self.http is not None and self.http.outgoing is not None
+        if self.http is not None and self.http.outgoing is not None:
+            ending = self.http.outgoing.ending
+            if ending == TraceSseEnding.FAILED and self.watchdog_timeout:
+                ending = TraceSseEnding.WATCHDOG_TIMEOUT
+            self.http.outgoing.finish(monotonic(), ending)
         attempts = self.http.close() if self.http is not None else []
         if isinstance(history_store, PostgresHistoryStore) and not self.discarded:
             with suppress(Exception):
                 with anyio.fail_after(0.35):
-                    if attempts:
+                    if attempts or has_stream:
                         boundary = await history_store.trace_boundary(
                             session_id, user_id, exchange_id
                         )
@@ -431,7 +555,7 @@ class ManagedTurnCapture:
             http_incomplete=self.http is None,
         )
         if self.http is not None:
-            if attempts and not self.discarded:
+            if (attempts or has_stream) and not self.discarded:
                 self.client.submit_http(
                     session_id,
                     self.capture_id,
