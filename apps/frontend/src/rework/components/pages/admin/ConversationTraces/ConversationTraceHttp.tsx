@@ -18,6 +18,7 @@ import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import type {
   ConversationTraceTurn,
+  TraceCheckpointStatus,
   TraceHttpAttempt,
   TraceHttpBody,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -217,9 +218,11 @@ function AttemptEvidence({
 export function TraceHttpAttemptSummary({
   active,
   provider = false,
+  checkpointStatus,
 }: {
   active: TraceHttpAttempt;
   provider?: boolean;
+  checkpointStatus?: TraceCheckpointStatus;
 }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
   const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
@@ -241,6 +244,8 @@ export function TraceHttpAttemptSummary({
         <>
           <dt>{t("release")}</dt>
           <dd>{active.release ?? t("unavailable")}</dd>
+          <dt>{t("checkpointStatus")}</dt>
+          <dd>{t(`checkpoint.${checkpointStatus ?? "unknown"}`)}</dd>
         </>
       )}
       <dt>{t("completeness")}</dt>
@@ -365,7 +370,7 @@ export function ConversationTraceHttp({
             </Button>
           ))}
       </div>
-      {active && <TraceHttpAttemptSummary active={active} provider />}
+      {active && <TraceHttpAttemptSummary active={active} provider checkpointStatus={turn.checkpoint_status} />}
       <ButtonGroup
         items={[{ label: t("exchangeTab") }, { label: t("langchainTab") }, { label: t("sseTab") }]}
         size="2xs"

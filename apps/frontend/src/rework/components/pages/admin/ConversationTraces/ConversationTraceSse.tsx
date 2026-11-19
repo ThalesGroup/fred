@@ -14,7 +14,7 @@ import type {
   TraceSseSegment,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import SseWindow, { type SseRange } from "./SseWindow";
-import { TRACE_TRANSLATION_PREFIX, downloadTraceBytes, traceBytes } from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, canReadTraceArtifact, downloadTraceBytes, traceBytes } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -125,6 +125,8 @@ export function TraceSseFramePayload({
 function SseTrack({
   source,
   lanes,
+  sessionId,
+  exchangeId,
   events,
   view,
   selected,
@@ -133,6 +135,8 @@ function SseTrack({
 }: {
   source: TrackSource;
   lanes: Lane[];
+  sessionId: string;
+  exchangeId: string;
   events: TimedFrame[];
   view: SseRange;
   selected: string | undefined;
@@ -162,7 +166,6 @@ function SseTrack({
         {first && (
           <span>{t("frameCount", { count: lanes.reduce((total, { stream }) => total + stream.frame_count, 0) })}</span>
         )}
-        {first?.headers_ms != null && <span>{t("headersAt", { time: elapsed(first.headers_ms) })}</span>}
         {lastEvent != null && <span>{t("lastAt", { time: elapsed(lastEvent) })}</span>}
         {gap && <span className={styles.sseGapLabel}>{t("gap", { duration: elapsed(gap[1] - gap[0]) })}</span>}
         {last && <span>{t("ended", { reason: t("ending." + last.ending), time: elapsed(last.end_ms) })}</span>}
@@ -214,7 +217,62 @@ function SseTrack({
             ))}
         </div>
       )}
+      {lanes.map((lane) =>
+        lane.stream.headers_ms != null ? (
+          <SseHeaders
+            key={lane.stream.ref}
+            lane={lane}
+            sessionId={sessionId}
+            exchangeId={exchangeId}
+            label={t("headersAt", { time: elapsed(lane.stream.headers_ms) })}
+          />
+        ) : null,
+      )}
     </section>
+  );
+}
+
+function SseHeaders({
+  lane,
+  sessionId,
+  exchangeId,
+  label,
+}: {
+  lane: Lane;
+  sessionId: string;
+  exchangeId: string;
+  label: string;
+}) {
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  const [open, setOpen] = useState(false);
+  const stored = lane.stream.headers_available;
+  const response = enhancedControlPlaneApi.useGetConversationTraceSseHeadersQuery(
+    open && lane.shared && stored ? { sessionId, exchangeId, ref: lane.stream.ref } : skipToken,
+    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+  );
+  const headers = response.currentData?.headers;
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{label}</summary>
+      {!open ? null : !stored || response.isError ? (
+        <p>{t("headersUnavailable")}</p>
+      ) : !lane.shared ? (
+        <p>{t("headersMasked")}</p>
+      ) : !headers ? (
+        <p role="status">{t("loading")}</p>
+      ) : Object.keys(headers).length === 0 ? (
+        <p>{t("headersEmpty")}</p>
+      ) : (
+        <dl>
+          {Object.entries(headers).map(([name, value]) => (
+            <div key={name} className={styles.httpHeader}>
+              <dt>{name}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </details>
   );
 }
 
@@ -271,6 +329,8 @@ function Timeline({
           key={source}
           source={source}
           lanes={lanes[source]}
+          sessionId={sessionId}
+          exchangeId={exchangeId}
           events={points[source]}
           view={view}
           selected={selected}
@@ -334,20 +394,18 @@ export function ConversationTraceSse({
     { sessionId, exchangeId: turn.exchange_id },
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  const segments = [...(metadata.currentData ?? [])].sort((a, b) => a.outgoing.started_ms - b.outgoing.started_ms);
-  const canRead = (segment: TraceSseSegment) =>
-    turn.access === "local" ||
-    (turn.access === "shared" &&
-      cutoffRank != null &&
-      segment.observed_through_rank != null &&
-      segment.observed_through_rank <= cutoffRank);
+  const start = (segment: TraceSseSegment) => segment.outgoing?.started_ms ?? segment.provider[0]?.started_ms ?? 0;
+  const segments = [...(metadata.currentData ?? [])].sort((a, b) => start(a) - start(b));
+  const canRead = (segment: TraceSseSegment) => canReadTraceArtifact(turn, cutoffRank, segment.observed_through_rank);
   const lanes = {
     provider: segments.flatMap((segment) =>
       segment.provider
         .filter((stream) => stream.ref === attemptRef)
         .map((stream) => ({ stream, shared: canRead(segment) })),
     ),
-    outgoing: segments.map((segment) => ({ stream: segment.outgoing, shared: canRead(segment) })),
+    outgoing: segments.flatMap((segment) =>
+      segment.outgoing ? [{ stream: segment.outgoing, shared: canRead(segment) }] : [],
+    ),
   };
   return (
     <section className={styles.sseTimeline} aria-label={t("title")}>

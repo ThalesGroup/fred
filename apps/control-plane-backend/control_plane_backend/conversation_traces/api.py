@@ -42,6 +42,9 @@ from fred_core.conversation_trace import (
     TraceOwnerVisibilityRequest,
     TraceSseArtifactAccess,
     TraceSseFrame,
+    TraceSseHeaderAccess,
+    TraceSseHeaders,
+    TraceSseLane,
     TraceSseSegment,
     TraceStorageCleanup,
     TraceStorageCleanupResult,
@@ -117,6 +120,7 @@ _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 _SSE_FRAME = TypeAdapter(TraceSseFrame)
+_SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 _TOOL_EVIDENCE = TypeAdapter(TraceToolEvidence)
 _EXPORTS = anyio.CapacityLimiter(2)
@@ -1044,14 +1048,13 @@ async def list_conversation_trace_sse_segments(
     return await store.sse_segments(session_id, exchange_id)
 
 
-async def _sse_artifact_access(
+async def _sse_lane_access(
     container: ControlPlaneContainer,
     reference: TraceConversationReference | None,
     request: Request,
     exchange_id: str,
     ref: str,
-    index: int | None,
-) -> TraceSseArtifactAccess:
+) -> tuple[TraceSseHeaderAccess, TraceSseLane]:
     reference, local, grant = await _artifact_permission(
         container, reference, request, exchange_id, kind="sse"
     )
@@ -1059,10 +1062,7 @@ async def _sse_artifact_access(
         reference.session_id, exchange_id
     )
     for segment in segments:
-        lane = next(
-            (lane for lane in (segment.outgoing, *segment.provider) if lane.ref == ref),
-            None,
-        )
+        lane = next((lane for lane in segment.lanes if lane.ref == ref), None)
         if lane is None:
             continue
         if not local and (
@@ -1071,24 +1071,59 @@ async def _sse_artifact_access(
             or segment.observed_through_rank > grant.cutoff.last_rank
         ):
             raise HTTPException(403, "trace_sse_access_denied")
-        if index is None:
-            offset, size = 0, lane.raw_size
-            if not size:
-                break
-        else:
-            if (
-                not 0 <= index < len(lane.frames)
-                or (offset := lane.frames[index].offset) is None
-            ):
-                break
-            size = lane.frames[index].size
-        return TraceSseArtifactAccess(
-            grant_id=grant.grant_id if grant is not None else None,
-            local_content_access=local,
-            offset=offset,
-            size=size,
+        return (
+            TraceSseHeaderAccess(
+                grant_id=grant.grant_id if grant is not None else None,
+                local_content_access=local,
+            ),
+            lane,
         )
     raise HTTPException(404, "trace_sse_unavailable")
+
+
+async def _sse_artifact_access(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference | None,
+    request: Request,
+    exchange_id: str,
+    ref: str,
+    index: int | None,
+) -> TraceSseArtifactAccess:
+    access, lane = await _sse_lane_access(
+        container, reference, request, exchange_id, ref
+    )
+    if index is None:
+        offset, size = 0, lane.raw_size
+        if not size:
+            raise HTTPException(404, "trace_sse_unavailable")
+    else:
+        if (
+            not 0 <= index < len(lane.frames)
+            or (offset := lane.frames[index].offset) is None
+        ):
+            raise HTTPException(404, "trace_sse_unavailable")
+        size = lane.frames[index].size
+    return TraceSseArtifactAccess(
+        grant_id=access.grant_id,
+        local_content_access=access.local_content_access,
+        offset=offset,
+        size=size,
+    )
+
+
+async def _sse_header_access(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference | None,
+    request: Request,
+    exchange_id: str,
+    ref: str,
+) -> TraceSseHeaderAccess:
+    access, lane = await _sse_lane_access(
+        container, reference, request, exchange_id, ref
+    )
+    if not lane.headers_available:
+        raise HTTPException(404, "trace_sse_unavailable")
+    return access
 
 
 @router.get(
@@ -1145,6 +1180,59 @@ async def get_conversation_trace_sse_frame(
     )
     if access != await _sse_artifact_access(
         container, await store.reference(session_id), request, exchange_id, ref, index
+    ):
+        raise HTTPException(403, "trace_sse_access_denied")
+    return result
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/sse-header-access",
+    operation_id="get_conversation_trace_sse_header_access",
+)
+async def get_conversation_trace_sse_header_access(
+    session_id: SessionId,
+    runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
+    exchange_id: Annotated[str, Query(min_length=1, max_length=255)],
+    ref: Annotated[str, Query(pattern=r"^[0-9a-f]{32}$")],
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceSseHeaderAccess:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await container.get_conversation_trace_store().reference(session_id)
+    if reference is None or reference.runtime_id != runtime_id:
+        raise HTTPException(403, "trace_sse_access_denied")
+    return await _sse_header_access(container, reference, request, exchange_id, ref)
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/sse-headers/{exchange_id}/{ref}",
+    operation_id="get_conversation_trace_sse_headers",
+)
+async def get_conversation_trace_sse_headers(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    ref: ArtifactRef,
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceSseHeaders:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    access = await _sse_header_access(container, reference, request, exchange_id, ref)
+    assert reference is not None
+    result = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-sse-headers/{quote(exchange_id, safe='')}/{ref}",
+        _SSE_HEADERS,
+    )
+    if access != await _sse_header_access(
+        container, await store.reference(session_id), request, exchange_id, ref
     ):
         raise HTTPException(403, "trace_sse_access_denied")
     return result

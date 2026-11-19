@@ -24,6 +24,7 @@ from fred_core.conversation_trace import (
     TraceModelIndex,
     TraceSseAvailability,
     TraceSseFrame,
+    TraceSseHeaders,
     TraceSseLane,
     TraceToolCall,
     TraceToolEvidence,
@@ -50,6 +51,7 @@ _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP = TypeAdapter(TraceHttpEvidence)
 _SSE = TypeAdapter(TraceSseFrame)
+_SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL = TypeAdapter(TraceModelEvidence)
 _TOOL = TypeAdapter(TraceToolEvidence)
 _JSON_OBJECT = TypeAdapter(dict[str, object])
@@ -79,6 +81,7 @@ class TraceExportArtifact(BaseModel):
     ) = None
     lane: Literal["provider", "outgoing"] | None = None
     segment: int | None = None
+    headers_status: EvidenceStatus | None = None
 
 
 class TraceExportEvidence(BaseModel):
@@ -277,6 +280,7 @@ class _TurnExport:
         *,
         lane: Literal["provider", "outgoing"] | None = None,
         segment: int | None = None,
+        runtime_kind: str | None = None,
     ) -> TraceExportArtifact:
         """Resolve one protected artifact through the corresponding Runtime API."""
         entries: list[str] = []
@@ -289,7 +293,7 @@ class _TurnExport:
             value, read_status = await _read_available(
                 self.read,
                 self.reference,
-                f"trace-{kind}/{exchange}/{metadata.ref}",
+                f"trace-{runtime_kind or kind}/{exchange}/{metadata.ref}",
                 decoder,
             )
             if value is None:
@@ -322,6 +326,11 @@ class _TurnExport:
         async def write_sse(path: str, value: TraceSseFrame) -> list[str]:
             return [self.files.add(f"{path}.bin", _opaque_bytes(value.data))]
 
+        async def write_headers(path: str, value: TraceSseHeaders) -> list[str]:
+            return [
+                self.files.add(f"{path}-headers.json", value.model_dump_json().encode())
+            ]
+
         async def write_json(path: str, value: BaseModel) -> list[str]:
             return [self.files.add(f"{path}.json", value.model_dump_json().encode())]
 
@@ -337,25 +346,48 @@ class _TurnExport:
         ]
         sse = []
         for ordinal, segment in enumerate(index.sse, 1):
-            pairs: list[tuple[Literal["outgoing", "provider"], TraceSseLane]] = [
-                ("outgoing", segment.outgoing)
-            ]
+            pairs: list[tuple[Literal["outgoing", "provider"], TraceSseLane]] = []
+            if segment.outgoing is not None:
+                pairs.append(("outgoing", segment.outgoing))
             pairs.extend(("provider", lane) for lane in segment.provider)
             for kind, lane in pairs:
                 status = _SSE_STATES[lane.availability]
                 if not lane.raw_size and status in ("partial", "available"):
                     status = "unavailable"
-                sse.append(
-                    await self._artifact(
+                artifact = await self._artifact(
+                    "sse",
+                    lane,
+                    _SSE,
+                    self._status(segment.observed_through_rank, status),
+                    write_sse,
+                    lane=kind,
+                    segment=ordinal,
+                )
+                if lane.headers_available:
+                    headers = await self._artifact(
                         "sse",
                         lane,
-                        _SSE,
-                        self._status(segment.observed_through_rank, status),
-                        write_sse,
-                        lane=kind,
-                        segment=ordinal,
+                        _SSE_HEADERS,
+                        self._status(segment.observed_through_rank, "available"),
+                        write_headers,
+                        runtime_kind="sse-headers",
                     )
-                )
+                    artifact.headers_status = headers.status
+                    artifact.files.extend(headers.files)
+                    if artifact.status == "empty":
+                        artifact.status = headers.status
+                    elif (
+                        artifact.status == "unavailable"
+                        and headers.status == "available"
+                    ):
+                        artifact.status = "partial"
+                    elif (
+                        artifact.status == "available" and headers.status != "available"
+                    ):
+                        artifact.status = "partial"
+                elif lane.headers_ms is not None:
+                    artifact.headers_status = "unavailable"
+                sse.append(artifact)
         model = []
         for item in index.model:
 

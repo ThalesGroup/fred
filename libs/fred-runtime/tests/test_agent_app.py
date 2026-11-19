@@ -68,6 +68,11 @@ from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.conversation_trace import (
+    ConversationTraceClient,
+    ManagedTurnCapture,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
@@ -2225,7 +2230,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
-    with TestClient(app) as client:
+    buffer = HttpTurnBuffer()
+    trace_client = MagicMock(spec=ConversationTraceClient)
+    trace_client.artifacts = MagicMock()
+    trace_client.admit = AsyncMock(
+        return_value=ManagedTurnCapture("trace-fixture", trace_client, http=buffer)
+    )
+    with TestClient(app) as client, monkeypatch.context() as patches:
+        patches.setattr(
+            get_pod_container_from_app(app), "conversation_trace_client", trace_client
+        )
         response = client.post(
             "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
@@ -2249,6 +2263,22 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     )
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+    trace_client.admit.assert_awaited_once()
+    trace_client.submit_http.assert_called_once()
+    session_id, _, result, evidence, rank = trace_client.submit_http.call_args.args
+    assert session_id == "managed-session"
+    assert result.outcome == "completed"
+    assert result.checkpoint_status == "persisted"
+    assert rank is not None
+    assert evidence.model_calls
+    if stream:
+        assert evidence.outgoing is not None
+        assert evidence.outgoing.headers == {
+            name: response.headers[name]
+            for name in ("content-type", "x-request-id", "x-correlation-id")
+        }
+    else:
+        assert evidence.outgoing is None
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(

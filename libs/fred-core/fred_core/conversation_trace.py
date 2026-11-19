@@ -189,6 +189,7 @@ TRACE_MAX_SSE_FRAMES = 512
 TRACE_MAX_SSE_SEGMENTS = 8
 TRACE_SSE_SEGMENT_BYTES = 512 * 1024
 TRACE_SSE_FRAME_BYTES = 64 * 1024
+TRACE_HEADER_VALUE_BYTES = 256
 
 
 class TraceSseKind(StrEnum):
@@ -241,6 +242,7 @@ class TraceSseLane(BaseModel):
     ref: EvidenceReference
     started_ms: TraceRank
     headers_ms: TraceRank | None
+    headers_available: bool = False
     end_ms: TraceRank
     last_event_ms: TraceRank | None
     longest_gap: tuple[TraceRank, TraceRank] | None
@@ -264,22 +266,32 @@ class TraceSseLane(BaseModel):
 
 class TraceSseSegment(BaseModel):
     observed_through_rank: TraceRank | None
-    outgoing: TraceSseLane
+    outgoing: TraceSseLane | None
     provider: Annotated[list[TraceSseLane], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)]
+
+    @property
+    def lanes(self) -> list[TraceSseLane]:
+        return [self.outgoing, *self.provider] if self.outgoing else self.provider
+
+    @property
+    def ref(self) -> str:
+        return self.lanes[0].ref
 
     @model_validator(mode="after")
     def _check_frame_limit(self) -> TraceSseSegment:
-        if (
-            sum(len(lane.frames) for lane in [self.outgoing, *self.provider])
-            > TRACE_MAX_SSE_FRAMES
-        ):
+        if not self.lanes:
+            raise ValueError("SSE segment must contain a lane")
+        if sum(len(lane.frames) for lane in self.lanes) > TRACE_MAX_SSE_FRAMES:
             raise ValueError("too many SSE timing markers in one execution segment")
         return self
 
 
-class TraceSseArtifactAccess(BaseModel):
+class TraceSseHeaderAccess(BaseModel):
     grant_id: str | None = None
     local_content_access: bool = False
+
+
+class TraceSseArtifactAccess(TraceSseHeaderAccess):
     offset: Annotated[int, Field(ge=0, le=TRACE_SSE_SEGMENT_BYTES)]
     size: Annotated[int, Field(gt=0, le=TRACE_SSE_SEGMENT_BYTES)]
 
@@ -287,6 +299,13 @@ class TraceSseArtifactAccess(BaseModel):
 class TraceSseFrame(BaseModel):
     encoding: Literal["base64"] = "base64"
     data: str
+
+
+class TraceSseHeaders(BaseModel):
+    headers: Annotated[
+        dict[str, Annotated[str, Field(max_length=TRACE_HEADER_VALUE_BYTES)]],
+        Field(max_length=16),
+    ]
 
 
 TRACE_MAX_MODEL_CALLS = 64
@@ -493,6 +512,13 @@ class TraceStorageCleanupResult(BaseModel):
     measured: TraceStorageRefs | None = None
 
 
+class TraceCheckpointStatus(StrEnum):
+    PERSISTED = "persisted"
+    NOT_OBSERVED = "not_observed"
+    UNCONFIGURED = "unconfigured"
+    UNKNOWN = "unknown"
+
+
 class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -506,6 +532,7 @@ class TraceFinalization(BaseModel):
     )
     trace_id: TraceId | None = None
     span_id: SpanId | None = None
+    checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     discarded: bool = False
     http_attempts: Annotated[
         list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)

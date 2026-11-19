@@ -6177,8 +6177,10 @@ saved messages and tool evidence when the reader opens a shared turn.
 
 Model calls group their recorded HTTP attempts beneath the selected turn.
 The HTTP status and failure stage describe an individual attempt, and the
-turn header retains its own terminal outcome. The reader can inspect safe
-attempt details while masked. With consent, they can open request and response
+turn header retains its own terminal outcome. The model attempt summary
+also shows whether Fred confirmed a root SQL checkpoint write during the turn.
+The reader can inspect safe attempt details while masked. With consent, they
+can open request and response
 panels and distinguish empty, unavailable, and truncated bodies. JSON can be
 folded and the recorded body bytes can be downloaded.
 
@@ -6187,8 +6189,9 @@ on the turn clock. Both lanes show header and terminal timings, last frame,
 and longest observed silence. The common zoom window supports independent edge
 resizing and middle panning with pointer or keyboard controls. An event picker
 also exposes dense arrivals to keyboard users. Masked readers see the timeline
-and categories, and an authorized reader can view or download the selected
-original frame.
+and categories. An authorized reader can expand a lane's header timing to
+inspect the captured header values, or view or download a selected original
+frame. An early provider rejection can expose headers before any frame arrives.
 
 The LangChain tab shows the messages and tools handed to the model, the
 parsed or partial response, and any matching saved tool results in foldable

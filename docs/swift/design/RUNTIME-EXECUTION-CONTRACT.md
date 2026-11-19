@@ -7454,14 +7454,24 @@ command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
 
 ### Managed conversation trace admission (2026-11-19)
 
-The managed chat SSE route asks Control Plane to admit its exchange using
+The managed chat JSON and SSE routes ask Control Plane to admit their exchange using
 the registered runtime workload identity. Admission is scoped to the
 conversation, owner, and agent instance. The runtime uses existing model
 and tool call identifiers, terminal events, and turn spans to finalize a
 masked summary. If the tracing backend exposes a span, the runtime attaches
 an opaque capture reference. Catalog persistence works independently of
 trace export. Admission and finalization have bounded deadlines and
-failures leave the managed SSE contract intact.
+failures leave the managed response contracts intact. A HITL resume retains its
+exchange identity and records evidence through the newly saved history rank.
+Managed JSON can collect provider stream evidence when available.
+
+For admitted executions, the SQL checkpointer records an observation after a
+root checkpoint transaction commits on the current execution's thread. The
+trace contains only the status: persisted, SQL write not observed, persistence
+unconfigured, or unknown for unsupported and older evidence. A resumed
+exchange preserves a previously confirmed write. The status describes a commit
+observed during the exchange. Current checkpoint availability and individual
+model attempt outcomes are separate facts.
 
 ### Consent-checked trace history (2026-11-19)
 
@@ -7509,6 +7519,11 @@ Provider frames are observed after HTTP content decoding and before tool-call
 normalization. Fred outgoing frames are recorded after the exact serialized
 bytes are handed to ASGI. Both lanes share a monotonic execution clock. A
 resumed execution uses the catalog's offset from the turn's original admission.
+Outgoing headers come from ASGI response start. Provider headers come from the
+observed HTTP response, including an early rejection. The diagnostic allowlist
+keeps up to 256 bytes per header value. Header values live in protected evidence
+files. The index exposes timing and header availability. A managed JSON response
+has no outgoing SSE lane.
 
 Each streamed segment keeps up to 512 timing markers and 512 KiB of frame bytes.
 Lanes retain the last observation and longest silence when the frame budget is
@@ -7521,7 +7536,10 @@ ZIP exports can read an indexed lane in one request to
 `/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}`. The Runtime
 obtains access for that same reference before and after reading. The lane
 contains only indexed raw frames. Their offsets in the manifest still
-identify the individual frames.
+identify the individual frames. The header read at
+`/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}` uses the
+same runtime binding, rank, and consent checks and works even when no frame
+was observed.
 
 ### LangChain invocation and stream normalization (2026-11-19)
 

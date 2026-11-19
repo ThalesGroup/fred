@@ -279,6 +279,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceSseHeaders: build.query<GetTraceSseHeadersApiResponse, GetTraceSseHeadersApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getTraceSseLane: build.query<GetTraceSseLaneApiResponse, GetTraceSseLaneApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}`,
@@ -566,6 +571,12 @@ export type GetTraceHttpEvidenceApiArg = {
 };
 export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
 export type GetTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetTraceSseHeadersApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -1592,6 +1603,11 @@ export type TraceModelEvidence = {
   output_state: TraceModelOutputState;
   version?: 1;
 };
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
+};
 export type TraceSseFrame = {
   data: string;
   encoding?: "base64";
@@ -1887,6 +1903,8 @@ export const {
   useLazyGetTraceHttpEvidenceQuery,
   useGetTraceModelEvidenceQuery,
   useLazyGetTraceModelEvidenceQuery,
+  useGetTraceSseHeadersQuery,
+  useLazyGetTraceSseHeadersQuery,
   useGetTraceSseLaneQuery,
   useLazyGetTraceSseLaneQuery,
   useGetTraceSseFrameQuery,

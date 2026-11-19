@@ -166,6 +166,7 @@ class ConversationTraceTurnRow(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     turn_number: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(String(32), default=TraceOutcome.UNKNOWN.value)
+    checkpoint_status: Mapped[str | None] = mapped_column(String(32))
     failure_category: Mapped[str | None] = mapped_column(String(32))
     support_error_ref: Mapped[str | None] = mapped_column(String(32), index=True)
     call_ids: Mapped[list[str]] = mapped_column(JSON, default=list)

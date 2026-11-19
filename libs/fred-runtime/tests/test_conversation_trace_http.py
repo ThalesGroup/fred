@@ -25,6 +25,7 @@ import httpx
 import httpx2
 import pytest
 from fred_core.conversation_trace import (
+    TRACE_HEADER_VALUE_BYTES,
     TRACE_HTTP_TURN_BYTES,
     TraceHttpCompleteness,
     TraceHttpFailureStage,
@@ -176,7 +177,14 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     raw = second + first + second + done
     encoded = compress(raw) if content_encoding else raw
     split = 17 if content_encoding else len(raw) - len(done) - 1
-    headers = {"content-type": "text/event-stream"}
+    headers = {
+        "content-type": "text/event-stream",
+        "x-request-id": "provider-correlation",
+        "set-cookie": "private",
+        "authorization": "private",
+        "x-api-key": "private",
+        "x-correlation-id": "x" * (TRACE_HEADER_VALUE_BYTES + 1),
+    }
     if content_encoding:
         headers["content-encoding"] = content_encoding
     buffer = HttpTurnBuffer()
@@ -223,6 +231,13 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     assert attempt.normalization(raw_stored=False).rewrites[0].frame_index is None
     store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
     await store.write_sse("session", attempt.sse, create_prefix=True)
+    assert lane.headers_available
+    assert "provider-correlation" not in lane.model_dump_json()
+    assert (await store.read_sse_headers("session", lane.ref)).headers == {
+        name: value[:TRACE_HEADER_VALUE_BYTES]
+        for name, value in headers.items()
+        if name not in {"set-cookie", "authorization", "x-api-key"}
+    }
     raw_size = lane.raw_size
     assert raw_size == len(raw)
     assert raw_size is not None

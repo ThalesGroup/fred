@@ -28,6 +28,7 @@ from fred_core.conversation_trace import (
     TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
+    TraceCheckpointStatus,
     TraceFinalization,
     TraceHistoryBoundary,
     TraceHistoryIncident,
@@ -116,12 +117,15 @@ def _consent_version(row: ConversationTraceConsentRow | None) -> str | None:
 
 
 def _sse_refs(segments: list[dict[str, object]]) -> set[str]:
-    return {
-        ref
-        for item in segments
-        if isinstance(lane := item.get("outgoing"), dict)
-        and isinstance(ref := lane.get("ref"), str)
-    }
+    refs = set()
+    for item in segments:
+        lane = item.get("outgoing")
+        provider = item.get("provider")
+        if lane is None and isinstance(provider, list) and provider:
+            lane = provider[0]
+        if isinstance(lane, dict) and isinstance(ref := lane.get("ref"), str):
+            refs.add(ref)
+    return refs
 
 
 def _stored_refs(result: TraceFinalization) -> set[str]:
@@ -134,8 +138,9 @@ def _stored_refs(result: TraceFinalization) -> set[str]:
     if result.sse is not None:
         refs.update(
             lane.ref
-            for lane in (result.sse.outgoing, *result.sse.provider)
-            if any(frame.offset is not None for frame in lane.frames)
+            for lane in result.sse.lanes
+            if lane.headers_available
+            or any(frame.offset is not None for frame in lane.frames)
         )
     return refs
 
@@ -496,7 +501,7 @@ class ConversationTraceStore:
                 )
                 already_published = (
                     all(item.ref in accepted for item in result.http_attempts)
-                    and (result.sse is None or result.sse.outgoing.ref in accepted_sse)
+                    and (result.sse is None or result.sse.ref in accepted_sse)
                     and all(item.ref in accepted_models for item in result.model_calls)
                     and all(item.ref in accepted_tools for item in result.tool_calls)
                 )
@@ -525,6 +530,11 @@ class ConversationTraceStore:
                 return True
             row.completed_at = utcnow()
             row.outcome = result.outcome.value
+            if (
+                result.checkpoint_status != TraceCheckpointStatus.UNKNOWN
+                and row.checkpoint_status != TraceCheckpointStatus.PERSISTED
+            ):
+                row.checkpoint_status = result.checkpoint_status.value
             if result.outcome == TraceOutcome.FAILED:
                 row.failure_category = result.failure_category
                 row.support_error_ref = result.support_error_ref
@@ -545,9 +555,7 @@ class ConversationTraceStore:
             ]
             combined = [*previous, *(item.model_dump(mode="json") for item in incoming)]
             sse_segments = row.sse_segments or []
-            if result.sse is not None and result.sse.outgoing.ref not in _sse_refs(
-                sse_segments
-            ):
+            if result.sse is not None and result.sse.ref not in _sse_refs(sse_segments):
                 sse_segments = [*sse_segments, result.sse.model_dump(mode="json")]
             model_calls = row.model_calls or []
             model_refs = {item["ref"] for item in model_calls}
@@ -592,7 +600,7 @@ class ConversationTraceStore:
                     result.sse is not None
                     and any(
                         lane.availability == TraceSseAvailability.PARTIAL
-                        for lane in (result.sse.outgoing, *result.sse.provider)
+                        for lane in result.sse.lanes
                     )
                 )
             ):
@@ -719,43 +727,76 @@ class ConversationTraceStore:
         if not keys:
             return []
         turn = ConversationTraceTurnRow
-        # Search the earliest retained captures first. A bounded miss leaves
-        # the origin unknown rather than inferring it from a later request.
+        current = aliased(turn)
+        anchor = (
+            select(current.history_rank)
+            .where(current.session_id == session_id, current.exchange_id == exchange_id)
+            .scalar_subquery()
+        )
         query = (
             select(
                 turn.exchange_id, turn.history_rank, turn.turn_number, turn.model_calls
             )
-            .where(turn.session_id == session_id, turn.model_calls.is_not(None))
+            .where(
+                turn.session_id == session_id,
+                turn.model_calls.is_not(None),
+                or_(
+                    turn.history_rank < anchor,
+                    and_(turn.history_rank == anchor, turn.exchange_id <= exchange_id),
+                ),
+            )
             .order_by(turn.history_rank, turn.exchange_id)
             .limit(64)
         )
-        if call.observed_through_rank is not None:
-            query = query.where(turn.history_rank <= call.observed_through_rank)
+        rank_limits = [
+            rank
+            for rank in (cutoff_rank, call.observed_through_rank)
+            if rank is not None
+        ]
+        rank_limit = min(rank_limits, default=None)
+        if rank_limit is not None:
+            query = query.where(turn.history_rank <= rank_limit)
+        origins: list[TraceModelOrigin] = []
+        page = query
         async with use_session(self._sessions) as session:
-            rows = (await session.execute(query)).all()
-        origins = []
-        for observed_exchange, rank, number, items in rows:
-            for item in items or []:
-                prior = TraceModelIndex.model_validate(item)
-                if cutoff_rank is not None and (
-                    prior.observed_through_rank is None
-                    or prior.observed_through_rank > cutoff_rank
-                ):
-                    continue
-                if keys.intersection(prior.observed_invalid_tools):
-                    keys.difference_update(prior.observed_invalid_tools)
-                    origins.append(
-                        TraceModelOrigin(
-                            exchange_id=observed_exchange,
-                            history_rank=rank,
-                            turn_number=number,
-                            call_id=prior.call_id,
-                        )
+            while rows := (await session.execute(page)).all():
+                for observed_exchange, rank, number, items in rows:
+                    for item in items or []:
+                        prior = TraceModelIndex.model_validate(item)
+                        if (
+                            (
+                                cutoff_rank is None
+                                or prior.observed_through_rank is not None
+                            )
+                            and (
+                                rank_limit is None
+                                or prior.observed_through_rank is None
+                                or prior.observed_through_rank <= rank_limit
+                            )
+                            and keys.intersection(prior.observed_invalid_tools)
+                        ):
+                            keys.difference_update(prior.observed_invalid_tools)
+                            origins.append(
+                                TraceModelOrigin(
+                                    exchange_id=observed_exchange,
+                                    history_rank=rank,
+                                    turn_number=number,
+                                    call_id=prior.call_id,
+                                )
+                            )
+                        if not keys or (
+                            observed_exchange == exchange_id and prior.ref == call.ref
+                        ):
+                            return origins
+                exchange, rank, _, _ = rows[-1]
+                if exchange == exchange_id:
+                    break
+                page = query.where(
+                    or_(
+                        turn.history_rank > rank,
+                        and_(turn.history_rank == rank, turn.exchange_id > exchange),
                     )
-                if not keys or (
-                    observed_exchange == exchange_id and prior.ref == call.ref
-                ):
-                    return origins
+                )
         return origins
 
     async def reference(self, session_id: str) -> TraceConversationReference | None:
@@ -1196,6 +1237,9 @@ class ConversationTraceStore:
                     started_at=_utc(row.started_at),
                     duration_ms=row.duration_ms,
                     outcome=TraceOutcome(row.outcome),
+                    checkpoint_status=TraceCheckpointStatus(
+                        row.checkpoint_status or TraceCheckpointStatus.UNKNOWN
+                    ),
                     failure_category=TraceFailureCategory(row.failure_category)
                     if row.failure_category is not None
                     else None,

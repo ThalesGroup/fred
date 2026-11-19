@@ -18,6 +18,7 @@ from typing import Annotated, Literal
 
 from fred_core.conversation_trace import (
     TraceAvailability,
+    TraceCheckpointStatus,
     TraceDegradation,
     TraceHistoryBoundary,
     TraceId,
@@ -181,6 +182,7 @@ class ConversationTraceTurn(BaseModel):
     started_at: datetime
     duration_ms: int | None
     outcome: TraceOutcome
+    checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
     call_ids: list[str]

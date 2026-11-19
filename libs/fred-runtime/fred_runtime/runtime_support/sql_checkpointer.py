@@ -83,6 +83,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
+from fred_runtime.runtime_support.checkpoints import active_checkpoint_write
 from fred_runtime.runtime_support.graph_resume_lock import GraphResumeLock
 
 
@@ -643,6 +644,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     pool_wait_ms=pool_wait_ms,
                     sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
+            observation = active_checkpoint_write.get()
+            if (
+                observation is not None
+                and observation.thread_id == thread_id
+                and not checkpoint_ns
+            ):
+                observation.persisted = True
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.

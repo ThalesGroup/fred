@@ -71,6 +71,7 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
+from fred_core.conversation_trace import TraceCheckpointStatus
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
     ChatMessage,
@@ -89,7 +90,11 @@ from fred_core.logs.context import (
     current_context,
     operation_log_scope,
 )
-from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
+from fred_core.logs.http import (
+    REFERENCE_HEADERS,
+    RequestLoggingFastAPI,
+    observe_response_start,
+)
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.propagation import outbound_context_headers
@@ -259,6 +264,7 @@ from fred_runtime.runtime_support.authority import (
     RunStopError,
 )
 from fred_runtime.runtime_support.checkpoints import (
+    CheckpointWriteObservation,
     checkpoint_namespace,
     graph_thread_id,
     graph_thread_prefix,
@@ -314,7 +320,8 @@ from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
-from .conversation_trace_artifacts import TraceHttpArtifactStore
+from .conversation_trace import ManagedTurnCapture
+from .conversation_trace_artifacts import TraceHttpArtifactStore, trace_response_headers
 from .conversation_trace_history import owner_hidden_sessions
 from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
@@ -2699,14 +2706,6 @@ class _RunStreamingResponse(StreamingResponse):
     """Runs its `background` however the response ends. Starlette skips it when
     the response raises or is cancelled, and a run must not outlive its response."""
 
-    on_headers: Callable[[float], None] | None = None
-
-    async def stream_response(self, send: Send) -> None:
-        # Starlette sends the headers before advancing the body iterator.
-        if self.on_headers is not None:
-            self.on_headers(time.monotonic())
-        await super().stream_response(send)
-
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         finish, self.background = self.background, None
         try:
@@ -4481,6 +4480,43 @@ async def _resolve_exchange_id(
     return str(uuid4())
 
 
+async def _admit_managed_turn_capture(
+    container: PodApplicationContext,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    *,
+    session_id: str | None,
+    user_id: str,
+    exchange_id: str,
+    instance_id: str | None,
+    history_rank: int,
+) -> ManagedTurnCapture | None:
+    if not session_id or not instance_id:
+        return None
+    trace_client = container.conversation_trace_client
+    if trace_client is None:
+        return None
+    capture = await trace_client.admit(
+        session_id=session_id,
+        user_id=user_id,
+        exchange_id=exchange_id,
+        agent_instance_id=instance_id,
+        history_rank=history_rank,
+    )
+    if capture is not None:
+        checkpointer = get_runtime_context().config.checkpointer
+        if checkpointer is None:
+            capture.checkpoint_status = TraceCheckpointStatus.UNCONFIGURED
+        elif isinstance(checkpointer, FredSqlCheckpointer):
+            thread_id = (
+                graph_thread_id(session_id, instance_id)
+                if isinstance(definition, GraphAgentDefinition)
+                else session_id
+            )
+            capture.checkpoint_write = CheckpointWriteObservation(thread_id)
+            capture.checkpoint_status = TraceCheckpointStatus.NOT_OBSERVED
+    return capture
+
+
 async def _stream(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -4510,7 +4546,8 @@ async def _stream(
     exchange_id: str | None = None,
     prewritten_initial: bool = False,
     on_start: Callable[[], None] | None = None,
-    headers_at: Callable[[], float | None] | None = None,
+    response_start: asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]]
+    | None = None,
 ) -> AsyncGenerator[str | bytes, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -4541,22 +4578,16 @@ async def _stream(
         history_store, session_id, request, 0 if prewritten_initial else None
     )
     trace_history_rank = base_rank or 0
-    trace_client = container.conversation_trace_client
-    capture = None
-    if trace_client is not None and session_id and request.agent_instance_id:
-        capture = await trace_client.admit(
-            session_id=session_id,
-            user_id=user_id,
-            exchange_id=exchange_id,
-            agent_instance_id=request.agent_instance_id,
-            history_rank=trace_history_rank,
-        )
+    capture = await _admit_managed_turn_capture(
+        container,
+        definition,
+        session_id=session_id,
+        user_id=user_id,
+        exchange_id=exchange_id,
+        instance_id=request.agent_instance_id,
+        history_rank=trace_history_rank,
+    )
     turn_start = time.monotonic()
-    if capture is not None and capture.http is not None:
-        emitted_headers = headers_at() if headers_at is not None else None
-        capture.http.start_stream(
-            emitted_headers or turn_start, capture.stream_offset_ms
-        )
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
     # carry the same value.  Standalone no-security default: "personal".
@@ -4594,6 +4625,16 @@ async def _stream(
     )
     events = capture.iterate(payloads) if capture is not None else payloads
     try:
+        if capture is not None and capture.http is not None:
+            at, headers = turn_start, None
+            if response_start is not None:
+                try:
+                    async with asyncio.timeout(0.25):
+                        at, raw_headers = await asyncio.shield(response_start)
+                    headers = trace_response_headers(raw_headers)
+                except TimeoutError:
+                    pass
+            capture.http.start_stream(at, capture.stream_offset_ms, headers)
         if on_start is not None:
             on_start()
         async for runtime_payload in events:
@@ -7611,7 +7652,18 @@ def _build_agent_router(
         )
         payloads: list[dict[str, Any]] = []
         expander = _TurnEventExpander(target.definition, internal_req)
-        async for runtime_payload in _iterate_runtime_event_payloads(
+        capture = await _admit_managed_turn_capture(
+            container,
+            target.definition,
+            session_id=session_id,
+            user_id=user_id_str,
+            exchange_id=exchange_id,
+            instance_id=internal_req.agent_instance_id,
+            history_rank=base_rank or 0,
+        )
+        if capture is not None and capture.http is not None:
+            capture.http.start_execution(time.monotonic(), capture.stream_offset_ms)
+        runtime_events = _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
             access_token=None
@@ -7637,53 +7689,74 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
-        ):
-            for payload in expander.expand(runtime_payload):
-                payloads.append(
-                    await _rank_runtime_event(
+        )
+        events = (
+            capture.iterate(runtime_events) if capture is not None else runtime_events
+        )
+        try:
+            async for runtime_payload in events:
+                for payload in expander.expand(runtime_payload):
+                    payload = await _rank_runtime_event(
                         payload,
                         ranker,
                         session_id=session_id,
                         user_id=user_id_str,
                         exchange_id=exchange_id,
                     )
-                )
-        _emit_turn_completed(
-            container,
-            session_id=session_id,
-            exchange_id=exchange_id,
-            user_id=user_id_str,
-            team_id=target.team_id,
-            agent_instance_id=request.agent_instance_id,
-            agent_instance_name=target.agent_instance_name,
-            template_agent_id=target.definition.agent_id,
-            payloads=payloads,
-            turn_start=turn_start,
-        )
-        # Write history after generator is fully consumed.
-        # Can await here — no SSE response to block.
-        if session_id:
-            if history_store is not None:
-                await _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id_str,
-                    request_message=request.input,
-                    turn_command=_turn_command(internal_req.context or {}),
-                    skill_invocation=(internal_req.context or {}).get("skill"),
-                    skill_invocations=(internal_req.context or {}).get("skills"),
-                    attachments=(internal_req.context or {}).get("attachments"),
-                    payloads=payloads,
-                    history_store=history_store,
-                    team_id=target.team_id,
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
-                )
+                    payloads.append(payload)
+                    if capture is not None:
+                        capture.note_event(payload)
+            _emit_turn_completed(
+                container,
+                session_id=session_id,
+                exchange_id=exchange_id,
+                user_id=user_id_str,
+                team_id=target.team_id,
+                agent_instance_id=request.agent_instance_id,
+                agent_instance_name=target.agent_instance_name,
+                template_agent_id=target.definition.agent_id,
+                payloads=payloads,
+                turn_start=turn_start,
+            )
+            # Write history after generator is fully consumed.
+            # Can await here — no SSE response to block.
+            if session_id:
+                if history_store is not None:
+                    await _write_turn_history(
+                        session_id=session_id,
+                        user_id=user_id_str,
+                        request_message=request.input,
+                        turn_command=_turn_command(internal_req.context or {}),
+                        skill_invocation=(internal_req.context or {}).get("skill"),
+                        skill_invocations=(internal_req.context or {}).get("skills"),
+                        attachments=(internal_req.context or {}).get("attachments"),
+                        payloads=payloads,
+                        history_store=history_store,
+                        team_id=target.team_id,
+                        agent_instance_id=request.agent_instance_id,
+                        exchange_id=exchange_id,
+                        resume_payload=request.resume_payload,
+                        occurrence_id=request.occurrence_id,
+                        previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                        base_rank=base_rank,
+                        pending_message_id=request.pending_message_id,
+                        prewritten_initial=prewritten_initial,
+                    )
+        finally:
+            if capture is not None and session_id is not None:
+                try:
+                    await complete_cleanup(runtime_events.aclose())
+                finally:
+                    await complete_cleanup(
+                        capture.finish(
+                            history_store,
+                            session_id=session_id,
+                            user_id=user_id_str,
+                            exchange_id=exchange_id,
+                            history_rank=base_rank or 0,
+                            started=turn_start,
+                        )
+                    )
         return _terminal_execute_payload(payloads)
 
     @router.post(
@@ -7971,11 +8044,20 @@ def _build_agent_router(
             raise
         provider = target.credential_provider
         stream_started = False
-        headers_sent_at: float | None = None
+        response_start: (
+            asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]] | None
+        ) = None
+        if (
+            internal_req.agent_instance_id
+            and container.conversation_trace_client is not None
+        ):
+            response_start = asyncio.get_running_loop().create_future()
 
-        def note_headers(at: float) -> None:
-            nonlocal headers_sent_at
-            headers_sent_at = at
+            def note_headers(at: float, headers: list[tuple[bytes, bytes]]) -> None:
+                if response_start is not None and not response_start.done():
+                    response_start.set_result((at, headers))
+
+            observe_response_start(http_request.scope, note_headers)
 
         def mark_stream_started() -> None:
             nonlocal stream_started
@@ -8019,15 +8101,13 @@ def _build_agent_router(
             exchange_id=exchange_id,
             prewritten_initial=prewritten_initial,
             on_start=mark_stream_started,
-            headers_at=lambda: headers_sent_at,
+            response_start=response_start,
         )
         response = _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
             background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
-        if internal_req.agent_instance_id:
-            response.on_headers = note_headers
         return response
 
     return router

@@ -35,6 +35,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.sessions.store import SessionMetadataStore
@@ -45,6 +46,7 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHttpAttempt,
     TraceHttpCompleteness,
+    TraceModelIndex,
     TraceSseSegment,
     TraceToolCall,
     TraceToolOutcome,
@@ -69,6 +71,7 @@ def _sse_segment(rank: int) -> TraceSseSegment:
                 "ref": uuid4().hex,
                 "started_ms": 0,
                 "headers_ms": 0,
+                "headers_available": True,
                 "end_ms": 20,
                 "last_event_ms": 19,
                 "longest_gap": [0, 19],
@@ -236,6 +239,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         ).json() is None
 
         lane = _sse_segment(10)
+        assert lane.outgoing is not None
         failed_reservation = {
             "publication_id": str(uuid4()),
             "objects": {lane.outgoing.ref: 12},
@@ -256,6 +260,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         ).json() == "reserved"
         failed = {
             "outcome": "failed",
+            "checkpoint_status": "persisted",
             "failure_category": "http_400",
             "support_error_ref": "a" * 32,
             "duration_ms": 20,
@@ -381,6 +386,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert first["agent_display_name"] == "Synthetic assistant"
         assert [turn["turn_number"] for turn in first["turns"]] == [2]
         assert first["turns"][0]["call_ids"] == ["call-1"]
+        assert first["turns"][0]["checkpoint_status"] == "persisted"
         timeline = f"{_ADMIN}/session/sse/{admission['exchange_id']}"
         masked = await client.get(timeline, headers=_READER)
         assert masked.json() == [failed["sse"]]
@@ -390,12 +396,19 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (
             await client.get(f"{timeline}/{outgoing['ref']}/0", headers=_READER)
         ).status_code == 403
+        assert (
+            await client.get(
+                f"{_ADMIN}/session/sse-headers/{admission['exchange_id']}/{outgoing['ref']}",
+                headers=_READER,
+            )
+        ).status_code == 403
         second = await client.get(
             f"{_ADMIN}/session",
             headers=_READER,
             params={"cursor": first["next_cursor"]},
         )
         assert [turn["turn_number"] for turn in second.json()["turns"]] == [3]
+        assert second.json()["turns"][0]["checkpoint_status"] == "unknown"
 
         assert await SessionMetadataStore(engine).delete(
             "session", TeamId("team"), "owner"
@@ -422,6 +435,78 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()[
             "used_bytes"
         ] == 0
+
+
+@pytest.mark.asyncio
+async def test_model_origin_searches_beyond_the_first_page_in_call_order(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    old_key, shared_key, future_key = ("a" * 64, "b" * 64, "c" * 64)
+    ordinary = TraceModelIndex(
+        ref=uuid4().hex,
+        call_id="ordinary",
+        model=None,
+        observed_through_rank=2,
+        completeness=TraceHttpCompleteness.COMPLETE,
+    )
+    legacy = ordinary.model_copy(
+        update={"observed_through_rank": None, "observed_invalid_tools": [old_key]}
+    )
+    origin = ordinary.model_copy(
+        update={
+            "ref": uuid4().hex,
+            "call_id": "origin",
+            "observed_through_rank": 130,
+            "observed_invalid_tools": [old_key, shared_key],
+        }
+    )
+    current = ordinary.model_copy(
+        update={
+            "ref": uuid4().hex,
+            "call_id": "current",
+            "observed_through_rank": 132,
+            "related_tools": [old_key, shared_key, future_key],
+        }
+    )
+    later = ordinary.model_copy(
+        update={
+            "ref": uuid4().hex,
+            "call_id": "later",
+            "observed_through_rank": 132,
+            "observed_invalid_tools": [future_key],
+        }
+    )
+
+    async with async_sessionmaker(control_plane_sql_engine).begin() as session:
+        session.add(
+            SessionMetadataRow(session_id="session", team_id="team", user_id="owner")
+        )
+        for turn_number in range(1, 67):
+            calls = {
+                1: [legacy],
+                65: [origin],
+                66: [current, later],
+            }.get(turn_number, [ordinary])
+            session.add(
+                ConversationTraceTurnRow(
+                    capture_id=str(uuid4()),
+                    session_id="session",
+                    exchange_id=f"turn-{turn_number}",
+                    history_rank=2 * turn_number - 1,
+                    turn_number=turn_number,
+                    runtime_id="fred-agents",
+                    agent_display_name="Synthetic assistant",
+                    model_calls=[call.model_dump(mode="json") for call in calls],
+                )
+            )
+    store = ConversationTraceStore(control_plane_sql_engine)
+    shared = await store.model_origins("session", "turn-66", current, cutoff_rank=132)
+    assert [(item.turn_number, item.call_id) for item in shared] == [(65, "origin")]
+    local = await store.model_origins("session", "turn-66", current, cutoff_rank=None)
+    assert [(item.turn_number, item.call_id) for item in local] == [
+        (1, "ordinary"),
+        (65, "origin"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -966,10 +1051,10 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
 
         segments = await client.get(f"{_ADMIN}/session/sse/exchange", headers=_READER)
         assert segments.status_code == 200
-        for frame in ({"index": 0}, {}):
+        for kind, frame in (("sse", {"index": 0}), ("sse", {}), ("sse-header", {})):
             for segment, expected in zip(segments.json(), (200, 403), strict=True):
                 response = await client.get(
-                    f"{_ADMIN}/session/sse-access",
+                    f"{_ADMIN}/session/{kind}-access",
                     headers=_READER,
                     params={
                         "exchange_id": "exchange",

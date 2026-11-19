@@ -30,11 +30,11 @@ from uuid import uuid4
 import anyio
 import httpx
 from fastapi import HTTPException
-from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TraceAdmission,
     TraceAdmissionRequest,
+    TraceCheckpointStatus,
     TraceDegradation,
     TraceFinalization,
     TraceHistoryAccess,
@@ -49,6 +49,8 @@ from fred_core.conversation_trace import (
     TraceSseArtifactAccess,
     TraceSseEnding,
     TraceSseFrame,
+    TraceSseHeaderAccess,
+    TraceSseHeaders,
     TraceSseSegment,
     TraceStorageCleanup,
     TraceStorageCleanupResult,
@@ -59,6 +61,7 @@ from fred_core.conversation_trace import (
     TraceToolEvidence,
 )
 from fred_core.filesystem.structures import BaseFilesystem
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.model.http_capture import active_http_capture
 from fred_core.security.backend_to_backend_auth import (
@@ -80,6 +83,10 @@ from fred_runtime.app.conversation_trace_artifacts import (
     safe_identifier,
 )
 from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
+from fred_runtime.runtime_support.checkpoints import (
+    CheckpointWriteObservation,
+    active_checkpoint_write,
+)
 from fred_runtime.runtime_support.llm_diagnostics import classify_error
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer
 
@@ -115,8 +122,10 @@ def _prepare_publication(
             worst_case_links.setdefault(attempt.call_id, []).append(
                 attempt.normalization(raw_stored=False)
             )
-    if buffer.outgoing is not None and buffer.outgoing.raw:
-        files[buffer.outgoing.ref] = store.sse_files(buffer.outgoing)
+    if buffer.outgoing is not None:
+        outgoing_files = store.sse_files(buffer.outgoing)
+        if outgoing_files:
+            files[buffer.outgoing.ref] = outgoing_files
     for tool in buffer.tool_calls:
         files[tool.ref] = {"tool-v1.json": tool.evidence.model_dump_json().encode()}
     model_evidence: dict[str, TraceModelEvidence] = {}
@@ -251,6 +260,11 @@ class ConversationTraceClient:
             return await self.artifacts.read_sse(
                 session_id, ref, access.offset, access.size
             )
+
+    async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
+        assert self.artifacts is not None
+        async with self._http_readers:
+            return await self.artifacts.read_sse_headers(session_id, ref)
 
     async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
         assert self.artifacts is not None
@@ -464,17 +478,20 @@ class ConversationTraceClient:
                 continue
             lane_stored = False
             if attempt.sse is not None:
-                lane_stored = not attempt.sse.raw or stored
+                lane_stored = stored
                 lanes.append(attempt.sse.summary(stored=lane_stored))
             normalization.setdefault(attempt.call_id, []).append(
                 attempt.normalization(raw_stored=lane_stored)
             )
-        if buffer.outgoing is not None:
-            lane = buffer.outgoing
-            stored = not lane.raw or await write(lane.ref, by_ref[lane.ref])
+        outgoing = None
+        lane = buffer.outgoing
+        if lane is not None:
+            stored = lane.ref in by_ref and await write(lane.ref, by_ref[lane.ref])
+            outgoing = lane.summary(stored=stored)
+        if outgoing is not None or lanes:
             result.sse = TraceSseSegment(
                 observed_through_rank=observed_through_rank,
-                outgoing=lane.summary(stored=stored),
+                outgoing=outgoing,
                 provider=lanes,
             )
         for call in buffer.model_calls:
@@ -543,6 +560,18 @@ class ConversationTraceClient:
             authorization,
             TraceSseArtifactAccess,
             index=index,
+        )
+
+    async def sse_header_access(
+        self, session_id: str, exchange_id: str, ref: str, authorization: str
+    ) -> TraceSseHeaderAccess:
+        return await self._artifact_access(
+            "sse-header",
+            session_id,
+            exchange_id,
+            ref,
+            authorization,
+            TraceSseHeaderAccess,
         )
 
     async def model_access(
@@ -696,6 +725,8 @@ class ManagedTurnCapture:
     call_ids: dict[str, None] = field(default_factory=dict)
     trace_id: str | None = None
     span_id: str | None = None
+    checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
+    checkpoint_write: CheckpointWriteObservation | None = None
 
     def note_call(self, call_id: str) -> None:
         if len(self.call_ids) < MAX_TRACE_CALL_IDS and _CALL_IDENTIFIER.fullmatch(
@@ -738,11 +769,13 @@ class ManagedTurnCapture:
         while True:
             token = _ACTIVE_CAPTURE.set(self)
             tool_token = active_tool_buffer.set(self.http)
+            checkpoint_token = active_checkpoint_write.set(self.checkpoint_write)
             try:
                 payload = await anext(payloads)
             except StopAsyncIteration:
                 return
             finally:
+                active_checkpoint_write.reset(checkpoint_token)
                 active_tool_buffer.reset(tool_token)
                 _ACTIVE_CAPTURE.reset(token)
             yield payload
@@ -766,11 +799,18 @@ class ManagedTurnCapture:
             if ending == TraceSseEnding.FAILED and self.watchdog_timeout:
                 ending = TraceSseEnding.WATCHDOG_TIMEOUT
             self.http.outgoing.finish(monotonic(), ending)
-        attempts = self.http.close() if self.http is not None else []
+        if self.http is not None:
+            self.http.close()
+        has_evidence = self.http is not None and (
+            has_stream
+            or self.http.attempts
+            or self.http.model_calls
+            or self.http.tool_calls
+        )
         if isinstance(history_store, PostgresHistoryStore) and not self.discarded:
             with suppress(Exception):
                 with anyio.fail_after(0.35):
-                    if attempts or has_stream:
+                    if has_evidence:
                         boundary = await history_store.trace_boundary(
                             session_id, user_id, exchange_id
                         )
@@ -790,6 +830,11 @@ class ManagedTurnCapture:
             call_ids=list(self.call_ids),
             trace_id=self.trace_id,
             span_id=self.span_id,
+            checkpoint_status=(
+                TraceCheckpointStatus.PERSISTED
+                if self.checkpoint_write is not None and self.checkpoint_write.persisted
+                else self.checkpoint_status
+            ),
             discarded=self.discarded,
             http_incomplete=self.http is None,
             degradation=(
@@ -801,7 +846,7 @@ class ManagedTurnCapture:
             ),
         )
         if self.http is not None:
-            if (attempts or has_stream) and not self.discarded:
+            if has_evidence and not self.discarded:
                 self.client.submit_http(
                     session_id,
                     self.capture_id,

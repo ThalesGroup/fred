@@ -5519,14 +5519,20 @@ does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
 
+The turn summary and ZIP manifest expose the bounded root checkpoint status
+observed during the exchange. Existing captures and history-only evidence
+use unknown. The status is safe to serve while content is masked.
+
 ### SSE timeline and original frames
 
 `GET /admin/conversation-traces/{session_id}/sse/{exchange_id}` returns bounded
-timing and event categories for the selected turn. Each streamed execution
-segment includes one outgoing lane and provider lanes keyed by HTTP attempt
-reference. A frame read at `/sse/{exchange_id}/{ref}/{index}` requires the
-registered runtime and current consent through the segment's saved end rank.
-Control Plane and the runtime recheck access after reading the frame.
+timing, header availability, and event categories for the selected turn.
+Each segment can include an outgoing lane for a streamed client response and
+provider lanes keyed by HTTP attempt reference. Frame and header reads at
+`/sse/{exchange_id}/{ref}/{index}` and `/sse-headers/{exchange_id}/{ref}`
+require the registered runtime and current consent through the segment's saved
+end rank. Both services recheck access after reading the evidence. Authorized
+content exports include header JSON separately from raw frames.
 
 ### LangChain model evidence
 
@@ -5536,10 +5542,11 @@ bounded model-call index with opaque evidence references. A snapshot read at
 registered runtime, and current consent through the segment's saved rank.
 Both services recheck access before returning content. The request can
 include links to an earlier retained invocation that first recorded a
-matching malformed tool call or wire rewrite. That lookup is limited to
-the first 64 indexed turns in the conversation and to evidence covered by
-the active grant. If no match is identifiable within those bounds, the
-snapshot remains available with no earlier-turn link.
+matching malformed tool call or wire rewrite. The lookup reads retained turns
+in bounded pages up to the selected invocation, using only observations
+allowed by the consent and execution ranks. Where a legacy observation lacks
+its own rank, it is eligible only in local content mode. If a match cannot be
+identified, the snapshot remains available with no earlier-turn link.
 
 ### Tool execution evidence
 

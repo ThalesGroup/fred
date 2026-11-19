@@ -1923,6 +1923,27 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
       }),
     }),
+    getConversationTraceSseHeaderAccess: build.query<
+      GetConversationTraceSseHeaderAccessApiResponse,
+      GetConversationTraceSseHeaderAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-header-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceSseHeaders: build.query<
+      GetConversationTraceSseHeadersApiResponse,
+      GetConversationTraceSseHeadersApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     listConversationTraceModelCalls: build.query<
       ListConversationTraceModelCallsApiResponse,
       ListConversationTraceModelCallsApiArg
@@ -4071,6 +4092,19 @@ export type GetConversationTraceSseFrameApiArg = {
   exchangeId: string;
   ref: string;
   index: number;
+};
+export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 Successful Response */ TraceSseHeaderAccess;
+export type GetConversationTraceSseHeaderAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetConversationTraceSseHeadersApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
 };
 export type ListConversationTraceModelCallsApiResponse = /** status 200 Successful Response */ TraceModelCall[];
 export type ListConversationTraceModelCallsApiArg = {
@@ -7020,6 +7054,7 @@ export type ManualTraceConsentRequest = {
   expected_version: string | null;
   source_note: string;
 };
+export type TraceCheckpointStatus = "persisted" | "not_observed" | "unconfigured" | "unknown";
 export type TraceReportedFailure = {
   support_error_ref: string;
   failure_category?: TraceFailureCategory | null;
@@ -7030,6 +7065,7 @@ export type ConversationTraceTurn = {
   started_at: string;
   duration_ms: number | null;
   outcome: TraceOutcome;
+  checkpoint_status?: TraceCheckpointStatus;
   failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
   call_ids: string[];
@@ -7318,6 +7354,7 @@ export type TraceSseLane = {
   ref: string;
   started_ms: number;
   headers_ms: number | null;
+  headers_available?: boolean;
   end_ms: number;
   last_event_ms: number | null;
   longest_gap: [number, number] | null;
@@ -7328,7 +7365,7 @@ export type TraceSseLane = {
 };
 export type TraceSseSegment = {
   observed_through_rank: number | null;
-  outgoing: TraceSseLane;
+  outgoing: TraceSseLane | null;
   provider: TraceSseLane[];
 };
 export type TraceSseArtifactAccess = {
@@ -7340,6 +7377,15 @@ export type TraceSseArtifactAccess = {
 export type TraceSseFrame = {
   encoding?: "base64";
   data: string;
+};
+export type TraceSseHeaderAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+};
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
 };
 export type TraceModelCall = {
   ref: string;
@@ -7484,6 +7530,7 @@ export type TraceFinalization = {
   call_ids?: string[];
   trace_id?: string | null;
   span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
   discarded?: boolean;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
@@ -8544,6 +8591,10 @@ export const {
   useLazyGetConversationTraceSseAccessQuery,
   useGetConversationTraceSseFrameQuery,
   useLazyGetConversationTraceSseFrameQuery,
+  useGetConversationTraceSseHeaderAccessQuery,
+  useLazyGetConversationTraceSseHeaderAccessQuery,
+  useGetConversationTraceSseHeadersQuery,
+  useLazyGetConversationTraceSseHeadersQuery,
   useListConversationTraceModelCallsQuery,
   useLazyListConversationTraceModelCallsQuery,
   useGetConversationTraceModelAccessQuery,

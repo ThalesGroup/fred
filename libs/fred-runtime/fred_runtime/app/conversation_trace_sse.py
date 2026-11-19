@@ -106,6 +106,7 @@ class RecordedSseLane:
     budget: SseBudget
     started_ms: int
     headers_ms: int | None = None
+    headers: dict[str, str] | None = None
     end_ms: int | None = None
     ending: TraceSseEnding = TraceSseEnding.CLOSED
     frames: list[TraceSseEvent] = field(default_factory=list)
@@ -246,6 +247,7 @@ class RecordedSseLane:
             ref=self.ref,
             started_ms=self.started_ms,
             headers_ms=self.headers_ms,
+            headers_available=stored and self.headers is not None,
             end_ms=self.end_ms if self.end_ms is not None else self.started_ms,
             last_event_ms=self.last_event_ms,
             longest_gap=self.gap,

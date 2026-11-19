@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from _thread import LockType
 from base64 import b64encode
-from collections.abc import Coroutine, Sequence
+from collections.abc import Coroutine, Iterable, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
 from threading import Lock
@@ -31,6 +31,7 @@ from uuid import uuid4
 import httpx
 import httpx2
 from fred_core.conversation_trace import (
+    TRACE_HEADER_VALUE_BYTES,
     TRACE_HTTP_CHUNK_BYTES,
     TRACE_HTTP_TURN_BYTES,
     TRACE_MAX_HTTP_ATTEMPTS,
@@ -50,6 +51,7 @@ from fred_core.conversation_trace import (
     TraceNormalizationStatus,
     TraceSseEnding,
     TraceSseFrame,
+    TraceSseHeaders,
     TraceToolEvidence,
     TraceToolSource,
 )
@@ -80,13 +82,36 @@ _REQUEST_IDS = (
     "request-id",
     "x-amzn-requestid",
 )
-_RESPONSE_HEADERS = _REQUEST_HEADERS.union(_REQUEST_IDS, {"retry-after", "date"})
+_RESPONSE_HEADERS = _REQUEST_HEADERS.union(
+    _REQUEST_IDS, {"retry-after", "date", "cache-control", "x-accel-buffering"}
+)
+_RESPONSE_HEADER_BYTES = frozenset(name.encode("ascii") for name in _RESPONSE_HEADERS)
 
 
 def _headers(
     source: httpx.Headers | httpx2.Headers, allow: frozenset[str]
 ) -> dict[str, str]:
-    return {name: source[name][:256] for name in allow if name in source}
+    return {
+        name: source[name][:TRACE_HEADER_VALUE_BYTES]
+        for name in allow
+        if name in source
+    }
+
+
+def trace_response_headers(source: Iterable[tuple[bytes, bytes]]) -> dict[str, str]:
+    """Keep only the bounded diagnostic allowlist at either response boundary."""
+    headers: dict[str, str] = {}
+    for raw_name, value in source:
+        raw_name = raw_name.lower()
+        if raw_name not in _RESPONSE_HEADER_BYTES:
+            continue
+        name = raw_name.decode("ascii")
+        previous = headers.get(name)
+        prefix = f"{previous}, " if previous is not None else ""
+        budget = TRACE_HEADER_VALUE_BYTES - len(prefix)
+        if budget > 0:
+            headers[name] = prefix + value[:budget].decode("latin-1")
+    return headers
 
 
 def safe_identifier(value: str | None) -> str | None:
@@ -163,21 +188,17 @@ class RecordedHttpAttempt:
 
     def headers(self, response: httpx.Response | httpx2.Response) -> None:
         self.status = response.status_code
-        self.response_headers = _headers(response.headers, _RESPONSE_HEADERS)
-        if not response.is_success or (
+        self.response_headers = trace_response_headers(response.headers.raw)
+        is_sse = response.is_success and (
             response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-            != "text/event-stream"
-        ):
+            == "text/event-stream"
+        )
+        if not is_sse:
             self.normalization_status = TraceNormalizationStatus.SKIPPED
         if self.sse is not None:
             self.sse.headers_ms = self.buffer.sse.at(monotonic())
-            self.streams_sse = response.is_success and (
-                response.headers.get("content-type", "")
-                .split(";", 1)[0]
-                .strip()
-                .lower()
-                == "text/event-stream"
-            )
+            self.sse.headers = self.response_headers
+            self.streams_sse = is_sse
 
     def chunk(self, data: bytes) -> None:
         with self.buffer.lock:
@@ -388,7 +409,7 @@ class HttpTurnBuffer:
                 _headers(request.headers, _REQUEST_HEADERS),
                 tool_ref=tool_ref,
             )
-            if tool_ref is None and self.outgoing is not None:
+            if tool_ref is None:
                 attempt.sse = RecordedSseLane(
                     attempt.ref, self.sse, self.sse.at(attempt.started)
                 )
@@ -402,11 +423,20 @@ class HttpTurnBuffer:
             attempt.request_complete = kept == len(data)
             return attempt
 
-    def start_stream(self, headers_at: float, offset_ms: int) -> None:
-        self.sse.started = headers_at
+    def start_execution(self, started: float, offset_ms: int) -> None:
+        self.sse.started = started
         self.sse.offset_ms = offset_ms
+
+    def start_stream(
+        self, headers_at: float, offset_ms: int, headers: dict[str, str] | None = None
+    ) -> None:
+        self.start_execution(headers_at, offset_ms)
         self.outgoing = RecordedSseLane(
-            uuid4().hex, self.sse, offset_ms, headers_ms=offset_ms
+            uuid4().hex,
+            self.sse,
+            offset_ms,
+            headers_ms=offset_ms if headers is not None else None,
+            headers=headers,
         )
 
     def emit(self, data: bytes, kind: str) -> None:
@@ -652,19 +682,29 @@ class TraceHttpArtifactStore:
     def sse_files(lane: RecordedSseLane) -> ArtifactFiles:
         """Describe bounded raw SSE chunks using views over the closed stream buffer."""
         data = memoryview(lane.raw)
-        return {
+        files: ArtifactFiles = {
             f"sse-{index}": data[start : start + TRACE_HTTP_CHUNK_BYTES]
             for index, start in enumerate(range(0, len(data), TRACE_HTTP_CHUNK_BYTES))
         }
+        if lane.headers is not None:
+            files["sse-headers.json"] = (
+                TraceSseHeaders(headers=lane.headers).model_dump_json().encode()
+            )
+        return files
 
     async def write_sse(
         self, session_id: str, lane: RecordedSseLane, *, create_prefix: bool
     ) -> None:
-        if not lane.raw:
-            return
-        await self.publish(
-            session_id, lane.ref, self.sse_files(lane), create_prefix=create_prefix
-        )
+        files = self.sse_files(lane)
+        if files:
+            await self.publish(session_id, lane.ref, files, create_prefix=create_prefix)
+
+    async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        data = await self._filesystem.read(f"{prefix}/sse-headers.json")
+        if len(data) > TRACE_HTTP_CHUNK_BYTES:
+            raise ValueError("Oversized SSE headers")
+        return TraceSseHeaders.model_validate_json(data)
 
     async def read_sse(
         self, session_id: str, ref: str, offset: int, size: int
