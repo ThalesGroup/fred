@@ -25,7 +25,7 @@ const traceEditorTheme = EditorView.theme({
     color: "var(--on-surface)",
     background: "var(--surface-container-low)",
   },
-  ".cm-scroller": { overflow: "auto", maxHeight: "32lh" },
+  ".cm-scroller": { overflow: "auto", maxHeight: "var(--trace-code-max-height, 32lh)" },
   ".cm-content": { padding: "var(--spacing-xs) 0" },
   ".cm-gutters": {
     color: "var(--on-surface-retreat)",
@@ -38,8 +38,14 @@ const traceEditorTheme = EditorView.theme({
     background: "var(--surface-container)",
     borderColor: "var(--outline-variant)",
   },
-  ".cm-line.trace-message-even": { background: "var(--surface-main)" },
-  ".cm-line.trace-message-odd": { background: "var(--surface-container)" },
+  ".cm-line.trace-message-even": {
+    background: "color-mix(in srgb, var(--info) 18%, var(--surface-container-low))",
+    boxShadow: "inset 2px 0 var(--info)",
+  },
+  ".cm-line.trace-message-odd": {
+    background: "color-mix(in srgb, var(--warning) 18%, var(--surface-container-low))",
+    boxShadow: "inset 2px 0 var(--warning)",
+  },
 });
 
 function modelRequestLayout(code: string) {

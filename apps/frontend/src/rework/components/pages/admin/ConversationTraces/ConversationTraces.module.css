@@ -66,6 +66,18 @@
   min-height: 0;
 }
 
+.catalogEmpty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.catalogEmpty > :first-child {
+  flex: none;
+}
+
 .dialogFields > p {
   margin: 0;
 }
@@ -549,6 +561,18 @@
   align-content: start;
   gap: var(--spacing-xs);
   min-width: 0;
+}
+
+.framePayload {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  block-size: clamp(15rem, 45vh, 24rem);
+}
+
+.framePayloadBody {
+  --trace-code-max-height: none;
+
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .httpPayload h4,
@@ -1040,7 +1064,7 @@
 }
 
 .rawBody pre {
-  max-height: 32lh;
+  max-height: var(--trace-code-max-height, 32lh);
   overflow: auto;
 }
 

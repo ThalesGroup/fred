@@ -6162,7 +6162,9 @@ the inspector use the same labeled badges. A conversation with a recorded
 failure keeps its latest failed badge even after a successful follow-up.
 The catalog reuses the Analytics team and time controls and fetches filtered
 and sorted pages from Control Plane. One search box covers users, agents,
-conversations, error references, and outcome categories.
+conversations, error references, and outcome categories. If a search with
+an outcome filter returns no rows, the catalog offers to search all
+outcomes with the same query.
 
 An authorized title appears above the agent instance name. Without current
 title consent, the row shows a neutral conversation label. The table fills
@@ -6193,7 +6195,7 @@ IDs. With consent, the HTTP tab shows stacked request and response panels
 with headers, foldable JSON, and downloads of the original body bytes.
 The panels distinguish empty, unavailable, and truncated bodies. The HTTP
 request and LangChain invocation initially fold the top-level tools and
-alternate the background of message objects.
+use alternating blue and amber tints for message objects.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
@@ -6201,7 +6203,8 @@ leave events attributable only to the full turn, available in the turn SSE
 timeline. Reasoning markers use amber squares and text markers use green
 circles. The common zoom window supports independent edge
 resizing and middle panning with pointer or keyboard controls. The event list
-and payload sit below the chart. Selecting an event centers it in the list.
+and payload sit below the chart and scroll independently. Selecting an
+event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
 across both lanes in list order. Masked readers see the timeline
 and categories. An authorized reader can expand a lane's header timing to

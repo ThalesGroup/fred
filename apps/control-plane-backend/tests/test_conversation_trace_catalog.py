@@ -521,6 +521,8 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert failure_page[0]["user_display_name"] == "Camille Durand"
         for search in (
             "CAMILLE DURAND",
+            "camille",
+            "DuRaNd",
             "cdurand",
             str(owner_id),
             "agent",

@@ -702,15 +702,15 @@
       "refresh": "Réessayer",
       "revokeTitle": "Retirer l'accès au support ?",
       "shareTitle": "Partager cette conversation avec le support ?",
-      "revokeDescription": "Le support perdra l'accès au contenu partagé dans Fred. Les destinataires conservent les fichiers déjà téléchargés.",
-      "shareDescription": "Le support peut lire vos messages enregistrés et consulter des informations sur les fichiers lus ou écrits par l'agent, y compris les extraits enregistrés. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
+      "revokeDescription": "Le support perdra l'accès au contenu partagé dans Fred.",
+      "shareDescription": "Le support peut lire vos messages enregistrés et consulter des informations sur les fichiers lus ou écrits par l'agent. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
       "cancel": "Annuler",
       "saveError": "Fred n'a pas pu confirmer la modification. Fermez cette fenêtre, vérifiez l'état du partage et réessayez.",
       "incident": {
         "failure": "L'agent n'a pas pu terminer sa réponse.",
         "title": "Partager cette erreur avec le support ?",
         "reference": "Référence de l'erreur pour le support",
-        "description": "Le support peut lire les messages enregistrés jusqu'à cette erreur et consulter des informations sur les fichiers lus ou écrits par l'agent, y compris les extraits enregistrés. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
+        "description": "Le support peut lire les messages enregistrés jusqu'à cette erreur et consulter des informations sur les fichiers lus ou écrits par l'agent. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
         "unavailable": "Fred n'a pas pu vérifier l'historique enregistré pour cette erreur. Réessayez une fois la conversation enregistrée.",
         "reported": "Cette erreur a déjà été partagée avec le support.",
         "saveError": "Fred n'a pas pu confirmer le partage. Vérifiez les informations de partage et réessayez."
@@ -1440,6 +1440,7 @@
         "outcomeLabel": "Résultat",
         "consentFilter": "Consentement",
         "noMatches": "Aucune conversation ne correspond à ces filtres.",
+        "showAllSearchOutcomes": "Inclure tous les statuts",
         "quickStatus": {
           "all": "Toutes",
           "completed": "Terminées",

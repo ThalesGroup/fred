@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -42,7 +42,6 @@ import {
 import {
   TRACE_LIST_PATH,
   TRACE_TRANSLATION_PREFIX,
-  TraceIdentifier,
   TraceOutcomeBadge,
   TracePageButtons,
   useTracePagination,
@@ -115,6 +114,7 @@ export default function ConversationTraceListPage() {
   const [consent, setConsent] = useState<TraceConsentFilter>("shared");
   const [period, setPeriod] = useState(() => resolvePreset("last30d"));
   const [queryInput, setQueryInput] = useState("");
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [catalogRestarted, setCatalogRestarted] = useState(false);
   const [sort, setSort] = useState<{ field: TraceCatalogSort; direction: "asc" | "desc" }>({
@@ -225,14 +225,7 @@ export default function ConversationTraceListPage() {
       label: sortLabels.outcome,
       size: "minmax(10rem, 1.2fr)",
       sortable: true,
-      cellRenderer: (row) => (
-        <div className={styles.catalogMetadata}>
-          <TraceOutcomeBadge outcome={row.failure_category ?? row.outcome} />
-          {row.availability === "history_only" && row.support_error_ref && (
-            <TraceIdentifier label={t("supportErrorRef")} value={row.support_error_ref} />
-          )}
-        </div>
-      ),
+      cellRenderer: (row) => <TraceOutcomeBadge outcome={row.failure_category ?? row.outcome} />,
     },
     {
       label: sortLabels.consent,
@@ -285,6 +278,7 @@ export default function ConversationTraceListPage() {
       <div className={styles.filters} role="group" aria-label={t("filtersLabel")}>
         <div className={styles.primaryFilters}>
           <TextInput
+            ref={queryInputRef}
             label={t("searchLabel")}
             size="medium"
             type="search"
@@ -418,7 +412,22 @@ export default function ConversationTraceListPage() {
             {t("loading")}
           </p>
         ) : (
-          <PageEmptyState message={t("noMatches")} icon="search" />
+          <div className={styles.catalogEmpty}>
+            <PageEmptyState message={t("noMatches")} icon="search" />
+            {search && statusOutcomes.length > 0 && (
+              <Button
+                color="on-surface"
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  changeFilter(setStatusOutcomes)(quickOutcomes.all);
+                  queryInputRef.current?.focus();
+                }}
+              >
+                {t("showAllSearchOutcomes")}
+              </Button>
+            )}
+          </div>
         )}
         <TracePageButtons
           pager={pager}

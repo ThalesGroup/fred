@@ -497,21 +497,22 @@ function Timeline({
           )}
         </section>
         {active && (
-          <section aria-label={t("frame")}>
+          <section className={styles.framePayload} aria-label={t("frame")}>
             <h3>{t("frame")}</h3>
             <p className={styles.help}>
               {t(active.source)} /{" "}
               {t("eventAt", { kind: t("kind." + active.frame.kind), time: elapsed(active.frame.at_ms) })}
             </p>
-            <TraceSseFramePayload
-              key={active.key}
-              sessionId={sessionId}
-              exchangeId={exchangeId}
-              refId={active.ref}
-              index={active.index}
-              shared={active.shared}
-              stored={active.frame.offset != null}
-            />
+            <div key={active.key} className={styles.framePayloadBody}>
+              <TraceSseFramePayload
+                sessionId={sessionId}
+                exchangeId={exchangeId}
+                refId={active.ref}
+                index={active.index}
+                shared={active.shared}
+                stored={active.frame.offset != null}
+              />
+            </div>
           </section>
         )}
       </div>

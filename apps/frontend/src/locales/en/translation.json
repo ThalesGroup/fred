@@ -702,15 +702,15 @@
       "refresh": "Try again",
       "revokeTitle": "Withdraw support access?",
       "shareTitle": "Share this conversation with support?",
-      "revokeDescription": "Support will lose access to the shared content in Fred. Files already downloaded remain with their recipients.",
-      "shareDescription": "Support can read your saved messages and see details about the files the agent read or wrote, including any saved excerpts. New content stays private unless you share this conversation again.",
+      "revokeDescription": "Support will lose access to the shared content in Fred.",
+      "shareDescription": "Support can read your saved messages and see details about the files the agent read or wrote. New content stays private unless you share this conversation again.",
       "cancel": "Cancel",
       "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again.",
       "incident": {
         "failure": "The agent could not finish responding.",
         "title": "Share this error with support?",
         "reference": "Support error reference",
-        "description": "Support can read messages saved up to this error and see details about the files the agent read or wrote, including any saved excerpts. New content stays private unless you share this conversation again.",
+        "description": "Support can read messages saved up to this error and see details about the files the agent read or wrote. New content stays private unless you share this conversation again.",
         "unavailable": "Fred could not verify the saved history for this error. Try again once the conversation has finished saving.",
         "reported": "This error has already been shared with support.",
         "saveError": "Fred could not confirm sharing. Review the sharing details and try again."
@@ -1440,6 +1440,7 @@
         "outcomeLabel": "Outcome",
         "consentFilter": "Consent",
         "noMatches": "No conversations match these filters.",
+        "showAllSearchOutcomes": "Search all outcomes",
         "quickStatus": {
           "all": "All",
           "completed": "Done",
