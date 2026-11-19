@@ -63,7 +63,7 @@
 }
 
 .sharing h2 {
-  font: var(--font-title-small);
+  font: var(--font-label-large);
 }
 
 .sharingActions {

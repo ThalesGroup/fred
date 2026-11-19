@@ -128,6 +128,16 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-header-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-headers/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/conversation-traces/{session_id}/model/{exchange_id}
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential
@@ -203,6 +213,11 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
   - service: agent-pod
     method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: agent-pod
+    method: GET
     path: /pod/v1/agents/sessions/{session_id}/trace-model/{exchange_id}/{ref}
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
@@ -234,6 +249,11 @@ operations:
   - service: control-plane
     method: POST
     path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/admit
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/reconcile/{segment_id}
     review_status: approved
     required_permission: registered_runtime_workload
   - service: control-plane

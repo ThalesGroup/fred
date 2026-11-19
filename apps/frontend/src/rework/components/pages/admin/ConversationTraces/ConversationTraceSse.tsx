@@ -3,7 +3,7 @@
 
 import { skipToken } from "@reduxjs/toolkit/query";
 import Button from "@shared/atoms/Button/Button";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
@@ -240,15 +240,24 @@ function SseHeaders({
   label: string;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  const [open, setOpen] = useState(false);
+  const disclosureId = useId();
+  const [{ open, opening }, setDisclosure] = useState({ open: false, opening: 0 });
   const stored = lane.stream.headers_available;
+  // A disclosure must wait for its own authorization, including a rapid
+  // close and reopen before RTK Query has evicted the old response.
+  const query = { sessionId, exchangeId, ref: lane.stream.ref, disclosure: `${disclosureId}/${opening}` };
   const response = enhancedControlPlaneApi.useGetConversationTraceSseHeadersQuery(
-    open && lane.shared && stored ? { sessionId, exchangeId, ref: lane.stream.ref } : skipToken,
+    open && lane.shared && stored ? query : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  const headers = response.currentData?.headers;
+  const headers = response.isSuccess && !response.isFetching ? response.currentData?.headers : undefined;
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details
+      onToggle={(event) => {
+        const open = event.currentTarget.open;
+        setDisclosure((previous) => ({ open, opening: previous.opening + Number(open) }));
+      }}
+    >
       <summary>{label}</summary>
       {!open ? null : !stored || response.isError ? (
         <p>{t("headersUnavailable")}</p>
