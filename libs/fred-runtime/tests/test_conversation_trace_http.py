@@ -27,6 +27,8 @@ from fred_core.conversation_trace import (
     TRACE_HTTP_TURN_BYTES,
     TraceHttpCompleteness,
     TraceHttpFailureStage,
+    TraceModelOutputState,
+    TraceNormalizationStatus,
     TraceSseEnding,
     TraceSseKind,
 )
@@ -38,7 +40,10 @@ from fred_runtime.app.conversation_trace_artifacts import (
     ModelHttpCapture,
     TraceHttpArtifactStore,
 )
+from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
 
 class BodyStream(httpx.AsyncByteStream):
@@ -50,9 +55,64 @@ class BodyStream(httpx.AsyncByteStream):
             yield chunk
 
 
+@pytest.mark.parametrize(
+    ("fragments", "output_state", "content"),
+    [
+        ([], TraceModelOutputState.ABSENT, None),
+        (["partial ", "assistant"], TraceModelOutputState.PARTIAL, "partial assistant"),
+        (["x" * (256 * 1024)], TraceModelOutputState.UNAVAILABLE, None),
+    ],
+)
+def test_model_capture_distinguishes_absent_and_retained_partial_output(
+    fragments: list[str], output_state: TraceModelOutputState, content: str | None
+) -> None:
+    buffer = HttpTurnBuffer()
+    observer = ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
+    assert observer.record_model_call()
+    callback = ModelSnapshotCallback(observer)
+    run_id = uuid4()
+    callback.on_chat_model_start(
+        {}, [[HumanMessage(content="synthetic")]], run_id=run_id
+    )
+    for fragment in fragments:
+        callback.on_llm_new_token(
+            fragment,
+            chunk=ChatGenerationChunk(message=AIMessageChunk(content=fragment)),
+            run_id=run_id,
+        )
+    # LangChain supplies synthetic error metadata even when the request has no output.
+    callback.on_llm_error(
+        RuntimeError("synthetic"),
+        run_id=run_id,
+        response=LLMResult(
+            generations=[
+                [
+                    ChatGeneration(
+                        message=AIMessage(
+                            content="",
+                            response_metadata={"body": "synthetic provider error"},
+                        )
+                    )
+                ]
+            ],
+        ),
+    )
+    assert observer.snapshot is not None
+    assert observer.snapshot.input is not None
+    assert observer.snapshot.input.messages[0]["content"] == "synthetic"
+    assert observer.snapshot.output_state == output_state
+    if content is None:
+        assert observer.snapshot.output is None
+    else:
+        assert observer.snapshot.output is not None
+        assert observer.snapshot.output.messages[0]["content"] == content
+
+
 @pytest.mark.asyncio
+@pytest.mark.parametrize("content_encoding", ["gzip", None])
 async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     tmp_path: Path,
+    content_encoding: str | None,
 ):
     first = (
         b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,'
@@ -63,7 +123,14 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
         b'"id":"null","function":{"arguments":"{}"}}]}}]}\r\n\r\n'
     )
     done = b"data: [DONE]\r\n\r\n"
-    encoded = compress(first + second + done)
+    # The byte-identical placeholder before the first real ID stays unchanged.
+    # Splitting the later blank line across chunks must still link its raw frame.
+    raw = second + first + second + done
+    encoded = compress(raw) if content_encoding else raw
+    split = 17 if content_encoding else len(raw) - len(done) - 1
+    headers = {"content-type": "text/event-stream"}
+    if content_encoding:
+        headers["content-encoding"] = content_encoding
     buffer = HttpTurnBuffer()
     buffer.start_stream(monotonic(), 3000)
     token = active_http_capture.set(
@@ -75,11 +142,8 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
                 httpx.MockTransport(
                     lambda _: httpx.Response(
                         200,
-                        headers={
-                            "content-type": "text/event-stream",
-                            "content-encoding": "gzip",
-                        },
-                        stream=BodyStream([encoded[:17], encoded[17:]]),
+                        headers=headers,
+                        stream=BodyStream([encoded[:split], encoded[split:]]),
                     )
                 )
             ),
@@ -90,6 +154,7 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     finally:
         active_http_capture.reset(token)
     assert b'"id":null' in response.content
+    assert b'"id":"null"' in response.content
     (attempt,) = buffer.close()
     assert attempt.sse is not None
     assert b"".join(attempt.response_body.chunks) == encoded
@@ -99,11 +164,18 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     assert [frame.kind for frame in lane.frames] == [
         TraceSseKind.TOOL,
         TraceSseKind.TOOL,
+        TraceSseKind.TOOL,
         TraceSseKind.DONE,
     ]
+    normalization = attempt.normalization(raw_stored=True)
+    assert normalization.status == TraceNormalizationStatus.CORRECTED
+    (rewrite,) = normalization.rewrites
+    assert rewrite.tool_call_id == "call-original"
+    assert rewrite.frame_index == 2
+    assert attempt.normalization(raw_stored=False).rewrites[0].frame_index is None
     store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
     await store.write_sse("session", attempt.sse, create_prefix=True)
-    for frame, original in zip(lane.frames, [first, second, done], strict=True):
+    for frame, original in zip(lane.frames, [second, first, second, done], strict=True):
         assert frame.offset is not None
         persisted = await store.read_sse("session", lane.ref, frame.offset, frame.size)
         assert b64decode(persisted.data) == original

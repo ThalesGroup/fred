@@ -37,6 +37,9 @@ from fred_core.conversation_trace import (
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
     TraceHttpEvidence,
+    TraceModelArtifactAccess,
+    TraceModelEvidence,
+    TraceNormalization,
     TraceOutcome,
     TraceSseArtifactAccess,
     TraceSseEnding,
@@ -45,7 +48,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.postgres_history_store import PostgresHistoryStore
-from fred_core.model.http_capture import HttpCapture, active_http_capture
+from fred_core.model.http_capture import active_http_capture
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
     M2MBearerAuth,
@@ -62,6 +65,7 @@ from fred_runtime.app.conversation_trace_artifacts import (
     TraceHttpArtifactStore,
     safe_identifier,
 )
+from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane
 from fred_runtime.runtime_support.llm_diagnostics import classify_error
 
@@ -76,20 +80,26 @@ _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
 
 
 @contextmanager
-def capture_model_http(call_id: str, model: str | None) -> Iterator[None]:
+def capture_model_http(
+    call_id: str, model: str | None
+) -> Iterator[ModelSnapshotCallback | None]:
     capture = _ACTIVE_CAPTURE.get()
     if capture is None:
-        yield
+        yield None
         return
     capture.note_call(call_id)
-    observer: HttpCapture | None = (
+    observer = (
         ModelHttpCapture(capture.http, call_id, safe_identifier(model))
         if capture.http is not None
         else None
     )
     token = active_http_capture.set(observer)
     try:
-        yield
+        yield (
+            ModelSnapshotCallback(observer)
+            if observer is not None and observer.record_model_call()
+            else None
+        )
     finally:
         active_http_capture.reset(token)
 
@@ -167,6 +177,11 @@ class ConversationTraceClient:
                 session_id, ref, access.offset, access.size
             )
 
+    async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
+        assert self.artifacts is not None
+        async with self._http_readers:
+            return await self.artifacts.read_model(session_id, ref)
+
     def _new_http_buffer(self) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
         if self.artifacts is None or self._http_turns >= 32:
@@ -237,6 +252,7 @@ class ConversationTraceClient:
                     return
                 summaries: list[TraceHttpAttempt] = []
                 lanes = []
+                normalization: dict[str, list[TraceNormalization]] = {}
                 # Keep order and cap per-pod in-flight writes across all turns.
                 deadline = monotonic() + 8
                 for attempt in attempts:
@@ -259,6 +275,7 @@ class ConversationTraceClient:
                             observed_through_rank=observed_through_rank,
                         )
                     )
+                    lane_stored = False
                     if attempt.sse is not None:
                         lane_stored = await self._publish_sse_lane(
                             session_id,
@@ -270,6 +287,9 @@ class ConversationTraceClient:
                         if lane_stored and attempt.sse.raw and not stored:
                             refs.append(attempt.ref)
                         lanes.append(attempt.sse.summary(stored=lane_stored))
+                    normalization.setdefault(attempt.call_id, []).append(
+                        attempt.normalization(raw_stored=lane_stored)
+                    )
                 result.http_attempts = summaries
                 result.http_incomplete = buffer.incomplete
                 if buffer.outgoing is not None:
@@ -287,6 +307,28 @@ class ConversationTraceClient:
                         observed_through_rank=observed_through_rank,
                         outgoing=lane.summary(stored=stored),
                         provider=lanes,
+                    )
+                for call in buffer.model_calls:
+                    evidence = call.evidence(normalization.get(call.call_id, []))
+                    stored = False
+                    if permitted and store is not None and deadline > monotonic():
+                        try:
+                            with anyio.fail_after(max(0, deadline - monotonic())):
+                                await store.write_model(session_id, call.ref, evidence)
+                            refs.append(call.ref)
+                            stored = True
+                        except Exception:
+                            logger.warning(
+                                "event=conversation_trace.model_artifact_write_failed"
+                            )
+                            await self._erase_attempts(session_id, [call.ref])
+                    result.model_calls.append(
+                        call.index(
+                            evidence,
+                            stored=stored,
+                            session_id=session_id,
+                            observed_through_rank=observed_through_rank,
+                        )
                     )
                 published = await self.finalize(capture_id, result)
                 # A definitive rejection fences erasure and duplicate finalizations.
@@ -344,6 +386,18 @@ class ConversationTraceClient:
             authorization,
             TraceSseArtifactAccess,
             index=index,
+        )
+
+    async def model_access(
+        self, session_id: str, exchange_id: str, ref: str, authorization: str
+    ) -> TraceModelArtifactAccess:
+        return await self._artifact_access(
+            "model",
+            session_id,
+            exchange_id,
+            ref,
+            authorization,
+            TraceModelArtifactAccess,
         )
 
     async def _artifact_access(

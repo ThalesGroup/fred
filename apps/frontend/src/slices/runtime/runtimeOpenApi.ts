@@ -267,6 +267,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-http/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceModelEvidence: build.query<GetTraceModelEvidenceApiResponse, GetTraceModelEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
@@ -531,6 +536,12 @@ export type GetTraceHistoryTranscriptApiArg = {
 };
 export type GetTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
 export type GetTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
+export type GetTraceModelEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -1484,6 +1495,48 @@ export type TraceHttpEvidence = {
   target: string;
   version?: 1;
 };
+export type TraceModelSnapshot = {
+  messages: {
+    [key: string]: any;
+  }[];
+  partial?: boolean;
+  tools?: {
+    [key: string]: any;
+  }[];
+};
+export type TraceNormalizationRewrite = {
+  choice_index: number;
+  frame_index?: number | null;
+  original_id?: "null";
+  replacement_id?: null;
+  tool_call_id?: string | null;
+  tool_index: number;
+};
+export type TraceNormalizationStatus = "skipped" | "unchanged" | "corrected" | "unavailable";
+export type TraceNormalization = {
+  attempt_ref: string;
+  partial?: boolean;
+  rewrites: TraceNormalizationRewrite[];
+  status: TraceNormalizationStatus;
+};
+export type TraceModelOrigin = {
+  call_id: string;
+  exchange_id: string;
+  history_rank: number;
+  turn_number: number | null;
+};
+export type TraceModelOutputState = "complete" | "partial" | "absent" | "unavailable";
+export type TraceModelEvidence = {
+  input: TraceModelSnapshot | null;
+  matched_results?: {
+    [key: string]: any;
+  }[];
+  normalization?: TraceNormalization[];
+  origins?: TraceModelOrigin[];
+  output: TraceModelSnapshot | null;
+  output_state: TraceModelOutputState;
+  version?: 1;
+};
 export type TraceSseFrame = {
   data: string;
   encoding?: "base64";
@@ -1766,6 +1819,8 @@ export const {
   useLazyGetTraceHistoryTranscriptQuery,
   useGetTraceHttpEvidenceQuery,
   useLazyGetTraceHttpEvidenceQuery,
+  useGetTraceModelEvidenceQuery,
+  useLazyGetTraceModelEvidenceQuery,
   useGetTraceSseFrameQuery,
   useLazyGetTraceSseFrameQuery,
   useGetRuntimeInstanceSkillsQuery,

@@ -22,13 +22,15 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations for the catalog, consent, HTTP attempt index, and SSE timeline, then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation.
+Apply the Control Plane migrations for the catalog, consent, HTTP attempt index, SSE timeline, and LangChain evidence index (`9a6e2c14b7d0`), then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation. Existing rows retain their previous evidence. New captures populate the LangChain index.
 
 ## Validation
 
 Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent unshared conversation does not appear. From the owner's Debug panel, share through a saved turn, confirm support can read that turn, then withdraw access and verify it is denied.
 
 For a captured streaming turn, open the model attempt's SSE tab. Verify the provider and Fred lanes, the shared zoom window, and the consent requirement for original frames.
+
+Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there.
 
 ## Rollback
 

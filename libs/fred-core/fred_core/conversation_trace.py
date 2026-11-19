@@ -253,6 +253,93 @@ class TraceSseFrame(BaseModel):
     data: str
 
 
+TRACE_MAX_MODEL_CALLS = 64
+TRACE_MAX_NORMALIZATION_REWRITES = 24
+TraceToolFingerprint = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
+class TraceNormalizationStatus(StrEnum):
+    SKIPPED = "skipped"
+    UNCHANGED = "unchanged"
+    CORRECTED = "corrected"
+    UNAVAILABLE = "unavailable"
+
+
+class TraceNormalizationRewrite(BaseModel):
+    choice_index: int
+    tool_index: int
+    original_id: Literal["null"] = "null"
+    replacement_id: None = None
+    tool_call_id: CallIdentifier | None = None
+    frame_index: Annotated[int, Field(ge=0, lt=TRACE_MAX_SSE_FRAMES)] | None = None
+
+
+class TraceNormalization(BaseModel):
+    attempt_ref: EvidenceReference
+    status: TraceNormalizationStatus
+    rewrites: Annotated[
+        list[TraceNormalizationRewrite],
+        Field(max_length=TRACE_MAX_NORMALIZATION_REWRITES),
+    ]
+    partial: bool = False
+
+
+class TraceModelCall(BaseModel):
+    ref: EvidenceReference
+    call_id: CallIdentifier
+    model: CallIdentifier | None
+    observed_through_rank: TraceRank | None
+    completeness: TraceHttpCompleteness
+
+
+class TraceModelIndex(TraceModelCall):
+    related_tools: Annotated[list[TraceToolFingerprint], Field(max_length=32)] = Field(
+        default_factory=list
+    )
+    observed_invalid_tools: Annotated[
+        list[TraceToolFingerprint], Field(max_length=32)
+    ] = Field(default_factory=list)
+
+
+class TraceModelArtifactAccess(BaseModel):
+    grant_id: str | None = None
+    local_content_access: bool = False
+    owner_id: TraceIdentifier
+    observed_through_rank: TraceRank | None
+
+
+class TraceModelOutputState(StrEnum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    ABSENT = "absent"
+    UNAVAILABLE = "unavailable"
+
+
+class TraceModelSnapshot(BaseModel):
+    messages: list[dict[str, object]]
+    tools: list[dict[str, object]] = Field(default_factory=list)
+    partial: bool = False
+
+
+class TraceModelOrigin(BaseModel):
+    exchange_id: TraceIdentifier
+    history_rank: TraceRank
+    turn_number: int | None
+    call_id: CallIdentifier
+
+
+class TraceModelEvidence(BaseModel):
+    version: Literal[1] = 1
+    input: TraceModelSnapshot | None
+    output: TraceModelSnapshot | None
+    output_state: TraceModelOutputState
+    normalization: Annotated[
+        list[TraceNormalization], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
+    ] = Field(default_factory=list)
+    matched_results: list[dict[str, object]] = Field(default_factory=list)
+    origins: list[TraceModelOrigin] = Field(default_factory=list)
+
+
 class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -270,3 +357,6 @@ class TraceFinalization(BaseModel):
     ] = Field(default_factory=list)
     http_incomplete: bool = False
     sse: TraceSseSegment | None = None
+    model_calls: Annotated[
+        list[TraceModelIndex], Field(max_length=TRACE_MAX_MODEL_CALLS)
+    ] = Field(default_factory=list)

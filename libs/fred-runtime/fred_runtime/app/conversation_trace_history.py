@@ -22,13 +22,20 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryTranscript,
     TraceHttpEvidence,
+    TraceModelEvidence,
     TraceSseFrame,
     is_local_trace_request,
 )
+from fred_core.history.history_schema import Channel, ToolResultPart
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.security.oidc import require_own_credential
+from sqlalchemy.exc import SQLAlchemyError
 
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.conversation_trace_model import (
+    matched_tool_ids,
+    retain_tool_results,
+)
 from fred_runtime.app.dependencies import get_pod_container
 
 router = APIRouter(prefix="/agents/sessions", tags=["ConversationTraceHistory"])
@@ -167,6 +174,63 @@ async def get_trace_history_transcript(
     if access != await _access(container, request, session_id, exchange_id):
         raise HTTPException(403, "trace_history_access_denied")
     return result
+
+
+@router.get(
+    "/{session_id}/trace-model/{exchange_id}/{ref}",
+    operation_id="get_trace_model_evidence",
+)
+async def get_trace_model_evidence(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceModelEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_model_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    access = await client.model_access(session_id, exchange_id, ref, authorization)
+    if access.local_content_access and not _allows_local_trace(container, request):
+        raise HTTPException(403, "trace_model_access_denied")
+    try:
+        with anyio.fail_after(5):
+            evidence = await client.read_model(session_id, ref)
+    except Exception as exc:
+        raise HTTPException(503, "trace_model_unavailable") from exc
+
+    tool_ids = matched_tool_ids(evidence)
+    history = _history(container)
+    if tool_ids and history is not None and access.observed_through_rank is not None:
+        try:
+            with anyio.fail_after(1):
+                transcript = await history.trace_transcript(
+                    session_id,
+                    access.owner_id,
+                    exchange_id,
+                    highest_rank=access.observed_through_rank,
+                    after_rank=-1,
+                    limit=64,
+                    channel=Channel.tool_result,
+                )
+                evidence.matched_results = retain_tool_results(
+                    [
+                        {"rank": message.rank, **part.model_dump(mode="json")}
+                        for message in transcript.messages
+                        for part in message.parts
+                        if isinstance(part, ToolResultPart) and part.call_id in tool_ids
+                    ]
+                )
+        except (TimeoutError, ValueError, SQLAlchemyError):
+            # The invocation remains readable if optional history is unavailable.
+            pass
+    if access != await client.model_access(session_id, exchange_id, ref, authorization):
+        raise HTTPException(403, "trace_model_access_denied")
+    return evidence
 
 
 @router.get(

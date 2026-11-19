@@ -475,6 +475,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         highest_rank: int | None,
         after_rank: int,
         limit: int,
+        channel: Channel | None = None,
     ) -> TraceHistoryTranscript:
         from fred_core.conversation_trace import TraceHistoryTranscript
 
@@ -493,6 +494,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         )
         if highest_rank is not None:
             query = query.where(row.rank <= highest_rank)
+        if channel is not None:
+            query = query.where(row.channel == channel.value)
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).scalars().all()
         messages = self._deserialize_messages(session_id, rows[:limit])

@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from _thread import LockType
 from base64 import b64encode
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
 from threading import Lock
@@ -32,22 +33,37 @@ from fred_core.conversation_trace import (
     TRACE_HTTP_CHUNK_BYTES,
     TRACE_HTTP_TURN_BYTES,
     TRACE_MAX_HTTP_ATTEMPTS,
+    TRACE_MAX_MODEL_CALLS,
+    TRACE_MAX_NORMALIZATION_REWRITES,
+    TRACE_MAX_SSE_FRAMES,
     TraceHttpAttempt,
     TraceHttpBody,
     TraceHttpCompleteness,
     TraceHttpEvidence,
     TraceHttpFailureStage,
+    TraceModelEvidence,
+    TraceModelOutputState,
+    TraceNormalization,
+    TraceNormalizationRewrite,
+    TraceNormalizationStatus,
     TraceSseEnding,
     TraceSseFrame,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.model.http_capture import HttpAttempt
+from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
 
+from fred_runtime.app.conversation_trace_model import (
+    MODEL_TURN_BYTES,
+    RecordedModelCall,
+    capture_snapshot,
+)
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
 
 _MAX_COUNT = 2**31 - 1
 _MAX_CHUNKS = TRACE_HTTP_TURN_BYTES // TRACE_HTTP_CHUNK_BYTES
+_NORMALIZATION_REWRITES_PER_SEGMENT = 128
 _IDENT = re.compile(r"[a-zA-Z0-9_.:-]{1,255}\Z")
 _REQUEST_HEADERS = frozenset(
     {"accept", "content-type", "content-encoding", "content-length"}
@@ -126,6 +142,11 @@ class RecordedHttpAttempt:
     request_complete: bool = False
     response_complete: bool = False
     failed: bool = False
+    normalization_status: TraceNormalizationStatus = (
+        TraceNormalizationStatus.UNAVAILABLE
+    )
+    rewrites: list[TraceNormalizationRewrite] = field(default_factory=list)
+    normalization_partial: bool = False
 
     @property
     def remaining_budget(self) -> int:
@@ -135,6 +156,11 @@ class RecordedHttpAttempt:
     def headers(self, response: httpx.Response) -> None:
         self.status = response.status_code
         self.response_headers = _headers(response.headers, _RESPONSE_HEADERS)
+        if not response.is_success or (
+            response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            != "text/event-stream"
+        ):
+            self.normalization_status = TraceNormalizationStatus.SKIPPED
         if self.sse is not None:
             self.sse.headers_ms = self.buffer.sse.at(monotonic())
             self.streams_sse = response.is_success and (
@@ -184,6 +210,66 @@ class RecordedHttpAttempt:
             with self.buffer.lock:
                 if not self.buffer.closed:
                     self.sse.finish(monotonic(), _sse_ending(error))
+
+    def normalization_started(self, *, enabled: bool) -> None:
+        self.normalization_status = (
+            TraceNormalizationStatus.UNCHANGED
+            if enabled
+            else TraceNormalizationStatus.SKIPPED
+        )
+
+    def normalization_rewrites(
+        self, frame_index: int, changes: list[tuple[int, int, str]]
+    ) -> None:
+        with self.buffer.lock:
+            if self.buffer.closed:
+                return
+            self.normalization_status = TraceNormalizationStatus.CORRECTED
+            available = min(
+                TRACE_MAX_NORMALIZATION_REWRITES - len(self.rewrites),
+                self.buffer.normalization_remaining,
+            )
+            self.normalization_partial |= len(changes) > available
+            self.buffer.normalization_remaining -= min(len(changes), available)
+            self.rewrites.extend(
+                TraceNormalizationRewrite(
+                    choice_index=choice,
+                    tool_index=tool,
+                    tool_call_id=safe_identifier(original),
+                    frame_index=frame_index
+                    if frame_index < TRACE_MAX_SSE_FRAMES
+                    else None,
+                )
+                for choice, tool, original in changes[:available]
+            )
+
+    def normalization(self, *, raw_stored: bool) -> TraceNormalization:
+        # A CR at the end of a transport chunk can be observed by the
+        # normalizer before the raw lane finishes recording its CRLF frame.
+        frames = self.sse.frames if self.sse is not None and raw_stored else []
+        rewrites = [
+            rewrite
+            if (index := rewrite.frame_index) is not None
+            and index < len(frames)
+            and frames[index].offset is not None
+            else rewrite.model_copy(update={"frame_index": None})
+            for rewrite in self.rewrites
+        ]
+        return TraceNormalization(
+            attempt_ref=self.ref,
+            status=self.normalization_status,
+            rewrites=rewrites,
+            partial=self.normalization_partial
+            or (
+                self.normalization_status
+                in (
+                    TraceNormalizationStatus.UNCHANGED,
+                    TraceNormalizationStatus.CORRECTED,
+                )
+                and self.sse is not None
+                and self.sse.partial
+            ),
+        )
 
     def summary(
         self,
@@ -244,6 +330,9 @@ class HttpTurnBuffer:
     incomplete: bool = False
     sse: SseBudget = field(default_factory=SseBudget)
     outgoing: RecordedSseLane | None = None
+    model_calls: list[RecordedModelCall] = field(default_factory=list)
+    model_remaining: int = MODEL_TURN_BYTES
+    normalization_remaining: int = _NORMALIZATION_REWRITES_PER_SEGMENT
 
     def start_stream(self, headers_at: float, offset_ms: int) -> None:
         self.sse.started = headers_at
@@ -273,6 +362,51 @@ class ModelHttpCapture:
     call_id: str
     model: str | None
     attempts: int = 0
+    snapshot: RecordedModelCall | None = None
+
+    def record_model_call(self) -> bool:
+        with self.buffer.lock:
+            if (
+                self.buffer.closed
+                or len(self.buffer.model_calls) >= TRACE_MAX_MODEL_CALLS
+            ):
+                self.buffer.incomplete = True
+                return False
+            self.snapshot = RecordedModelCall(self.call_id, self.model)
+            self.buffer.model_calls.append(self.snapshot)
+            return True
+
+    def input_snapshot(
+        self, messages: Sequence[BaseMessage], tools: Sequence[object]
+    ) -> None:
+        with self.buffer.lock:
+            if self.buffer.closed or self.snapshot is None:
+                return
+            snapshot, size = capture_snapshot(
+                messages, tools, self.buffer.model_remaining
+            )
+            self.snapshot.input = snapshot
+            self.buffer.model_remaining -= size
+
+    def output_snapshot(
+        self, messages: Sequence[BaseMessage], *, partial: bool, had_chunks: bool
+    ) -> None:
+        with self.buffer.lock:
+            if self.buffer.closed or self.snapshot is None:
+                return
+            if not messages:
+                if partial and not had_chunks:
+                    self.snapshot.output_state = TraceModelOutputState.ABSENT
+                return
+            snapshot, size = capture_snapshot(messages, (), self.buffer.model_remaining)
+            self.snapshot.output = snapshot
+            self.buffer.model_remaining -= size
+            if snapshot is not None:
+                self.snapshot.output_state = (
+                    TraceModelOutputState.PARTIAL
+                    if partial or snapshot.partial
+                    else TraceModelOutputState.COMPLETE
+                )
 
     def begin(self, request: httpx.Request) -> HttpAttempt | None:
         with self.buffer.lock:
@@ -333,6 +467,22 @@ def _session_path(session_id: str) -> str:
 class TraceHttpArtifactStore:
     def __init__(self, filesystem: BaseFilesystem) -> None:
         self._filesystem = filesystem
+
+    async def write_model(
+        self, session_id: str, ref: str, evidence: TraceModelEvidence
+    ) -> None:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        await self._filesystem.mkdir(prefix)
+        await self._filesystem.write(
+            f"{prefix}/model-v1.json", evidence.model_dump_json()
+        )
+
+    async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        data = await self._filesystem.read(f"{prefix}/model-v1.json")
+        if len(data) > MODEL_TURN_BYTES:
+            raise ValueError("Oversized model trace artifact")
+        return TraceModelEvidence.model_validate_json(data)
 
     async def write(self, session_id: str, attempt: RecordedHttpAttempt) -> None:
         prefix = f"{_session_path(session_id)}/{attempt.ref}"

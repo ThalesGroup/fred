@@ -23,6 +23,7 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { TRACE_TRANSLATION_PREFIX, TraceIdentifier, downloadTraceBytes, traceBytes } from "./traceControls";
+import { ConversationTraceModel } from "./ConversationTraceModel";
 import { ConversationTraceSse } from "./ConversationTraceSse";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
@@ -207,24 +208,35 @@ export function ConversationTraceHttp({
   sessionId,
   turn,
   cutoffRank,
+  initialCallId,
 }: {
   sessionId: string;
   turn: ConversationTraceTurn;
   cutoffRank?: number;
+  initialCallId?: string;
 }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
-  const [selected, setSelected] = useState<string>();
-  const [view, setView] = useState(0);
+  const [selected, setSelected] = useState(initialCallId);
+  const [view, setView] = useState(initialCallId ? 1 : 0);
   const metadata = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(
     turn.availability === "history_only" ? skipToken : { sessionId, exchangeId: turn.exchange_id },
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
+  const modelMetadata = enhancedControlPlaneApi.useListConversationTraceModelCallsQuery(
+    turn.availability === "history_only" ? skipToken : { sessionId, exchangeId: turn.exchange_id },
+    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+  );
   const attempts = metadata.currentData ?? [];
-  const active = attempts.find((attempt) => attempt.ref === selected) ?? attempts[0];
+  const models = modelMetadata.currentData ?? [];
+  const selectedModel = models.find((model) => model.ref === selected || model.call_id === selected);
+  const active =
+    attempts.find((attempt) => attempt.ref === selected || attempt.call_id === selectedModel?.call_id) ??
+    (selectedModel ? undefined : attempts[0]);
+  const activeModel =
+    selectedModel ?? models.find((model) => model.call_id === active?.call_id) ?? (active ? undefined : models[0]);
   if (turn.availability === "history_only") return null;
-  if (metadata.isError) return <p role="alert">{t("unavailable")}</p>;
-  if (!active) {
-    return metadata.isLoading ? null : (
+  if (!active && !activeModel) {
+    return metadata.isLoading || modelMetadata.isLoading ? null : (
       <ConversationTraceSse sessionId={sessionId} turn={turn} cutoffRank={cutoffRank} />
     );
   }
@@ -236,8 +248,8 @@ export function ConversationTraceHttp({
   }
   const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
   return (
-    <section className={styles.history} aria-label={t("title")}>
-      <h3>{t("title")}</h3>
+    <section className={styles.history} aria-label={t("evidenceTitle")}>
+      <h3>{t("evidenceTitle")}</h3>
       <div className={styles.httpAttempts}>
         {Array.from(groups, ([callId, group]) => (
           <div className={styles.httpAttemptGroup} key={callId}>
@@ -248,9 +260,9 @@ export function ConversationTraceHttp({
                   key={item.ref}
                   type="button"
                   size="2xs"
-                  variant={item.ref === active.ref ? "filled" : "outlined"}
-                  color={item.ref === active.ref ? "primary" : "on-surface"}
-                  aria-pressed={item.ref === active.ref}
+                  variant={item.ref === active?.ref ? "filled" : "outlined"}
+                  color={item.ref === active?.ref ? "primary" : "on-surface"}
+                  aria-pressed={item.ref === active?.ref}
                   onClick={() => setSelected(item.ref)}
                 >
                   {t("attempt", { number: item.attempt })}
@@ -261,35 +273,55 @@ export function ConversationTraceHttp({
             </div>
           </div>
         ))}
+        {models
+          .filter((model) => !groups.has(model.call_id))
+          .map((model) => (
+            <Button
+              key={model.ref}
+              type="button"
+              size="2xs"
+              variant={model.ref === activeModel?.ref ? "filled" : "outlined"}
+              color={model.ref === activeModel?.ref ? "primary" : "on-surface"}
+              aria-pressed={model.ref === activeModel?.ref}
+              onClick={() => {
+                setSelected(model.ref);
+                setView(1);
+              }}
+            >
+              {model.model ?? t("modelCall")}
+            </Button>
+          ))}
       </div>
-      <dl>
-        <dt>{t("model")}</dt>
-        <dd>{active.model ?? t("unavailable")}</dd>
-        <dt>{t("httpStatus")}</dt>
-        <dd>{active.status ?? t("noStatus")}</dd>
-        <dt>{t("duration")}</dt>
-        <dd>{milliseconds.format(active.duration_ms)}</dd>
-        <dt>{t("failureStage")}</dt>
-        <dd>{active.failure_stage ? t(`stage.${active.failure_stage}`) : t("noFailure")}</dd>
-        <dt>{t("release")}</dt>
-        <dd>{active.release ?? t("unavailable")}</dd>
-        <dt>{t("completeness")}</dt>
-        <dd>{t(`completenessValue.${active.completeness}`)}</dd>
-        <dt>{t("callId")}</dt>
-        <dd>
-          <TraceIdentifier label={t("callId")} value={active.call_id} />
-        </dd>
-        {active.upstream_id && (
-          <>
-            <dt>{t("upstreamId")}</dt>
-            <dd>
-              <TraceIdentifier label={t("upstreamId")} value={active.upstream_id} />
-            </dd>
-          </>
-        )}
-      </dl>
+      {active && (
+        <dl>
+          <dt>{t("model")}</dt>
+          <dd>{active.model ?? t("unavailable")}</dd>
+          <dt>{t("httpStatus")}</dt>
+          <dd>{active.status ?? t("noStatus")}</dd>
+          <dt>{t("duration")}</dt>
+          <dd>{milliseconds.format(active.duration_ms)}</dd>
+          <dt>{t("failureStage")}</dt>
+          <dd>{active.failure_stage ? t(`stage.${active.failure_stage}`) : t("noFailure")}</dd>
+          <dt>{t("release")}</dt>
+          <dd>{active.release ?? t("unavailable")}</dd>
+          <dt>{t("completeness")}</dt>
+          <dd>{t(`completenessValue.${active.completeness}`)}</dd>
+          <dt>{t("callId")}</dt>
+          <dd>
+            <TraceIdentifier label={t("callId")} value={active.call_id} />
+          </dd>
+          {active.upstream_id && (
+            <>
+              <dt>{t("upstreamId")}</dt>
+              <dd>
+                <TraceIdentifier label={t("upstreamId")} value={active.upstream_id} />
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
       <ButtonGroup
-        items={[{ label: t("exchangeTab") }, { label: t("sseTab") }]}
+        items={[{ label: t("exchangeTab") }, { label: t("langchainTab") }, { label: t("sseTab") }]}
         size="2xs"
         color="primary"
         variant="tabs"
@@ -297,8 +329,12 @@ export function ConversationTraceHttp({
         selectedIndex={view}
         onSelectedIndexChange={setView}
       />
-      {view === 1 ? (
-        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={active.ref} cutoffRank={cutoffRank} />
+      {view === 2 ? (
+        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={active?.ref} cutoffRank={cutoffRank} />
+      ) : view === 1 ? (
+        <ConversationTraceModel sessionId={sessionId} turn={turn} model={activeModel} cutoffRank={cutoffRank} />
+      ) : !active ? (
+        <p>{t("unavailable")}</p>
       ) : turn.access === "local" ||
         (turn.access === "shared" &&
           cutoffRank != null &&

@@ -5483,3 +5483,16 @@ segment includes one outgoing lane and provider lanes keyed by HTTP attempt
 reference. A frame read at `/sse/{exchange_id}/{ref}/{index}` requires the
 registered runtime and current consent through the segment's saved end rank.
 Control Plane and the runtime recheck access after reading the frame.
+
+### LangChain model evidence
+
+`GET /admin/conversation-traces/{session_id}/model/{exchange_id}` returns a
+bounded model-call index with opaque evidence references. A snapshot read at
+`/model/{exchange_id}/{ref}` requires the reader's own credential, the
+registered runtime, and current consent through the segment's saved rank.
+Both services recheck access before returning content. The request can
+include links to an earlier retained invocation that first recorded a
+matching malformed tool call or wire rewrite. That lookup is limited to
+the first 64 indexed turns in the conversation and to evidence covered by
+the active grant. If no match is identifiable within those bounds, the
+snapshot remains available with no earlier-turn link.

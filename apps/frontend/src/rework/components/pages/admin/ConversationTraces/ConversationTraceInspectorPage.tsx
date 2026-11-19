@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { ConversationTraceHttp } from "./ConversationTraceHttp";
@@ -32,13 +32,37 @@ import styles from "./ConversationTraces.module.css";
 
 export default function ConversationTraceInspectorPage() {
   const { sessionId } = useParams();
-  return <ConversationTraceInspector key={sessionId} sessionId={sessionId} />;
+  const [params] = useSearchParams();
+  const exchange = params.get("turn") ?? undefined;
+  const rank = params.get("rank");
+  const call = params.get("view") === "langchain" ? (params.get("call") ?? undefined) : undefined;
+  const cursor =
+    rank && /^[0-9]{1,10}$/.test(rank) && +rank > 0 && +rank < 2 ** 31 ? String(+rank - 1) + "|_" : undefined;
+  return (
+    <ConversationTraceInspector
+      key={sessionId + "|" + params.toString()}
+      sessionId={sessionId}
+      initialExchange={exchange}
+      initialCall={call}
+      initialCursor={cursor}
+    />
+  );
 }
 
-function ConversationTraceInspector({ sessionId }: { sessionId: string | undefined }) {
+function ConversationTraceInspector({
+  sessionId,
+  initialExchange,
+  initialCall,
+  initialCursor,
+}: {
+  sessionId: string | undefined;
+  initialExchange?: string;
+  initialCall?: string;
+  initialCursor?: string;
+}) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
-  const [selectedExchange, setSelectedExchange] = useState<string>();
-  const pager = useTracePagination();
+  const [selectedExchange, setSelectedExchange] = useState(initialExchange);
+  const pager = useTracePagination(initialCursor);
   const trace = useGetConversationTraceQuery(sessionId ? { sessionId, cursor: pager.cursor } : skipToken, {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true,
@@ -166,6 +190,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId: string | undefin
                   sessionId={conversation.session_id}
                   turn={turn}
                   cutoffRank={cutoff?.last_rank}
+                  initialCallId={turn.exchange_id === initialExchange ? initialCall : undefined}
                 />
                 <ConversationTraceHistory key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
               </section>

@@ -1483,7 +1483,37 @@
           "paused": "En attente d'une réponse",
           "unknown": "Inconnu"
         },
+        "model": {
+          "input": "Invocation LangChain",
+          "output": "Sortie analysée du modèle",
+          "partialOutput": "Sortie partielle analysée du modèle",
+          "inputUnavailable": "L'invocation finale est indisponible.",
+          "outputUnavailable": "La sortie analysée du modèle est indisponible.",
+          "noOutput": "LangChain n'a produit aucune sortie du modèle pour cette invocation.",
+          "partialSnapshot": "Cette capture contient uniquement la partie enregistrée.",
+          "normalizationTitle": "Normalisation des identifiants d'appels d'outils",
+          "normalizationAttempt": "Tentative {{number}} - {{status}}",
+          "partialNormalization": "Seule une partie du flux ou des corrections a été enregistrée.",
+          "normalization": {
+            "skipped": "Ignorée",
+            "unchanged": "Exécutée sans modification",
+            "corrected": "Fragments corrigés",
+            "unavailable": "Normalisation indisponible"
+          },
+          "rewrites_one": "{{count}} fragment réécrit",
+          "rewrites_other": "{{count}} fragments réécrits",
+          "rewritesLabel": "Modifications des identifiants enregistrées",
+          "originalFragment": "Inspecter la trame d'origine {{number}}",
+          "originTurn": "Première observation au tour conservé {{number}}",
+          "originCall": "Inspecter la première observation conservée",
+          "matchedResults": "Résultats d'outils conservés correspondants",
+          "unavailable": "Les données LangChain sont indisponibles.",
+          "masked": "Les données LangChain sont masquées.",
+          "loading": "Chargement des données LangChain..."
+        },
         "http": {
+          "evidenceTitle": "Données sur les appels au modèle",
+          "langchainTab": "LangChain",
           "title": "Échange HTTP du modèle",
           "exchangeTab": "Échange HTTP",
           "sseTab": "SSE",

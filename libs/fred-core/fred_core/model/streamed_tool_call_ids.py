@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Iterator
+from contextlib import suppress
 
 import httpx
+from fred_core.conversation_trace import TRACE_MAX_NORMALIZATION_REWRITES
 from fred_core.model.http_capture import (
     HttpAttempt,
     observe_http_response,
@@ -29,14 +31,16 @@ _CORRECTED_STREAMS = Counter(
 
 
 class _ToolCallEvents:
-    def __init__(self) -> None:
-        self._known_calls: set[tuple[int, int]] = set()
+    def __init__(self, attempt: HttpAttempt | None = None) -> None:
+        self._attempt = attempt
+        self._known_calls: dict[tuple[int, int], str] = {}
         self._counted_correction = False
         self._frame = bytearray()
         self._oversized = False
         self._line_has_data = False
         self._pending_lf = False
         self._started = False
+        self._frame_index = 0
 
     def feed(self, chunk: bytes) -> Iterator[bytes]:
         if not chunk:
@@ -57,10 +61,13 @@ class _ToolCallEvents:
             self._pending_lf = match.end() == len(chunk) and match[0] == b"\r"
             start = match.end()
             if blank_line:
+                frame_index = self._frame_index
+                if self._attempt is not None:
+                    self._frame_index += 1
                 if self._frame:
                     frame = bytes(self._frame)
                     self._frame.clear()
-                    yield self._normalize(frame)
+                    yield self._normalize(frame, frame_index)
                 self._oversized = False
         if start < len(chunk):
             self._line_has_data = True
@@ -82,7 +89,7 @@ class _ToolCallEvents:
         else:
             self._frame.extend(part)
 
-    def _normalize(self, frame: bytes) -> bytes:
+    def _normalize(self, frame: bytes, frame_index: int) -> bytes:
         first_frame = not self._started
         self._started = True
         if b"tool_calls" not in frame and b"\\u" not in frame:
@@ -107,7 +114,10 @@ class _ToolCallEvents:
             self._known_calls.clear()
             return frame
 
-        if not self._normalize_calls(event):
+        rewrites: list[tuple[int, int, str]] | None = (
+            [] if self._attempt is not None else None
+        )
+        if not self._normalize_calls(event, rewrites):
             return frame
         try:
             payload = json.dumps(
@@ -127,9 +137,14 @@ class _ToolCallEvents:
         if not self._counted_correction:
             _CORRECTED_STREAMS.inc()
             self._counted_correction = True
+        if self._attempt is not None and rewrites:
+            with suppress(Exception):
+                self._attempt.normalization_rewrites(frame_index, rewrites)
         return normalized
 
-    def _normalize_calls(self, event: object) -> bool:
+    def _normalize_calls(
+        self, event: object, rewrites: list[tuple[int, int, str]] | None
+    ) -> bool:
         choices = event.get("choices") if isinstance(event, dict) else None
         if not isinstance(choices, list):
             return False
@@ -159,11 +174,18 @@ class _ToolCallEvents:
                     ):
                         call["id"] = None
                         changed = True
+                        if (
+                            rewrites is not None
+                            and len(rewrites) <= TRACE_MAX_NORMALIZATION_REWRITES
+                        ):
+                            rewrites.append((*key, prior_calls[key]))
                     else:
-                        self._known_calls.discard(key)
+                        self._known_calls.pop(key, None)
                 elif isinstance(call_id, str) and call_id:
                     if len(self._known_calls) < _MAX_CALL_INDEXES:
-                        self._known_calls.add(key)
+                        self._known_calls[key] = (
+                            call_id[:256] if self._attempt is not None else ""
+                        )
         return changed
 
 
@@ -213,7 +235,9 @@ class _NormalizedStream(httpx.SyncByteStream):
         self._attempt = attempt
 
     def __iter__(self) -> Iterator[bytes]:
-        events = _ToolCallEvents() if self._normalize else None
+        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        if self._attempt is not None:
+            self._attempt.normalization_started(enabled=self._normalize)
         try:
             for chunk in self._upstream.iter_bytes():
                 if self._attempt is not None:
@@ -253,7 +277,9 @@ class _AsyncNormalizedStream(httpx.AsyncByteStream):
         return self._iterator
 
     async def _iterate(self) -> AsyncIterator[bytes]:
-        events = _ToolCallEvents() if self._normalize else None
+        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        if self._attempt is not None:
+            self._attempt.normalization_started(enabled=self._normalize)
         try:
             async for chunk in self._upstream.aiter_bytes():
                 if self._attempt is not None:

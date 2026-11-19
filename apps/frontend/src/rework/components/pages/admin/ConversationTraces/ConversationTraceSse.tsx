@@ -53,15 +53,29 @@ function longestGap(lanes: Lane[]) {
   }, undefined);
 }
 
-function FramePayload({ sessionId, exchangeId, event }: { sessionId: string; exchangeId: string; event: TimedFrame }) {
+export function TraceSseFramePayload({
+  sessionId,
+  exchangeId,
+  refId,
+  index,
+  shared,
+  stored,
+}: {
+  sessionId: string;
+  exchangeId: string;
+  refId: string;
+  index: number;
+  shared: boolean;
+  stored: boolean;
+}) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const [showRaw, setShowRaw] = useState(false);
-  const canRead = event.shared && event.frame.offset != null;
+  const canRead = shared && stored;
   const response = enhancedControlPlaneApi.useGetConversationTraceSseFrameQuery(
-    canRead ? { sessionId, exchangeId, ref: event.ref, index: event.index } : skipToken,
+    canRead ? { sessionId, exchangeId, ref: refId, index } : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
-  if (!event.shared) return <p>{t("masked")}</p>;
+  if (!shared) return <p>{t("masked")}</p>;
   if (!canRead || response.isError) return <p>{t("frameUnavailable")}</p>;
   if (!response.currentData) return <p role="status">{t("loading")}</p>;
 
@@ -289,7 +303,17 @@ function Timeline({
           </select>
         </label>
       )}
-      {active && <FramePayload key={active.key} sessionId={sessionId} exchangeId={exchangeId} event={active} />}
+      {active && (
+        <TraceSseFramePayload
+          key={active.key}
+          sessionId={sessionId}
+          exchangeId={exchangeId}
+          refId={active.ref}
+          index={active.index}
+          shared={active.shared}
+          stored={active.frame.offset != null}
+        />
+      )}
     </>
   );
 }

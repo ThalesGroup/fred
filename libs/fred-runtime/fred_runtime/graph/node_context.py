@@ -324,7 +324,7 @@ class NodeContext:
         model_name = _resolve_model_name(model)
         call_id = uuid4().hex if is_trace_capture_active() else ""
         with (
-            capture_model_http(call_id, model_name),
+            capture_model_http(call_id, model_name) as snapshot,
             _observe(
                 self,
                 "v2.graph.model",
@@ -337,7 +337,10 @@ class NodeContext:
             ) as obs,
         ):
             accumulated: BaseMessage | None = None
-            async for chunk in model.astream(messages):
+            async for chunk in model.astream(
+                messages,
+                config={"callbacks": [snapshot]} if snapshot is not None else None,
+            ):
                 if isinstance(chunk.content, str) and chunk.content:
                     self.emit_assistant_delta(chunk.content)
                 # Adding chunks merges usage, tool calls and response metadata.
@@ -382,7 +385,7 @@ class NodeContext:
         observed = {"model_name": model_name, "output_model": output_model.__name__}
         call_id = uuid4().hex if is_trace_capture_active() else ""
         with (
-            capture_model_http(call_id, model_name),
+            capture_model_http(call_id, model_name) as snapshot,
             _observe(
                 self,
                 "v2.graph.structured_model",
@@ -391,7 +394,13 @@ class NodeContext:
                 dims=observed,
             ) as obs,
         ):
-            response = cast(dict[str, Any], await structured_model.ainvoke(messages))
+            response = cast(
+                dict[str, Any],
+                await structured_model.ainvoke(
+                    messages,
+                    config={"callbacks": [snapshot]} if snapshot is not None else None,
+                ),
+            )
             raw = response["raw"]
             name, usage, finish_reason = (
                 runtime_metadata_from_message(raw)

@@ -33,6 +33,10 @@ from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceHttpEvidence,
+    TraceModelArtifactAccess,
+    TraceModelCall,
+    TraceModelEvidence,
+    TraceModelIndex,
     TraceSseArtifactAccess,
     TraceSseFrame,
     TraceSseSegment,
@@ -57,8 +61,8 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
     ConversationTraceSettings,
-    TraceConsentRequest,
     TraceConsentGrant,
+    TraceConsentRequest,
     TraceConsentState,
 )
 from control_plane_backend.conversation_traces.store import (
@@ -84,6 +88,7 @@ _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 _SSE_FRAME = TypeAdapter(TraceSseFrame)
+_MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 
 
 async def _runtime_history(
@@ -739,6 +744,122 @@ async def get_conversation_trace_sse_frame(
     ):
         raise HTTPException(403, "trace_sse_access_denied")
     return result
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/model/{exchange_id}",
+    operation_id="list_conversation_trace_model_calls",
+)
+async def list_conversation_trace_model_calls(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    container: Container,
+    _user: Operator,
+    response: Response,
+) -> list[TraceModelCall]:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "conversation_trace_not_found")
+    return list(await store.model_calls(session_id, exchange_id))
+
+
+async def _model_artifact_access(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference | None,
+    request: Request,
+    exchange_id: str,
+    ref: str,
+) -> tuple[TraceModelArtifactAccess, TraceModelIndex]:
+    reference, local, grant = await _artifact_permission(
+        container, reference, request, exchange_id, kind="model"
+    )
+    calls = await container.get_conversation_trace_store().model_calls(
+        reference.session_id, exchange_id
+    )
+    call = next((item for item in calls if item.ref == ref), None)
+    if call is None or call.completeness == TraceHttpCompleteness.UNAVAILABLE:
+        raise HTTPException(404, "trace_model_unavailable")
+    if not local and (
+        grant is None
+        or call.observed_through_rank is None
+        or call.observed_through_rank > grant.cutoff.last_rank
+    ):
+        raise HTTPException(403, "trace_model_access_denied")
+    return TraceModelArtifactAccess(
+        grant_id=grant.grant_id if grant is not None else None,
+        local_content_access=local,
+        owner_id=reference.owner_id,
+        observed_through_rank=call.observed_through_rank,
+    ), call
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/model-access",
+    operation_id="get_conversation_trace_model_access",
+)
+async def get_conversation_trace_model_access(
+    session_id: SessionId,
+    runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
+    exchange_id: Annotated[str, Query(min_length=1, max_length=255)],
+    ref: Annotated[str, Query(pattern=r"^[0-9a-f]{32}$")],
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceModelArtifactAccess:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await container.get_conversation_trace_store().reference(session_id)
+    if reference is None or reference.runtime_id != runtime_id:
+        raise HTTPException(403, "trace_model_access_denied")
+    access, _ = await _model_artifact_access(
+        container, reference, request, exchange_id, ref
+    )
+    return access
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/model/{exchange_id}/{ref}",
+    operation_id="get_conversation_trace_model_evidence",
+)
+async def get_conversation_trace_model_evidence(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    ref: ArtifactRef,
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceModelEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    access, call = await _model_artifact_access(
+        container, reference, request, exchange_id, ref
+    )
+    assert reference is not None
+    evidence = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-model/{quote(exchange_id, safe='')}/{ref}",
+        _MODEL_EVIDENCE,
+    )
+    origins = await store.model_origins(
+        session_id,
+        exchange_id,
+        call,
+        cutoff_rank=reference.consent.cutoff.last_rank
+        if reference.consent is not None and not access.local_content_access
+        else None,
+    )
+    current, _ = await _model_artifact_access(
+        container, await store.reference(session_id), request, exchange_id, ref
+    )
+    if access != current:
+        raise HTTPException(403, "trace_model_access_denied")
+    return evidence.model_copy(update={"origins": origins})
 
 
 @router.get(

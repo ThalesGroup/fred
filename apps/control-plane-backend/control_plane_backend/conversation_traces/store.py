@@ -21,6 +21,7 @@ from uuid import uuid4
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TRACE_MAX_HTTP_ATTEMPTS,
+    TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TraceAdmission,
     TraceAdmissionRequest,
@@ -29,6 +30,8 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHttpAttempt,
     TraceHttpCompleteness,
+    TraceModelIndex,
+    TraceModelOrigin,
     TraceOutcome,
     TraceSseAvailability,
     TraceSseSegment,
@@ -273,8 +276,13 @@ class ConversationTraceStore:
                     {a["ref"] for a in (row.http_attempts or [])} if row else set()
                 )
                 accepted_sse = _sse_refs(row.sse_segments or []) if row else set()
-                return all(item.ref in accepted for item in result.http_attempts) and (
-                    result.sse is None or result.sse.outgoing.ref in accepted_sse
+                accepted_models = (
+                    {item["ref"] for item in row.model_calls or []} if row else set()
+                )
+                return (
+                    all(item.ref in accepted for item in result.http_attempts)
+                    and (result.sse is None or result.sse.outgoing.ref in accepted_sse)
+                    and all(item.ref in accepted_models for item in result.model_calls)
                 )
             if result.discarded:
                 if row.completed_at is None:
@@ -303,20 +311,31 @@ class ConversationTraceStore:
                 sse_segments
             ):
                 sse_segments = [*sse_segments, result.sse.model_dump(mode="json")]
+            model_calls = row.model_calls or []
+            model_refs = {item["ref"] for item in model_calls}
+            new_models = [
+                item for item in result.model_calls if item.ref not in model_refs
+            ]
+            model_calls = [
+                *model_calls,
+                *(item.model_dump(mode="json") for item in new_models),
+            ]
             if (
                 len(combined) > TRACE_MAX_HTTP_ATTEMPTS
                 or len(sse_segments) > TRACE_MAX_SSE_SEGMENTS
+                or len(model_calls) > TRACE_MAX_MODEL_CALLS
             ):
                 row.http_availability = TraceAvailability.PARTIAL
                 return False
             row.http_attempts = combined or None
             row.sse_segments = sse_segments or None
+            row.model_calls = model_calls or None
             if (
                 result.http_incomplete
                 or row.http_availability == TraceAvailability.PARTIAL
                 or any(
                     item.completeness != TraceHttpCompleteness.COMPLETE
-                    for item in incoming
+                    for item in [*incoming, *new_models]
                 )
                 or (
                     result.sse is not None
@@ -327,7 +346,7 @@ class ConversationTraceStore:
                 )
             ):
                 row.http_availability = TraceAvailability.PARTIAL
-            elif combined or sse_segments:
+            elif combined or sse_segments or model_calls:
                 row.http_availability = TraceAvailability.CAPTURED
             return True
 
@@ -354,6 +373,70 @@ class ConversationTraceStore:
                 )
             )
         return [TraceSseSegment.model_validate(item) for item in segments or []]
+
+    async def model_calls(
+        self, session_id: str, exchange_id: str
+    ) -> list[TraceModelIndex]:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            items = await session.scalar(
+                select(turn.model_calls).where(
+                    turn.session_id == session_id,
+                    turn.exchange_id == exchange_id,
+                )
+            )
+        return [TraceModelIndex.model_validate(item) for item in items or []]
+
+    async def model_origins(
+        self,
+        session_id: str,
+        exchange_id: str,
+        call: TraceModelIndex,
+        *,
+        cutoff_rank: int | None,
+    ) -> list[TraceModelOrigin]:
+        keys = set(call.related_tools)
+        if not keys:
+            return []
+        turn = ConversationTraceTurnRow
+        # Search the earliest retained captures first. A bounded miss leaves
+        # the origin unknown rather than inferring it from a later request.
+        query = (
+            select(
+                turn.exchange_id, turn.history_rank, turn.turn_number, turn.model_calls
+            )
+            .where(turn.session_id == session_id, turn.model_calls.is_not(None))
+            .order_by(turn.history_rank, turn.exchange_id)
+            .limit(64)
+        )
+        if call.observed_through_rank is not None:
+            query = query.where(turn.history_rank <= call.observed_through_rank)
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).all()
+        origins = []
+        for observed_exchange, rank, number, items in rows:
+            for item in items or []:
+                prior = TraceModelIndex.model_validate(item)
+                if cutoff_rank is not None and (
+                    prior.observed_through_rank is None
+                    or prior.observed_through_rank > cutoff_rank
+                ):
+                    continue
+                if keys.intersection(prior.observed_invalid_tools):
+                    keys.difference_update(prior.observed_invalid_tools)
+                    origins.append(
+                        TraceModelOrigin(
+                            exchange_id=observed_exchange,
+                            history_rank=rank,
+                            turn_number=number,
+                            call_id=prior.call_id,
+                        )
+                    )
+                if not keys or (
+                    observed_exchange == exchange_id and prior.ref == call.ref
+                ):
+                    return origins
+        return origins
 
     async def reference(self, session_id: str) -> TraceConversationReference | None:
         active = ConversationTraceConsentRow
@@ -632,7 +715,11 @@ class ConversationTraceStore:
         turn = ConversationTraceTurnRow
         query = (
             select(turn)
-            .options(defer(turn.http_attempts), defer(turn.sse_segments))
+            .options(
+                defer(turn.http_attempts),
+                defer(turn.sse_segments),
+                defer(turn.model_calls),
+            )
             .where(turn.session_id == reference.session_id)
             .order_by(turn.history_rank, turn.exchange_id)
             .limit(limit + 1)

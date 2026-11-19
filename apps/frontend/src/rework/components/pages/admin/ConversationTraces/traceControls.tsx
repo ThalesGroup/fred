@@ -37,10 +37,10 @@ export function downloadTraceBytes(data: string, name: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function useTracePagination() {
+export function useTracePagination(initialCursor?: string) {
   const [pages, setPages] = useState<string[]>([]);
   return {
-    cursor: pages.length > 0 ? pages[pages.length - 1] : undefined,
+    cursor: pages.length > 0 ? pages[pages.length - 1] : initialCursor,
     next: (cursor: string) => setPages((prior) => [...prior, cursor]),
     previous: () => setPages((prior) => prior.slice(0, -1)),
     reset: () => setPages([]),

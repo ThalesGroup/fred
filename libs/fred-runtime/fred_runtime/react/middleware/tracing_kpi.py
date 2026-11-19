@@ -31,6 +31,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables.config import (
     ensure_config,
@@ -220,20 +221,25 @@ class TracingKpiMiddleware(AgentMiddleware):
                 if span is not None
                 else LlmProgressCallback(observation)
             )
-            config = merge_configs(ensure_config(), {"callbacks": [callback]})
 
             async def invoke_model() -> ModelResponse:
                 nonlocal handler_ended
                 # Exclude telemetry setup/teardown from model boundary timings.
                 observation.http.started = time.monotonic()
                 try:
-                    with capture_model_http(observation.call_id, model_name):
-                        return await handler(request)
+                    return await handler(request)
                 finally:
                     handler_ended = time.monotonic()
 
-            with set_config_context(config) as context:
-                response = await asyncio.create_task(invoke_model(), context=context)
+            with capture_model_http(observation.call_id, model_name) as snapshot:
+                callbacks: list[BaseCallbackHandler] = [callback]
+                if snapshot is not None:
+                    callbacks.append(snapshot)
+                config = merge_configs(ensure_config(), {"callbacks": callbacks})
+                with set_config_context(config) as context:
+                    response = await asyncio.create_task(
+                        invoke_model(), context=context
+                    )
             with suppress(Exception):
                 if span is not None:
                     response_model_name = (

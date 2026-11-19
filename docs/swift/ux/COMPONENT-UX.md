@@ -6181,3 +6181,10 @@ resizing and middle panning with pointer or keyboard controls. An event picker
 also exposes dense arrivals to keyboard users. Masked readers see the timeline
 and categories, and an authorized reader can view or download the selected
 original frame.
+
+The LangChain tab shows the messages and tools handed to the model, the
+parsed or partial response, and any matching saved tool results in foldable
+JSON. The response status distinguishes a rejection before model output
+from unavailable evidence. The tab shows the normalization result and
+provides links to the original provider frame and the earliest matching
+retained turn when available.

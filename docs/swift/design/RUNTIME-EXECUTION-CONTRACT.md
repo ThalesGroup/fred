@@ -7507,3 +7507,24 @@ emitted. If Fred's model watchdog interrupts a silent response, the outgoing
 lane records the watchdog while the provider lane records the close it observed.
 Original frames are fetched by reference and byte range from the private
 evidence prefix under the saved rank and consent checks.
+
+### LangChain invocation and stream normalization (2026-11-19)
+
+For an admitted model call, LangChain callbacks record the invocation
+messages after middleware and the tool definitions bound for that call.
+Successful output uses LangChain's parsed messages. On stream failure the
+runtime retains an available partial generation, including a bounded prefix
+of LangChain token chunks when the error callback omits its aggregate. A
+rejection before any model event records absent output. Parsed calls keep
+valid and invalid calls, available usage and finish metadata, and matching
+saved tool results through the execution segment's rank. Snapshots use up
+to 128 KiB each and 512 KiB per execution segment.
+
+The shared provider transport records whether tool-call ID normalization
+was skipped, ran unchanged, or corrected a frame. The signal is unavailable
+when the attempt never exposes a normalization decision. A correction
+records the choice and tool indexes, preceding call ID when representable,
+and its original frame index if the raw SSE lane retained it. Model evidence
+uses the private trace prefix and can be read with the same runtime
+binding, consent, and rank checks as HTTP/SSE. Capture works independently
+of tracing export.

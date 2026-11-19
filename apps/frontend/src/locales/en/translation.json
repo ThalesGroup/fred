@@ -1483,7 +1483,37 @@
           "paused": "Awaiting input",
           "unknown": "Unknown"
         },
+        "model": {
+          "input": "LangChain invocation",
+          "output": "Parsed model output",
+          "partialOutput": "Partial parsed model output",
+          "inputUnavailable": "The final invocation was unavailable.",
+          "outputUnavailable": "Parsed model output was unavailable.",
+          "noOutput": "LangChain produced no model output for this invocation.",
+          "partialSnapshot": "This snapshot contains only the recorded portion.",
+          "normalizationTitle": "Tool-call ID normalization",
+          "normalizationAttempt": "Attempt {{number}} · {{status}}",
+          "partialNormalization": "Only part of the stream or its rewrite history was recorded.",
+          "normalization": {
+            "skipped": "Skipped",
+            "unchanged": "Ran without changes",
+            "corrected": "Corrected fragments",
+            "unavailable": "Normalization unavailable"
+          },
+          "rewrites_one": "{{count}} rewritten fragment",
+          "rewrites_other": "{{count}} rewritten fragments",
+          "rewritesLabel": "Recorded tool-call ID changes",
+          "originalFragment": "Inspect original frame {{number}}",
+          "originTurn": "First observed in retained turn {{number}}",
+          "originCall": "Inspect first retained observation",
+          "matchedResults": "Matching retained tool results",
+          "unavailable": "LangChain evidence unavailable.",
+          "masked": "LangChain evidence is masked.",
+          "loading": "Loading LangChain evidence..."
+        },
         "http": {
+          "evidenceTitle": "Model call evidence",
+          "langchainTab": "LangChain",
           "title": "Model HTTP exchange",
           "exchangeTab": "HTTP exchange",
           "sseTab": "SSE",
