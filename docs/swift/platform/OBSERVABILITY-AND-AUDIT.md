@@ -74,6 +74,11 @@ They carry no conversation, exchange, person, team, call, or payload identifiers
 The artifact series counts reservation trouble and final publication outcomes,
 so it can increment twice for a single degraded segment.
 
+The existing `runtime_stage_latency_ms` series includes `history_opening` and
+`history_terminal` stage values for managed history. These timers cover the
+entire operation, including connection checkout, the persisted write fence
+and transaction completion.
+
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 
 Usage questions — active users, conversations per team, top agents by usage, token consumption

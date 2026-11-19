@@ -42,6 +42,7 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
@@ -64,6 +65,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.sql import Executable
 
 from fred_core.history.base_history_store import BaseHistoryStore
 from fred_core.history.history_models import (
@@ -87,6 +89,7 @@ from fred_core.history.managed_session_erasure import (
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
+from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.bounded_work import BoundedSqlWork
 
@@ -277,11 +280,19 @@ class PostgresHistoryStore(BaseHistoryStore):
         *,
         kpi: BaseKPIWriter | None = None,
         trace_sql_slots: int = 1,
+        file_write_engine: AsyncEngine | None = None,
+        file_write_slots: int = 1,
     ) -> None:
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
         self._trace_sql = BoundedSqlWork(trace_sql_slots)
+        self._file_sessions = (
+            make_session_factory(file_write_engine)
+            if file_write_engine is not None
+            else self._sessions
+        )
+        self._file_sql = BoundedSqlWork(file_write_slots, queued=2 * file_write_slots)
 
     # ------------------------------------------------------------------
     # Write
@@ -314,6 +325,46 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
+        upsert = self._prepare_history_upsert(
+            session_id, messages, user_id, team_id, agent_instance_id
+        )
+        pool_wait_start = time.monotonic()
+        async with use_session(self._sessions, session) as s:
+            await self._execute_history_upsert(s, upsert, pool_wait_start)
+
+    async def _execute_history_upsert(
+        self,
+        session: AsyncSession,
+        upsert: Executable,
+        pool_wait_start: float,
+        *,
+        fence_key: str | None = None,
+    ) -> bool:
+        await session.connection()
+        pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+        sql_start = time.monotonic()
+        if fence_key is not None and not await managed_session_writes_allowed(
+            session, fence_key
+        ):
+            return False
+        await session.execute(upsert)
+        record_persist_metrics(
+            self._kpi,
+            store="history",
+            op="save",
+            pool_wait_ms=pool_wait_ms,
+            sql_ms=(time.monotonic() - sql_start) * 1000.0,
+        )
+        return True
+
+    def _prepare_history_upsert(
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        team_id: str | None,
+        agent_instance_id: str | None,
+    ) -> Executable:
         rows = []
         for msg in messages:
             parts, metadata = _serialize_history_payload(msg.parts or [], msg.metadata)
@@ -335,7 +386,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                 }
             )
         stmt = _dialect_insert(self._engine)(SessionHistoryRow).values(rows)
-        upsert_stmt = stmt.on_conflict_do_update(
+        return stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],
             set_={
                 k: stmt.excluded[k]
@@ -348,18 +399,6 @@ class PostgresHistoryStore(BaseHistoryStore):
                 ]
             },
         )
-        pool_wait_start = time.monotonic()
-        async with use_session(self._sessions, session) as s:
-            pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
-            sql_start = time.monotonic()
-            await s.execute(upsert_stmt)
-            record_persist_metrics(
-                self._kpi,
-                store="history",
-                op="save",
-                pool_wait_ms=pool_wait_ms,
-                sql_ms=(time.monotonic() - sql_start) * 1000.0,
-            )
 
     async def save_managed_turn(
         self,
@@ -371,24 +410,41 @@ class PostgresHistoryStore(BaseHistoryStore):
         agent_instance_id: str,
     ) -> bool:
         """Store a managed result under the same fence as checkpoint writes."""
-        async with self._sessions.begin() as session:
-            if not await managed_session_writes_allowed(
-                session, managed_session_key(session_id)
-            ):
-                return False
-            await self.save(
-                session_id=session_id,
-                messages=messages,
-                user_id=user_id,
-                team_id=team_id,
-                agent_instance_id=agent_instance_id,
-                session=session,
-            )
+        if not messages:
             return True
+        async with runtime_stage_timer(self._kpi, "history_terminal"):
+            upsert = self._prepare_history_upsert(
+                session_id, messages, user_id, team_id, agent_instance_id
+            )
+            pool_wait_start = time.monotonic()
+            async with self._sessions.begin() as session:
+                return await self._execute_history_upsert(
+                    session,
+                    upsert,
+                    pool_wait_start,
+                    fence_key=managed_session_key(session_id),
+                )
 
     async def fence_managed_session_erasure(self, session_id: str) -> None:
         async with self._sessions.begin() as session:
             await close_managed_session_write_fence(session, session_id)
+
+    async def write_managed_file(
+        self, session_id: str, operation: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Order a bounded physical object write with managed session erasure."""
+
+        async def write() -> None:
+            async with self._file_sessions.begin() as session:
+                async with asyncio.timeout(2):
+                    await session.connection()
+                if not await open_managed_session_write_fence(session, session_id):
+                    raise ValueError("session_erasing")
+                await operation()
+
+        await self._file_sql.run(
+            write, timeout=None, finish_on_cancel=True, queue_timeout=2
+        )
 
     # ------------------------------------------------------------------
     # Read
@@ -894,6 +950,14 @@ class PostgresHistoryStore(BaseHistoryStore):
             )
             return (result.scalar() or 0) > 0
 
+    async def session_has_other_owner(self, session_id: str, user_id: str) -> bool:
+        async with self._sessions() as session:
+            foreign = select(SessionHistoryRow.session_id).where(
+                SessionHistoryRow.session_id == session_id,
+                SessionHistoryRow.user_id != user_id,
+            )
+            return bool(await session.scalar(select(foreign.exists())))
+
     # ------------------------------------------------------------------
     # Rank helper
     # ------------------------------------------------------------------
@@ -986,14 +1050,20 @@ class PostgresHistoryStore(BaseHistoryStore):
         message: ChatMessage | None,
     ) -> bool:
         """Open the managed write fence and persist the first ordinary user message."""
-        async with self._sessions.begin() as session:
+        if message is not None:
+            parts, metadata = _serialize_history_payload(
+                message.parts or [], message.metadata
+            )
+        else:
+            parts, metadata = [], {}
+        async with (
+            runtime_stage_timer(self._kpi, "history_opening"),
+            self._sessions.begin() as session,
+        ):
             if not await open_managed_session_write_fence(session, session_id):
                 raise ValueError("session_erasing")
             if message is None:
                 return False
-            parts, metadata = _serialize_history_payload(
-                message.parts or [], message.metadata
-            )
             await self._lock_conversation(session, session_id)
             owner_instance_id = (
                 await session.execute(
@@ -1078,6 +1148,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         for attempt in range(3):
             try:
                 async with self._sessions.begin() as session:
+                    if not await open_managed_session_write_fence(session, session_id):
+                        raise ValueError("session_erasing")
                     await self._lock_conversation(session, session_id)
                     existing = (
                         await session.execute(
