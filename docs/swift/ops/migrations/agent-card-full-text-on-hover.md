@@ -1,10 +1,10 @@
 ---
 schema: 1
-title: "Show full agent card text on hover"
+title: "Show full agent text on hover"
 impact: none
 configuration: none
-configuration_reason: "Only frontend card title attributes change; no runtime configuration is affected."
-no_action_reason: "The tooltip reads existing card fields and requires no data or deployment changes."
+configuration_reason: "Only frontend title attributes change; no runtime configuration is affected."
+no_action_reason: "The tooltip reads existing agent fields and requires no data or deployment changes."
 ---
 ## Applicability
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Hover over an agent card with a long name, role, or description and confirm that the full field appears in the browser tooltip.
+Hover over a long agent name, role, or description in cards, the new-chat welcome, home views, and the agent form, and confirm that the full field appears in the browser tooltip.
 
 ## Rollback
 

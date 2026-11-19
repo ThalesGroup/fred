@@ -131,7 +131,12 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             </span>
           </span>
           {agent.description && (
-            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+            <span
+              className={styles.welcomeAgentDescription}
+              data-chat-welcome-agent-description
+              tabIndex={0}
+              title={agent.description}
+            >
               {agent.description}
             </span>
           )}
