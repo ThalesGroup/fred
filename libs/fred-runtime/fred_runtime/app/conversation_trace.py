@@ -131,6 +131,7 @@ def _prepare_publication(
     for attempt in buffer.attempts:
         files[attempt.ref] = store.http_files(attempt)
         if attempt.sse is not None:
+            attempt.sse.prepare_provider()
             files[attempt.ref].update(store.sse_files(attempt.sse))
         if attempt.tool_ref is None:
             worst_case_links.setdefault(attempt.call_id, []).append(

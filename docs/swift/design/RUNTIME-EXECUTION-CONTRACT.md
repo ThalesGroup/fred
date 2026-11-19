@@ -7564,9 +7564,13 @@ files. The index exposes timing and header availability. A managed JSON response
 has no outgoing SSE lane.
 
 Each streamed segment keeps up to 512 timing markers and 512 KiB of frame bytes.
-Lanes retain the last observation and longest silence when the frame budget is
-exhausted. A provider close can be independent of the terminal event Fred
-emitted. If Fred's model watchdog interrupts a silent response, the outgoing
+The publication worker classifies retained provider frames, including Anthropic
+text, thinking and tool deltas. The segment reserves up to 64 KiB of transient
+probes for possible terminal frames beyond the index and byte limits. The
+provider ending stays closed if the retained evidence does not confirm
+completion. Lanes keep the last observation and longest silence after the
+frame budget is exhausted. A provider close can be independent of the terminal
+event Fred emitted. If Fred's model watchdog interrupts a silent response, the outgoing
 lane records the watchdog while the provider lane records the close it observed.
 Original frames are fetched by reference and byte range from the private
 evidence prefix under the saved rank and consent checks.
@@ -7594,9 +7598,7 @@ to 128 KiB each and 512 KiB per execution segment.
 Model and tool snapshot copies run on two dedicated workers per pod. The
 invocation waits for its own bounded copy so later code can mutate the original
 structures safely. When both workers are busy a new copy reports partial or
-unavailable evidence. Provider SSE keeps counting frames and measuring gaps
-after the index limit, and classifies possible terminal markers so the ending
-remains visible.
+unavailable evidence.
 
 The shared provider transport records whether tool-call ID normalization
 was skipped, ran unchanged, or corrected a frame. The signal is unavailable

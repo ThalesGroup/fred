@@ -33,6 +33,7 @@ from fred_core.conversation_trace import (
     TraceHttpFailureStage,
     TraceModelOutputState,
     TraceNormalizationStatus,
+    TraceSseAvailability,
     TraceSseEnding,
     TraceSseKind,
     TraceToolOutcome,
@@ -300,6 +301,7 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     (attempt,) = buffer.close()
     assert attempt.sse is not None
     assert b"".join(attempt.response_body.chunks) == encoded
+    attempt.sse.prepare_provider()
     lane = attempt.sse.summary(stored=True)
     assert lane.ending == TraceSseEnding.COMPLETED
     assert lane.started_ms >= 3000
@@ -341,6 +343,7 @@ def test_partial_sse_keeps_exact_line_endings_and_separates_gap_from_lifetime():
     lane.feed(b"\ndata: other\n", 100.25)
     lane.feed(b"\n", 100.5)
     lane.finish(220.5, TraceSseEnding.TRUNCATED)
+    lane.prepare_provider()
     info = lane.summary(stored=True)
     assert info.end_ms == 120_500
     assert info.longest_gap == (500, 120_500)
@@ -599,12 +602,113 @@ def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classificati
     lane.feed(done[:20], 200.0)
     lane.feed(done[20:], 201.0)
     lane.finish(202.0, TraceSseEnding.CLOSED)
+    assert classified == []
+    lane.prepare_provider()
     summary = lane.summary(stored=True)
     assert classified == [text, done]
     assert summary.frame_count == 102
     assert summary.longest_gap == (2000, 101_000)
     assert summary.ending == TraceSseEnding.COMPLETED
     assert len(summary.frames) == 1
+
+
+@pytest.mark.parametrize(
+    ("data", "kind"),
+    [
+        (
+            b'{"type":"content_block_start","content_block":{"type":"text","text":""}}',
+            TraceSseKind.TEXT,
+        ),
+        (
+            b'{"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}',
+            TraceSseKind.TEXT,
+        ),
+        (
+            b'{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"why"}}',
+            TraceSseKind.REASONING,
+        ),
+        (
+            b'{"type":"content_block_delta","delta":{"type":"signature_delta","signature":"x"}}',
+            TraceSseKind.REASONING,
+        ),
+        (
+            b'{"type":"content_block_start","content_block":{"type":"tool_use","name":"lookup","input":{}}}',
+            TraceSseKind.TOOL,
+        ),
+        (
+            b'{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}',
+            TraceSseKind.TOOL,
+        ),
+        (
+            b'{"type":"message_delta","delta":{"stop_reason":"tool_use"}}',
+            TraceSseKind.STATUS,
+        ),
+        (b'{"type":"message_stop"}', TraceSseKind.DONE),
+        (b'{"type":"error","error":{"type":"overloaded_error"}}', TraceSseKind.ERROR),
+        (
+            b'{"choices":[{"delta":{"reasoning_content":"why"}}]}',
+            TraceSseKind.REASONING,
+        ),
+        (
+            b'{"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{}"}}]}}]}',
+            TraceSseKind.TOOL,
+        ),
+        (
+            b'{"choices":[{"delta":{"tool_calls":[],"content":"hi"}}]}',
+            TraceSseKind.TEXT,
+        ),
+        (b'{"choices":[{"finish_reason":"stop","delta":{}}]}', TraceSseKind.OTHER),
+    ],
+)
+def test_provider_sse_classifies_supported_original_events(
+    data: bytes, kind: TraceSseKind
+) -> None:
+    assert (
+        conversation_trace_sse.provider_kind(bytearray(b"data: " + data + b"\r\n\r\n"))
+        == kind
+    )
+
+
+def test_provider_sse_byte_cap_preserves_terminal_and_missing_raw_availability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = conversation_trace_sse.provider_kind
+    classified: list[bytes] = []
+
+    def counted(frame: bytearray) -> TraceSseKind:
+        classified.append(bytes(frame))
+        return original(frame)
+
+    monkeypatch.setattr(conversation_trace_sse, "provider_kind", counted)
+    text = b'data: {"choices":[{"delta":{"content":"fixture"}}]}\n\n'
+    embedded = b'data: {"choices":[{"delta":{"content":"[DONE]"}}]}\n\n'
+    terminal = b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    budget = SseBudget(started=100.0, bytes=len(text))
+    lane = RecordedSseLane(uuid4().hex, budget, 0)
+    lane.feed(text * 200, 101.0)
+    lane.feed(embedded, 102.0)
+    lane.feed(terminal, 103.0)
+    lane.finish(104.0, TraceSseEnding.CLOSED)
+
+    assert classified == []
+    lane.prepare_provider()
+    summary = lane.summary(stored=False)
+    assert classified == [text, embedded, terminal]
+    assert lane.raw == text
+    assert summary.ending == TraceSseEnding.COMPLETED
+    assert summary.frames[-1].kind == TraceSseKind.DONE
+    assert all(frame.offset is None for frame in summary.frames)
+    assert summary.availability == TraceSseAvailability.PARTIAL
+
+
+def test_provider_sse_cannot_infer_completion_from_unterminated_frame() -> None:
+    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0)
+    lane.feed(b"data: [DONE]\n", 101.0)
+    lane.finish(102.0, TraceSseEnding.CLOSED)
+    lane.prepare_provider()
+    assert lane.ending == TraceSseEnding.CLOSED
+    assert lane.gap == (1000, 2000)
+    assert lane.partial
 
 
 @pytest.mark.asyncio

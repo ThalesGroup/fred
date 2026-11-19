@@ -53,6 +53,7 @@ from fred_core.conversation_trace import (
     TRACE_SEGMENT_HEADER,
     TraceOutcome,
 )
+from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.history.history_schema import SESSION_BINDING_HEADER
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
@@ -77,15 +78,13 @@ from fred_core.users.store import postgres_user_store
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
+from fred_runtime.app import conversation_trace_sse
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.conversation_trace import (
     ConversationTraceClient,
     ManagedTurnCapture,
 )
-from fred_runtime.app.conversation_trace_artifacts import (
-    HttpTurnBuffer,
-    TraceHttpArtifactStore,
-)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
 from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
@@ -2377,24 +2376,32 @@ async def test_lost_admission_ack_finishes_with_facts_only(
 
 
 @pytest.mark.asyncio
-async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
+async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
     tmp_path, monkeypatch
 ) -> None:
     from fred_core.history.postgres_history_store import PostgresHistoryStore
 
+    loop = asyncio.get_running_loop()
     writes_started = asyncio.Event()
-    release = asyncio.Event()
+    release = Event()
     failure_recorded = asyncio.Event()
     started_workers = 0
+    classify = conversation_trace_sse.provider_kind
 
-    async def stall_publisher(*_args):
+    def note_worker() -> None:
         nonlocal started_workers
         started_workers += 1
         if started_workers == 2:
             writes_started.set()
-        await release.wait()
+
+    def stall_classifier(frame: bytearray):
+        loop.call_soon_threadsafe(note_worker)
+        assert release.wait(5)
+        return classify(frame)
 
     async def capture_facts(request):
+        if request.url.path.endswith("/reserve"):
+            return httpx.Response(200, json="capacity")
         payload = json.loads(request.content)
         if payload["outcome"] == "failed":
             assert payload["support_error_ref"] == "f" * 32
@@ -2402,11 +2409,7 @@ async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
             failure_recorded.set()
         return httpx.Response(204)
 
-    async def stall_history(*_args):
-        await release.wait()
-
     history = MagicMock(spec=PostgresHistoryStore)
-    history.exchange_number = AsyncMock(side_effect=stall_history)
     history.trace_boundary = AsyncMock(
         side_effect=AssertionError("cannot use a mutable exchange boundary")
     )
@@ -2416,13 +2419,24 @@ async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
     transport = httpx.MockTransport(capture_facts)
     async with httpx.AsyncClient(transport=transport) as http:
         client = ConversationTraceClient(http, config, NoOpKPIWriter())
-        client.artifacts = MagicMock(spec=TraceHttpArtifactStore)
-        monkeypatch.setattr(client, "_publish_reserved", stall_publisher)
+        client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
+        monkeypatch.setattr(conversation_trace_sse, "provider_kind", stall_classifier)
         try:
             for _ in range(2):
                 buffer = client._new_http_buffer()
                 assert buffer is not None
                 buffer.start_stream(monotonic(), 0)
+                attempt = buffer.begin_http(
+                    httpx.Request("POST", "https://provider.invalid"),
+                    call_id="model",
+                    number=1,
+                )
+                assert attempt is not None
+                attempt.headers(
+                    httpx.Response(200, headers={"Content-Type": "text/event-stream"})
+                )
+                attempt.sse_chunk(b"data: [DONE]\n\n")
+                attempt.finish_sse()
                 capture = ManagedTurnCapture(
                     "trace-fixture", client, http=buffer, segment_id=uuid4()
                 )
