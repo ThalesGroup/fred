@@ -54,12 +54,14 @@ account. Keycloak uses the selected account/password; Entra ID uses the
 independent API access token above. Authentication provider groups are unchanged:
 the campaign manages application roles through existing OpenFGA-backed APIs.
 
-The normal path performs 149 actual checks including transport and recovery,
-with at most one extra interruption step (150 total). It does not run the exhaustive
-combination matrix behind summarized rows. Coverage is deliberately focused:
+The normal path reports 154 steps including transport and recovery, with at most
+one extra interruption step (155 total).
 
-- No platform role and each of the five roles separately, with one representative
+- No platform role and six individual role profiles, with one representative
   privileged route per role and admin-route refusals for delegated roles.
+  The trace reader can read conversation trace settings and is denied access to
+  platform Analytics. The campaign also preserves any original platform access
+  manager grant during recovery.
 - Public/private team profiles: nonmember, member, editor, analyst, the
   charter-resolved admin (active or pending), and its editor/analyst union.
 - Exact team role/permission projections, own-team and foreign-team prompt

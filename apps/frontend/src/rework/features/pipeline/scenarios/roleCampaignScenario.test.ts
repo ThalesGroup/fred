@@ -27,6 +27,7 @@ const ROLE_ROUTES: Array<{ id: string; path: string; roles: PlatformRoleRelation
   { id: "announcements", path: "/admin/platform/announcements", roles: [] },
   { id: "import-export", path: "/import-export/stats", roles: [] },
   { id: "observation", path: "/kpi/presets/sessions_over_time", roles: ["platform_observer"] },
+  { id: "trace-settings", path: "/admin/conversation-traces/settings", roles: ["trace_reader"] },
 ];
 
 const CP = "/control-plane/v1",
@@ -267,19 +268,19 @@ async function run(f: ReturnType<typeof fake>, signal?: AbortSignal) {
 
 describe("automatic two-account role campaign", () => {
   it.each([true, false])("exercises the matrix, accepted charter=%s and restores grants", async (accepted) => {
-    const f = fake({ accepted, original: ["team_manager", "platform_observer"] }),
+    const f = fake({ accepted, original: ["team_manager", "platform_observer", "platform_access_manager"] }),
       steps = await run(f);
     expect(steps.filter((s) => s.status === "failed")).toEqual([]);
-    expect(steps.filter((s) => /^platform-\d+-roles$/.test(s.id))).toHaveLength(6);
+    expect(steps.filter((s) => /^platform-\d+-roles$/.test(s.id))).toHaveLength(7);
     expect(steps.filter((s) => /^team-\d+.*-roles$/.test(s.id))).toHaveLength(12);
-    expect(steps.length).toBe(148);
+    expect(steps).toHaveLength(153);
     expect(f.state.calls.length).toBeLessThanOrEqual(500);
     for (const roles of CAMPAIGN_PLATFORM_CASES)
       expect(f.state.platformSets.has([...roles].sort().join(","))).toBe(true);
     for (const visibility of ["public", "private"])
       for (const roles of campaignTeamCases(accepted ? "team_admin" : "pending_team_admin"))
         expect(f.state.teamSets.has(`${visibility}:${[...roles].sort().join(",")}`)).toBe(true);
-    expect(f.state.roles.sort()).toEqual(["platform_observer", "team_manager"]);
+    expect(f.state.roles.sort()).toEqual(["platform_access_manager", "platform_observer", "team_manager"]);
     expect(f.state.teams.size).toBe(0);
     expect(f.state.prompts.size).toBe(0);
     expect(f.state.journal).toBeNull();
@@ -409,9 +410,10 @@ describe("automatic two-account role campaign", () => {
   it.each([
     [1, "/users"],
     [2, "/kpi/presets/sessions_over_time"],
-    [3, "/teams/all"],
-    [4, "/admin/capabilities"],
-    [5, "/admin/platform/prompt"],
+    [3, "/admin/conversation-traces/settings"],
+    [4, "/teams/all"],
+    [5, "/admin/capabilities"],
+    [6, "/admin/platform/prompt"],
   ] as const)("detects unexpected denial for platform case %i", async (index, route) => {
     const f = fake();
     f.state.inject = (path, token) => {
@@ -421,6 +423,23 @@ describe("automatic two-account role campaign", () => {
     const steps = await run(f);
     expect(steps.some((step) => step.id === `platform-${index}-access` && step.status === "failed")).toBe(true);
     expect(f.state.roles).toEqual(["prompt_editor"]);
+    expect(f.state.journal).toBeNull();
+  });
+  it.each(["/users", "/kpi/presets/sessions_over_time"])("detects trace reader overreach on %s", async (route) => {
+    const f = fake();
+    f.state.inject = (path, token) => {
+      if (
+        token === TARGET &&
+        f.state.roles.includes("trace_reader") &&
+        new URL(path, "http://local").pathname === `${CP}${route}`
+      )
+        return { status: 200, body: [] };
+    };
+    const steps = await run(f);
+    expect(steps.find((step) => step.id === "platform-3-no-admin")).toMatchObject({
+      status: "failed",
+      error: `${route}: HTTP 200, expected 403 or 404`,
+    });
     expect(f.state.journal).toBeNull();
   });
   it("cleans a prompt persisted before a refused response", async () => {
@@ -548,7 +567,7 @@ describe("automatic two-account role campaign", () => {
     };
     const steps = await run(f);
     expect(steps.some((s) => s.id === "team-1-private-own-sessions" && s.status === "failed")).toBe(true);
-    expect(steps.length + 1).toBeLessThanOrEqual(150);
+    expect(steps.length + 1).toBeLessThanOrEqual(155);
     expect(f.state.journal).toBeNull();
   });
 });
