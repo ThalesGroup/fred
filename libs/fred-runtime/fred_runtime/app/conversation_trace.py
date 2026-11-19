@@ -375,6 +375,7 @@ class ConversationTraceClient:
         result: TraceFinalization,
         lookup: _TurnNumber | None,
     ) -> None:
+        retry_discard = None
         async with self._fact_workers:
             result.turn_number = await _turn_number(lookup)
             if isinstance(target, TraceAdmissionRequest):
@@ -389,17 +390,15 @@ class ConversationTraceClient:
                 committed = await self._commit_index(url, payload, timeout=1)
                 if committed is None and not result.discarded:
                     committed = await self._commit_index(url, payload, timeout=1)
+                if result.discarded and not committed:
+                    retry_discard = (url, payload)
             else:
                 committed = await self.finalize(target, result)
-        if (
-            isinstance(target, TraceAdmissionRequest)
-            and result.discarded
-            and not committed
-        ):
+        if retry_discard is not None:
             # A missing receipt may still be committing on the admission replica.
             await asyncio.sleep(_ADMISSION_SECONDS)
             async with self._fact_workers:
-                committed = await self._commit_index(url, payload, timeout=1)
+                committed = await self._commit_index(*retry_discard, timeout=1)
         self._metric("facts", _finalization_status(committed))
 
     def submit_http(
