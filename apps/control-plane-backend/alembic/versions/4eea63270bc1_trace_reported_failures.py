@@ -17,6 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Create the report index and preserve incidents from active legacy grants."""
     op.create_table(
         "conversation_trace_incident",
         sa.Column("session_id", sa.String(255), primary_key=True),
@@ -46,19 +47,45 @@ def upgrade() -> None:
         "conversation_trace_incident",
         ["session_id", "started_at"],
     )
-    op.execute(
+    if op.get_context().dialect.name == "sqlite":
+        # Match SQLAlchemy's SQLite timestamp format. Convert whole seconds to UTC
+        # separately so SQLite's date functions cannot round the legacy microseconds.
+        legacy_incidents = """
+            SELECT session_id, json_extract(incident, '$.support_error_ref'),
+                json_extract(incident, '$.cutoff.exchange_id'),
+                json_extract(incident, '$.cutoff.first_rank'),
+                json_extract(incident, '$.cutoff.last_rank'),
+                json_extract(incident, '$.cutoff.turn_number'),
+                datetime(substr(started_at, 1, 19) ||
+                    CASE WHEN substr(started_at, -6, 1) IN ('+', '-')
+                        THEN substr(started_at, -6) ELSE '' END) ||
+                    CASE WHEN substr(started_at, 20, 1) = '.'
+                        THEN substr(started_at, 20, 7) ELSE '.000000' END,
+                json_extract(incident, '$.failure_category')
+            FROM (
+                SELECT session_id, incident,
+                    json_extract(incident, '$.cutoff.started_at') AS started_at
+                FROM conversation_trace_consent
+                WHERE revoked_at IS NULL AND json_type(incident) = 'object'
+            ) AS active_incidents
         """
+    else:
+        legacy_incidents = """
+            SELECT session_id, incident->>'support_error_ref', incident->'cutoff'->>'exchange_id',
+                (incident->'cutoff'->>'first_rank')::integer,
+                (incident->'cutoff'->>'last_rank')::integer,
+                (incident->'cutoff'->>'turn_number')::integer,
+                (incident->'cutoff'->>'started_at')::timestamptz, incident->>'failure_category'
+            FROM conversation_trace_consent
+            WHERE revoked_at IS NULL AND json_typeof(incident) = 'object'
+        """
+    op.execute(
+        f"""
         INSERT INTO conversation_trace_incident (
             session_id, support_error_ref, exchange_id, first_rank,
             last_rank, turn_number, started_at, failure_category
         )
-        SELECT session_id, incident->>'support_error_ref', incident->'cutoff'->>'exchange_id',
-            (incident->'cutoff'->>'first_rank')::integer,
-            (incident->'cutoff'->>'last_rank')::integer,
-            (incident->'cutoff'->>'turn_number')::integer,
-            (incident->'cutoff'->>'started_at')::timestamptz, incident->>'failure_category'
-        FROM conversation_trace_consent
-        WHERE revoked_at IS NULL AND json_typeof(incident) = 'object'
+        {legacy_incidents}
         """
     )
 
