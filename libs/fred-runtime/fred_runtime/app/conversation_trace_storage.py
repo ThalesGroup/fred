@@ -144,9 +144,9 @@ class _TraceObjects(Protocol):
 
 
 class _S3Objects:
-    def __init__(self, config: MinioRuntimeFilesystemConfig) -> None:
+    def __init__(self, config: MinioRuntimeFilesystemConfig, workers: int) -> None:
         self._pool = _TraceS3Pool(
-            maxsize=_STORAGE_WORKERS,
+            maxsize=workers,
             block=True,
             cert_reqs="CERT_REQUIRED",
             ca_certs=os.environ.get("SSL_CERT_FILE") or certifi.where(),
@@ -187,7 +187,10 @@ class _S3Objects:
             raise
 
     def write(self, path: str, data: bytes) -> None:
-        self._client.put_object(self._bucket, path, BytesIO(data), len(data))
+        # Keep every multipart call on the worker carrying the SDK deadline.
+        self._client.put_object(
+            self._bucket, path, BytesIO(data), len(data), num_parallel_uploads=1
+        )
 
     def _list(self, path: str) -> Iterator[Object]:
         return self._client.list_objects(
@@ -268,22 +271,36 @@ class _GcsObjects:
 class TraceObjectIO:
     """Hold capacity until the synchronous SDK call actually ends."""
 
-    def __init__(self, backend: _TraceObjects) -> None:
+    def __init__(
+        self,
+        backend: _TraceObjects,
+        *,
+        workers: int = _STORAGE_WORKERS,
+        operation_seconds: float = _DEFAULT_OPERATION_SECONDS,
+    ) -> None:
         self._backend = backend
-        self._slots = asyncio.Semaphore(_STORAGE_WORKERS)
+        self._operation_seconds = operation_seconds
+        self._slots = asyncio.Semaphore(workers)
         self._pool = ThreadPoolExecutor(
-            max_workers=_STORAGE_WORKERS, thread_name_prefix="fred-trace-io"
+            max_workers=workers, thread_name_prefix="fred-object-io"
         )
         self._inflight: set[asyncio.Future[Any]] = set()
         self._closed = False
 
     @classmethod
     async def build(
-        cls, config: MinioRuntimeFilesystemConfig | GcsRuntimeFilesystemConfig
+        cls,
+        config: MinioRuntimeFilesystemConfig | GcsRuntimeFilesystemConfig,
+        *,
+        workers: int = _STORAGE_WORKERS,
+        operation_seconds: float = _DEFAULT_OPERATION_SECONDS,
     ) -> TraceObjectIO:
+        backend: _TraceObjects
         if isinstance(config, MinioRuntimeFilesystemConfig):
-            return cls(await asyncio.to_thread(_S3Objects, config))
-        return cls(await asyncio.to_thread(_GcsObjects, config))
+            backend = await asyncio.to_thread(_S3Objects, config, workers)
+        else:
+            backend = await asyncio.to_thread(_GcsObjects, config)
+        return cls(backend, workers=workers, operation_seconds=operation_seconds)
 
     async def read(self, path: str) -> bytes:
         return await self._run(self._backend.read, path)
@@ -302,7 +319,7 @@ class TraceObjectIO:
         return await self._run(self._backend.measure, path)
 
     async def _run(self, call: Callable[..., _T], *args: object) -> _T:
-        deadline = storage_deadline.get() or monotonic() + _DEFAULT_OPERATION_SECONDS
+        deadline = storage_deadline.get() or monotonic() + self._operation_seconds
         async with asyncio.timeout(max(0, deadline - monotonic())):
             await self._slots.acquire()
         try:

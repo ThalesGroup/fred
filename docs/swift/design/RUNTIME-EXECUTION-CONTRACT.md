@@ -7707,9 +7707,16 @@ delegation assertion are rejected. Human callers still use their own
 terms-admitted credential and the existing ownership rules.
 
 For a consent-guarded erasure, the Control Plane checkpoint fan-out requests
-a managed write fence before purging. The Runtime verifies an accepted
-erasure with Control Plane for the exact owner and session, or uses the
-platform principal already authorized for lifecycle erasure. Managed
-admission, terminal history, and checkpoint writes share the persisted
-fence. Writes that started before it closes finish before the purge. Later
-writes are skipped. Ordinary checkpoint reset keeps its existing contract.
+a managed write fence before purging. For an owner's erasure, the Runtime
+verifies Control Plane acceptance for the exact owner, session and registered
+Runtime, and retains the local history and checkpoint ownership checks. The
+platform principal already authorized for lifecycle erasure can close the
+fence. An ordinary checkpoint reset keeps its existing ownership contract.
+
+Managed admission, terminal history, steering, checkpoint and conversation
+file writes use the same persisted fence. PostgreSQL writers fail closed on
+an exclusive fence lock, and erasure retries through the existing purge
+queue if it cannot close the fence within one second. An admitted
+conversation-file write keeps its bounded SQL slot until the storage
+operation finishes, including when the request is canceled. The purge runs
+after earlier writes drain and later writes cannot recreate deleted data.

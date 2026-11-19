@@ -1262,6 +1262,14 @@ def _build_conversation_filesystem(
     trusted_session_id = (
         binding.runtime_context.session_id or binding.portable_context.request_id
     )
+    history = runtime_config.history_store
+    write_fence = (
+        partial(history.write_managed_file, trusted_session_id)
+        if binding.runtime_context.agent_instance_id
+        and binding.runtime_context.session_id
+        and isinstance(history, PostgresHistoryStore)
+        else None
+    )
     return ConversationFilesystemService(
         runtime_config.filesystem,
         trusted_session_id,
@@ -1271,6 +1279,8 @@ def _build_conversation_filesystem(
             else ConversationFilesystemQuotaConfig()
         ),
         kpi=runtime_config.kpi_writer,
+        write_fence=write_fence,
+        managed_write=runtime_config.managed_conversation_file_write,
     )
 
 
@@ -8595,6 +8605,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        managed_conversation_file_write=container.get_managed_file_writer(),
                         preparation_capabilities=config.preparation.enabled_capabilities,
                         skills=skills,
                         conversation_filesystem_quotas=(

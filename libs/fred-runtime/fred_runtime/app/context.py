@@ -32,7 +32,7 @@ from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.config import AgentPodConfig, LocalRuntimeFilesystemConfig
 from fred_runtime.app.conversation_trace import ConversationTraceClient
 from fred_runtime.app.session_visibility import (
     OwnerSessionVisibility,
@@ -40,8 +40,11 @@ from fred_runtime.app.session_visibility import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from fred_core.filesystem.structures import BaseFilesystem
 
+    from fred_runtime.app.conversation_trace_storage import TraceObjectIO
     from fred_runtime.app.platform_sql import PlatformSqlAdapter
     from fred_runtime.app.web_research import WebResearchService
     from fred_runtime.app.web_research_activity import WebResearchActivityStore
@@ -129,9 +132,11 @@ class PodApplicationContext:
     def __init__(self, configuration: AgentPodConfig) -> None:
         self.configuration = configuration
         self._sql_engine: AsyncEngine | None = None
+        self._file_write_engine: AsyncEngine | None = None
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
         self._filesystem: BaseFilesystem | None = None
+        self._managed_file_io: TraceObjectIO | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._platform_sql: PlatformSqlAdapter | None = None
         self.web_research: WebResearchService | None = None
@@ -186,12 +191,23 @@ class PodApplicationContext:
 
     async def initialize_filesystem(self) -> None:
         """Build the pod-wide filesystem and the optional private trace backend."""
-        from fred_runtime.app.config import LocalRuntimeFilesystemConfig
         from fred_runtime.app.conversation_trace_storage import TraceObjectIO
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
         config = self.configuration.storage.object_store
         self._filesystem = await build_runtime_filesystem(config)
+        if not isinstance(config, LocalRuntimeFilesystemConfig):
+            # Keep tool writes independent of trace capacity and leave the
+            # ordinary filesystem transport untouched.
+            try:
+                self._managed_file_io = await TraceObjectIO.build(
+                    config, workers=8, operation_seconds=30
+                )
+            except Exception as exc:
+                logger.warning(
+                    "event=managed_file.storage_initialization_failed error_type=%s",
+                    type(exc).__name__,
+                )
         if self.conversation_trace_client is not None:
             try:
                 trace_io = (
@@ -289,8 +305,26 @@ class PodApplicationContext:
         trace_sql_slots = int(
             postgres_config.pool_size != 1 or postgres_config.max_overflow != 0
         )
+        pool_size = postgres_config.pool_size or 5
+        overflow = postgres_config.max_overflow
+        connections = pool_size + (10 if overflow is None else max(0, overflow))
+        file_write_slots = 1
+        if engine.dialect.name == "postgresql":
+            if connections == 1:
+                self._file_write_engine = create_async_engine_from_config(
+                    postgres_config.model_copy(
+                        update={"pool_size": 2, "max_overflow": 0, "pool_timeout": 2}
+                    )
+                )
+                file_write_slots = 2
+            else:
+                file_write_slots = min(8, connections - 1, max(2, connections // 4))
         history_store = PostgresHistoryStore(
-            engine, kpi=self.get_kpi_writer(), trace_sql_slots=trace_sql_slots
+            engine,
+            kpi=self.get_kpi_writer(),
+            trace_sql_slots=trace_sql_slots,
+            file_write_engine=self._file_write_engine,
+            file_write_slots=file_write_slots,
         )
         self._sql_engine = engine
         self._checkpointer = checkpointer
@@ -424,6 +458,19 @@ class PodApplicationContext:
             )
         return self._filesystem
 
+    def get_managed_file_writer(self) -> Callable[[str, bytes], Awaitable[None]] | None:
+        if self._managed_file_io is not None:
+            return self._managed_file_io.write
+        if isinstance(
+            self.configuration.storage.object_store, LocalRuntimeFilesystemConfig
+        ):
+            return None
+        return self._unavailable_managed_file_write
+
+    @staticmethod
+    async def _unavailable_managed_file_write(_path: str, _data: bytes) -> None:
+        raise OSError("Managed conversation file writes are unavailable")
+
     def get_platform_sql(self) -> PlatformSqlAdapter | None:
         return self._platform_sql
 
@@ -455,9 +502,13 @@ class PodApplicationContext:
         self._kpi_tasks = []
         if self.conversation_trace_client is not None:
             await self.conversation_trace_client.drain()
+        if self._managed_file_io is not None:
+            await self._managed_file_io.close()
         if self._sql_engine is not None:
             await self._sql_engine.dispose()
             logger.info("[fred-runtime] SQL engine disposed")
+        if self._file_write_engine is not None:
+            await self._file_write_engine.dispose()
         if self._platform_sql is not None:
             await self._platform_sql.dispose()
             logger.info("[fred-runtime] platform SQL engine disposed")

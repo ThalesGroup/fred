@@ -45,7 +45,6 @@ from fred_core.model.streamed_tool_call_ids import AsyncToolCallIdTransport
 from fred_runtime.app import (
     conversation_trace_artifacts,
     conversation_trace_sse,
-    conversation_trace_storage,
 )
 from fred_runtime.app.config import GcsRuntimeFilesystemConfig
 from fred_runtime.app.conversation_trace_artifacts import (
@@ -121,10 +120,7 @@ async def test_publication_stops_after_a_slow_issued_object_request(
 
 
 @pytest.mark.asyncio
-async def test_twice_cancelled_object_put_retains_its_worker_slot(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(conversation_trace_storage, "_STORAGE_WORKERS", 1)
+async def test_twice_cancelled_object_put_retains_its_worker_slot() -> None:
     loop = asyncio.get_running_loop()
     started = asyncio.Event()
     release = Event()
@@ -139,7 +135,7 @@ async def test_twice_cancelled_object_put_retains_its_worker_slot(
 
     backend = MagicMock()
     backend.write.side_effect = put
-    storage = TraceObjectIO(backend)
+    storage = TraceObjectIO(backend, workers=1)
     try:
         late = asyncio.create_task(storage.write("late", b"old"))
         await asyncio.wait_for(started.wait(), 1)
@@ -159,8 +155,10 @@ async def test_twice_cancelled_object_put_retains_its_worker_slot(
 
 
 @pytest.mark.asyncio
-async def test_gcs_trace_read_limits_transport_and_does_not_retry(
+@pytest.mark.parametrize("writing", [False, True])
+async def test_gcs_object_io_limits_transport_and_does_not_retry(
     monkeypatch: pytest.MonkeyPatch,
+    writing: bool,
 ) -> None:
     monkeypatch.setattr(
         "google.auth.default", lambda: (AnonymousCredentials(), "trace-test")
@@ -182,11 +180,16 @@ async def test_gcs_trace_read_limits_transport_and_does_not_retry(
 
     monkeypatch.setattr(Session, "request", fail_request)
     storage = await TraceObjectIO.build(
-        GcsRuntimeFilesystemConfig(bucket_name="fixture")
+        GcsRuntimeFilesystemConfig(bucket_name="fixture"),
+        workers=2,
+        operation_seconds=30 if writing else 5,
     )
     try:
         with pytest.raises(ServiceUnavailable):
-            await storage.read("conversation-traces/example")
+            if writing:
+                await storage.write("conversations/example", b"fictional content")
+            else:
+                await storage.read("conversation-traces/example")
     finally:
         await storage.close()
     assert len(calls) == 1
