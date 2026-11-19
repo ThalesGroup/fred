@@ -5629,7 +5629,11 @@ The owner delete dialog supplies `expected_trace_grant_id` on the team
 session DELETE with either the reviewed active grant ID or `unshared`. Control
 Plane checks it under the conversation lifecycle lock when accepting either
 choice, and returns 409 if consent has changed. The dialog then refreshes the
-options. `keep_shared_diagnostics=true` requires an active grant ID and hides
+options and leaves any running reply intact. On accepted full erasure, the
+same SQL transaction hides the conversation, fences new execution, and
+enqueues its existing purge. A surviving lifecycle worker can finish the
+purge if the accepting request stops during fan-out.
+`keep_shared_diagnostics=true` requires an active grant ID and hides
 the chat while freezing the grant in the same transaction. Programmatic callers
 can omit the guard for ordinary erasure.
 The owner-facing details, history and execution paths reject the removed chat.

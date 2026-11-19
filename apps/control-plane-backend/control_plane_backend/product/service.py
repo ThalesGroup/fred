@@ -3821,7 +3821,11 @@ def _session_usable_for_execution(
       `CreateSessionRequest`) — an agent-agnostic session matches any
       instance the same user/team requests
     """
-    if session_record is None or session_record.trace_retained_after_delete:
+    if (
+        session_record is None
+        or session_record.trace_retained_after_delete
+        or session_record.trace_erasing
+    ):
         return False
     if str(session_record.team_id) != str(team_id):
         return False
@@ -5722,6 +5726,29 @@ async def _defer_erasure(
         user_id=user_id,
         due_at=due_at,
     )
+    await _record_deferred_erasure_task(
+        session=session,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+        due_at=due_at,
+        reason=reason,
+        inserted=inserted,
+        deps=deps,
+    )
+
+
+async def _record_deferred_erasure_task(
+    *,
+    session: SessionMetadataRecord,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    due_at: datetime,
+    reason: ErasureReason,
+    inserted: bool,
+    deps: ProductServiceDependencies,
+) -> None:
     # CTRLP-12 (P2): the enqueue above is idempotent for an already-pending
     # session, so a retried / double-clicked deferred delete keeps the original
     # queue row. Only mint the observable scheduled erasure task alongside a NEW
@@ -5801,16 +5828,6 @@ async def delete_or_defer_session(
     )
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
-    if not keep_shared_diagnostics and expected_trace_grant_id is not None:
-        expected_grant_id = (
-            None if expected_trace_grant_id == "unshared" else expected_trace_grant_id
-        )
-        if not await deps.get_session_metadata_store().fence_owner_trace_erasure(
-            session_id, team_id, user_id, expected_grant_id=expected_grant_id
-        ):
-            raise SessionAttachmentRequestError(
-                "trace_consent_no_longer_available", http_status=409
-            )
     if keep_shared_diagnostics:
         due_at = (
             _utcnow() + timedelta(seconds=duration_to_seconds(window))
@@ -5833,6 +5850,61 @@ async def delete_or_defer_session(
             user_id=user_id,
             session_id=session_id,
             grant_id=grant_id,
+        )
+        return
+    if expected_trace_grant_id is not None:
+        now = _utcnow()
+        due_at = (
+            now + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else now
+        )
+        queue = deps.get_purge_queue_store()
+        inserted = await deps.get_session_metadata_store().schedule_owner_trace_erasure(
+            session_id,
+            team_id,
+            user_id,
+            expected_grant_id=(
+                None
+                if expected_trace_grant_id == "unshared"
+                else expected_trace_grant_id
+            ),
+            deleted_at=now,
+            due_at=due_at,
+            queue=queue,
+        )
+        if inserted is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        if (
+            window is None
+            and inserted
+            and await delete_session(
+                team_id=team_id,
+                session_id=session_id,
+                user_id=user_id,
+                authorization=authorization,
+                deps=deps,
+            )
+        ):
+            try:
+                await queue.mark_done(session_id=session_id)
+            except Exception:
+                logger.warning(
+                    "Owner erasure completed. Purge acknowledgement will retry.",
+                    exc_info=True,
+                )
+            return
+        await _record_deferred_erasure_task(
+            session=session,
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            due_at=due_at,
+            reason=ErasureReason.user_deleted,
+            inserted=inserted,
+            deps=deps,
         )
         return
     if window is None:

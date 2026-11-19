@@ -17,6 +17,9 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { abortTurn } from "@core/hooks/backgroundTurns";
+
+vi.mock("@core/hooks/backgroundTurns", { spy: true });
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const defaultSessions = [
@@ -174,6 +177,7 @@ it.each([
   consent = option === undefined ? undefined : { grant_id: "first-grant", cutoff: { turn_number: 1 } };
   removeSession.mockClear().mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
   refreshConsent.mockClear();
+  vi.mocked(abortTurn).mockClear();
   try {
     act(render);
     const radios = () => [...document.querySelectorAll<HTMLInputElement>('[role="alertdialog"] input[type="radio"]')];
@@ -182,6 +186,7 @@ it.each([
       (button) => button.textContent === label,
     );
     await act(async () => confirm?.click());
+    expect(abortTurn).not.toHaveBeenCalled();
     expect(removeSession).toHaveBeenCalledWith({
       teamId: "team-1",
       sessionId: "saved",

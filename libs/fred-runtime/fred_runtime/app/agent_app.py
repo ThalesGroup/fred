@@ -87,6 +87,7 @@ from fred_core.history.history_schema import (
     HitlResponsePart,
     TextPart,
 )
+from fred_core.history.managed_session_erasure import SESSION_ERASURE_HEADER
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
@@ -273,6 +274,7 @@ from fred_runtime.runtime_support.authority import (
 )
 from fred_runtime.runtime_support.checkpoints import (
     CheckpointWriteObservation,
+    active_managed_checkpoint_session,
     checkpoint_namespace,
     graph_thread_id,
     graph_thread_prefix,
@@ -3605,21 +3607,25 @@ async def _claim_initial_opening(
         not isinstance(history_store, PostgresHistoryStore)
         or not session_id
         or not request.agent_instance_id
-        or not request.message
-        or request.resume_payload is not None
-        or request.interrupted_action is not None
-        or request.pending_message_id is not None
     ):
         return False
     from fred_core.history.history_schema import make_user_text
 
+    message = None
+    if (
+        request.message
+        and request.resume_payload is None
+        and request.interrupted_action is None
+        and request.pending_message_id is None
+    ):
+        message = make_user_text(session_id, exchange_id, 0, request.message)
     try:
         return await history_store.claim_initial_user_message(
             session_id=session_id,
             user_id=user_id,
             team_id=team_id,
             agent_instance_id=request.agent_instance_id,
-            message=make_user_text(session_id, exchange_id, 0, request.message),
+            message=message,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -4290,13 +4296,25 @@ async def _write_turn_history(
                 )
 
     try:
-        await history_store.save(
-            session_id=session_id,
-            messages=messages,
-            user_id=user_id,
-            team_id=team_id,
-            agent_instance_id=agent_instance_id,
-        )
+        if agent_instance_id is not None and isinstance(
+            history_store, PostgresHistoryStore
+        ):
+            if not await history_store.save_managed_turn(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            ):
+                return None
+        else:
+            await history_store.save(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            )
     except Exception:
         if delegation_enabled():
             logger.error("event=turn_history outcome=failed reason=write_failed")
@@ -4610,11 +4628,11 @@ async def _admit_managed_turn_capture(
         return None
     if resuming and isinstance(history_store, PostgresHistoryStore):
         try:
-            async with asyncio.timeout(0.1):
-                original_rank = await history_store.trace_exchange_start(
-                    session_id, user_id, exchange_id
-                )
+            original_rank = await history_store.trace_exchange_start(
+                session_id, user_id, exchange_id
+            )
         except Exception:
+            trace_client.note_resume_boundary_unavailable()
             logger.debug("event=conversation_trace.resume_boundary_unavailable")
             return None
         if original_rank is not None:
@@ -5833,6 +5851,11 @@ async def _iterate_runtime_event_payloads_inner(
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     error_phase = "capability_setup"
     owner_token = set_owner_execution(owns_run_record)
+    checkpoint_session_token = active_managed_checkpoint_session.set(
+        execution_config.session_id
+        if request.agent_instance_id and runtime_context.session_id
+        else active_managed_checkpoint_session.get()
+    )
     try:
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
@@ -6056,8 +6079,10 @@ async def _iterate_runtime_event_payloads_inner(
                 scope.cancel_children()
         try:
             reset_owner_execution(owner_token)
+            active_managed_checkpoint_session.reset(checkpoint_session_token)
         except ValueError:
             set_owner_execution(False)
+            active_managed_checkpoint_session.set(None)
         if runtime is not None:
             await complete_cleanup(runtime.dispose())
 
@@ -7716,6 +7741,24 @@ def _build_agent_router(
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         cp = _get_checkpointer()
+        runtime_history = get_runtime_context().config.history_store
+        fenced_history = (
+            runtime_history
+            if http_request.headers.get(SESSION_ERASURE_HEADER) == "true"
+            and isinstance(runtime_history, PostgresHistoryStore)
+            else None
+        )
+        if fenced_history is not None and not platform and security_enabled:
+            accepted = await hidden_managed_sessions(
+                container,
+                http_request.headers.get("Authorization"),
+                [session_id],
+                erasing_only=True,
+            )
+            if session_id not in accepted:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                )
         if not platform and await owner_hidden_sessions(
             container,
             caller_uid,
@@ -7731,6 +7774,7 @@ def _build_agent_router(
             not platform
             and caller_uid is not None
             and history_store is not None
+            and fenced_history is None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
         ):
             # No history to prove ownership (e.g. an erase retry after history
@@ -7745,11 +7789,13 @@ def _build_agent_router(
             )
             if owners == {}:
                 return {"deleted": 0}
-            if owners is None or any(owner != caller_uid for owner in owners.values()):
+            if not owners or any(owner != caller_uid for owner in owners.values()):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied.",
                 )
+        if fenced_history is not None:
+            await fenced_history.fence_managed_session_erasure(session_id)
         if isinstance(cp, FredSqlCheckpointer):
             deleted = await cp.adelete_session_threads(
                 session_id, derived_prefix=derived_prefix

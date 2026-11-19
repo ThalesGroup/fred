@@ -66,7 +66,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
-from fred_core.history.history_models import SessionHistoryRow, SessionTraceIncidentRow
+from fred_core.history.history_models import (
+    ManagedSessionWriteFenceRow,
+    SessionHistoryRow,
+    SessionTraceIncidentRow,
+)
 from fred_core.history.history_schema import (
     Channel,
     ChatMessage,
@@ -74,6 +78,12 @@ from fred_core.history.history_schema import (
     MessagePart,
     Role,
     TraceFailureCategory,
+)
+from fred_core.history.managed_session_erasure import (
+    close_managed_session_write_fence,
+    managed_session_key,
+    managed_session_writes_allowed,
+    open_managed_session_write_fence,
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
@@ -209,6 +219,7 @@ def history_metadata() -> MetaData:
     metadata = MetaData()
     SessionHistoryRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
     SessionTraceIncidentRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
+    ManagedSessionWriteFenceRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
     return metadata
 
 
@@ -265,12 +276,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         engine: AsyncEngine,
         *,
         kpi: BaseKPIWriter | None = None,
-        trace_incident_slots: int = 1,
+        trace_sql_slots: int = 1,
     ) -> None:
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
-        self._trace_incident_writes = BoundedSqlWork(trace_incident_slots)
+        self._trace_sql = BoundedSqlWork(trace_sql_slots)
 
     # ------------------------------------------------------------------
     # Write
@@ -349,6 +360,35 @@ class PostgresHistoryStore(BaseHistoryStore):
                 pool_wait_ms=pool_wait_ms,
                 sql_ms=(time.monotonic() - sql_start) * 1000.0,
             )
+
+    async def save_managed_turn(
+        self,
+        *,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        team_id: str | None,
+        agent_instance_id: str,
+    ) -> bool:
+        """Store a managed result under the same fence as checkpoint writes."""
+        async with self._sessions.begin() as session:
+            if not await managed_session_writes_allowed(
+                session, managed_session_key(session_id)
+            ):
+                return False
+            await self.save(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+                session=session,
+            )
+            return True
+
+    async def fence_managed_session_erasure(self, session_id: str) -> None:
+        async with self._sessions.begin() as session:
+            await close_managed_session_write_fence(session, session_id)
 
     # ------------------------------------------------------------------
     # Read
@@ -519,9 +559,18 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def trace_exchange_start(
         self, session_id: str, user_id: str, exchange_id: str
     ) -> int | None:
-        """Find the original saved rank without scanning unrelated exchanges."""
+        """Find the original saved rank within the optional SQL budget."""
+        return await self._trace_sql.run(
+            partial(self._read_trace_exchange_start, session_id, user_id, exchange_id),
+            timeout=0.1,
+        )
+
+    async def _read_trace_exchange_start(
+        self, session_id: str, user_id: str, exchange_id: str
+    ) -> int | None:
         row = SessionHistoryRow
         async with use_session(self._sessions) as session:
+            await self._set_trace_sql_deadline(session)
             return await session.scalar(
                 select(func.min(row.rank)).where(
                     row.session_id == session_id,
@@ -529,6 +578,15 @@ class PostgresHistoryStore(BaseHistoryStore):
                     row.exchange_id == exchange_id,
                     row.rank >= 0,
                     row.delivery_state.is_distinct_from("pending"),
+                )
+            )
+
+    async def _set_trace_sql_deadline(self, session: AsyncSession) -> None:
+        if self._engine.dialect.name == "postgresql":
+            await session.execute(
+                text(
+                    "SELECT set_config('statement_timeout', '100ms', true), "
+                    "set_config('idle_in_transaction_session_timeout', '200ms', true)"
                 )
             )
 
@@ -543,7 +601,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         failure: ChatMessage,
     ) -> int | None:
         """Persist a trusted terminal boundary before attempting the transcript write."""
-        return await self._trace_incident_writes.run(
+        return await self._trace_sql.run(
             partial(
                 self._write_trace_incident,
                 session_id=session_id,
@@ -578,13 +636,11 @@ class PostgresHistoryStore(BaseHistoryStore):
         receipt = SessionTraceIncidentRow
         exchange_id = failure.exchange_id
         async with self._sessions.begin() as session:
-            if self._engine.dialect.name == "postgresql":
-                await session.execute(
-                    text(
-                        "SELECT set_config('statement_timeout', '100ms', true), "
-                        "set_config('idle_in_transaction_session_timeout', '200ms', true)"
-                    )
-                )
+            await self._set_trace_sql_deadline(session)
+            if not await managed_session_writes_allowed(
+                session, managed_session_key(session_id)
+            ):
+                return None
             await self._lock_conversation(session, session_id)
             # A managed opening is saved before execution. Its history is the
             # ownership anchor and prevents a late terminal write after erasure.
@@ -927,13 +983,17 @@ class PostgresHistoryStore(BaseHistoryStore):
         user_id: str,
         team_id: str | None,
         agent_instance_id: str,
-        message: ChatMessage,
+        message: ChatMessage | None,
     ) -> bool:
-        """Persist the first ordinary user message before the stream can accept steering."""
-        parts, metadata = _serialize_history_payload(
-            message.parts or [], message.metadata
-        )
+        """Open the managed write fence and persist the first ordinary user message."""
         async with self._sessions.begin() as session:
+            if not await open_managed_session_write_fence(session, session_id):
+                raise ValueError("session_erasing")
+            if message is None:
+                return False
+            parts, metadata = _serialize_history_payload(
+                message.parts or [], message.metadata
+            )
             await self._lock_conversation(session, session_id)
             owner_instance_id = (
                 await session.execute(

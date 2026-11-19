@@ -30,6 +30,7 @@ from fred_core.history.history_schema import (
     make_tool_result,
     make_user_text,
 )
+from fred_core.history.managed_session_erasure import SESSION_ERASURE_HEADER
 from fred_core.history.postgres_history_store import (
     PostgresHistoryStore,
     create_history_schema,
@@ -39,7 +40,14 @@ from fred_runtime.app import agent_app
 from fred_runtime.app.conversation_trace_history import router
 from fred_runtime.app.dependencies import get_pod_container
 from fred_runtime.migrations import upgrade_sqlite_database
-from sqlalchemy import text
+from fred_runtime.runtime_support.checkpoints import (
+    active_managed_checkpoint_session,
+    checkpoint_config,
+    graph_thread_id,
+)
+from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from langgraph.checkpoint.base import empty_checkpoint
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -91,6 +99,127 @@ async def test_runtime_erasure_requires_platform_permission_for_service_agents(
         result = await client.delete("/agents/sessions/managed")
         assert result.status_code == 200
         assert result.json() == {"deleted": 2}
+
+
+@pytest.mark.asyncio
+async def test_accepted_erasure_fences_managed_writes_across_runtimes(
+    tmp_path, monkeypatch
+):
+    url = f"sqlite+aiosqlite:///{tmp_path / 'managed-erasure.db'}"
+    reader_engine = create_async_engine(url)
+    writer_engine = create_async_engine(url)
+    try:
+        await create_history_schema(reader_engine)
+        eraser = PostgresHistoryStore(reader_engine)
+        writer = PostgresHistoryStore(writer_engine)
+        reader_checkpoints = FredSqlCheckpointer(reader_engine)
+        writer_checkpoints = FredSqlCheckpointer(writer_engine)
+        session_id = "managed"
+        owner = KeycloakUser(uid="owner", username="owner", roles=[])
+        opening = dict(
+            session_id=session_id,
+            user_id=owner.uid,
+            team_id="team",
+            agent_instance_id="agent",
+        )
+        assert await writer.claim_initial_user_message(
+            **opening, message=make_user_text(session_id, "first", 0, "Fictional input")
+        )
+
+        app = FastAPI()
+        app.include_router(agent_app._build_agent_router({}, True, 100))
+        app.dependency_overrides[get_current_user_or_service] = lambda: owner
+        app.dependency_overrides[get_pod_container] = lambda: object()
+        monkeypatch.setattr(
+            agent_app,
+            "get_runtime_context",
+            lambda: SimpleNamespace(
+                config=SimpleNamespace(
+                    history_store=eraser, checkpointer=reader_checkpoints
+                )
+            ),
+        )
+
+        async def not_platform(_caller):
+            return False
+
+        async def no_retained_history(*_args):
+            return set()
+
+        accepted = False
+
+        async def erasure_accepted(
+            _container, authorization, sessions, *, erasing_only
+        ):
+            assert authorization == "Bearer owner"
+            assert erasing_only and sessions == [session_id]
+            return {session_id} if accepted else set()
+
+        monkeypatch.setattr(agent_app, "_caller_can_manage_platform", not_platform)
+        monkeypatch.setattr(agent_app, "owner_hidden_sessions", no_retained_history)
+        monkeypatch.setattr(agent_app, "hidden_managed_sessions", erasure_accepted)
+
+        thread_id = graph_thread_id(session_id, "agent")
+        config = checkpoint_config(thread_id=thread_id)
+        token = active_managed_checkpoint_session.set(session_id)
+        try:
+            initial = await writer_checkpoints.aput(
+                config, empty_checkpoint(), {}, {"message": "1"}
+            )
+            await writer_checkpoints.aput_writes(initial, [("tool", "result")], "task")
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://test",
+                headers={"Authorization": "Bearer owner"},
+            ) as client:
+                path = f"/agents/checkpoints/{session_id}"
+                flag = {SESSION_ERASURE_HEADER: "true"}
+                assert (await client.delete(path, headers=flag)).status_code == 403
+                assert (await client.delete(path)).json() == {"deleted": 1}
+                await writer_checkpoints.aput(
+                    config, empty_checkpoint(), {}, {"message": "2"}
+                )
+                accepted = True
+                assert (await client.delete(path, headers=flag)).json() == {
+                    "deleted": 1
+                }
+                assert (
+                    await client.delete(f"/agents/sessions/{session_id}")
+                ).json() == {"deleted": 1}
+
+            late = await writer_checkpoints.aput(
+                config, empty_checkpoint(), {}, {"message": "3"}
+            )
+            await writer_checkpoints.aput_writes(late, [("tool", "late")], "task")
+            assert (
+                await writer_checkpoints.aclaim_hitl_resume(
+                    thread_id=thread_id, checkpoint_ns="", interrupt_id="late"
+                )
+                is None
+            )
+            assert not await writer.save_managed_turn(
+                **opening, messages=[make_user_text(session_id, "late", 1, "Late")]
+            )
+            with pytest.raises(ValueError, match="session_erasing"):
+                await writer.claim_initial_user_message(**opening, message=None)
+            assert await eraser.get(session_id, owner.uid) == []
+            async with reader_engine.connect() as connection:
+                for table in (
+                    reader_checkpoints.checkpoints_table,
+                    reader_checkpoints.blobs_table,
+                    reader_checkpoints.writes_table,
+                    reader_checkpoints.thread_owner_table,
+                    reader_checkpoints.hitl_claim_table,
+                ):
+                    assert (
+                        await connection.scalar(select(func.count()).select_from(table))
+                        == 0
+                    )
+        finally:
+            active_managed_checkpoint_session.reset(token)
+    finally:
+        await writer_engine.dispose()
+        await reader_engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -369,6 +498,8 @@ async def test_slow_incident_write_leaves_the_saved_error_fallback(monkeypatch):
         )
         assert proof_cleanup.is_set()
         assert not proof_closed.is_set()
+        with pytest.raises(TimeoutError, match="saturated"):
+            await store.trace_exchange_start("session", "owner", "failed")
         with pytest.raises(TimeoutError, match="saturated"):
             await store.record_trace_incident(
                 session_id="other-session",

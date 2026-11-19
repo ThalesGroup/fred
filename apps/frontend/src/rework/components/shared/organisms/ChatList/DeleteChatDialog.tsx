@@ -44,7 +44,6 @@ export function DeleteChatDialog({
     setError(undefined);
     const expectedTraceGrantId = grant?.grant_id ?? "unshared";
     const keepSharedDiagnostics = choice?.option === "keep";
-    if (!keepSharedDiagnostics) abortTurn(sessionId);
     try {
       await remove({
         teamId,
@@ -62,7 +61,7 @@ export function DeleteChatDialog({
       }
       return;
     }
-    if (keepSharedDiagnostics) abortTurn(sessionId);
+    abortTurn(sessionId);
     clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
     onDeleted();
   }

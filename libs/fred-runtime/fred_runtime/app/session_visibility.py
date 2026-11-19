@@ -67,18 +67,21 @@ class OwnerSessionVisibility:
         authorization: str | None,
         session_ids: tuple[str, ...],
         subject: AssertedUser | None,
+        *,
+        erasing_only: bool,
     ) -> list[str]:
+        params = (
+            {"person": subject.uid, "run": subject.run_id, "agent": subject.agent_id}
+            if subject is not None
+            else {}
+        )
+        if erasing_only:
+            params["erasing_only"] = "true"
         response = await self._client.post(
             self._url,
             json=list(session_ids),
             headers={"Authorization": authorization} if authorization else None,
-            params={
-                "person": subject.uid,
-                "run": subject.run_id,
-                "agent": subject.agent_id,
-            }
-            if subject is not None
-            else None,
+            params=params,
             follow_redirects=False,
         )
         response.raise_for_status()
@@ -89,6 +92,8 @@ class OwnerSessionVisibility:
         authorization: str | None,
         session_ids: list[str],
         subject: AssertedUser | None = None,
+        *,
+        erasing_only: bool = False,
     ) -> set[str]:
         hidden: set[str] = set()
         try:
@@ -97,7 +102,9 @@ class OwnerSessionVisibility:
                 for window in batched(batches, _PARALLEL_BATCHES):
                     results = await asyncio.gather(
                         *(
-                            self._hidden_batch(authorization, batch, subject)
+                            self._hidden_batch(
+                                authorization, batch, subject, erasing_only=erasing_only
+                            )
                             for batch in window
                         ),
                         return_exceptions=True,
@@ -117,12 +124,17 @@ async def hidden_managed_sessions(
     session_ids: list[str],
     *,
     subject: AssertedUser | None = None,
+    erasing_only: bool = False,
 ) -> set[str]:
     if not session_ids:
         return set()
     visibility = container.owner_session_visibility
     if visibility is None:
         raise HTTPException(503, "conversation_visibility_unavailable")
+    if erasing_only:
+        return await visibility.hidden(
+            authorization, session_ids, subject, erasing_only=True
+        )
     return await visibility.hidden(authorization, session_ids, subject)
 
 

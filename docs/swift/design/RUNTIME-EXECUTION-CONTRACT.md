@@ -7676,6 +7676,9 @@ record safe facts and partial evidence while a live reservation stays charged
 for leased cleanup. The Runtime terminal-error proof write has a 200 ms request
 budget and uses at most one slot of its history pool. If proof writing times out,
 the ordinary saved transcript can still supply the terminal error reference.
+The original exchange rank lookup on a resumed turn shares that physical
+budget and has a 100 ms caller deadline. An unavailable lookup skips optional
+capture and leaves the resume available.
 
 ### Owner-hidden conversation history and lifecycle erasure
 
@@ -7702,3 +7705,11 @@ the lifecycle worker's own machine bearer. A service agent must hold
 `organization.can_manage_platform`; an unentitled service agent and a
 delegation assertion are rejected. Human callers still use their own
 terms-admitted credential and the existing ownership rules.
+
+For a consent-guarded erasure, the Control Plane checkpoint fan-out requests
+a managed write fence before purging. The Runtime verifies an accepted
+erasure with Control Plane for the exact owner and session, or uses the
+platform principal already authorized for lifecycle erasure. Managed
+admission, terminal history, and checkpoint writes share the persisted
+fence. Writes that started before it closes finish before the purge. Later
+writes are skipped. Ordinary checkpoint reset keeps its existing contract.

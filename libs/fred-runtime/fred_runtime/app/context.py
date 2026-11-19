@@ -220,6 +220,7 @@ class PodApplicationContext:
         (dated entries) for the incidents this closes.
         """
         from fred_core.history.history_models import (
+            ManagedSessionWriteFenceRow,
             SessionHistoryRow,
             SessionTraceIncidentRow,
         )
@@ -270,6 +271,7 @@ class PodApplicationContext:
             await require_tables(
                 engine,
                 [
+                    ManagedSessionWriteFenceRow.__tablename__,
                     SessionHistoryRow.__tablename__,
                     SessionTraceIncidentRow.__tablename__,
                 ],
@@ -284,11 +286,11 @@ class PodApplicationContext:
 
         init_user_store(engine)
         checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
-        proof_slots = int(
+        trace_sql_slots = int(
             postgres_config.pool_size != 1 or postgres_config.max_overflow != 0
         )
         history_store = PostgresHistoryStore(
-            engine, kpi=self.get_kpi_writer(), trace_incident_slots=proof_slots
+            engine, kpi=self.get_kpi_writer(), trace_sql_slots=trace_sql_slots
         )
         self._sql_engine = engine
         self._checkpointer = checkpointer

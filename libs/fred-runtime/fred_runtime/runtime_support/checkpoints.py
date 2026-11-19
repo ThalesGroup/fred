@@ -45,6 +45,9 @@ class CheckpointWriteObservation:
 active_checkpoint_write: ContextVar[CheckpointWriteObservation | None] = ContextVar(
     "checkpoint_write_observation", default=None
 )
+active_managed_checkpoint_session: ContextVar[str | None] = ContextVar(
+    "managed_checkpoint_session", default=None
+)
 
 
 class CheckpointTupleLike(Protocol):

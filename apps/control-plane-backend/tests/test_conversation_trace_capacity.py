@@ -29,6 +29,7 @@ from fred_core.conversation_trace import (
     TraceAdmissionReconciliation,
     TraceAdmissionRequest,
     TraceAvailability,
+    TraceDegradation,
     TraceFinalization,
     TraceFinalizationFacts,
     TraceHistoryBoundary,
@@ -40,7 +41,7 @@ from fred_core.conversation_trace import (
     TraceStorageReservationState,
 )
 from fred_core.history.history_schema import TraceFailureCategory
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 _RUNTIME = "fred-agents"
@@ -542,6 +543,7 @@ async def test_owner_erasure_requires_the_reviewed_sharing_state(
     await _seed(engine, "shared", "unshared")
     store = ConversationTraceStore(engine)
     metadata = SessionMetadataStore(engine)
+    queue = PurgeQueueStore(engine)
     team = TeamId("team")
     reference = await store.reference("shared")
     assert reference is not None and reference.consent is None
@@ -555,28 +557,110 @@ async def test_owner_erasure_requires_the_reviewed_sharing_state(
     grant, _ = await store.set_consent(reference, cutoff)
     assert grant is not None
 
-    assert not await metadata.fence_owner_trace_erasure(
-        "shared", team, "owner", expected_grant_id=None
-    )
+    timestamp = utcnow() - timedelta(seconds=1)
+    due = timestamp + timedelta(hours=1)
+
+    async def erase(
+        session_id: str, grant_id: str | None, *, user: str = "owner", due_at=timestamp
+    ) -> bool | None:
+        return await metadata.schedule_owner_trace_erasure(
+            session_id,
+            team,
+            user,
+            expected_grant_id=grant_id,
+            deleted_at=timestamp,
+            due_at=due_at,
+            queue=queue,
+        )
+
+    assert await erase("shared", None) is None
     replacement, _ = await store.set_consent(
         reference,
         cutoff.model_copy(update={"last_rank": 2}),
         expected_version=grant.grant_id,
     )
     assert replacement is not None
-    assert not await metadata.fence_owner_trace_erasure(
-        "shared", team, "owner", expected_grant_id=grant.grant_id
-    )
-    assert not await metadata.fence_owner_trace_erasure(
-        "shared", team, "intruder", expected_grant_id=replacement.grant_id
-    )
-    assert await metadata.fence_owner_trace_erasure(
-        "shared", team, "owner", expected_grant_id=replacement.grant_id
-    )
-    assert await metadata.fence_owner_trace_erasure(
-        "unshared", team, "owner", expected_grant_id=None
-    )
+    assert await erase("shared", grant.grant_id) is None
+    assert await erase("shared", replacement.grant_id, user="intruder") is None
+    assert await erase("shared", replacement.grant_id, due_at=due) is True
+    assert await erase("shared", replacement.grant_id) is False
+    assert await erase("unshared", None) is True
+    assert [item.session_id for item in await queue.list_due(limit=10)] == ["unshared"]
     assert await store.reference("shared") is None
+    stored = await metadata.get("shared")
+    assert stored is not None and stored.trace_erasing
+
+
+@pytest.mark.asyncio
+async def test_owner_erasure_rolls_back_hidden_state_if_queue_fails(
+    control_plane_sql_engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "chat")
+    queue = PurgeQueueStore(engine)
+    metadata = SessionMetadataStore(engine)
+    enqueue = queue.enqueue
+
+    async def interrupt_queue(**kwargs):
+        await enqueue(**kwargs)
+        await kwargs["session"].flush()
+        raise RuntimeError("injected enqueue failure")
+
+    monkeypatch.setattr(queue, "enqueue", interrupt_queue)
+    with pytest.raises(RuntimeError, match="injected enqueue failure"):
+        await metadata.schedule_owner_trace_erasure(
+            "chat",
+            TeamId("team"),
+            "owner",
+            expected_grant_id=None,
+            deleted_at=utcnow(),
+            due_at=utcnow(),
+            queue=queue,
+        )
+    async with async_sessionmaker(engine)() as session:
+        chat = await session.get(SessionMetadataRow, "chat")
+        assert chat is not None and chat.deleted_at is None and not chat.trace_erasing
+    assert await queue.list_due(limit=10) == []
+
+
+@pytest.mark.asyncio
+async def test_degradation_commits_without_accounting_access(
+    control_plane_sql_engine: AsyncEngine,
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "chat")
+    publisher = ConversationTraceStore(engine)
+    reader = ConversationTraceStore(engine)
+    await publisher.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    admission = await _admit(publisher, "chat")
+    assert admission is not None and not (await reader.settings()).degraded
+
+    def deny_accounting_query(_conn, _cursor, sql, _parameters, _ctx, _many):
+        assert "conversation_trace_settings" not in sql.lower()
+
+    event.listen(engine.sync_engine, "before_cursor_execute", deny_accounting_query)
+    try:
+        assert await publisher.finalize(
+            _RUNTIME,
+            str(admission.capture_id),
+            TraceFinalization(
+                outcome=TraceOutcome.COMPLETED,
+                duration_ms=1,
+                http_incomplete=True,
+                degradation=TraceDegradation.STORAGE,
+            ),
+        )
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", deny_accounting_query)
+    assert (await reader.settings()).degradation_reason == TraceDegradation.STORAGE
+    async with async_sessionmaker(engine).begin() as session:
+        await session.execute(
+            update(ConversationTraceTurnRow).values(
+                degraded_until=utcnow() - timedelta(seconds=1)
+            )
+        )
+    assert not (await reader.settings()).degraded
 
 
 @pytest.mark.asyncio

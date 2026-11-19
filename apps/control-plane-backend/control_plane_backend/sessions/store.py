@@ -38,6 +38,7 @@ from control_plane_backend.models.session_metadata_models import (
     SessionContextPromptRow,
     SessionMetadataRow,
 )
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 
 
 def _utcnow() -> datetime:
@@ -74,6 +75,7 @@ class SessionMetadataRecord:
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         trace_retained_after_delete: bool = False,
+        trace_erasing: bool = False,
     ) -> None:
         self.session_id = session_id
         self.team_id = team_id
@@ -86,6 +88,7 @@ class SessionMetadataRecord:
         self.created_at = created_at
         self.updated_at = updated_at
         self.trace_retained_after_delete = trace_retained_after_delete
+        self.trace_erasing = trace_erasing
 
 
 def _row_to_record(
@@ -103,6 +106,7 @@ def _row_to_record(
         created_at=row.created_at,
         updated_at=row.updated_at,
         trace_retained_after_delete=row.trace_retained_after_delete,
+        trace_erasing=row.trace_erasing,
     )
 
 
@@ -232,31 +236,44 @@ class SessionMetadataStore:
                 .values(trace_erasing=True, updated_at=SessionMetadataRow.updated_at)
             )
 
-    async def fence_owner_trace_erasure(
+    async def schedule_owner_trace_erasure(
         self,
         session_id: str,
         team_id: TeamId,
         user_id: str,
         *,
         expected_grant_id: str | None,
-    ) -> bool:
-        """Fence an owner erasure only for the active consent state they reviewed."""
+        deleted_at: datetime,
+        due_at: datetime,
+        queue: PurgeQueueStore,
+    ) -> bool | None:
+        """Hide and fence the reviewed chat in the same commit as the purge."""
         owner = SessionMetadataRow
         async with use_session(self._sessions) as session:
             row = await self._lock_trace_owner(session, session_id, team_id, user_id)
             if row is None or row.trace_retained_after_delete:
-                return False
+                return None
             if (
                 await self._active_trace_grant_id(session, session_id)
                 != expected_grant_id
             ):
-                return False
+                return None
             await session.execute(
                 update(owner)
                 .where(owner.session_id == session_id)
-                .values(trace_erasing=True, updated_at=owner.updated_at)
+                .values(
+                    deleted_at=row.deleted_at or deleted_at,
+                    trace_erasing=True,
+                    updated_at=owner.updated_at,
+                )
             )
-            return True
+            return await queue.enqueue(
+                session_id=session_id,
+                team_id=str(team_id),
+                user_id=user_id,
+                due_at=due_at,
+                session=session,
+            )
 
     async def retain_for_support(
         self,
@@ -331,14 +348,20 @@ class SessionMetadataStore:
         session_ids: list[str],
         *,
         session: AsyncSession | None = None,
+        erasing_only: bool = False,
     ) -> list[str]:
         """Find retained conversations that ordinary owner history must hide."""
         owner = SessionMetadataRow
         hidden = select(owner.session_id).where(
             owner.user_id == user_id,
             owner.session_id.in_(session_ids),
-            owner.trace_retained_after_delete.is_(True),
         )
+        if erasing_only:
+            hidden = hidden.where(
+                owner.deleted_at.is_not(None), owner.trace_erasing.is_(True)
+            )
+        else:
+            hidden = hidden.where(owner.trace_retained_after_delete.is_(True))
         if runtime_id is not None:
             hidden = hidden.where(
                 or_(

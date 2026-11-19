@@ -34,10 +34,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models.base import Base, JsonColumn
+
+
+class ManagedSessionWriteFenceRow(Base):
+    """Keep a content-free fence for one managed conversation identity."""
+
+    __tablename__ = "managed_session_write_fence"
+
+    session_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    erased: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 
 class SessionHistoryRow(Base):

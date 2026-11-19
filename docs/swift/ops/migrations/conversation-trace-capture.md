@@ -45,6 +45,10 @@ the updated Control Plane API. The PostgreSQL migration locks the trace turn
 table against concurrent writes during the backfill. After upgrade, writes from
 older Control Plane replicas also maintain the index.
 
+Control Plane revision `60cbb822db04` adds a partial index and two nullable
+columns for recent degradation on captured turns. A replica can report
+degradation even when another replica holds the storage accounting row.
+
 Deploy the Control Plane API before the updated Runtime. The new Runtime
 uses the caller's credential with the product lifecycle API for managed
 history. Managed history fails closed while that API is unreachable. Control
@@ -57,6 +61,12 @@ It adds a table for terminal support references and their immutable cutoffs
 with the same session erasure lifecycle as chat history. Ordinary history
 rows and earlier terminal references remain readable without backfill.
 This migration also applies to local SQLite databases.
+
+Runtime revision `d37ac41af81b` adds the managed session write fence. It keeps
+an opaque digest after erasure so a delayed Runtime cannot recreate deleted
+transcripts or checkpoints. It stores no chat content or owner identity.
+Roll this migration and the updated Runtime to all replicas before exposing
+the new owner delete behavior.
 
 ## Validation
 
