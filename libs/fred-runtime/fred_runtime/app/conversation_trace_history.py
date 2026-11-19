@@ -155,13 +155,14 @@ async def list_trace_history_turns(
     after_rank: Rank = -1,
     after_exchange: Annotated[str, Query(max_length=255)] = "",
     exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    latest_only: bool = False,
 ) -> list[TraceHistoryBoundary]:
     response.headers["Cache-Control"] = "no-store"
     access = await _access(container, request, session_id)
     store = _history(container)
     if store is None:
         return []
-    if exchange_id is not None:
+    if latest_only or exchange_id is not None:
         boundary = await store.trace_boundary(session_id, access.owner_id, exchange_id)
         return [boundary] if boundary is not None else []
     return await store.trace_history_page(

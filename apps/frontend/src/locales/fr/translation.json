@@ -1426,6 +1426,43 @@
   "rework": {
     "admin": {
       "conversationTraces": {
+        "filtersLabel": "Filtres des traces",
+        "searchLabel": "Rechercher des traces",
+        "searchPlaceholder": "Conversation, référence d'erreur, titre ou agent",
+        "clearSearch": "Effacer la recherche",
+        "clearUser": "Effacer le filtre utilisateur",
+        "user": "Utilisateur",
+        "userPlaceholder": "Nom ou identifiant utilisateur",
+        "team": "Équipe",
+        "teamsError": "Impossible de charger les équipes.",
+        "outcomeLabel": "Résultat",
+        "consentFilter": "Consentement",
+        "noMatches": "Aucune conversation ne correspond à ces filtres.",
+        "quickStatus": {
+          "all": "Toutes",
+          "completed": "Terminées",
+          "failed": "Échecs"
+        },
+        "consentOptions": {
+          "all": "Tous",
+          "shared": "Partagées",
+          "masked": "Masquées"
+        },
+        "catalogAccess": {
+          "shared": "Partagée",
+          "masked": "Masquée",
+          "local": "Accès local"
+        },
+        "outcomePicker": {
+          "count_one": "{{count}} résultat",
+          "count_other": "{{count}} résultats",
+          "all": "Tous les résultats",
+          "search": "Rechercher des résultats",
+          "selected": "Résultats sélectionnés",
+          "others": "Autres résultats",
+          "empty": "Aucun résultat correspondant",
+          "apply": "Appliquer"
+        },
         "flushCaptures": "Supprimer toutes les captures",
         "flushTitle": "Supprimer toutes les données de diagnostic capturées ?",
         "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
@@ -1529,8 +1566,17 @@
           "system": "Système"
         },
         "outcome": {
+          "http_5xx": "HTTP 5xx en amont",
+          "http_429": "HTTP 429 limite de débit",
+          "http_400": "HTTP 400 requête incorrecte",
+          "http_other_4xx": "Autres HTTP 4xx",
+          "stream_interrupted": "Flux interrompu",
+          "timeout_or_connection": "Délai ou connexion",
+          "context_limit": "Limite de contexte",
+          "tool_or_capability": "Outil ou capacité",
+          "internal_or_unknown": "Interne ou inconnu",
           "completed": "Terminé",
-          "failed": "Échec",
+          "failed": "Échec (catégorie indisponible)",
           "paused": "En attente d'une réponse",
           "unknown": "Inconnu"
         },

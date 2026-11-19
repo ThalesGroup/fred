@@ -1765,11 +1765,23 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/conversation-traces/captures`, method: "DELETE" }),
     }),
+    listConversationTraceTeams: build.query<ListConversationTraceTeamsApiResponse, ListConversationTraceTeamsApiArg>({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/teams` }),
+    }),
     listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces`,
         params: {
           failed_only: queryArg.failedOnly,
+          outcomes: queryArg.outcomes,
+          team_ids: queryArg.teamIds,
+          user_id: queryArg.userId,
+          consent: queryArg.consent,
+          query: queryArg.query,
+          since: queryArg.since,
+          until: queryArg.until,
+          sort: queryArg.sort,
+          direction: queryArg.direction,
           limit: queryArg.limit,
           cursor: queryArg.cursor,
         },
@@ -3939,9 +3951,20 @@ export type DeleteConversationTracesApiArg = {
 export type FlushConversationTraceCapturesApiResponse =
   /** status 200 Successful Response */ DeleteConversationTracesResult;
 export type FlushConversationTraceCapturesApiArg = void;
+export type ListConversationTraceTeamsApiResponse = /** status 200 Successful Response */ TraceTeamOption[];
+export type ListConversationTraceTeamsApiArg = void;
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
 export type ListConversationTracesApiArg = {
   failedOnly?: boolean;
+  outcomes?: (TraceOutcome | TraceFailureCategory)[];
+  teamIds?: string[];
+  userId?: string | null;
+  consent?: TraceConsentFilter;
+  query?: string;
+  since?: string | null;
+  until?: string | null;
+  sort?: TraceCatalogSort;
+  direction?: "asc" | "desc";
   limit?: number;
   cursor?: string | null;
 };
@@ -6906,14 +6929,35 @@ export type DeleteConversationTracesResult = {
 export type DeleteConversationTracesRequest = {
   session_ids: string[];
 };
+export type TraceTeamOption = {
+  team_id: string;
+  name: string;
+};
+export type TraceContentAccess = "masked" | "shared" | "local";
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
 export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
 export type ConversationTraceSummary = {
   session_id: string;
   agent_display_name: string;
+  title?: string | null;
+  user_id?: string | null;
+  username?: string | null;
   team_id: string;
+  team_name: string;
+  access: TraceContentAccess;
   latest_started_at: string;
   outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
   support_error_ref?: string | null;
 };
@@ -6921,6 +6965,8 @@ export type ConversationTraceCatalog = {
   conversations: ConversationTraceSummary[];
   next_cursor: string | null;
 };
+export type TraceConsentFilter = "all" | "shared" | "masked";
+export type TraceCatalogSort = "latest" | "title" | "user" | "team" | "outcome" | "consent";
 export type TraceHistoryBoundary = {
   exchange_id: string;
   first_rank: number;
@@ -6956,13 +7002,13 @@ export type ManualTraceConsentRequest = {
   expected_version: string | null;
   source_note: string;
 };
-export type TraceContentAccess = "masked" | "shared" | "local";
 export type ConversationTraceTurn = {
   exchange_id: string;
   turn_number: number | null;
   started_at: string;
   duration_ms: number | null;
   outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
   call_ids: string[];
   trace_id: string | null;
@@ -6973,6 +7019,7 @@ export type ConversationTraceTurn = {
 };
 export type ConversationTraceDetail = {
   session_id: string;
+  title?: string | null;
   agent_display_name: string;
   team_id: string;
   turns: ConversationTraceTurn[];
@@ -7144,6 +7191,7 @@ export type ChatMetadata = {
   }[];
   command?: CommandDescriptor | null;
   support_error_ref?: string | null;
+  trace_failure_category?: TraceFailureCategory | null;
   [key: string]: any;
 };
 export type ChatMessage = {
@@ -7406,6 +7454,8 @@ export type TraceModelIndex = {
 };
 export type TraceFinalization = {
   outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
   duration_ms: number;
   turn_number?: number | null;
   call_ids?: string[];
@@ -8440,6 +8490,8 @@ export const {
   useSetConversationTraceSettingsMutation,
   useDeleteConversationTracesMutation,
   useFlushConversationTraceCapturesMutation,
+  useListConversationTraceTeamsQuery,
+  useLazyListConversationTraceTeamsQuery,
   useListConversationTracesQuery,
   useLazyListConversationTracesQuery,
   useGetTraceConsentQuery,

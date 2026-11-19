@@ -8,8 +8,76 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 
+from fred_core.history.history_schema import TraceFailureCategory
+from fred_sdk.authoring.api import ToolInvocationError
+from langchain_core.exceptions import ContextOverflowError
+from langchain_core.tools import ToolException
+
+from fred_runtime.capabilities.errors import CapabilityError
+from fred_runtime.react.middleware.rate_limit_retry import ProviderRateLimitError
 from fred_runtime.execution_errors import UserFacingExecutionError
-from fred_runtime.runtime_support.llm_diagnostics import failed_calls
+from fred_runtime.runtime_support.llm_diagnostics import (
+    Scalar,
+    classify_error,
+    exception_chain,
+    failed_calls,
+)
+
+
+def _invocation_category(fields: dict[str, Scalar]) -> TraceFailureCategory | None:
+    status = fields.get("http_status")
+    if isinstance(status, int):
+        if status == 429:
+            return TraceFailureCategory.HTTP_429
+        if status == 400:
+            return TraceFailureCategory.HTTP_400
+        if 500 <= status < 600:
+            return TraceFailureCategory.HTTP_5XX
+        if 400 <= status < 500:
+            return TraceFailureCategory.HTTP_OTHER_4XX
+    code = fields.get("error_code")
+    if code == "context_overflow":
+        return TraceFailureCategory.CONTEXT_LIMIT
+    if code == "stream_idle_timeout":
+        return TraceFailureCategory.STREAM_INTERRUPTED
+    if code in {
+        "connect_timeout",
+        "connection_error",
+        "pool_timeout",
+        "read_timeout",
+        "remote_protocol_error",
+        "timeout",
+        "write_timeout",
+    }:
+        chunks = fields.get("observed_chunks")
+        return (
+            TraceFailureCategory.STREAM_INTERRUPTED
+            if isinstance(chunks, int) and chunks > 0
+            else TraceFailureCategory.TIMEOUT_OR_CONNECTION
+        )
+    return None
+
+
+def classify_terminal_failure(exc: Exception, phase: str) -> TraceFailureCategory:
+    """Classify only the exception ending the turn, never recovered attempts."""
+    calls, _ = failed_calls(exc)
+    for fields in calls:
+        if category := _invocation_category(fields):
+            return category
+    chain, _ = exception_chain(exc)
+    if any(isinstance(exc, ProviderRateLimitError) for exc in chain):
+        return TraceFailureCategory.HTTP_429
+    if phase == "capability_setup" or any(
+        isinstance(exc, (CapabilityError, ToolException, ToolInvocationError))
+        for exc in chain
+    ):
+        return TraceFailureCategory.TOOL_OR_CAPABILITY
+    if any(isinstance(exc, ContextOverflowError) for exc in chain):
+        return TraceFailureCategory.CONTEXT_LIMIT
+    return (
+        _invocation_category(classify_error(exc))
+        or TraceFailureCategory.INTERNAL_OR_UNKNOWN
+    )
 
 
 def report_execution_error(

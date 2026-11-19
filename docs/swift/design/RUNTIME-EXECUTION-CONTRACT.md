@@ -7474,8 +7474,10 @@ exchange and the immutable consent rank, with pagination and a second
 access check before returning content. Ordinary owner history access
 continues through the existing messages route.
 
-The runtime saves terminal execution errors in the existing history batch,
-including the opaque support reference emitted in the event and execution log.
+The runtime saves the bounded terminal category and opaque support reference
+in the existing history batch. The managed terminal event and captured turn
+index carry the same safe metadata. Classification considers the failure
+that ended the turn. Earlier recovered call attempts remain in the evidence.
 This runs independently of detailed capture. The owner-scoped
 `trace-history-incident/{support_error_ref}` lookup resolves the failed
 exchange and the saved rank of that exact terminal event, even if the exchange

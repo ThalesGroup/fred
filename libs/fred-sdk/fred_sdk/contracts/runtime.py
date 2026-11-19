@@ -44,7 +44,11 @@ from typing import (
     TypeVar,
 )
 
-from fred_core.history.history_schema import FinishReason, coerce_finish_reason
+from fred_core.history.history_schema import (
+    FinishReason,
+    TraceFailureCategory,
+    coerce_finish_reason,
+)
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
@@ -559,6 +563,7 @@ class RuntimeErrorEvent(RuntimeEventBase):
     message: str = Field(..., min_length=1)
     reason: RuntimeStopReason | None = None
     support_error_ref: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    trace_failure_category: TraceFailureCategory | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[

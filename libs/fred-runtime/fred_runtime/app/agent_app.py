@@ -193,7 +193,10 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.conversation_trace import note_stream_failure
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.execution_diagnostics import (
+    classify_terminal_failure,
+    report_execution_error,
+)
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
@@ -4117,7 +4120,10 @@ async def _write_turn_history(
                     metadata=ChatMetadata(
                         support_error_ref=payload.get("support_error_ref")
                         if kind == "execution_error"
-                        else None
+                        else None,
+                        trace_failure_category=payload.get("trace_failure_category")
+                        if kind == "execution_error"
+                        else None,
                     ),
                 )
             )
@@ -5865,7 +5871,9 @@ async def _iterate_runtime_event_payloads_inner(
         error_ref = uuid4().hex
         message = report_execution_error(logger, exc, error_phase, reference=error_ref)
         yield RuntimeErrorEvent(
-            message=message, support_error_ref=error_ref
+            message=message,
+            support_error_ref=error_ref,
+            trace_failure_category=classify_terminal_failure(exc, error_phase),
         ).model_dump(mode="json")
     finally:
         if owns_run_record:

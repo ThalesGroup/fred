@@ -100,7 +100,7 @@ function ConversationTraceInspector({
   return (
     <div className={styles.page}>
       <PageHeader
-        title={t(cutoff || conversation?.local_content_access ? "conversation" : "maskedConversation")}
+        title={conversation?.title || t("maskedConversation")}
         subtitle={conversation?.agent_display_name}
         breadcrumb={
           <Link className={styles.link} to={TRACE_LIST_PATH}>
@@ -163,7 +163,7 @@ function ConversationTraceInspector({
                           {item.turn_number ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn")}
                         </strong>
                         <time dateTime={item.started_at}>{date.format(new Date(item.started_at))}</time>
-                        <TraceOutcomeBadge outcome={item.outcome} />
+                        <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
                         {item.availability === "history_only" && <small>{t("evidence.history_only")}</small>}
                         {(cutoff || conversation.local_content_access) && (
                           <small>{t(`access.${item.access ?? "masked"}`)}</small>
@@ -188,7 +188,7 @@ function ConversationTraceInspector({
               <section className={styles.turnDetail} aria-label={t("turnSummary")}>
                 <header>
                   <h2>{t("turnSummary")}</h2>
-                  <TraceOutcomeBadge outcome={turn.outcome} />
+                  <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} />
                 </header>
                 <dl>
                   <dt>{t("availability")}</dt>

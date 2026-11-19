@@ -252,6 +252,8 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         ).json() == "reserved"
         failed = {
             "outcome": "failed",
+            "failure_category": "http_400",
+            "support_error_ref": "a" * 32,
             "duration_ms": 20,
             "turn_number": 2,
             "call_ids": ["call-1"],
@@ -329,7 +331,44 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             await client.get(_ADMIN, headers=_READER, params={"failed_only": False})
         ).json()["conversations"]
         assert [row["outcome"] for row in failure_page] == ["failed"]
-        assert [row["outcome"] for row in all_page] == ["completed"]
+        assert [row["outcome"] for row in all_page] == ["failed"]
+        assert failure_page[0]["failure_category"] == "http_400"
+        assert failure_page[0]["support_error_ref"] == "a" * 32
+        assert (
+            len(
+                (
+                    await client.get(
+                        f"{_ADMIN}?outcomes=http_400&team_ids=team", headers=_READER
+                    )
+                ).json()["conversations"]
+            )
+            == 1
+        )
+        assert (
+            len(
+                (
+                    await client.get(
+                        f"{_ADMIN}?outcomes=http_5xx&outcomes=http_400&team_ids=other&team_ids=team",
+                        headers=_READER,
+                    )
+                ).json()["conversations"]
+            )
+            == 1
+        )
+        assert (
+            await client.get(f"{_ADMIN}?outcomes=http_5xx", headers=_READER)
+        ).json()["conversations"] == []
+        assert (
+            await client.get(f"{_ADMIN}?outcomes=completed", headers=_READER)
+        ).json()["conversations"] == []
+        assert (await client.get(f"{_ADMIN}?query={'a' * 32}", headers=_READER)).json()[
+            "conversations"
+        ] == failure_page
+        assert (
+            await client.get(
+                f"{_ADMIN}?query=Private+conversation+title&sort=title", headers=_READER
+            )
+        ).json()["conversations"] == []
         detail = await client.get(
             f"{_ADMIN}/session", headers=_READER, params={"limit": 1}
         )
@@ -405,6 +444,7 @@ async def test_owner_share_catalog_extension_and_revocation(
                 user_id="owner",
                 agent_instance_id="share-agent",
                 title="Private title",
+                title_revision=uuid4().hex,
             )
         )
 
@@ -428,7 +468,11 @@ async def test_owner_share_catalog_extension_and_revocation(
     def runtime(request: httpx.Request) -> httpx.Response:
         if "/trace-history-incident/" in request.url.path:
             assert request.headers["Authorization"] == "Bearer owner"
-            incident = {"cutoff": turns[0], "support_error_ref": error_ref}
+            incident = {
+                "cutoff": turns[0],
+                "support_error_ref": error_ref,
+                "failure_category": "http_400",
+            }
             if request.url.path.endswith(error_ref):
                 return httpx.Response(200, json=incident)
             return httpx.Response(200, content=b"null")
@@ -443,6 +487,8 @@ async def test_owner_share_catalog_extension_and_revocation(
             return httpx.Response(403, json={"detail": "trace_history_access_denied"})
         assert request.url.path.endswith("/trace-history-turns")
         assert request.headers["Authorization"] == "Bearer reader"
+        if request.url.params.get("latest_only") == "true":
+            return httpx.Response(200, json=[turns[latest]])
         return httpx.Response(200, json=turns)
 
     app = FastAPI()
@@ -496,7 +542,30 @@ async def test_owner_share_catalog_extension_and_revocation(
             "history_only"
         ]
         detail = await client.get(f"{_ADMIN}/shared-session", headers=reader)
-        assert "Private title" not in detail.text
+        assert detail.json()["title"] == "Private title"
+        assert (
+            await client.get(
+                _ADMIN,
+                headers=reader,
+                params={"failed_only": False, "query": "Private title"},
+            )
+        ).json()["conversations"][0]["title"] == "Private title"
+        await SessionMetadataStore(engine).update_metadata(
+            "shared-session",
+            TeamId("personal-owner"),
+            "owner",
+            title="Revised private title",
+        )
+        assert (
+            await client.get(
+                _ADMIN,
+                headers=reader,
+                params={"failed_only": False, "query": "Revised private title"},
+            )
+        ).json()["conversations"] == []
+        assert (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()[
+            "title"
+        ] is None
         assert [item["access"] for item in detail.json()["turns"]] == [
             "shared",
             "masked",
@@ -514,6 +583,9 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert extended.status_code == 200
         assert extended.json()["consent"]["grant_id"] != first_id
         assert extended.json()["consent"]["cutoff"]["turn_number"] == 2
+        assert (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()[
+            "title"
+        ] == "Revised private title"
         assert (await client.delete(path, headers=owner)).status_code == 204
         assert (
             await client.put(path, headers=owner, json=extension)
@@ -559,6 +631,8 @@ async def test_owner_share_catalog_extension_and_revocation(
             (row["availability"], row["outcome"], row["support_error_ref"])
             for row in rows
         ] == [("history_only", "failed", error_ref)]
+        assert rows[0]["title"] is None
+        assert rows[0]["failure_category"] == "http_400"
         assert (
             await client.get(
                 f"{_ADMIN}/shared-session/history/exchange-2", headers=reader
@@ -609,6 +683,7 @@ async def test_owner_share_catalog_extension_and_revocation(
         detail = await client.get(f"{_ADMIN}/shared-session", headers=reader)
         assert note not in detail.text
         assert detail.json()["turns"][0]["support_error_ref"] == error_ref
+        assert detail.json()["title"] == "Revised private title"
         assert (await client.delete(path, headers=owner)).status_code == 204
         assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
         assert (

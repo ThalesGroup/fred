@@ -44,12 +44,17 @@ from fred_core.conversation_trace import (
     TraceStorageReservationState,
     TraceToolCall,
 )
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import and_, case, func, literal, or_, select, union_all, update
+from sqlalchemy import and_, func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import aliased, defer
 
 from control_plane_backend.conversation_traces import capacity
+from control_plane_backend.conversation_traces.catalog import (
+    catalog_rows,
+    list_catalog_teams,
+)
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
@@ -57,8 +62,10 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceSettingsUpdate,
     ConversationTraceSummary,
     ConversationTraceTurn,
+    TraceCatalogFilters,
     TraceConsentGrant,
     TraceContentAccess,
+    TraceTeamOption,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
@@ -150,6 +157,9 @@ class TraceConversationReference:
     consent_version: str | None
     incident: TraceHistoryIncident | None = None
     retained_after_delete: bool = False
+    title: str | None = None
+    title_revision: str | None = None
+    title_authorized: bool = False
 
     @property
     def visible(self) -> bool:
@@ -504,6 +514,9 @@ class ConversationTraceStore:
                 return True
             row.completed_at = utcnow()
             row.outcome = result.outcome.value
+            if result.outcome == TraceOutcome.FAILED:
+                row.failure_category = result.failure_category
+                row.support_error_ref = result.support_error_ref
             row.turn_number = row.turn_number or result.turn_number
             row.duration_ms = min(
                 (row.duration_ms or 0) + result.duration_ms, 2**31 - 1
@@ -754,6 +767,14 @@ class ConversationTraceStore:
             consent_version=_consent_version(grant),
             incident=_incident(grant),
             retained_after_delete=owner.trace_retained_after_delete,
+            title=owner.title,
+            title_revision=owner.title_revision,
+            title_authorized=bool(
+                grant is not None
+                and grant.revoked_at is None
+                and owner.title_revision is not None
+                and grant.title_revision == owner.title_revision
+            ),
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:
@@ -801,13 +822,14 @@ class ConversationTraceStore:
         incident: TraceHistoryIncident | None = None,
         actor_id: str | None = None,
         source_note: str | None = None,
+        title_covered: bool = False,
     ) -> tuple[TraceConsentGrant | None, str | None]:
         reporting = incident is not None
         metadata = SessionMetadataRow
         active = ConversationTraceConsentRow
         async with use_session(self._sessions) as session:
             owner = await session.scalar(
-                select(metadata.session_id)
+                select(metadata)
                 .where(
                     metadata.session_id == reference.session_id,
                     metadata.user_id == reference.owner_id,
@@ -819,9 +841,10 @@ class ConversationTraceStore:
             )
             if owner is None:
                 raise TraceSessionNotFound()
+            session_id = owner.session_id
             latest = await session.scalar(
                 select(active)
-                .where(active.session_id == owner)
+                .where(active.session_id == session_id)
                 .order_by(active.granted_at.desc(), active.grant_id.desc())
                 .limit(1)
             )
@@ -848,7 +871,7 @@ class ConversationTraceStore:
                 captured = ConversationTraceTurnRow
                 if not await session.scalar(
                     select(captured.capture_id)
-                    .where(captured.session_id == owner)
+                    .where(captured.session_id == session_id)
                     .limit(1)
                 ):
                     raise TraceSessionNotFound()
@@ -879,10 +902,19 @@ class ConversationTraceStore:
                 )
             row = active(
                 grant_id=str(uuid4()),
-                session_id=owner,
+                session_id=session_id,
                 actor_id=actor_id or reference.owner_id,
                 source="manual" if source_note is not None else "owner",
                 source_note=source_note,
+                title_revision=owner.title_revision
+                if (
+                    (title_covered and owner.title_revision == reference.title_revision)
+                    or (
+                        previous is not None
+                        and previous.title_revision == owner.title_revision
+                    )
+                )
+                else None,
                 incident=incident.model_dump(mode="json")
                 if incident is not None
                 else None,
@@ -905,131 +937,40 @@ class ConversationTraceStore:
 
     async def list_conversations(
         self,
+        filters: TraceCatalogFilters,
         *,
-        failed_only: bool,
-        limit: int,
-        before: tuple[datetime, str] | None,
+        cursor: str | None = None,
+        before: tuple[datetime, str] | None = None,
+        local_content_access: bool = False,
     ) -> ConversationTraceCatalog:
-        turn = ConversationTraceTurnRow
-        newer = aliased(turn)
-        grant = ConversationTraceConsentRow
-        instance = AgentInstanceRow
-        metadata = SessionMetadataRow
-        incident_rank = grant.incident["cutoff"]["first_rank"].as_integer()
-        incident_exchange = grant.incident["cutoff"]["exchange_id"].as_string()
-        error_ref = grant.incident["support_error_ref"].as_string()
-        superseded = select(newer.capture_id).where(
-            newer.session_id == turn.session_id,
-            or_(
-                newer.history_rank > turn.history_rank,
-                and_(
-                    newer.history_rank == turn.history_rank,
-                    newer.capture_id > turn.capture_id,
-                ),
-            ),
-        )
-        if failed_only:
-            superseded = superseded.where(newer.outcome == TraceOutcome.FAILED.value)
-        captured = (
-            select(
-                turn.session_id.label("session_id"),
-                turn.agent_display_name.label("agent_display_name"),
-                metadata.team_id.label("team_id"),
-                turn.started_at.label("started_at"),
-                turn.capture_id.label("entry_id"),
-                turn.outcome.label("outcome"),
-                turn.completed_at.label("completed_at"),
-                turn.http_availability.label("http_availability"),
-                literal(False).label("history_only"),
-                case((incident_exchange == turn.exchange_id, error_ref)).label(
-                    "support_error_ref"
-                ),
-            )
-            .select_from(turn)
-            .join(metadata, metadata.session_id == turn.session_id)
-            .outerjoin(
-                grant,
-                and_(grant.session_id == turn.session_id, grant.revoked_at.is_(None)),
-            )
-            .where(
-                or_(
-                    metadata.deleted_at.is_(None),
-                    metadata.trace_retained_after_delete.is_(True),
-                ),
-                metadata.trace_erasing.is_(False),
-                ~superseded.exists(),
-                or_(grant.incident.is_(None), incident_rank <= turn.history_rank),
-            )
-        )
-        newer_capture = select(turn.capture_id).where(
-            turn.session_id == grant.session_id,
-            or_(grant.incident.is_(None), turn.history_rank >= incident_rank),
-        )
-        shared = (
-            select(
-                grant.session_id,
-                func.coalesce(instance.display_name, metadata.agent_display_name, ""),
-                metadata.team_id,
-                grant.started_at,
-                grant.grant_id,
-                case(
-                    (grant.incident.is_not(None), TraceOutcome.FAILED.value),
-                    else_=TraceOutcome.UNKNOWN.value,
-                ),
-                grant.granted_at,
-                literal(None),
-                literal(True),
-                error_ref,
-            )
-            .select_from(grant)
-            .join(metadata, metadata.session_id == grant.session_id)
-            .outerjoin(
-                instance,
-                and_(
-                    instance.agent_instance_id == metadata.agent_instance_id,
-                    instance.team_id == metadata.team_id,
-                ),
-            )
-            .where(
-                grant.revoked_at.is_(None),
-                or_(
-                    metadata.deleted_at.is_(None),
-                    metadata.trace_retained_after_delete.is_(True),
-                ),
-                metadata.trace_erasing.is_(False),
-            )
-        )
-        if failed_only:
-            captured = captured.where(turn.outcome == TraceOutcome.FAILED.value)
-            shared = shared.where(grant.incident.is_not(None))
-            newer_capture = newer_capture.where(
-                turn.outcome == TraceOutcome.FAILED.value
-            )
-        entries = union_all(captured, shared.where(~newer_capture.exists())).subquery()
-        query = (
-            select(entries)
-            .order_by(entries.c.started_at.desc(), entries.c.entry_id.desc())
-            .limit(limit + 1)
-        )
-        if before is not None:
-            date, entry_id = before
-            query = query.where(
-                or_(
-                    entries.c.started_at < date,
-                    and_(entries.c.started_at == date, entries.c.entry_id < entry_id),
-                )
-            )
+        limit = filters.limit
         async with use_session(self._sessions) as session:
-            rows = (await session.execute(query)).all()
+            rows = await catalog_rows(
+                session,
+                filters,
+                postgres=session.get_bind().dialect.name == "postgresql",
+                local_content_access=local_content_access,
+                limit=limit,
+                cursor=cursor,
+                before=before,
+            )
         last = rows[limit - 1] if len(rows) > limit else None
         return ConversationTraceCatalog(
             conversations=[
                 ConversationTraceSummary(
                     session_id=row.session_id,
-                    agent_display_name=row.agent_display_name,
+                    agent_display_name=row.display_name,
+                    title=row.title,
+                    user_id=row.user_id,
+                    username=row.username,
                     team_id=row.team_id,
-                    latest_started_at=_utc(row.started_at),
+                    team_name=row.team_name,
+                    access=TraceContentAccess(row.access),
+                    latest_started_at=_utc(row.latest_started_at),
                     outcome=TraceOutcome(row.outcome),
+                    failure_category=TraceFailureCategory(row.failure_category)
+                    if row.failure_category is not None
+                    else None,
                     support_error_ref=row.support_error_ref,
                     availability=(
                         TraceAvailability.HISTORY_ONLY
@@ -1041,10 +982,12 @@ class ConversationTraceStore:
                 )
                 for row in rows[:limit]
             ],
-            next_cursor=f"{_utc(last.started_at).isoformat()}|{last.entry_id}"
-            if last
-            else None,
+            next_cursor=f"session|{last.session_id}" if last else None,
         )
+
+    async def list_teams(self) -> list[TraceTeamOption]:
+        async with use_session(self._sessions) as session:
+            return await list_catalog_teams(session)
 
     async def conversation_page(
         self,
@@ -1121,6 +1064,10 @@ class ConversationTraceStore:
                     started_at=_utc(row.started_at),
                     duration_ms=row.duration_ms,
                     outcome=TraceOutcome(row.outcome),
+                    failure_category=TraceFailureCategory(row.failure_category)
+                    if row.failure_category is not None
+                    else None,
+                    support_error_ref=row.support_error_ref,
                     availability=_availability(
                         row.completed_at, row.outcome, row.http_availability
                     ),
@@ -1156,6 +1103,9 @@ class ConversationTraceStore:
                     )
                 point[1].outcome = TraceOutcome.FAILED
                 point[1].support_error_ref = incident.support_error_ref
+                point[1].failure_category = (
+                    incident.failure_category or point[1].failure_category
+                )
                 points[boundary.exchange_id] = point
         ordered = sorted(
             points.values(), key=lambda item: (item[0], item[1].exchange_id)
@@ -1171,4 +1121,7 @@ class ConversationTraceStore:
             consent_version=reference.consent_version,
             local_content_access=local_content_access,
             retained_after_delete=reference.retained_after_delete,
+            title=reference.title
+            if local_content_access or reference.title_authorized
+            else None,
         )

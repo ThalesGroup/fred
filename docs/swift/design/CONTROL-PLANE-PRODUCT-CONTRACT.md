@@ -5434,14 +5434,33 @@ conversation APIs. Settings updates emit a content-free audit event.
 Capture starts disabled. Control Plane records admissions from the enrolled
 runtime workload against an existing managed conversation and accepts
 finalization of an admitted exchange after capture is switched off. The
-catalog keeps operational identifiers and timestamps. It omits conversation
-titles, transcript text, and tool payloads. Catalog rows are paged in SQL and
-follow the ordinary conversation erasure transaction.
+catalog keeps operational identifiers and timestamps. It omits transcript
+text and tool payloads. Catalog rows are paged in SQL and follow the ordinary
+conversation erasure transaction.
 
 Trace turns are one-to-many with different read and retention rules from
 `session_metadata`. The trace tables reuse the existing conversation key,
 owner, agent instance, and runtime binding through a foreign key and scoped
 admission, without copying conversation content.
+
+### Catalog search, title authorization, and ordering
+
+The catalog defaults to any recorded terminal failure. It displays the most
+recent failed turn's category or the latest recorded turn's outcome if none
+failed. Outcome filters can match earlier recorded failures. Time bounds apply
+to the latest recorded turn. The trace operator team picker lists teams with
+visible diagnostics. The catalog supports text, exact owner ID or username,
+team, consent, and time filters. An exact support error reference can match
+any recorded failed turn. Keyset pages use the selected sort and conversation
+ID, with no title in the cursor.
+
+The current title is available to search, sort, and display only when its
+server-owned revision matches the active grant. To authorize a new title
+revision, the verified consent boundary must reach the latest saved turn,
+and the revision must still match at grant commit. Renaming and revocation
+hide the title until consent covers it again. Older grants without title
+provenance remain masked. The explicit loopback development profile can
+inspect active conversation titles without a grant.
 
 ### Owner consent for saved history
 

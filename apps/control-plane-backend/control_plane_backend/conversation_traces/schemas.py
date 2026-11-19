@@ -14,7 +14,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fred_core.conversation_trace import (
     TraceAvailability,
@@ -25,6 +25,7 @@ from fred_core.conversation_trace import (
     TraceOutcome,
     TraceRank,
 )
+from fred_core.history.history_schema import TraceFailureCategory
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
@@ -98,12 +99,56 @@ class TraceContentAccess(StrEnum):
     LOCAL = "local"
 
 
+class TraceConsentFilter(StrEnum):
+    ALL = "all"
+    SHARED = "shared"
+    MASKED = "masked"
+
+
+class TraceCatalogSort(StrEnum):
+    LATEST = "latest"
+    TITLE = "title"
+    USER = "user"
+    TEAM = "team"
+    OUTCOME = "outcome"
+    CONSENT = "consent"
+
+
+TraceOutcomeFilter = TraceOutcome | TraceFailureCategory
+
+
+class TraceCatalogFilters(BaseModel):
+    failed_only: bool = True
+    outcomes: list[TraceOutcomeFilter] = Field(default_factory=list, max_length=20)
+    team_ids: list[TraceIdentifier] = Field(default_factory=list, max_length=500)
+    user_id: TraceIdentifier | None = None
+    consent: TraceConsentFilter = TraceConsentFilter.ALL
+    query: Annotated[str, Field(max_length=255)] = ""
+    since: datetime | None = None
+    until: datetime | None = None
+    sort: TraceCatalogSort = TraceCatalogSort.LATEST
+    direction: Literal["asc", "desc"] = "desc"
+    limit: Annotated[int, Field(ge=1, le=100)] = 50
+    cursor: Annotated[str, Field(max_length=263)] | None = None
+
+
+class TraceTeamOption(BaseModel):
+    team_id: str
+    name: str
+
+
 class ConversationTraceSummary(BaseModel):
     session_id: str
     agent_display_name: str
+    title: str | None = None
+    user_id: str | None = None
+    username: str | None = None
     team_id: str
+    team_name: str
+    access: TraceContentAccess
     latest_started_at: datetime
     outcome: TraceOutcome
+    failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
     support_error_ref: TraceId | None = None
 
@@ -119,6 +164,7 @@ class ConversationTraceTurn(BaseModel):
     started_at: datetime
     duration_ms: int | None
     outcome: TraceOutcome
+    failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
     call_ids: list[str]
     trace_id: str | None
@@ -130,6 +176,7 @@ class ConversationTraceTurn(BaseModel):
 
 class ConversationTraceDetail(BaseModel):
     session_id: str
+    title: str | None = None
     agent_display_name: str
     team_id: str
     turns: list[ConversationTraceTurn]

@@ -30,6 +30,7 @@ from uuid import uuid4
 import anyio
 import httpx
 from fastapi import HTTPException
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TraceAdmission,
@@ -690,6 +691,8 @@ class ManagedTurnCapture:
     http: HttpTurnBuffer | None = None
     stream_offset_ms: int = 0
     watchdog_timeout: bool = False
+    failure_category: TraceFailureCategory | None = None
+    support_error_ref: str | None = None
     call_ids: dict[str, None] = field(default_factory=dict)
     trace_id: str | None = None
     span_id: str | None = None
@@ -713,6 +716,13 @@ class ManagedTurnCapture:
             self.outcome = TraceOutcome.COMPLETED
         elif kind == RuntimeEventKind.EXECUTION_ERROR:
             self.outcome = TraceOutcome.FAILED
+            raw_ref = event.get("support_error_ref")
+            if isinstance(raw_ref, str) and _TRACE_ID.fullmatch(raw_ref):
+                self.support_error_ref = raw_ref
+            raw_category = event.get("trace_failure_category")
+            if isinstance(raw_category, str):
+                with suppress(ValueError):
+                    self.failure_category = TraceFailureCategory(raw_category)
         elif kind == RuntimeEventKind.AWAITING_HUMAN:
             self.outcome = TraceOutcome.PAUSED
         elif kind == RuntimeEventKind.EXECUTION_INTERRUPTED:
@@ -773,6 +783,8 @@ class ManagedTurnCapture:
                         )
         result = TraceFinalization(
             outcome=self.outcome,
+            failure_category=self.failure_category,
+            support_error_ref=self.support_error_ref,
             duration_ms=duration_ms,
             turn_number=turn_number,
             call_ids=list(self.call_ids),

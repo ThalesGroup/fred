@@ -78,6 +78,22 @@
   display: flex;
   gap: var(--spacing-xs);
 }
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--spacing-m);
+}
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+.filterGroup > span {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
 .pager {
   flex-wrap: wrap;
   justify-content: end;
@@ -116,9 +132,24 @@
   background: var(--success-container);
   color: var(--on-success-container);
 }
+.outcome[data-outcome="http_400"],
+.outcome[data-outcome="http_other_4xx"],
+.outcome[data-outcome="http_5xx"],
+.outcome[data-outcome="tool_or_capability"],
+.outcome[data-outcome="internal_or_unknown"],
 .outcome[data-outcome="failed"] {
   background: var(--error-container);
   color: var(--on-error-container);
+}
+.outcome[data-outcome="http_429"],
+.outcome[data-outcome="context_limit"] {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+.outcome[data-outcome="stream_interrupted"],
+.outcome[data-outcome="timeout_or_connection"] {
+  background: var(--info-container);
+  color: var(--on-info-container);
 }
 .inspector {
   display: grid;

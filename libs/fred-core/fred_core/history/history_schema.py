@@ -419,6 +419,20 @@ class CommandDescriptor(BaseModel):
     )
 
 
+class TraceFailureCategory(str, Enum):
+    """Bounded terminal failure labels shared by chat history and trace indexes."""
+
+    HTTP_5XX = "http_5xx"
+    HTTP_429 = "http_429"
+    HTTP_400 = "http_400"
+    HTTP_OTHER_4XX = "http_other_4xx"
+    STREAM_INTERRUPTED = "stream_interrupted"
+    TIMEOUT_OR_CONNECTION = "timeout_or_connection"
+    CONTEXT_LIMIT = "context_limit"
+    TOOL_OR_CAPABILITY = "tool_or_capability"
+    INTERNAL_OR_UNKNOWN = "internal_or_unknown"
+
+
 class ChatMetadata(BaseModel):
     """
     Small structured metadata attached to each stored message.
@@ -455,6 +469,8 @@ class ChatMetadata(BaseModel):
     command: Optional[CommandDescriptor] = None
     # Runtime-generated terminal error correlation, written only on error rows.
     support_error_ref: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+    trace_failure_category: TraceFailureCategory | None = None
 
     @field_validator("finish_reason", mode="before")
     @classmethod

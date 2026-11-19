@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
+from uuid import uuid4
+
 from sqlalchemy import case, delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -178,6 +180,7 @@ class SessionMetadataStore:
             agent_display_name=record.agent_display_name,
             user_id=record.user_id,
             title=record.title,
+            title_revision=str(uuid4()) if record.title is not None else None,
             created_at=record.created_at or now,
             updated_at=record.updated_at or now,
         )
@@ -389,6 +392,10 @@ class SessionMetadataStore:
         values: dict[str, object] = {}
         if title is not None:
             values["title"] = title
+            values["title_revision"] = case(
+                (SessionMetadataRow.title == title, SessionMetadataRow.title_revision),
+                else_=str(uuid4()),
+            )
         if updated_at is not None:
             values["updated_at"] = updated_at
             now = _utcnow()

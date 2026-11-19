@@ -484,6 +484,9 @@ class PostgresHistoryStore(BaseHistoryStore):
                 row.rank.label("last_rank"),
                 turns.c.turn_number,
                 turns.c.started_at,
+                row.metadata_json["trace_failure_category"]
+                .as_string()
+                .label("failure_category"),
             )
             .join(row, row.exchange_id == turns.c.exchange_id)
             .where(
@@ -505,6 +508,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         return TraceHistoryIncident(
             cutoff=TraceHistoryBoundary.model_validate(boundary),
             support_error_ref=support_error_ref,
+            failure_category=boundary["failure_category"],
         )
 
     async def trace_transcript(

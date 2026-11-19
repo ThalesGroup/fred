@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useCopyConfirmation } from "@core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import type { ConversationTraceTurn, TraceOutcome } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  ConversationTraceTurn,
+  TraceFailureCategory,
+  TraceOutcome,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
@@ -50,11 +54,12 @@ export function downloadTraceBytes(data: string, name: string) {
 
 export function useTracePagination(initialCursor?: string) {
   const [pages, setPages] = useState<string[]>([]);
+  const reset = useCallback(() => setPages([]), []);
   return {
     cursor: pages.length > 0 ? pages[pages.length - 1] : initialCursor,
     next: (cursor: string) => setPages((prior) => [...prior, cursor]),
     previous: () => setPages((prior) => prior.slice(0, -1)),
-    reset: () => setPages([]),
+    reset,
   };
 }
 
@@ -93,7 +98,7 @@ export function TracePageButtons({
   );
 }
 
-export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome }) {
+export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome | TraceFailureCategory }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   return (
     <span className={styles.outcome} data-outcome={outcome}>

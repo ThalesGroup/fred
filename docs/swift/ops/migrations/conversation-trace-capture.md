@@ -24,7 +24,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `76b1a93d8c57`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, and the owner-removal state. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+Apply the Control Plane migrations through `83adb40b71f5`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
 
 Upgrade the Control Plane API before the runtime replicas so the managed owner visibility check is available. Enable the updated owner removal UI after all runtime replicas enforce it.
 
@@ -43,6 +43,8 @@ Open the LangChain tab on a shared turn and verify the invocation, bound tools, 
 For a shared turn with remote tool evidence, select the tool and open its HTTP tab. Verify the individual tool outcome, HTTP status, and turn outcome. Check that the raw response is readable only through consent.
 
 Delete selected diagnostics in Admin and confirm the ordinary chat can still continue. Remove a shared chat from the owner's list while keeping diagnostics, then confirm the cutoff is frozen and the old owner history route is closed. Remove its remaining diagnostics and watch the lifecycle worker complete session erasure. Flush while a managed turn is in flight. The turn can finish and later eligible turns can be captured. Verify that a standalone history-only share still appears.
+
+Open the failed catalog after a failed turn followed by a successful one. The conversation keeps its latest failed badge. Search by the support reference, combine filters, and check that renaming a shared conversation hides its title from search until consent covers the new title.
 
 ## Rollback
 

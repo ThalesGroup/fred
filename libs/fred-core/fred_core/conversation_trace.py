@@ -22,7 +22,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from fred_core.history.history_schema import ChatMessage
+from fred_core.history.history_schema import ChatMessage, TraceFailureCategory
 
 TraceIdentifier = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 CallIdentifier = Annotated[
@@ -70,6 +70,7 @@ class TraceHistoryBoundary(BaseModel):
 class TraceHistoryIncident(BaseModel):
     cutoff: TraceHistoryBoundary
     support_error_ref: TraceId
+    failure_category: TraceFailureCategory | None = None
 
 
 def is_local_trace_request(peer: str | None, host: str | None) -> bool:
@@ -484,6 +485,8 @@ class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     outcome: TraceOutcome
+    failure_category: TraceFailureCategory | None = None
+    support_error_ref: TraceId | None = None
     duration_ms: Annotated[int, Field(ge=0, le=2**31 - 1)]
     turn_number: Annotated[int, Field(ge=1, lt=2**31)] | None = None
     call_ids: Annotated[list[CallIdentifier], Field(max_length=MAX_TRACE_CALL_IDS)] = (

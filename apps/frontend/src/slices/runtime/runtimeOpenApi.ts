@@ -256,6 +256,7 @@ const injectedRtkApi = api.injectEndpoints({
           after_rank: queryArg.afterRank,
           after_exchange: queryArg.afterExchange,
           exchange_id: queryArg.exchangeId,
+          latest_only: queryArg.latestOnly,
         },
       }),
     }),
@@ -543,6 +544,7 @@ export type ListTraceHistoryTurnsApiArg = {
   afterRank?: number;
   afterExchange?: string;
   exchangeId?: string | null;
+  latestOnly?: boolean;
 };
 export type GetTraceHistoryTranscriptApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
 export type GetTraceHistoryTranscriptApiArg = {
@@ -1083,6 +1085,16 @@ export type AwaitingHumanRuntimeEvent = {
   )[];
 };
 export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
 export type RuntimeErrorEvent = {
   kind?: "execution_error";
   message: string;
@@ -1090,6 +1102,7 @@ export type RuntimeErrorEvent = {
   reason?: RuntimeStopReason | null;
   sequence?: number;
   support_error_ref?: string | null;
+  trace_failure_category?: TraceFailureCategory | null;
 };
 export type ExecutionInterruptedRuntimeEvent = {
   interruption_id: string;
@@ -1393,6 +1406,7 @@ export type ChatMetadata = {
   sources?: VectorSearchHit[];
   support_error_ref?: string | null;
   token_usage?: ChatTokenUsage | null;
+  trace_failure_category?: TraceFailureCategory | null;
   ui_parts?: {
     [key: string]: any;
   }[];
@@ -1499,6 +1513,7 @@ export type TraceHistoryBoundary = {
 };
 export type TraceHistoryIncident = {
   cutoff: TraceHistoryBoundary;
+  failure_category?: TraceFailureCategory | null;
   support_error_ref: string;
 };
 export type TraceHistoryTranscript = {

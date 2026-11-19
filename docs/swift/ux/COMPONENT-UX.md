@@ -6151,10 +6151,16 @@ note for distinct counts.
 
 ## Conversation traces in Admin (2026-11-19)
 
-The catalog opens on failed conversations. The All control includes
-completed and incomplete captures. A masked conversation shows a neutral
-label and the recorded agent instance name. The capture switch explains
-its deployment-wide scope and what happens to turns already admitted.
+The catalog opens on Failed. All, Done, and Failed share the same selection
+as the searchable outcome picker next to Consent. Table rows, filters, and
+the inspector use the same labeled badges. A conversation with a recorded
+failure keeps its latest failed badge even after a successful follow-up.
+The catalog reuses the Analytics team and time controls and fetches filtered
+and sorted pages from Control Plane.
+
+An authorized title appears above the agent instance name. Without current
+title consent, the row shows a neutral conversation label. The capture
+switch explains what happens to turns already admitted.
 
 The inspector retains the main navigation rail and uses the rest of the
 workspace for its turn list and detail pane. Outcome and evidence

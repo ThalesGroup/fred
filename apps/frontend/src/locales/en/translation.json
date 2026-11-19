@@ -1426,6 +1426,43 @@
   "rework": {
     "admin": {
       "conversationTraces": {
+        "filtersLabel": "Trace filters",
+        "searchLabel": "Search traces",
+        "searchPlaceholder": "Conversation, error reference, title, or agent",
+        "clearSearch": "Clear search",
+        "clearUser": "Clear user filter",
+        "user": "User",
+        "userPlaceholder": "Username or user ID",
+        "team": "Team",
+        "teamsError": "Teams could not be loaded.",
+        "outcomeLabel": "Outcome",
+        "consentFilter": "Consent",
+        "noMatches": "No conversations match these filters.",
+        "quickStatus": {
+          "all": "All",
+          "completed": "Done",
+          "failed": "Failed"
+        },
+        "consentOptions": {
+          "all": "All",
+          "shared": "Shared",
+          "masked": "Masked"
+        },
+        "catalogAccess": {
+          "shared": "Shared",
+          "masked": "Masked",
+          "local": "Local access"
+        },
+        "outcomePicker": {
+          "count_one": "{{count}} outcome",
+          "count_other": "{{count}} outcomes",
+          "all": "All outcomes",
+          "search": "Search outcomes",
+          "selected": "Selected outcomes",
+          "others": "Other outcomes",
+          "empty": "No matching outcomes",
+          "apply": "Apply"
+        },
         "flushCaptures": "Delete all captures",
         "flushTitle": "Delete all captured diagnostics?",
         "flushHelp": "This removes current captures across the deployment. Standalone history-only reports follow their own retention. You can keep chatting, and your settings apply to new turns.",
@@ -1529,8 +1566,17 @@
           "system": "System"
         },
         "outcome": {
+          "http_5xx": "Upstream HTTP 5xx",
+          "http_429": "HTTP 429 rate limit",
+          "http_400": "HTTP 400 bad request",
+          "http_other_4xx": "Other HTTP 4xx",
+          "stream_interrupted": "Stream interrupted",
+          "timeout_or_connection": "Timeout or connection",
+          "context_limit": "Context limit",
+          "tool_or_capability": "Tool or capability",
+          "internal_or_unknown": "Internal or unknown",
           "completed": "Completed",
-          "failed": "Failed",
+          "failed": "Failed (category unavailable)",
           "paused": "Awaiting input",
           "unknown": "Unknown"
         },

@@ -74,10 +74,13 @@ from control_plane_backend.conversation_traces.schemas import (
     DeleteConversationTracesRequest,
     DeleteConversationTracesResult,
     ManualTraceConsentRequest,
+    TraceCatalogFilters,
+    TraceCatalogSort,
     TraceConsentGrant,
     TraceConsentRequest,
     TraceConsentState,
     TraceIncidentOffer,
+    TraceTeamOption,
 )
 from control_plane_backend.conversation_traces.store import (
     TraceConsentChanged,
@@ -144,19 +147,22 @@ async def _runtime_history(
         raise HTTPException(503, "trace_history_unavailable") from exc
 
 
-def _local_content_access(
-    container: ControlPlaneContainer,
-    request: Request,
-    reference: TraceConversationReference,
-) -> bool:
+def _local_request(container: ControlPlaneContainer, request: Request) -> bool:
     return (
-        not reference.retained_after_delete
-        and container.get_conversation_trace_store().local_development
+        container.get_conversation_trace_store().local_development
         and is_local_trace_request(
             request.client.host if request.client is not None else None,
             request.url.hostname,
         )
     )
+
+
+def _local_content_access(
+    container: ControlPlaneContainer,
+    request: Request,
+    reference: TraceConversationReference,
+) -> bool:
+    return not reference.retained_after_delete and _local_request(container, request)
 
 
 async def _owned_conversation(
@@ -271,31 +277,61 @@ async def flush_conversation_trace_captures(
     return DeleteConversationTracesResult(removed=removed)
 
 
+@router.get(
+    "/admin/conversation-traces/teams", operation_id="list_conversation_trace_teams"
+)
+async def list_conversation_trace_teams(
+    container: Container, _user: Operator, response: Response
+) -> list[TraceTeamOption]:
+    response.headers["Cache-Control"] = "no-store"
+    return await container.get_conversation_trace_store().list_teams()
+
+
 @router.get("/admin/conversation-traces", operation_id="list_conversation_traces")
 async def list_conversation_traces(
     container: Container,
     _user: Operator,
-    failed_only: bool = True,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    cursor: Annotated[str | None, Query(max_length=100)] = None,
+    request: Request,
+    response: Response,
+    filters: Annotated[TraceCatalogFilters, Query()],
 ) -> ConversationTraceCatalog:
+    response.headers["Cache-Control"] = "no-store"
     before = None
-    if cursor is not None:
+    anchor = None
+    for name in ("since", "until"):
+        bound = getattr(filters, name)
+        if bound is not None and bound.tzinfo is None:
+            setattr(filters, name, bound.replace(tzinfo=timezone.utc))
+    if (
+        filters.since is not None
+        and filters.until is not None
+        and filters.since > filters.until
+    ):
+        raise HTTPException(422, "invalid_trace_time_range")
+    if filters.cursor is not None:
         try:
-            timestamp, capture_id = cursor.split("|", 1)
-            parsed = datetime.fromisoformat(timestamp)
-            before = (
-                parsed
-                if parsed.tzinfo is not None
-                else parsed.replace(tzinfo=timezone.utc),
-                str(UUID(capture_id)),
-            )
+            prefix, value = filters.cursor.split("|", 1)
+            if prefix == "session" and 0 < len(value) <= 255:
+                anchor = value
+            elif (
+                filters.sort == TraceCatalogSort.LATEST and filters.direction == "desc"
+            ):
+                parsed = datetime.fromisoformat(prefix)
+                before = (
+                    parsed
+                    if parsed.tzinfo is not None
+                    else parsed.replace(tzinfo=timezone.utc),
+                    str(UUID(value)),
+                )
+            else:
+                raise ValueError("invalid cursor")
         except ValueError as exc:
             raise HTTPException(422, "invalid_trace_cursor") from exc
     return await container.get_conversation_trace_store().list_conversations(
-        failed_only=failed_only,
-        limit=limit,
+        filters,
+        cursor=anchor,
         before=before,
+        local_content_access=_local_request(container, request),
     )
 
 
@@ -357,7 +393,43 @@ async def set_trace_consent(
         _BOUNDARY,
         params={"exchange_id": body.exchange_id},
     )
-    return await _save_consent(container, reference, cutoff, body, user.uid)
+    return await _save_consent(container, reference, cutoff, body, user.uid, request)
+
+
+async def _title_cutoff_covers_current_revision(
+    container: ControlPlaneContainer,
+    request: Request,
+    reference: TraceConversationReference,
+    cutoff: TraceHistoryBoundary,
+    *,
+    manual: bool,
+) -> bool:
+    # The reference precedes the independent history read. The store compares
+    # that revision under the session lock before recording authorization.
+    if reference.title_revision is None or reference.title_authorized:
+        return False
+    authorization = request.headers.get("Authorization", "")
+    try:
+        if manual:
+            turns = await _runtime_history(
+                container,
+                reference,
+                authorization,
+                "trace-history-turns",
+                _HISTORY_TURNS,
+                params={"latest_only": "true"},
+            )
+            return len(turns) == 1 and turns[0] == cutoff
+        latest = await _runtime_history(
+            container,
+            reference,
+            authorization,
+            "trace-history-boundary",
+            _BOUNDARY,
+        )
+        return latest == cutoff
+    except HTTPException:
+        return False
 
 
 async def _save_consent(
@@ -366,6 +438,7 @@ async def _save_consent(
     cutoff: TraceHistoryBoundary | None,
     body: TraceConsentRequest,
     actor_id: str,
+    request: Request,
     *,
     incident: TraceHistoryIncident | None = None,
     source_note: str | None = None,
@@ -376,6 +449,9 @@ async def _save_consent(
         or cutoff.last_rank != body.last_rank
     ):
         raise HTTPException(409, "trace_consent_turn_changed")
+    title_covered = await _title_cutoff_covers_current_revision(
+        container, request, reference, cutoff, manual=source_note is not None
+    )
     try:
         grant, action = await container.get_conversation_trace_store().set_consent(
             reference,
@@ -384,6 +460,7 @@ async def _save_consent(
             incident=incident,
             actor_id=actor_id,
             source_note=source_note,
+            title_covered=title_covered,
         )
     except TraceSessionNotFound as exc:
         raise HTTPException(404, "conversation_trace_not_found") from exc
@@ -497,7 +574,13 @@ async def share_trace_incident(
         container, session_id, team_id, user, request, error_ref
     )
     return await _save_consent(
-        container, reference, incident.cutoff, body, user.uid, incident=incident
+        container,
+        reference,
+        incident.cutoff,
+        body,
+        user.uid,
+        request,
+        incident=incident,
     )
 
 
@@ -531,7 +614,13 @@ async def record_trace_consent(
         (turn for turn in turns if turn.exchange_id == body.exchange_id), None
     )
     return await _save_consent(
-        container, reference, cutoff, body, user.uid, source_note=body.source_note
+        container,
+        reference,
+        cutoff,
+        body,
+        user.uid,
+        request,
+        source_note=body.source_note,
     )
 
 
