@@ -157,7 +157,10 @@ def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_chan
         definition=_PingAgent(),
         services=RuntimeServices(
             skills=PlatformSkills.from_directory(
-                str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
+                str(
+                    Path(__file__).resolve().parents[3]
+                    / "apps/control-plane/skill-packs/en"
+                ),
                 builtin=True,
             )
         ),

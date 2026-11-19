@@ -159,7 +159,8 @@ def test_original_skill_instructions_do_not_require_external_documentation() -> 
             continue  # Imported material retains its upstream references and notices.
         pending = [
             (
-                Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
             ).joinpath(skill.name)
         ]
         while pending:
@@ -318,7 +319,10 @@ async def test_native_minutes_cannot_be_loaded_without_explicit_user_selection(
     agent = compiled(
         model,
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ),
         binding(),

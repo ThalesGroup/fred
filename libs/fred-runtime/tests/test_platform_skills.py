@@ -315,7 +315,10 @@ def test_unknown_and_forged_selection() -> None:
         SkillInvocation.model_validate({"name": "meeting-minutes", "body": "forged"})
     with pytest.raises(ValueError):
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ).read("unknown")
 
@@ -1278,7 +1281,10 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
         ),
         RuntimeServices(
             skills=PlatformSkills.from_directory(
-                str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
+                str(
+                    Path(__file__).resolve().parents[3]
+                    / "apps/control-plane/skill-packs/en"
+                ),
                 builtin=True,
             )
         ),
@@ -1321,7 +1327,10 @@ async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) ->
     agent = compiled(
         model,
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ),
         bound,

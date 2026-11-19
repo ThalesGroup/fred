@@ -204,7 +204,6 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.authorization import is_allowed, require_permission
-from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.app.history_access import (
     authorize_history_read,
     readable_history_sessions,
@@ -262,6 +261,7 @@ from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,
     build_conversation_filesystem,
 )
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
