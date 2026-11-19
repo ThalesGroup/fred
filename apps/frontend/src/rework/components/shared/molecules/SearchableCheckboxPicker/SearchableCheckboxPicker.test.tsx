@@ -33,7 +33,7 @@ it("dismisses a picker when keyboard focus moves to its neighbor and gives Escap
       root.render(
         <>
           <SearchableCheckboxPicker
-            icon="group"
+            icon="groups"
             labels={{ ...labels, title: "Teams" }}
             triggerLabel="Teams"
             options={[{ value: "blue", label: "Blue" }]}
@@ -41,7 +41,7 @@ it("dismisses a picker when keyboard focus moves to its neighbor and gives Escap
             onChange={onChange}
           />
           <SearchableCheckboxPicker
-            icon="filter_list"
+            icon="tune"
             labels={{ ...labels, title: "Outcomes" }}
             triggerLabel="Outcomes"
             options={[{ value: "failed", label: "Failed" }]}
