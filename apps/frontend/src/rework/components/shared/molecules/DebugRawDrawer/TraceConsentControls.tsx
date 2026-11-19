@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
@@ -27,13 +27,14 @@ import styles from "./DebugRawDrawer.module.css";
 interface TraceConsentControlsProps {
   teamId: string;
   sessionId: string;
+  turnPending: boolean;
 }
 
 type ConsentDecision =
   | { kind: "share"; cutoff: TraceHistoryBoundary; version: string | null; extending: boolean }
   | { kind: "revoke" };
 
-export function TraceConsentControls({ teamId, sessionId }: TraceConsentControlsProps) {
+export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceConsentControlsProps) {
   const { t } = useTranslation(undefined, { keyPrefix: "chatbot.traceConsent" });
   const args = { teamId, sessionId };
   const state = useGetTraceConsentQuery(args, { refetchOnMountOrArgChange: true });
@@ -41,10 +42,22 @@ export function TraceConsentControls({ teamId, sessionId }: TraceConsentControls
   const [revokeConsent, revoking] = useRevokeTraceConsentMutation();
   const [decision, setDecision] = useState<ConsentDecision>();
   const [error, setError] = useState(false);
+  const wasPending = useRef(turnPending);
+  const refreshConsent = state.refetch;
+  useEffect(() => {
+    if (wasPending.current && !turnPending) void refreshConsent();
+    wasPending.current = turnPending;
+  }, [refreshConsent, turnPending]);
   const busy = setting.isLoading || revoking.isLoading;
   const grant = state.currentData?.consent;
   const cutoff = state.currentData?.available_cutoff;
-  const canShare = cutoff != null && (grant == null || cutoff.first_rank > grant.cutoff.first_rank);
+  const canShare =
+    cutoff != null &&
+    (grant == null ||
+      cutoff.first_rank > grant.cutoff.first_rank ||
+      (cutoff.exchange_id === grant.cutoff.exchange_id &&
+        cutoff.first_rank === grant.cutoff.first_rank &&
+        cutoff.last_rank > grant.cutoff.last_rank));
 
   async function confirm() {
     if (!decision || busy) return;

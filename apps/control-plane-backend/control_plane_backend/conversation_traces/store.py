@@ -47,12 +47,13 @@ from fred_core.conversation_trace import (
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import and_, func, literal, or_, select, update
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer
 
 from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.catalog import (
     catalog_rows,
+    cursor_revision,
     list_catalog_teams,
 )
 from control_plane_backend.conversation_traces.schemas import (
@@ -65,12 +66,14 @@ from control_plane_backend.conversation_traces.schemas import (
     TraceCatalogFilters,
     TraceConsentGrant,
     TraceContentAccess,
+    TraceReportedFailure,
     TraceTeamOption,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceIncidentRow,
     ConversationTraceSettingsRow,
     ConversationTraceTurnRow,
 )
@@ -112,14 +115,6 @@ def _consent_version(row: ConversationTraceConsentRow | None) -> str | None:
     return f"{row.grant_id}:revoked" if row.revoked_at is not None else row.grant_id
 
 
-def _incident(row: ConversationTraceConsentRow | None) -> TraceHistoryIncident | None:
-    return (
-        TraceHistoryIncident.model_validate(row.incident)
-        if row is not None and row.revoked_at is None and row.incident is not None
-        else None
-    )
-
-
 def _sse_refs(segments: list[dict[str, object]]) -> set[str]:
     return {
         ref
@@ -155,7 +150,6 @@ class TraceConversationReference:
     has_capture: bool
     consent: TraceConsentGrant | None
     consent_version: str | None
-    incident: TraceHistoryIncident | None = None
     retained_after_delete: bool = False
     title: str | None = None
     title_revision: str | None = None
@@ -837,7 +831,6 @@ class ConversationTraceStore:
             if grant is not None and grant.revoked_at is None
             else None,
             consent_version=_consent_version(grant),
-            incident=_incident(grant),
             retained_after_delete=owner.trace_retained_after_delete,
             title=owner.title,
             title_revision=owner.title_revision,
@@ -899,6 +892,7 @@ class ConversationTraceStore:
         reporting = incident is not None
         metadata = SessionMetadataRow
         active = ConversationTraceConsentRow
+        report = ConversationTraceIncidentRow
         async with use_session(self._sessions) as session:
             owner = await session.scalar(
                 select(metadata)
@@ -926,19 +920,28 @@ class ConversationTraceStore:
             if cutoff is None:
                 if previous is None:
                     return None, None
-                previous.revoked_at = utcnow()
+                await capacity.revoke_conversation_grants(
+                    session, (session_id,), utcnow()
+                )
                 return _consent(previous), "revoked"
             current = _consent(previous) if previous is not None else None
-            previous_incident = _incident(previous)
+            already_reported = (
+                incident is not None
+                and previous is not None
+                and await session.get(report, (session_id, incident.support_error_ref))
+                is not None
+            )
             if (
                 current is not None
                 and current.cutoff == cutoff
                 and source_note is None
-                and (incident is None or incident == previous_incident)
+                and (incident is None or already_reported)
             ):
                 return current, None
             if expected_version != _consent_version(latest):
                 raise TraceConsentChanged()
+            if already_reported and current is not None:
+                return current, None
             if source_note is not None and previous is None:
                 captured = ConversationTraceTurnRow
                 if not await session.scalar(
@@ -950,8 +953,8 @@ class ConversationTraceStore:
             if previous is not None and current is not None:
                 at_same_exchange = cutoff.exchange_id == previous.exchange_id
                 advancing = cutoff.first_rank > previous.first_rank or (
-                    (reporting or source_note is not None)
-                    and at_same_exchange
+                    at_same_exchange
+                    and cutoff.first_rank == previous.first_rank
                     and cutoff.last_rank > previous.last_rank
                 )
                 if cutoff != current.cutoff and not advancing:
@@ -961,11 +964,26 @@ class ConversationTraceStore:
                     cutoff = current.cutoff
                 previous.revoked_at = utcnow()
                 await session.flush()
-            if previous_incident is not None and (
-                incident is None
-                or incident.cutoff.last_rank < previous_incident.cutoff.last_rank
-            ):
-                incident = previous_incident
+            if incident is not None:
+                session.add(
+                    report(
+                        session_id=session_id,
+                        support_error_ref=incident.support_error_ref,
+                        failure_category=incident.failure_category,
+                        **incident.cutoff.model_dump(),
+                    )
+                )
+                await session.flush()
+            latest_report = await session.scalar(
+                select(report)
+                .where(report.session_id == session_id)
+                .order_by(
+                    report.started_at.desc(),
+                    report.last_rank.desc(),
+                    report.support_error_ref.desc(),
+                )
+                .limit(1)
+            )
             granted_at = utcnow()
             if latest is not None:
                 # Keep grant order stable when the next request lands on a different pod.
@@ -987,11 +1005,9 @@ class ConversationTraceStore:
                     )
                 )
                 else None,
-                incident=incident.model_dump(mode="json")
-                if incident is not None
-                else None,
-                diagnostic_at=incident.cutoff.started_at
-                if incident is not None
+                incident=self._legacy_incident(latest_report),
+                diagnostic_at=latest_report.started_at
+                if latest_report is not None
                 else cutoff.started_at,
                 granted_at=granted_at,
                 **cutoff.model_dump(),
@@ -1007,11 +1023,52 @@ class ConversationTraceStore:
                 else "granted"
             )
 
+    @staticmethod
+    def _legacy_incident(
+        report: ConversationTraceIncidentRow | None,
+    ) -> dict[str, object] | None:
+        if report is None:
+            return None
+        return TraceHistoryIncident(
+            cutoff=TraceHistoryBoundary(
+                exchange_id=report.exchange_id,
+                first_rank=report.first_rank,
+                last_rank=report.last_rank,
+                turn_number=report.turn_number,
+                started_at=_utc(report.started_at),
+            ),
+            support_error_ref=report.support_error_ref,
+            failure_category=TraceFailureCategory(report.failure_category)
+            if report.failure_category is not None
+            else None,
+        ).model_dump(mode="json")
+
+    async def incident_reported(
+        self, session_id: str, grant_id: str | None, support_error_ref: str
+    ) -> bool:
+        if grant_id is None:
+            return False
+        grant, report = ConversationTraceConsentRow, ConversationTraceIncidentRow
+        async with use_session(self._sessions) as session:
+            return bool(
+                await session.scalar(
+                    select(report.support_error_ref)
+                    .join(grant, grant.session_id == report.session_id)
+                    .where(
+                        report.session_id == session_id,
+                        report.support_error_ref == support_error_ref,
+                        grant.grant_id == grant_id,
+                        grant.revoked_at.is_(None),
+                    )
+                )
+            )
+
     async def list_conversations(
         self,
         filters: TraceCatalogFilters,
         *,
         cursor: str | None = None,
+        expected_revision: str | None = None,
         before: tuple[datetime, str] | None = None,
         local_content_access: bool = False,
     ) -> ConversationTraceCatalog:
@@ -1024,6 +1081,7 @@ class ConversationTraceStore:
                 local_content_access=local_content_access,
                 limit=limit,
                 cursor=cursor,
+                expected_revision=expected_revision,
                 before=before,
             )
         last = rows[limit - 1] if len(rows) > limit else None
@@ -1054,7 +1112,9 @@ class ConversationTraceStore:
                 )
                 for row in rows[:limit]
             ],
-            next_cursor=f"session|{last.session_id}" if last else None,
+            next_cursor=f"v2|{cursor_revision(last._mapping, filters.sort)}|{last.session_id}"
+            if last is not None
+            else None,
         )
 
     async def list_teams(self) -> list[TraceTeamOption]:
@@ -1093,8 +1153,8 @@ class ConversationTraceStore:
             )
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).scalars().all()
+            incidents = await self._incident_page(session, reference, after, limit)
         cutoff = reference.consent.cutoff if reference.consent is not None else None
-        incident = reference.incident
 
         def access(rank: int, exchange_id: str) -> TraceContentAccess:
             if local_content_access:
@@ -1152,33 +1212,42 @@ class ConversationTraceStore:
                     else None,
                 ),
             )
-        if incident is not None:
-            boundary = incident.cutoff
-            key = (boundary.first_rank, boundary.exchange_id)
-            if after is None or key > after:
-                point = points.get(boundary.exchange_id)
-                if point is None:
-                    point = (
-                        boundary.first_rank,
-                        ConversationTraceTurn(
-                            exchange_id=boundary.exchange_id,
-                            turn_number=boundary.turn_number,
-                            started_at=boundary.started_at,
-                            duration_ms=None,
-                            outcome=TraceOutcome.FAILED,
-                            availability=TraceAvailability.HISTORY_ONLY,
-                            call_ids=[],
-                            trace_id=None,
-                            span_id=None,
-                            access=access(*key),
-                        ),
-                    )
-                point[1].outcome = TraceOutcome.FAILED
-                point[1].support_error_ref = incident.support_error_ref
-                point[1].failure_category = (
-                    incident.failure_category or point[1].failure_category
+        for incident in incidents:
+            key = (incident.first_rank, incident.exchange_id)
+            point = points.get(incident.exchange_id)
+            if point is None:
+                point = (
+                    incident.first_rank,
+                    ConversationTraceTurn(
+                        exchange_id=incident.exchange_id,
+                        turn_number=incident.turn_number,
+                        started_at=_utc(incident.started_at),
+                        duration_ms=None,
+                        outcome=TraceOutcome.FAILED,
+                        availability=TraceAvailability.HISTORY_ONLY,
+                        call_ids=[],
+                        trace_id=None,
+                        span_id=None,
+                        access=access(*key),
+                    ),
                 )
-                points[boundary.exchange_id] = point
+            item = point[1]
+            failure = TraceReportedFailure(
+                support_error_ref=incident.support_error_ref,
+                failure_category=TraceFailureCategory(incident.failure_category)
+                if incident.failure_category is not None
+                else None,
+            )
+            if not item.reported_failures:
+                item.outcome = TraceOutcome.FAILED
+                item.support_error_ref = (
+                    item.support_error_ref or failure.support_error_ref
+                )
+                item.failure_category = (
+                    failure.failure_category or item.failure_category
+                )
+            item.reported_failures.append(failure)
+            points[incident.exchange_id] = point
         ordered = sorted(
             points.values(), key=lambda item: (item[0], item[1].exchange_id)
         )
@@ -1196,4 +1265,50 @@ class ConversationTraceStore:
             title=reference.title
             if local_content_access or reference.title_authorized
             else None,
+        )
+
+    @staticmethod
+    async def _incident_page(
+        session: AsyncSession,
+        reference: TraceConversationReference,
+        after: tuple[int, str] | None,
+        limit: int,
+    ) -> list[ConversationTraceIncidentRow]:
+        if reference.consent is None:
+            return []
+        report, grant = ConversationTraceIncidentRow, ConversationTraceConsentRow
+        exchanges = select(report.exchange_id, report.first_rank).where(
+            report.session_id == reference.session_id
+        )
+        if after is not None:
+            rank, exchange_id = after
+            exchanges = exchanges.where(
+                or_(
+                    report.first_rank > rank,
+                    and_(report.first_rank == rank, report.exchange_id > exchange_id),
+                )
+            )
+        page = (
+            exchanges.distinct()
+            .order_by(report.first_rank, report.exchange_id)
+            .limit(limit + 1)
+            .subquery()
+        )
+        return list(
+            await session.scalars(
+                select(report)
+                .join(page, page.c.exchange_id == report.exchange_id)
+                .join(grant, grant.session_id == report.session_id)
+                .where(
+                    report.session_id == reference.session_id,
+                    grant.grant_id == reference.consent.grant_id,
+                    grant.revoked_at.is_(None),
+                )
+                .order_by(
+                    report.first_rank,
+                    report.exchange_id,
+                    report.last_rank.desc(),
+                    report.support_error_ref,
+                )
+            )
         )

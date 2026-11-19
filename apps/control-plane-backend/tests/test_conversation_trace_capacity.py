@@ -17,6 +17,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceIncidentRow,
     ConversationTraceStorageRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
@@ -386,7 +387,12 @@ async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
     metadata = SessionMetadataStore(engine)
     queue = PurgeQueueStore(engine)
     team = TeamId("team")
-    assert await metadata.retain_for_support("unshared", team, "owner", None) is None
+    assert (
+        await metadata.retain_for_support(
+            "unshared", team, "owner", None, expected_grant_id=None
+        )
+        is None
+    )
     await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
     if removal != "expiry":
         await _publish(store, "kept", 35)
@@ -399,14 +405,36 @@ async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
     )
     original = await store.reference("kept")
     assert original is not None
-    await store.set_consent(
+    grant, _ = await store.set_consent(
         original,
         cutoff,
         incident=TraceHistoryIncident(cutoff=cutoff, support_error_ref=uuid4().hex),
     )
-    assert await metadata.retain_for_support("kept", team, "intruder", None) is None
-    grant_id = await metadata.retain_for_support("kept", team, "owner", None)
-    assert grant_id
+    assert grant is not None
+    current_grant, _ = await store.set_consent(
+        original,
+        cutoff.model_copy(update={"last_rank": cutoff.last_rank + 1}),
+        expected_version=grant.grant_id,
+    )
+    assert current_grant is not None
+    assert (
+        await metadata.retain_for_support(
+            "kept", team, "intruder", None, expected_grant_id=current_grant.grant_id
+        )
+        is None
+    )
+    assert (
+        await metadata.retain_for_support(
+            "kept", team, "owner", None, expected_grant_id=grant.grant_id
+        )
+        is None
+    )
+    visible = await store.reference("kept")
+    assert visible and not visible.retained_after_delete
+    grant_id = await metadata.retain_for_support(
+        "kept", team, "owner", None, expected_grant_id=current_grant.grant_id
+    )
+    assert grant_id == current_grant.grant_id
     saved = await store.reference("kept")
     assert saved and saved.retained_after_delete and saved.consent
     assert saved.consent.cutoff.first_rank == cutoff.first_rank
@@ -426,6 +454,11 @@ async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
     assert [(item.session_id, item.user_id) for item in due] == [("kept", "owner")]
     fenced = await store.reference("kept")
     assert fenced and not fenced.visible
+    async with async_sessionmaker(engine)() as session:
+        assert (
+            await session.scalar(select(ConversationTraceIncidentRow.support_error_ref))
+            is None
+        )
     ordinary = await metadata.get("unshared")
     assert ordinary and not ordinary.trace_retained_after_delete
     assert await metadata.delete("kept", team, "owner")

@@ -71,6 +71,7 @@ from pydantic import TypeAdapter
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.conversation_traces.catalog import StaleTraceCursor
 from control_plane_backend.conversation_traces.exports import (
     build_trace_archive,
     trace_export_state,
@@ -400,6 +401,7 @@ async def list_conversation_traces(
     response.headers["Cache-Control"] = "no-store"
     before = None
     anchor = None
+    expected_revision = None
     for name in ("since", "until"):
         bound = getattr(filters, name)
         if bound is not None and bound.tzinfo is None:
@@ -413,7 +415,15 @@ async def list_conversation_traces(
     if filters.cursor is not None:
         try:
             prefix, value = filters.cursor.split("|", 1)
-            if prefix == "session" and 0 < len(value) <= 255:
+            if prefix == "v2":
+                expected_revision, anchor = value.split("|", 1)
+                if (
+                    len(expected_revision) != 32
+                    or any(char not in "0123456789abcdef" for char in expected_revision)
+                    or not 0 < len(anchor) <= 255
+                ):
+                    raise ValueError("invalid cursor")
+            elif prefix == "session" and 0 < len(value) <= 255:
                 anchor = value
             elif (
                 filters.sort == TraceCatalogSort.LATEST and filters.direction == "desc"
@@ -429,12 +439,16 @@ async def list_conversation_traces(
                 raise ValueError("invalid cursor")
         except ValueError as exc:
             raise HTTPException(422, "invalid_trace_cursor") from exc
-    return await container.get_conversation_trace_store().list_conversations(
-        filters,
-        cursor=anchor,
-        before=before,
-        local_content_access=_local_request(container, request),
-    )
+    try:
+        return await container.get_conversation_trace_store().list_conversations(
+            filters,
+            cursor=anchor,
+            expected_revision=expected_revision,
+            before=before,
+            local_content_access=_local_request(container, request),
+        )
+    except StaleTraceCursor as exc:
+        raise HTTPException(409, "stale_trace_cursor") from exc
 
 
 @router.get(
@@ -653,7 +667,9 @@ async def get_trace_incident_offer(
         capture_available=await container.get_conversation_trace_store().has_capture_through(
             session_id, incident.cutoff
         ),
-        reported=reference.incident == incident,
+        reported=await container.get_conversation_trace_store().incident_reported(
+            session_id, reference.consent_version, incident.support_error_ref
+        ),
     )
 
 

@@ -205,14 +205,26 @@ function ConversationTraceInspector({
                   <dd>
                     <TraceIdentifier label={t("exchangeId")} value={turn.exchange_id} />
                   </dd>
-                  {turn.support_error_ref && (
-                    <>
+                  {turn.support_error_ref &&
+                    !turn.reported_failures?.some(
+                      ({ support_error_ref }) => support_error_ref === turn.support_error_ref,
+                    ) && (
+                      <>
+                        <dt>{t("supportErrorRef")}</dt>
+                        <dd>
+                          <TraceIdentifier label={t("supportErrorRef")} value={turn.support_error_ref} />
+                        </dd>
+                      </>
+                    )}
+                  {turn.reported_failures?.map(({ support_error_ref, failure_category }) => (
+                    <div key={support_error_ref}>
                       <dt>{t("supportErrorRef")}</dt>
                       <dd>
-                        <TraceIdentifier label={t("supportErrorRef")} value={turn.support_error_ref} />
+                        <TraceIdentifier label={t("supportErrorRef")} value={support_error_ref} />
+                        <TraceOutcomeBadge outcome={failure_category ?? "failed"} />
                       </dd>
-                    </>
-                  )}
+                    </div>
+                  ))}
                   {turn.trace_id && (
                     <>
                       <dt>{t("traceId")}</dt>

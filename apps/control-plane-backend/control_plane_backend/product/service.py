@@ -5726,6 +5726,7 @@ async def delete_or_defer_session(
     authorization: str,
     deps: ProductServiceDependencies,
     keep_shared_diagnostics: bool = False,
+    expected_trace_grant_id: str | None = None,
 ) -> None:
     """The conversation delete button: hide now, erase after a governed window.
 
@@ -5763,7 +5764,11 @@ async def delete_or_defer_session(
             else None
         )
         grant_id = await deps.get_session_metadata_store().retain_for_support(
-            session_id, team_id, user_id, due_at
+            session_id,
+            team_id,
+            user_id,
+            due_at,
+            expected_grant_id=expected_trace_grant_id,
         )
         if grant_id is None:
             raise SessionAttachmentRequestError(

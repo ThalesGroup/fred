@@ -32,6 +32,7 @@ from control_plane_backend.conversation_traces.store import (
     TraceConversationReference,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
 )
@@ -459,11 +460,12 @@ async def test_owner_share_catalog_extension_and_revocation(
             "turn_number": number,
             "started_at": "2026-01-01T12:00:00Z",
         }
-        for number, rank in ((1, 0), (2, 2))
+        for number, rank in ((1, 0), (2, 4))
     ]
     latest = 0
     withdraw_while_exporting = False
     error_ref = uuid4().hex
+    second_error_ref = uuid4().hex
     audit = Mock()
     monkeypatch.setattr(
         "control_plane_backend.conversation_traces.api.emit_audit_log", audit
@@ -483,6 +485,15 @@ async def test_owner_share_catalog_extension_and_revocation(
             }
             if request.url.path.endswith(error_ref):
                 return httpx.Response(200, json=incident)
+            if request.url.path.endswith(second_error_ref):
+                return httpx.Response(
+                    200,
+                    json={
+                        "cutoff": turns[1],
+                        "support_error_ref": second_error_ref,
+                        "failure_category": "http_429",
+                    },
+                )
             return httpx.Response(200, content=b"null")
         if request.url.path.endswith("/trace-history-boundary"):
             assert request.headers["Authorization"] == "Bearer owner"
@@ -604,13 +615,30 @@ async def test_owner_share_catalog_extension_and_revocation(
             assert json.loads(archive.read(history_file))["messages"] == []
             assert masked["evidence"]["history"]["files"] == []
 
+        turns[0]["last_rank"] = 2
+        detail = (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()
+        assert detail["consent_cutoff"]["last_rank"] == cutoff["last_rank"]
+        resumed = await client.put(
+            path,
+            headers=owner,
+            json={**request, "last_rank": 2, "expected_version": first_id},
+        )
+        assert resumed.status_code == 200
+        assert resumed.json()["consent"]["cutoff"]["last_rank"] == 2
+        assert (
+            resumed.json()["consent"]["cutoff"]["exchange_id"] == cutoff["exchange_id"]
+        )
+        outdated = await client.put(path, headers=owner, json=request)
+        assert outdated.status_code == 409
+        assert outdated.json()["detail"] == "trace_consent_turn_changed"
+        resumed_id = resumed.json()["consent_version"]
         latest = 1
         state = (await client.get(path, headers=owner)).json()
         new_cutoff = state["available_cutoff"]
         extension = {
             "exchange_id": new_cutoff["exchange_id"],
             "last_rank": new_cutoff["last_rank"],
-            "expected_version": first_id,
+            "expected_version": resumed_id,
         }
         extended = await client.put(path, headers=owner, json=extension)
         assert extended.status_code == 200
@@ -717,6 +745,30 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert note not in detail.text
         assert detail.json()["turns"][0]["support_error_ref"] == error_ref
         assert detail.json()["title"] == "Revised private title"
+        second_report = report.replace(error_ref, second_error_ref)
+        second = await client.put(
+            second_report,
+            headers=owner,
+            json={**extension, "expected_version": recorded_id},
+        )
+        assert second.status_code == 200
+        assert (await client.get(report, headers=owner)).json()["reported"]
+        assert (await client.get(second_report, headers=owner)).json()["reported"]
+        (latest_row,) = (await client.get(_ADMIN, headers=reader)).json()[
+            "conversations"
+        ]
+        assert latest_row["failure_category"] == "http_429"
+        assert latest_row["support_error_ref"] == second_error_ref
+        for ref, category in ((error_ref, "http_400"), (second_error_ref, "http_429")):
+            search = await client.get(
+                _ADMIN, headers=reader, params={"query": ref, "outcomes": category}
+            )
+            assert len(search.json()["conversations"]) == 1
+        detail = (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()
+        assert [
+            turn["reported_failures"][0]["support_error_ref"]
+            for turn in detail["turns"]
+        ] == [error_ref, second_error_ref]
         response = await client.post(
             export_path, headers=reader, json={**selection, "mode": "metadata_only"}
         )
@@ -735,9 +787,74 @@ async def test_owner_share_catalog_extension_and_revocation(
         ).status_code == 404
         assert (await client.delete(path, headers=owner)).status_code == 204
         assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
+        assert not (await client.get(report, headers=owner)).json()["reported"]
+        assert not (await client.get(second_report, headers=owner)).json()["reported"]
         assert (
             await client.put(manual_path, headers=reader, json=manual)
         ).status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("withdraw", [True, False])
+async def test_catalog_restart_when_page_anchor_disappears_or_changes(
+    control_plane_sql_engine: AsyncEngine,
+    withdraw: bool,
+):
+    engine = control_plane_sql_engine
+    async with async_sessionmaker(engine).begin() as session:
+        session.add_all(
+            SessionMetadataRow(
+                session_id=f"session-{index}",
+                team_id="team",
+                user_id="owner",
+                agent_instance_id="agent",
+                title=title,
+                title_revision=uuid4().hex,
+            )
+            for index, title in enumerate(("Alpha", "Beta", "Gamma"))
+        )
+    store = ConversationTraceStore(engine)
+    cutoff = TraceHistoryBoundary(
+        exchange_id="exchange-0",
+        first_rank=0,
+        last_rank=1,
+        turn_number=1,
+        started_at=utcnow(),
+    )
+    for index in range(3):
+        ref = await store.reference(f"session-{index}")
+        assert ref is not None
+        await store.set_consent(ref, cutoff, title_covered=True)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac, get_conversation_trace_store=lambda: store
+    )
+    filters = {"failed_only": False, "limit": 1, "sort": "title", "direction": "asc"}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = (await client.get(_ADMIN, headers=_READER, params=filters)).json()
+        assert first["conversations"][0]["title"] == "Alpha"
+        assert "Alpha" not in first["next_cursor"]
+        params = {**filters, "cursor": first["next_cursor"]}
+        following = await client.get(_ADMIN, headers=_READER, params=params)
+        assert following.status_code == 200
+        assert following.json()["conversations"][0]["title"] == "Beta"
+        anchor = await store.reference("session-0")
+        assert anchor is not None
+        if withdraw:
+            await store.set_consent(anchor, None)
+        else:
+            await SessionMetadataStore(engine).update_metadata(
+                "session-0", TeamId("team"), "owner", title="Moved"
+            )
+        stale = await client.get(_ADMIN, headers=_READER, params=params)
+        assert stale.status_code == 409
+        assert stale.json()["detail"] == "stale_trace_cursor"
+        restarted = (await client.get(_ADMIN, headers=_READER, params=filters)).json()
+        assert restarted["conversations"]
 
 
 @pytest.mark.asyncio

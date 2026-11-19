@@ -113,6 +113,7 @@ export default function ConversationTraceListPage() {
   const [queryInput, setQueryInput] = useState("");
   const [userInput, setUserInput] = useState("");
   const [search, setSearch] = useState({ query: "", userId: "" });
+  const [catalogRestarted, setCatalogRestarted] = useState(false);
   const [sort, setSort] = useState<{ field: TraceCatalogSort; direction: "asc" | "desc" }>({
     field: "latest",
     direction: "desc",
@@ -126,6 +127,7 @@ export default function ConversationTraceListPage() {
     const timer = window.setTimeout(() => {
       setSearch({ query: queryInput.trim(), userId: userInput.trim() });
       resetPage();
+      setCatalogRestarted(false);
       setSelected(new Set());
     }, 250);
     return () => window.clearTimeout(timer);
@@ -149,6 +151,13 @@ export default function ConversationTraceListPage() {
     },
     { refetchOnMountOrArgChange: true },
   );
+  const staleCursor =
+    Boolean(pager.cursor) && catalog.error && "status" in catalog.error && catalog.error.status === 409;
+  useEffect(() => {
+    if (!staleCursor) return;
+    resetPage();
+    setCatalogRestarted(true);
+  }, [staleCursor, resetPage]);
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" });
   const rows = catalog.currentData?.conversations ?? [];
   const picked = rows.map(({ session_id }) => session_id).filter((id) => selected.has(id));
@@ -167,6 +176,7 @@ export default function ConversationTraceListPage() {
 
   function clearPick() {
     setSelected(new Set());
+    setCatalogRestarted(false);
     resetPage();
   }
 
@@ -342,7 +352,8 @@ export default function ConversationTraceListPage() {
           {t("refresh")}
         </Button>
       </div>
-      {catalog.isError ? (
+      {catalogRestarted && !pager.cursor && <p role="status">{t("catalogRestarted")}</p>}
+      {catalog.isError && !staleCursor ? (
         <p role="alert" className={styles.error}>
           {t("listError")}
         </p>
@@ -375,7 +386,7 @@ export default function ConversationTraceListPage() {
       <TracePageButtons
         pager={pager}
         nextCursor={catalog.currentData?.next_cursor ?? null}
-        disabled={catalog.isFetching || queryUpdating}
+        disabled={catalog.isFetching || queryUpdating || Boolean(staleCursor)}
       />
     </div>
   );

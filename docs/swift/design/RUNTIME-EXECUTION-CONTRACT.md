@@ -7496,7 +7496,7 @@ Mistral through the existing OpenAI-compatible binding. SDK-owned transports
 outside the shared stack can still appear with model call metadata.
 
 An admitted turn buffers at most 2 MiB and 64 HTTP attempts. Per-pod capacity
-is limited to 32 buffers and four background publishers. The existing private
+is limited to 32 buffers and two background publishers. The existing private
 runtime filesystem stores a manifest and up to 256 KiB per raw-body chunk under
 a separate trace prefix. The runtime authorizes a requested attempt through
 Control Plane before reading bytes and again before returning them. Transport

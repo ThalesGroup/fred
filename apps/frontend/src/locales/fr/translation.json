@@ -1528,6 +1528,7 @@
         "all": "Toutes",
         "refresh": "Actualiser",
         "listError": "Impossible de charger les traces de conversation.",
+        "catalogRestarted": "Les résultats ont changé. La première page s'affiche avec vos filtres et votre sélection.",
         "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
         "noCaptures": "Aucune conversation n'a été capturée ou partagée.",
         "loading": "Chargement des traces de conversation...",
@@ -3849,6 +3850,7 @@
         "deleteDialog": {
           "checkingConsent": "Vérification du partage de la conversation avec le support...",
           "consentError": "Impossible de vérifier le partage de cette conversation. Réessayez.",
+          "consentChanged": "Les diagnostics partagés avec le support ont changé. Vérifiez les options actuelles avant de confirmer à nouveau.",
           "retry": "Réessayer",
           "sharedMessage": "Vous avez partagé \"{{name}}\" avec le support.",
           "sharedOptions": "Que souhaitez-vous faire des diagnostics partagés ?",

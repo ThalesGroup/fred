@@ -141,7 +141,7 @@ class TraceCatalogFilters(BaseModel):
     sort: TraceCatalogSort = TraceCatalogSort.LATEST
     direction: Literal["asc", "desc"] = "desc"
     limit: Annotated[int, Field(ge=1, le=100)] = 50
-    cursor: Annotated[str, Field(max_length=263)] | None = None
+    cursor: Annotated[str, Field(max_length=291)] | None = None
 
 
 class TraceTeamOption(BaseModel):
@@ -170,6 +170,11 @@ class ConversationTraceCatalog(BaseModel):
     next_cursor: str | None
 
 
+class TraceReportedFailure(BaseModel):
+    support_error_ref: TraceId
+    failure_category: TraceFailureCategory | None = None
+
+
 class ConversationTraceTurn(BaseModel):
     exchange_id: str
     turn_number: int | None
@@ -184,6 +189,7 @@ class ConversationTraceTurn(BaseModel):
     access: TraceContentAccess = TraceContentAccess.MASKED
     retained_cutoff: TraceHistoryBoundary | None = None
     support_error_ref: TraceId | None = None
+    reported_failures: list[TraceReportedFailure] = Field(default_factory=list)
 
 
 class ConversationTraceDetail(BaseModel):

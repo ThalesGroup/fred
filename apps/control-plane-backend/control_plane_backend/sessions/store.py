@@ -15,11 +15,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from uuid import uuid4
-
 from sqlalchemy import case, delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +31,7 @@ from control_plane_backend.conversation_traces.capacity import (
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceIncidentRow,
     ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import (
@@ -233,9 +233,17 @@ class SessionMetadataStore:
             )
 
     async def retain_for_support(
-        self, session_id: str, team_id: TeamId, user_id: str, due_at: datetime | None
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        due_at: datetime | None,
+        *,
+        expected_grant_id: str | None,
     ) -> str | None:
-        """Hide an owned chat while retaining its current diagnostic consent."""
+        """Hide an owned chat while retaining the owner's confirmed grant."""
+        if expected_grant_id is None:
+            return None
         owner = SessionMetadataRow
         grant = ConversationTraceConsentRow
         async with use_session(self._sessions) as session:
@@ -262,7 +270,9 @@ class SessionMetadataStore:
                 return None
             grant_id = await session.scalar(
                 select(grant.grant_id).where(
-                    grant.session_id == session_id, grant.revoked_at.is_(None)
+                    grant.session_id == session_id,
+                    grant.revoked_at.is_(None),
+                    grant.grant_id == expected_grant_id,
                 )
             )
             if grant_id is None:
@@ -563,6 +573,11 @@ class SessionMetadataStore:
                 await s.execute(
                     delete(ConversationTraceConsentRow).where(
                         ConversationTraceConsentRow.session_id == session_id
+                    )
+                )
+                await s.execute(
+                    delete(ConversationTraceIncidentRow).where(
+                        ConversationTraceIncidentRow.session_id == session_id
                     )
                 )
                 await s.execute(

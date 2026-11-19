@@ -31,6 +31,16 @@ let sessions = defaultSessions;
 let agents: { agent_instance_id: string; display_name: string }[] | undefined;
 let success = true;
 let error = false;
+const removeSession = vi.fn();
+const refreshConsent = vi.fn();
+let consent = { grant_id: "first-grant", cutoff: { turn_number: 1 } };
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetTraceConsentQuery: () => ({
+    currentData: { consent },
+    isSuccess: true,
+    refetch: refreshConsent,
+  }),
+}));
 vi.mock("../../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
 }));
@@ -50,7 +60,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     isError: error,
     refetch: vi.fn(),
   }),
-  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation: () => [vi.fn()],
+  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation: () => [removeSession, {}],
 }));
 vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
   ChatListItem: (props: {
@@ -66,6 +76,7 @@ vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
   ),
 }));
 import ChatList from "./ChatList";
+import { DeleteChatDialog } from "./DeleteChatDialog";
 
 describe("ChatList deleted agents", () => {
   it("keeps the saved conversation navigable and labels a confirmed deleted agent", () => {
@@ -136,5 +147,49 @@ it("groups by agent identity while preserving distinct live and deleted names", 
     act(() => root.unmount());
     container.remove();
     sessions = defaultSessions;
+  }
+});
+
+it("requires a new choice after the confirmed grant changed", async () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onDeleted = vi.fn();
+  const close = vi.fn();
+  const render = () =>
+    root.render(
+      <DeleteChatDialog
+        teamId="team-1"
+        sessionId="saved"
+        agentInstanceId="agent-1"
+        label="Chat"
+        onClose={close}
+        onDeleted={onDeleted}
+      />,
+    );
+  removeSession.mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
+  try {
+    act(render);
+    const radios = () => [...document.querySelectorAll<HTMLInputElement>('[role="alertdialog"] input[type="radio"]')];
+    act(() => radios()[1].click());
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+      (button) => button.textContent === "keep",
+    );
+    await act(async () => confirm?.click());
+    expect(removeSession).toHaveBeenCalledWith({
+      teamId: "team-1",
+      sessionId: "saved",
+      keepSharedDiagnostics: true,
+      expectedTraceGrantId: "first-grant",
+    });
+    expect(refreshConsent).toHaveBeenCalledOnce();
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(document.querySelector("[role='alert']")?.textContent).toBe("consentChanged");
+    consent = { grant_id: "second-grant", cutoff: { turn_number: 2 } };
+    act(render);
+    expect(radios().every((radio) => !radio.checked)).toBe(true);
+  } finally {
+    act(() => root.unmount());
+    container.remove();
   }
 });

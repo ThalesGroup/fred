@@ -2145,6 +2145,9 @@ async def delete_team_session(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(require_own_credential),
     keep_shared_diagnostics: bool = False,
+    expected_trace_grant_id: Annotated[
+        str | None, Query(min_length=1, max_length=36)
+    ] = None,
 ) -> Response:
     """
     Delete one team-scoped conversation (CTRLP-12 A5).
@@ -2157,6 +2160,9 @@ async def delete_team_session(
     Returns 204 on success. Returns 404 when the session does not exist or is
     not owned by the caller (ownership is enforced up front, identical to the
     immediate-erase path).
+
+    To keep shared diagnostics, supply the grant ID confirmed by the owner.
+    Returns 409 if that grant is no longer active.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
@@ -2167,6 +2173,7 @@ async def delete_team_session(
             authorization=request.headers.get("Authorization", ""),
             deps=deps,
             keep_shared_diagnostics=keep_shared_diagnostics,
+            expected_trace_grant_id=expected_trace_grant_id,
         )
     except SessionAttachmentRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

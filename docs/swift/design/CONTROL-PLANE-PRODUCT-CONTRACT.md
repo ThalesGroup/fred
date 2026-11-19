@@ -5452,7 +5452,9 @@ to the latest recorded turn. The trace operator team picker lists teams with
 visible diagnostics. The catalog supports text, exact owner ID or username,
 team, consent, and time filters. An exact support error reference can match
 any recorded failed turn. Keyset pages use the selected sort and conversation
-ID, with no title in the cursor.
+ID. A cursor records the anchor's revision without including a title. A
+missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
+restarts from the first page with the current filter and selection.
 
 The current title is available to search, sort, and display only when its
 server-owned revision matches the active grant. To authorize a new title
@@ -5468,8 +5470,10 @@ The owner can read, grant, extend, or withdraw support consent at
 `/teams/{team_id}/sessions/{session_id}/trace-consent` using their own
 credential. Control Plane verifies session ownership and asks the bound
 runtime for the exact saved exchange and rank approved by the owner. An
-extension creates a new immutable grant. A stale sharing decision is
-rejected after revocation. Grants, extensions, and revocations emit
+extension creates a new immutable grant. A resumed exchange can extend
+an existing cutoff when the owner explicitly confirms the new saved end
+rank. A stale sharing decision is rejected after revocation. Grants,
+extensions, and revocations emit
 content-free audit events. The consent table follows session erasure.
 
 An explicit Debug share appears under All while its grant is active.
@@ -5488,10 +5492,13 @@ The conversation owner opens and confirms a report at
 `/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`. Control
 Plane resolves the reference against the bound runtime's saved terminal error
 and verifies its exact cutoff and consent version on confirmation. An active
-report contributes a failed catalog entry even without a capture. The Admin
-catalog shows its support reference and the inspector serves retained evidence
-through the active cutoff. Withdrawal removes a history-only entry from the
-catalog and revokes its content access.
+report contributes a failed catalog entry even without a capture. Each
+explicit report keeps its own support reference and category across extensions
+of the active grant. The catalog shows the most recent failure and can find
+any reported reference or category. The inspector lists the reports for the
+corresponding turns and serves retained evidence through the active cutoff.
+Withdrawal removes the reports, removes a standalone history-only entry
+from the catalog, and revokes its content access.
 
 Trace readers and platform admins can `PUT` to
 `/admin/conversation-traces/{session_id}/consent` for a retained turn in a
@@ -5577,8 +5584,10 @@ reservations stay charged while a PUT may still complete. The audit events
 record the actor and affected conversation count.
 
 The owner can remove a shared conversation by supplying
-`keep_shared_diagnostics=true` on the team session DELETE. Control Plane
-hides the chat and freezes its existing grant in the same session transaction.
+`keep_shared_diagnostics=true` and `expected_trace_grant_id` on the team
+session DELETE. Control Plane checks the confirmed grant ID, hides the chat,
+and freezes the grant in the same session transaction. The route returns 409
+if the confirmed grant is missing or no longer active.
 The owner-facing details, history and execution paths reject the removed chat.
 Support can read through the existing grant, and manual consent cannot extend
 it. The existing governed delete deadlines still apply. Otherwise, removal

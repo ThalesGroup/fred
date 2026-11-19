@@ -3,7 +3,9 @@
 
 """Build the operator's catalog from safe, consent-scoped SQL projections."""
 
+from collections.abc import Mapping
 from datetime import datetime
+from hashlib import sha256
 from typing import Any
 
 from fred_core.conversation_trace import TraceOutcome
@@ -23,7 +25,6 @@ from sqlalchemy import (
     union_all,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from control_plane_backend.conversation_traces.schemas import (
     TraceCatalogFilters,
@@ -35,6 +36,11 @@ from control_plane_backend.conversation_traces.schemas import (
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow as Grant,
+)
+from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceIncidentRow as Incident,
+)
+from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceTurnRow as Turn,
 )
 from control_plane_backend.models.session_metadata_models import (
@@ -51,6 +57,25 @@ def _visible_owner():
 
 def _active_grant():
     return and_(Grant.session_id == Owner.session_id, Grant.revoked_at.is_(None))
+
+
+class StaleTraceCursor(Exception):
+    pass
+
+
+def cursor_revision(row: Mapping[str, Any], sort: TraceCatalogSort) -> str:
+    # Title revisions are independent of their text, including when masked.
+    sort_key = None if sort == TraceCatalogSort.TITLE else row["sort_key"]
+    state = (
+        row["session_id"],
+        row["entry_id"],
+        row["latest_started_at"],
+        row["title_revision"] if sort == TraceCatalogSort.TITLE else None,
+        row["grant_id"],
+        row["access"],
+        sort_key,
+    )
+    return sha256(repr(state).encode()).hexdigest()[:32]
 
 
 async def list_catalog_teams(session: AsyncSession) -> list[TraceTeamOption]:
@@ -76,10 +101,6 @@ async def list_catalog_teams(session: AsyncSession) -> list[TraceTeamOption]:
 
 
 def _catalog_events(owners):
-    incident_exchange = Grant.incident["cutoff"]["exchange_id"].as_string()
-    incident_error_ref = Grant.incident["support_error_ref"].as_string()
-    incident_category = Grant.incident["failure_category"].as_string()
-    same_incident = incident_exchange == Turn.exchange_id
     captured = (
         select(
             Turn.session_id,
@@ -87,36 +108,66 @@ def _catalog_events(owners):
             Turn.started_at,
             Turn.capture_id.label("entry_id"),
             Turn.history_rank,
-            case((same_incident, TraceOutcome.FAILED.value), else_=Turn.outcome).label(
-                "outcome"
-            ),
-            func.coalesce(
-                case((same_incident, incident_category)), Turn.failure_category
-            ).label("failure_category"),
+            Turn.outcome,
+            Turn.failure_category,
             Turn.completed_at,
             Turn.http_availability,
             literal(False).label("history_only"),
-            func.coalesce(
-                Turn.support_error_ref, case((same_incident, incident_error_ref))
-            ).label("support_error_ref"),
+            Turn.support_error_ref,
+            literal(-1).label("report_rank"),
         )
         .select_from(Turn)
         .join(owners, owners.c.session_id == Turn.session_id)
-        .outerjoin(
-            Grant, and_(Grant.session_id == Turn.session_id, Grant.revoked_at.is_(None))
+        .where(
+            ~select(Incident.support_error_ref)
+            .join(
+                Grant,
+                and_(
+                    Grant.session_id == Incident.session_id, Grant.revoked_at.is_(None)
+                ),
+            )
+            .where(
+                Incident.session_id == Turn.session_id,
+                Incident.exchange_id == Turn.exchange_id,
+                or_(
+                    Turn.support_error_ref.is_(None),
+                    Incident.support_error_ref == Turn.support_error_ref,
+                ),
+            )
+            .correlate(Turn)
+            .exists()
         )
     )
-    matching_capture = aliased(Turn)
-    has_matching_capture = (
-        select(matching_capture.capture_id)
-        .where(
-            matching_capture.session_id == Grant.session_id,
-            or_(
-                Grant.incident.is_(None),
-                matching_capture.exchange_id == incident_exchange,
+    reported = (
+        select(
+            Incident.session_id,
+            func.coalesce(Turn.agent_display_name, ""),
+            func.coalesce(Turn.started_at, Incident.started_at),
+            Incident.support_error_ref,
+            Incident.first_rank,
+            literal(TraceOutcome.FAILED.value),
+            func.coalesce(Incident.failure_category, Turn.failure_category),
+            case(
+                (Turn.capture_id.is_(None), Grant.granted_at), else_=Turn.completed_at
+            ),
+            Turn.http_availability,
+            Turn.capture_id.is_(None),
+            Incident.support_error_ref,
+            Incident.last_rank,
+        )
+        .select_from(Incident)
+        .join(owners, owners.c.session_id == Incident.session_id)
+        .join(
+            Grant,
+            and_(Grant.session_id == Incident.session_id, Grant.revoked_at.is_(None)),
+        )
+        .outerjoin(
+            Turn,
+            and_(
+                Turn.session_id == Incident.session_id,
+                Turn.exchange_id == Incident.exchange_id,
             ),
         )
-        .exists()
     )
     history_only = (
         select(
@@ -124,24 +175,28 @@ def _catalog_events(owners):
             literal(""),
             func.coalesce(Grant.diagnostic_at, Grant.started_at),
             Grant.grant_id,
-            func.coalesce(
-                Grant.incident["cutoff"]["first_rank"].as_integer(), Grant.first_rank
-            ),
-            case(
-                (Grant.incident.is_not(None), TraceOutcome.FAILED.value),
-                else_=TraceOutcome.UNKNOWN.value,
-            ),
-            incident_category,
+            Grant.first_rank,
+            literal(TraceOutcome.UNKNOWN.value),
+            literal(None),
             Grant.granted_at,
             literal(None),
             literal(True),
-            incident_error_ref,
+            literal(None),
+            literal(-1),
         )
         .select_from(Grant)
         .join(owners, owners.c.session_id == Grant.session_id)
-        .where(Grant.revoked_at.is_(None), ~has_matching_capture)
+        .where(
+            Grant.revoked_at.is_(None),
+            ~select(Turn.capture_id)
+            .where(Turn.session_id == Grant.session_id)
+            .exists(),
+            ~select(Incident.support_error_ref)
+            .where(Incident.session_id == Grant.session_id)
+            .exists(),
+        )
     )
-    return union_all(captured, history_only).cte("trace_events")
+    return union_all(captured, reported, history_only).cte("trace_events")
 
 
 def _matching_failure(events, filters: TraceCatalogFilters):
@@ -180,6 +235,7 @@ async def catalog_rows(
     local_content_access: bool,
     limit: int,
     cursor: str | None,
+    expected_revision: str | None,
     before: tuple[datetime, str] | None,
 ) -> list[Any]:
     owners_query = select(Owner.session_id).where(*_visible_owner())
@@ -195,6 +251,7 @@ async def catalog_rows(
             order_by=(
                 case((events.c.outcome == TraceOutcome.FAILED.value, 0), else_=1),
                 events.c.history_rank.desc(),
+                events.c.report_rank.desc(),
                 events.c.entry_id.desc(),
             ),
         )
@@ -251,6 +308,8 @@ async def catalog_rows(
             Owner.team_id,
             team_name.label("team_name"),
             access.label("access"),
+            case((title.is_not(None), Owner.title_revision)).label("title_revision"),
+            Grant.grant_id,
             sort_key.label("sort_key"),
         )
         .select_from(ranked)
@@ -319,24 +378,34 @@ async def catalog_rows(
                     for field in fields
                 ),
                 error_match,
-                Grant.incident["support_error_ref"].as_string() == search,
+                select(Incident.support_error_ref)
+                .where(
+                    Incident.session_id == Owner.session_id,
+                    Incident.support_error_ref == search,
+                    is_shared,
+                )
+                .correlate(Owner, Grant)
+                .exists(),
             )
         )
     entries = filtered.cte("trace_catalog")
     asc = filters.direction == "asc"
     result = select(entries)
+    anchor = None
     if cursor is not None:
         anchor = (
-            select(entries.c.sort_key)
-            .where(entries.c.session_id == cursor)
-            .scalar_subquery()
+            select(entries).where(entries.c.session_id == cursor).cte("trace_anchor")
         )
-        key_after = entries.c.sort_key > anchor if asc else entries.c.sort_key < anchor
+        key_after = (
+            entries.c.sort_key > anchor.c.sort_key
+            if asc
+            else entries.c.sort_key < anchor.c.sort_key
+        )
         id_after = (
             entries.c.session_id > cursor if asc else entries.c.session_id < cursor
         )
-        result = result.where(
-            or_(key_after, and_(entries.c.sort_key == anchor, id_after))
+        result = result.join(anchor, literal(True)).where(
+            or_(key_after, and_(entries.c.sort_key == anchor.c.sort_key, id_after))
         )
     elif before is not None:
         date, entry_id = before
@@ -355,4 +424,37 @@ async def catalog_rows(
         if asc
         else result.order_by(key.desc(), tie.desc())
     )
-    return list(await session.execute(result.limit(limit + 1)))
+    result = result.limit(limit + 1)
+    if anchor is None:
+        return list(await session.execute(result))
+    # The anchor and page must come from the same snapshot. Retain an anchor
+    # row even for a valid empty page so deletion is distinguishable.
+    page = result.subquery()
+    revision_columns = (
+        "session_id",
+        "entry_id",
+        "latest_started_at",
+        "title_revision",
+        "grant_id",
+        "access",
+        "sort_key",
+    )
+    anchored_page = select(
+        page, *(anchor.c[name].label(f"anchor_{name}") for name in revision_columns)
+    ).select_from(anchor.outerjoin(page, literal(True)))
+    order = (page.c.sort_key, page.c.session_id)
+    rows = list(
+        await session.execute(
+            anchored_page.order_by(
+                *(column.asc() if asc else column.desc() for column in order)
+            )
+        )
+    )
+    if not rows:
+        raise StaleTraceCursor()
+    state = {name: rows[0]._mapping[f"anchor_{name}"] for name in revision_columns}
+    if expected_revision is not None and expected_revision != cursor_revision(
+        state, filters.sort
+    ):
+        raise StaleTraceCursor()
+    return rows if rows[0].session_id is not None else []

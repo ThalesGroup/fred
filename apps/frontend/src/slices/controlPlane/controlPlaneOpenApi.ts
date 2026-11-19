@@ -956,6 +956,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
         params: {
           keep_shared_diagnostics: queryArg.keepSharedDiagnostics,
+          expected_trace_grant_id: queryArg.expectedTraceGrantId,
         },
       }),
     }),
@@ -3444,6 +3445,7 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
   teamId: string;
   sessionId: string;
   keepSharedDiagnostics?: boolean;
+  expectedTraceGrantId?: string | null;
 };
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
   /** status 200 Successful Response */ SessionAttachmentSummary[];
@@ -7018,6 +7020,10 @@ export type ManualTraceConsentRequest = {
   expected_version: string | null;
   source_note: string;
 };
+export type TraceReportedFailure = {
+  support_error_ref: string;
+  failure_category?: TraceFailureCategory | null;
+};
 export type ConversationTraceTurn = {
   exchange_id: string;
   turn_number: number | null;
@@ -7032,6 +7038,7 @@ export type ConversationTraceTurn = {
   access?: TraceContentAccess;
   retained_cutoff?: TraceHistoryBoundary | null;
   support_error_ref?: string | null;
+  reported_failures?: TraceReportedFailure[];
 };
 export type ConversationTraceDetail = {
   session_id: string;

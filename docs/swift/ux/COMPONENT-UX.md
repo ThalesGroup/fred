@@ -6169,7 +6169,9 @@ and available trace, span, and call identifiers.
 
 The conversation owner's Debug panel explains which saved turns and
 content they can share with support. It shows the active cutoff and makes
-extensions and withdrawals explicit. The inspector labels retained
+extensions and withdrawals explicit, including saved content added when a
+paused turn resumes. Escape and focus belong to the confirmation while it is
+open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
 
@@ -6221,8 +6223,12 @@ explains the effect on ordinary chats and standalone reports.
 
 When a chat has an active grant, its delete dialog asks the owner whether
 to erase it for everyone or remove it and keep the evidence already shared
-with support. The option shows the approved turn cutoff. The inspector
-identifies a retained chat and omits its consent editor.
+with support. The option shows the approved turn cutoff. When consent changes
+before deletion, the dialog refreshes the options for a new confirmation.
+The inspector identifies a retained chat and omits its consent editor.
+
+When the catalog page anchor changes, the list returns to the first page
+with the operator's filters and selection still in place.
 
 Export conversation in the inspector and Export selected in the catalog
 open the same ZIP dialog. Metadata only is selected initially. Operators

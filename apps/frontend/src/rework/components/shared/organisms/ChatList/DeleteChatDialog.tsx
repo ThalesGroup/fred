@@ -12,7 +12,7 @@ import { useGetTraceConsentQuery } from "../../../../../slices/controlPlane/cont
 import { useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ChatList.module.scss";
 
-type DeleteChoice = "everyone" | "keep";
+type DeleteChoice = { option: "everyone" | "keep"; grantId: string };
 
 export function DeleteChatDialog({
   teamId,
@@ -31,27 +31,37 @@ export function DeleteChatDialog({
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: "rework.sidebar.chatList.deleteDialog" });
   const optionsName = useId();
-  const [choice, setChoice] = useState<DeleteChoice>();
-  const [error, setError] = useState(false);
+  const [selection, setSelection] = useState<DeleteChoice>();
+  const [error, setError] = useState<"error" | "consentChanged">();
   const consent = useGetTraceConsentQuery({ teamId, sessionId }, { refetchOnMountOrArgChange: true });
   const [remove, removing] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
   const grant = consent.currentData?.consent;
+  const choice = selection?.grantId === grant?.grant_id ? selection : undefined;
   const ready = consent.isSuccess && !consent.isFetching && !consent.isError;
 
   async function confirm() {
     if (!ready || removing.isLoading || (grant && !choice)) return;
-    setError(false);
-    abortTurn(sessionId);
+    setError(undefined);
+    const expectedTraceGrantId = choice?.option === "keep" ? choice.grantId : undefined;
+    if (!expectedTraceGrantId) abortTurn(sessionId);
     try {
-      await remove({ teamId, sessionId, keepSharedDiagnostics: Boolean(grant && choice === "keep") }).unwrap();
+      await remove({
+        teamId,
+        sessionId,
+        keepSharedDiagnostics: Boolean(expectedTraceGrantId),
+        expectedTraceGrantId,
+      }).unwrap();
     } catch (failure) {
-      setError(true);
       if (typeof failure === "object" && failure !== null && "status" in failure && failure.status === 409) {
-        setChoice(undefined);
+        setError("consentChanged");
+        setSelection(undefined);
         void consent.refetch();
+      } else {
+        setError("error");
       }
       return;
     }
+    if (expectedTraceGrantId) abortTurn(sessionId);
     clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
     onDeleted();
   }
@@ -77,7 +87,12 @@ export function DeleteChatDialog({
               <legend>{t("sharedOptions")}</legend>
               {(["everyone", "keep"] as const).map((value) => (
                 <label key={value}>
-                  <input type="radio" name={optionsName} checked={choice === value} onChange={() => setChoice(value)} />
+                  <input
+                    type="radio"
+                    name={optionsName}
+                    checked={choice?.option === value}
+                    onChange={() => setSelection({ option: value, grantId: grant.grant_id })}
+                  />
                   <span>
                     <strong>{t(value)}</strong>
                     <span>{t(value === "keep" ? "keepHelp" : "everyoneHelp", { turn: grant.cutoff.turn_number })}</span>
@@ -86,10 +101,10 @@ export function DeleteChatDialog({
               ))}
             </fieldset>
           ) : null}
-          {error && <p role="alert">{t("error")}</p>}
+          {error && <p role="alert">{t(error)}</p>}
         </>
       }
-      confirmLabel={t(grant && choice ? choice : "confirm")}
+      confirmLabel={t(choice?.option ?? "confirm")}
       cancelLabel={t("cancel")}
       criticalAction
       confirmDisabled={!ready || removing.isLoading || Boolean(grant && !choice)}

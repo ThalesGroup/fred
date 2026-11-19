@@ -1130,7 +1130,12 @@ export default function ManagedChatPage() {
               showRaw={isAdmin}
               sharing={
                 chat.sessionId ? (
-                  <TraceConsentControls key={chat.sessionId} teamId={teamId} sessionId={chat.sessionId} />
+                  <TraceConsentControls
+                    key={chat.sessionId}
+                    teamId={teamId}
+                    sessionId={chat.sessionId}
+                    turnPending={chat.waitResponse}
+                  />
                 ) : undefined
               }
             />

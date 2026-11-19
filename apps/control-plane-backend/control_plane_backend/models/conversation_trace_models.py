@@ -93,7 +93,9 @@ class ConversationTraceConsentRow(Base):
     title_revision: Mapped[str | None] = mapped_column(String(36))
     source: Mapped[str] = mapped_column(String(32))
     source_note: Mapped[str | None] = mapped_column(Text, deferred=True)
-    incident: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
+    incident: Mapped[dict[str, object] | None] = mapped_column(
+        JSON(none_as_null=True), deferred=True
+    )
     diagnostic_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -118,6 +120,31 @@ class ConversationTraceConsentRow(Base):
         Index("ix_conversation_trace_consent_session", "session_id"),
         Index("ix_conversation_trace_consent_catalog", "granted_at", "grant_id"),
         Index("ix_trace_consent_diagnostic_expiry", "diagnostic_at", "grant_id"),
+    )
+
+
+class ConversationTraceIncidentRow(Base):
+    """Explicitly reported failures for the conversation's continuous active consent."""
+
+    __tablename__ = "conversation_trace_incident"
+
+    session_id: Mapped[str] = mapped_column(
+        String(255),
+        ForeignKey("session_metadata.session_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    support_error_ref: Mapped[str] = mapped_column(String(32), primary_key=True)
+    exchange_id: Mapped[str] = mapped_column(String(255))
+    first_rank: Mapped[int] = mapped_column(Integer)
+    last_rank: Mapped[int] = mapped_column(Integer)
+    turn_number: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    failure_category: Mapped[str | None] = mapped_column(String(32))
+
+    __table_args__ = (
+        Index("ix_trace_incident_ref", "support_error_ref", "session_id"),
+        Index("ix_trace_incident_order", "session_id", "first_rank", "exchange_id"),
+        Index("ix_trace_incident_latest", "session_id", "started_at"),
     )
 
 

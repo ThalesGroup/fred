@@ -22,7 +22,7 @@ from fred_core.conversation_trace import (
     TraceStorageReservation,
     TraceStorageReservationState,
 )
-from sqlalchemy import Select, delete, exists, func, literal, select, update
+from sqlalchemy import Select, delete, exists, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
@@ -33,6 +33,7 @@ from control_plane_backend.conversation_traces.schemas import ConversationTraceS
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceIncidentRow,
     ConversationTraceSettingsRow,
     ConversationTraceStorageRow,
     ConversationTraceTurnRow,
@@ -362,12 +363,7 @@ async def retire_conversations(
             .execution_options(synchronize_session=False)
         ),
     )
-    await session.execute(
-        update(Grant)
-        .where(Grant.session_id.in_(session_ids), Grant.revoked_at.is_(None))
-        .values(revoked_at=now)
-        .execution_options(synchronize_session=False)
-    )
+    await revoke_conversation_grants(session, session_ids, now)
     await enqueue_retained_erasure(session, session_ids, now)
     queued = await queue_artifact_cleanup(
         session, session_ids, now, count_bytes=count_bytes
@@ -378,6 +374,25 @@ async def retire_conversations(
         .execution_options(synchronize_session=False)
     )
     return owners.rowcount, queued
+
+
+async def revoke_conversation_grants(
+    session: AsyncSession, session_ids: _SessionIds, now: datetime
+) -> None:
+    await session.execute(
+        update(Grant)
+        .where(
+            Grant.session_id.in_(session_ids),
+            or_(Grant.revoked_at.is_(None), Grant.incident.is_not(None)),
+        )
+        .values(revoked_at=func.coalesce(Grant.revoked_at, now), incident=None)
+        .execution_options(synchronize_session=False)
+    )
+    await session.execute(
+        delete(ConversationTraceIncidentRow).where(
+            ConversationTraceIncidentRow.session_id.in_(session_ids)
+        )
+    )
 
 
 async def retire_capture(session: AsyncSession, session_id: str, now: datetime) -> int:
@@ -445,16 +460,11 @@ async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int,
     )
     stale_grant_ids = list(await session.scalars(stale_grants))
     if stale_grant_ids:
-        await enqueue_retained_erasure(
-            session,
-            select(Grant.session_id).where(Grant.grant_id.in_(stale_grant_ids)),
-            now,
+        stale_sessions = select(Grant.session_id).where(
+            Grant.grant_id.in_(stale_grant_ids)
         )
-        await session.execute(
-            update(Grant)
-            .where(Grant.grant_id.in_(stale_grant_ids), Grant.revoked_at.is_(None))
-            .values(revoked_at=now)
-        )
+        await enqueue_retained_erasure(session, stale_sessions, now)
+        await revoke_conversation_grants(session, stale_sessions, now)
 
     need = (
         settings.used_bytes

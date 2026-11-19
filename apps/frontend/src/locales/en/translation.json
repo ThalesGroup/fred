@@ -1528,6 +1528,7 @@
         "all": "All",
         "refresh": "Refresh",
         "listError": "Conversation traces could not be loaded.",
+        "catalogRestarted": "The results changed. Showing the first page with your filters and selection.",
         "noFailures": "No failed conversations were captured or shared.",
         "noCaptures": "No conversations were captured or shared.",
         "loading": "Loading conversation traces...",
@@ -3849,6 +3850,7 @@
         "deleteDialog": {
           "checkingConsent": "Checking whether this conversation is shared with support...",
           "consentError": "Could not check whether this conversation is shared. Try again.",
+          "consentChanged": "The diagnostics shared with support have changed. Review the current options before confirming again.",
           "retry": "Try again",
           "sharedMessage": "You shared \"{{name}}\" with support.",
           "sharedOptions": "What should happen to the shared diagnostics?",
