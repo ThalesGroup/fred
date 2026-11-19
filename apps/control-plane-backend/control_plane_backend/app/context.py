@@ -551,11 +551,11 @@ class ApplicationContext:
             pool_size = postgres.pool_size or 5
             overflow = 10 if postgres.max_overflow is None else postgres.max_overflow
             # Share the configured pool, preserving capacity for product traffic.
-            admission_slots = max(1, min(12, (pool_size + max(0, overflow)) // 2))
+            runtime_write_slots = min(12, (pool_size + max(0, overflow)) // 2)
             self._conversation_trace_store = ConversationTraceStore(
                 self.get_pg_async_engine(),
                 local_development=self.configuration.conversation_trace_local_development,
-                admission_slots=admission_slots,
+                runtime_write_slots=runtime_write_slots,
             )
         return self._conversation_trace_store
 

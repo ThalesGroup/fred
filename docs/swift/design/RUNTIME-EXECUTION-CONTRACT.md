@@ -7665,6 +7665,18 @@ slow object write can delay evidence while the terminal failure is already
 available in the catalog. A failed diagnostic history lookup for the display
 turn number also leaves publication of known facts available.
 
+Control Plane admits runtime trace writes through a shared per-pod budget
+covering admission, reconciliation, reservation, finalization and both cleanup
+routes. It uses up to half the configured product pool, capped at 12 concurrent
+writes, with at most one queued operation per slot. Its 650 ms response budget
+includes checkout and transaction cleanup, and a slot remains charged until
+driver work finishes. Postgres uses transaction-local lock, statement and idle
+timeouts for these writes. When byte accounting is unavailable, a publisher can
+record safe facts and partial evidence while a live reservation stays charged
+for leased cleanup. The Runtime terminal-error proof write has a 200 ms request
+budget and uses at most one slot of its history pool. If proof writing times out,
+the ordinary saved transcript can still supply the terminal error reference.
+
 ### Owner-hidden conversation history and lifecycle erasure
 
 For managed owner history reads, the runtime checks the registered Control

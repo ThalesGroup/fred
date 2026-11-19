@@ -46,6 +46,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
+from functools import partial
 from typing import TYPE_CHECKING, Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -77,6 +78,7 @@ from fred_core.history.history_schema import (
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.sql.bounded_work import BoundedSqlWork
 
 if TYPE_CHECKING:
     from fred_core.conversation_trace import (
@@ -259,11 +261,16 @@ class PostgresHistoryStore(BaseHistoryStore):
     """
 
     def __init__(
-        self, engine: AsyncEngine, *, kpi: BaseKPIWriter | None = None
+        self,
+        engine: AsyncEngine,
+        *,
+        kpi: BaseKPIWriter | None = None,
+        trace_incident_slots: int = 1,
     ) -> None:
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
+        self._trace_incident_writes = BoundedSqlWork(trace_incident_slots)
 
     # ------------------------------------------------------------------
     # Write
@@ -536,6 +543,29 @@ class PostgresHistoryStore(BaseHistoryStore):
         failure: ChatMessage,
     ) -> int | None:
         """Persist a trusted terminal boundary before attempting the transcript write."""
+        return await self._trace_incident_writes.run(
+            partial(
+                self._write_trace_incident,
+                session_id=session_id,
+                user_id=user_id,
+                agent_instance_id=agent_instance_id,
+                first_rank=first_rank,
+                started_at=started_at,
+                failure=failure,
+            ),
+            timeout=0.2,
+        )
+
+    async def _write_trace_incident(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        agent_instance_id: str,
+        first_rank: int,
+        started_at: datetime,
+        failure: ChatMessage,
+    ) -> int | None:
         from fred_core.conversation_trace import (
             TraceHistoryBoundary,
             TraceHistoryIncident,
@@ -549,7 +579,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         exchange_id = failure.exchange_id
         async with self._sessions.begin() as session:
             if self._engine.dialect.name == "postgresql":
-                await session.execute(text("SET LOCAL statement_timeout = '100ms'"))
+                await session.execute(
+                    text(
+                        "SELECT set_config('statement_timeout', '100ms', true), "
+                        "set_config('idle_in_transaction_session_timeout', '200ms', true)"
+                    )
+                )
             await self._lock_conversation(session, session_id)
             # A managed opening is saved before execution. Its history is the
             # ownership anchor and prevents a late terminal write after erasure.

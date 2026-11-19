@@ -394,6 +394,8 @@ class ConversationTraceClient:
                     retry_discard = (url, payload)
             else:
                 committed = await self.finalize(target, result)
+                if committed is None:
+                    committed = await self.finalize(target, result)
         if retry_discard is not None:
             # A missing receipt may still be committing on the admission replica.
             await asyncio.sleep(_ADMISSION_SECONDS)
@@ -548,20 +550,26 @@ class ConversationTraceClient:
                 )
         except Exception:
             self._metric("publication", "error")
-            fallback = result.model_copy(
-                update={
-                    "http_attempts": [],
-                    "sse": None,
-                    "model_calls": [],
-                    "tool_calls": [],
-                    "http_incomplete": True,
-                    "degradation": TraceDegradation.STORAGE,
-                    "storage": None,
-                }
-            )
-            await self.finalize(capture_id, fallback)
+            await self._publish_missing_evidence(capture_id, result)
         finally:
             self.release_buffer()
+
+    async def _publish_missing_evidence(
+        self, capture_id: str, result: TraceFinalization
+    ) -> None:
+        fallback = result.model_copy(
+            update={
+                "http_attempts": [],
+                "sse": None,
+                "model_calls": [],
+                "tool_calls": [],
+                "http_incomplete": True,
+                "degradation": result.degradation or TraceDegradation.STORAGE,
+                "storage": None,
+            }
+        )
+        committed = await self.finalize(capture_id, fallback)
+        self._metric("facts", _finalization_status(committed))
 
     async def _publish_reserved(
         self,
@@ -703,6 +711,11 @@ class ConversationTraceClient:
             if result.degradation is None or committed is not True
             else "degraded",
         )
+        if committed is None:
+            # The first commit may have succeeded. A completed receipt leaves
+            # it intact. Otherwise only safe facts and partial evidence settle,
+            # and the charged reservation stays subject to leased cleanup.
+            await self._publish_missing_evidence(capture_id, result)
 
     async def http_access(
         self, session_id: str, exchange_id: str, ref: str, authorization: str

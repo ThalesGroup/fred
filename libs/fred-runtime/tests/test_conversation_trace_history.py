@@ -327,19 +327,25 @@ async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tm
 @pytest.mark.asyncio
 async def test_slow_incident_write_leaves_the_saved_error_fallback(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    proof_cleanup = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    proof_closed = asyncio.Event()
+    proof_started = 0
     try:
         await create_history_schema(engine)
         store = PostgresHistoryStore(engine)
-        proof_cancelled = False
 
         async def held_proof(**_kwargs):
-            nonlocal proof_cancelled
+            nonlocal proof_started
+            proof_started += 1
             try:
                 await asyncio.Future()
             finally:
-                proof_cancelled = True
+                proof_cleanup.set()
+                await release_cleanup.wait()
+                proof_closed.set()
 
-        monkeypatch.setattr(store, "record_trace_incident", held_proof)
+        monkeypatch.setattr(store, "_write_trace_incident", held_proof)
         error_ref = "2" * 32
         captured_rank = await asyncio.wait_for(
             agent_app._write_turn_history(
@@ -361,9 +367,23 @@ async def test_slow_incident_write_leaves_the_saved_error_fallback(monkeypatch):
             ),
             timeout=1.0,
         )
-        assert proof_cancelled
+        assert proof_cleanup.is_set()
+        assert not proof_closed.is_set()
+        with pytest.raises(TimeoutError, match="saturated"):
+            await store.record_trace_incident(
+                session_id="other-session",
+                user_id="owner",
+                agent_instance_id="managed",
+                first_rank=0,
+                started_at=datetime.now(timezone.utc),
+                failure=make_user_text("other-session", "other-failure", 1, "Input"),
+            )
+        assert proof_started == 1
         incident = await store.trace_history_incident("session", "owner", error_ref)
         assert incident is not None
         assert captured_rank == incident.cutoff.last_rank == 1
     finally:
+        release_cleanup.set()
+        if proof_cleanup.is_set():
+            await asyncio.wait_for(proof_closed.wait(), timeout=1)
         await engine.dispose()

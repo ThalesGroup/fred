@@ -14,11 +14,11 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import TypeVar
 from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
@@ -52,6 +52,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
+from fred_core.sql.bounded_work import BoundedSqlWork
 from sqlalchemy import (
     Select,
     String,
@@ -104,7 +105,8 @@ from control_plane_backend.models.conversation_trace_models import (
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 
 _TERMINAL_OUTCOMES = (TraceOutcome.COMPLETED, TraceOutcome.FAILED)
-_ADMISSION_DB_SECONDS = 0.75
+_RUNTIME_WRITE_SECONDS = 0.65
+_TraceWriteResult = TypeVar("_TraceWriteResult")
 
 
 def _admission_owner(runtime_id: str, request: TraceAdmissionRequest) -> Select[str]:
@@ -375,7 +377,7 @@ class TraceSessionNotFound(Exception):
     pass
 
 
-class TraceAdmissionUnavailable(Exception):
+class TraceWriteUnavailable(Exception):
     """The bounded diagnostic transaction could not complete."""
 
 
@@ -393,26 +395,40 @@ class ConversationTraceStore:
         engine: AsyncEngine,
         *,
         local_development: bool = False,
-        admission_slots: int = 7,
+        runtime_write_slots: int = 7,
     ) -> None:
         self._sessions = make_session_factory(engine)
-        self._admissions = asyncio.Semaphore(admission_slots)
+        self._runtime_writes = BoundedSqlWork(
+            runtime_write_slots, queued=runtime_write_slots
+        )
         self.local_development = local_development
 
-    @asynccontextmanager
-    async def _admission_session(self) -> AsyncIterator[AsyncSession]:
+    async def run_runtime_write(
+        self, operation: Callable[[], Awaitable[_TraceWriteResult]]
+    ) -> _TraceWriteResult:
         try:
-            async with asyncio.timeout(_ADMISSION_DB_SECONDS), self._admissions:
-                async with use_session(self._sessions) as session:
-                    if session.get_bind().dialect.name == "postgresql":
-                        await session.execute(text("SET LOCAL lock_timeout = '120ms'"))
-                    yield session
+            return await self._runtime_writes.run(
+                operation, timeout=_RUNTIME_WRITE_SECONDS
+            )
         except TimeoutError as exc:
-            raise TraceAdmissionUnavailable from exc
+            raise TraceWriteUnavailable from exc
         except DBAPIError as exc:
-            if getattr(exc.orig, "sqlstate", None) == "55P03":
-                raise TraceAdmissionUnavailable from exc
+            if getattr(exc.orig, "sqlstate", None) in ("55P03", "57014", "25P03"):
+                raise TraceWriteUnavailable from exc
             raise
+
+    @asynccontextmanager
+    async def _runtime_write_session(self) -> AsyncIterator[AsyncSession]:
+        async with use_session(self._sessions) as session:
+            if session.get_bind().dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "SELECT set_config('lock_timeout', '120ms', true), "
+                        "set_config('statement_timeout', '500ms', true), "
+                        "set_config('idle_in_transaction_session_timeout', '700ms', true)"
+                    )
+                )
+            yield session
 
     async def settings(self) -> ConversationTraceSettings:
         """Read live settings and byte usage without a write lock."""
@@ -455,7 +471,7 @@ class ConversationTraceStore:
     ) -> TraceAdmission | None:
         owner = SessionMetadataRow
         turn = ConversationTraceTurnRow
-        async with self._admission_session() as session:
+        async with self._runtime_write_session() as session:
             settings = await capacity.lock_admission(
                 session, request.session_id, self.local_development, resuming=resuming
             )
@@ -522,7 +538,7 @@ class ConversationTraceStore:
         admission = report.admission
         owner = SessionMetadataRow
         turn = ConversationTraceTurnRow
-        async with self._admission_session() as session:
+        async with self._runtime_write_session() as session:
             capture_id = await session.scalar(
                 _admission_owner(runtime_id, admission)
                 .join(turn, turn.session_id == owner.session_id)
@@ -644,7 +660,7 @@ class ConversationTraceStore:
     ) -> TraceStorageReservationState:
         """Reserve bytes for one publication only while its admitted turn is writable."""
         turn = ConversationTraceTurnRow
-        async with use_session(self._sessions) as session:
+        async with self._runtime_write_session() as session:
             settings = await capacity.lock_settings(session, self.local_development)
             if await _lock_writable_owner(session, runtime_id, capture_id) is None:
                 return TraceStorageReservationState.FENCED
@@ -680,7 +696,7 @@ class ConversationTraceStore:
         self, runtime_id: str
     ) -> tuple[TraceStorageCleanup | None, tuple[int, int, int]]:
         """Run a bounded lifecycle tick and hand off work to the bucket owner."""
-        async with use_session(self._sessions) as session:
+        async with self._runtime_write_session() as session:
             settings = await capacity.lock_settings(session, self.local_development)
             expired = await capacity.maintain(session, settings)
             return await capacity.claim_cleanup(session, runtime_id), expired
@@ -692,7 +708,7 @@ class ConversationTraceStore:
         result: TraceStorageCleanupResult,
     ) -> None:
         """Acknowledge cleanup only through the runtime's current SQL lease."""
-        async with use_session(self._sessions) as session:
+        async with self._runtime_write_session() as session:
             settings = await capacity.lock_settings(session, self.local_development)
             await capacity.complete_cleanup(
                 session, settings, runtime_id, work_id, result
@@ -702,7 +718,7 @@ class ConversationTraceStore:
         self, runtime_id: str, capture_id: str, result: TraceFinalization
     ) -> bool:
         """Publish evidence and settle its global byte reservation in one transaction."""
-        async with use_session(self._sessions) as session:
+        async with self._runtime_write_session() as session:
             settings = None
             storage = None
             publication = result.storage
@@ -717,8 +733,12 @@ class ConversationTraceStore:
                 return False
             if publication is None and refs:
                 return False
-            if publication is not None or result.degradation is not None:
+            if publication is not None:
                 settings = await capacity.lock_settings(session, self.local_development)
+            elif result.degradation is not None:
+                # Safe facts and unavailable evidence can settle even while the
+                # accounting row is held by storage or lifecycle work.
+                settings = await capacity.lock_settings_if_available(session)
             if publication is not None:
                 storage = await capacity.publication_row(
                     session, runtime_id, capture_id, publication

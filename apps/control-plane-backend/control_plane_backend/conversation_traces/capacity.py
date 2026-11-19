@@ -128,6 +128,14 @@ async def lock_settings(
     return row
 
 
+async def lock_settings_if_available(session: AsyncSession) -> Settings | None:
+    return await session.scalar(
+        select(Settings)
+        .where(Settings.id == SETTINGS_ID)
+        .with_for_update(key_share=True, skip_locked=True)
+    )
+
+
 async def _insert_pg_settings(session: AsyncSession, local_development: bool) -> None:
     await session.execute(
         pg_insert(Settings)

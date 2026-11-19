@@ -284,7 +284,12 @@ class PodApplicationContext:
 
         init_user_store(engine)
         checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
-        history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
+        proof_slots = int(
+            postgres_config.pool_size != 1 or postgres_config.max_overflow != 0
+        )
+        history_store = PostgresHistoryStore(
+            engine, kpi=self.get_kpi_writer(), trace_incident_slots=proof_slots
+        )
         self._sql_engine = engine
         self._checkpointer = checkpointer
         self._history_store = history_store

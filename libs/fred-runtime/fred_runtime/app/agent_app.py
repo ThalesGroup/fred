@@ -4274,15 +4274,14 @@ async def _write_turn_history(
         )
         if failure is not None:
             try:
-                async with asyncio.timeout(0.2):
-                    terminal_rank = await history_store.record_trace_incident(
-                        session_id=session_id,
-                        user_id=user_id,
-                        agent_instance_id=agent_instance_id,
-                        first_rank=base_rank,
-                        started_at=min(message.timestamp for message in messages),
-                        failure=failure,
-                    )
+                terminal_rank = await history_store.record_trace_incident(
+                    session_id=session_id,
+                    user_id=user_id,
+                    agent_instance_id=agent_instance_id,
+                    first_rank=base_rank,
+                    started_at=min(message.timestamp for message in messages),
+                    failure=failure,
+                )
             except Exception as exc:
                 # A failed proof write leaves the existing saved-error path available.
                 logger.warning(

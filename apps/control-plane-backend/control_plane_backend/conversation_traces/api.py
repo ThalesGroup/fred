@@ -105,11 +105,12 @@ from control_plane_backend.conversation_traces.schemas import (
     TraceTeamOption,
 )
 from control_plane_backend.conversation_traces.store import (
-    TraceAdmissionUnavailable,
+    ConversationTraceStore,
     TraceConsentChanged,
     TraceConsentDoesNotExtend,
     TraceConversationReference,
     TraceSessionNotFound,
+    TraceWriteUnavailable,
 )
 from control_plane_backend.teams.system import resolve_system_team_id
 
@@ -1528,6 +1529,19 @@ async def get_conversation_trace_tool_evidence(
     return evidence
 
 
+async def _runtime_trace_write(
+    container: ControlPlaneContainer,
+    operation: Callable[[ConversationTraceStore], Awaitable[_TraceResponse]],
+    *,
+    unavailable: str = "trace_write_unavailable",
+) -> _TraceResponse:
+    store = container.get_conversation_trace_store()
+    try:
+        return await store.run_runtime_write(lambda: operation(store))
+    except TraceWriteUnavailable as exc:
+        raise HTTPException(503, unavailable) from exc
+
+
 @router.post(
     "/internal/runtimes/{runtime_id}/conversation-traces/admit",
     response_model=TraceAdmission | None,
@@ -1545,17 +1559,19 @@ async def admit_trace_turn(
     except ValueError as exc:
         raise HTTPException(400, "invalid_trace_segment") from exc
     try:
-        return await container.get_conversation_trace_store().admit(
-            runtime_id,
-            body,
-            segment_id=segment_id,
-            resuming=request.headers.get(TRACE_RESUME_HEADER) == "true",
+        return await _runtime_trace_write(
+            container,
+            lambda store: store.admit(
+                runtime_id,
+                body,
+                segment_id=segment_id,
+                resuming=request.headers.get(TRACE_RESUME_HEADER) == "true",
+            ),
+            unavailable="trace_admission_unavailable",
         )
     except TraceFlushInProgress:
         response.headers[TRACE_ADMISSION_STATUS_HEADER] = "flush_in_progress"
         return None
-    except TraceAdmissionUnavailable as exc:
-        raise HTTPException(503, "trace_admission_unavailable") from exc
 
 
 @router.put(
@@ -1568,12 +1584,11 @@ async def reconcile_trace_admission(
     container: Container,
     runtime_id: Runtime,
 ) -> Response:
-    try:
-        accepted = await container.get_conversation_trace_store().reconcile_admission(
-            runtime_id, segment_id, body
-        )
-    except TraceAdmissionUnavailable as exc:
-        raise HTTPException(503, "trace_admission_unavailable") from exc
+    accepted = await _runtime_trace_write(
+        container,
+        lambda store: store.reconcile_admission(runtime_id, segment_id, body),
+        unavailable="trace_admission_unavailable",
+    )
     if not accepted:
         raise HTTPException(409, "trace_capture_no_longer_writable")
     return Response(status_code=204)
@@ -1595,8 +1610,9 @@ async def reserve_trace_storage(
     container: Container,
     runtime_id: Runtime,
 ) -> TraceStorageReservationState:
-    return await container.get_conversation_trace_store().reserve_storage(
-        runtime_id, str(capture_id), body
+    return await _runtime_trace_write(
+        container,
+        lambda store: store.reserve_storage(runtime_id, str(capture_id), body),
     )
 
 
@@ -1607,7 +1623,9 @@ async def claim_trace_storage_cleanup(
     (
         work,
         (expired, history_only, evicted),
-    ) = await container.get_conversation_trace_store().next_storage_cleanup(runtime_id)
+    ) = await _runtime_trace_write(
+        container, lambda store: store.next_storage_cleanup(runtime_id)
+    )
     if expired or history_only or evicted:
         emit_audit_log(
             "conversation_trace.lifecycle.retired",
@@ -1629,8 +1647,9 @@ async def acknowledge_trace_storage_cleanup(
     container: Container,
     runtime_id: Runtime,
 ) -> Response:
-    await container.get_conversation_trace_store().finish_storage_cleanup(
-        runtime_id, str(work_id), body
+    await _runtime_trace_write(
+        container,
+        lambda store: store.finish_storage_cleanup(runtime_id, str(work_id), body),
     )
     return Response(status_code=204)
 
@@ -1641,8 +1660,8 @@ async def acknowledge_trace_storage_cleanup(
 async def finalize_trace_turn(
     capture_id: UUID, body: TraceFinalization, container: Container, runtime_id: Runtime
 ) -> Response:
-    accepted = await container.get_conversation_trace_store().finalize(
-        runtime_id, str(capture_id), body
+    accepted = await _runtime_trace_write(
+        container, lambda store: store.finalize(runtime_id, str(capture_id), body)
     )
     if not accepted:
         raise HTTPException(409, "trace_capture_no_longer_writable")
