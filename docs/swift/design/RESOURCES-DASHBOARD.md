@@ -31,6 +31,10 @@ Columns: Name (folder/file-type icon + name), Taille, Création, Auteur, an unla
 status chip (nothing for `ready`; a chip only for a state needing attention), and a
 preview + "more" actions cell.
 
+Folder and file names can be selected for native copy or copied from the row's
+"Copy name" menu action. A folder opens from its name button or a double-click
+on the row background; checkboxes and action controls keep their own behavior.
+
 - **Auteur** is the uploading identity — `Identity.uploaded_by` — never the file's own embedded author metadata
   (`identity.author`), which reflects the document's internal properties, not who put it
   in Fred. A document ingested before `uploaded_by` existed renders `—` (no backfill).

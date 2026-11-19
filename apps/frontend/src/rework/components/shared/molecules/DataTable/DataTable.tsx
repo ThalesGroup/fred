@@ -100,6 +100,8 @@ export interface DataTableProps<T> {
   /** Pointer activation of the row background; embedded controls keep their own
    *  actions. Keyboard users need an equivalent control inside the row. */
   onRowClick?: (row: T) => void;
+  /** Pointer double-click on row background; embedded controls keep their own actions. */
+  onRowDoubleClick?: (row: T) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
    *  for DataTable to sort `data` internally using each column's
@@ -173,6 +175,7 @@ export default function DataTable<T>({
   selectedKeys,
   onSelectionChange,
   onRowClick,
+  onRowDoubleClick,
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
@@ -351,6 +354,15 @@ export default function DataTable<T>({
                       if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
                       if (onRowClick) onRowClick(line);
                       else toggleRow(key);
+                    }
+                  : undefined
+              }
+              onDoubleClick={
+                onRowDoubleClick
+                  ? (event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      onRowDoubleClick(line);
                     }
                   : undefined
               }

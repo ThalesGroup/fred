@@ -629,4 +629,24 @@ describe("row activation", () => {
     expect(select).toHaveBeenCalledOnce();
     expect(activate).toHaveBeenCalledOnce();
   });
+
+  it("double-clicks row background without activating embedded controls", () => {
+    const activate = vi.fn();
+    render(
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={[{ label: "Id", cellRenderer: (row) => <button>{row.id}</button> }]}
+        onRowDoubleClick={activate}
+      />,
+    );
+    const row = container.querySelector('[class*="datatable-row"]')!;
+    act(() => {
+      row.querySelector('[class*="datatable-cell"]')!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
+    act(() => {
+      row.querySelector("button")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(activate).toHaveBeenCalledOnce();
+  });
 });

@@ -188,6 +188,19 @@ describe("DocumentWorkspace — per-row download (more menu, just under Renommer
   });
 });
 
+describe("DocumentWorkspace name copying", () => {
+  it("copies the displayed filename from the document menu", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    clickMoreMenuItem("rework.resources.action.copyName");
+    await act(async () => {});
+
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("Report.pdf");
+    expect(toast.showSuccess).toHaveBeenCalledWith({ summary: "rework.resources.toast.nameCopied" });
+  });
+});
+
 describe("DocumentWorkspace — bulk download", () => {
   it("zips the selected document(s) when the bulk download button is clicked", () => {
     act(() => {

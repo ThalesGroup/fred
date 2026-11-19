@@ -151,7 +151,7 @@ const isUserAssetsTag = (name: string, path?: string | null) => name === "User A
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata };
 
-type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
+type DocMenuAction = "copyName" | "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 
 function rowKey(row: Row): string {
   return row.kind === "folder" ? `folder:${row.node.full}` : `doc:${row.doc.identity.document_uid}`;
@@ -1316,9 +1316,27 @@ function DocumentWorkspace({
     }
   };
 
-  const moreOptionsForFolder = (node: TagNode): OptionModel<"rename" | "delete">[] => {
-    if (!canCreateFolder || !node.tagsHere[0]) return [];
+  const copyName = async (name: string) => {
+    try {
+      await navigator.clipboard.writeText(name);
+      showSuccess?.({ summary: t("rework.resources.toast.nameCopied") });
+    } catch {
+      showError?.({ summary: t("rework.resources.toast.copyNameError") });
+    }
+  };
+
+  const moreOptionsForFolder = (node: TagNode): OptionModel<DocMenuAction>[] => {
+    const options: OptionModel<DocMenuAction>[] = [
+      {
+        value: "copyName",
+        key: "copyName",
+        label: t("rework.resources.action.copyName"),
+        icon: { category: "outlined", type: "content_copy" },
+      },
+    ];
+    if (!canCreateFolder || !node.tagsHere[0]) return options;
     return [
+      ...options,
       {
         value: "rename",
         key: "rename",
@@ -1337,7 +1355,14 @@ function DocumentWorkspace({
 
   const moreOptionsForDoc = (doc: DocumentMetadata): OptionModel<DocMenuAction>[] => {
     const activeTask = activeDocTaskByUid.get(doc.identity.document_uid);
-    const options: OptionModel<DocMenuAction>[] = [];
+    const options: OptionModel<DocMenuAction>[] = [
+      {
+        value: "copyName",
+        key: "copyName",
+        label: t("rework.resources.action.copyName"),
+        icon: { category: "outlined", type: "content_copy" },
+      },
+    ];
     // No "error detail" entry here: the per-stage messages ride the "failed"
     // StatusChip itself, on hover (#2315).
     if (canCreateFolder) {
@@ -1492,13 +1517,23 @@ function DocumentWorkspace({
             <button
               type="button"
               className={styles.nameButton}
-              onClick={() => navigateTo(row.node.full)}
+              onClick={(event) => {
+                const selection = window.getSelection();
+                if (
+                  event.detail &&
+                  selection &&
+                  !selection.isCollapsed &&
+                  event.currentTarget.contains(selection.anchorNode)
+                )
+                  return;
+                navigateTo(row.node.full);
+              }}
               {...folderDropProps(row.node, canCreateFolder)}
             >
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
-              <span>{row.node.name}</span>
+              <span className={styles.nameText}>{row.node.name}</span>
             </button>
           );
         }
@@ -1630,9 +1665,11 @@ function DocumentWorkspace({
               options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
               onSelect={(value) => {
                 if (row.kind === "folder") {
+                  if (value === "copyName") void copyName(row.node.name);
                   if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
                   if (value === "delete") void confirmDeleteFolder(row.node);
                 } else {
+                  if (value === "copyName") void copyName(documentDisplayName(row.doc));
                   if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
                   if (value === "download") void commands.download(row.doc);
                   if (value === "labels") setLabelsTarget(row.doc);
@@ -1808,6 +1845,9 @@ function DocumentWorkspace({
         </div>
       )}
       <ResourceExplorer<Row>
+        onRowDoubleClick={(row) => {
+          if (row.kind === "folder") navigateTo(row.node.full);
+        }}
         breadcrumb={{
           segments: breadcrumbSegments,
           onBack: navigateBack,

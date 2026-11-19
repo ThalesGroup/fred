@@ -137,6 +137,60 @@ function folderToggle(name: string): HTMLButtonElement {
   return button;
 }
 
+describe("DocumentWorkspace folder navigation", () => {
+  it("keeps a folder open while its name is selected for copying", () => {
+    const button = folderToggle("CIR");
+    const name = button.querySelector('[class*="nameText"]');
+    if (!name?.firstChild) throw new Error("folder name not rendered");
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const browseCount = probe.browseCalls.length;
+
+    act(() => button.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+
+    expect(probe.browseCalls).toHaveLength(browseCount);
+    expect(folderToggle("CIR")).not.toBeNull();
+    act(() => button.click());
+    expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
+    selection?.removeAllRanges();
+  });
+
+  it("opens a folder when its row background is double-clicked", async () => {
+    const row = folderToggle("CIR").closest('[class*="datatable-row"]');
+    if (!row) throw new Error("folder row not rendered");
+    const sizeCell = row.querySelectorAll('[class*="datatable-cell"]')[2];
+    await act(async () => {
+      sizeCell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
+    expect(folderToggle("Sub")).not.toBeNull();
+  });
+
+  it("copies the folder name from its row menu", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const row = folderToggle("CIR").closest('[class*="datatable-row"]');
+    if (!row) throw new Error("folder row not rendered");
+    const moreButton = row.querySelector('button[aria-label="rework.resources.action.more"]');
+    if (!moreButton) throw new Error("folder menu not rendered");
+    act(() => {
+      moreButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const item = [...document.querySelectorAll('[role="presentation"] li')].find((el) =>
+      el.textContent?.includes("rework.resources.action.copyName"),
+    );
+    if (!item) throw new Error("copy name action not rendered");
+    await act(async () => {
+      item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("CIR");
+  });
+});
+
 /** Native events carry no dataTransfer in happy-dom; graft the shape React reads.
  * The handler resolves the payload through file-selector's async `fromEvent`, so
  * the drop is awaited past a macrotask for that traversal to settle. */

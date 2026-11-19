@@ -65,6 +65,7 @@ export interface ResourceExplorerProps<T> {
   selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
+  onRowDoubleClick?: (row: T) => void;
   /** Mutually exclusive with `pageSize` — same contract as DataTable. */
   serverPagination?: ServerPagination;
   /** Controlled sort, passed straight through — a server-paginated explorer
@@ -104,6 +105,7 @@ export default function ResourceExplorer<T>({
   selectable = true,
   selectedKeys,
   onSelectedKeysChange,
+  onRowDoubleClick,
   serverPagination,
   sortState,
   onSortChange,
@@ -188,6 +190,7 @@ export default function ResourceExplorer<T>({
             selectable={selectable}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
+            onRowDoubleClick={onRowDoubleClick}
             serverPagination={serverPagination}
             sortState={sortState}
             onSortChange={onSortChange}
