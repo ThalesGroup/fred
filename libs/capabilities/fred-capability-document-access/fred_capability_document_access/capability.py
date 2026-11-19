@@ -632,10 +632,15 @@ class DocumentAccessCapability(
             Skip purely conversational exchanges. The exception is identified
             text attachments, whose content can be read directly:
 
-            For questions about identified text attachments, prefer read_document
-            with their uids when available, following pagination as needed.
-            Use summarize_document for an overview or extract_from_document for
-            matching items. If direct reading is unavailable, disclose that limit.
+            For identified text attachments, first use read_document from offset=0.
+            If evidence is insufficient and a next offset is returned, continue
+            reading at that offset instead of searching. Answer without search
+            once evidence is sufficient; exhaustive requests and global comparisons
+            require all relevant portions. Only search for further evidence after
+            completing that reading, or when a reading tool or execution limit
+            prevents continuation. Disclose any such limit; search cannot recover
+            text discarded during ingestion. Use summarize_document for an overview
+            or extract_from_document for matching items, when available.
             Search hits are selected passages, not proof of complete coverage or
             absence. Report any truncation or incomplete reading in the answer.
 

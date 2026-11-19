@@ -27,8 +27,9 @@ Deploy Fred normally; no additional operator or user action is required.
 
 Attach a text document exceeding the ingestion limit: a notice appears on upload,
 remains in its preview after reloading, and precedes the text returned by direct
-reading. Check a factual question and a question needing later portions. A CSV
-with a shortened preview must remain queryable without a missing-data warning.
+reading. For an answer beyond the first read portion, verify that the agent
+continues with the returned offset rather than immediately switching to RAG.
+A CSV with a shortened preview must remain queryable without a missing-data warning.
 
 ## Rollback
 

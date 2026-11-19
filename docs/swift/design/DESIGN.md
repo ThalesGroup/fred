@@ -384,8 +384,14 @@ setting, since the remote path can't be exercised offline to tighten it.
 
 ### Reading conversation attachments
 
-For questions about identified text attachments, agents prefer `read_document`
-and follow its offsets as needed. The existing Knowledge Flow read path joins
+For questions about identified text attachments, agents start `read_document`
+at offset 0 and follow its returned offsets until they have enough evidence or
+reach the end of the available text. An insufficient first portion is a reason
+to continue reading, not to switch to RAG. If reading supplies the answer, no
+search is needed. Exhaustive requests and global comparisons require all
+relevant portions. Search for further evidence is a fallback after this reading,
+or when a reading tool or execution limit prevents continuation. The existing
+Knowledge Flow read path joins
 all owned stored fragments in page order; it does not select RAG hits. Summary
 and extraction tools operate on this same retained text. Search remains useful
 for locating passages, but selected hits cannot establish exhaustive coverage or
