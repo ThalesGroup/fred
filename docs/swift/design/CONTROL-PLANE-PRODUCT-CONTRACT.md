@@ -5545,9 +5545,11 @@ bounded model-call index with opaque evidence references. A snapshot read at
 registered runtime, and current consent through the segment's saved rank.
 Both services recheck access before returning content. The request can
 include links to an earlier retained invocation that first recorded a
-matching malformed tool call or wire rewrite. The lookup reads retained turns
-in bounded pages up to the selected invocation, using only observations
-allowed by the consent and execution ranks. Where a legacy observation lacks
+matching malformed tool call or wire rewrite. The lookup seeks the first
+eligible occurrence for each opaque fingerprint in the conversation's
+invalid-tool index. It stops at the selected invocation and checks both the
+consent and execution ranks. The index is maintained with retained model
+calls and cleared with their captures. Where a legacy observation lacks
 its own rank, it is eligible only in local content mode. If a match cannot be
 identified, the snapshot remains available with no earlier-turn link.
 

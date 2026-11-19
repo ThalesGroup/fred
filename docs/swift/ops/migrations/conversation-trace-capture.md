@@ -24,7 +24,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `c1a4bf6de820`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+Apply the Control Plane migrations through `3fa0e47d652c`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
 
 Revision `4eea63270bc1` adds an indexed row per explicit incident report to
 support search, expiry, and deletion through the existing session lifecycle.
@@ -38,6 +38,12 @@ Revision `c1a4bf6de820` adds nullable segment receipts to the existing capture
 catalog. Upgrade Control Plane before Fred Agents to enable independent
 pause and resume publications and the fresh runtime-binding sampling decision.
 Older clients retain the combined finalization protocol during rollout.
+
+Revision `3fa0e47d652c` builds an index of opaque invalid tool fingerprints
+from retained model calls on PostgreSQL and SQLite. Apply it before starting
+the updated Control Plane API. The PostgreSQL migration locks the trace turn
+table against concurrent writes during the backfill. After upgrade, writes from
+older Control Plane replicas also maintain the index.
 
 Deploy the Control Plane API before the updated Runtime. The new Runtime
 uses the caller's credential with the product lifecycle API for managed
@@ -73,7 +79,7 @@ writes are delayed. Verify the terminal status appears first and both timeline
 segments appear after storage recovers. A grant through the pause can read its
 evidence while the resumed segment stays masked.
 
-Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there.
+Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there. If upgrading from an earlier trace build, verify that an earlier invalid occurrence retained before the upgrade still links from a later shared call.
 
 For a shared turn with remote tool evidence, select the tool and open its HTTP tab. Verify the individual tool outcome, HTTP status, and turn outcome. Check that the raw response is readable only through consent.
 

@@ -24,6 +24,9 @@ from zipfile import ZipFile
 import httpx
 import pytest
 import yaml
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.conversation_traces import api as trace_api
@@ -37,6 +40,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
+    ConversationTraceInvalidToolRow,
     ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
@@ -56,7 +60,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import Connection, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 _ADMIN = "/admin/conversation-traces"
@@ -572,7 +576,9 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
 async def test_model_origin_searches_beyond_the_first_page_in_call_order(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
-    old_key, shared_key, future_key = ("a" * 64, "b" * 64, "c" * 64)
+    old_key, shared_key, future_key, same_key, absent_key = (
+        character * 64 for character in "abcde"
+    )
     ordinary = TraceModelIndex(
         ref=uuid4().hex,
         call_id="ordinary",
@@ -596,7 +602,14 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
             "ref": uuid4().hex,
             "call_id": "current",
             "observed_through_rank": 132,
-            "related_tools": [old_key, shared_key, future_key],
+            "related_tools": [old_key, shared_key, future_key, same_key],
+        }
+    )
+    same_turn = current.model_copy(
+        update={
+            "ref": uuid4().hex,
+            "call_id": "earlier-in-turn",
+            "observed_invalid_tools": [same_key],
         }
     )
     later = ordinary.model_copy(
@@ -607,17 +620,22 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
             "observed_invalid_tools": [future_key],
         }
     )
+    no_match = current.model_copy(
+        update={
+            "ref": uuid4().hex,
+            "observed_through_rank": 2400,
+            "related_tools": [absent_key],
+        }
+    )
+    calls_by_turn = {1: [legacy], 65: [origin], 66: [current, later], 1200: [no_match]}
 
     async with async_sessionmaker(control_plane_sql_engine).begin() as session:
         session.add(
             SessionMetadataRow(session_id="session", team_id="team", user_id="owner")
         )
-        for turn_number in range(1, 67):
-            calls = {
-                1: [legacy],
-                65: [origin],
-                66: [current, later],
-            }.get(turn_number, [ordinary])
+        await session.flush()
+        for turn_number in range(1, 1201):
+            calls = calls_by_turn.get(turn_number, [ordinary])
             session.add(
                 ConversationTraceTurnRow(
                     capture_id=str(uuid4()),
@@ -630,6 +648,21 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
                     model_calls=[call.model_dump(mode="json") for call in calls],
                 )
             )
+
+    def upgrade_legacy_schema(connection: Connection) -> None:
+        revision = ScriptDirectory(
+            str(Path(__file__).resolve().parents[1] / "alembic")
+        ).get_revision(
+            "3fa0e47d652c"  # pragma: allowlist secret
+        )
+        assert revision is not None
+        with Operations.context(MigrationContext.configure(connection)) as operations:
+            operations.drop_table(ConversationTraceInvalidToolRow.__tablename__)
+            revision.module.upgrade()
+
+    async with control_plane_sql_engine.begin() as connection:
+        await connection.run_sync(upgrade_legacy_schema)
+
     store = ConversationTraceStore(control_plane_sql_engine)
     shared = await store.model_origins("session", "turn-66", current, cutoff_rank=132)
     assert [(item.turn_number, item.call_id) for item in shared] == [(65, "origin")]
@@ -638,6 +671,37 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
         (1, "ordinary"),
         (65, "origin"),
     ]
+    assert not await store.model_origins(
+        "session", "turn-1200", no_match, cutoff_rank=2400
+    )
+
+    turn = ConversationTraceTurnRow
+    invalid = ConversationTraceInvalidToolRow
+    async with async_sessionmaker(control_plane_sql_engine).begin() as session:
+        assert await session.scalar(select(func.count()).select_from(invalid)) == 4
+        # The source write is identical for older Control Plane pods.
+        await session.execute(
+            update(turn)
+            .where(turn.exchange_id == "turn-66")
+            .values(
+                model_calls=[
+                    model.model_dump(mode="json")
+                    for model in (same_turn, current, later)
+                ]
+            )
+        )
+    shared = await store.model_origins("session", "turn-66", current, cutoff_rank=132)
+    assert [(item.turn_number, item.call_id) for item in shared] == [
+        (65, "origin"),
+        (66, "earlier-in-turn"),
+    ]
+    cutoff = await store.model_origins("session", "turn-66", current, cutoff_rank=131)
+    assert [(item.turn_number, item.call_id) for item in cutoff] == [(65, "origin")]
+
+    async with async_sessionmaker(control_plane_sql_engine).begin() as session:
+        await session.execute(delete(turn).where(turn.session_id == "session"))
+        assert await session.scalar(select(func.count()).select_from(invalid)) == 0
+    assert not await store.model_origins("session", "turn-66", current, cutoff_rank=132)
 
 
 @pytest.mark.asyncio

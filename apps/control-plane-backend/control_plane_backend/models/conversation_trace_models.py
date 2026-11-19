@@ -208,3 +208,34 @@ class ConversationTraceTurnRow(Base):
             "capture_id",
         ),
     )
+
+
+class ConversationTraceInvalidToolRow(Base):
+    __tablename__ = "conversation_trace_invalid_tool"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True
+    )
+    capture_id: Mapped[str] = mapped_column(
+        ForeignKey("conversation_trace_turn.capture_id", ondelete="CASCADE"),
+        index=True,
+    )
+    session_id: Mapped[str] = mapped_column(String(255))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    history_rank: Mapped[int] = mapped_column(Integer)
+    exchange_id: Mapped[str] = mapped_column(String(255))
+    call_order: Mapped[int] = mapped_column(Integer)
+    call_id: Mapped[str] = mapped_column(String(255))
+    observed_through_rank: Mapped[int | None] = mapped_column(Integer)
+
+    __table_args__ = (
+        Index(
+            "ix_conversation_trace_invalid_tool_first",
+            "session_id",
+            "fingerprint",
+            "history_rank",
+            "exchange_id",
+            "call_order",
+            unique=True,
+        ),
+    )

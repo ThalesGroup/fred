@@ -52,7 +52,22 @@ from fred_core.conversation_trace import (
 )
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import Select, and_, func, literal, or_, select, text, update
+from sqlalchemy import (
+    Select,
+    String,
+    and_,
+    case,
+    column,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    true,
+    tuple_,
+    update,
+    values,
+)
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer, load_only
@@ -81,6 +96,7 @@ from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
     ConversationTraceIncidentRow,
+    ConversationTraceInvalidToolRow,
     ConversationTraceSettingsRow,
     ConversationTraceTurnRow,
     TraceSegmentReceipt,
@@ -91,9 +107,7 @@ _TERMINAL_OUTCOMES = (TraceOutcome.COMPLETED, TraceOutcome.FAILED)
 _ADMISSION_DB_SECONDS = 0.75
 
 
-def _admission_owner(
-    runtime_id: str, request: TraceAdmissionRequest
-) -> Select[tuple[str]]:
+def _admission_owner(runtime_id: str, request: TraceAdmissionRequest) -> Select[str]:
     owner = SessionMetadataRow
     agent = AgentInstanceRow
     return (
@@ -959,81 +973,104 @@ class ConversationTraceStore:
         *,
         cutoff_rank: int | None,
     ) -> list[TraceModelOrigin]:
-        keys = set(call.related_tools)
+        keys = dict.fromkeys(call.related_tools)
         if not keys:
             return []
         turn = ConversationTraceTurnRow
-        current = aliased(turn)
-        anchor = (
-            select(current.history_rank)
-            .where(current.session_id == session_id, current.exchange_id == exchange_id)
-            .scalar_subquery()
+        invalid = ConversationTraceInvalidToolRow
+        rank_limit = min(
+            (
+                rank
+                for rank in (cutoff_rank, call.observed_through_rank)
+                if rank is not None
+            ),
+            default=None,
         )
-        query = (
-            select(
-                turn.exchange_id, turn.history_rank, turn.turn_number, turn.model_calls
-            )
-            .where(
-                turn.session_id == session_id,
-                turn.model_calls.is_not(None),
-                or_(
-                    turn.history_rank < anchor,
-                    and_(turn.history_rank == anchor, turn.exchange_id <= exchange_id),
-                ),
-            )
-            .order_by(turn.history_rank, turn.exchange_id)
-            .limit(64)
-        )
-        rank_limits = [
-            rank
-            for rank in (cutoff_rank, call.observed_through_rank)
-            if rank is not None
-        ]
-        rank_limit = min(rank_limits, default=None)
-        if rank_limit is not None:
-            query = query.where(turn.history_rank <= rank_limit)
-        origins: list[TraceModelOrigin] = []
-        page = query
         async with use_session(self._sessions) as session:
-            while rows := (await session.execute(page)).all():
-                for observed_exchange, rank, number, items in rows:
-                    for item in items or []:
-                        prior = TraceModelIndex.model_validate(item)
-                        if (
+            if session.get_bind().dialect.name == "postgresql":
+                entries = (
+                    func.json_array_elements(
+                        case(
                             (
-                                cutoff_rank is None
-                                or prior.observed_through_rank is not None
+                                func.json_typeof(turn.model_calls) == "array",
+                                turn.model_calls,
                             )
-                            and (
-                                rank_limit is None
-                                or prior.observed_through_rank is None
-                                or prior.observed_through_rank <= rank_limit
-                            )
-                            and keys.intersection(prior.observed_invalid_tools)
-                        ):
-                            keys.difference_update(prior.observed_invalid_tools)
-                            origins.append(
-                                TraceModelOrigin(
-                                    exchange_id=observed_exchange,
-                                    history_rank=rank,
-                                    turn_number=number,
-                                    call_id=prior.call_id,
-                                )
-                            )
-                        if not keys or (
-                            observed_exchange == exchange_id and prior.ref == call.ref
-                        ):
-                            return origins
-                exchange, rank, _, _ = rows[-1]
-                if exchange == exchange_id:
-                    break
-                page = query.where(
-                    or_(
-                        turn.history_rank > rank,
-                        and_(turn.history_rank == rank, turn.exchange_id > exchange),
+                        )
                     )
+                    .table_valued("value", with_ordinality="ordinal")
+                    .render_derived()
                 )
-        return origins
+                position = entries.c.ordinal - 1
+                ref = entries.c.value.op("->>")("ref")
+            else:
+                entries = func.json_each(turn.model_calls).table_valued("key", "value")
+                position = entries.c.key
+                ref = func.json_extract(entries.c.value, "$.ref")
+            # Read only the current turn's bounded model array to locate the call.
+            call_order = (
+                select(position)
+                .where(ref == call.ref)
+                .order_by(position)
+                .limit(1)
+                .correlate(turn)
+                .scalar_subquery()
+            )
+            anchor = (
+                select(turn.history_rank, call_order.label("call_order"))
+                .where(turn.session_id == session_id, turn.exchange_id == exchange_id)
+                .cte("trace_anchor")
+                .prefix_with("MATERIALIZED")
+            )
+            fingerprints = (
+                values(column("fingerprint", String(64)))
+                .data([(key,) for key in keys])
+                .cte("trace_fingerprints")
+            )
+            order = (invalid.history_rank, invalid.exchange_id, invalid.call_order)
+            first = (
+                select(invalid.id)
+                .where(
+                    invalid.session_id == session_id,
+                    invalid.fingerprint == fingerprints.c.fingerprint,
+                    tuple_(*order)
+                    <= tuple_(anchor.c.history_rank, exchange_id, anchor.c.call_order),
+                )
+                .order_by(*order)
+                .limit(1)
+                .correlate(anchor, fingerprints)
+            )
+            if rank_limit is not None:
+                rank_allowed = invalid.observed_through_rank <= rank_limit
+                if cutoff_rank is None:
+                    rank_allowed = or_(
+                        rank_allowed, invalid.observed_through_rank.is_(None)
+                    )
+                first = first.where(
+                    invalid.history_rank <= rank_limit,
+                    rank_allowed,
+                )
+            winners = (
+                select(first.scalar_subquery())
+                .select_from(fingerprints.join(anchor, true()))
+                .where(anchor.c.call_order.is_not(None))
+            )
+            query = (
+                select(*order, turn.turn_number, invalid.call_id)
+                .join(turn, turn.capture_id == invalid.capture_id)
+                .where(invalid.id.in_(winners))
+                .distinct()
+                .order_by(*order)
+            )
+            rows = (await session.execute(query)).all()
+        return [
+            TraceModelOrigin(
+                exchange_id=exchange,
+                history_rank=rank,
+                turn_number=number,
+                call_id=call_id,
+            )
+            for rank, exchange, _, number, call_id in rows
+        ]
 
     async def reference(self, session_id: str) -> TraceConversationReference | None:
         active = ConversationTraceConsentRow
