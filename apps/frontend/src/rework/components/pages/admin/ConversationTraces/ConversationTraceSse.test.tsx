@@ -99,14 +99,12 @@ it("hides protected SSE headers during reauthorization and after revocation", as
     await toggle(true);
     expect(host.textContent).toContain(protectedHeader);
     requests.blocked = revoked;
-    await act(async () => {
-      store.dispatch(
-        enhancedControlPlaneApi.util.invalidateTags([{ type: "ConversationTraceConsent", id: "session" }]),
-      );
-    });
+    await act(async () => window.dispatchEvent(new Event("focus")));
     expect(requests.headers).toBe(2);
     expect(host.textContent).not.toContain(protectedHeader);
     await toggle(false);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(requests.headers).toBe(2);
     await toggle(true);
     expect(requests.headers).toBe(3);
     expect(host.textContent).not.toContain(protectedHeader);

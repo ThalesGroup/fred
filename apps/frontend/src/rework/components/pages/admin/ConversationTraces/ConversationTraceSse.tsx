@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { skipToken } from "@reduxjs/toolkit/query";
+import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import Button from "@shared/atoms/Button/Button";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -243,13 +244,14 @@ function SseHeaders({
   const disclosureId = useId();
   const [{ open, opening }, setDisclosure] = useState({ open: false, opening: 0 });
   const stored = lane.stream.headers_available;
+  const canRead = open && lane.shared && stored;
   // A disclosure must wait for its own authorization, including a rapid
   // close and reopen before RTK Query has evicted the old response.
   const query = { sessionId, exchangeId, ref: lane.stream.ref, disclosure: `${disclosureId}/${opening}` };
-  const response = enhancedControlPlaneApi.useGetConversationTraceSseHeadersQuery(
-    open && lane.shared && stored ? query : skipToken,
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
-  );
+  const response = enhancedControlPlaneApi.useGetConversationTraceSseHeadersQuery(canRead ? query : skipToken, {
+    refetchOnMountOrArgChange: true,
+  });
+  useRefetchOnWindowFocus(response.refetch, !canRead);
   const headers = response.isSuccess && !response.isFetching ? response.currentData?.headers : undefined;
   return (
     <details
