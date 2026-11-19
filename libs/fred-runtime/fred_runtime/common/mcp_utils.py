@@ -126,9 +126,19 @@ def _mcp_http_client_factory(
     auth: httpx2.Auth | None = None,
     follow_redirects: bool = False,
 ) -> httpx2.AsyncClient:
+    from fred_core.portable.observability import get_tracer
+    from fred_core.technical_tracing import TechnicalTracer
+
+    from .mcp_tracing import TracedMCPClient
+
     # httpx2 counts one auth retry in redirect history even when redirects are off.
     # The MCP SDK also follows redirects itself, so reject them before it can.
-    return httpx2.AsyncClient(
+    client_class = (
+        TracedMCPClient
+        if isinstance(get_tracer(), TechnicalTracer)
+        else httpx2.AsyncClient
+    )
+    return client_class(
         headers=headers,
         auth=auth,
         timeout=timeout,

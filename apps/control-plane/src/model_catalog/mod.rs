@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Platform observations, explicit organization assignments and model policy.
-//! Deployment initializes once; admissions read current SQL facts.
+//! Deployment adds sources and seeds policies once; admissions read current SQL facts.
 
 pub mod config;
 mod discovery;

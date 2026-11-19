@@ -99,13 +99,11 @@
       "properties": {
         "applications": {
           "type": "object",
-          "maxProperties": 0,
-          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+          "description": "Legacy values are rejected by the template; applications use Control Plane SQL, and Knowledge Base publishers remain unsupported."
         },
         "knowledgeBasePublishers": {
           "type": "object",
-          "maxProperties": 0,
-          "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211)."
+          "description": "Legacy values are rejected by the template; applications use Control Plane SQL, and Knowledge Base publishers remain unsupported."
         }
       },
       "additionalProperties": false
@@ -1594,6 +1592,12 @@
                       "title": "Knowledge Flow Url",
                       "type": "string"
                     },
+                    "normalize_streamed_tool_call_ids": {
+                      "default": true,
+                      "description": "Repair malformed continuation tool-call IDs in admitted Chat Completions streams for this pod. Disable only for provider compatibility diagnosis; this does not change model permissions or affect Responses API.",
+                      "title": "Normalize Streamed Tool Call Ids",
+                      "type": "boolean"
+                    },
                     "timeout": {
                       "description": "Minimal timeout settings for outbound runtime HTTP clients.\n\nWhy this exists:\n- KF/MCP clients need consistent timeout settings across runtimes\n\nHow to use it:\n- construct with explicit connect/read values\n- call `as_httpx_timeout_config()` to feed httpx",
                       "properties": {
@@ -1652,17 +1656,43 @@
                   "additionalProperties": false
                 },
                 "observability": {
-                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+                  "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse | diagnostic\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
                   "properties": {
                     "tracer": {
-                      "description": "Distributed tracing backend for the agent pod.\n\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
+                      "description": "Distributed tracing backend for the agent pod.\n\n- diagnostic \u2014 technical spans for sampled incoming requests, via a Collector\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
                       "enum": [
+                        "diagnostic",
                         "null",
                         "logging",
                         "langfuse"
                       ],
                       "title": "TracerBackend",
                       "type": "string"
+                    },
+                    "diagnostic": {
+                      "anyOf": [
+                        {
+                          "description": "Experimental developer tracing; no conversation content or identity export.",
+                          "properties": {
+                            "collector_endpoint": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Collector Endpoint",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "title": "DiagnosticTracingConfig",
+                          "type": "object",
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
                     },
                     "kpi": {
                       "description": "KPI sink configuration shared across all Fred backends.\n\nDefaults enable Prometheus + OpenSearch (prod-ready out of the box).\nFor local dev, disable both and enable log instead:\n\n    observability:\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false",
@@ -7339,17 +7369,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -9876,17 +9906,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -12336,17 +12366,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -14780,17 +14810,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -17224,17 +17254,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -18388,6 +18418,15 @@
                     "log_level": {
                       "type": "string"
                     },
+                    "metrics_port": {
+                      "description": "Prometheus `/metrics` port on `address`, outside `base_url` and without\nauthentication: no ingress may route it. Absent disables the listener.",
+                      "format": "int32",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
                     "port": {
                       "format": "int32",
                       "minimum": 0,
@@ -18399,6 +18438,66 @@
                     "port"
                   ],
                   "type": "object"
+                },
+                "observability": {
+                  "description": "Developer-only diagnostics configured alongside the application's other YAML settings.",
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "logging"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "null"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "diagnostic": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "collector_endpoint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "type": "object"
+                        },
+                        "tracer": {
+                          "enum": [
+                            "diagnostic"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "diagnostic",
+                        "tracer"
+                      ],
+                      "type": "object"
+                    }
+                  ]
                 },
                 "platform": {
                   "additionalProperties": false,
@@ -18459,6 +18558,62 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "knowledge_bases": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "credentials": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credential_binding": {
+                                "type": "string"
+                              },
+                              "runtime_id": {
+                                "type": "string"
+                              },
+                              "space_id": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "runtime_id",
+                              "space_id",
+                              "credential_binding"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "workers": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "audience": {
+                                "type": "string"
+                              },
+                              "client_id": {
+                                "type": "string"
+                              },
+                              "issuer": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "audience",
+                              "client_id"
+                            ],
+                            "type": "object"
+                          },
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
                     },
                     "knowledge_flow_url": {
                       "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",
@@ -20804,6 +20959,15 @@
                     "log_level": {
                       "type": "string"
                     },
+                    "metrics_port": {
+                      "description": "Prometheus `/metrics` port on `address`, outside `base_url` and without\nauthentication: no ingress may route it. Absent disables the listener.",
+                      "format": "int32",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
                     "port": {
                       "format": "int32",
                       "minimum": 0,
@@ -20815,6 +20979,66 @@
                     "port"
                   ],
                   "type": "object"
+                },
+                "observability": {
+                  "description": "Developer-only diagnostics configured alongside the application's other YAML settings.",
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "logging"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "tracer": {
+                          "enum": [
+                            "null"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tracer"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "diagnostic": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "collector_endpoint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "collector_endpoint"
+                          ],
+                          "type": "object"
+                        },
+                        "tracer": {
+                          "enum": [
+                            "diagnostic"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "diagnostic",
+                        "tracer"
+                      ],
+                      "type": "object"
+                    }
+                  ]
                 },
                 "platform": {
                   "additionalProperties": false,
@@ -20875,6 +21099,62 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "knowledge_bases": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "credentials": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credential_binding": {
+                                "type": "string"
+                              },
+                              "runtime_id": {
+                                "type": "string"
+                              },
+                              "space_id": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "runtime_id",
+                              "space_id",
+                              "credential_binding"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "workers": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "audience": {
+                                "type": "string"
+                              },
+                              "client_id": {
+                                "type": "string"
+                              },
+                              "issuer": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "audience",
+                              "client_id"
+                            ],
+                            "type": "object"
+                          },
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
                     },
                     "knowledge_flow_url": {
                       "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",

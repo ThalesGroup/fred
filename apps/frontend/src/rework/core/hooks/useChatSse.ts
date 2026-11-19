@@ -691,8 +691,6 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            // No token figure here (#2403): a tool call costs nothing by
-            // itself, and the row deliberately shows latency only.
           });
           break;
         }
@@ -851,7 +849,7 @@ export function useChatSse(
         }
 
         case "node_error": {
-          onError?.(`Agent error in ${event.routed_to}/${event.node_id}: ${event.error_message}`);
+          onError?.(event.error_message);
           break;
         }
 
@@ -913,7 +911,8 @@ export function useChatSse(
         case "execution_error": {
           turn.completed = false;
           turn.awaitingInput = false;
-          console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
+          const message = event.message ?? i18n.t("rework.chatTrace.failure.unexpected");
+          console.error(`[useChatSse] execution_error received — ${message}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughts.entries()) {
             emit({
@@ -937,9 +936,8 @@ export function useChatSse(
           }
           thoughts.clear();
           // Persist the crash in the chain of thought as an error entry (not
-          // just the transient toast): a trailing error row whose raw message is
-          // browsable in the trace drawer. The toast still fires for the
-          // immediate signal.
+          // just the transient toast), marked like the runtime's stored row:
+          // the platform wrote the sentence, so the trace shows it verbatim.
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
@@ -947,9 +945,14 @@ export function useChatSse(
             timestamp: ts,
             role: "assistant",
             channel: "error",
-            parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
+            parts: [{ type: "text", text: message }],
+            metadata: { extras: { platform_written: true } },
           });
-          onError?.(event.message ?? "Agent execution error");
+          // The runtime stores a failed turn like a completed one. Without this
+          // signal a conversation whose first turn fails stays "locally
+          // creating": it is never re-prepared, so sending stays blocked.
+          onTurnPersisted?.(sessionId);
+          onError?.(message);
           break;
         }
 

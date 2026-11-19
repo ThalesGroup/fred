@@ -19,6 +19,8 @@ dependencies = [
   "langchain-core>=1.6.5",
   "langgraph>=1.2.12",
   "langfuse>=3.0.0",
+  "opentelemetry-sdk>=1.39,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
   "requests>=2.32,<3",
   "PyYAML>=6.0",
   # multipart form parsing for /agents/capabilities/{id}/validate-config (#1974)

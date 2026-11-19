@@ -5,7 +5,7 @@ use super::{
     models::*,
     store::{self, Generation, generations, row},
 };
-use crate::{documents, error::AppResult, onboarding};
+use crate::error::AppResult;
 use chrono::Utc;
 
 impl Processing {
@@ -50,7 +50,6 @@ impl Processing {
         }
         let planned = generation.chunks as u32;
         if commit.stage == Stage::Indexing {
-            let document = crate::db::pipeline_document(&self.pool, r.summary.document_id).await?;
             let names: std::collections::HashSet<&str> =
                 manifest.artifacts.iter().map(|a| a.path.as_str()).collect();
             if manifest.vectors > i64::from(planned)
@@ -62,12 +61,7 @@ impl Processing {
             {
                 return Err(invalid());
             }
-            let extension = document
-                .name
-                .rsplit('.')
-                .next()
-                .unwrap_or("")
-                .to_lowercase();
+            let extension = r.name.rsplit('.').next().unwrap_or("").to_lowercase();
             if matches!(extension.as_str(), "csv" | "xlsx" | "xls" | "xlsm")
                 && (manifest.rows.is_none()
                     || (extension != "csv" && !names.contains("tables.json")))
@@ -89,11 +83,7 @@ impl Processing {
             None
         };
         let mut tx = if commit.stage == Stage::Indexing {
-            let mut tx =
-                documents::authorized_mutation(&self.pool, &r.actor, r.space_id, r.session_id)
-                    .await?;
-            onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &r.actor).await?;
-            tx
+            self.writer(&r).await?
         } else {
             self.pool.begin().await?
         };
@@ -136,8 +126,15 @@ impl Processing {
             sqlx::query("update document_processing set status='succeeded',stage='done',error_code=null,revision=revision+1,completed_at=clock_timestamp() where id=$1")
                 .bind(r.summary.id).execute(&mut *tx).await?;
             // The database runs local and organization used-byte accounting.
-            sqlx::query("update document set published_generation=$2,retrievable=case when retrieval_id is null then $3 else retrievable end where id=$1")
-                .bind(r.summary.document_id).bind(g.id).bind(value).execute(&mut *tx).await?;
+            let changed = sqlx::query("update document set current_content_id=$4,published_generation=$2,retrievable=case when $6::uuid is null and retrieval_id is null then $3 else retrievable end where id=$1 and deletion_id is null and not retrievable_pending and current_content_id=$5 and published_generation is not distinct from $6")
+                .bind(r.summary.document_id).bind(g.id).bind(value).bind(current.content_id)
+                .bind(current.expected_content_id).bind(current.expected_generation_id)
+                .execute(&mut *tx).await?.rows_affected();
+            if changed != 1 {
+                return Err(conflict("stale_generation"));
+            }
+            sqlx::query("update kb_source_document set current_version=pending_version where pending_processing_id=$1 and document_id=$2")
+                .bind(r.summary.id).bind(r.summary.document_id).execute(&mut *tx).await?;
         } else {
             sqlx::query("update document_processing set revision=revision+1 where id=$1")
                 .bind(r.summary.id)

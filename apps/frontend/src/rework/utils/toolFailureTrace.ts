@@ -19,9 +19,10 @@ import {
   toolResultContent,
   toolResultFailure,
   toolSlug,
+  textOf,
   type TraceEntry,
 } from "./traceUtils";
-import { tabularToolKind } from "./tabularTrace";
+import { isTabularQueryTool, tabularToolKind } from "./tabularTrace";
 import { isLocalExchangeId } from "../core/hooks/chatSseUtils";
 
 const ARGUMENTS: Record<string, string[]> = {
@@ -55,17 +56,18 @@ function displayArgument(value: unknown, budget = { remaining: 20000 }): unknown
   return value === null || typeof value === "number" || typeof value === "boolean" ? value : "[invalid argument type]";
 }
 
-/** Project the recorded failure code, business arguments and safe diagnoses.
+/** Project the recorded failure, business arguments and safe diagnoses.
  *
- * The message comes only from `failure.code`; the result text guides the model
- * and never classifies the failure. It is shown only where its producer owns it.
+ * The runtime writes the person's sentence (`failure.message`); rows stored
+ * before it have none. The result text guides the model and never classifies
+ * the failure. It is shown only where its producer owns it.
  */
 export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>) {
   const failure = entry.result ? toolResultFailure(entry.result) : null;
   if (!entry.result || !failure) return null;
   const name = toolName(entry.call);
   const slug = toolSlug(name);
-  const query = /^(?:mcp__knowledge_flow__)?query_tabular_documents(?:_\d+)?$/.test(name);
+  const query = isTabularQueryTool(name);
   const tabular = query || tabularToolKind(name) !== null;
   const conversationFile = ["read_conversation_file", "publish_conversation_file"].includes(name);
   const args = toolArgs(entry.call);
@@ -73,20 +75,23 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const displayed =
     tabular || conversationFile
       ? Object.fromEntries(
-          (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
+          (ARGUMENTS[slug] ?? [])
+            .filter((key) => key in args)
+            .map((key) => [
+              key,
+              displayArgument(
+                args[key],
+                key === "sql" && typeof args[key] === "string" ? { remaining: Infinity } : budget,
+              ),
+            ]),
         )
       : null;
   const sqlFailure = query ? asFailedSqlQueryResult(entry) : null;
   // A refusal by the person is a decision, not an incident to report.
   const declined = failure.code === "not_approved";
-  // Knowledge Flow named the component at fault: the message says which, and
-  // that the request is not the cause.
-  const origin =
-    failure.origin && (failure.code === "misconfigured" || failure.code === "service_busy") ? failure.origin : null;
   return {
     arguments: displayed,
-    errorKey: origin ? `rework.chatTrace.failure.platform.${failure.code}` : `rework.chatTrace.failure.${failure.code}`,
-    originKey: origin ? `rework.chatTrace.failure.origin.${origin}` : null,
+    message: failure.message ?? null,
     setting: failure.setting ?? null,
     status: failure.status ?? null,
     declined,
@@ -104,10 +109,10 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
 
 export type ToolFailureDetail = NonNullable<ReturnType<typeof toolFailureDetail>>;
 
-/** Current runtime failures carry a safe explanation and a server diagnostic reference.
- * Older provider dumps must not become visible when expanding inline errors. */
-export function executionFailureText(text: string): string | null {
-  return /^[^\r\n]+ Contact support with reference [a-f0-9]{32}\.$/.test(text.trim())
-    ? String(displayArgument(text.trim()))
+/** The person's sentence of an execution error, shown verbatim. The platform
+ * marks the rows it writes; an older row may hold a raw provider dump. */
+export function executionFailureText(entry: TraceEntry): string | null {
+  return entry.kind === "solo" && entry.message.metadata?.extras?.platform_written === true
+    ? textOf(entry.message)
     : null;
 }

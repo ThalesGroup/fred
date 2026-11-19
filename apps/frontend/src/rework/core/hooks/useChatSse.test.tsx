@@ -165,6 +165,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSessionTitle: (sessionId) => onSessionTitleMock(sessionId),
+    onTurnPersisted: (sessionId) => onTurnPersistedMock(sessionId),
     onBackgroundTurnSettled: (sessionId, messages) => onBackgroundTurnSettledMock(sessionId, messages),
     isTurnCurrent,
     isExecutionAllowed,
@@ -183,6 +184,7 @@ const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
 const onBackgroundTurnSettledMock = vi.fn();
 const onSessionTitleMock = vi.fn();
+const onTurnPersistedMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -211,6 +213,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onAwaitingHumanMock.mockClear();
     onBackgroundTurnSettledMock.mockClear();
     onSessionTitleMock.mockClear();
+    onTurnPersistedMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -626,7 +629,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       {
         kind: "tool_result",
         call_id: "failed-call",
-        failure: { code: "authentication_required", status: 401 },
+        failure: { code: "authentication_required", status: 401, message: "Authentication was refused." },
         content: "Authentication must be restored before retrying.",
       },
       { kind: "tool_result", call_id: "successful-call", content: "[]" },
@@ -648,7 +651,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(live).toHaveLength(2);
     expect(live[0]).toMatchObject({
       arguments: { document_uids: ["bad-id"] },
-      errorKey: "rework.chatTrace.failure.authentication_required",
+      message: "Authentication was refused.",
       status: 401,
     });
     expect(live[1]).toBeNull();
@@ -987,6 +990,38 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       streamController.close();
       await sendPromise;
     });
+    fetchSpy.mockRestore();
+  });
+
+  it("ignores retired tool attribution while retaining conversation usage", async () => {
+    const usage = { input_tokens: 20672, output_tokens: 679, model_call_id: "response-1", tool_call_count: 2 };
+    const events = [
+      { kind: "tool_call", call_id: "c1", tool_name: "read_query", model_call_usage: usage },
+      { kind: "tool_result", call_id: "c1", content: "done" },
+      {
+        kind: "final",
+        content: "done",
+        model_call_usage: { input_tokens: 103991, output_tokens: 2956, tool_call_count: 0 },
+        token_usage: { input_tokens: 100, output_tokens: 7, total_tokens: 107 },
+        context_tokens: 100,
+      },
+    ];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200 }),
+      );
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    const call = latest.messages.find((message) => message.channel === "tool_call");
+    expect(call?.metadata?.model_call_usage).toBeUndefined();
+    expect(call?.metadata?.token_usage).toBeUndefined();
+    const final = latest.messages.find((message) => message.role === "assistant" && message.channel === "final");
+    expect(final?.metadata?.model_call_usage).toBeUndefined();
+    expect(final?.metadata?.token_usage?.total_tokens).toBe(107);
+    expect(final?.metadata?.context_tokens).toBe(100);
     fetchSpy.mockRestore();
   });
 
@@ -2587,7 +2622,58 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       fetchSpy.mockRestore();
     });
 
+    it.each([
+      [
+        "the runtime's sentence verbatim",
+        "Le fournisseur du modèle est injoignable.",
+        "Le fournisseur du modèle est injoignable.",
+      ],
+      ["the translated fallback without one", undefined, "rework.chatTrace.failure.unexpected:"],
+    ])("reports an execution error with %s", async (_case, message, expected) => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      await act(async () => {
+        stream.push({ kind: "execution_error", message });
+        stream.close();
+        await sendPromise;
+      });
+      expect(onErrorMock).toHaveBeenCalledExactlyOnceWith(expected);
+      expect(latest.messages[latest.messages.length - 1]).toMatchObject({
+        channel: "error",
+        parts: [{ type: "text", text: expected }],
+        metadata: { extras: { platform_written: true } },
+      });
+      fetchSpy.mockRestore();
+    });
+
+    it("reports a node error with the runtime's sentence verbatim", async () => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      const sentence = "L'agent a rencontré une erreur interne en traitant votre demande.";
+      await act(async () => {
+        stream.push({ kind: "node_error", node_id: "fetch", routed_to: "finalize", error_message: sentence });
+        stream.close();
+        await sendPromise;
+      });
+      expect(onErrorMock).toHaveBeenCalledExactlyOnceWith(sentence);
+      fetchSpy.mockRestore();
+    });
+
     const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
+
+    // A new conversation stays "locally creating" until its first turn is
+    // stored; a failed first turn is stored too, or the page never re-prepares.
+    it.each(["final", "execution_error"])("reports the turn as stored when it ends (%s)", async (outcome) => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      await act(async () => {
+        stream.push({ kind: outcome, content: "finished", message: "failed" });
+        stream.close();
+        await sendPromise;
+      });
+      expect(onTurnPersistedMock).toHaveBeenCalledExactlyOnceWith("session-1");
+      fetchSpy.mockRestore();
+    });
 
     it.each(["final", "execution_error", "EOF", "cancel", "cut_after_final", "error_after_final"])(
       "marks only a completed background answer ready (%s)",

@@ -176,12 +176,14 @@ func (c *swiftConversation) Execute(ctx context.Context) result {
 	}
 	return runOverOpenConn(ctx, c.conn, c.adapter.cfg, c.sessionID)
 }
-func (c *swiftConversation) Close() {
+func (c *swiftConversation) Close() { c.closeContext(context.Background()) }
+
+func (c *swiftConversation) closeContext(parent context.Context) {
 	if c.conn != nil {
 		_ = c.conn.Close(websocket.StatusNormalClosure, "done")
 	}
 	if c.created && c.adapter.cfg.DeleteSession {
-		ctx, cancel := context.WithTimeout(context.Background(), c.adapter.cfg.Timeout)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), c.adapter.cfg.Timeout)
 		defer cancel()
 		c.created = false
 		if c.adapter.cfg.Protocol == "sse" {
@@ -212,6 +214,7 @@ func executeSwiftSSE(ctx context.Context, client *http.Client, cfg config, sessi
 		return result{Err: err, Measurement: turnMeasurement{StartedAt: start}}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	injectTurnTrace(req)
 	req.Header.Set("Accept", "text/event-stream")
 	if cfg.Token != "" && !cfg.TokenInQuery {
 		req.Header.Set("Authorization", "Bearer "+cfg.Token)

@@ -233,6 +233,30 @@ describe("ThoughtTrace", () => {
     });
   });
 
+  describe("an execution error", () => {
+    const error = (text: string, marked: boolean) =>
+      msg({
+        channel: "error",
+        parts: [{ type: "text", text }],
+        ...(marked ? { metadata: { extras: { platform_written: true } } } : {}),
+      });
+
+    it.each([
+      "Le fournisseur du modèle est injoignable (modèle gpt-4o, HTTP 503). Réessayez dans un instant.",
+      "The model provider could not be reached. Please try again in a moment.",
+    ])("shows the platform's sentence verbatim: %s", (sentence) => {
+      const html = render([error(sentence, true)], false);
+      expect(html).toContain(sentence.replace(/'/g, "&#x27;"));
+      expect(html).not.toContain("rework.chatTrace.failure.unexpected");
+    });
+
+    it("hides the raw provider dump of an older row", () => {
+      const html = render([error("openai.APIError: 500 {'error': 'upstream secret'}", false)], false);
+      expect(html).toContain("rework.chatTrace.failure.unexpected");
+      expect(html).not.toContain("upstream secret");
+    });
+  });
+
   it("collapses to the summary line alone once the turn is done", () => {
     const html = render(TRACE, true);
     expect(html).not.toContain("rework.chatTrace.phase.planning");

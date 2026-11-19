@@ -1115,7 +1115,7 @@ def test_delete_session_filesystem_rejects_a_different_session_owner(
     )
     app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
     history_store = AsyncMock()
-    history_store.session_belongs_to_user = AsyncMock(return_value=False)
+    history_store.session_ownership = AsyncMock(return_value=False)
 
     with TestClient(app) as client:
         current = get_runtime_context().config
@@ -1134,9 +1134,7 @@ def test_delete_session_filesystem_rejects_a_different_session_owner(
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Access denied."}
-    history_store.session_belongs_to_user.assert_awaited_once_with(
-        "session-bob", "alice"
-    )
+    history_store.session_ownership.assert_awaited_once_with("session-bob", "alice")
 
 
 def test_delete_session_filesystem_reports_storage_failures(
@@ -5499,17 +5497,14 @@ def test_a_team_or_personal_alias_cannot_replace_a_canonical_space(team):
 
 
 class _FakeHistoryStore:
-    """session_exists / session_belongs_to_user oracle for F-C tests."""
+    """session_ownership oracle for F-C tests."""
 
     def __init__(self, *, exists: bool, owner: str | None) -> None:
         self._exists = exists
         self._owner = owner
 
-    async def session_exists(self, session_id: str) -> bool:
-        return self._exists
-
-    async def session_belongs_to_user(self, session_id: str, user_id: str) -> bool:
-        return self._owner is not None and user_id == self._owner
+    async def session_ownership(self, session_id: str, user_id: str) -> bool | None:
+        return user_id == self._owner if self._exists else None
 
 
 def _wire_history(monkeypatch, store: object) -> None:

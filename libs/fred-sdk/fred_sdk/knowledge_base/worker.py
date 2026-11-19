@@ -29,6 +29,7 @@ import logging
 
 from temporalio import activity
 from temporalio.client import Client
+from temporalio.exceptions import ApplicationError
 from temporalio.runtime import (
     LogForwardingConfig,
     LoggingConfig,
@@ -47,11 +48,17 @@ from fred_sdk.knowledge_base._workflow import (
     SYNCHRONIZE_ACTIVITY,
     SynchronizeInput,
     SynchronizeWorkflow,
+    WeaverSynchronizeWorkflow,
 )
 from fred_sdk.knowledge_base.client import ControlPlaneClient
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import declare_library_synchronized
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
+from fred_sdk.knowledge_base.models import (
+    KnowledgeBaseReconciliation,
+    KnowledgeBaseRunOutcome,
+    KnowledgeBaseSyncResult,
+)
 from fred_sdk.knowledge_base.routing import task_queue_for
 
 logger = logging.getLogger(__name__)
@@ -150,6 +157,45 @@ def _build_activity(
     return synchronize
 
 
+def _build_weaver_activity(
+    knowledge_base: KnowledgeBase, control_plane: ControlPlaneClient
+):
+    handler = knowledge_base.resolve_handler()
+
+    @activity.defn(name="fred_weaver_knowledge_base_synchronize")
+    async def synchronize(run_id: str) -> str:
+        with telemetry.observing_run() as run:
+            try:
+                context = await control_plane.claim_run(run_id)
+            except Exception:
+                raise ApplicationError("Knowledge Base admission unavailable") from None
+            if isinstance(context, KnowledgeBaseRunOutcome):
+                return context.value
+            try:
+                if context.definition_id != knowledge_base.id:
+                    raise ValueError("Unexpected Knowledge Base definition")
+                run.stage = "handler"
+                result = await handler(context)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # SDK/source exceptions can embed credentials; never serialize
+                # them in Temporal history or the Control Plane result.
+                result = KnowledgeBaseSyncResult(
+                    outcome=KnowledgeBaseRunOutcome.failed,
+                    reconciliation=KnowledgeBaseReconciliation.partial,
+                )
+            run.result = result
+            run.stage = "complete"
+            try:
+                await control_plane.complete_run(run_id, result)
+            except Exception:
+                raise ApplicationError("Knowledge Base result unavailable") from None
+            return result.outcome.value
+
+    return synchronize
+
+
 async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) -> None:
     """Poll this definition's queue until the process is stopped."""
     task_queue = task_queue_for(knowledge_base.id)
@@ -163,11 +209,19 @@ async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) 
     control_plane = ControlPlaneClient(configuration)
     logger.info("Knowledge Base %s serving runs on %s", knowledge_base.id, task_queue)
     try:
+        if configuration.knowledge_base.protocol == "weaver":
+            admission = await control_plane.worker_configuration(knowledge_base.id)
+            task_queue = admission["task_queue"]
+            workflows = [WeaverSynchronizeWorkflow]
+            activities = [_build_weaver_activity(knowledge_base, control_plane)]
+        else:
+            workflows = [SynchronizeWorkflow]
+            activities = [_build_activity(knowledge_base, control_plane, configuration)]
         async with Worker(
             client,
             task_queue=task_queue,
-            workflows=[SynchronizeWorkflow],
-            activities=[_build_activity(knowledge_base, control_plane, configuration)],
+            workflows=workflows,
+            activities=activities,
             workflow_runner=build_workflow_runner(),
         ):
             await asyncio.Event().wait()

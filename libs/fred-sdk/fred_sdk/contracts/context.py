@@ -42,6 +42,7 @@ from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional
 from urllib.parse import urlsplit
 
+from fred_core.history.history_schema import FailureReason as FailureReason
 from fred_core.history.history_schema import ToolFailure as ToolFailure
 from fred_core.history.history_schema import ToolFailureCode as ToolFailureCode
 from fred_core.model.models import ModelProvider

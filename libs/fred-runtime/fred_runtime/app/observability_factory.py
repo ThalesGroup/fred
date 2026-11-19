@@ -84,7 +84,7 @@ def bootstrap_observability(
     set_metrics_provider(metrics)
     logger.info(
         "observability ready — tracer=%s prometheus=%s",
-        config.tracer.value,
+        type(tracer).__name__,
         config.kpi.prometheus.enabled,
     )
 
@@ -95,6 +95,11 @@ def bootstrap_observability(
 
 
 def _build_tracer(config: PodObservabilityConfig) -> Tracer:
+    if config.tracer == TracerBackend.diagnostic:
+        from .technical_tracing import OTLPTracer
+
+        assert config.diagnostic is not None  # validated by PodObservabilityConfig
+        return OTLPTracer(collector_endpoint=str(config.diagnostic.collector_endpoint))
     if config.tracer == TracerBackend.null:
         return Tracer()
     if config.tracer == TracerBackend.logging:

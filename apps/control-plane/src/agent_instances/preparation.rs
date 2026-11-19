@@ -80,10 +80,6 @@ pub struct PreparationModels {
     #[schema(required = true)]
     pub fallback: Option<ModelOfferKey>,
     pub options: ModelOptions,
-    /// A retained diagnostic only, never a selectable profile.
-    #[schema(required = true)]
-    pub legacy_profile_id: Option<String>,
-    pub requires_reselection: bool,
     pub offers: Vec<PreparationModelOffer>,
 }
 
@@ -94,8 +90,6 @@ impl From<RuntimeModels> for PreparationModels {
             default: models.default,
             fallback: models.policy.fallback,
             options: models.options,
-            legacy_profile_id: models.legacy_profile_id,
-            requires_reselection: models.requires_reselection,
             offers: models
                 .offers
                 .into_iter()
@@ -236,7 +230,7 @@ async fn prepare_execution(
     nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
 ) -> AppResult<impl IntoResponse> {
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    super::http::require_instance_space(space.kind)?;
+    super::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&s.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -297,7 +291,7 @@ async fn prepare_execution(
     let selected = require_available_capabilities(&current.tuning.0, &template)?;
     let policy = enablement::Policy::load_for_space(&mut *tx, &space).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
-    let supports_skills = !embedded && matches!(template.category.as_str(), "react" | "deep");
+    let supports_skills = super::supports_skills(&template);
     let skills = if supports_skills {
         Some(
             crate::skills::resolve(&mut tx, &user.uid, &space, false)
@@ -329,18 +323,28 @@ async fn prepare_execution(
         headers.get(header::AUTHORIZATION),
     )
     .await;
+    let platform_control = |widget: &str, default: bool| ChatControlDescriptor {
+        capability_id: "platform".into(),
+        widget: widget.into(),
+        params: Some(std::collections::BTreeMap::from([(
+            "default".into(),
+            serde_json::json!(default),
+        )])),
+    };
     if models.offers.iter().any(|offer| offer.reasoning_enabled) {
-        chat_controls.push(ChatControlDescriptor {
-            capability_id: "platform".into(),
-            widget: "reasoning_toggle".into(),
-            params: Some(std::collections::BTreeMap::from([(
-                "default".into(),
-                serde_json::json!(models.offers.iter().any(|offer| {
-                    Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
-                        && offer.reasoning_default_on
-                })),
-            )])),
-        });
+        chat_controls.push(platform_control(
+            "reasoning_toggle",
+            models.offers.iter().any(|offer| {
+                Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
+                    && offer.reasoning_default_on
+            }),
+        ));
+    }
+    // A question needs the HITL resume path; without it no control is sent and
+    // the runtime does not mount ask_user.
+    let supports_hitl = !embedded && template.supports_hitl;
+    if supports_hitl {
+        chat_controls.push(platform_control("ask_user_toggle", true));
     }
     let result = ExecutionPreparation {
         agent_configuration_revision: current.configuration_revision,
@@ -352,7 +356,7 @@ async fn prepare_execution(
         execute_stream_url: format!("{base}/agents/execute/stream"),
         messages_url_template: Some(format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
-        supports_hitl: !embedded && template.supports_hitl,
+        supports_hitl,
         supports_ui_parts: !embedded,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,

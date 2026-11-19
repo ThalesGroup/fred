@@ -119,6 +119,7 @@ where
     S: FnOnce(String) -> F + Send + 'static,
     F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
 {
+    let (model_name, turn_started) = (turn.model_name().to_owned(), Instant::now());
     let events = async_stream::try_stream! {
         yield RuntimeEvent::Status {
             sequence: 0,
@@ -259,7 +260,26 @@ where
         }
     })
     .enumerate()
-    .map(|(index, event)| event.with_sequence(index as u64 + 1))
+    .map(move |(index, event)| {
+        // The turn's one measure, at its terminal event: a dropped stream records none.
+        let finish_reason = match &event {
+            RuntimeEvent::Final { finish_reason, .. } => Some(*finish_reason),
+            RuntimeEvent::Error { .. } => Some("error"),
+            _ => None,
+        };
+        if let Some(finish_reason) = finish_reason {
+            let provider = crate::DEFINITION.provider;
+            fred_rust_sdk::metrics::turn(
+                provider,
+                provider,
+                crate::AGENT_ID,
+                &model_name,
+                finish_reason,
+                turn_started.elapsed(),
+            );
+        }
+        event.with_sequence(index as u64 + 1)
+    })
 }
 
 #[cfg(test)]
@@ -517,6 +537,20 @@ mod tests {
         .collect()
         .await;
         assert_eq!(kinds(&events), ["status", "execution_error"]);
+        // Both turns reach the dashboards' series under Ralph's names.
+        let scraped = fred_rust_sdk::metrics::render().unwrap();
+        for finish_reason in ["stop", "error"] {
+            let turn = format!(
+                r#"agent_turn_completed_count{{finish_reason="{finish_reason}",model_name="model",runtime_id="control-plane",service="control-plane",template_agent_id="fred.github.ralph"}}"#
+            );
+            assert!(scraped.contains(&turn), "{turn} missing from:\n{scraped}");
+        }
+        for status in ["ok", "error"] {
+            let call = format!(
+                r#"llm_call_latency_ms_count{{model_name="model",service="control-plane",status="{status}"}}"#
+            );
+            assert!(scraped.contains(&call), "{call} missing from:\n{scraped}");
+        }
     }
 
     #[tokio::test]

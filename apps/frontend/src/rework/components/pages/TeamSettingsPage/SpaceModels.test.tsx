@@ -44,7 +44,6 @@ beforeEach(() => {
     models: {
       default: a,
       recommendation: null,
-      requires_reselection: false,
       reasoning_default_on: [a],
       options: {},
       policy: { organization_id: "org", revision: 2, permitted: [b], reasoning_enabled: [b], embedding_locked: false },

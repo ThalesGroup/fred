@@ -35,6 +35,7 @@ dependencies = [
     "sqlalchemy>=2.0.42",
     "sqlparse>=0.6.0",
     "httpx>=0.28.1",
+    "opentelemetry-api>=1.39,<2",
     "langchain-core>=1.6.5",
     "langchain-google-genai>=4.2.1",
     "langchain-ollama>=1.0.1",

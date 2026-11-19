@@ -129,7 +129,8 @@ class TracingKpiMiddleware(AgentMiddleware):
         self._tracer = tracer
         self._kpi = kpi
         self._binding = binding
-        self._role = "child" if role == "child" else "root"
+        # Closed `llm_role` label; "title" is the conversation-title call.
+        self._role = role if role in ("child", "title") else "root"
 
     async def awrap_model_call(
         self,
@@ -286,6 +287,8 @@ class TracingKpiMiddleware(AgentMiddleware):
             if span is not None:
                 with suppress(Exception):
                     for key, value in fields.items():
+                        if key in {"provider_error_name", "x_correlation_id"}:
+                            continue
                         if key == "model_name" and response_model_name is not None:
                             value = response_model_name
                         span.set_attribute(key, value)

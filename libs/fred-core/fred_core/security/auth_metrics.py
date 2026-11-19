@@ -4,6 +4,8 @@
 
 from prometheus_client import Counter, Histogram
 
+from fred_core.technical_tracing import record_timed_operation
+
 M2M_CACHE = Counter(
     "fred_auth_m2m_cache", "Workload token cache decisions", ["outcome"]
 )
@@ -27,6 +29,13 @@ DELEGATION = Counter(
 
 
 def observe_m2m(event: str, outcome: str, seconds: float) -> None:
+    operation = {
+        "acquire": "auth.m2m.acquire",
+        "request_initial": "iam.token.initial",
+        "request_renewal": "iam.token.renewal",
+    }.get(event)
+    if operation is not None:
+        record_timed_operation(operation, seconds, outcome)
     if event == "cache" and outcome in {"hit", "miss", "shared_refresh"}:
         M2M_CACHE.labels(outcome).inc()
     elif outcome in {"success", "error", "cancelled"}:

@@ -25,6 +25,8 @@ import type { TraceEntry } from "../../../../utils/traceUtils";
  */
 export interface TraceDrawerApi {
   openTrace: (entry: TraceEntry) => void;
+  /** The conversation's entries, so a row names what earlier steps found. */
+  entries?: TraceEntry[];
 }
 
 const TraceDrawerContext = createContext<TraceDrawerApi>({ openTrace: () => {} });

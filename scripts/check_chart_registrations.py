@@ -17,9 +17,8 @@
 #   "pyyaml>=6.0",
 # ]
 # ///
-"""Check the Rust chart's explicit rejection of unsupported registrations.
+"""Check that Helm cannot compete with the SQL application registry.
 
-Upstream composition scenarios are preserved in commit 4d8f1d285 (#3211).
 Usage: check_chart_registrations.py <chart dir>.
 """
 
@@ -56,7 +55,9 @@ def publishers(**entries: object) -> dict:
 
 
 class ChartRegistrationTests(unittest.TestCase):
-    def helm(self, *files: dict, skip_schema: bool = False) -> subprocess.CompletedProcess:
+    def helm(
+        self, *files: dict, skip_schema: bool = False
+    ) -> subprocess.CompletedProcess:
         with tempfile.TemporaryDirectory() as work:
             command = ["helm", "template", "fred", str(CHART)]
             if skip_schema:
@@ -84,13 +85,14 @@ class ChartRegistrationTests(unittest.TestCase):
             if d["kind"] == "Deployment" and d["metadata"]["name"] == "frontend"
         )
         env = frontend["spec"]["template"]["spec"]["containers"][0]["env"]
-        gateway = [e["value"] for e in env if e["name"] == "FRONTEND_APPLICATIONS_JSON"]
-        self.assertEqual(
-            len(gateway), 1, "FRONTEND_APPLICATIONS_JSON must be set exactly once"
+        self.assertFalse(
+            {"FRONTEND_APPLICATIONS_JSON", "FRONTEND_ENABLE_APPLICATIONS"}
+            & {entry["name"] for entry in env}
         )
-        return yaml.safe_load(config_map["data"]["configuration.yaml"]), json.loads(
-            gateway[0]
+        self.assertTrue(
+            any(entry["name"] == "FRONTEND_CONTROL_PLANE_UPSTREAM" for entry in env)
         )
+        return yaml.safe_load(config_map["data"]["configuration.yaml"]), env
 
     def refused(self, values: dict, message: str) -> None:
         result = self.helm(values)
@@ -98,10 +100,9 @@ class ChartRegistrationTests(unittest.TestCase):
         self.assertIn(message, result.stderr)
 
     def test_default_registers_nothing(self):
-        configuration, gateway = self.render()
+        configuration, _ = self.render()
         self.assertNotIn("platform", configuration)
         self.assertNotIn("knowledge_bases", configuration)
-        self.assertEqual(gateway, [])
 
     def test_nonempty_registrations_are_refused(self):
         for values, field in (
@@ -112,7 +113,7 @@ class ChartRegistrationTests(unittest.TestCase):
                 self.refused(values, field)
                 result = self.helm(values, skip_schema=True)
                 self.assertNotEqual(result.returncode, 0, result.stdout)
-                self.assertIn("Non-empty registrations are not supported", result.stderr)
+                self.assertIn(field, result.stderr)
 
     def test_former_values_are_refused(self):
         control_plane = {
@@ -126,6 +127,14 @@ class ChartRegistrationTests(unittest.TestCase):
         configuration.pop("platform")
         configuration["knowledge_bases"] = {"publishers": []}
         self.refused(control_plane, "knowledge_bases")
+        configuration["platform"] = {
+            "frontend": {"feature_flags": {"enableApplications": True}}
+        }
+        configuration.pop("knowledge_bases")
+        self.refused(control_plane, "frontend")
+        result = self.helm(control_plane, skip_schema=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Admin > Applications", result.stderr)
         for key in ("env", "extraEnvVars"):
             with self.subTest(key=key):
                 frontend = {
@@ -135,7 +144,11 @@ class ChartRegistrationTests(unittest.TestCase):
                         }
                     }
                 }
-                self.refused(frontend, "registrations.applications.<app_id>.gateway")
+                self.refused(frontend, "Admin > Applications")
+                frontend["applications"]["frontend"][key][0]["name"] = (
+                    "FRONTEND_ENABLE_APPLICATIONS"
+                )
+                self.refused(frontend, "Admin > Applications")
 
 
 if __name__ == "__main__":

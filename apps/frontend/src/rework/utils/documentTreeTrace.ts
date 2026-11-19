@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { stripDocumentUids } from "./traceUtils";
-
 export interface TreeDocument {
   uid: string;
   name: string;
@@ -41,9 +39,16 @@ export interface DocumentTreeTrace {
   truncated: boolean;
   documentCount: number;
   latestUid: string | null;
+  /** Folder id to folder path, for every folder the listing identified. */
+  folderPaths: ReadonlyMap<string, string>;
 }
 
 const INCOMPLETE_PREFIX = "Listing incomplete:";
+
+/** Hide historical folder/document ids while preserving brackets in display names. */
+export function stripDocumentUids(tree: string): string {
+  return tree.replace(/ \[[^\]\r\n]+\](?=\/| \((?:uploaded )?(?:\d{4}-\d{2}-\d{2}|unknown date)\))/g, "");
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -116,7 +121,9 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
   let latest: TreeDocument | null = null;
   let recognized = false;
   const byPath = new Map<string, TreeFolder>();
-  function folderAt(path: string): TreeFolder {
+  const folderPaths = new Map<string, string>();
+  function folderAt(path: string, id?: string): TreeFolder {
+    if (id) folderPaths.set(id, path);
     let folder = byPath.get(path);
     if (!folder) {
       folder = { path, documents: [] };
@@ -143,11 +150,11 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
     const depth = line.length - line.trimStart().length;
     if (depth % 2 !== 0 || depth / 2 > paths.length) return null;
     let document: TreeDocument | null = null;
-    const legacyFolder = trimmed.match(/^(.*?)(?: \[(?:folder:)?[^\]]+\])?\/$/);
+    const legacyFolder = trimmed.match(/^(.*?)(?: \[(?:folder:)?([^\]]+)\])?\/$/);
     if (legacyFolder) {
       paths.length = depth / 2;
       paths.push(legacyFolder[1]);
-      folderAt(paths.join("/"));
+      folderAt(paths.join("/"), legacyFolder[2]);
       recognized = true;
       continue;
     }
@@ -157,7 +164,7 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
         if (record(value) && typeof value.folder === "string") {
           paths.length = depth / 2;
           paths.push(value.folder);
-          folderAt(paths.join("/"));
+          folderAt(paths.join("/"), optionalText(value.folder_id));
           recognized = true;
           continue;
         }
@@ -197,6 +204,7 @@ export function parseDocumentTreeTrace(text: string): DocumentTreeTrace | null {
         truncated,
         documentCount: unique.size,
         latestUid: latest?.uid ?? null,
+        folderPaths,
       }
     : null;
 }

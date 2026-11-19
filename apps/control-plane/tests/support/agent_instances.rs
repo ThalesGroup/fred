@@ -144,7 +144,7 @@ fn definition() -> Value {
     json!({"template_agent_id":"custom", "title":"Custom", "description":"Assistant", "kind":"react",
         "description_by_lang":{"fr":"Assistant français"}, "supports_capabilities":true, "default_capability_ids":[],
         "available_capabilities":[{"id":"tool", "kind":"tool", "config_fields":[{"key":"endpoint","type":"url"}]}],
-        "default_tuning":{"role":"Original", "description":"Original description", "usage_statement":"Original usage",
+        "default_tuning":{"recommended_chat_profile_id":null,"role":"Original", "description":"Original description", "usage_statement":"Original usage",
             "tags":["custom"], "unknown":{"nested":[null,{},[]]}, "values":{"prompts.system":"Default prompt"},
             "fields":[{"key":"prompts.system","type":"prompt","required":true,"default_by_lang":{"fr":"Défaut"}},
                 {"key":"count","type":"integer","min":1,"max":4}, {"key":"ratio","type":"number","min":0,"max":1},
@@ -558,7 +558,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn instances_capabilities_and_profiles_fail_explicitly() {
+async fn instances_capabilities_fail_explicitly_and_metadata_preserves_config() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
@@ -569,8 +569,13 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     // Metadata edits preserve opaque, not-yet-connected saved settings.
     sqlx::query("update agent_instance set tuning = tuning || $1 where space_id=$2")
-        .bind(sqlx::types::Json(json!({"recommended_chat_profile_id":"saved-profile","capability_config":{"tool":{"version":2,"config":{"nested":[1,null]}}}})))
-        .bind(team.id).execute(&e.pool).await.unwrap();
+        .bind(sqlx::types::Json(
+            json!({"capability_config":{"tool":{"version":2,"config":{"nested":[1,null]}}}}),
+        ))
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     let before = saved(&e, team.id, &instance).await.tuning.0;
     catalog.state.lock().await.status = 503;
     let metadata = request(
@@ -583,22 +588,11 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
     )
     .await;
     assert_eq!(metadata.0, 200);
-    assert_eq!(metadata.1["recommended_chat_profile_id"], "saved-profile");
+    assert!(metadata.1.get("recommended_chat_profile_id").is_none());
     assert_eq!(
         saved(&e, team.id, &instance).await.tuning.0["capability_config"],
         before["capability_config"]
     );
-    let cleared = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "PATCH",
-        &item(team.id, &instance),
-        json!({"recommended_chat_profile_id":null}),
-    )
-    .await;
-    assert_eq!(cleared.0, 200);
-    assert!(cleared.1["recommended_chat_profile_id"].is_null());
     for value in [Value::Null, json!({})] {
         assert_eq!(
             request(
@@ -652,7 +646,7 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
         let code = if patch.get("capability_ids").is_some() {
             "agent_capability_unavailable"
         } else {
-            "legacy_model_reselection_required"
+            "invalid_fields"
         };
         let mut body = creation(template, "Rejected");
         body.as_object_mut()
@@ -1238,6 +1232,14 @@ async fn preparation_uses_live_runtime_hitl_support_and_defaults_to_false() {
             request(&app, &identity, Some("alice"), "POST", &path, Value::Null).await;
         assert_eq!(status, 200, "{prepared}");
         assert_eq!(prepared["supports_hitl"], advertised.unwrap_or(false));
+        // The ask_user toggle follows the HITL resume path, on by default.
+        let ask_user = json!({"capability_id": "platform", "widget": "ask_user_toggle", "params": {"default": true}});
+        let expected = if advertised == Some(true) {
+            json!([ask_user])
+        } else {
+            json!([])
+        };
+        assert_eq!(prepared["chat_controls"], expected);
     }
 }
 
@@ -1722,21 +1724,18 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
         "select fixture_document(p_id=>gen_random_uuid(),p_space_id=>$1,p_session_id=>case n when 5 then null::uuid when 6 then $3 else $2 end,p_name=>'file-' || n || case n % 3 when 0 then '.csv' when 1 then '.xlsx' else '.txt' end,p_mime=>case n % 3 when 0 then 'text/csv' when 1 then 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' else 'text/plain' end,p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>gen_random_uuid()::text,p_quota_owner=>$1,p_retrievable=>true) from generate_series(1,110) n",
     ).bind(team.id).bind(session).bind(other).fetch_all(&e.pool).await.unwrap();
     sqlx::query(
-        "insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
-         select id,id,'alice',id,'fast',id::text,'{}',now()+interval '1 hour','{}',60,60,60 from document where id=any($1)",
+        "insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id)
+         select id,id,'alice',id,'fast',id::text,'{}',now()+interval '1 hour','{}',60,60,60,current_content_id,current_content_id,published_generation from document where id=any($1)",
     ).bind(&ids).execute(&e.pool).await.unwrap();
     // Published CSV/Excel need no vectors, just like text documents in this fixture.
     sqlx::query(
         "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after,document_id)
          select id,id,'indexing',id,id,1,now()+interval '1 hour',id::text,now(),'{}',now()+interval '2 hours',id from document where id=any($1)",
     ).bind(&ids).execute(&e.pool).await.unwrap();
+    sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=now() where document_id=any($1)")
+        .bind(&ids).execute(&e.pool).await.unwrap();
     sqlx::query("update document set published_generation=id where id=any($1)")
-        .bind(&ids)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    sqlx::query("update document set published_generation=null where id=$1")
-        .bind(ids[0])
+        .bind(&ids[1..])
         .execute(&e.pool)
         .await
         .unwrap();
@@ -2547,4 +2546,54 @@ async fn runtime_corpus_uses_direct_read_roles_and_new_admissions_observe_revoca
     assert_eq!(next.0, 403, "{next:?}");
     // The previous response is a snapshot, not a route to refresh its permissions.
     assert_eq!(admitted.1["authorized_space_ids"], json!([org.id, team.id]));
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn instances_enrollment_excludes_shared_pod_model_profiles() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    for (index, profile) in [Value::Null, json!("swift-profile")]
+        .into_iter()
+        .enumerate()
+    {
+        catalog.state.lock().await.templates[0]["default_tuning"]["recommended_chat_profile_id"] =
+            profile;
+        let instance = create(
+            &app,
+            &identity,
+            team.id,
+            creation(template, &format!("Agent {index}")),
+        )
+        .await;
+        assert!(instance.get("recommended_chat_profile_id").is_none());
+        assert!(
+            saved(&e, team.id, &instance)
+                .await
+                .tuning
+                .0
+                .get("recommended_chat_profile_id")
+                .is_none()
+        );
+        let (status, runtime) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &format!("{}/runtime", item(team.id, &instance)),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{runtime}");
+        assert!(
+            runtime["agent"]["configuration"]
+                .get("recommended_chat_profile_id")
+                .is_none()
+        );
+    }
 }

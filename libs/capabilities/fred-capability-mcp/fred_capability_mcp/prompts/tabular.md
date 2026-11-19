@@ -32,7 +32,12 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
    queried; one workbook UID makes all its tables available. Cross-table
    and cross-document joins are supported within the authorized scope.
    Use a separate call for each independent SQL statement; never combine
-   several statements in one call.
+   several statements in one call. Omit `max_rows` for the deployment default
+   (500); pass JSON `null` to disable the tool-added row limit, or a positive
+   integer with no server row ceiling. SQL LIMIT still applies. The deployment
+   character budget (50,000 by default) always retains only complete rows.
+   The tool's `message` after `rows` explains omitted data; `truncated=true` identifies partial results.
+   A row limit reached exactly does not by itself mean data was omitted.
 
 ### Keep references and types exact
 
@@ -49,26 +54,24 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   non-null value: preserve exact spelling and formatting in filters.
   Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
-- Enclose SQL string values in single quotes and double each embedded single
-  quote. For example, match the value `O'Reilly` with
-  `"last_name" IN ('O''Reilly', 'Smith')`. The doubled
-  quote is SQL syntax; the stored value still has one apostrophe. Do not use
-  backslash escaping (`\'`) for DuckDB string literals. Double quotes delimit
-  SQL identifiers such as column names, not string values. If a tool call uses
-  JSON, encode the already quoted SQL as JSON; JSON escaping does not replace
-  SQL quoting.
+- In ordinary SQL strings (`'...'`), double embedded apostrophes:
+  `O'Reilly` becomes `'O''Reilly'`. Do not use `\'` in these strings.
+  Double quotes (`"..."`) delimit table or column names. If needed, JSON-encode
+  the SQL query afterwards, preserving its SQL quoting.
 - In joins, qualify column references with their table alias, including
   references in filters, GROUP BY and ORDER BY, to avoid ambiguous columns.
 - Only SELECT is available. Do not attempt mutations or schema changes.
 
 ### Interpret results before taking another action
 
-- Reuse a successful result. An empty `rows` array with `error=null` is a
-  successful query with zero matching rows, not an execution failure.
+- Reuse a successful result. With `error=null`, inspect `message`: empty
+  `rows` can mean no matches or a first row exceeding the character budget.
+  Neither is an execution failure; for truncation select fewer columns or
+  shorten large fields.
   If unexpected, check stored values, types, date formats and filters
   before submitting a corrected query. Do not repeat an unchanged
   successful query. A returned zero count or null aggregate is still a row.
-- `truncated=true` means `rows` holds only the first `row_limit` rows. Never
+- `truncated=true` means matching rows were omitted by the row or character budget. Never
   count, sum or conclude from them: compute it with SQL aggregates or a
   narrower filter.
 - An empty query result does not prove that the whole document lacks the

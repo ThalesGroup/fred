@@ -205,3 +205,28 @@ def test_configuration_rejects_removed_tabular_query_presigned_ttl_seconds_field
 
     with pytest.raises(ValueError, match="'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported"):
         Configuration.model_validate(payload)
+
+
+def test_query_result_budget_defaults_and_overrides():
+    from fred_knowledge.configuration import TabularQueryConfig
+
+    config = TabularQueryConfig()
+    assert config.default_max_rows == 500
+    assert config.max_output_chars == 50000
+    assert TabularQueryConfig(default_max_rows=700, max_output_chars=12000).max_output_chars == 12000
+    for invalid in (0, 1, -1):
+        with pytest.raises(ValueError):
+            TabularQueryConfig(max_output_chars=invalid)
+    with pytest.raises(ValueError, match="query.max_rows is no longer supported"):
+        TabularQueryConfig(max_rows=1000)
+
+
+def test_startup_summary_reports_character_budget(app_context, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="knowledge_flow_backend.application_context"):
+        app_context._log_config_summary()
+    summaries = [record for record in caplog.records if hasattr(record, "tabular_max_output_chars")]
+    assert len(summaries) == 1
+    assert summaries[0].tabular_default_max_rows == 500
+    assert summaries[0].tabular_max_output_chars == 50000

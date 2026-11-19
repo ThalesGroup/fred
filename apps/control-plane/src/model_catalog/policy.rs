@@ -519,9 +519,8 @@ pub(super) async fn replace(
     read(conn, organization_id).await
 }
 
-/// Deployment or future administration can initialize using business values only.
-/// Caller holds the organization lock. A receipt survives policy deletion and a
-/// completed receipt prevents recreating assignments or decisions on replay.
+/// Caller holds the organization lock. Deployment adds declared sources on each
+/// pass; a durable receipt prevents reseeding administered or deleted policies.
 pub(super) async fn initialize(
     conn: &mut PgConnection,
     organization: Uuid,
@@ -535,6 +534,7 @@ pub(super) async fn initialize(
     .bind(organization)
     .fetch_optional(&mut *conn)
     .await?;
+    assign_sources(conn, organization, source_ids).await?;
     if receipt.as_ref().is_some_and(Option::is_some) {
         return Ok(());
     }
@@ -553,7 +553,6 @@ pub(super) async fn initialize(
             "Explicit source mapping must cover every retained permission.",
         ));
     }
-    assign_sources(conn, organization, source_ids).await?;
     if receipt.is_none() {
         replace(
             conn,

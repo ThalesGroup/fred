@@ -18,9 +18,7 @@ use super::{
     store::{conflict, hash},
 };
 use crate::{
-    agent_instances::{
-        self, AgentInstance, NewAgentInstance, http::CreateAgentInstanceRequest, tuning,
-    },
+    agent_instances::{self, AgentInstance, CreateAgentInstanceRequest, NewAgentInstance, tuning},
     agents,
     api::AppState,
     auth::CurrentUser,
@@ -379,7 +377,7 @@ pub(super) async fn prepare_install(
         Permission::Write,
     )
     .await?;
-    agent_instances::http::require_instance_space(space.kind)?;
+    agent_instances::require_instance_space(space.kind)?;
     let template_id = agents::template_id(
         space.organization,
         &package.runtime_id,
@@ -506,12 +504,11 @@ pub(super) async fn prepare_install(
         ),
         capability_ids: Some(selected.clone()),
         capability_config_values: Some(configurations.into_iter().collect()),
-        recommended_chat_profile_id: None,
         recommended_model: package.recommended_model.clone(),
         model_options: Some(package.model_options.clone()),
     };
     let mut instance =
-        agent_instances::http::prepare_create(s, user, space.id, authorization, &mut body).await?;
+        agent_instances::prepare_create(s, user, space.id, authorization, &mut body).await?;
     let actual = tuning::saved_selection(&instance.tuning)?;
     if actual.iter().collect::<std::collections::BTreeSet<_>>() != selected.iter().collect() {
         return Err(incompatible(

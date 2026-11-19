@@ -369,3 +369,17 @@ async def test_compiled_trace_captures_final_model_input(
         assert SECRET_QUESTION not in repr([span.mock_calls for span in spans])
     assert SECRET_QUESTION not in repr([vars(record) for record in caplog.records])
     assert all(span.end.call_count == 1 for span in spans)
+
+
+def test_llm_role_is_a_closed_set_including_the_title_call() -> None:
+    def role(value: str) -> str:
+        return TracingKpiMiddleware(
+            tracer=None, kpi=None, binding=cast(Any, SimpleNamespace()), role=value
+        )._role
+
+    assert [role(v) for v in ("root", "child", "title", "x")] == [
+        "root",
+        "child",
+        "title",
+        "root",
+    ]

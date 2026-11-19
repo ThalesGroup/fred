@@ -721,7 +721,7 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
 
 def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     prompt = compose_system_prompt(

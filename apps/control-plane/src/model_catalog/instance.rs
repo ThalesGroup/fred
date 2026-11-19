@@ -58,7 +58,6 @@ pub(crate) struct SavedModelSettings {
     pub recommended_model: Option<ModelOfferKey>,
     #[serde(default)]
     pub model_options: ModelOptions,
-    pub recommended_chat_profile_id: Option<String>,
 }
 
 impl SavedModelSettings {
@@ -101,14 +100,10 @@ pub(crate) async fn validate_write(
         .await?;
     }
     // Check the known effective recommendation/default, never an arbitrary first offer.
-    // A legacy profile has no offer identity and cannot be resolved by name.
-    let selected = settings.recommended_model.as_ref().or_else(|| {
-        settings
-            .recommended_chat_profile_id
-            .is_none()
-            .then_some(effective.default.as_ref())
-            .flatten()
-    });
+    let selected = settings
+        .recommended_model
+        .as_ref()
+        .or(effective.default.as_ref());
     if let Some(key) = selected {
         let metadata: Option<Json<ModelMetadata>> = sqlx::query_scalar(
             "select o.metadata from model_offer o join organization_model_source a using (source_id)
@@ -163,9 +158,6 @@ pub struct RuntimeModels {
     pub default: Option<ModelOfferKey>,
     pub recommendation: Option<ModelOfferKey>,
     pub options: ModelOptions,
-    /// Diagnostic only. Never an alternative resolution key.
-    pub legacy_profile_id: Option<String>,
-    pub requires_reselection: bool,
     /// Union of permitted keys and retained recommendation/default/fallback references.
     pub offers: Vec<RuntimeModelOffer>,
     /// Local preference; never exceeds the organization reasoning ceiling.
@@ -204,13 +196,10 @@ pub(crate) async fn resolve(
         })
         .collect();
     Ok(RuntimeModels {
-        requires_reselection: settings.recommended_model.is_none()
-            && settings.recommended_chat_profile_id.is_some(),
         default: policy.default.clone(),
         policy,
         recommendation: settings.recommended_model,
         options: settings.model_options,
-        legacy_profile_id: settings.recommended_chat_profile_id,
         offers,
         reasoning_default_on: Vec::new(),
     })
@@ -293,7 +282,6 @@ fn describe_offer(
 #[serde(rename_all = "snake_case")]
 pub enum ModelPreparationErrorCode {
     SelectionMissing,
-    ReselectionRequired,
     OfferUnknown,
     OfferForbidden,
     OfferUnavailable,
@@ -310,7 +298,6 @@ impl ModelPreparationErrorCode {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Self::SelectionMissing => "model_selection_missing",
-            Self::ReselectionRequired => "model_reselection_required",
             Self::OfferUnknown => "model_offer_unknown",
             Self::OfferForbidden => "model_offer_forbidden",
             Self::OfferUnavailable => "model_offer_unavailable",
@@ -322,9 +309,6 @@ impl ModelPreparationErrorCode {
         let message = match self {
             Self::SelectionMissing => {
                 "No model is selected and neither the agent nor its space defines a default. Choose a model in the chat, or ask a space owner to set a default."
-            }
-            Self::ReselectionRequired => {
-                "This agent retains an old model profile. Choose an available model in the chat."
             }
             Self::OfferUnknown => {
                 "The selected model is not in this agent's available model catalog. Choose another model or ask an organization owner to check the model policy."
@@ -354,9 +338,6 @@ pub(crate) fn decide(
     reasoning: impl Into<Option<bool>>,
 ) -> Result<InferenceSelection, ModelPreparationError> {
     use ModelPreparationErrorCode as Error;
-    if models.requires_reselection && choice.is_none() {
-        return Err(Error::ReselectionRequired.diagnostic());
-    }
     let key = choice
         .or(models.recommendation.as_ref())
         .or(models.default.as_ref())
@@ -706,8 +687,6 @@ mod preparation_tests {
             default: None,
             recommendation: None,
             options: ModelOptions::default(),
-            legacy_profile_id: None,
-            requires_reselection: false,
             offers: vec![candidate("model"), candidate("fallback")],
             reasoning_default_on: Vec::new(),
         }
@@ -800,12 +779,6 @@ mod preparation_tests {
         assert_eq!(
             error(&models, None),
             Some(ModelPreparationErrorCode::OfferUnknown)
-        );
-        assert_eq!(error(&models, Some(&key("model"))), None);
-        models.requires_reselection = true;
-        assert_eq!(
-            error(&models, None),
-            Some(ModelPreparationErrorCode::ReselectionRequired)
         );
         assert_eq!(error(&models, Some(&key("model"))), None);
     }

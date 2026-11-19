@@ -74,6 +74,7 @@ async def generate_session_title(
                 tracer=services.tracer,
                 kpi=services.kpi_writer,
                 binding=binding,
+                role="title",
             ).awrap_model_call(request, invoke)
             title = clean_title(response.result[0].text) if response.result else None
             if not title:

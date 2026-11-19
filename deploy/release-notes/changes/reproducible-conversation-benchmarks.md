@@ -3,7 +3,7 @@ schema: 1
 title: "Reproducible local conversation benchmarks and additive model source assignment"
 impact: minor
 configuration: local
-configuration_reason: "Optional factory BENCH=reference values add a local mock source and workload binding; normal production chart configuration is unchanged."
+configuration_reason: "Optional factory model values add a local mock source and workload binding; normal production chart configuration is unchanged."
 covers:
   - c3f3a58ca04e9bf4040765d3f8fee4c9c69a834e
 ---
@@ -25,7 +25,7 @@ this change requires no reset or schema migration.
 
 Follow the factory's versioned
 [benchmark guide](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/docs/BENCHMARKS.md).
-Its optional `BENCH=reference` deployment profile adds the mock source and local
+Its optional `VALUES` file adds the mock source and local
 workload binding to normal values. Operator credentials and generated account
 passwords are local private inputs, never committed overlays or command-line secrets.
 
@@ -36,14 +36,10 @@ Build and deploy the normal images from the checked-out Fred sources. The
 the resolver's `default` and `reasoning_default_on` fields without a hotfix image.
 Deploy the normal Grafana dashboard through the existing provisioning procedure.
 
-For optional benchmark setup, use the factory's `k3d-bench-prepare` workflow.
-After source configuration and organization provisioning, its Weaver step uses
-`control-plane assign-model-source <organization-uuid> <source-id>` with deployment
-credentials. The command is additive and safe to repeat, including for organizations
-with a completed initialization receipt. It does not discover offers, permit models,
-change defaults or reset the receipt. The organization Owner's ordinary APIs then
-refresh and permit the desired offers. Do not edit SQL or delete initialization
-receipts; [CLI contract](../../../apps/control-plane/README.md#assign-a-source-after-initialization).
+The factory's mock values reuse `platform.organization_models`: startup and
+provisioning add the source to Acme, including after initialization. Existing
+permissions, defaults and receipts stay unchanged. The Owner then refreshes and
+permits the model in the UI; no manual source assignment is required.
 
 ## Validation
 

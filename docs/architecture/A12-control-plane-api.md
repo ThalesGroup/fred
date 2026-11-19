@@ -9,10 +9,31 @@ with `make -C apps/control-plane generate-openapi` (`apps/control-plane/openapi.
 the [generated TypeScript client](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
 provides a versioned view. Regenerate this inventory with `make -C docs/architecture generate-models`.
 
+## Root application transport
+
+The [application proxy](../../apps/control-plane/src/applications/proxy.rs) mounts
+outside `/control-plane/v1` and the generated OpenAPI inventory. These are
+implementation references, not evidence of deployed application acceptance.
+
+| Root path | Boundary |
+| --- | --- |
+| `/apps/{logical_name}/...` | Enabled application's static GET/HEAD assets; no authentication required, no bearer or cookies forwarded. |
+| `/app-services/{logical_name}/teams/{space_uuid}/...` | Authenticated person, current entry permission and capability policy; forwards the verified bearer to the registered API with the same space path. |
+
+Redirects and ambiguous paths are rejected. Request bodies are bounded to 16 MiB
+and 60 seconds; responses stream up to 64 MiB within the 180-second upstream
+deadline. Admission completes before the network call; no SQL transaction spans
+upstream work. The service still enforces its own business and resource rights.
+
+## Generated business API inventory
+
+The application registry operations below describe registration and catalogue
+contracts; they do not establish acceptance of a service's business workflows.
+
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/knowledge-base-definitions`](#knowledge-base-definitions-routes) · [`/knowledge-base-runs`](#knowledge-base-runs-routes) · [`/knowledge-bases`](#knowledge-bases-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/platform`](#platform-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
@@ -138,6 +159,33 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | --- | --- | --- | --- |
 | POST | `/import-export/import` | `import_blueprint` | Required |
 
+## /knowledge-base-definitions routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| POST | `/knowledge-base-definitions/publish` | `publish` | Required |
+
+## /knowledge-base-runs routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/knowledge-base-runs/{id}` | `context` | Required |
+| POST | `/knowledge-base-runs/{id}/claim` | `claim_knowledge_base_run` | Required |
+| POST | `/knowledge-base-runs/{id}/complete` | `complete` | Required |
+| GET | `/knowledge-base-runs/{id}/documents` | `catalogue` | Required |
+| POST | `/knowledge-base-runs/{id}/documents` | `upload_knowledge_base_document` | Required |
+| DELETE | `/knowledge-base-runs/{id}/documents` | `retract` | Required |
+| GET | `/knowledge-base-runs/{id}/documents/tasks/{task}` | `outcome` | Required |
+
+## /knowledge-bases routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/knowledge-bases/worker` | `binding` | Required |
+| PATCH | `/knowledge-bases/{id}` | `update` | Required |
+| GET | `/knowledge-bases/{id}/runs` | `knowledge_base_runs` | Required |
+| POST | `/knowledge-bases/{id}/runs` | `start_knowledge_base_run` | Required |
+
 ## /me routes
 
 | Method | Path | Operation | Authentication |
@@ -167,17 +215,19 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
 
+## /platform routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/platform/applications` | `platform_applications` | Required |
+| POST | `/platform/applications` | `create_application` | Required |
+| PUT | `/platform/applications/{application_id}` | `update_application` | Required |
+
 ## /powerpoint-uploads routes
 
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
 | GET | `/powerpoint-uploads/{request_key}` | `powerpoint_upload_receipt` | Required |
-
-## /skills routes
-
-| Method | Path | Operation | Authentication |
-| --- | --- | --- | --- |
-| GET | `/skills/defaults` | `default_skills` | Required |
 
 ## /spaces routes
 
@@ -224,8 +274,12 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
+| GET | `/spaces/{space_id}/applications` | `space_applications` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{source_id}` | `replace_space_capability_policy` | Required |
+| GET | `/spaces/{space_id}/knowledge-base-definitions` | `definitions` | Required |
+| GET | `/spaces/{space_id}/knowledge-bases` | `list` | Required |
+| POST | `/spaces/{space_id}/knowledge-bases` | `create` | Required |
 | GET | `/spaces/{space_id}/marketplace-installations/{installation_id}` | `marketplace_installation` | Required |
 | GET | `/spaces/{space_id}/mcp-connections` | `mcp_connections` | Required |
 | POST | `/spaces/{space_id}/mcp-connections` | `create_mcp_connection` | Required |
@@ -271,7 +325,6 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/sessions/{session_id}/generated-title` | `record_title` | Required |
 | GET | `/spaces/{space_id}/skills` | `list_skills` | Required |
 | POST | `/spaces/{space_id}/skills` | `create_skill` | Required |
-| POST | `/spaces/{space_id}/skills/packages/{name}/install` | `install_skill` | Required |
 | GET | `/spaces/{space_id}/skills/scope` | `skill_scope` | Required |
 | GET | `/spaces/{space_id}/skills/scope/{skill_id}` | `preview_skill` | Required |
 | GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |

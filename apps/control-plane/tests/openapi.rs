@@ -164,6 +164,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     }
     let expected = [
         "get /healthz",
+        "get /platform/applications",
+        "post /platform/applications",
+        "put /platform/applications/{application_id}",
+        "get /spaces/{space_id}/applications",
         "get /frontend/config",
         "get /me/onboarding",
         "post /gcu",
@@ -323,7 +327,6 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview",
         "get /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}/content",
         "delete /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}",
-        "get /skills/defaults",
         "get /spaces/{space_id}/skills",
         "post /spaces/{space_id}/skills",
         "get /spaces/{space_id}/skills/scope",
@@ -331,7 +334,6 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/skills/{skill_id}",
         "put /spaces/{space_id}/skills/{skill_id}",
         "delete /spaces/{space_id}/skills/{skill_id}",
-        "post /spaces/{space_id}/skills/packages/{name}/install",
         "get /spaces/{space_id}/wiki/availability",
         "get /spaces/{space_id}/wiki/pages",
         "post /spaces/{space_id}/wiki/pages",
@@ -351,6 +353,21 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/supervision",
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
+        "post /knowledge-base-definitions/publish",
+        "get /spaces/{space_id}/knowledge-base-definitions",
+        "get /spaces/{space_id}/knowledge-bases",
+        "post /spaces/{space_id}/knowledge-bases",
+        "patch /knowledge-bases/{id}",
+        "post /knowledge-bases/{id}/runs",
+        "get /knowledge-bases/{id}/runs",
+        "get /knowledge-bases/worker",
+        "get /knowledge-base-runs/{id}",
+        "post /knowledge-base-runs/{id}/claim",
+        "post /knowledge-base-runs/{id}/complete",
+        "post /knowledge-base-runs/{id}/documents",
+        "get /knowledge-base-runs/{id}/documents",
+        "delete /knowledge-base-runs/{id}/documents",
+        "get /knowledge-base-runs/{id}/documents/tasks/{task}",
         "post /agents/execute/stream",
         "get /agents/sessions/{session_id}/messages",
     ]
@@ -530,6 +547,20 @@ fn upload_and_empty_responses_match_the_http_contract() {
                         assert_eq!(
                             response["content"]["application/json"]["schema"]["$ref"],
                             "#/components/schemas/Receipt"
+                        );
+                    } else if status == "202"
+                        && operation["operationId"] == "start_knowledge_base_run"
+                    {
+                        assert_eq!(
+                            response["content"]["application/json"]["schema"]["$ref"],
+                            "#/components/schemas/KnowledgeBaseRun"
+                        );
+                    } else if status == "202"
+                        && operation["operationId"] == "upload_knowledge_base_document"
+                    {
+                        assert_eq!(
+                            response["content"]["application/json"]["schema"]["$ref"],
+                            "#/components/schemas/KnowledgeBaseDocumentReceipt"
                         );
                     } else {
                         assert!(
@@ -777,8 +808,8 @@ fn document_receipts_and_lifecycle_receipts_have_distinct_generated_contracts() 
 
 #[test]
 fn instance_operations_and_nullable_patch_match_the_wire_contract() {
-    use control_plane::agent_instances::http::{
-        CreateAgentInstanceRequest, UpdateAgentInstanceRequest,
+    use control_plane::agent_instances::{
+        CreateAgentInstanceRequest, http::UpdateAgentInstanceRequest,
     };
     let api = schema();
     let schemas = &api["components"]["schemas"];
@@ -881,12 +912,42 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
     let omitted: UpdateAgentInstanceRequest = serde_json::from_value(json!({})).unwrap();
     assert!(omitted.tuning_field_values.is_none());
     assert!(omitted.capability_ids.is_none());
-    assert!(omitted.recommended_chat_profile_id.is_none());
-    let cleared:UpdateAgentInstanceRequest=serde_json::from_value(json!({"tuning_field_values":null,"capability_ids":null,"capability_config_values":null,"recommended_chat_profile_id":null})).unwrap();
+    let cleared: UpdateAgentInstanceRequest = serde_json::from_value(
+        json!({"tuning_field_values":null,"capability_ids":null,"capability_config_values":null}),
+    )
+    .unwrap();
     assert!(matches!(cleared.tuning_field_values, Some(None)));
     assert!(matches!(cleared.capability_ids, Some(None)));
     assert!(matches!(cleared.capability_config_values, Some(None)));
-    assert!(matches!(cleared.recommended_chat_profile_id, Some(None)));
+    for schema in [
+        "CreateAgentInstanceRequest",
+        "UpdateAgentInstanceRequest",
+        "ManagedAgentInstanceSummary",
+    ] {
+        assert!(
+            schemas[schema]["properties"]
+                .get("recommended_chat_profile_id")
+                .is_none()
+        );
+    }
+    for schema in ["RuntimeModels", "PreparationModels"] {
+        assert!(
+            schemas[schema]["properties"]
+                .get("legacy_profile_id")
+                .is_none()
+        );
+        assert!(
+            schemas[schema]["properties"]
+                .get("requires_reselection")
+                .is_none()
+        );
+    }
+    assert!(
+        serde_json::from_value::<UpdateAgentInstanceRequest>(
+            json!({"recommended_chat_profile_id":null})
+        )
+        .is_err()
+    );
     let empty: UpdateAgentInstanceRequest =
         serde_json::from_value(json!({"tuning_field_values":{},"capability_ids":[]})).unwrap();
     assert!(empty.tuning_field_values.unwrap().unwrap().is_empty());

@@ -165,6 +165,15 @@ impl Lifecycle {
             return Ok(receipt);
         }
         db::folder(&mut *tx, id).await?;
+        let managed: bool = sqlx::query_scalar("with recursive subtree as (select id from folder where id=$1 union all select f.id from folder f join subtree p on f.parent_id=p.id) select exists(select 1 from kb_instance i join subtree f on f.id=i.folder_id)")
+            .bind(id).fetch_one(&mut *tx).await?;
+        if managed {
+            return Err(crate::documents::conflict(
+                "knowledge_base_managed",
+                "A managed source folder cannot be deleted manually",
+            ));
+        }
+
         if !self.config.enabled {
             return Err(AppError::Unavailable(
                 "folder deletion is disabled by configuration".into(),
@@ -344,11 +353,44 @@ impl Lifecycle {
         if immediate && creator != actor {
             return Err(AppError::Forbidden);
         }
-        let active: bool = sqlx::query_scalar(
-            "select exists(select 1 from document_processing where document_id = $1 and status in ('pending', 'running'))",
+        crate::knowledge_bases::documents::require_manual_document(&mut *tx, document_id).await?;
+        let receipt = self
+            .retire_document(&mut tx, actor, &space, document_id, session, immediate)
+            .await?;
+        tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%receipt.id, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
+        Ok(receipt)
+    }
+
+    /// Shared retirement after the caller has established its human or admitted workload scope.
+    pub(crate) async fn retire_document(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        actor: &str,
+        space: &Space,
+        document_id: Uuid,
+        session: Option<Uuid>,
+        immediate: bool,
+    ) -> AppResult<Receipt> {
+        if let Some(receipt) = sqlx::query_as::<_, Receipt>(
+            "select * from deletion where target_id=$1 and target_kind='document'",
         )
         .bind(document_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut **tx)
+        .await?
+        {
+            return Ok(receipt);
+        }
+        if !self.config.enabled {
+            return Err(AppError::Unavailable(
+                "document deletion is disabled by configuration".into(),
+            ));
+        }
+        let active: bool = sqlx::query_scalar(
+            "select exists(select 1 from document_processing where document_id = $1 and status in ('pending', 'running')) or exists(select 1 from document_upload where target_document_id=$1 and status='pending')",
+        )
+        .bind(document_id)
+        .fetch_one(&mut **tx)
         .await?;
         if active {
             return Err(AppError::problem(
@@ -357,21 +399,20 @@ impl Lifecycle {
                 "document processing is active",
             ));
         }
+        let space_id = space.id;
         let requested_at = Utc::now();
-        let (due_at, rule) = self.deadline(&space, requested_at, immediate)?;
+        let (due_at, rule) = self.deadline(space, requested_at, immediate)?;
         let operation = Uuid::new_v4();
         let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id,document_session_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *")
-            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).bind(session).fetch_one(&mut *tx).await?;
+            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).bind(session).fetch_one(&mut **tx).await?;
         // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query(
             "update document set deletion_id = $2, purge_after = clock_timestamp() where id = $1",
         )
         .bind(document_id)
         .bind(operation)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-        tx.commit().await?;
-        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%operation, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
         Ok(receipt)
     }
 

@@ -98,6 +98,7 @@ func (a *weaverAdapter) request(ctx context.Context, method, path string, body a
 	}
 	req.Header.Set("Authorization", "Bearer "+a.cfg.Token)
 	req.Header.Set("Content-Type", "application/json")
+	injectTurnTrace(req)
 	return req, nil
 }
 
@@ -205,12 +206,14 @@ func (a *weaverAdapter) Open(ctx context.Context, _ int) (conversation, error) {
 }
 func (c *weaverConversation) ID() string   { return c.sessionID }
 func (c *weaverConversation) path() string { return c.adapter.spacePath() + "/sessions/" + c.sessionID }
-func (c *weaverConversation) Close() {
+func (c *weaverConversation) Close()       { c.closeContext(context.Background()) }
+
+func (c *weaverConversation) closeContext(parent context.Context) {
 	if !c.created || !c.adapter.cfg.DeleteSession {
 		return
 	}
 	c.created = false
-	ctx, cancel := context.WithTimeout(context.Background(), c.adapter.cfg.Timeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), c.adapter.cfg.Timeout)
 	defer cancel()
 	// Acceptance of asynchronous deletion is not proof of physical erasure.
 	var receipt struct {

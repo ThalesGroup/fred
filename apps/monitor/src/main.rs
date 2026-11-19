@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
             Ok("json") => LogFormat::Json,
             _ => LogFormat::Text,
         },
+        None,
     )?;
     // Once logging runs, a fatal error is one more structured event, not stray stderr.
     if let Err(error) = serve().await {

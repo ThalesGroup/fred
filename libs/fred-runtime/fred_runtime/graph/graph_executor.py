@@ -77,6 +77,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import to_jsonable_python
 
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.graph.node_context import (
     NodeContext,
     _graph_phase_timer,
@@ -393,7 +394,11 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         return run
 
     def _route_error(self, node_id: str, target: str, exc: Exception) -> Command:
-        """`on_error`: report the failure and continue at the fallback node."""
+        """`on_error`: report the failure and continue at the fallback node.
+
+        The event carries the person's sentence; the state keeps the exception
+        text for the fallback node, which decides what to say.
+        """
         message = str(exc).strip() or type(exc).__name__
         logger.warning(
             "Node %r raised; routing to on_error=%r. agent=%s error_type=%s",
@@ -404,7 +409,14 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         )
         get_stream_writer()(
             NodeErrorRuntimeEvent(
-                node_id=node_id, error_message=message, routed_to=target
+                node_id=node_id,
+                error_message=report_execution_error(
+                    logger,
+                    exc,
+                    "node_error",
+                    language=self._binding.runtime_context.language,
+                ),
+                routed_to=target,
             )
         )
         return Command(goto=target, update=self._jsonable({"node_error": message}))

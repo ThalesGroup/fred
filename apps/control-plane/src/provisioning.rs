@@ -97,16 +97,22 @@ pub struct Report {
     pub identities_created: usize,
     pub spaces_reconciled: usize,
     pub grants_acknowledged: usize,
+    /// Declared skills absent from their space, created by this import.
+    pub skills_created: usize,
+    /// Declared skills already present by name; never replaced, even if edited.
+    pub skills_kept: usize,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "identities_resolved={}, identities_created={}, spaces_reconciled={}, grants_acknowledged={}",
+            "identities_resolved={}, identities_created={}, spaces_reconciled={}, grants_acknowledged={}, skills_created={}, skills_kept={}",
             self.identities_resolved,
             self.identities_created,
             self.spaces_reconciled,
-            self.grants_acknowledged
+            self.grants_acknowledged,
+            self.skills_created,
+            self.skills_kept
         )
     }
 }
@@ -407,6 +413,33 @@ impl Importer<'_> {
                 }
             }
         }
+        // Install-if-absent under the same locks: a replay keeps every space's edits.
+        let (mut created, mut kept) = (0, 0);
+        for skill in &bundle.skills {
+            let (space, _) = &resolved[skill.space];
+            let present: bool = sqlx::query_scalar(
+                "select exists(select 1 from skill where space_id=$1 and name=$2)",
+            )
+            .bind(space.id)
+            .bind(&skill.name)
+            .fetch_one(&mut *tx)
+            .await?;
+            if present {
+                kept += 1;
+            } else {
+                crate::skills::save(
+                    &mut tx,
+                    space.id,
+                    self.operator,
+                    &skill.name,
+                    &skill.files,
+                    None,
+                    true,
+                )
+                .await?;
+                created += 1;
+            }
+        }
         for entry in &bundle.users {
             for role in &entry.platform {
                 let subject = &subjects[&entry.identity.username];
@@ -423,6 +456,8 @@ impl Importer<'_> {
         }
         tx.commit().await?;
         report.spaces_reconciled = resolved.len();
+        report.skills_created = created;
+        report.skills_kept = kept;
         Ok(())
     }
 }

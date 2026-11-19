@@ -289,7 +289,7 @@ def test_package_source_is_independent_of_cwd_and_backend_is_reused(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     default = FilesystemBackend(root_dir=tmp_path)

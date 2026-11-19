@@ -19,8 +19,8 @@ type scenarioFixture struct {
 	t                                                 *testing.T
 	mu                                                sync.Mutex
 	server                                            *httptest.Server
-	profile                                           string
-	markers                                           map[string][]turnMarker
+	fragments                                         int
+	turns                                             map[string]int
 	messages                                          map[string][]json.RawMessage
 	owners                                            map[string]string
 	registered                                        map[string]time.Time
@@ -28,19 +28,23 @@ type scenarioFixture struct {
 	invalidRegistration                               bool
 	registrations                                     int
 	active, logins, executions, historyReads, deletes int
-	badACK, badHistory, failLogin                     bool
+	badStream, badHistory, failLogin                  bool
 	stallSecond                                       chan struct{}
 	rejectUser                                        string
 }
 
-func newScenarioFixture(t *testing.T) *scenarioFixture {
-	f := &scenarioFixture{t: t, profile: "reference", markers: map[string][]turnMarker{}, messages: map[string][]json.RawMessage{}, owners: map[string]string{}, registered: map[string]time.Time{}}
-	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
+func newScenarioFixture(t *testing.T, wrappers ...func(http.Handler) http.Handler) *scenarioFixture {
+	f := &scenarioFixture{t: t, fragments: 1, turns: map[string]int{}, messages: map[string][]json.RawMessage{}, owners: map[string]string{}, registered: map[string]time.Time{}}
+	var handler http.Handler = http.HandlerFunc(f.serve)
+	for _, wrap := range wrappers {
+		handler = wrap(handler)
+	}
+	f.server = httptest.NewServer(handler)
 	t.Cleanup(f.server.Close)
 	return f
 }
 func (f *scenarioFixture) cfg(target, mode string) config {
-	return config{Scenario: "conversation", Target: target, Protocol: "sse", CredentialFile: testCredentialPath(f.t, f.server.URL+"/realms/app", 4), ConcurrencySteps: "1,2", IdentityMode: mode, AuthConcurrency: 2, MockProfile: f.profile, FredOrigin: f.server.URL, ControlPlanePath: "/control-plane/v1", SpaceID: testSpace, AgentInstanceID: testInstance, SSETeamID: "same-team", URL: f.server.URL + "/runtime/agents/execute/stream", RequestsPerClient: 3, CreateSession: true, DeleteSession: true, Timeout: time.Second, RawReportPath: filepath.Join(f.t.TempDir(), "turns.jsonl"), JSONReportPath: filepath.Join(f.t.TempDir(), "summary.json"), SessionTitle: "Benchmark", Message: "PRIVATE_PROMPT"}
+	return config{Scenario: "conversation", Target: target, Protocol: "sse", CredentialFile: testCredentialPath(f.t, f.server.URL+"/realms/app", 4), ConcurrencySteps: "1,2", IdentityMode: mode, AuthConcurrency: 2, FredOrigin: f.server.URL, ControlPlanePath: "/control-plane/v1", SpaceID: testSpace, AgentInstanceID: testInstance, SSETeamID: "same-team", URL: f.server.URL + "/runtime/agents/execute/stream", RequestsPerClient: 3, CreateSession: true, DeleteSession: true, Timeout: time.Second, RawReportPath: filepath.Join(f.t.TempDir(), "turns.jsonl"), JSONReportPath: filepath.Join(f.t.TempDir(), "summary.json"), SessionTitle: "Benchmark", Message: "PRIVATE_PROMPT"}
 }
 func (f *scenarioFixture) serve(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(r.URL.Path, "/frontend/config") {
@@ -89,12 +93,6 @@ func (f *scenarioFixture) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input, _ := body["input"].(string)
-		var marker turnMarker
-		for _, line := range strings.Split(input, "\n") {
-			if strings.HasPrefix(line, markerPrefix) {
-				_ = json.Unmarshal([]byte(strings.TrimPrefix(line, markerPrefix)), &marker)
-			}
-		}
 		ctx, _ := body["runtime_context"].(map[string]any)
 		if ctx["team_id"] != "same-team" && ctx["space_id"] != testSpace {
 			f.t.Error("wrong team/space")
@@ -110,13 +108,13 @@ func (f *scenarioFixture) serve(w http.ResponseWriter, r *http.Request) {
 			f.t.Error("execution without registered session")
 		}
 		f.owners[session] = sub
-		prior := append([]turnMarker{}, f.markers[session]...)
+		turn := f.turns[session] + 1
 		f.active++
 		f.executions++
-		bad, stall, profile := f.badACK, f.stallSecond, f.profile
+		bad, stall, fragments := f.badStream, f.stallSecond, f.fragments
 		f.mu.Unlock()
 		defer func() { f.mu.Lock(); f.active--; f.mu.Unlock() }()
-		if stall != nil && marker.Turn == 2 {
+		if stall != nil && turn == 2 {
 			select {
 			case stall <- struct{}{}:
 			default:
@@ -124,10 +122,7 @@ func (f *scenarioFixture) serve(w http.ResponseWriter, r *http.Request) {
 			<-r.Context().Done()
 			return
 		}
-		if bad && marker.Turn == 2 {
-			prior = append(prior, turnMarker{"foreign", 1, "foreign"})
-		}
-		answer := ackText(marker, prior, profile)
+		answer := strings.Repeat("A normal answer about the documents.\n", fragments)
 		w.Header().Set("Content-Type", "text/event-stream")
 		for _, line := range strings.SplitAfter(answer, "\n") {
 			if line == "" {
@@ -136,14 +131,18 @@ func (f *scenarioFixture) serve(w http.ResponseWriter, r *http.Request) {
 			data, _ := json.Marshal(map[string]string{"kind": "assistant_delta", "delta": line})
 			fmt.Fprintf(w, "data: %s\n\n", data)
 		}
-		data, _ := json.Marshal(map[string]string{"kind": "final", "content": answer})
+		final := answer
+		if bad && turn == 2 {
+			final = "Different final text"
+		}
+		data, _ := json.Marshal(map[string]string{"kind": "final", "content": final})
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		f.mu.Lock()
-		f.markers[session] = append(f.markers[session], marker)
-		exchange := fmt.Sprintf("e%d", marker.Turn)
+		f.turns[session] = turn
+		exchange := fmt.Sprintf("e%d", turn)
 		for _, message := range []map[string]any{
-			{"session_id": session, "exchange_id": exchange, "rank": marker.Turn*2 - 1, "role": "user", "channel": "final", "parts": []map[string]string{{"type": "text", "text": input}}},
-			{"session_id": session, "exchange_id": exchange, "rank": marker.Turn * 2, "role": "assistant", "channel": "final", "parts": []map[string]string{{"type": "text", "text": answer}}},
+			{"session_id": session, "exchange_id": exchange, "rank": turn*2 - 1, "role": "user", "channel": "final", "parts": []map[string]string{{"type": "text", "text": input}}},
+			{"session_id": session, "exchange_id": exchange, "rank": turn * 2, "role": "assistant", "channel": "final", "parts": []map[string]string{{"type": "text", "text": answer}}},
 		} {
 			data, _ := json.Marshal(message)
 			f.messages[session] = append(f.messages[session], data)
@@ -272,7 +271,7 @@ func TestScenarioBothTargetsStepsIdentitiesAndHistory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, secret := range []string{"PRIVATE", "private-user", "signature", markerPrefix, ackPrefix, "session_id", f.server.URL} {
+				for _, secret := range []string{"PRIVATE", "private-user", "signature", "session_id", f.server.URL} {
 					if strings.Contains(string(data), secret) {
 						t.Fatal("raw leaked", secret)
 					}
@@ -315,11 +314,11 @@ func TestScenarioBothTargetsStepsIdentitiesAndHistory(t *testing.T) {
 }
 
 func TestScenarioFailuresAndNoFictitiousSuccess(t *testing.T) {
-	for _, failure := range []string{"login", "ack", "history"} {
+	for _, failure := range []string{"login", "stream", "history"} {
 		t.Run(failure, func(t *testing.T) {
 			f := newScenarioFixture(t)
 			f.failLogin = failure == "login"
-			f.badACK = failure == "ack"
+			f.badStream = failure == "stream"
 			f.badHistory = failure == "history"
 			cfg := fixtureConfig(f, "weaver", "shared")
 			cfg.ConcurrencySteps = "2"
@@ -333,7 +332,7 @@ func TestScenarioFailuresAndNoFictitiousSuccess(t *testing.T) {
 				if s.Attempted != 0 || s.NotStarted != 6 || f.executions != 0 || report.AuthErrors != 1 {
 					t.Fatal("login failure allowed load")
 				}
-			case "ack":
+			case "stream":
 				if s.Attempted != 4 || s.NotStarted != 2 || s.IntegrityErrors != 2 || s.PerformanceErrors != 0 || s.Success != 2 {
 					t.Fatalf("%+v", s)
 				}
@@ -392,7 +391,7 @@ func TestScenarioDurableRowsBeforeCancellation(t *testing.T) {
 
 func TestScenarioStreamingMetricsAndExclusiveOutputs(t *testing.T) {
 	f := newScenarioFixture(t)
-	f.profile = "streaming"
+	f.fragments = 100
 	cfg := fixtureConfig(f, "swift", "shared")
 	cfg.ConcurrencySteps = "1"
 	cfg.RequestsPerClient = 1

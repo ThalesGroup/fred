@@ -330,6 +330,60 @@ ai:
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
 
+For experimental developer diagnostics, configure the existing selector in the
+pod's YAML (also supported by Control Plane):
+
+```yaml
+observability:
+  tracer: diagnostic
+  diagnostic:
+    collector_endpoint: http://collector:4318/v1/traces
+```
+
+This prepares tracing at startup; it does not record ordinary requests. The fixed
+parent-based sampler records only sampled incoming W3C contexts. Bench diagnostic
+mode requests every turn; performance mode requests none unless a sample fraction
+is selected. Missing, invalid and unsampled parents produce no exported spans.
+The context is not authorization and does not prove the caller is bench.
+
+This mode exports only closed technical operation names, categories, outcomes and
+numeric timings/statuses. No prompts, answers, tool payloads, user/session metadata
+or Langfuse observation mapping are prepared. `LANGFUSE_CAPTURE_CONTENT` cannot
+enable content in diagnostic mode. Existing standalone logging/null/Langfuse
+backends keep their own behavior; they are not selected through a hidden OTel flag.
+
+Fred creates one OTLP HTTP/protobuf exporter with the configured full trace URL,
+service name `fred-agents`, a queue of 2048 spans, batches of 256, a one-second
+export interval and a three-second HTTP timeout. Sampling and service identity
+are fixed by this mode, independent of `OTEL_TRACES_SAMPLER` and `OTEL_SERVICE_NAME`.
+Shutdown drains outside the event loop; its worker join is bounded at 30 seconds.
+Queue saturation or an unavailable Collector can lose spans. These bounds do not
+establish zero overhead or production suitability. See the
+[local collector guide](../../developer_tools/benchmarks/README.md).
+
+W3C `traceparent` links the incoming request, first-party calls and MCP HTTP.
+Explicit parent spans take precedence over active context; diagnostics do not
+create a sampled root from a business identifier.
+The HTTP server span covers authentication, admission,
+streaming and cleanup. Existing model/tool spans are reused. History writes and
+checkpoint operations are measured as whole operations, without SQL statements.
+Model spans are client invocations of the logical `llm` dependency, including
+wrapper/retry work within that boundary, not pure network or provider CPU time.
+
+Coverage is partial: cached JWTs do not run local signature verification; JWKS
+fetches and actual M2M token requests are distinguished from local verification
+and token acquisition waits. The M2M observer anchors its existing monotonic
+duration at its completion timestamp. MCP spans cover HTTP response bodies,
+including long-lived SSE transports; they are not per-tool server execution
+times, and an already-open SSE connection can belong to an earlier trace.
+The MCP client instruments HTTPX's `_send_single_request` seam below auth/retries,
+preserving its normal proxy/NO_PROXY, TLS and pool selection. IAM measurements
+are client-side only: JWKS and M2M calls do not inject `traceparent` into Keycloak.
+External model/MCP server internals, individual SQL calls, pool waits and other
+uninstrumented services remain unmeasured. Sampling, exporter queue loss, process
+failure and Collector delivery can omit spans; trace presence is not proof of
+complete coverage. Parent/child and concurrent intervals must not be summed.
+
 When `observability.metrics: prometheus` is enabled, `create_agent_app(...)`
 starts a dedicated Prometheus exporter on `app.metrics_address:app.metrics_port`
 and restores the shared Fred KPI pipeline, including process and SQL pool KPIs.

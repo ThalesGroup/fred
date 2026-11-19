@@ -15,7 +15,6 @@ const form = () => ({
   role: INSTANCE.role,
   description: INSTANCE.description ?? "",
   usageStatement: INSTANCE.usage_statement,
-  recommendedChatProfileId: INSTANCE.recommended_chat_profile_id ?? null,
   recommendedModel: INSTANCE.recommended_model ?? null,
   tuningValues: INSTANCE.tuning_field_values,
   selectedCapabilityIds: INSTANCE.selected_capability_ids ?? [],

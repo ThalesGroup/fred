@@ -13,17 +13,24 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { ApplicationSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { SpaceApplication } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { applicationFrameTarget, parseApplicationFrameMessage } from "./applicationHost.ts";
 
-function summary(uiPrefix: string): ApplicationSummary {
+function summary(uiPrefix: string): SpaceApplication {
   return {
-    id: "example",
+    id: "registry-uuid",
+    logical_name: "example",
+    display_name: "Example",
+    description: "Example application",
+    source_id: "$applications",
+    capability_id: "application:registry-uuid",
+    entry_permission: "read",
+    api_path: "/app-services/example/teams/team-1/",
     version: "1.0.0",
-    name: { en: "Example" },
-    description: { en: "Example application" },
+    display_name_by_lang: { en: "Example" },
+    description_by_lang: { en: "Example application" },
     icon: "widgets",
-    ui_prefix: uiPrefix,
+    ui_path: uiPrefix,
   };
 }
 

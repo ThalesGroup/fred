@@ -7,20 +7,31 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 )
 
 type config struct {
+	DeferCleanup    func(func() int)
+	Mode            string
+	TotalTurns      int
+	WarmupTurns     int
+	TraceSampleRate *float64
+
+	Identity              *benchmarkIdentity
+	ObserveTurn           func(scenarioTurn)
 	PrepareOnly           bool
 	AcceptTestTerms       string
 	Scenario              string
+	TraceTurns            bool
 	CredentialFile        string
 	ConcurrencySteps      string
 	IdentityMode          string
 	AuthConcurrency       int
-	MockProfile           string
+	QuestionsFile         string
+	Questions             []string
 	RuntimeDecoder        func([]byte) (streamEvent, error)
 	Target                string
 	FredOrigin            string
@@ -71,10 +82,54 @@ type config struct {
 func main() { os.Exit(run()) }
 
 func run() int {
+	if len(os.Args) > 1 && isBenchHelp(os.Args[1]) {
+		topic := ""
+		if len(os.Args) > 3 {
+			fmt.Fprintln(os.Stderr, "bench: usage: ./bench help [run|report]")
+			return 2
+		}
+		if len(os.Args) == 3 {
+			topic = os.Args[2]
+		}
+		switch topic {
+		case "":
+			fmt.Print(benchHelp)
+			return 0
+		case "run":
+			return runBenchCLI([]string{"--help"})
+		case "report":
+			return runHTMLReportCLI([]string{"--help"})
+		default:
+			fmt.Fprintln(os.Stderr, "bench: unknown help topic; expected run or report")
+			return 2
+		}
+	}
+	if len(os.Args) == 1 || os.Args[1] == "run" {
+		args := []string{}
+		if len(os.Args) > 1 {
+			args = os.Args[2:]
+		}
+		return runBenchCLI(args)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "report" {
+		if len(os.Args) == 2 {
+			return openLatestBenchReport()
+		}
 		return runHTMLReportCLI(os.Args[2:])
 	}
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		fmt.Fprintln(os.Stderr, "bench: unknown command; see ./bench --help")
+		return 2
+	}
 	cfg := parseFlags()
+	if flag.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "bench: unexpected arguments; see ./bench --help")
+		return 2
+	}
+	if cfg.TraceTurns && (cfg.Scenario != "conversation" || cfg.PrepareOnly) {
+		fmt.Fprintln(os.Stderr, "trace-turns requires -scenario=conversation (not prepare-only)")
+		return 2
+	}
 	if cfg.PrepareOnly {
 		return runTermsCLI(cfg)
 	}
@@ -85,8 +140,8 @@ func run() int {
 	if cfg.Scenario != "" {
 		return runScenarioCLI(cfg)
 	}
-	if cfg.CredentialFile != "" || cfg.ConcurrencySteps != "" {
-		fmt.Fprintln(os.Stderr, "credential-file and concurrency-steps require -scenario=conversation")
+	if cfg.CredentialFile != "" || cfg.QuestionsFile != "" || slices.Contains(cfg.ExplicitFlags, "concurrency-steps") {
+		fmt.Fprintln(os.Stderr, "credential-file, questions-file and concurrency-steps require -scenario=conversation")
 		return 2
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -223,13 +278,14 @@ func parseFlags() config {
 
 	targetFlag := flag.String("target", "swift", "Backend target: swift or weaver")
 	scenarioFlag := flag.String("scenario", "", "Opt-in conversation scenario (managed SSE, explicit concurrency steps)")
+	traceTurnsFlag := flag.Bool("trace-turns", false, "Opt-in W3C trace correlation per scenario turn; no telemetry export by the client")
 	prepareOnlyFlag := flag.Bool("prepare-only", false, "Check synthetic identities and terms without creating sessions or running load")
 	acceptTermsFlag := flag.String("accept-test-terms", "", "Explicit prepare-only terms acceptance: current (synthetic bench-* accounts only)")
 	credentialsFlag := flag.String("credential-file", "", "Private factory credentials JSON; scenario only, never put credentials in argv")
 	stepsFlag := flag.String("concurrency-steps", "", "Explicit sequential concurrency levels, e.g. 1,10,50 (scenario only)")
 	identityFlag := flag.String("identity-mode", "per-conversation", "Scenario identities: per-conversation or shared")
 	authConcurrencyFlag := flag.Int("auth-concurrency", 8, "Maximum concurrent initial OIDC logins")
-	mockProfileFlag := flag.String("mock-profile", "reference", "Expected opt-in mock profile: reference or streaming")
+	questionsFlag := flag.String("questions-file", "", "JSON array of questions, sent in order once per conversation; sets the turn count")
 	fredOriginFlag := flag.String("fred-origin", "", "Weaver public HTTP(S) origin shared by Control Plane and runtime")
 	controlPlanePathFlag := flag.String("control-plane-path", "/control-plane/v1", "Weaver Control Plane public path on fred-origin")
 	spaceIDFlag := flag.String("space-id", "", "Weaver space UUID")
@@ -285,6 +341,9 @@ func parseFlags() config {
 		*sessionFlag = strings.ToLower(*sessionFlag)
 	}
 
+	if *scenarioFlag == "conversation" && *credentialsFlag == "" && !slices.Contains(explicitFlags, "identity-mode") {
+		*identityFlag = "shared"
+	}
 	token := strings.TrimSpace(*tokenFlag)
 	if token == "" {
 		token = strings.TrimSpace(os.Getenv("AGENTIC_TOKEN"))
@@ -305,9 +364,10 @@ func parseFlags() config {
 	}
 
 	return config{
+		TraceTurns:  *traceTurnsFlag,
 		PrepareOnly: *prepareOnlyFlag, AcceptTestTerms: *acceptTermsFlag,
 		Scenario: *scenarioFlag, CredentialFile: *credentialsFlag, ConcurrencySteps: *stepsFlag,
-		IdentityMode: *identityFlag, AuthConcurrency: *authConcurrencyFlag, MockProfile: *mockProfileFlag,
+		IdentityMode: *identityFlag, AuthConcurrency: *authConcurrencyFlag, QuestionsFile: *questionsFlag,
 		Target:                target,
 		FredOrigin:            strings.TrimSpace(*fredOriginFlag),
 		ControlPlanePath:      strings.TrimSpace(*controlPlanePathFlag),

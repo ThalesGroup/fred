@@ -316,8 +316,8 @@ async fn processing_document(pool: &PgPool, space: Uuid) -> Uuid {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
-        values($1,$1,'alice',$1,'fast',$1::text,'{}',now()+interval '1 hour','{}',60,60,60)")
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,expected_generation_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
+        values($1,$1,'alice',$1,$1,$1,null,'fast',$1::text,'{}',now()+interval '1 hour','{}',60,60,60)")
         .bind(id).execute(pool).await.unwrap();
     id
 }
@@ -327,6 +327,12 @@ async fn generation(pool: &PgPool, processing: Uuid, document: Uuid) -> Result<U
     sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after)
         values($1,$2,$3,'indexing',$1,$1,1,now()+interval '1 hour',$1::text,now()+interval '2 hours')")
         .bind(id).bind(processing).bind(document).execute(pool).await?;
+    sqlx::query("update generation set committed_at=now(),vector_ordinals='{}' where id=$1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=now() where id=$1")
+        .bind(processing).execute(pool).await?;
     Ok(id)
 }
 
@@ -348,14 +354,15 @@ async fn publication_and_generation_cannot_cross_document_boundaries() {
             .unwrap_err(),
         "23503",
     );
-    let mut tx = pool.begin().await.unwrap();
-    sqlx::query("update document set published_generation=$1 where id=$2")
-        .bind(first)
-        .bind(b)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    violation(tx.commit().await.unwrap_err(), "23503");
+    violation(
+        sqlx::query("update document set published_generation=$1 where id=$2")
+            .bind(first)
+            .bind(b)
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+        "23514",
+    );
 
     sqlx::query("update document set published_generation=$1 where id=$2")
         .bind(first)
@@ -373,18 +380,15 @@ async fn publication_and_generation_cannot_cross_document_boundaries() {
         .unwrap();
     violation(tx.commit().await.unwrap_err(), "23503");
 
-    let second = generation(&pool, a, a).await.unwrap();
-    sqlx::query("update document set published_generation=$1 where id=$2")
-        .bind(second)
-        .bind(a)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("update document set published_generation=null where id=$1")
-        .bind(a)
-        .execute(&pool)
-        .await
-        .unwrap();
+    // Clearing a live publication would discard a usable result without a successor.
+    violation(
+        sqlx::query("update document set published_generation=null where id=$1")
+            .bind(a)
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+        "23514",
+    );
 }
 
 #[tokio::test]

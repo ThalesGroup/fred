@@ -459,7 +459,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "These panels cover the shared ReAct/Deep model boundary, including native children; independent summarization, Graph and capability-internal calls are excluded. Observed chunks are LangChain callbacks, not tokens or network packets. A missing timing series means no observation, not zero latency. A blank panel means no matching observations or no scrape. Failures after HTTP 200 are possible. Compare gaps with event-loop lag and process load before attributing a failure to a gateway/provider. Active calls are per-process gauges; do not sum across time."
+        "content": "The model invocation panels cover the shared ReAct/Deep model boundary, including native children; independent summarization, Graph and capability-internal calls are excluded. Observed chunks are LangChain callbacks, not tokens or network packets. A missing timing series means no observation, not zero latency. A blank panel means no matching observations or no scrape. Failures after HTTP 200 are possible. Compare gaps with event-loop lag and process load before attributing a failure to a gateway/provider. Active calls are per-process gauges; do not sum across time."
       }
     },
     {
@@ -469,7 +469,7 @@
       "gridPos": {
         "x": 0,
         "y": 35,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -506,9 +506,9 @@
       "title": "LLM error rate (%)",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 35,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -536,6 +536,38 @@
           "editorMode": "code",
           "expr": "100 * sum by (model_name, llm_role) (rate(llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\",status=\"error\"}[$__rate_interval])) / clamp_min(sum by (model_name, llm_role) (rate(llm_calls_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",service=~\"${service:regex}\"}[$__rate_interval])), 1e-9)",
           "legendFormat": "{{model_name}} {{llm_role}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "title": "Streams with corrected tool-call IDs",
+      "type": "timeseries",
+      "description": "Chat Completions SSE responses with at least one tool-call ID rewritten by Fred, across the selected namespaces and pods; independent of the Fred service filter.",
+      "gridPos": {
+        "x": 16,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum(increase(fred_tool_call_id_corrected_streams_total{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[1h]))",
+          "legendFormat": "Corrected streams (rolling 1h)",
           "range": true
         }
       ]
@@ -1047,7 +1079,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, namespace, service, runtime_stage) (rate(runtime_stage_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, namespace, service, runtime_stage) (rate(runtime_stage_latency_ms_bucket{namespace=~\"${namespace:regex}\",pod=~\"${pod:regex}\",runtime_stage=~\"pod_authz|runtime_binding.*\"}[$__rate_interval])))",
           "instant": false,
           "range": true,
           "legendFormat": "{{namespace}} / {{service}} / {{runtime_stage}}",

@@ -43,7 +43,16 @@ IDENTITY = {"service", "knowledge_base"}
 
 OPERATIONS = {
     # The declaration's `publish` is a one-shot hook nobody scrapes: unmeasured.
-    "control_plane": {"run_context"},
+    "control_plane": {
+        "run_context",
+        "worker_configuration",
+        "claim",
+        "complete",
+        "publish",
+        "task_status",
+        "list",
+        "retract",
+    },
     "knowledge_flow": {
         "declare_synchronized",
         "publish",
@@ -59,7 +68,7 @@ OPERATIONS = {
 CLOSED = {
     "outcome": {"succeeded", "failed", "cancelled", "error", "interrupted"},
     "reconciliation": {"complete", "partial", "up_to_date", "none"},
-    "stage": {"context", "declare", "handler"},
+    "stage": {"context", "declare", "handler", "complete"},
     "change": {"discovered", "created", "updated", "removed", "unchanged"},
     "severity": {"warning", "error"},
     "target": set(OPERATIONS),
@@ -110,6 +119,13 @@ def _measured_operations() -> dict[str, set[str]]:
                 continue
             if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
                 found[target].add(literal.value)
+                if module == "documents.py" and literal.value in {
+                    "publish",
+                    "task_status",
+                    "list",
+                    "retract",
+                }:
+                    found["control_plane"].add(literal.value)
     return found
 
 
@@ -155,7 +171,7 @@ def _drive_every_path() -> None:
             run.result = KnowledgeBaseSyncResult(
                 outcome=outcome, reconciliation=KnowledgeBaseReconciliation.partial
             )
-    for stage in ("context", "declare", "handler"):
+    for stage in ("context", "declare", "handler", "complete"):
         with pytest.raises(RuntimeError):
             with telemetry.observing_run() as run:
                 run.stage = stage

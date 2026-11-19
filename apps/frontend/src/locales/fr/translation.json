@@ -814,7 +814,8 @@
       "hitlQuestionsChanged": "Les questions en attente ont changé. Vos réponses n'ont pas été appliquées. Rouvrez la conversation pour charger les questions actuelles.",
       "hitlConflict": "Votre réponse n'a pas pu être appliquée car la conversation est occupée ou a changé. Réessayez, ou rouvrez la conversation si le problème persiste.",
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
-      "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
+      "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée.",
+      "agentErrorSummary": "Erreur de l'agent"
     },
     "hitlOtherAnswerPlaceholder": "Autre",
     "hitlOtherAnswerWithText": "Autre : {{answer}}",
@@ -1246,6 +1247,10 @@
       },
       "tabular": {
         "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
+        "libraryBinding": {
+          "title": "Restreindre à des dossiers de documents",
+          "description": "Limiter les requêtes tabulaires aux dossiers sélectionnés. Une sélection vide n'autorise aucun document du corpus."
+        },
         "name": "Exploiter les fichiers tabulaires"
       }
     }
@@ -1622,7 +1627,6 @@
       "scopeUnavailable": "Cet espace est indisponible ou vous n’y avez pas accès.",
       "modelProfile": "Modèle recommandé",
       "modelUnavailable": "La sélection de modèles n'est pas encore raccordée dans ce formulaire. Les réglages enregistrés sont conservés.",
-      "legacyModelReselection": "Cet ancien profil est conservé pour diagnostic uniquement. Une re-sélection explicite d'un modèle plateforme est nécessaire ; ce formulaire conserve la référence.",
       "errors": {
         "unauthorized": "Votre session a expiré. Veuillez vous reconnecter.",
         "forbidden": "Vous n’avez pas les droits nécessaires pour cette opération.",
@@ -2517,6 +2521,38 @@
     },
     "cancel": "Annuler",
     "chatTrace": {
+      "readDocument": {
+        "documentLabel": "Lecture de {{name}}",
+        "folderLabel": "Lecture du dossier {{name}}",
+        "document": "Document",
+        "folder": "Dossier",
+        "unnamed": "Nom absent de cette trace"
+      },
+      "conversationFile": {
+        "labels": {
+          "ls": "Liste : {{name}}",
+          "read_file": "Lecture : {{name}}",
+          "write_file": "Écriture : {{name}}",
+          "edit_file": "Modification : {{name}}",
+          "glob": "Recherche des fichiers {{name}}",
+          "grep": "Recherche de « {{name}} » dans les fichiers",
+          "concat_files": "Assemblage de fichiers dans {{name}}",
+          "read_conversation_file": "Récupération : {{name}}",
+          "publish_conversation_file": "Livraison : {{name}}"
+        },
+        "file": "Fichier",
+        "folder": "Dossier",
+        "pattern": "Motif",
+        "text": "Texte recherché",
+        "files": "Fichiers parcourus",
+        "output": "Fichier produit",
+        "inputs": "Fichiers assemblés",
+        "delivered": "Livré sous",
+        "source": "Fichier de l'espace de travail",
+        "size": "Taille écrite",
+        "lines": "Lignes demandées",
+        "storedResult": "un résultat d'outil conservé"
+      },
       "documentTree": {
         "metadataFor": "Métadonnées de {{name}}",
         "truncated": "Tronqué",
@@ -2565,6 +2601,7 @@
       "partialRows_other": "Résultat partiel : {{count}} premières lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "copyFullResponse": "Le bouton de copie de la réponse copie la réponse enregistrée complète.",
       "sqlQuery": "Requête :",
       "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
@@ -2581,6 +2618,12 @@
         "catalogComplete": "Sommaire complet : {{total}} lignes.",
         "catalogPreview": "Sommaire : les {{shown}} premières lignes sur {{total}}.",
         "emptyCatalog": "Ce catalogue est vide.",
+        "queryPreview_one": "Aperçu de {{count}} ligne sur {{total}}{{shortened}}{{copy}}.",
+        "queryPreview_other": "Aperçu de {{count}} lignes sur {{total}}{{shortened}}{{copy}}.",
+        "queryPreviewShortened": ", certaines valeurs sont abrégées",
+        "queryPreviewCopy": " ; Copier récupère la réponse enregistrée complète",
+        "showMoreRows_one": "Afficher {{count}} ligne supplémentaire",
+        "showMoreRows_other": "Afficher {{count}} lignes supplémentaires",
         "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
         "kind": {
           "csv": "CSV",
@@ -2694,6 +2737,7 @@
           "grep": "Recherche dans les fichiers",
           "execute": "Exécution d'une commande",
           "concat_files": "Assemblage de fichiers",
+          "list_conversation_files": "Liste des fichiers de la conversation",
           "task": "Travail confié à un assistant",
           "write_todos": "Mise à jour du plan"
         },
@@ -2733,27 +2777,7 @@
       "failure": {
         "arguments": "Arguments de l'appel :",
         "error": "Erreur :",
-        "invalid_arguments": "Les arguments de l'appel ont été refusés. Vérifiez et corrigez les arguments de l'appel avant de réessayer.",
-        "not_approved": "Appel refusé par l'utilisateur.",
-        "authentication_required": "La demande d'authentification a été refusée. Rétablissez l'authentification avant de réessayer.",
-        "resource_unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès. Choisissez une ressource disponible dans votre périmètre d'accès actuel.",
-        "scope_refused": "Cet appel visait des documents hors de la sélection de cette conversation : rien n'a été lu.",
-        "rate_limited": "La limite de requêtes du service a été atteinte. Attendez la réinitialisation de la limite avant de réessayer.",
-        "misconfigured": "Une dépendance a refusé la configuration de la plateforme. C'est un problème de configuration, pas de votre demande : un administrateur doit le corriger.",
-        "service_busy": "Le service est temporairement indisponible ou à capacité. Réessayez plus tard.",
-        "timeout": "L'opération a dépassé son délai maximal. Réduisez la demande avant de réessayer.",
-        "service_error": "Le service n'a pas pu terminer cette opération. Réessayez plus tard ; contactez le support si le problème persiste.",
         "unexpected": "Cette étape a échoué de façon inattendue. Réessayez ; contactez le support si le problème persiste.",
-        "platform": {
-          "misconfigured": "{{origin}} a refusé les identifiants de Knowledge Flow. C'est un problème de configuration de la plateforme, pas de votre demande : un administrateur doit corriger la configuration de Knowledge Flow.",
-          "service_busy": "{{origin}} est injoignable. C'est un problème de disponibilité de la plateforme, pas de votre demande : réessayez plus tard ; si le problème persiste, un administrateur doit vérifier ce service."
-        },
-        "origin": {
-          "knowledge_flow": "Knowledge Flow",
-          "object_storage": "Le stockage de documents",
-          "search_index": "L'index de recherche",
-          "database": "La base de données"
-        },
         "setting": "Réglage à vérifier :",
         "settingOwner": "(Knowledge Flow)",
         "httpStatus": "Statut HTTP {{status}}",
@@ -5124,12 +5148,14 @@
       "networkError": "Le résultat n'a pas pu être reçu.",
       "replay": "Certaines modifications peuvent déjà être appliquées. Corrigez la cause, puis importez explicitement le même bundle à nouveau.",
       "completed": "Import terminé",
-      "additive": "Réimporter préserve les identités, les espaces et les rôles existants, et ajoute les déclarations du bundle. Les mots de passe existants sont conservés.",
+      "additive": "Réimporter préserve les identités, les espaces, les rôles et les skills existants, et ajoute les déclarations du bundle. Les mots de passe existants et les skills déjà présents ne sont pas modifiés.",
       "counts": {
         "identities_resolved": "Identités résolues",
         "identities_created": "Identités créées",
         "spaces_reconciled": "Espaces réconciliés",
-        "grants_acknowledged": "Attributions confirmées"
+        "grants_acknowledged": "Attributions confirmées",
+        "skills_created": "Skills créés",
+        "skills_kept": "Skills conservés"
       }
     },
     "manager": {
@@ -5374,12 +5400,12 @@
       "agentHint": "Le choix doit respecter les autorisations de l'organisation et les restrictions de l'espace. Sans recommandation, l'agent suit le défaut de l'espace, puis celui de l'organisation."
     },
     "toolGovernance": {
-      "title": "Outils",
+      "title": "Outils et applications",
       "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace.",
       "restrict": "Restreindre les offres dans cet espace",
       "inherit": "Sans restriction locale, cet espace suit les autorisations de ses parents.",
       "denyAll": "Ne rien autoriser dans cet espace",
-      "offer": "Offre du pod",
+      "offer": "Offre",
       "parent": "Plafond parent",
       "local": "Choix local",
       "effective": "Décision effective",
@@ -5396,16 +5422,23 @@
     "spaceSkills": {
       "title": "Skills",
       "scope": "Ce catalogue appartient à l’espace sélectionné. Les conversations utilisent aussi les skills des espaces parents directement accessibles en lecture.",
-      "empty": "Aucun skill installé dans cet espace.",
-      "defaults": "Skills fournis",
-      "installExplanation": "Installez un package indépendant dans cet espace. Son contenu pourra ensuite être géré ici.",
-      "install": "Installer",
+      "empty": "Aucun skill dans cet espace.",
       "remove": "Supprimer",
       "removeConfirm": "Supprimer {{name}} de cet espace ?",
       "edit": "Modifier les fichiers",
       "save": "Enregistrer le package",
       "cancel": "Annuler",
-      "failed": "L’opération a échoué. Vérifiez le format du package et rechargez-le s’il a changé."
+      "failed": "L’opération a échoué. Vérifiez le format du package et rechargez-le s’il a changé.",
+      "new": "Nouveau skill",
+      "create": "Créer le skill",
+      "name": "Nom",
+      "nameHint": "Lettres minuscules, chiffres et tirets, par exemple compte-rendu. Il ne pourra plus être modifié.",
+      "description": "Description",
+      "instructions": "Instructions (Markdown)",
+      "filePath": "Chemin du nouveau fichier",
+      "filePathHint": "Ressource texte comme references/guide.md (.md, .txt, .json, .yaml, .yml, .csv).",
+      "addFile": "Ajouter le fichier",
+      "removeFile": "Supprimer ce fichier"
     },
     "localMarketplace": {
       "savedProposals": "Soumissions à vérifier",
@@ -5631,6 +5664,44 @@
       "invalid": "Saisissez un entier positif respectant le plafond de l’organisation.",
       "failed": "Impossible d’enregistrer le délai de purge.",
       "saved": "Délai de purge enregistré."
+    },
+    "applications": {
+      "registryHint": "Enregistrez les applications hébergées, puis activez-les pour que les Owners d’organisation puissent les autoriser.",
+      "create": "Enregistrer une application",
+      "edit": "Modifier l’application",
+      "editNamed": "Modifier {{name}}",
+      "display_name": "Nom",
+      "description": "Description",
+      "logical_name": "Clé de l’application",
+      "icon": "Icône",
+      "version": "Version",
+      "ui_base_url": "Destination interne de l’interface",
+      "api_base_url": "Destination interne de l’API",
+      "ui_base_urlHint": "URL complète du répertoire HTTP(S) qui sert l’interface, terminée par /.",
+      "api_base_urlHint": "URL HTTP(S) facultative de base de l’API, terminée par /. Laissez vide pour une application sans API.",
+      "entry_permission": "Permission requise pour utiliser cette application",
+      "permissions": {
+        "read": "Lire le contenu de l’espace",
+        "write": "Modifier le contenu de l’espace",
+        "manage": "Gérer l’espace",
+        "run_evaluations": "Exécuter des évaluations",
+        "manage_evaluation_corpus": "Gérer le corpus d’évaluation",
+        "read_conversations_for_evaluation": "Lire les conversations pour évaluation",
+        "read_usage": "Consulter la consommation"
+      },
+      "enabled": "Activée sur la plateforme",
+      "active": "Activée",
+      "inactive": "Désactivée",
+      "createdDisabled": "Une nouvelle application est désactivée. Vérifiez son inscription avant de l’activer. Les Owners d’organisation décident où elle est autorisée.",
+      "conflict": "Cette inscription a changé. Fermez et rouvrez-la avant d’enregistrer. Pour une création, choisissez une clé d’application inutilisée.",
+      "invalid": "Vérifiez la clé de l’application, les libellés et les destinations HTTP(S).",
+      "saveFailed": "Impossible d’enregistrer l’application.",
+      "display_name_by_lang": "Nom traduit (facultatif)",
+      "description_by_lang": "Description traduite (facultative)",
+      "locale": {
+        "en": "Anglais",
+        "fr": "Français"
+      }
     }
   },
   "runtime": {

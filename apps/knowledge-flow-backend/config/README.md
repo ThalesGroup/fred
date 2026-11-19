@@ -10,6 +10,16 @@ Search uses `storage.vector_store`. The API's index base name and artifact bucke
 
 For processing profiles, queues, output credentials and optional PyMuPDF, see the [worker configuration](../../knowledge-flow-worker/config/README.md).
 
+## Tabular query results
+
+`storage.tabular_store.query.default_max_rows` defaults to 500. A query may omit
+`max_rows` to use that default, send JSON `null` to disable the row limit, or set
+any positive row limit. `max_output_chars` (default 50,000) always bounds the JSON
+rows array and keeps complete rows; metadata and explanation are additional.
+The retired configuration key `query.max_rows` is rejected. SQL LIMIT, memory,
+execution-time, concurrency and dataset guards remain effective. `truncated`
+reports actual omitted rows; reaching the row limit alone does not imply truncation.
+
 ## Tabular HTTPS reads
 
 For Parquet artifacts served by an internal HTTPS object store, mount a readable

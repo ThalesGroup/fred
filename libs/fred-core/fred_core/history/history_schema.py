@@ -194,6 +194,19 @@ class FailureOrigin(StrEnum):
     database = "database"
 
 
+class FailureReason(StrEnum):
+    """
+    What exactly a tool refused, when the code alone is too coarse for the person.
+
+    Why this exists:
+    - the runtime writes the person's sentence from this closed value, so a
+      producer can make it precise without supplying any text
+    """
+
+    # The value is not a document uid: a file name, a path, a shortened uid.
+    not_a_document_uid = "not_a_document_uid"
+
+
 # The name of an environment variable; never its value.
 SETTING_NAME_PATTERN = r"^[A-Z][A-Z0-9_]{0,63}$"
 
@@ -226,6 +239,7 @@ class ToolFailure(BaseModel):
       refuses the call
     - ``origin`` and ``setting`` come only from Knowledge Flow's own report; the
       runtime believes no other server
+    - ``message`` is the runtime's to write; a producer leaves it unset
     """
 
     model_config = ConfigDict(frozen=True)
@@ -235,11 +249,22 @@ class ToolFailure(BaseModel):
     origin: Optional[FailureOrigin] = None
     # The setting to correct, only for ``misconfigured``.
     setting: Optional[str] = Field(default=None, pattern=SETTING_NAME_PATTERN)
+    # Refines ``invalid_arguments`` when the tool knows what it refused.
+    reason: Optional[FailureReason] = None
+    # The person's sentence, in their language, shown verbatim. The runtime
+    # writes it from the code when the failure leaves the turn, replacing any
+    # value a tool or a dependency set; rows stored before it have none.
+    message: Optional[str] = None
 
     @model_validator(mode="after")
-    def _setting_only_when_misconfigured(self) -> "ToolFailure":
+    def _facets_fit_code(self) -> "ToolFailure":
         if self.setting is not None and self.code is not ToolFailureCode.misconfigured:
             raise ValueError("a setting names what to correct in a misconfiguration")
+        if (
+            self.reason is not None
+            and self.code is not ToolFailureCode.invalid_arguments
+        ):
+            raise ValueError("a reason refines a refused call")
         return self
 
     def platform_explanation(self) -> Optional[str]:
@@ -717,9 +742,7 @@ def make_tool_call(
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - carries no token figure (#2403): a tool call costs nothing by itself,
-      and the former ``token_usage`` argument carried the deciding model
-      call's whole prompt, making a free tool call look like a 17k one.
+    - model token usage is accounted for by the turn, not the tool call.
     """
     return ChatMessage(
         session_id=session_id,

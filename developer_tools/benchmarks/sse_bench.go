@@ -120,6 +120,9 @@ func decodeRuntimeEvent(data []byte) (streamEvent, error) {
 	if event.Kind == "execution_interrupted" {
 		return streamEvent{}, benchmarkError("execution_interrupted")
 	}
+	if event.Kind == "awaiting_human" {
+		return streamEvent{}, benchmarkError("human_input_required")
+	}
 	if event.Kind == "" {
 		return streamEvent{}, benchmarkError("invalid_event")
 	}

@@ -29,7 +29,11 @@ from uuid import uuid4
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer_structures import KPIEvent, Metric, Trace
-from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.kpi.prometheus_kpi_store import (
+    MS_BUCKETS,
+    SECONDS_BUCKETS,
+    PrometheusKPIStore,
+)
 
 
 class _RecordingKPIStore(BaseKPIStore):
@@ -165,6 +169,44 @@ def test_prometheus_store_promotes_runtime_stage() -> None:
     assert "runtime_stage" in label_names
     assert "status" in label_names
     assert "service" in label_names
+
+
+def test_prometheus_store_promotes_persist_store_and_op() -> None:
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    metric_name = f"test.persist_labels_{uuid4().hex}_ms"
+    store.index_event(
+        KPIEvent(
+            metric=Metric(name=metric_name, type="timer", value=3.0, unit="ms"),
+            dims={"store": "checkpoint", "op": "owner", "session_id": "private"},
+        )
+    )
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    assert store._label_names[(resolved_name, "timer")] == ("op", "store")
+
+
+def test_prometheus_store_chooses_buckets_from_the_emitted_unit() -> None:
+    """agent.turn_completed is in ms although its name has no `_ms` suffix."""
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    names = {unit: f"test.bucket_unit_{unit}_{uuid4().hex}" for unit in ("ms", "s")}
+    for unit, name in names.items():
+        store.index_event(
+            KPIEvent(
+                metric=Metric(name=name, type="timer", value=1.0, unit=unit),
+                dims={"status": "ok"},
+            )
+        )
+
+    def bounds(name: str) -> list[float]:
+        metric = store._metrics[(store._resolve_metric_name(name), "timer")]
+        return [
+            float(s.labels["le"])
+            for s in next(iter(metric.collect())).samples
+            if s.name.endswith("_bucket")
+        ]
+
+    assert bounds(names["ms"]) == [*MS_BUCKETS, float("inf")]
+    assert bounds(names["s"]) == [*SECONDS_BUCKETS, float("inf")]
 
 
 def test_prometheus_store_promotes_pdf_stage_as_a_distinct_label_from_runtime_stage() -> (

@@ -89,7 +89,10 @@ from fred_core.history.history_schema import (
 )
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
-from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
+from fred_core.kpi.kpi_runtime_stage_metric import (
+    record_runtime_stage_metric,
+    runtime_stage_timer,
+)
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import (
@@ -109,6 +112,7 @@ from fred_core.security.structure import (
     KeycloakUser,
     is_service_agent,
 )
+from fred_core.technical_tracing import technical_span, trace_async, trace_headers
 from fred_sdk.contracts.agent_draft import (
     AgentDraftPodRequest,
     AgentDraftResult,
@@ -176,6 +180,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     SessionTitleRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
+    ToolResultRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillInvocation
@@ -199,7 +204,6 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
 from fred_runtime.app.authorization import is_allowed, require_permission
-from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.app.history_access import (
     authorize_history_read,
     readable_history_sessions,
@@ -257,6 +261,7 @@ from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,
     build_conversation_filesystem,
 )
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
@@ -285,6 +290,7 @@ from fred_runtime.runtime_support.hitl_batch import (
 )
 from fred_runtime.runtime_support.session_fence import SessionWritesPending
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+from fred_runtime.runtime_support.tool_execution import describe_failure
 from fred_runtime.runtime_support.turn_steering import turn_messages
 
 from ..common.structures import AgentSettingsLike
@@ -335,6 +341,7 @@ from .dependencies import (
     get_pod_container_from_app,
 )
 from .observability_factory import bootstrap_observability
+from .technical_tracing import TechnicalTracingMiddleware, shutdown_technical_tracing
 
 logger = logging.getLogger(__name__)
 
@@ -547,7 +554,10 @@ def _execute_response_adapter() -> TypeAdapter[Any]:
 
 def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
     """Models come exclusively from the complete turn resolver, never pod discovery."""
-    return RoutedChatModelFactory(credentials=config.inference_credentials)
+    return RoutedChatModelFactory(
+        credentials=config.inference_credentials,
+        normalize_streamed_tool_call_ids=config.ai.normalize_streamed_tool_call_ids,
+    )
 
 
 @dataclass(slots=True)
@@ -1004,11 +1014,7 @@ def _build_runtime_services(
     )
     document_access_config = None
     effective_tuning = tuning if tuning is not None else settings.tuning
-    if effective_tuning and any(
-        key.startswith("managed-mcp:")
-        for key in (effective_tuning.selected_capability_ids or ())
-    ):
-        settings.managed_mcp_bindings = current_turn().binding.mcp_bindings
+    settings.managed_mcp_bindings = current_turn().binding.mcp_bindings
     if capability_registry is not None and "document_access" in capability_registry:
         stored = (
             effective_tuning.capability_config.get("document_access")
@@ -1105,11 +1111,28 @@ def _build_runtime_services(
         settings=settings,
         credentials=credential_provider,
     )
+    mcp_document_scope = document_scope
+    if capability_registry is not None:
+        mcp_document_scope = mcp_document_scope.intersect(
+            DocumentScope.from_ids(
+                resolve_bound_library_ids(
+                    capability_registry,
+                    capability_ids=[
+                        admitted.capability_id
+                        for admitted in settings.managed_mcp_bindings
+                        if admitted.capability_id in capability_registry
+                    ],
+                    capability_config=effective_tuning.capability_config
+                    if effective_tuning
+                    else {},
+                )
+            )
+        )
     tool_provider = FredMcpToolProvider(
         binding=binding,
         settings=settings,
         credentials=credential_provider,
-        document_scope=document_scope,
+        document_scope=mcp_document_scope,
     )
     workspace_fs = FredWorkspaceFs(binding=binding, credentials=credential_provider)
     handlers = (
@@ -1719,13 +1742,17 @@ async def _resolve_agent_instance(
     if request_id:
         headers["X-Request-Id"] = request_id
     try:
-        response = await http_client.post(
-            f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
-            headers=headers,
-            params=params,
-            auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
-            follow_redirects=False,
-        )
+        with technical_span("control_plane.runtime") as span:
+            response = await http_client.post(
+                f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
+                headers={**headers, **trace_headers()},
+                params=params,
+                auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
+                follow_redirects=False,
+            )
+            span.set_attribute("http.response.status_code", response.status_code)
+            if response.status_code >= 400:
+                span.set_attribute("status", "error")
         if response.status_code == 409:
             problem = response.json()
             if (
@@ -1754,7 +1781,6 @@ async def _resolve_agent_instance(
                 )
             if isinstance(problem, dict) and problem.get("code") in {
                 "model_selection_missing",
-                "model_reselection_required",
                 "model_offer_unknown",
                 "model_offer_forbidden",
                 "model_offer_unavailable",
@@ -1843,10 +1869,9 @@ async def _resolve_agent_instance(
             "runtime_id": resolution.agent.runtime_id,
             "template_id": str(resolution.agent.template_id),
         }
+        owned = await history.session_ownership(conversation, resolution.subject_id)
         accepted = await checkpointer.abind_conversation(
-            conversation,
-            association,
-            allow_create=not await history.session_exists(conversation),
+            conversation, association, allow_create=owned is None
         )
         if not accepted:
             raise HTTPException(
@@ -1974,10 +1999,9 @@ async def _enforce_session_ownership(
     history_store = get_runtime_context().config.history_store
     if history_store is None:
         return
-    if not await history_store.session_exists(session_id):
-        return  # new session — the caller becomes its owner
-    if await history_store.session_belongs_to_user(session_id, authenticated_user.uid):
-        return  # caller owns this session
+    owned = await history_store.session_ownership(session_id, authenticated_user.uid)
+    if owned is not False:
+        return  # new session (the caller becomes its owner) or the caller's own
     _emit_audit_event(
         container,
         "warning",
@@ -3025,6 +3049,7 @@ async def _rank_runtime_event(
     session_id: str | None,
     user_id: str,
     exchange_id: str,
+    language: str | None = None,
 ) -> dict[str, Any]:
     if ranker is None:
         return payload
@@ -3065,7 +3090,7 @@ async def _rank_runtime_event(
             if scope is not None:
                 scope.fail_event_receipt(receipt_key, exc)
             if isinstance(exc, ActiveTurnLost):
-                return RuntimeErrorEvent(message=exc.user_message).model_dump(
+                return RuntimeErrorEvent(message=exc.user_message(language)).model_dump(
                     mode="json"
                 )
             raise
@@ -3102,6 +3127,7 @@ class _TurnEventExpander:
         return [payload]
 
 
+@trace_async("history.write")
 async def _write_turn_history(
     *,
     session_id: str,
@@ -3530,6 +3556,11 @@ async def _write_turn_history(
                             )
                         )
                     ],
+                    # The platform wrote this sentence for the person: a reader
+                    # shows it verbatim. Rows stored before may hold raw errors.
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"platform_written": True}}
+                    ),
                 )
             )
 
@@ -3575,7 +3606,13 @@ async def _write_turn_history(
     # 3. Terminal assistant message (from FinalRuntimeEvent). A turn whose only
     # output is a card (no text, no model name) still has to leave a row, or the
     # card it produced is lost exactly as before ui_parts were persisted.
-    if final_content or final_model or final_ui_parts:
+    if (
+        final_content
+        or final_model
+        or final_ui_parts
+        or final_token_usage is not None
+        or final_context_tokens is not None
+    ):
         messages.append(
             make_assistant_final(
                 session_id,
@@ -3763,9 +3800,12 @@ def _emit_turn_completed(
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
+    history_write: tuple[float, float] | None = None,
 ) -> None:
     """
     Emit turn KPIs after the SSE stream closes.
+
+    `history_write` (start, end) becomes the turn's `history_write` stage.
 
     Two metrics are emitted:
 
@@ -3831,6 +3871,14 @@ def _emit_turn_completed(
             },
             actor=KPIActor(type="human", user_id=user_id),
         )
+
+        if history_write is not None:
+            record_runtime_stage_metric(
+                kpi_writer=kpi,
+                runtime_stage="history_write",
+                start_ts=history_write[0],
+                end_ts=history_write[1],
+            )
 
         if outcome.is_error:
             kpi.emit(
@@ -3984,6 +4032,7 @@ async def _stream(
             raise AuthorityLostError()
 
         collected: list[dict[str, Any]] = []
+        history_write: tuple[float, float] | None = None
         expander = _TurnEventExpander(definition, request)
         payloads = _iterate_runtime_event_payloads(
             definition,
@@ -4010,6 +4059,7 @@ async def _stream(
                         session_id=session_id,
                         user_id=user_id,
                         exchange_id=exchange_id,
+                        language=ctx.get("language"),
                     )
                     collected.append(payload)
                     if payload.get("kind") in {"final", "execution_error"}:
@@ -4019,6 +4069,7 @@ async def _stream(
         finally:
             await complete_cleanup(payloads.aclose())
             if session_id and history_store is not None:
+                write_start = time.monotonic()
                 try:
                     await complete_cleanup(
                         _write_turn_history(
@@ -4044,10 +4095,12 @@ async def _stream(
                         )
                     )
                 except ActiveTurnLost as exc:
-                    terminal = RuntimeErrorEvent(message=exc.user_message).model_dump(
-                        mode="json"
-                    )
+                    terminal = RuntimeErrorEvent(
+                        message=exc.user_message(ctx.get("language"))
+                    ).model_dump(mode="json")
                     collected.append(terminal)
+                finally:
+                    history_write = (write_start, time.monotonic())
 
     finally:
         if request._active_turn is not None:
@@ -4079,6 +4132,7 @@ async def _stream(
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
+        history_write=history_write,
     )
 
 
@@ -4379,7 +4433,11 @@ class HitlResumeAlreadyClaimedError(UserFacingExecutionError):
 
     def __init__(self, internal_message: str) -> None:
         super().__init__(
-            "This HITL request is already being resumed.", internal_message
+            {
+                "en": "This HITL request is already being resumed.",
+                "fr": "Cette demande est déjà en cours de reprise.",
+            },
+            internal_message,
         )
 
 
@@ -4739,7 +4797,9 @@ async def _iterate_runtime_event_payloads(
         except ActiveTurnLost as exc:
             outcome = "failed"
             logger.error("event=active_turn outcome=stopped reason=lease_lost")
-            yield RuntimeErrorEvent(message=exc.user_message).model_dump(mode="json")
+            yield RuntimeErrorEvent(
+                message=exc.user_message((request.context or {}).get("language"))
+            ).model_dump(mode="json")
         except asyncio.CancelledError:
             outcome = "cancelled"
             if owns_run_record:
@@ -4819,6 +4879,7 @@ async def _iterate_runtime_event_payloads_inner(
       child; handed to every adapter this turn builds
     """
 
+    setup_start = time.monotonic()
     request_id = str(current_context().get("request_id") or uuid4())
     ctx = request.context or {}
     correlation_id = str(current_context().get("correlation_id") or uuid4())
@@ -4943,48 +5004,53 @@ async def _iterate_runtime_event_payloads_inner(
 
     current_turn().check_context(runtime_context, definition.agent_id)
 
-    conversation_filesystem = _build_conversation_filesystem(binding)
-    services = _build_runtime_services(
-        definition,
-        binding,
-        tuning=tuning,
-        document_scope=request._document_scope,
-        turn_options=getattr(request, "turn_options", None),
-        registry=registry,
-        access_token=access_token,
-        capability_registry=capability_registry,
-        credential_provider=credential_provider,
-        conversation_filesystem=conversation_filesystem,
-        bound_library_ids=_instance_bound_library_ids(
-            capability_registry, tuning, definition
-        ),
-    )
-    if not ctx.get("session_id"):
-        # A one-shot call, such as an evaluation, has no conversation, and only
-        # conversations created by the Control Plane own stored checkpoints.
-        services = replace(services, checkpointer=InMemorySaver())
-    if owns_run_record and current_turn().binding.title is not None:
-        request._title_task = asyncio.create_task(
-            generate_session_title(request.message, binding=binding, services=services)
-        )
-        register_run_child(request._title_task)
-    # session_id drives LangGraph checkpointing: the agent resumes its graph
-    # state on every turn. Falls back to request_id for one-shot calls so
-    # LangGraph's checkpointer invariant (thread_id required internally) is met.
-    execution_config = ExecutionConfig(
-        session_id=ctx.get("session_id") or request_id,
-        pending_message_id=request.pending_message_id,
-        interrupt_id=request.interrupt_id,
-        resume_payload=request.resume_payload,
-        invocation_turns=getattr(request, "invocation_turns", ()),
-        interrupted_action=request.interrupted_action,
-        interruption_id=request.interruption_id,
-    )
-
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     error_phase = "capability_setup"
     owner_token = set_owner_execution(owns_run_record)
     try:
+        # Inside the try: resolving the instance's bound libraries raises a
+        # named CapabilityError on unknown ids or invalid stored config, which
+        # must surface as a runtime error event, not an HTTP 500.
+        conversation_filesystem = _build_conversation_filesystem(binding)
+        services = _build_runtime_services(
+            definition,
+            binding,
+            tuning=tuning,
+            document_scope=request._document_scope,
+            turn_options=getattr(request, "turn_options", None),
+            registry=registry,
+            access_token=access_token,
+            capability_registry=capability_registry,
+            credential_provider=credential_provider,
+            conversation_filesystem=conversation_filesystem,
+            bound_library_ids=_instance_bound_library_ids(
+                capability_registry, tuning, definition
+            ),
+        )
+        if not ctx.get("session_id"):
+            # A one-shot call, such as an evaluation, has no conversation, and only
+            # conversations created by the Control Plane own stored checkpoints.
+            services = replace(services, checkpointer=InMemorySaver())
+        if owns_run_record and current_turn().binding.title is not None:
+            request._title_task = asyncio.create_task(
+                generate_session_title(
+                    request.message, binding=binding, services=services
+                )
+            )
+            register_run_child(request._title_task)
+        # session_id drives LangGraph checkpointing: the agent resumes its graph
+        # state on every turn. Falls back to request_id for one-shot calls so
+        # LangGraph's checkpointer invariant (thread_id required internally) is met.
+        execution_config = ExecutionConfig(
+            session_id=ctx.get("session_id") or request_id,
+            pending_message_id=request.pending_message_id,
+            interrupt_id=request.interrupt_id,
+            resume_payload=request.resume_payload,
+            invocation_turns=getattr(request, "invocation_turns", ()),
+            interrupted_action=request.interrupted_action,
+            interruption_id=request.interruption_id,
+        )
+
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
         # invalid stored config — surfaced below as a runtime error event
@@ -5033,6 +5099,11 @@ async def _iterate_runtime_event_payloads_inner(
             runtime.bind(binding)
             await runtime.activate()
             executor = await runtime.get_executor()
+            record_runtime_stage_metric(
+                kpi_writer=services.kpi_writer,
+                runtime_stage="turn_setup",
+                start_ts=setup_start,
+            )
             # Graph agents receive their typed input schema; the agent's
             # build_turn_state() maps it to graph state before the first node runs.
             # The standard contract is a single "message" field in the input schema.
@@ -5069,12 +5140,7 @@ async def _iterate_runtime_event_payloads_inner(
                 )
             request._hitl_resume_started = request.resume_payload is not None
             async for event in executor.stream(graph_input, execution_config):
-                payload = event.model_dump(mode="json")
-                if not isinstance(payload, dict):
-                    raise RuntimeError(
-                        "RuntimeEvent payload must serialize to a JSON object."
-                    )
-                yield payload
+                yield _event_payload(event, runtime_context.language)
             if graph_claim is not None:
                 await graph_claim.consume()
         else:
@@ -5099,6 +5165,11 @@ async def _iterate_runtime_event_payloads_inner(
             runtime.bind(binding)
             await runtime.activate()
             executor = await runtime.get_executor()
+            record_runtime_stage_metric(
+                kpi_writer=services.kpi_writer,
+                runtime_stage="turn_setup",
+                start_ts=setup_start,
+            )
             # On HITL resume, messages are ignored by the codec — the graph
             # resumes from its checkpointed interrupt via Command(resume=...).
             # ReActInput.validate_messages requires at least one (user)
@@ -5163,12 +5234,7 @@ async def _iterate_runtime_event_payloads_inner(
                         ),
                     ):
                         _mark_run_terminal(credential_provider)
-                    payload = event.model_dump(mode="json")
-                    if not isinstance(payload, dict):
-                        raise RuntimeError(
-                            "RuntimeEvent payload must serialize to a JSON object."
-                        )
-                    yield payload
+                    yield _event_payload(event, runtime_context.language)
             finally:
                 if owns_run_record:
                     _mark_run_terminal(credential_provider)
@@ -5193,7 +5259,9 @@ async def _iterate_runtime_event_payloads_inner(
     except Exception as exc:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
-        message = report_execution_error(logger, exc, error_phase)
+        message = report_execution_error(
+            logger, exc, error_phase, language=runtime_context.language
+        )
         yield RuntimeErrorEvent(message=message).model_dump(mode="json")
     finally:
         if owns_run_record:
@@ -5207,6 +5275,20 @@ async def _iterate_runtime_event_payloads_inner(
             set_owner_execution(False)
         if runtime is not None:
             await complete_cleanup(runtime.dispose())
+
+
+def _event_payload(event: RuntimeEvent, language: str | None) -> dict[str, Any]:
+    """Serialize one runtime event as the stream and the history receive it.
+
+    Every runtime's tool results pass here, so a failure gains the person's
+    sentence once, in the run's language.
+    """
+
+    if isinstance(event, ToolResultRuntimeEvent) and event.failure is not None:
+        event = event.model_copy(
+            update={"failure": describe_failure(event.failure, language)}
+        )
+    return event.model_dump(mode="json")
 
 
 def _terminal_execute_payload(
@@ -6098,7 +6180,8 @@ def _build_agent_router(
             )
             and caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and await history_store.session_ownership(session_id, caller_uid)
+            is not True
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -6483,7 +6566,8 @@ def _build_agent_router(
             )
             and caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and await history_store.session_ownership(session_id, caller_uid)
+            is not True
         ):
             # No history to prove ownership (e.g. an erase retry after history
             # went first): nothing left is a successful no-op, otherwise every
@@ -6620,6 +6704,7 @@ def _build_agent_router(
                                 session_id=session_id,
                                 user_id=user_id_str,
                                 exchange_id=exchange_id,
+                                language=(internal_req.context or {}).get("language"),
                             )
                         )
             finally:
@@ -6660,9 +6745,11 @@ def _build_agent_router(
                         )
                     except ActiveTurnLost as exc:
                         payloads.append(
-                            RuntimeErrorEvent(message=exc.user_message).model_dump(
-                                mode="json"
-                            )
+                            RuntimeErrorEvent(
+                                message=exc.user_message(
+                                    (internal_req.context or {}).get("language")
+                                )
+                            ).model_dump(mode="json")
                         )
             _emit_turn_completed(
                 container,
@@ -6787,6 +6874,7 @@ def _build_agent_router(
                                 session_id=session_id,
                                 user_id=user_id_str,
                                 exchange_id=exchange_id,
+                                language=(internal_req.context or {}).get("language"),
                             )
                         )
                 eval_session_id = session_id or str(uuid4())
@@ -6826,9 +6914,11 @@ def _build_agent_router(
                         )
                     except ActiveTurnLost as exc:
                         payloads.append(
-                            RuntimeErrorEvent(message=exc.user_message).model_dump(
-                                mode="json"
-                            )
+                            RuntimeErrorEvent(
+                                message=exc.user_message(
+                                    (internal_req.context or {}).get("language")
+                                )
+                            ).model_dump(mode="json")
                         )
             _emit_turn_completed(
                 container,
@@ -7299,6 +7389,7 @@ def create_agent_app(
             for label, close in (
                 ("gc diagnostics", gc_diagnostics.stop),
                 ("pod container", container.shutdown),
+                ("technical tracing", shutdown_technical_tracing),
                 # Release the Keycloak refresh pool deterministically rather
                 # than leaving it to GC, as the control-plane client above is.
                 ("keycloak refresh pool", aclose_token_refresh_client),
@@ -7342,6 +7433,8 @@ def create_agent_app(
         KPIMiddleware,
         kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
     )
+
+    app.add_request_middleware(TechnicalTracingMiddleware)
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

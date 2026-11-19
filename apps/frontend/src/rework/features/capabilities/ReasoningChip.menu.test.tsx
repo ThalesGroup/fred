@@ -61,8 +61,6 @@ const models: PreparationModels = {
   recommendation: first,
   default: second,
   fallback: null,
-  legacy_profile_id: null,
-  requires_reselection: false,
   options: { temperature: 0.4, max_tokens: 300 },
   offers: [first, second].map((key) => ({
     key,

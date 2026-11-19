@@ -296,11 +296,6 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     )
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # NOTE (#2403): this event carries no token usage on purpose. It used to
-    # carry the usage of the model call that DECIDED the call, which the trace
-    # UI rendered on the tool row — reading as if the tool had consumed the
-    # whole prompt (17.5k tokens for a call that consumes none). A tool call
-    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -486,7 +481,9 @@ class NodeErrorRuntimeEvent(RuntimeEventBase):
 
     Fields:
     - `node_id`: the node that raised
-    - `error_message`: str(exc) — a short technical description
+    - `error_message`: the platform's sentence for the person, in their
+      language, shown verbatim; never the exception text, which only the
+      fallback node receives, in its state
     - `routed_to`: the node the runtime is routing to next (the on_error target)
     """
 
@@ -566,12 +563,12 @@ class RuntimeErrorEvent(RuntimeEventBase):
 
     SSE client guidance:
     - Treat `execution_error` as a terminal event: no `final` will follow.
-    - Display `message` as a technical error detail (not as assistant content).
+    - Display `message` verbatim as an error (not as assistant content): it is
+      the platform's sentence for the person, in their language, and never
+      carries upstream error detail.
     - The stream closes after this event is delivered.
     - `reason` is set only when the platform itself ended the run. It is absent
       for a crash, so a client that ignores it behaves exactly as before.
-      When it is set, `message` is a platform-owned sentence that never carries
-      upstream error detail.
     """
 
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
@@ -1004,12 +1001,12 @@ class HistoryStorePort(Protocol):
         """
         ...
 
-    async def session_belongs_to_user(
+    async def session_ownership(
         self,
         session_id: str,
         user_id: str,
-    ) -> bool:
-        """Return True iff at least one history row exists for (session_id, user_id)."""
+    ) -> bool | None:
+        """``None`` without history rows, else whether one belongs to ``user_id``."""
         ...
 
     async def next_rank(self, session_id: str) -> int:

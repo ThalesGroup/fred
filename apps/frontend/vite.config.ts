@@ -14,31 +14,13 @@
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { loadEnv, mergeConfig, transformWithEsbuild, type Plugin } from "vite";
+import { loadEnv, mergeConfig, transformWithEsbuild } from "vite";
 import svgr from "@svgr/rollup";
 import path from "path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { visualizer } from "rollup-plugin-visualizer";
-import { loadApplicationProxyConfig, parseApplicationsEnabled } from "./scripts/application-proxy.mjs";
+import { loadApplicationProxyConfig } from "./scripts/application-proxy.mjs";
 import { themeOverlayPlugin } from "./scripts/theme-overlay.mjs";
-
-function applicationFailClosedPlugin(classifyRequest: (requestUrl: string) => "proxy" | 404 | 503 | null): Plugin {
-  return {
-    name: "fred-applications-fail-closed",
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const classification = classifyRequest(request.url ?? "");
-        if (classification === null || classification === "proxy") {
-          next();
-          return;
-        }
-        response.statusCode = classification;
-        response.setHeader("Content-Type", "text/plain; charset=utf-8");
-        response.end(classification === 404 ? "Not found" : "Application service unavailable");
-      });
-    },
-  };
-}
 
 // https://vitejs.dev/config/
 const baseConfig = defineConfig({
@@ -123,18 +105,13 @@ const baseConfig = defineConfig({
 });
 
 export default defineConfig(({ command, mode }) => {
-  // A build has no deployment configuration, so completeness of the upstreams
-  // is a serve-time and container-startup concern only.
-  const applications = loadApplicationProxyConfig({
-    registrationsJson: process.env.FRONTEND_APPLICATIONS_JSON ?? "[]",
-    requireServiceUpstreams: command === "serve" && mode !== "test",
-    enabled: parseApplicationsEnabled(process.env.FRONTEND_ENABLE_APPLICATIONS),
-  });
+  const applications = loadApplicationProxyConfig(
+    process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
+  );
 
   return mergeConfig(baseConfig, {
-    server: { proxy: applications.proxy },
+    server: { proxy: applications },
     plugins: [
-      applicationFailClosedPlugin(applications.classifyRequest),
       command === "serve" && mode !== "test"
         ? themeOverlayPlugin({ ...loadEnv(mode, path.resolve(__dirname, "config"), "FRONTEND_THEME_"), ...process.env })
         : null,

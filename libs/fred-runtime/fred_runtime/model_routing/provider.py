@@ -39,15 +39,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SEGMENT = re.compile(r"(?!\.{1,2}$)[A-Za-z0-9._-]+")
-_ENTRA_UNAVAILABLE = "Inference authentication is unavailable for the approved source"
-_TEMPERATURE_REFUSED = "The model client does not accept the admitted temperature"
+_ENTRA_UNAVAILABLE = {
+    "en": "Inference authentication is unavailable for the approved source.",
+    "fr": "L'authentification d'inférence est indisponible pour la source approuvée.",
+}
+_TEMPERATURE_REFUSED = {
+    "en": "The model client does not accept the admitted temperature.",
+    "fr": "Le client du modèle n'accepte pas la température admise.",
+}
 
 
 def _local_secret(variable: str | None) -> str:
     secret = os.environ.get(variable) if variable else None
     if not secret:
         raise ModelRoutingError(
-            "Inference credential is unavailable for the approved source"
+            {
+                "en": "Inference credential is unavailable for the approved source.",
+                "fr": "L'identifiant d'inférence est indisponible pour la source approuvée.",
+            }
         )
     return secret
 
@@ -71,11 +80,20 @@ class FredCoreModelProvider:
 
 class RoutedChatModelFactory(ChatModelFactoryPort):
     def __init__(
-        self, *, credentials: tuple[InferenceCredentialBinding, ...] = ()
+        self,
+        *,
+        credentials: tuple[InferenceCredentialBinding, ...] = (),
+        normalize_streamed_tool_call_ids: bool = True,
     ) -> None:
+        self._normalize_streamed_tool_call_ids = normalize_streamed_tool_call_ids
         self._credentials = {item.credential_binding: item for item in credentials}
         if len(self._credentials) != len(credentials):
-            raise ModelRoutingError("Duplicate inference credential binding")
+            raise ModelRoutingError(
+                {
+                    "en": "Duplicate inference credential binding.",
+                    "fr": "Liaison d'identifiant d'inférence en double.",
+                }
+            )
         self._entra: dict[tuple[str, str, str], ClientSecretCredential] = {}
 
     def build(
@@ -90,7 +108,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         authority.check_context(binding.runtime_context, definition.agent_id)
         if binding.runtime_context.chat_profile_id is not None:
             raise ModelRoutingError(
-                "Legacy model profile requires explicit offer re-selection"
+                {
+                    "en": "Legacy model profile requires explicit offer re-selection.",
+                    "fr": "Un profil de modèle hérité exige de sélectionner à nouveau une offre.",
+                }
             )
         return self._build_admitted(authority, authority.binding.inference)
 
@@ -98,7 +119,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         authority = current_turn()
         title = authority.binding.title
         if title is None:
-            raise ModelRoutingError("No title inference was admitted")
+            raise ModelRoutingError(
+                {
+                    "en": "No title inference was admitted.",
+                    "fr": "Aucune inférence de titre n'a été admise.",
+                }
+            )
         return self._build_admitted(authority, title.inference)[0]
 
     def _build_admitted(
@@ -111,13 +137,26 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         local = self._credentials.get(connection.credential_binding)
         if local is None or not local.attests(connection):
             raise ModelRoutingError(
-                "Inference source provisioning does not match the approved connection"
+                {
+                    "en": "Inference source provisioning does not match the approved connection.",
+                    "fr": "Le provisionnement de la source d'inférence ne correspond pas à la connexion approuvée.",
+                }
             )
         # This identifier becomes a path segment on this route.
         if connection.route == "azure_deployment" and not _SEGMENT.fullmatch(model_id):
-            raise ModelRoutingError("Invalid model identifier for a deployment route")
+            raise ModelRoutingError(
+                {
+                    "en": "Invalid model identifier for a deployment route.",
+                    "fr": "Identifiant de modèle invalide pour une route de déploiement.",
+                }
+            )
         config = ModelConfiguration(
-            provider="openai", name=model_id, settings=admission.chat_settings()
+            provider="openai",
+            name=model_id,
+            settings={
+                **admission.chat_settings(),
+                "normalize_streamed_tool_call_ids": self._normalize_streamed_tool_call_ids,
+            },
         )
         identity = json.dumps(
             selection.key.identity, ensure_ascii=False, separators=(",", ":")

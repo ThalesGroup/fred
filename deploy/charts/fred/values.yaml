@@ -353,8 +353,8 @@ x-kf-storage: &kf-storage
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
       # Set both options for HTTPS Parquet reads against a private CA.
       # Mount the CA bundle in the Knowledge Flow container before enabling them.
       duckdb_ca_cert_file: null
@@ -370,15 +370,9 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
-# ── Registrations ────────────────────────────────────────────────────
-# What this deployment serves, one entry per application or Knowledge Base, keyed
-# by its id: Helm merges maps, so each one can come from its own values file, and
-# `null` removes it (a whole entry, not one of its fields). The chart derives from them the control plane's
-# platform.application_sources and knowledge_bases.publishers, and the frontend
-# gateway's FRONTEND_APPLICATIONS_JSON; setting those directly is refused.
-# Registration grants no access: a platform admin enables each one per team.
-# Rust control plane: both maps must remain empty until #3211 is ported.
-# Non-empty registrations are rejected by the schema and templates.
+# Retired registration maps stay empty. Applications are registered through
+# Admin > Applications and stored in Control Plane SQL. Knowledge Base publishers
+# remain unsupported. Non-empty legacy values are rejected.
 registrations:
   applications: {}
   knowledgeBasePublishers: {}
@@ -666,6 +660,7 @@ applications:
           connect_timeout_seconds: 5
 
       ai:
+        normalize_streamed_tool_call_ids: true
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v2"
         timeout:
           connect: 5
@@ -953,17 +948,6 @@ applications:
               service:
                 name: knowledge-flow-backend
                 port: 8000
-            # Worked example — sending an application UI straight to its own
-            # Service, skipping the frontend hop. Only the path changes hands:
-            # the browser URL stays /apps/acme-forecast/, so ui_prefix and the
-            # bundle's base path are unaffected. Keep its gateway in
-            # registrations.applications regardless, since /app-services still
-            # goes through the frontend and needs the id to answer 404 vs 503.
-            # - path: /apps/acme-forecast
-            #   pathType: Prefix
-            #   service:
-            #     name: acme-forecast-ui
-            #     port: 80
       tls:
         - secretName: frontend-crt
           hosts:
@@ -1687,6 +1671,9 @@ applications:
     ports: &manager-ports
     - name: http
       containerPort: 8222
+    # Pod-level scrape of `app.metrics_port`; neither the Service nor the ingress routes it.
+    - name: metrics
+      containerPort: 9222
     service:
       annotations: {}
       extraLabels: {}
@@ -1791,6 +1778,7 @@ applications:
         base_url: /control-plane/v1
         address: 0.0.0.0
         port: 8222
+        metrics_port: 9222
         log_level: info
         log_format: json
         bootstrap_token_env_var: FRED_BOOTSTRAP_TOKEN

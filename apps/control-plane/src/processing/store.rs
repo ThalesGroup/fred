@@ -13,15 +13,15 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction, types::Json};
 use uuid::Uuid;
 
-/// Published counts come from the document's official generation, never a failed attempt.
+/// Counts belong to this request's committed result, including superseded successes.
 macro_rules! summary_from {
     () => {
-        "p.id, p.document_id, p.profile, p.status, p.stage, p.revision, p.error_code, p.created_at, p.completed_at, p.retry_of, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document_current d on d.id = p.document_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+        "p.id, p.document_id, p.profile, p.status, p.stage, p.revision, p.error_code, p.created_at, p.completed_at, p.retry_of, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p left join generation g on g.processing_id = p.id and g.stage = 'indexing' and g.committed_at is not null"
     };
 }
 macro_rules! row {
     () => {
-        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, d.session_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document_current d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+        "select p.*, p.submission->'files'->0 as file, c.sha256 as original_sha256, c.object_key, c.mime, c.size, d.name, d.folder_id, d.space_id, d.session_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id join document_content c on c.id = p.content_id and c.document_id = d.id join space s on s.id = d.space_id left join generation g on g.processing_id = p.id and g.stage = 'indexing' and g.committed_at is not null"
     };
 }
 
@@ -52,7 +52,16 @@ pub struct Row {
     #[sqlx(flatten)]
     pub summary: Summary,
     pub actor: String,
+    pub kb_run_id: Option<Uuid>,
     pub original_sha256: String,
+    pub object_key: String,
+    pub mime: String,
+    pub size: i64,
+    pub name: String,
+    pub folder_id: Option<Uuid>,
+    pub content_id: Uuid,
+    pub expected_content_id: Uuid,
+    pub expected_generation_id: Option<Uuid>,
     pub space_id: Uuid,
     pub session_id: Option<Uuid>,
     pub organization_id: Uuid,
@@ -227,6 +236,42 @@ impl Processing {
         document_id: Uuid,
         start: &Start,
     ) -> AppResult<Summary> {
+        self.admit_source(tx, actor, key, document_id, start, None)
+            .await
+    }
+
+    /// A workload run admits immutable candidate bytes through the same pipeline and limits.
+    pub(crate) async fn admit_kb(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        actor: &str,
+        upload: &crate::documents::models::UploadRow,
+        run: &crate::knowledge_bases::Run,
+    ) -> AppResult<Summary> {
+        self.admit_source(
+            tx,
+            actor,
+            upload.receipt.request_key,
+            upload.target_document_id.unwrap_or(upload.id),
+            &Start {
+                profile: serde_json::from_value(serde_json::Value::String(run.profile.clone()))
+                    .map_err(|_| invalid())?,
+                retry_of: None,
+            },
+            Some((upload.id, run.id)),
+        )
+        .await
+    }
+
+    async fn admit_source(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        actor: &str,
+        key: Uuid,
+        document_id: Uuid,
+        start: &Start,
+        candidate: Option<(Uuid, Uuid)>,
+    ) -> AppResult<Summary> {
         if !self.config.enabled {
             return Err(super::unavailable());
         }
@@ -235,6 +280,9 @@ impl Processing {
             .execute(&mut **tx)
             .await?;
         db::pipeline_document(&mut **tx, document_id).await?;
+        let (content_id, generation_id, inclusion_pending): (Uuid, Option<Uuid>, bool) =
+            sqlx::query_as("select current_content_id,published_generation,retrievable_pending from document where id=$1 for update")
+                .bind(document_id).fetch_one(&mut **tx).await?;
         // Indexing needs the organization's embedding model; refuse before queuing work.
         if !sqlx::query_scalar::<_, bool>("select exists(select 1 from document d join space s on s.id=d.space_id join organization_model_policy p on p.organization_id=s.organization_id where d.id=$1 and p.embedding_source_id is not null)")
             .bind(document_id)
@@ -265,14 +313,20 @@ impl Processing {
             }
             return Ok(existing);
         }
+        if inclusion_pending {
+            return Err(conflict("retrieval_pending"));
+        }
         if let Some(previous) = start.retry_of {
-            let (old_document, old_status): (Uuid, ProcessingStatus) = sqlx::query_as(
-                "select document_id, status from document_processing where id=$1 for update",
+            let (old_document, old_content, old_status): (Uuid, Uuid, ProcessingStatus) = sqlx::query_as(
+                "select document_id, content_id, status from document_processing where id=$1 for update",
             )
             .bind(previous)
             .fetch_one(&mut **tx)
             .await?;
-            if old_document != document_id || old_status != ProcessingStatus::Failed {
+            if old_document != document_id
+                || old_content != content_id
+                || old_status != ProcessingStatus::Failed
+            {
                 return Err(conflict("invalid_retry"));
             }
             if sqlx::query_scalar::<_, bool>(
@@ -285,10 +339,11 @@ impl Processing {
                 return Err(conflict("retry_superseded"));
             }
         }
-        if sqlx::query_scalar::<_, bool>("select exists(select 1 from document_processing where document_id=$1 and status in ('pending','running','succeeded'))").bind(document_id).fetch_one(&mut **tx).await? {
+        if sqlx::query_scalar::<_, bool>("select exists(select 1 from document_processing where document_id=$1 and (status in ('pending','running') or ($2 and status='succeeded')))").bind(document_id).bind(candidate.is_none()).fetch_one(&mut **tx).await? {
             return Err(conflict("processing_exists"));
         }
-        if start.retry_of.is_none()
+        if candidate.is_none()
+            && start.retry_of.is_none()
             && sqlx::query_scalar::<_, bool>(
                 "select exists(select 1 from document_processing where document_id=$1)",
             )
@@ -309,8 +364,8 @@ impl Processing {
         let id = Uuid::new_v4();
         let workflow = format!("manager-document-{}-{id}", self.installation);
         let [preparation, extraction, indexing] = self.contract.leases(start.profile);
-        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,deadline_at,retry_of,submission,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$2,$3,$4,$5,$6,clock_timestamp()+make_interval(secs=>$7),$8,$9,$10,$11,$12,$13)")
-            .bind(id).bind(key).bind(actor).bind(document_id).bind(start.profile).bind(&workflow).bind(self.config.limits.execution_seconds as f64).bind(start.retry_of).bind(Json(self.contract.submission(self.installation,id,document_id,actor,start.profile,&workflow))).bind(Json(&self.contract.processor_profiles[start.profile.as_str()])).bind(preparation).bind(extraction).bind(indexing).execute(&mut **tx).await?;
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,deadline_at,retry_of,submission,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id,kb_run_id) values($1,$2,$3,$4,$5,$6,clock_timestamp()+make_interval(secs=>$7),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)")
+            .bind(id).bind(key).bind(actor).bind(document_id).bind(start.profile).bind(&workflow).bind(self.config.limits.execution_seconds as f64).bind(start.retry_of).bind(Json(self.contract.submission(self.installation,id,document_id,actor,start.profile,&workflow))).bind(Json(&self.contract.processor_profiles[start.profile.as_str()])).bind(preparation).bind(extraction).bind(indexing).bind(candidate.map_or(content_id, |c| c.0)).bind(content_id).bind(generation_id).bind(candidate.map(|c| c.1)).execute(&mut **tx).await?;
         // Sent only if this transaction commits; the dispatcher's poll covers a missed wake-up.
         sqlx::query("select pg_notify($1, '')")
             .bind(super::dispatch::WAKE_CHANNEL)
@@ -343,18 +398,30 @@ impl Processing {
         let (mut tx, _) =
             spaces::authorized_mutation(&self.pool, actor, d.space_id, Permission::Write).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
+        crate::knowledge_bases::documents::require_manual_document(&mut *tx, id).await?;
         let summary = self.admit(&mut tx, actor, key, id, &start).await?;
         tx.commit().await?;
         tracing::info!(target:"fred.security.audit",audit_event="document.processing.accepted",actor_uid=actor,document_id=%id,operation_id=%summary.id,outcome="accepted","Document processing accepted");
         Ok(summary)
     }
-    pub(crate) async fn authorize_actor(&self, r: &Row) -> AppResult<()> {
-        onboarding::require_accepted(&self.pool, self.terms.as_deref(), &r.actor).await?;
-        let tx =
+    pub(crate) async fn writer(&self, r: &Row) -> AppResult<Transaction<'static, Postgres>> {
+        if let Some(run) = r.kb_run_id {
+            return crate::knowledge_bases::documents::processing_writer(
+                &self.pool,
+                run,
+                r.summary.document_id,
+            )
+            .await;
+        }
+        let mut tx =
             crate::documents::authorized_mutation(&self.pool, &r.actor, r.space_id, r.session_id)
                 .await
                 .map_err(crate::documents::dependency_error)?;
-        tx.commit().await?;
+        onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &r.actor).await?;
+        Ok(tx)
+    }
+    pub(crate) async fn authorize_actor(&self, r: &Row) -> AppResult<()> {
+        self.writer(r).await?.commit().await?;
         Ok(())
     }
     pub async fn history(
@@ -486,8 +553,10 @@ impl Processing {
         g: &Generation,
         models: StageModels,
     ) -> AppResult<Descriptor> {
-        let d = db::pipeline_document(&self.pool, r.summary.document_id).await?;
-        let folder = match (d.folder_id, r.session_id) {
+        if r.retired {
+            return Err(AppError::NotFound);
+        }
+        let folder = match (r.folder_id, r.session_id) {
             (Some(id), None) => Some(db::folder(&self.pool, id).await?),
             (None, Some(_)) => None,
             _ => return Err(invalid()),
@@ -511,12 +580,12 @@ impl Processing {
             work: r.work(self.installation),
             organization_id: r.organization_id,
             space_id: r.space_id,
-            folder_id: d.folder_id,
+            folder_id: r.folder_id,
             folder_path: folder.map(|f| f.path),
             session_id: r.session_id,
-            name: d.name,
-            mime: d.mime,
-            size: d.size,
+            name: r.name.clone(),
+            mime: r.mime.clone(),
+            size: r.size,
             actor: r.actor.clone(),
             stage: g.stage,
             generation: g.id,

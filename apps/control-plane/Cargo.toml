@@ -44,6 +44,8 @@ rmcp = { version = "=3.9.0", default-features = false, features = ["client", "tr
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
+opentelemetry.workspace = true
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
 jsonwebtoken = { workspace = true }
 axum = { version = "0.8", features = ["http2"] }
 prost = "0.14"

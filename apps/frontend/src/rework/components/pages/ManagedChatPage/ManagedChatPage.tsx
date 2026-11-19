@@ -41,6 +41,7 @@ import { TraceDetailDrawer } from "@shared/molecules/ThoughtTrace/TraceDetailDra
 import { TraceDrawerProvider } from "@shared/molecules/ThoughtTrace/traceDrawerContext";
 import {
   findTraceEntry,
+  groupTraceEntries,
   skillFileReadOf,
   skillLoadOf,
   traceEntryKey,
@@ -230,8 +231,16 @@ function ManagedChatContent({
   // against the live message list below, so reasoning streams into the open drawer
   // as deltas arrive. Trace rows open it through TraceDrawerProvider.
   const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null);
+
+  const isPersonalTeam = space.kind === "personal";
+  const team = { id: space.id, name: space.name };
+  const isAdmin =
+    space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
+  const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
+  const traceEntries = useMemo(() => groupTraceEntries(chat.messages), [chat.messages]);
   const traceDrawerApi = useMemo(
     () => ({
+      entries: traceEntries,
       openTrace: (entry: TraceEntry) => {
         const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
         if (skillFileReadOf(entry)) {
@@ -248,14 +257,8 @@ function ManagedChatContent({
         }
       },
     }),
-    [openSkill],
+    [openSkill, traceEntries],
   );
-
-  const isPersonalTeam = space.kind === "personal";
-  const team = { id: space.id, name: space.name };
-  const isAdmin =
-    space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
-  const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
   const conversationFiles = useConversationFiles(chat.workspaceFilesUrl);
   const { refetch: refreshFiles, isUninitialized: filesUninitialized } = conversationFiles;
   useEffect(() => {
@@ -387,8 +390,8 @@ function ManagedChatContent({
     [chat.messages, todoSnapshot],
   );
   const presentedTodos = useMemo(
-    () => presentAgentTodos(todoSnapshot?.todos ?? [], todoSnapshotSettled),
-    [todoSnapshot, todoSnapshotSettled],
+    () => presentAgentTodos(todoSnapshot?.todos ?? [], todoSnapshotSettled, chat.waitResponse),
+    [todoSnapshot, todoSnapshotSettled, chat.waitResponse],
   );
   const todoRemainingCount = presentedTodos.filter((todo) => todo.status !== "completed").length;
   const hasRemainingTodos = todoRemainingCount > 0;
@@ -644,8 +647,10 @@ function ManagedChatContent({
               : [],
           documentIds: Array.isArray(documentConfig.document_uids) ? documentConfig.document_uids : [],
         }
-      : null;
-  const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? [];
+      : documentScopeParams?.bound_library_ids != null
+        ? { folderIds: documentScopeParams.bound_library_ids, documentIds: [] }
+        : null;
+  const documentScopeBoundLibraryIds = documentScopeParams?.bound_library_ids ?? null;
 
   // Empty is a deliberate turn restriction too; only null inherits the agent.
   // This drives both the badge and reset action.
@@ -1267,6 +1272,7 @@ function ManagedChatContent({
         <TraceDetailDrawer
           entry={selectedTraceEntry}
           messages={chat.messages}
+          entries={traceEntries}
           onClose={() => setSelectedTraceKey(null)}
         />
         <UploadWarningAckDialog

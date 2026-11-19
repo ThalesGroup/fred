@@ -677,3 +677,302 @@ async def test_trusted_calls_preserve_authority_stops_and_curated_sql_failures()
         )()
     assert str(error.value) == "mcp_tool_unavailable"
     assert error.value.__context__ is None
+
+
+@pytest.fixture
+def tabular_capability(monkeypatch):
+    from importlib import import_module
+    from pathlib import Path
+
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).resolve().parents[2] / "capabilities/fred-capability-mcp")
+    )
+    return import_module("fred_capability_mcp").TabularCapability()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deep", [False, True])
+@pytest.mark.parametrize("empty", [False, True])
+async def test_tabular_only_turn_assembles_admitted_tools_or_fails(
+    monkeypatch, caplog, deep, empty, tabular_capability
+):
+    import logging
+
+    from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+    from fred_core.documents.transport import DocumentAccessContext
+    from fred_runtime.app import agent_app
+    from fred_runtime.execution_diagnostics import report_execution_error
+    from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
+    from fred_sdk.contracts.models import AgentTuning
+    from test_deep_agent_dispatch import _DeepAgent, _ReActAgent
+    from test_platform_skills import binding as runtime_binding
+    from weaver_fixtures import active_turn
+
+    admitted = McpTabularBinding(url="https://kf.invalid/api/mcp/tabular")
+    bound = runtime_binding()
+    library = str(UUID(int=201))
+    bound.runtime_context.selected_document_libraries_ids = [library]
+    tuning = AgentTuning(
+        role="test",
+        description="test",
+        selected_capability_ids=[admitted.capability_id],
+    )
+    definition = _DeepAgent(agent_id="test") if deep else _ReActAgent(agent_id="test")
+    monkeypatch.setattr(
+        "fred_runtime.runtime_context._RUNTIME_CONTEXT",
+        RuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="https://kf.invalid/api",
+                chat_model_factory=StaticChatModelFactory(
+                    ToolFriendlyFakeChatModel(responses=[])
+                ),
+            )
+        ),
+    )
+    FakeClient.pages = [page([] if empty else [remote("list_tabular_documents")])]
+    monkeypatch.setattr(FakeClient, "server_info", None, raising=False)
+    provider, _ = delegated_provider()
+    caplog.set_level(logging.INFO)
+    registry = CapabilityRegistry()
+    registry.register(tabular_capability)
+    with active_turn(bound) as authority:
+        authority.binding = authority.binding.model_copy(
+            update={"mcp_bindings": (admitted,)}
+        )
+        services = agent_app._build_runtime_services(
+            definition,
+            bound,
+            tuning=tuning,
+            credential_provider=provider,
+            capability_registry=registry,
+        )
+        tool_provider = services.tool_provider
+        assert isinstance(tool_provider, agent_app.FredMcpToolProvider)
+        try:
+            if empty:
+                with pytest.raises(
+                    managed_mcp.ManagedMcpError, match="mcp_inventory_empty"
+                ) as error:
+                    await tool_provider.activate()
+                message = report_execution_error(
+                    logging.getLogger(__name__), error.value, "runtime_setup"
+                )
+                assert message.startswith("Knowledge Flow Tabular is unavailable.")
+                assert "https://" not in message and "workload" not in message
+            else:
+                await tool_provider.activate()
+                assert [tool.name for tool in tool_provider.get_tools()] == [
+                    "list_tabular_documents"
+                ]
+                # Re-activation does not connect or log a second time in this turn.
+                await tool_provider.activate()
+                logs = [
+                    record.message
+                    for record in caplog.records
+                    if "event=mcp_tools" in record.message
+                ]
+                assert logs == [
+                    f"event=mcp_tools outcome=assembled capability_tool_counts={{'{admitted.capability_id}': 1}}"
+                ]
+            assert len(FakeClient.instances) == 1
+            sent = []
+
+            async def receive(request):
+                sent.append(
+                    DocumentAccessContext.model_validate_json(
+                        request.headers["x-fred-document-context"]
+                    )
+                )
+                return httpx2.Response(200)
+
+            client = FakeClient.instances[0]
+            async with httpx2.AsyncClient(
+                auth=client.transport.auth, transport=httpx2.MockTransport(receive)
+            ) as http:
+                await http.post(client.transport.url)
+            assert sent[0].document_scope.covers(UUID(int=101), UUID(library))
+            assert not sent[0].document_scope.covers(UUID(int=102), UUID(int=202))
+        finally:
+            await tool_provider.aclose()
+        if empty:
+            request = agent_app._AgentExecuteRequest(
+                agent_instance_id=bound.runtime_context.agent_instance_id,
+                message="Count findings",
+                context=bound.runtime_context.model_dump(exclude_none=True),
+            )
+            events = [
+                event
+                async for event in agent_app._iterate_runtime_event_payloads_inner(
+                    definition,
+                    request,
+                    tuning=tuning,
+                    credential_provider=provider,
+                    capability_registry=registry,
+                )
+            ]
+            [error_event] = [
+                event for event in events if event["kind"] == "execution_error"
+            ]
+            assert error_event["message"].startswith(
+                "Knowledge Flow Tabular is unavailable."
+            )
+            assert not any(event["kind"] == "final" for event in events)
+
+
+def test_tabular_saved_empty_config_gets_scope_defaults(tabular_capability):
+
+    from fred_runtime.capabilities import evaluate_chat_controls_batch
+    from fred_sdk.contracts.capability import (
+        ChatControlsRequest,
+        ChatControlsRequestItem,
+        StoredCapabilityConfig,
+    )
+
+    capability = tabular_capability
+    registry = CapabilityRegistry()
+    registry.register(capability)
+    response = evaluate_chat_controls_batch(
+        registry,
+        ChatControlsRequest(
+            items=[
+                ChatControlsRequestItem(
+                    capability_id=capability.manifest.id,
+                    config_envelope=StoredCapabilityConfig(
+                        schema_version="1", config={}
+                    ),
+                )
+            ]
+        ),
+    )
+    [result] = response.results
+    assert result.error is None
+    [control] = result.controls
+    assert control.widget == "document_scope"
+    assert control.params == {
+        "libraries": True,
+        "documents": True,
+        "bound_library_ids": None,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "enabled,folders,selection,expected",
+    [
+        (False, [201], None, [201, 202]),
+        (True, [201], None, [201]),
+        (True, [201], [201, 202], [201]),
+        (True, [201], [202], []),
+        (True, [201], [], []),
+        (True, [], None, []),
+    ],
+)
+async def test_tabular_folder_binding_cannot_be_widened_by_conversation(
+    monkeypatch, tabular_capability, enabled, folders, selection, expected
+):
+    from fred_core.documents.transport import DocumentAccessContext
+    from fred_runtime.app import agent_app
+    from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
+    from fred_sdk.contracts.models import AgentTuning, StoredCapabilityConfig
+    from test_deep_agent_dispatch import _ReActAgent
+    from test_platform_skills import binding as runtime_binding
+    from weaver_fixtures import active_turn
+
+    admitted = McpTabularBinding(url="https://kf.invalid/api/mcp/tabular")
+    registry = CapabilityRegistry()
+    registry.register(tabular_capability)
+    bound = runtime_binding()
+    bound.runtime_context.selected_document_libraries_ids = (
+        [str(UUID(int=value)) for value in selection] if selection is not None else None
+    )
+    tuning = AgentTuning(
+        role="test",
+        description="test",
+        selected_capability_ids=[admitted.capability_id],
+        capability_config={
+            admitted.capability_id: StoredCapabilityConfig(
+                schema_version="1",
+                config={
+                    "chat_options.libraries_binding": enabled,
+                    "chat_options.bound_library_ids": [
+                        str(UUID(int=value)) for value in folders
+                    ],
+                },
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "fred_runtime.runtime_context._RUNTIME_CONTEXT",
+        RuntimeContext(RuntimeConfig(knowledge_flow_url="https://kf.invalid/api")),
+    )
+    with active_turn(bound) as authority:
+        authority.binding = authority.binding.model_copy(
+            update={"mcp_bindings": (admitted,)}
+        )
+        services = agent_app._build_runtime_services(
+            _ReActAgent(agent_id="test"),
+            bound,
+            tuning=tuning,
+            capability_registry=registry,
+        )
+        provider = services.tool_provider
+        assert isinstance(provider, agent_app.FredMcpToolProvider)
+        context = DocumentAccessContext.model_validate_json(
+            provider._agent.document_context()
+        )
+        assert [
+            folder
+            for folder in (201, 202)
+            if context.document_scope.covers(UUID(int=101), UUID(int=folder))
+        ] == expected
+        # The tabular setting does not become a new ceiling on non-MCP document tools.
+        assert authority.document_context(bound.runtime_context).document_scope.covers(
+            UUID(int=101), UUID(int=202)
+        ) == (selection is None or 202 in selection)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"chat_options.libraries_binding": "yes"},
+        {
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": "folder",
+        },
+    ],
+)
+def test_invalid_tabular_binding_fails_closed(tabular_capability, config):
+    from fred_runtime.capabilities import resolve_bound_library_ids
+    from fred_runtime.capabilities.errors import CapabilityConfigInvalidError
+    from fred_sdk.contracts.models import StoredCapabilityConfig
+
+    registry = CapabilityRegistry()
+    registry.register(tabular_capability)
+    with pytest.raises(CapabilityConfigInvalidError):
+        resolve_bound_library_ids(
+            registry,
+            capability_ids=[tabular_capability.manifest.id],
+            capability_config={
+                tabular_capability.manifest.id: StoredCapabilityConfig(
+                    schema_version="1", config=config
+                )
+            },
+        )
+
+
+def test_copy_tabular_binding_resets_private_folder_ids(tabular_capability):
+    from fred_sdk.contracts.capability.scope import reset_scope_private
+
+    config = tabular_capability.ConfigModel.model_validate(
+        {
+            "chat_options.libraries_binding": True,
+            "chat_options.bound_library_ids": [str(UUID(int=201))],
+        }
+    )
+    copied = reset_scope_private(
+        config, field_specs=tabular_capability.manifest.config_fields
+    )
+    assert copied.model_dump()["chat_options.bound_library_ids"] == []
+    [control] = tabular_capability.chat_controls(copied)
+    assert control.params.bound_library_ids == []
+    assert config.model_dump()["chat_options.bound_library_ids"] == [str(UUID(int=201))]

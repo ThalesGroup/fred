@@ -17,9 +17,15 @@ sqlx = { workspace = true, features = ["macros"] }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+tracing-opentelemetry.workspace = true
+prometheus.workspace = true
 uuid.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
 base64 = "0.23.1"
 rsa = "=0.9.10"

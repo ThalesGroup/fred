@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +18,8 @@ import (
 )
 
 func scenarioSteps(cfg config) ([]int, error) {
-	if cfg.Scenario != "conversation" || cfg.CredentialFile == "" || cfg.RawReportPath == "" || cfg.Protocol != "sse" || cfg.AgentInstanceID == "" || cfg.RequestsPerClient < 1 || cfg.RequestsPerClient > 100 || cfg.Timeout <= 0 || cfg.AuthConcurrency < 1 || cfg.AuthConcurrency > 64 || (cfg.IdentityMode != "per-conversation" && cfg.IdentityMode != "shared") || (cfg.MockProfile != "reference" && cfg.MockProfile != "streaming") {
-		return nil, benchmarkError("scenario_requires_managed_sse_credentials_raw_report_and_explicit_steps")
+	if cfg.Scenario != "conversation" || (cfg.CredentialFile == "" && cfg.Token == "") || cfg.RawReportPath == "" || cfg.Protocol != "sse" || cfg.AgentInstanceID == "" || cfg.RequestsPerClient < 1 || cfg.RequestsPerClient > 100 || cfg.Timeout <= 0 || cfg.AuthConcurrency < 1 || cfg.AuthConcurrency > 64 || (cfg.IdentityMode != "per-conversation" && cfg.IdentityMode != "shared") {
+		return nil, benchmarkError("scenario_requires_managed_sse_identity_raw_report_and_explicit_steps")
 	}
 	if cfg.SessionID != "" || !cfg.CreateSession || cfg.TokenInQuery || cfg.AllowEmptyTok || cfg.InsecureTLS || cfg.PrepareSessions || cfg.EnsureV2DefinitionRef != "" || cfg.EnsureV2ProfileID != "" || cfg.AgentUUID != "" {
 		return nil, benchmarkError("unsupported_scenario_option")
@@ -70,10 +71,27 @@ func runScenarioCLI(cfg config) int {
 }
 
 func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
-	report := scenarioReport{Kind: "summary", SchemaVersion: "fred.bench.scenario.v1", CampaignID: newExchangeID(), Target: cfg.Target, IdentityMode: cfg.IdentityMode, MockProfile: cfg.MockProfile, Outcome: "FAILED"}
+	if cfg.Identity != nil {
+		defer func() { cfg.Identity.record = nil }()
+	}
+	report := scenarioReport{Mode: cfg.Mode, TraceSampleRate: cfg.TraceSampleRate, WarmupTurns: cfg.WarmupTurns, Kind: "summary", SchemaVersion: "fred.bench.scenario.v1", CampaignID: newExchangeID(), Target: cfg.Target, IdentityMode: cfg.IdentityMode, Outcome: "FAILED"}
+	var err error
+	cfg, err = scenarioQuestions(cfg)
+	if err != nil {
+		return report, err
+	}
+	if cfg.TotalTurns < 0 || cfg.TotalTurns > 50000 || (cfg.TotalTurns > 0 && (cfg.Mode != "performance" || cfg.IdentityMode != "shared")) {
+		return report, benchmarkError("invalid_performance_plan")
+	}
+	if cfg.TraceSampleRate != nil && !(*cfg.TraceSampleRate >= 0 && *cfg.TraceSampleRate <= 1) {
+		return report, benchmarkError("invalid_trace_sample_rate")
+	}
 	steps, err := scenarioSteps(cfg)
 	if err != nil {
 		return report, err
+	}
+	if cfg.TotalTurns > 0 && len(steps) != 1 {
+		return report, benchmarkError("performance_requires_one_concurrency_level")
 	}
 	count := 1
 	for _, n := range steps {
@@ -81,13 +99,24 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 			count = n
 		}
 	}
-	credentials, err := readCredentials(cfg.CredentialFile, count)
-	if err != nil {
-		return report, err
+	var credentials credentialFile
+	if cfg.CredentialFile != "" {
+		credentials, err = readCredentials(cfg.CredentialFile, count)
+		if err != nil {
+			return report, err
+		}
+	} else if count != 1 {
+		return report, benchmarkError("one_token_requires_shared_identity")
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	writer, err := newScenarioWriter(cfg.RawReportPath, cancel)
+	if cfg.Mode != "" {
+		ctx, _, err = newSampledTurnTrace(ctx, 0)
+		if err != nil {
+			return report, err
+		}
+	}
+	writer, err := newScenarioWriter(cfg.RawReportPath, cancel, cfg.Mode == "performance")
 	if err != nil {
 		return report, err
 	}
@@ -100,7 +129,7 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 		}
 		defer summaryFile.Close()
 	}
-	writer.write(map[string]any{"kind": "run", "schema_version": report.SchemaVersion, "campaign_id": report.CampaignID, "target": cfg.Target, "identity_mode": cfg.IdentityMode, "concurrency_steps": steps, "turns": cfg.RequestsPerClient})
+	writer.write(map[string]any{"kind": "run", "schema_version": report.SchemaVersion, "campaign_id": report.CampaignID, "target": cfg.Target, "identity_mode": cfg.IdentityMode, "concurrency_steps": steps, "turns": cfg.RequestsPerClient, "total_turns": cfg.TotalTurns, "mode": cfg.Mode, "trace_sample_rate": cfg.TraceSampleRate, "warmup_turns": cfg.WarmupTurns})
 	client := sseHTTPClient(config{})
 	defer client.CloseIdleConnections()
 	var authMu sync.Mutex
@@ -130,6 +159,9 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 	}
 	for index, n := range steps {
 		summary := stepReport{Step: index + 1, Concurrency: n, Planned: n * cfg.RequestsPerClient}
+		if cfg.TotalTurns > 0 {
+			summary.Planned = cfg.TotalTurns
+		}
 		if authErr != nil || ctx.Err() != nil {
 			summary.NotStarted = summary.Planned
 			report.Steps = append(report.Steps, summary)
@@ -143,7 +175,7 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 			if cfg.IdentityMode == "per-conversation" {
 				identity = identities[worker]
 			}
-			c := &scenarioConversation{cfg: cfg, identity: identity, client: client, campaign: report.CampaignID, markerID: newExchangeID(), completed: make([]turnMarker, 0)}
+			c := &scenarioConversation{cfg: cfg, identity: identity, client: client, campaign: report.CampaignID, completed: make([]completedTurn, 0)}
 			token, _, err := identity.token(openCtx)
 			if err != nil {
 				return nil, err
@@ -163,7 +195,7 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 			return c, err
 		}
 		started := time.Now()
-		runLoad(ctx, loadPlan{Clients: n, Turns: cfg.RequestsPerClient, Timeout: cfg.Timeout, Observe: func(r result) {
+		runLoad(ctx, loadPlan{Clients: n, Turns: cfg.RequestsPerClient, TotalTurns: cfg.TotalTurns, DiscardResults: true, Timeout: cfg.Timeout, Observe: func(r result) {
 			row := scenarioTurn{PerformanceOutcome: "error", PerformanceError: r.Measurement.Error, Integrity: "not_observed"}
 			if r.Scenario != nil {
 				row = *r.Scenario
@@ -185,10 +217,19 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 			row.IdentityID = identity.pseudonym
 			rows = append(rows, row)
 			writer.write(row)
+			if cfg.ObserveTurn != nil {
+				cfg.ObserveTurn(row)
+			}
 		}}, open)
 		summary.LoadElapsedMS = millis(time.Since(started))
 		summary.Attempted, summary.NotStarted = len(rows), summary.Planned-len(rows)
 		for _, row := range rows {
+			if row.Outcome == "timeout" {
+				summary.Timeouts++
+			}
+			if row.Outcome == "canceled" {
+				summary.Canceled++
+			}
 			if row.Outcome == "success" {
 				summary.Success++
 			} else {
@@ -202,6 +243,10 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 			}
 		}
 		summary.First, summary.Following = summarizeTurns(rows, true), summarizeTurns(rows, false)
+		summary.All = summarizeTurns(rows, false, true)
+		if summary.LoadElapsedMS > 0 {
+			summary.SuccessfulTurnsPerSecond = float64(summary.Success) * 1000 / summary.LoadElapsedMS
+		}
 		// runLoad has joined all workers. No history GET or cleanup competes with
 		// the measured load window. Cancellation skips verification but still cleans up.
 		for _, c := range conversations {
@@ -224,31 +269,11 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 				}
 				writer.write(h)
 			}
-			if c.inner != nil && c.weaver != nil {
-				cleanupCtx, done := context.WithTimeout(context.Background(), cfg.Timeout)
-				token, _, tokenErr := c.identity.token(cleanupCtx)
-				done()
-				if tokenErr == nil {
-					c.weaver.cfg.Token = token
-					c.inner.Close()
-				} else if c.cfg.DeleteSession && c.inner.(*weaverConversation).created {
-					summary.CleanupErrors++
-				}
-			}
-			if c.weaver != nil {
-				summary.CleanupErrors += int(c.weaver.cleanupErrors.Load())
-			}
-			if c.swift != nil && c.inner != nil && cfg.DeleteSession && c.inner.(*swiftConversation).created {
-				cleanupCtx, done := context.WithTimeout(context.Background(), cfg.Timeout)
-				token, _, err := c.identity.token(cleanupCtx)
-				done()
-				if err == nil {
-					c.swift.cfg.Token = token
-					c.inner.Close()
-				} else {
-					summary.CleanupErrors++
-				}
-				summary.CleanupErrors += int(c.swift.cleanupErrors.Load())
+			if cfg.DeferCleanup != nil && cfg.DeleteSession {
+				cfg.DeferCleanup(func() int { return cleanupScenarioConversation(ctx, c) })
+				summary.CleanupDeferred++
+			} else {
+				summary.CleanupErrors += cleanupScenarioConversation(ctx, c)
 			}
 		}
 		report.Steps = append(report.Steps, summary)
@@ -284,6 +309,37 @@ func runScenario(ctx context.Context, cfg config) (scenarioReport, error) {
 	return report, nil
 }
 
+func cleanupScenarioConversation(ctx context.Context, c *scenarioConversation) int {
+	failures := 0
+	if c.inner != nil && c.weaver != nil {
+		cleanupCtx, done := context.WithTimeout(context.WithoutCancel(ctx), c.cfg.Timeout)
+		token, _, tokenErr := c.identity.token(cleanupCtx)
+		done()
+		if tokenErr == nil {
+			c.weaver.cfg.Token = token
+			c.inner.(*weaverConversation).closeContext(ctx)
+		} else if c.cfg.DeleteSession && c.inner.(*weaverConversation).created {
+			failures++
+		}
+	}
+	if c.weaver != nil {
+		failures += int(c.weaver.cleanupErrors.Load())
+	}
+	if c.swift != nil && c.inner != nil && c.cfg.DeleteSession && c.inner.(*swiftConversation).created {
+		cleanupCtx, done := context.WithTimeout(context.WithoutCancel(ctx), c.cfg.Timeout)
+		token, _, err := c.identity.token(cleanupCtx)
+		done()
+		if err == nil {
+			c.swift.cfg.Token = token
+			c.inner.(*swiftConversation).closeContext(ctx)
+		} else {
+			failures++
+		}
+		failures += int(c.swift.cleanupErrors.Load())
+	}
+	return failures
+}
+
 type scenarioConversation struct {
 	cfg       config
 	identity  *benchmarkIdentity
@@ -291,9 +347,8 @@ type scenarioConversation struct {
 	inner     conversation
 	weaver    *weaverAdapter
 	swift     *swiftAdapter
-	markerID  string
 	campaign  string
-	completed []turnMarker
+	completed []completedTurn
 	attempts  int
 	opened    bool
 }
@@ -308,17 +363,33 @@ func (c *scenarioConversation) Close() {} // scenario owns post-window verificat
 func (c *scenarioConversation) Execute(ctx context.Context) result {
 	c.attempts++
 	started := time.Now()
+	var trace turnTrace
+	if c.cfg.TraceTurns {
+		var err error
+		rate := 1.0
+		if c.cfg.TraceSampleRate != nil {
+			rate = *c.cfg.TraceSampleRate
+		}
+		ctx, trace, err = newSampledTurnTrace(ctx, rate)
+		if err != nil {
+			return result{Err: err, Measurement: turnMeasurement{StartedAt: started}}
+		}
+	}
 	token, auth, err := c.identity.token(ctx)
-	row := &scenarioTurn{Auth: auth, PerformanceOutcome: "error", Integrity: "not_observed"}
+	row := &scenarioTurn{TraceID: trace.TraceID, SpanID: trace.SpanID, Auth: auth, PerformanceOutcome: "error", Integrity: "not_observed"}
+	if !trace.Sampled {
+		row.TraceID, row.SpanID = "", ""
+	}
 	row.ConversationID = pseudonym(c.campaign, c.ID())
 	if err != nil {
 		row.PerformanceError = classifyError(err)
 		return result{Err: err, Measurement: turnMeasurement{StartedAt: started}, Scenario: row}
 	}
-	marker := turnMarker{c.markerID, c.attempts, newExchangeID()}
-	data, _ := json.Marshal(marker)
 	observer := &answerObserver{}
-	prompt := c.cfg.Message + "\n" + markerPrefix + string(data)
+	prompt := c.cfg.Message
+	if len(c.cfg.Questions) > 0 {
+		prompt = c.cfg.Questions[c.attempts-1]
+	}
 	if c.weaver != nil {
 		c.weaver.cfg.Token, c.weaver.cfg.Message, c.weaver.cfg.RuntimeDecoder = token, prompt, observer.decode
 	}
@@ -351,12 +422,16 @@ func (c *scenarioConversation) Execute(ctx context.Context) result {
 	if r.Err == nil {
 		row.PerformanceOutcome = "success"
 		row.Integrity = "passed"
-		if err := observer.verify(marker, c.completed, c.cfg.MockProfile); err != nil {
+		if err := observer.verify(); err != nil {
 			row.Integrity = "failed"
 			row.IntegrityError = classifyError(err)
 			r.Err = err
 		}
-		c.completed = append(c.completed, marker)
+		answer := observer.final
+		if answer == "" {
+			answer = observer.deltas.String()
+		}
+		c.completed = append(c.completed, completedTurn{sha256.Sum256([]byte(prompt)), sha256.Sum256([]byte(answer))})
 	} else {
 		row.PerformanceError = classifyError(r.Err)
 	}
@@ -394,7 +469,7 @@ func (c *scenarioConversation) history(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return verifyHistory(messages, c.ID(), c.completed, c.cfg.MockProfile)
+	return verifyHistory(messages, c.ID(), c.completed)
 }
 
 func (c *scenarioConversation) swiftHistoryRequest(ctx context.Context) ([]json.RawMessage, error) {

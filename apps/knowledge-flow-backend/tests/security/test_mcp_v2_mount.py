@@ -375,3 +375,38 @@ async def test_authenticated_technical_discovery_cannot_call_documents_even_with
             assert reached == []
             anonymous = await client.post("/mcp-test", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
             assert anonymous.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_query_null_row_limit_survives_mcp_without_cross_call_state(monkeypatch):
+    import asyncio
+
+    from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+
+    async def authenticate(request, token):
+        reset = mcp_delegation._verified_grant.set(DelegationGrant(person="trusted", run="run-1", agent="agent-1"))
+        try:
+            yield None
+        finally:
+            mcp_delegation._verified_grant.reset(reset)
+
+    monkeypatch.setattr(mcp_mount, "mcp_mount_auth", authenticate)
+    app = FastAPI()
+
+    async def query(request: TabularQueryRequest) -> dict:
+        return {"present": "max_rows" in request.model_fields_set, "value": request.max_rows}
+
+    # Resolve the locally imported annotation for FastAPI's signature inspection.
+    query.__annotations__["request"] = TabularQueryRequest
+    app.post("/tabular/query", tags=["Tabular"], operation_id="query_tabular_documents")(query)
+    mcp_mount.mount_fastapi_tools(app, path="/mcp-test", name="Tabular", description="Tabular", tags={"Tabular"})
+    async with app.router.lifespan_context(app):
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
+            extras = [{}, {"max_rows": None}, {"max_rows": 2100}, {}]
+            for concurrent in (False, True):
+                calls = [_request(client, "tools/call", {"name": "query_tabular_documents", "arguments": {"sql": "SELECT * FROM data", **extra}}) for extra in extras]
+                responses = await asyncio.gather(*calls) if concurrent else [await call for call in calls]
+                for extra, response in zip(extras, responses):
+                    result = response.json()["result"]
+                    assert not result.get("isError"), result
+                    assert result["structuredContent"] == {"present": "max_rows" in extra, "value": extra.get("max_rows")}

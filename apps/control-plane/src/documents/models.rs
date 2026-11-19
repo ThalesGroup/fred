@@ -75,11 +75,13 @@ impl Destination {
 }
 
 #[derive(Clone, sqlx::FromRow)]
-pub(super) struct UploadRow {
+pub(crate) struct UploadRow {
     pub id: Uuid,
     pub actor: String,
     pub quota_owner: Uuid,
     pub object_key: String,
+    pub target_document_id: Option<Uuid>,
+    pub expected_content_id: Option<Uuid>,
     pub expires_at: DateTime<Utc>,
     #[sqlx(flatten)]
     pub receipt: UploadReceipt,

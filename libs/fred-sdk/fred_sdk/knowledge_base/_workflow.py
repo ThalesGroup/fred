@@ -91,3 +91,22 @@ class SynchronizeWorkflow:
                 non_retryable=True,
             )
         return outcome
+
+
+@workflow.defn(name="SyncKnowledgeBase")
+class WeaverSynchronizeWorkflow:
+    @workflow.run
+    async def run(self, run_id: str) -> str:
+        outcome = await workflow.execute_activity(
+            "fred_weaver_knowledge_base_synchronize",
+            run_id,
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=FALLBACK_MAX_ATTEMPTS),
+        )
+        if outcome in ("failed", "cancelled"):
+            raise ApplicationError(
+                "Knowledge Base synchronization failed",
+                type="KnowledgeBaseSyncFailed",
+                non_retryable=True,
+            )
+        return outcome

@@ -182,8 +182,6 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                 "recommendation": key,
                 "reasoning_default_on": [],
                 "options": {},
-                "legacy_profile_id": None,
-                "requires_reselection": False,
                 "offers": [
                     {
                         "key": key,

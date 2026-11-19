@@ -34,6 +34,7 @@ from langgraph.prebuilt import ToolNode
 from fred_runtime.common.kf_base_client import KnowledgeFlowAgentContext
 from fred_runtime.common.mcp_toolkit import McpToolkit
 from fred_runtime.common.mcp_utils import (
+    MCP_SERVER_ID_METADATA_KEY,
     MCPConnectionError,
     get_connected_mcp_client_for_agent,
 )
@@ -295,11 +296,26 @@ class MCPRuntime:
                         self.agent_instance, "document_context", None
                     ),
                 )
+                counts = {
+                    binding.capability_id: sum(
+                        (tool.metadata or {}).get(MCP_SERVER_ID_METADATA_KEY)
+                        == binding.capability_id
+                        for tool in managed_tools
+                    )
+                    for binding in self.managed_bindings
+                }
+                for binding in self.managed_bindings:
+                    if not counts[binding.capability_id]:
+                        raise ManagedMcpError("mcp_inventory_empty", binding=binding)
                 if {tool.name for tool in tools} & {
                     tool.name for tool in managed_tools
                 }:
                     raise ManagedMcpError("mcp_tool_name_collision")
                 tools.extend(managed_tools)
+                logger.info(
+                    "event=mcp_tools outcome=assembled capability_tool_counts=%s",
+                    counts,
+                )
             # `tools` were already fetched (per server) while connecting/validating
             # above — reuse them instead of paying for a second get_tools() round
             # trip against every server on every single turn.

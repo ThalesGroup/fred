@@ -35,9 +35,9 @@ interface DocumentScopePanelProps {
   spaceId: string;
   showLibraries: boolean;
   showDocuments: boolean;
-  /** Non-empty when the agent binds specific libraries at creation — the library
+  /** Non-null when the agent binds specific libraries at creation — the library
    * tree is then read-only and pinned to this set (reset returns here). */
-  boundLibraryIds: string[];
+  boundLibraryIds: string[] | null;
   configuredSelection: DocumentLibrarySelection | null;
   selection: DocumentLibrarySelection | null;
   onSelectionChange: (selection: DocumentLibrarySelection) => void;
@@ -62,7 +62,7 @@ export function DocumentScopePanel({
 }: DocumentScopePanelProps) {
   const { t } = useTranslation();
 
-  const hasBound = boundLibraryIds.length > 0;
+  const hasBound = boundLibraryIds !== null;
   // Agent restrictions remain read-only above the separate turn selection.
   // Copying bound folders into the turn union would defeat document narrowing.
   const displayedSelection = selection ?? { folderIds: [], documentIds: [] };

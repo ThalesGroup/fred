@@ -8,7 +8,11 @@ defaults with the instance values, including the Control Plane's model sources
 and each runtime's credential references. The
 [operations reference](A3-manager-operations.md) and
 [model reference](A13-models.md#deployment-evidence) identify the deployment inputs.
-The frontend forwards `/control-plane/v1` to port 8222.
+The frontend forwards `/control-plane/v1`, `/apps/` and `/app-services/` to Control
+Plane. Application destinations come from its SQL registry, without per-application
+gateway configuration. Static assets are public and credential-free; API requests
+use authenticated space admission. Each application service owns its deployment,
+database schema and workers independently of its Fred registration.
 
 Rust configuration is validated against its generated schema. Credentials are
 references to Secrets, never literal values in application configuration.
@@ -16,13 +20,27 @@ references to Secrets, never literal values in application configuration.
 outbox and lifecycle work in one process. Knowledge Flow runs its Temporal worker.
 There is no separate `control-plane worker` command in this runtime.
 
-Model governance and credential provisioning have different lifetimes. The
-organization Owner changes permitted models and defaults through Control Plane;
-deployment supplies approved destinations and local credentials to the workloads.
-Changing a policy does not provision a missing credential. Credentials injected
-as environment variables require a workload restart after Secret rotation;
-the [rotation contract](A13-models.md#deployment-evidence) explains ordering and
-the limits for turns already in progress.
+A model source defines a provider connection and its inventory. Weaver cannot add
+sources through the UI; deployment configuration supplies them and their credentials.
+
+| Action | Responsible | Where | Restart / redeploy? |
+| --- | --- | --- | --- |
+| Register, update or suspend an application | Platform Admin | Applications UI, persisted in SQL | No; the service must already be deployed |
+| Add or change a model source | Operator | Deployment configuration | Yes, affected services |
+| Add a source to an organization | Operator | `platform.organization_models.sources` | Yes, Control Plane |
+| Refresh a discovered model inventory | Organization Owner | Models UI | No |
+| Add a model to a declared inventory | Operator | Deployment configuration | Yes, Control Plane |
+| Authorize models or set organization defaults | Organization Owner | Models UI | No |
+| Restrict models or set team/project defaults | Local Owner | Space settings UI | No |
+| Select a permitted model | Editor / user | Assistant / conversation UI | No |
+| Rotate an injected key | Operator | Secrets | Restart consuming services |
+
+Startup adds declared sources to existing organizations without overwriting UI
+permissions or defaults. Removing a declaration is not revocation.
+Refreshing an inventory grants no permission; changing a policy provisions no
+credential. The [model reference](A13-models.md#deployment-evidence) covers deployment
+and rotation; [selection rules](02.3-agent-administration.md#model-default-and-mcp-selection)
+explain how defaults apply.
 
 ## Ingestion preparation
 
@@ -38,8 +56,9 @@ these indexes.
 
 ## PostgreSQL ownership
 
-One database contains four isolated schemas. Control Plane owns `control_plane`
-(tables, functions, triggers and SQLx history) and `cp_read` (read contracts).
+Fred's core services share four isolated schemas in one database. Control Plane
+owns `control_plane` (tables, functions, triggers and SQLx history) and `cp_read`
+(read contracts).
 Knowledge Flow owns `knowledge`; Agent Pod owns `runtime`, including Alembic
 history and checkpoints. Their logins are `fred_cp`, `fred_kf`, `fred_runtime`;
 `fred_monitor` reads only its platform-role view. Consumers receive SELECT through
@@ -81,7 +100,8 @@ ever be compared with a limit, a bill or a quota, it belongs in the registry.
 OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
 Application logs are not among these figures: every process writes them to stdout
 and the platform's collector routes them, as described under Logs and lifecycle.
-Prometheus and OpenTelemetry serve technical health and operations.
+Prometheus serves technical health and operations. OpenTelemetry diagnostics are
+reserved for developer investigations and benchmark campaigns.
 
 The runtime reports consumption in its own name, using its workload identity.
 Control Plane derives the person, space and agent from the session metadata.
@@ -130,6 +150,54 @@ step. Other collective indicators retain their historical read paths and access
 rules. This does not establish full dashboard migration or collection completeness.
 The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
 its limits and verification sources.
+
+## Distributed tracing
+
+Weaver's OpenTelemetry instrumentation is an experimental developer diagnostic
+facility. It explains the order, duration and overlap of instrumented operations
+in a conversation turn; it is not a production tracing service or a guarantee of
+complete coverage or negligible overhead.
+
+The environment is prepared through Fred's YAML observability configuration,
+selecting diagnostic tracing and a Collector endpoint. The benchmark then chooses
+which calls request traces using W3C context: all measured calls in diagnostic
+mode, none by default in performance mode, or an explicit fraction. Ordinary
+requests without a sampled context are not recorded. Changing campaigns requires
+no service restart once the environment is prepared. W3C context grants no
+permissions and is not proof that the caller is the benchmark.
+
+**Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
+
+```mermaid
+flowchart TD
+    B["Developer benchmark"]
+    F["Control Plane and Agent Pod<br/>Diagnostic configuration"]
+    C["OpenTelemetry Collector<br/>Technical data filter"]
+    H["Offline report<br/>Timelines and campaign comparison"]
+
+    B -->|Sampled request context| F
+    F -->|Technical spans| C
+    C -->|Trace file| H
+    B -->|Client measurements| H
+
+    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
+    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class B,F,H fred
+    class C cots
+```
+
+Diagnostic producers exclude prompts, answers, tool payloads and identity metadata.
+Their bounded background queues export to the Collector, which filters technical
+files before storage. An unavailable destination can lose spans. Client statistics
+remain independent of trace sampling; trace retrieval and visual reporting use
+only the available observations. The benchmark does not deploy or reconfigure Fred.
+
+A span measures an instrumented boundary, not every operation inside a dependency.
+Durations can overlap and must not be added blindly. Missing spans mean unknown,
+not zero. Production sampling, incident retention and operational guarantees are
+outside this facility's scope. The [technical reference](A3-manager-operations.md#distributed-tracing)
+identifies the configuration and collection procedure.
 
 ## Operator diagnostics
 

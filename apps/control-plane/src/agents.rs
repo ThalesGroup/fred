@@ -42,6 +42,8 @@ const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 pub struct PlatformConfig {
     #[serde(default)]
     pub capability_preparation: crate::capability_preparation::Config,
+    #[serde(default)]
+    pub knowledge_bases: crate::knowledge_bases::Config,
     /// Optional server-owned KF base URL; enables Ralph's fixed document search tool.
     #[serde(default)]
     pub knowledge_flow_url: Option<String>,
@@ -95,7 +97,9 @@ impl PlatformConfig {
                 "runtime_id {id:?} must be nonblank, without surrounding spaces"
             );
             ensure!(
-                id != NATIVE_RUNTIME_ID && id != crate::mcp_connections::SOURCE_ID,
+                id != NATIVE_RUNTIME_ID
+                    && id != crate::mcp_connections::SOURCE_ID
+                    && id != crate::applications::SOURCE_ID,
                 "runtime_id {id} is reserved; external sources cannot use it"
             );
             ensure!(ids.insert(id), "runtime_id {id} is duplicated");
@@ -126,16 +130,25 @@ impl PlatformConfig {
                 "runtime {id} base_url must be HTTP(S), without credentials, query or fragment"
             );
         }
-        let mut worker_identities = std::collections::HashSet::new();
-        for (runtime, worker) in &self.capability_preparation.workers {
+        let mut worker_identities = std::collections::HashMap::new();
+        for (runtime, worker) in self
+            .capability_preparation
+            .workers
+            .iter()
+            .chain(self.knowledge_bases.workers.iter())
+        {
             ensure!(
-                self.runtime_catalog_sources
-                    .iter()
-                    .any(|source| &source.runtime_id == runtime),
+                self.knowledge_bases.workers.contains_key(runtime)
+                    || self
+                        .runtime_catalog_sources
+                        .iter()
+                        .any(|source| &source.runtime_id == runtime),
                 "Preparation worker requires a configured logical pod"
             );
             ensure!(
-                runtime.len() <= 64
+                !runtime.is_empty()
+                    && runtime != NATIVE_RUNTIME_ID
+                    && runtime.len() <= 64
                     && runtime
                         .bytes()
                         .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_')),
@@ -148,8 +161,23 @@ impl PlatformConfig {
                 "Preparation workload identity is incomplete"
             );
             ensure!(
-                worker_identities.insert((worker.issuer.trim_end_matches('/'), &worker.client_id)),
+                worker_identities
+                    .insert(
+                        (worker.issuer.trim_end_matches('/'), &worker.client_id),
+                        runtime
+                    )
+                    .is_none_or(|previous| previous == runtime),
                 "Preparation workers on different logical pods require separate workload identities"
+            );
+        }
+        for binding in &self.knowledge_bases.credentials {
+            ensure!(
+                self.knowledge_bases
+                    .workers
+                    .contains_key(&binding.runtime_id)
+                    && !binding.credential_binding.is_empty()
+                    && binding.credential_binding.len() <= 128,
+                "Knowledge base credential binding requires an approved runtime and reference"
             );
         }
         Ok(())
@@ -413,39 +441,28 @@ pub(crate) async fn enrollable_template(
     organization: Uuid,
     requested_id: Uuid,
 ) -> AppResult<(AgentTemplateSummary, serde_json::Value)> {
-    for catalog in discover(config).await? {
-        for template in catalog.templates {
-            let id = template_id(
-                organization,
-                &catalog.runtime_id,
-                &template.template_agent_id,
-            );
-            if id == requested_id {
-                let mut summary = template_summary(id, catalog.runtime_id, &template)?
-                    .ok_or(AppError::NotFound)?;
-                // Public catalog quarantine must not erase active enrollment dependencies.
-                if let Some(defaults) = template.metadata.get("default_capability_ids") {
-                    summary.default_capability_ids = serde_json::from_value(defaults.clone())
-                        .context("invalid template capability defaults")?;
-                }
-                let tuning = template
-                    .metadata
-                    .get("default_tuning")
-                    .context("runtime template has no default_tuning")?
-                    .clone();
-                if summary.supports_managed_mcp {
-                    crate::mcp_connections::extend_template(
-                        &mut summary,
-                        &crate::mcp_connections::available_offers(pool, organization).await?,
-                    );
-                } else {
-                    crate::mcp_connections::extend_template(&mut summary, &[]);
-                }
-                return Ok((summary, tuning));
-            }
-        }
+    let (runtime, template) = find_template(config, organization, requested_id).await?;
+    let mut summary =
+        template_summary(requested_id, runtime, &template)?.ok_or(AppError::NotFound)?;
+    // Public catalog quarantine must not erase active enrollment dependencies.
+    if let Some(defaults) = template.metadata.get("default_capability_ids") {
+        summary.default_capability_ids = serde_json::from_value(defaults.clone())
+            .context("invalid template capability defaults")?;
     }
-    Err(AppError::NotFound)
+    let tuning = template
+        .metadata
+        .get("default_tuning")
+        .context("runtime template has no default_tuning")?
+        .clone();
+    if summary.supports_managed_mcp {
+        crate::mcp_connections::extend_template(
+            &mut summary,
+            &crate::mcp_connections::available_offers(pool, organization).await?,
+        );
+    } else {
+        crate::mcp_connections::extend_template(&mut summary, &[]);
+    }
+    Ok((summary, tuning))
 }
 
 /// Organization "enabled for all" decision, shared by agents and capability offers.
@@ -550,7 +567,7 @@ async fn space_agent_templates(
     }
     // Discovery uses the pod's public catalog; no caller can opt into hidden agents.
     // Neither discovery nor template checks retain a SQL connection/transaction.
-    let catalogs = discover(&s.agent_catalog).await?;
+    let catalogs = available_catalogs(&s.agent_catalog).await?;
     let mut usable = BTreeMap::new();
     for catalog in &catalogs {
         let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
@@ -625,7 +642,7 @@ async fn organization_agents(
         .await?;
     let mut items = project(
         organization_id,
-        discover(&s.agent_catalog).await?,
+        available_catalogs(&s.agent_catalog).await?,
         &crate::mcp_connections::available_offers(&s.pool, organization_id).await?,
     )?;
     for item in &mut items {
@@ -657,16 +674,23 @@ async fn set_organization_agent_default(
 ) -> AppResult<axum::Json<AgentDefaultOnResult>> {
     authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
         .await?;
-    // Runtime discovery never holds a SQL connection or transaction.
-    let items = project(
-        organization_id,
-        discover(&s.agent_catalog).await?,
-        &crate::mcp_connections::available_offers(&s.pool, organization_id).await?,
-    )?;
-    let item = items
-        .iter()
-        .find(|item| item.id == agent_id)
-        .ok_or(AppError::NotFound)?;
+    // Revocation is an idempotent SQL decision, independent of runtime availability.
+    // Enabling still requires a current advertised template, outside the transaction.
+    let item = if body.default_on {
+        let (runtime_id, template) =
+            find_template(&s.agent_catalog, organization_id, agent_id).await?;
+        project(
+            organization_id,
+            vec![RuntimeCatalog {
+                runtime_id,
+                templates: vec![template],
+            }],
+            &crate::mcp_connections::available_offers(&s.pool, organization_id).await?,
+        )?
+        .pop()
+    } else {
+        None
+    };
     let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
@@ -674,7 +698,7 @@ async fn set_organization_agent_default(
         Permission::Manage,
     )
     .await?;
-    if body.default_on {
+    if let Some(item) = item {
         // Read under the organization lock, which offer default-off also takes.
         let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
         if let Some(missing) = item
@@ -743,17 +767,97 @@ async fn fetch_runtime_templates(
         .with_context(|| format!("runtime {} returned invalid templates", source.runtime_id))
 }
 
+/// Native discovery is immediate; external sources are independent and bounded.
+fn catalog_results(
+    config: &PlatformConfig,
+) -> Result<impl futures::Stream<Item = Result<RuntimeCatalog>> + '_> {
+    let client = catalog_client()?;
+    let external = futures::stream::iter(
+        config
+            .runtime_catalog_sources
+            .iter()
+            .filter(|source| source.enabled),
+    )
+    .map(move |source| {
+        let client = client.clone();
+        async move {
+            Ok(RuntimeCatalog {
+                runtime_id: source.runtime_id.clone(),
+                templates: fetch_runtime_templates(&client, source).await?,
+            })
+        }
+    })
+    .buffer_unordered(READ_CONCURRENCY);
+    Ok(futures::stream::iter([Ok(native_catalog())]).chain(external))
+}
+
+/// Operator discovery stays strict: its JSON output must be a complete inventory.
 /// Expects a configuration accepted by [`PlatformConfig::validate`].
 pub async fn discover(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
-    let client = catalog_client()?;
-    let mut catalogs = vec![native_catalog()];
-    for source in config.runtime_catalog_sources.iter().filter(|s| s.enabled) {
-        catalogs.push(RuntimeCatalog {
-            runtime_id: source.runtime_id.clone(),
-            templates: fetch_runtime_templates(&client, source).await?,
-        });
+    catalog_results(config)?.try_collect().await
+}
+
+/// UI catalogs retain healthy sources; omitted sources remain explicit in server logs.
+async fn available_catalogs(config: &PlatformConfig) -> Result<Vec<RuntimeCatalog>> {
+    let results = catalog_results(config)?;
+    futures::pin_mut!(results);
+    let mut catalogs = Vec::new();
+    while let Some(result) = results.next().await {
+        match result {
+            Ok(catalog) => catalogs.push(catalog),
+            // The outer message identifies the source without exposing its URL.
+            Err(error) => tracing::warn!(error = %error, "Runtime omitted from agent catalog"),
+        }
     }
     Ok(catalogs)
+}
+
+fn catalog_error(error: anyhow::Error) -> AppError {
+    let denied = error.chain().any(|cause| {
+        cause
+            .downcast_ref::<reqwest::Error>()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| matches!(status.as_u16(), 401 | 403))
+    });
+    if denied {
+        AppError::Forbidden
+    } else {
+        AppError::Unavailable("runtime template catalog unavailable".into())
+    }
+}
+
+/// UUIDs are derived, not reversible: only a matching live template proves provenance.
+async fn find_template(
+    config: &PlatformConfig,
+    organization: Uuid,
+    requested_id: Uuid,
+) -> AppResult<(String, RuntimeTemplate)> {
+    let results = catalog_results(config)?;
+    futures::pin_mut!(results);
+    let mut failure = AppError::NotFound;
+    while let Some(result) = results.next().await {
+        match result {
+            Ok(catalog) => {
+                for template in catalog.templates {
+                    if template_id(
+                        organization,
+                        &catalog.runtime_id,
+                        &template.template_agent_id,
+                    ) == requested_id
+                    {
+                        return Ok((catalog.runtime_id, template));
+                    }
+                }
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Runtime unavailable during template lookup");
+                if !matches!(failure, AppError::Forbidden) {
+                    failure = catalog_error(error);
+                }
+            }
+        }
+    }
+    Err(failure)
 }
 
 /// Refresh only the saved source, reusing discovery and its visibility rules.
@@ -777,19 +881,7 @@ pub(crate) async fn editable_template(
         };
         fetch_runtime_templates(&catalog_client()?, source)
             .await
-            .map_err(|error| {
-                let denied = error.chain().any(|cause| {
-                    cause
-                        .downcast_ref::<reqwest::Error>()
-                        .and_then(reqwest::Error::status)
-                        .is_some_and(|status| matches!(status.as_u16(), 401 | 403))
-                });
-                if denied {
-                    AppError::Forbidden
-                } else {
-                    AppError::Unavailable("runtime template catalog unavailable".into())
-                }
-            })?
+            .map_err(catalog_error)?
     };
     let Some(template) = templates
         .iter()
@@ -861,13 +953,22 @@ mod tests {
                         "title": "Georges",
                         "description": "Generalist",
                         "kind": "react",
-                        "max_chat_input_chars": 20000
+                        "max_chat_input_chars": 20000,
+                        "default_tuning": {"fields": []}
                     }]))
                 }),
             )
             .route(
                 "/failing/agents/templates",
                 get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+            )
+            .route(
+                "/stalled/agents/templates",
+                get(|| async { std::future::pending::<StatusCode>().await }),
+            )
+            .route(
+                "/denied/agents/templates",
+                get(|| async { StatusCode::FORBIDDEN }),
             )
             .route(
                 "/malformed/agents/templates",
@@ -920,6 +1021,127 @@ mod tests {
         platform(vec![source("a", "https://h/fred/agents/v2/")])
             .validate()
             .unwrap();
+    }
+
+    #[test]
+    fn reserved_runtime_sources_cannot_be_configured_even_when_disabled() {
+        for id in [
+            NATIVE_RUNTIME_ID,
+            crate::mcp_connections::SOURCE_ID,
+            crate::applications::SOURCE_ID,
+        ] {
+            let mut reserved = source(id, "http://localhost");
+            reserved.enabled = false;
+            assert!(
+                platform(vec![reserved])
+                    .validate()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("reserved")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn enrollment_and_lists_keep_healthy_sources_when_another_fails() {
+        let (base, _, task) = runtime().await;
+        let organization = Uuid::new_v4();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://unused:unused@localhost/unused")
+            .unwrap();
+        for failed in ["failing", "malformed", "redirect", "denied"] {
+            let config = platform(vec![
+                source("b", &format!("{base}/{failed}")),
+                source("a", &format!("{base}/ok")),
+            ]);
+            let catalogs = available_catalogs(&config).await.unwrap();
+            assert_eq!(catalogs.len(), 2);
+            assert!(catalogs.iter().any(|catalog| catalog.runtime_id == "a"));
+            let (summary, tuning) = enrollable_template(
+                &pool,
+                &config,
+                organization,
+                template_id(organization, "a", "georges"),
+            )
+            .await
+            .unwrap();
+            assert_eq!(summary.source_runtime_id, "a");
+            assert_eq!(tuning, json!({"fields": []}));
+            let error = find_template(&config, organization, Uuid::new_v4())
+                .await
+                .unwrap_err();
+            if failed == "denied" {
+                assert!(matches!(error, AppError::Forbidden));
+            } else {
+                assert!(matches!(error, AppError::Unavailable(_)));
+            }
+        }
+        assert!(matches!(
+            find_template(
+                &platform(vec![source("a", &format!("{base}/ok"))]),
+                organization,
+                Uuid::new_v4()
+            )
+            .await,
+            Err(AppError::NotFound)
+        ));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn template_lookup_does_not_wait_for_an_unrelated_stalled_source() {
+        let (base, _, task) = runtime().await;
+        let organization = Uuid::new_v4();
+        let config = platform(vec![
+            source("stalled", &format!("{base}/stalled")),
+            source("healthy", &format!("{base}/ok")),
+        ]);
+        let (runtime, _) = tokio::time::timeout(
+            Duration::from_secs(2),
+            find_template(
+                &config,
+                organization,
+                template_id(organization, "healthy", "georges"),
+            ),
+        )
+        .await
+        .expect("healthy template must not wait for the other pod's timeout")
+        .unwrap();
+        assert_eq!(runtime, "healthy");
+        let config = platform(vec![
+            source("denied", &format!("{base}/denied")),
+            source("failing", &format!("{base}/failing")),
+        ]);
+        assert!(matches!(
+            find_template(&config, organization, Uuid::new_v4()).await,
+            Err(AppError::Forbidden)
+        ));
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn native_enrollment_does_not_contact_external_sources() {
+        let (base, hits, task) = runtime().await;
+        let config = platform(vec![source("external", &format!("{base}/disabled"))]);
+        let organization = Uuid::new_v4();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://unused:unused@localhost/unused")
+            .unwrap();
+        let (summary, _) = enrollable_template(
+            &pool,
+            &config,
+            organization,
+            template_id(
+                organization,
+                NATIVE_RUNTIME_ID,
+                fred_rust_agent::DEFINITION.id,
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(summary.source_runtime_id, NATIVE_RUNTIME_ID);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        task.abort();
     }
 
     #[tokio::test]

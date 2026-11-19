@@ -30,8 +30,6 @@ def runtime_models() -> dict[str, Any]:
         "default": key,
         "recommendation": None,
         "options": {},
-        "legacy_profile_id": None,
-        "requires_reselection": False,
         "offers": [
             {
                 "key": key,
@@ -82,6 +80,8 @@ def test_runtime_model_facts_are_required(
         ("reasoning_default_on", True),
         ("reasoning_default_on", ["model"]),
         ("reasoning_default_on", [{"source_id": "source"}]),
+        ("legacy_profile_id", None),
+        ("requires_reselection", False),
         ("unexpected", True),
     ],
 )
@@ -92,5 +92,5 @@ def test_invalid_or_unknown_runtime_model_facts_are_refused(
     with pytest.raises(ValidationError) as error:
         RuntimeModels.model_validate(runtime_models)
     assert error.value.errors()[0]["loc"][0] == field
-    if field == "unexpected":
+    if field in {"unexpected", "legacy_profile_id", "requires_reselection"}:
         assert error.value.errors()[0]["type"] == "extra_forbidden"

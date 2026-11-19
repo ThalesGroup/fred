@@ -13,16 +13,13 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router-dom";
 import { useWikiAvailabilityQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { MySpace } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { TeamWithPermissions } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import { IconType } from "@shared/utils/Type.ts";
-import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 
@@ -48,25 +45,17 @@ export function useSpaceContentItems({
   showProjects?: boolean;
 }): NavigationMenuItemProps[] {
   const { t } = useTranslation();
-  const { pathname } = useLocation();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
-  const agentManagement = isWeaverContentRoute(pathname);
   const capabilities = useTeamCapabilities(selectedTeam);
   // Organization prompts use this same navigation; agent workspaces remain team/project/personal.
   const hasAgentWorkspace = space?.kind !== "organization";
 
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
   const { data: teamApplications, isError: applicationsError } = useTeamApplications(
     teamId,
-    agentManagement || !canReadContent || isPersonalTeam || skipApplications,
+    isPersonalTeam || !space || skipApplications,
   );
   // The Control Plane only returns applications already registered and authorized for this team.
-  const showApplications =
-    canReadContent &&
-    applicationsEnabled &&
-    !isPersonalTeam &&
-    !applicationsError &&
-    (teamApplications?.items?.length ?? 0) > 0;
+  const showApplications = !isPersonalTeam && !applicationsError && (teamApplications?.length ?? 0) > 0;
 
   // Hidden while unknown rather than shown optimistically: an entry that vanishes reads worse than a late one.
   const { currentData: wikiAvailability, isError: wikiUnavailable } = useWikiAvailabilityQuery(

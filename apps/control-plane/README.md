@@ -46,6 +46,50 @@ into the shared chat history contract under the same configured base URL.
 No additional server or deployment is required. Apply migrations 0009 and 0010
 before startup; the latter indexes sessions awaiting retirement receipts.
 
+## Knowledge Base admission (reception pending)
+
+The HTTP/SDK admission boundary accepts managed mirrors in dedicated space folders;
+the Knowledge Base administration UI is not yet connected to it. Apply the complete
+migration chain to a fresh installation. Document storage, processing and Temporal
+must be configured. A source worker needs an explicit workload binding, not an
+HTTP agent endpoint:
+
+```yaml
+platform:
+  knowledge_bases:
+    workers:
+      webdav-knowledge-base:
+        issuer: https://identity.example/realms/app
+        client_id: kb-fred.webdav
+        audience: app
+    credentials:
+      - runtime_id: webdav-knowledge-base
+        space_id: 00000000-0000-0000-0000-000000000001
+        credential_binding: webdav-research
+```
+
+Use the actual issuer, audience, runtime and destination space. Credential bindings
+contain no secret: the connector's `knowledge_base.secret_bindings` maps each approved
+reference to an environment variable. Set its `knowledge_base.protocol: weaver` and
+Control Plane URL; the connector uses the ordinary SDK `publish` and `run` commands.
+Publishing creates an offer; enable that offer through existing organization and
+space policy before a space Owner creates an instance or starts a run.
+
+The generated [REST inventory](../../docs/architecture/A12-control-plane-api.md)
+lists definition, instance and run operations. Source configuration and destination
+are immutable; pause/interval changes govern subsequent runs. Pausing keeps stored
+content, and already admitted document processing can finish. This boundary does
+not enable manual replacement or reprocessing in Resources. See the
+[storage contract](../../docs/architecture/A9-documents.md#managed-mirror-admission)
+for publication, withdrawal and cleanup ownership.
+
+## Metrics
+
+`app.metrics_port` opens an unauthenticated Prometheus `GET /metrics` listener,
+outside `base_url`; absent, there is none. The chart sets 9222 as the container's
+`metrics` port, which neither the Service nor the ingress routes. The series reuse
+the Python KPI names: see the [Fred bench dashboard](../../deploy/grafana/README.md#fred-bench).
+
 ## From scratch (fred-deployment-factory)
 
 **Host run**: see the [first start](../../deploy/k3d/README.md#first-start).
@@ -176,19 +220,26 @@ Management reads the exact owning space. `spaces::authorized_mutation` applies
 Write permission and the organization mutation lock, as for prompts. Creator
 identity is provenance, not authority. Space deletion cascades to its packages.
 
-The seven Swift packages (`analyze-data`, `compare-options`, `graph`, `grill-me`,
-`grounded-research`, `meeting-minutes`, `summarize-document`) live in `skills/`.
-Their instructions, references, MIT attribution and license were preserved from
-Swift `d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`. Fresh installations expose these
-installation templates at `/skills/defaults`; nothing is activated automatically.
-Installing creates an independent space-owned package. Subsequent distribution
-updates do not overwrite space edits.
+The binary ships no skill. Distributed packages are data, in language packs under
+`skill-packs/<language>/<name>/`: `en` holds the seven Swift packages
+(`analyze-data`, `compare-options`, `graph`, `grill-me`, `grounded-research`,
+`meeting-minutes`, `summarize-document`), whose instructions, references, MIT
+attribution and license were preserved from Swift
+`d7e7f99e75e3e7cc2d97b53cf652c85955d621ae`; `fr` translates all seven with
+the same names and invocation controls. A deployment
+installs one pack per organization; there is no runtime translation.
+
+A [provisioning bundle](#import-a-provisioning-bundle) places packages in declared
+spaces, creating each one absent by name and never replacing a present one, edited or
+not. A provisioned package is ordinary space content marked `builtin`; an edit makes
+it the space's own. Writers otherwise create packages in the space's Skills page,
+where the Control Plane validates the same contract. Nothing is activated without
+an import or a writer's action.
 
 `/spaces/{id}/skills` lists owned packages and accepts POST creation.
 GET/PUT/DELETE on `/{skill_id}` manages an existing package by its immutable UUID
-and owning space. POST `/packages/{name}/install` installs a supplied template.
-PUT includes the expected content revision and replaces all files atomically.
-`/scope` and `/scope/{skill_id}` expose the shared readable scope.
+and owning space. PUT includes the expected content revision and replaces all files
+atomically. `/scope` and `/scope/{skill_id}` expose the shared readable scope.
 
 A skill's logical name is a label, not its execution identity. Homonyms in
 readable spaces remain separate catalog entries, with their UUID and owning space.
@@ -206,7 +257,7 @@ capability inventory or tool-offer policies; tool authorization remains separate
 
 The packages pass [Agent Skills](https://agentskills.io/specification) reference
 validator `skills-ref` 0.1.0 at revision
-`83021e2be457a9b6679148719c1f6074f0ad975e` (`skills-ref validate skills/<name>`).
+`83021e2be457a9b6679148719c1f6074f0ad975e` (`skills-ref validate skill-packs/<language>/<name>`).
 Fred supports ASCII skill names, UTF-8 `.md`, `.txt`, `.json`, `.yaml`, `.yml` and
 `.csv` resources, at most 64 skills, 128 files/package, 64 KiB/file and 4 MiB per
 space/admitted snapshot. Binary assets and script execution are unsupported.
@@ -287,7 +338,7 @@ platform:
       visibility_scope: example-gateway-deployments
 ```
 
-### Initialize organization models once
+### Configure organization models
 
 `platform.organization_models` declares exact existing organization names (the same
 PostgreSQL lookup as provisioning), explicit source IDs and exact offer keys. It
@@ -346,17 +397,17 @@ Control Plane (for k3d: `kubectl exec deployment/control-plane-backend --
 control-plane initialize-models`, with the deployment context/namespace). This trusted operator command uses deployment database credentials, not a
 browser token, starts no service and requires every declared organization to exist.
 Each pass has a 120-second deadline; discovery retains its five-second per-source
-limit and runs outside transactions. This is initialization, not ongoing YAML sync.
+limit and runs outside transactions.
 
-**Initialize once, preserve afterwards.** Per organization, assignments, initial
-policy and completion receipt commit together under the existing organization lock.
-A successful replay performs no discovery and changes no decisions. UI edits,
-including an empty policy, survive restart. A separate durable receipt also remembers
-an administered policy after deletion; removing a policy or assignment cannot make
-the seed recreate it. Removing YAML is not revocation. Source revision changes,
-credential rotation and disabling remain handled by `configure_sources`, independently
-of the receipt. Keep identical declarations across replicas; a concurrent refresh
-may report `model_refresh_superseded`, which is safely replayable.
+**Add sources on every pass; seed policy only once.** Startup and provisioning add
+`sources` to each named organization under its existing lock, including organizations
+already initialized. Replays preserve permissions, policy revisions, document models,
+defaults and completion receipts, and perform no discovery for an administered policy.
+The Owner refreshes newly assigned sources and permits their models in the Models UI.
+Empty or deleted policies are not recreated. Removing a source from YAML does not
+revoke an existing assignment; disable the source or withdraw model permissions to
+stop its use. Source revision changes and credential rotation remain handled by
+`configure_sources`. Keep identical declarations across replicas.
 
 Every model permission references an explicit organization source assignment from
 creation. The foreign key is validated in the initial schema. Already administered
@@ -370,40 +421,22 @@ Correct the exact ID, source configuration or discovery dependency and replay
 completion receipt; earlier successful organizations and the organization provisioning
 itself remain committed. Discovery failure retains the last inventory. No provider
 body, token or configuration value is included in initialization diagnostics.
-Do not delete receipts to retry. Changing an already initialized association requires
-an explicit administrative change; this lot adds no association-management UI.
+Do not delete receipts to retry. To add a source, update the existing organization
+declaration and restart Control Plane; no UUID lookup or manual assignment is needed.
 
 ### Assign a source after initialization
 
-An operator can make an already configured source visible to an existing organization:
+For deployment-managed organizations, use `platform.organization_models.sources`
+as described above. The existing operator command remains available for an explicit
+assignment outside those declarations:
 
 ```sh
 control-plane assign-model-source <organization-uuid> <source-id>
-# k3d example, using the running deployment's configuration and database credentials:
-kubectl --context k3d-fred -n fred-weaver exec deployment/control-plane-backend -- \
-  control-plane assign-model-source "$ORGANIZATION_ID" bench-mock
 ```
 
-Use the organization's UUID returned by Control Plane, not a team UUID. The source
-must already exist in SQL after deploying its `platform.model_sources` configuration.
-The command uses the same deployment credentials and initialized-schema check as
-`initialize-models`; it accepts no browser token. It locks the active organization
-and the source, then adds the assignment in one transaction. Repeating it, including
-concurrently, is safe. Missing sources, missing organizations, team/project IDs and
-organizations pending deletion fail without creating an assignment.
-
-This command grants source visibility only. It makes no provider request, creates
-no policy or receipt, and preserves existing permissions, revisions, document models,
-defaults and fallback choices. A disabled source remains disabled. The organization
-Owner can then refresh its inventory and authorize selected offers through the
-existing model APIs or UI. There is no association-management HTTP endpoint.
-
-For a fresh installation, provision the organization and run the normal one-time
-`initialize-models` declarations first, if configured. The assignment command also
-works on a newly provisioned organization without a policy. For an already initialized
-installation, use this command for additional sources: editing `organization_models`
-and replaying initialization intentionally leaves completed organizations unchanged.
-Never delete the initialization receipt or edit SQL to make a new source visible.
+It requires an active organization and a configured source, uses deployment credentials,
+and adds visibility without discovery, policy changes or a new initialization receipt.
+A disabled source stays disabled. Repeating the command is safe.
 
 ### Source approval and discovery
 
@@ -555,17 +588,12 @@ No options alter identity or permission. Transport, endpoints, provider, credent
 retries, timeouts and reasoning are not instance options.
 When saving a changed recommendation or an options object, known output/context
 limits bound `max_tokens` for the recommendation, otherwise the organization default.
-A legacy-only profile prevents that implicit default resolution. Missing metadata
-adds no inferred capability. Prompt-dependent input/context budgets and actual
-provider support still require pod validation. The resolver separately diagnoses
+Missing metadata adds no inferred capability. Prompt-dependent input/context budgets
+and actual provider support still require pod validation. The resolver separately diagnoses
 option incompatibility for every candidate, including a possible fallback.
 
 Metadata-only edits, unchanged recommendations and explicit clears do not require
 successful discovery. Revocation, withdrawal or outage never rewrite a saved key.
-`recommended_chat_profile_id` remains in ordinary instance reads for diagnosis;
-new non-null writes return 422 `legacy_model_reselection_required`. Omission keeps
-it and explicit null clears it. Selecting a new composite key does not erase that
-history. No name conversion, synthetic profile or automatic migration exists.
 
 The existing authenticated `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime`
 route adds `models` and `agent.configuration_updated_at`. One read-only repeatable-read
@@ -590,8 +618,8 @@ bound `max_tokens`, even when the instance did not set an explicit override.
 Python's existing Mistral reasoning replay and transport guards remain active.
 
 `models.policy` includes revision, permitted and reasoning-enabled keys and explicit default/fallback;
-`recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
-saved settings. `offers` is the union of permitted keys and retained references.
+`recommendation` and `options` describe saved settings. `offers` is the union of
+permitted keys and retained references.
 Each entry separates `permitted`, `candidate`, `selectable`, typed diagnostics,
 known metadata and source/snapshot revisions and dates. A candidate requires known
 presence/chat, current source revision, enabled source, permission and compatible
@@ -603,8 +631,8 @@ disabled, revoked, unknown and obsolete-source references are not candidates.
 `model_catalog::instance::decide` is the single inference decision used by public
 preparation, trusted Python delegation and internal Rust admission. Selection is
 explicit choice, then instance recommendation, then organization default. A present
-unknown/forbidden choice is refused without substitution; legacy-only profiles
-require explicit re-selection. Fallback requires confirmed withdrawal and stays
+unknown/forbidden choice is refused without substitution. Fallback requires
+confirmed withdrawal and stays
 within the same source and its approved provisioning/account. A discovery outage
 alone, disabled source, revoked permission or missing credential never triggers it.
 
@@ -624,7 +652,6 @@ configuration revision and conversation attribution. Python pins it to `RunScope
 Rust retains it through the turn's tracing context. Neither runtime refreshes
 permissions between LLM calls. New admissions observe changes; admitted turns can
 finish, subject to local cancellation/deadlines and upstream credential rejection.
-The legacy profile remains diagnostic data, never a connection lookup key.
 
 ### Inference connection
 
@@ -962,9 +989,8 @@ Active capabilities return 422, other execution families 409.
 No unsupported control is replaced with a default or hidden tool selection.
 
 `models` projects the common catalog facts: recommendation, default/fallback, options,
-legacy diagnostic and composite offers with permission/candidate/selectable and
-effective reasoning-enabled facts,
-metadata and diagnostics. The DTO has no inference URL, connection or credential
+composite offers with permission/candidate/selectable and effective
+reasoning-enabled facts, metadata and diagnostics. The DTO has no inference URL, connection or credential
 binding. Its `inference` selection comes from the common decision, without certifying
 provider connectivity. A preparation is `Cache-Control: no-store` product data, never a grant or a replacement for M4.
 Session responses are also no-store.
@@ -995,9 +1021,17 @@ evaluate the person's admission and rights, and return `Cache-Control: no-store`
 Conversation deliverables share the `document` catalogue with source documents.
 `document` owns placement and the stable file identity; `document_content` owns
 immutable object keys, hashes and sizes. `document_current` projects the current
-primary content for existing readers. Source originals remain immutable and only
+primary content for existing readers. Content bytes remain immutable and only
 sources can enter Knowledge Flow processing. A preview references its exact primary
 content and disappears from current reads as soon as that primary is replaced.
+
+Source processing freezes `content_id`, `expected_content_id` and the nullable
+`expected_generation_id`; callbacks read those exact bytes and publication swaps
+content and generation together. Migration `0036_document_processing_content.sql`
+prepares replacement/reprocessing persistence and quota handling, but public
+processing admission still refuses a previous success. See the
+[storage/processing contract](../../docs/architecture/A9-documents.md#processing-behavior)
+for that boundary; it does not change conversation deliverable replacement.
 
 The conversation owner lists and downloads deliverables through
 `/spaces/{space}/sessions/{session}/files`. Listing, download, `write-target` and multipart write
@@ -1125,8 +1159,15 @@ The default output is `apps/control-plane/target/demo-provisioning-bundle.zip`
 (path from the repository root). Both entry points delegate to the same packager.
 
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
-`teams.json` and `projects.json`. The manifest declares `format_version: 2`,
-`users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
+`teams.json` and `projects.json`, plus an optional `skills.json`. The manifest
+declares `format_version: 2`, `users_schema_version: 2`, `source_platform: "swift"`.
+The data files are arrays. A `skills.json` entry is
+`{"space": "<declared ref>", "name": "<skill>", "files": {"SKILL.md": "...", "references/x.md": "..."}}`:
+its package must satisfy the [space skills](#space-skills) contract, once per space
+and name. A Control Plane without this support rejects the file as `not_yet_supported`.
+The packager builds it from an optional `skill_packs.json` in the fixture directory,
+`[{"space": "<ref>", "pack": "<directory relative to the fixture>", "skills": ["<name>"]}]`;
+the demo installs `en` in Acme and `fr` in Globex.
 The demo's people, spaces and roles are listed once in
 [Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
@@ -1158,6 +1199,8 @@ whitespace or control characters. Noncanonical names and known new-user email
 conflicts are rejected before any provisioning writes. All space roles are explicit: admin alone grants no content
 access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
+Declared skills are installed in the same transaction as the spaces; replay reports
+present ones as kept (`skills_kept`) and never rewrites them.
 Success returns JSON counts only after completion. A failed run reports a safe
 phase and acknowledgment counts; correct the cause and replay with a valid token.
 There is no cross-system rollback, so failure does not prove absence of effects.
@@ -1410,6 +1453,36 @@ checks the source revision and resolved configuration again. Existing PowerPoint
 upload receipts, quotas, original storage and capability preparation are reused.
 An unsupported file owner or configuration rejects the whole operation rather
 than dropping a capability. No Swift storage adapter or second workflow is used.
+
+## Hosted applications (reception pending)
+
+Platform Admin registers application UI directories and optional API directories
+through `/platform/applications`; registrations start disabled. These are trusted
+HTTP(S) services: API requests carry the caller's bearer. Register the full upstream
+UI directory (for example `http://fred-evaluator-ui:8080/apps/evaluation/`) and API
+root (for example `http://application-api:8080/api/`). URLs must
+end in `/` and contain no credentials, query or fragment. The stable logical name
+is the SDK application ID; the UUID identifies the registry entry. A revision is
+required for updates. Suspension preserves application data and governance.
+
+Applications use the `$applications` source and existing organization capability
+and team/project capability-policy screens. An organization Owner authorizes an
+offer; local Owners can only restrict the inherited ceiling. Personal spaces are
+excluded. The entry permission uses the existing space permission matrix (register
+Evaluation with `run_evaluations`); each service still checks its own action rights.
+Applications never become agent tools or pod templates.
+
+`/spaces/{space_id}/applications` returns permitted applications and browser paths,
+without internal destinations. The gateway forwards `/apps/` and `/app-services/`
+to Control Plane. Static GET/HEAD requests carry no credentials; API requests retain
+`teams/{space_uuid}/...` below the registered API directory and forward only the
+validated user bearer. Redirects and unsafe path segments are rejected. Requests
+are capped at 16 MiB/60 seconds; responses stream up to 64 MiB with a 180-second
+upstream deadline. Suspension affects new admissions, not already admitted calls.
+
+Targeted disposable reception: `make test-integration
+CARGO_TEST_OPTS=applications::hosted_applications_registration_governance_and_proxy`.
+Local SQL/HTTP checks do not establish deployed UI acceptance.
 
 ## Managed MCP connections (reception pending)
 
@@ -2195,3 +2268,13 @@ and adjacent windows, Acme/Globex and revocation, shared historical reads, exact
 homonyms, membership filtering before limits, late UI responses and unavailable/empty
 states. Execution of tests and code-quality remains assigned to Dimi; these additions
 are not a claim of passing tests or deployed reception.
+
+### Developer diagnostic tracing
+
+Select `observability.tracer: diagnostic` with
+`observability.diagnostic.collector_endpoint` in the service YAML. The default
+keeps diagnostic export off. The [SDK guide](../../libs/fred-rust-sdk/README.md)
+describes the fixed request-based sampling and bounded technical export; the
+[bench guide](../../developer_tools/benchmarks/README.md) describes collection.
+This is an experimental developer facility; a sampled request context carries
+no authority and does not certify bench as its sender.

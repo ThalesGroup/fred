@@ -258,13 +258,24 @@ impl InferenceTurn {
         }
     }
 
+    pub(crate) fn model_name(&self) -> &str {
+        &self.admission.selection.key.upstream_model_id
+    }
+
     /// No provider error/body, URL, credential or prompt is recorded.
     pub(crate) fn observe(&self, started: Instant, outcome: &'static str) {
         let selection = &self.admission.selection;
+        let latency = started.elapsed();
+        fred_rust_sdk::metrics::model_call(
+            crate::DEFINITION.provider,
+            self.model_name(),
+            outcome == "success",
+            latency,
+        );
         tracing::info!(target: "control_plane::inference", parent: &self.span, source_id = %selection.key.source_id, model = %selection.key.upstream_model_id,
             policy_revision = selection.policy_revision, source_revision = selection.source_revision,
             snapshot_revision = selection.snapshot_revision, selection = ?selection.source,
-            latency_ms = started.elapsed().as_millis() as u64, outcome, "Inference completed");
+            latency_ms = latency.as_millis() as u64, outcome, "Inference completed");
     }
 }
 

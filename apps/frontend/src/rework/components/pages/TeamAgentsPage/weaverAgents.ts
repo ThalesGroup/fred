@@ -61,9 +61,6 @@ export function updateAgentRequest(
   if (JSON.stringify(payload.recommendedModel) !== JSON.stringify(saved.recommended_model ?? null)) {
     request.recommended_model = payload.recommendedModel;
   }
-  if (saved.recommended_chat_profile_id && payload.recommendedChatProfileId === null) {
-    request.recommended_chat_profile_id = null;
-  }
   if (payload.displayName !== saved.display_name) request.display_name = payload.displayName;
   if (payload.role !== saved.role) request.role = payload.role;
   if (payload.description !== (saved.description ?? "")) request.description = payload.description;

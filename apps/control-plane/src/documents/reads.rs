@@ -166,12 +166,20 @@ impl Storage {
             .await
             .map_err(dependency_error)?;
         authorization::decide(&facts, Permission::Read.into())?;
-        let can_write = authorization::decide(&facts, Permission::Write.into()).is_ok();
+        let mut can_write = authorization::decide(&facts, Permission::Write.into()).is_ok();
         let mut tx = pool.begin().await?;
         sqlx::query("set transaction isolation level repeatable read, read only")
             .execute(&mut *tx)
             .await?;
         let ancestors = db::folder_ancestors(&mut *tx, space, query.parent_id).await?;
+        if let Some(id) = query.parent_id {
+            let managed: bool =
+                sqlx::query_scalar("select exists(select 1 from kb_instance where folder_id=$1)")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            can_write &= !managed;
+        }
         let total: i64 = directory_selection("select count(*)", space, &query)
             .build_query_scalar()
             .fetch_one(&mut *tx)
@@ -253,18 +261,17 @@ impl Storage {
     /// The caller has already checked the document's exact owning-space authority.
     pub(crate) async fn stream_original(&self, document: Document) -> AppResult<Response> {
         let id = document.id;
-        let key: String = sqlx::query_scalar(
-            "select object_key from document_current where id=$1 and deletion_id is null",
+        let (key, name, size, sha256): (String, String, i64, String) = sqlx::query_as(
+            "select object_key,name,size,sha256 from document_current where id=$1 and deletion_id is null",
         )
         .bind(id)
         .fetch_one(&self.pool)
         .await?;
-        self.stream_file(id, &key, &document.name, document.size, &document.sha256)
-            .await
+        self.stream_file(id, &key, &name, size, &sha256).await
     }
 
     /// The caller resolves the immutable key and authorizes its exact usage first.
-    pub(super) async fn stream_file(
+    pub(crate) async fn stream_file(
         &self,
         id: Uuid,
         key: &str,

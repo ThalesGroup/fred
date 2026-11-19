@@ -48,7 +48,10 @@ logger = logging.getLogger(__name__)
 # - phase, operation: generic dims shared by many unrelated call sites (Graph,
 #   checkpoint SQL, Knowledge Flow, LLM calls) with a wide, still-growing
 #   value set — promoting either would surface far more than intended.
-#   `runtime_stage` is the closed-set dimension for pre-LLM stages.
+#   `runtime_stage` is the closed-set dimension for turn stages outside model
+#   calls (see RuntimeStage).
+# - store and op are emitted only by record_persist_metrics, typed as the
+#   closed PersistStore/PersistOp sets (2 stores, 7 operations).
 #   `pdf_stage` is the same pattern for the PDF image OCR/VLM loop (two closed
 #   values, "image_loop"/"image_description" — see pdf_markdown_processor.py's
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
@@ -80,6 +83,8 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "file_type",
         "agent_step",
         "runtime_stage",
+        "store",
+        "op",
         "pdf_stage",
         "conversation_fs_namespace",
         "conversation_fs_resource",
@@ -133,6 +138,8 @@ MS_BUCKETS = (
     250.0,
     500.0,
     1000.0,
+    1500.0,
+    2000.0,
     2500.0,
     5000.0,
     10000.0,
@@ -205,7 +212,11 @@ class PrometheusKPIStore(BaseKPIStore):
             self._delegate.ensure_ready()
 
     def _get_metric(
-        self, name: str, metric_type: str, label_names: Tuple[str, ...]
+        self,
+        name: str,
+        metric_type: str,
+        label_names: Tuple[str, ...],
+        unit: Optional[str] = None,
     ) -> Counter | Gauge | Histogram:
         key = (name, metric_type)
         with self._lock:
@@ -219,11 +230,10 @@ class PrometheusKPIStore(BaseKPIStore):
             elif metric_type == "gauge":
                 metric = Gauge(name, "KPI gauge", list(label_names), registry=REGISTRY)
             else:
-                buckets = Histogram.DEFAULT_BUCKETS
-                if name.endswith("_ms"):
-                    buckets = MS_BUCKETS
-                elif name.endswith("_seconds"):
-                    buckets = SECONDS_BUCKETS
+                # The emitted unit, not the name: agent.turn_completed is in ms.
+                buckets = {"ms": MS_BUCKETS, "s": SECONDS_BUCKETS}.get(
+                    unit or "", Histogram.DEFAULT_BUCKETS
+                )
                 if name in {
                     "llm_first_chunk_ms",
                     "llm_max_chunk_gap_ms",
@@ -246,9 +256,10 @@ class PrometheusKPIStore(BaseKPIStore):
         metric_type: str,
         value: float,
         label_values: Dict[str, str],
+        unit: Optional[str] = None,
     ):
         label_names = self._label_names[(metric_name, metric_type)]
-        metric = self._get_metric(metric_name, metric_type, label_names)
+        metric = self._get_metric(metric_name, metric_type, label_names, unit)
         if metric_type == "counter":
             if value < 0:
                 logger.warning(
@@ -325,7 +336,11 @@ class PrometheusKPIStore(BaseKPIStore):
         base_label_map = self._label_maps[(base_name, metric_type)]
 
         self._emit_value(
-            base_name, metric_type, float(event.metric.value), label_values
+            base_name,
+            metric_type,
+            float(event.metric.value),
+            label_values,
+            event.metric.unit,
         )
 
         if event.cost:

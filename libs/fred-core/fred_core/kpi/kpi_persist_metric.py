@@ -11,25 +11,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+from typing import Literal, Optional
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import Dims, KPIActor
 
 PERSIST_METRIC_ACTOR = KPIActor(type="system", user_id=None)
 
+# Closed sets: both dims are Prometheus labels (PROMETHEUS_ALLOWED_LABELS).
+PersistStore = Literal["checkpoint", "history"]
+PersistOp = Literal[
+    "get_tuple", "put", "put_writes", "owner", "hitl_claim", "hitl_claim_start", "save"
+]
+
 
 def record_persist_metrics(
     kpi_writer: Optional[BaseKPIWriter],
     *,
-    store: str,
-    op: str,
+    store: PersistStore,
+    op: PersistOp,
     pool_wait_ms: float,
     sql_ms: float,
 ) -> None:
     """
     Emit `persist_pool_wait_ms` and `persist_sql_ms` for one checkpoint/history
-    write, split into connection-acquisition time vs. actual query time.
+    operation, split into connection-acquisition time vs. actual query time.
 
     `store` and `op` are bounded-cardinality dims (e.g. store="checkpoint",
     op="put") — never a thread/session/user id.

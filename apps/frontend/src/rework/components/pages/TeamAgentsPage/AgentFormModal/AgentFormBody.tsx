@@ -45,6 +45,7 @@ import {
   CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
+  CAP_TABULAR,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
@@ -95,8 +96,6 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Retained legacy reference for display only; never a model resolution key. */
-  recommendedChatProfileId: string | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -140,7 +139,6 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
-  recommendedChatProfileId,
   recommendedModel,
   onRecommendedModelChange,
   tuningFieldValues,
@@ -314,6 +312,10 @@ export function AgentFormBody({
         />
       );
     }
+    if (pack.id === CAP_TABULAR) {
+      const capability = capabilities.find((entry) => entry.id === CAP_TABULAR);
+      return capability ? renderConfigForm(capability) : undefined;
+    }
     // Team wiki: the capability's own `mode` field, read from the live manifest.
     if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
       const modeField = capabilities
@@ -451,9 +453,6 @@ export function AgentFormBody({
                   onChange={onRecommendedModelChange}
                   disabled={isSubmitting}
                 />
-                {recommendedChatProfileId && !recommendedModel && (
-                  <p role="status">{t("rework.weaverAgents.legacyModelReselection")}</p>
-                )}
                 {renderFieldList(generalFields)}
               </>
             )}

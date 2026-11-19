@@ -163,3 +163,71 @@ async fn quota_uses_fr001_while_declared_unique_and_foreign_keys_remain_conflict
     assert_eq!(status, 409);
     assert_eq!(body["code"], "conflict");
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn recent_assertion_triggers_report_constraint_and_table() {
+    let pool = database::database().await;
+    let org = Uuid::new_v4();
+    sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization','Diagnostics',$1)")
+        .bind(org).execute(&pool).await.unwrap();
+    // Exercise the effective functions after the full immutable migration chain.
+    // All three rows are otherwise valid; only their placement is invalid.
+    for (query, constraint, table) in [
+        (
+            "insert into team_join_link(space_id,token,created_by,expires_at) values($1,gen_random_uuid(),'alice',now()+interval '1 hour')",
+            "team_join_link_space_kind",
+            "team_join_link",
+        ),
+        (
+            "insert into avatar(id,space_id,object_key,size,status,expires_at) values(gen_random_uuid(),$1,'avatars/test',1,'pending',now()+interval '1 hour')",
+            "avatar_space_kind",
+            "avatar",
+        ),
+        (
+            "insert into space_model_policy(space_id,revision,updated_by) values($1,1,'alice')",
+            "space_model_policy_kind",
+            "space_model_policy",
+        ),
+    ] {
+        let error = sqlx::query(query)
+            .bind(org)
+            .execute(&pool)
+            .await
+            .unwrap_err();
+        assert_invariant_diagnostics(error, constraint, table).await;
+    }
+    for update in [
+        "update application set logical_name='renamed' where id=$1",
+        "update application set id=gen_random_uuid() where id=$1",
+    ] {
+        let mut tx = pool.begin().await.unwrap();
+        let id = Uuid::new_v4();
+        // The linked offer FK is deferred; this fixture rolls back before commit.
+        sqlx::query("insert into application(id,logical_name,ui_base_url,updated_by) values($1,'diagnostics','https://example.test/app/','alice')")
+            .bind(id).execute(&mut *tx).await.unwrap();
+        let error = sqlx::query(update)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .unwrap_err();
+        assert_invariant_diagnostics(error, "application_identity", "application").await;
+        tx.rollback().await.unwrap();
+    }
+}
+
+async fn assert_invariant_diagnostics(error: sqlx::Error, constraint: &str, table: &str) {
+    let diagnostic = error.as_database_error().unwrap();
+    assert_eq!(diagnostic.code().as_deref(), Some("23514"));
+    assert_eq!(diagnostic.constraint(), Some(constraint));
+    assert_eq!(diagnostic.table(), Some(table));
+    let (status, body, logs) = response(error).await;
+    assert_eq!(status, 500);
+    assert_eq!(
+        body,
+        serde_json::json!({"code":"invariant_violation","detail":"internal error"})
+    );
+    assert_eq!(logs.matches("invariant_violation").count(), 1);
+    assert!(logs.contains(&format!("constraint=\"{constraint}\"")));
+    assert!(logs.contains(&format!("table=\"{table}\"")));
+}

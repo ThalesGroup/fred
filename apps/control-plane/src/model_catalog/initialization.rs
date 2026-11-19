@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Deployment input only. SQL owns assignments and decisions after initialization.
+//! Deployment adds source assignments; organization policy is seeded only once.
 
 use std::{collections::BTreeSet, time::Duration};
 
@@ -147,9 +147,6 @@ async fn initialize_one(
     .bind(organization)
     .fetch_optional(pool)
     .await?;
-    if receipt.as_ref().is_some_and(Option::is_some) {
-        return Ok(());
-    }
     // A retained receipt means a policy has already been administered, even if deleted.
     // Discovery is only necessary for a new policy; it grants nothing by itself.
     if receipt.is_none() {

@@ -252,7 +252,7 @@ async fn create_session(
     validate_title(body.title.as_deref())?;
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    agent_instances::http::require_instance_space(space.kind)?;
+    agent_instances::require_instance_space(space.kind)?;
     onboarding::require_accepted(&mut *tx, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let existing: bool =
         sqlx::query_scalar("select exists(select 1 from session_metadata where session_id = $1)")

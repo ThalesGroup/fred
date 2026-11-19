@@ -249,6 +249,7 @@ impl IntoResponse for AuthError {
 /// Signing keys by `kid`, refreshed after five minutes or on an unknown `kid`.
 struct Jwks {
     url: String,
+    provider: Provider,
     http: reqwest::Client,
     /// When the keys were fetched, and the signing keys by kid.
     cache: RwLock<(Option<Instant>, HashMap<String, DecodingKey>)>,
@@ -258,9 +259,10 @@ struct Jwks {
 }
 
 impl Jwks {
-    fn new(url: String, http: reqwest::Client) -> Self {
+    fn new(url: String, http: reqwest::Client, provider: Provider) -> Self {
         Self {
             url,
+            provider,
             http,
             cache: RwLock::new((None, HashMap::new())),
             attempt: tokio::sync::Mutex::new(None),
@@ -275,45 +277,66 @@ impl Jwks {
             .flatten()
     }
 
+    #[tracing::instrument(target = "fred.telemetry", name = "auth.jwks.lookup", skip_all, fields(fred.cache = tracing::field::Empty, otel.status_code = tracing::field::Empty))]
     async fn key(&self, kid: &str) -> Result<DecodingKey> {
         if let Some(key) = self.cached(kid, JWKS_LIFESPAN).await {
+            tracing::Span::current().record("fred.cache", "hit");
             return Ok(key);
         }
+        tracing::Span::current().record("fred.cache", "miss");
         let mut attempt = self.attempt.lock().await;
         // Another request may have fetched while this one waited.
         if let Some(key) = self.cached(kid, JWKS_LIFESPAN).await {
+            tracing::Span::current().record("fred.cache", "hit");
             return Ok(key);
         }
         let stale = self.cached(kid, JWKS_STALE_LIMIT).await;
         if !may_fetch(attempt.map(|t| t.elapsed())) {
-            return stale.context("unknown kid within the refetch cooldown");
+            if stale.is_some() {
+                tracing::Span::current().record("fred.cache", "stale");
+            }
+            return stale
+                .context("unknown kid within the refetch cooldown")
+                .inspect_err(|_| {
+                    tracing::Span::current().record("otel.status_code", "ERROR");
+                });
         }
         *attempt = Some(Instant::now());
         let set = match self.fetch().await {
             Ok(set) => set,
             Err(error) => {
                 if let Some(key) = stale {
+                    tracing::Span::current().record("fred.cache", "stale");
                     tracing::warn!("JWKS refresh failed; serving a known signing key");
                     return Ok(key);
                 }
+                tracing::Span::current().record("otel.status_code", "ERROR");
                 return Err(error);
             }
         };
         let keys = signing_keys(&set);
+        tracing::Span::current().record("fred.cache", "refreshed");
         let found = keys.get(kid).cloned();
         *self.cache.write().await = (Some(Instant::now()), keys);
-        found.context("no signing key for kid")
+        found.context("no signing key for kid").inspect_err(|_| {
+            tracing::Span::current().record("otel.status_code", "ERROR");
+        })
     }
 
+    #[tracing::instrument(target = "fred.telemetry", name = "auth.jwks.fetch", skip_all, fields(otel.kind = "client", otel.status_code = tracing::field::Empty, peer.service = match self.provider { Provider::Keycloak => "keycloak", Provider::Oidc => "identity-provider" }))]
     async fn fetch(&self) -> Result<JwkSet> {
-        Ok(self
-            .http
-            .get(&self.url)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?)
+        async {
+            Ok(crate::telemetry::inject(self.http.get(&self.url))
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?)
+        }
+        .await
+        .inspect_err(|_: &anyhow::Error| {
+            tracing::Span::current().record("otel.status_code", "ERROR");
+        })
     }
 }
 
@@ -393,7 +416,7 @@ impl Authenticator {
         );
         Ok(Self {
             verifier: Some(Verifier {
-                jwks: Jwks::new(jwks_url, http),
+                jwks: Jwks::new(jwks_url, http, settings.provider),
                 issuer,
                 realm_issuers,
                 settings,
@@ -522,6 +545,10 @@ impl Verifier {
             return Err(AuthError::SigningKey);
         };
 
+        // Everything below is local signature/claim validation; the JWKS lookup
+        // (and its optional network fetch) has already completed.
+        let _validation =
+            tracing::info_span!(target: "fred.telemetry", "auth.jwt.validate", otel.status_code = tracing::field::Empty).entered();
         let user_audience = s.audience.clone().unwrap_or_else(|| s.client_id.clone());
         let mut validation = Validation::new(Algorithm::RS256);
         validation.leeway = s.clock_skew_seconds;
@@ -536,10 +563,12 @@ impl Verifier {
         let payload = match jsonwebtoken::decode::<Map<String, Value>>(token, &key, &validation) {
             Ok(data) => data.claims,
             Err(e) if matches!(e.kind(), ErrorKind::ExpiredSignature) => {
+                tracing::Span::current().record("otel.status_code", "ERROR");
                 tracing::warn!("Access token expired");
                 return Err(AuthError::Expired);
             }
             Err(_) => {
+                tracing::Span::current().record("otel.status_code", "ERROR");
                 tracing::error!("Invalid JWT token");
                 return Err(AuthError::Invalid);
             }
@@ -550,7 +579,10 @@ impl Verifier {
             now_seconds(),
             s.clock_skew_seconds,
             s.max_token_lifetime_seconds,
-        )?;
+        )
+        .inspect_err(|_| {
+            tracing::Span::current().record("otel.status_code", "ERROR");
+        })?;
 
         let roles_path = s.roles_claim.clone().unwrap_or_else(|| {
             vec![
@@ -571,6 +603,7 @@ impl Verifier {
         let identity = match payload.get(&s.claims.uid) {
             Some(Value::String(id)) if !id.trim().is_empty() => id.clone(),
             _ => {
+                tracing::Span::current().record("otel.status_code", "ERROR");
                 tracing::warn!("JWT token missing or invalid identity claim");
                 return Err(AuthError::InvalidClaims);
             }
@@ -798,7 +831,11 @@ mod tests {
     }
 
     fn verifier(settings: SecuritySettings) -> Verifier {
-        let jwks = Jwks::new("http://unused".into(), reqwest::Client::new());
+        let jwks = Jwks::new(
+            "http://unused".into(),
+            reqwest::Client::new(),
+            Provider::Keycloak,
+        );
         let mut keys_by_kid = HashMap::new();
         keys_by_kid.insert(KID.to_string(), keys().1.clone());
         *jwks.cache.try_write().unwrap() = (Some(Instant::now()), keys_by_kid);
@@ -889,6 +926,156 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn jwks_network_span_propagates_context_and_identifies_the_real_provider() {
+        use axum::{Router, http::HeaderMap, routing::get};
+        use opentelemetry::KeyValue;
+        use opentelemetry_sdk::trace::{
+            InMemorySpanExporter, SdkTracerProvider, SimpleSpanProcessor,
+        };
+        use tracing::Instrument;
+        use tracing_subscriber::prelude::*;
+
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = received.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/",
+                    get(move |headers: HeaderMap| {
+                        let captured = captured.clone();
+                        async move {
+                            captured
+                                .lock()
+                                .unwrap()
+                                .push(headers["traceparent"].to_str().unwrap().to_string());
+                            Json(json!({ "keys": [] }))
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_span_processor(crate::telemetry::SafeSpans(SimpleSpanProcessor::new(
+                exporter.clone(),
+            )))
+            .build();
+        let subscriber = tracing_subscriber::registry().with(crate::telemetry::layer(&provider));
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let root = tracing::info_span!(target: "fred.telemetry", "control_plane.http");
+        for identity_provider in [Provider::Keycloak, Provider::Oidc] {
+            let jwks = Jwks::new(url.clone(), reqwest::Client::new(), identity_provider);
+            jwks.fetch().instrument(root.clone()).await.unwrap();
+        }
+        drop(root);
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
+        let spans = exporter.get_finished_spans().unwrap();
+        let fetches: Vec<_> = spans
+            .iter()
+            .filter(|s| s.name == "auth.jwks.fetch")
+            .collect();
+        assert_eq!(fetches.len(), 2);
+        for (index, category) in ["keycloak", "auth"].iter().enumerate() {
+            let span = fetches[index];
+            assert!(
+                span.attributes
+                    .contains(&KeyValue::new("fred.category", *category))
+            );
+            let expected = format!(
+                "00-{}-{}-01",
+                span.span_context.trace_id(),
+                span.span_context.span_id()
+            );
+            assert_eq!(received.lock().unwrap()[index], expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn cached_jwt_validation_has_no_keycloak_network_span() {
+        use opentelemetry::KeyValue;
+        use opentelemetry_sdk::trace::{
+            InMemorySpanExporter, SdkTracerProvider, SimpleSpanProcessor,
+        };
+        use tracing_subscriber::prelude::*;
+
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_span_processor(crate::telemetry::SafeSpans(SimpleSpanProcessor::new(
+                exporter.clone(),
+            )))
+            .build();
+        let subscriber = tracing_subscriber::registry().with(crate::telemetry::layer(&provider));
+        let _guard = tracing::subscriber::set_default(subscriber);
+        decode(settings(), bob(json!({}))).await.unwrap();
+        let spans = exporter.get_finished_spans().unwrap();
+        assert_eq!(spans.len(), 2);
+        let lookup = spans.iter().find(|s| s.name == "auth.jwks.lookup").unwrap();
+        assert!(
+            lookup
+                .attributes
+                .contains(&KeyValue::new("fred.cache", "hit"))
+        );
+        assert!(spans.iter().any(|s| s.name == "auth.jwt.validate"));
+        assert!(spans.iter().all(|s| {
+            s.attributes
+                .contains(&KeyValue::new("fred.category", "auth"))
+        }));
+    }
+
+    #[tokio::test]
+    async fn failed_jwks_and_local_jwt_spans_have_errors_without_details() {
+        use opentelemetry::trace::Status;
+        use opentelemetry_sdk::trace::{
+            InMemorySpanExporter, SdkTracerProvider, SimpleSpanProcessor,
+        };
+        use tracing_subscriber::prelude::*;
+
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_span_processor(crate::telemetry::SafeSpans(SimpleSpanProcessor::new(
+                exporter.clone(),
+            )))
+            .build();
+        let subscriber = tracing_subscriber::registry().with(crate::telemetry::layer(&provider));
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let jwks = Jwks::new(
+            "http://127.0.0.1:1/private-path".into(),
+            reqwest::Client::new(),
+            Provider::Keycloak,
+        );
+        assert!(jwks.key("private-kid").await.is_err());
+        assert!(jwks.key("private-kid").await.is_err()); // cooldown is a lookup, not another HTTP call
+        assert!(
+            decode(
+                settings(),
+                bob(json!({ "iat": now() - 600, "exp": now() - 300 }))
+            )
+            .await
+            .is_err()
+        );
+        let spans = exporter.get_finished_spans().unwrap();
+        assert_eq!(
+            spans.iter().filter(|s| s.name == "auth.jwks.fetch").count(),
+            1
+        );
+        assert_eq!(
+            spans
+                .iter()
+                .filter(|s| s.status == Status::error(""))
+                .count(),
+            4
+        );
+        assert_eq!(spans.len(), 5); // failed fetch, two failed lookups, cache hit, local JWT failure
+        assert!(!format!("{spans:?}").contains("private-"));
+    }
+
+    #[tokio::test]
     async fn maps_a_keycloak_ui_token() {
         let user = decode(settings(), bob(json!({}))).await.unwrap();
         assert_eq!(user.uid, "0b7c2f8e-5a1d-4c3b-9e2f-1a2b3c4d5e6f");
@@ -959,7 +1146,11 @@ mod tests {
     async fn known_keys_survive_an_unreachable_provider_within_the_stale_limit() {
         // Nothing listens on port 1: every refetch fails.
         let aged = |age: Duration| {
-            let jwks = Jwks::new("http://127.0.0.1:1/certs".into(), reqwest::Client::new());
+            let jwks = Jwks::new(
+                "http://127.0.0.1:1/certs".into(),
+                reqwest::Client::new(),
+                Provider::Keycloak,
+            );
             let fetched = Instant::now()
                 .checked_sub(age)
                 .expect("monotonic clock older than the stale limit");
@@ -983,7 +1174,11 @@ mod tests {
     #[tokio::test]
     async fn a_failed_fetch_starts_the_cooldown_too() {
         // Nothing listens on port 1: the first attempt fails, the second is not even tried.
-        let jwks = Jwks::new("http://127.0.0.1:1/certs".into(), reqwest::Client::new());
+        let jwks = Jwks::new(
+            "http://127.0.0.1:1/certs".into(),
+            reqwest::Client::new(),
+            Provider::Keycloak,
+        );
         let first = jwks.key("any").await.unwrap_err().to_string();
         let second = jwks.key("any").await.unwrap_err().to_string();
         assert!(!first.contains("cooldown"), "{first}");

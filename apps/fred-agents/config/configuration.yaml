@@ -29,13 +29,15 @@ security:
   authorized_origins: []
 
 ai:
+  # Pod-wide compatibility repair; set false only for provider diagnosis.
+  normalize_streamed_tool_call_ids: true
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v2"
   timeout:
     connect: 5
     read: 30
 
 observability:
-  tracer: logging     # null | logging | langfuse
+  tracer: logging     # null | logging | langfuse | diagnostic
   kpi:
     log:
       enabled: true

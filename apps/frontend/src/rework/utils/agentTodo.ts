@@ -106,9 +106,11 @@ export function isAgentTodoSnapshotSettled(messages: readonly ChatMessage[], cal
   return hasFinal;
 }
 
-/** Finalized turns present their residual active step as complete without mutating stored history. */
-export function presentAgentTodos(todos: readonly AgentTodo[], isSettled: boolean): AgentTodo[] {
-  return todos.map((todo) =>
-    isSettled && todo.status === "in_progress" ? { ...todo, status: "completed" as const } : todo,
-  );
+/**
+ * Only a running turn presents a step as in progress: a finalized turn completes its residual
+ * active step, a stopped one leaves it pending. Stored history is not mutated.
+ */
+export function presentAgentTodos(todos: readonly AgentTodo[], isSettled: boolean, isRunning: boolean): AgentTodo[] {
+  const residual: AgentTodoStatus | null = isSettled ? "completed" : isRunning ? null : "pending";
+  return todos.map((todo) => (residual && todo.status === "in_progress" ? { ...todo, status: residual } : todo));
 }

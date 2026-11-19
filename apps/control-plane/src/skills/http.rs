@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{PackageSummary, SkillCatalog, SkillDetail, SpaceSkill, package::Files};
+use super::{SkillCatalog, SkillDetail, SpaceSkill, package::Files};
 use crate::{
     api::AppState,
     authorization,
@@ -33,28 +33,11 @@ pub struct CreateSkill {
 
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     utoipa_axum::router::OpenApiRouter::new()
-        .routes(utoipa_axum::routes!(default_skills))
         .routes(utoipa_axum::routes!(list_skills, create_skill))
         .routes(utoipa_axum::routes!(skill_scope))
         .routes(utoipa_axum::routes!(get_skill, put_skill, delete_skill))
-        .routes(utoipa_axum::routes!(install_skill))
         .routes(utoipa_axum::routes!(preview_skill))
         .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024))
-}
-
-#[utoipa::path(get, path="/skills/defaults", responses(
-        (status=200, body=Vec<PackageSummary>),
-        (status = 401, body = crate::error::ErrorBody),
-        (status = 403, body = crate::error::ErrorBody),
-        (status = 500, body = crate::error::ErrorBody)
-    ))]
-async fn default_skills(AdmittedUser(_user): AdmittedUser) -> AppResult<Json<Vec<PackageSummary>>> {
-    Ok(Json(
-        super::defaults::packages()
-            .into_iter()
-            .map(|(name, files)| super::package::validate(name, &files, true))
-            .collect::<AppResult<_>>()?,
-    ))
 }
 
 #[utoipa::path(get, path="/spaces/{space_id}/skills", params(("space_id"=Uuid, Path)), responses(
@@ -180,6 +163,9 @@ async fn put_skill(
 ) -> AppResult<StatusCode> {
     let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space, Permission::Write).await?;
+    let expected = body.expected_revision.as_deref().ok_or_else(|| {
+        AppError::Conflict("Skill revision required; reload before replacing the package".into())
+    })?;
     let name: String =
         sqlx::query_scalar("select name from skill where space_id=$1 and skill_id=$2")
             .bind(space)
@@ -193,36 +179,10 @@ async fn put_skill(
         &user.uid,
         &name,
         &body.files,
-        body.expected_revision.as_deref(),
+        Some((skill_id, expected)),
         false,
     )
     .await?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[utoipa::path(post, path="/spaces/{space_id}/skills/packages/{name}/install", params(("space_id"=Uuid, Path), ("name"=String, Path)), responses(
-        (status=204),
-        (status = 400, body = crate::error::ErrorBody),
-        (status = 401, body = crate::error::ErrorBody),
-        (status = 403, body = crate::error::ErrorBody),
-        (status = 404, body = crate::error::ErrorBody),
-        (status = 409, body = crate::error::ErrorBody),
-        (status = 422, body = crate::error::ErrorBody),
-        (status = 500, body = crate::error::ErrorBody)
-    ))]
-async fn install_skill(
-    State(s): State<AppState>,
-    AdmittedUser(user): AdmittedUser,
-    ApiPath((space, name)): ApiPath<(Uuid, String)>,
-) -> AppResult<StatusCode> {
-    let (mut tx, _) =
-        spaces::authorized_mutation(&s.pool, &user.uid, space, Permission::Write).await?;
-    let (_, files) = super::defaults::packages()
-        .into_iter()
-        .find(|(n, _)| *n == name)
-        .ok_or(AppError::NotFound)?;
-    super::save(&mut tx, space, &user.uid, &name, &files, None, true).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

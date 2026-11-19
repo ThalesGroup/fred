@@ -891,6 +891,9 @@ pub async fn create_folder(
             "the parent folder belongs to another space".into(),
         ));
     }
+    if let Some(id) = parent_id {
+        crate::knowledge_bases::documents::require_manual_folder(&mut *tx, id).await?;
+    }
     if parent
         .as_ref()
         .is_some_and(|p| p.path.split('/').filter(|s| !s.is_empty()).count() >= 15)

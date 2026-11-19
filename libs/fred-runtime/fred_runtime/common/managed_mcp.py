@@ -31,6 +31,8 @@ from fred_sdk.contracts.services import FredService
 from langchain.mcp import as_langchain_tool
 from langchain_core.tools import BaseTool, StructuredTool
 
+from fred_runtime.execution_errors import UserFacingExecutionError
+
 from .mcp_http_auth import MCPHTTPAuth
 from .mcp_utils import (
     MCP_DELEGATED_METADATA_KEY,
@@ -46,8 +48,32 @@ from .outbound_credentials import (
 )
 
 
-class ManagedMcpError(ValueError):
-    """Stable diagnostic, safe for logs and user-facing execution errors."""
+class ManagedMcpError(UserFacingExecutionError, ValueError):
+    """Stable diagnostic, surfaced through the existing execution-error path."""
+
+    def __init__(self, code: str, *, binding: McpBinding | None = None) -> None:
+        component = (
+            "Knowledge Flow Tabular"
+            if isinstance(binding, McpTabularBinding)
+            else "MCP"
+        )
+        sentences = (
+            {
+                "en": "{component} is unavailable.",
+                "fr": "{component} est indisponible.",
+            }
+            if code
+            in {
+                "mcp_inventory_empty",
+                "mcp_connection_unavailable",
+                "mcp_tool_unavailable",
+            }
+            else {
+                "en": "{component} configuration was refused.",
+                "fr": "La configuration {component} a été refusée.",
+            }
+        )
+        super().__init__(sentences, code, component=component)
 
 
 def credential_headers(
@@ -198,38 +224,38 @@ async def connect(
 ) -> list[BaseTool]:
     tools: list[BaseTool] = []
     for binding in bindings:
-        trusted = trusted_destination(binding, knowledge_flow_url)
-        headers = (
-            credential_headers(binding, credentials)
-            if isinstance(binding, McpConnectionBinding)
-            else {}
-        )
-        url = (
-            binding.configuration.url
-            if isinstance(binding, McpConnectionBinding)
-            else binding.url
-        )
-        auth = None
-        if trusted:
-            if (
-                not isinstance(provider, DelegatedCredentialProvider)
-                or document_context is None
-            ):
-                raise ManagedMcpError("mcp_delegated_context_required")
-            grant = await provider.credentials()
-            url = grant_query_url(url, grant.parameters)
-            auth = MCPHTTPAuth(
-                provider, document_context=document_context, destination=url
-            )
-        client = Client(
-            StreamableHttpTransport(
-                url, auth=auth, httpx_client_factory=_client_factory(headers)
-            ),
-            init_timeout=5,
-            timeout=30,
-            cache=False,
-        )
         try:
+            trusted = trusted_destination(binding, knowledge_flow_url)
+            headers = (
+                credential_headers(binding, credentials)
+                if isinstance(binding, McpConnectionBinding)
+                else {}
+            )
+            url = (
+                binding.configuration.url
+                if isinstance(binding, McpConnectionBinding)
+                else binding.url
+            )
+            auth = None
+            if trusted:
+                if (
+                    not isinstance(provider, DelegatedCredentialProvider)
+                    or document_context is None
+                ):
+                    raise ManagedMcpError("mcp_delegated_context_required")
+                grant = await provider.credentials()
+                url = grant_query_url(url, grant.parameters)
+                auth = MCPHTTPAuth(
+                    provider, document_context=document_context, destination=url
+                )
+            client = Client(
+                StreamableHttpTransport(
+                    url, auth=auth, httpx_client_factory=_client_factory(headers)
+                ),
+                init_timeout=5,
+                timeout=30,
+                cache=False,
+            )
             async with asyncio.timeout(20), client:
                 remote = {}
                 cursors: set[str] = set()
@@ -319,11 +345,13 @@ async def connect(
                     )
                     tools.append(tool)
             # Adapter tools reopen/close their client per invocation, as native MCP does.
-        except ManagedMcpError:
-            raise
+        except ManagedMcpError as exc:
+            raise ManagedMcpError(str(exc), binding=binding) from None
         except Exception as exc:
             stop = unwrap_run_stop_error(exc)
             if stop is not None:
                 raise stop from None
-            raise ManagedMcpError("mcp_connection_unavailable") from None
+            raise ManagedMcpError(
+                "mcp_connection_unavailable", binding=binding
+            ) from None
     return tools

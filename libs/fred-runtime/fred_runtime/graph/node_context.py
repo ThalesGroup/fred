@@ -22,6 +22,7 @@ executor's `sink` as it happens. Spans and KPIs for each call live here too.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time as _time
@@ -32,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from fred_core.portable import MetricsProvider, Span
+from fred_core.technical_tracing import activate_span
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -818,9 +820,13 @@ def _observe(
         )
     )
     try:
-        with timer as kpi_dims:
+        with timer as kpi_dims, activate_span(span):
             observation = _Observation(span=span, kpi_dims=kpi_dims)
             yield observation
+    except asyncio.CancelledError:
+        if span is not None:
+            span.set_attribute("status", "cancelled")
+        raise
     except Exception:
         if span is not None:
             span.set_attribute("status", "error")

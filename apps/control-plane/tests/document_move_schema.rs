@@ -189,7 +189,7 @@ async fn requests_reject_existing_processing_and_inclusion_work() {
     let pool = database().await;
     let [org, team, _, _] = spaces(&pool).await;
     let processing_doc = document(&pool, team).await;
-    sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'alice',$2,'fast',$1::text,'{}',now()+interval '1 hour','{}',1,1,1)")
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,expected_generation_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'alice',$2,$2,$2,null,'fast',$1::text,'{}',now()+interval '1 hour','{}',1,1,1)")
         .bind(Uuid::new_v4()).bind(processing_doc).execute(&pool).await.unwrap();
     violation(
         request(&pool, processing_doc, org, None).await.unwrap_err(),

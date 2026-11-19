@@ -1,8 +1,10 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `cf698a739afae1b4cbcd92e82439e32bc1038198`**, vérifiée dans les parents du merge `b8d7c6709` (Weaver `093c2f997`, Swift `cf698a739`).
-La tranche suivante vers `b77588473` est préparée localement le 16 novembre,
-sans commit de fusion ; voir la [section 22](#22-integration-swift-et-layout-membres-du-16-novembre-2026).
+**Borne Swift intégrée : `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`**,
+dans la fusion documentée en [section 24](#24-integration-swift-du-18-novembre-2026)
+(parents Weaver `a08dbd4ec`, Swift `5ee79587f`). La borne précédente
+`e28d0391c` est vérifiée dans les parents du merge `ecc5a868c` ; la section 23
+conserve son intégration du 17 novembre.
 La section 20 conserve la préparation historique de la fusion du 14 novembre.
 Les réceptions et comportements différés restent un inventaire distinct ; leur
 présence dans l'ascendance ne vaut pas validation produit. Les repères
@@ -3186,3 +3188,148 @@ et désactivé, puis le modèle distant configuré si souhaité. Aucune recette
 navigateur, fournisseur, Grafana ou déployée n'est attestée ici ; arc42 n'est pas
 élargi à un parcours non réceptionné. Les comportements différés de la section 21
 restent distincts et ne sont pas déclarés terminés par cette fusion.
+
+
+## 23. Integration Swift du 17 novembre 2026
+
+Demande de Dimi : fusionner la dernière Swift locale dans `~/Work/weaver/fred`
+et discuter les nouveaux choix produit, architecture et documentation. Branche
+`weaver`, base `b6c92e4025353046c0e3757637039e18aa224c32`. Borne précédente
+`b77588473596d4838659bdcd673f36038a0abbf7`, second parent de `3fc160afc`.
+Cible `e28d0391cf8ee8c5752944a0c89807b3f04372cf`, identique à la Swift locale
+et à `origin/swift` après fetch. Les seuls fichiers initialement non suivis sont
+le binaire `developer_tools/benchmarks/bench` et les résultats `.bench/` ; ils
+restent hors du merge.
+
+| Commit nouveau | Intégration Weaver |
+| --- | --- |
+| `9b6e38ed3` - consignes SQL | Texte raccourci dans le prompt tabulaire existant ; apostrophes SQL et encodage JSON restent distincts. Aucune modification du moteur DuckDB. |
+| `9f15c2eed` - identifiants d'outils en streaming | Normalisation bornée dans le transport HTTP partagé de fred-core, avant assemblage SDK. Appels concurrents séparés, état limité par réponse, opt-out conservé ; les gardes d'admission Weaver et les pools existants restent utilisés. Nouveau panneau de corrections adapté aux filtres namespace/pod, ID 29 pour préserver le panneau benchmark 25 et positions sans chevauchement. |
+| `bc2cded4f` - fenêtres Grafana | Fenêtre commune des courbes chat/HTTP reprise. Couverture HTTP Rust toujours exclue. |
+| `7d40b5115` - refus fournisseur | Catégories sur liste fermée et identifiant de corrélation HTTP 4xx/5xx borné. Identifiants omis sous délégation ; aucun texte libre fournisseur ajouté par ces diagnostics, nouveaux champs exclus des spans et labels Prometheus. Fixture de test adaptée à la construction Weaver. |
+| `e28d0391c` - release Swift 3.12 | Versions et contraintes Weaver 5.0.0 conservées, sans changement de dépendances externes dans cette tranche. Pas de publication 3.12 ni de réintroduction du corpus Swift ou de la capability platform-ops retirée. Notes opérateur courantes reprises dans `deploy/release-notes/changes`. |
+
+### Choix discuté avec Dimi
+
+Dimi demande de conserver un interrupteur opérateur. Swift le fournit dans les
+settings techniques du modèle, sans bouton UI dédié. Weaver expose
+`ai.normalize_streamed_tool_call_ids`, booléen strict, **true par défaut**, pour
+l'ensemble des modèles admis dans un Agent Pod. La factory existante transmet
+ce choix au transport commun ; aucun catalogue local, champ SQL, droit ou bouton
+supplémentaire. Modifier ce réglage nécessite de redémarrer les réplicas concernés.
+Il ne s'applique ni à Responses API ni au client Rust Ralph.
+
+Les chemins Helm et le retour arrière sont documentés dans le
+[README Fred Agents](apps/fred-agents/README.md) et la
+[note opérateur](deploy/release-notes/changes/normalize-streamed-tool-call-ids.md).
+Les schémas sont générés depuis le modèle Python. Les anciens comportements
+différés restent distincts ; cette fusion ne clôture aucune de leurs réceptions.
+
+La raison de refus fournisseur reste un diagnostic d'exploitation, pas un nouveau
+message métier ni une politique de rétention. Le dossier arc42 n'est pas élargi à
+un parcours non reçu. Les notes de release déjà publiées sont préservées. La
+précision Swift sur le reranker reste applicable : `settings.base_url` est l'URL
+racine du service, sans suffixe `/rerank` ; le déploiement Weaver garde ses clés
+admises et son worker ne réalise pas le reranking des recherches.
+
+### Vérifications et limites
+
+- Revue des changements par rapport aux deux parents : conservation de l'injection
+  des credentials, des clients contrôlés Weaver, du niveau DEBUG des réglages,
+  des panneaux benchmark et de la séparation namespace/pod. Pas de migration
+  Alembic/SQLx, de worker Temporal ou de route API modifié.
+- `make -o migration-tests code-quality` réussi sur les 18 composants de la cible
+  racine ; `migration-tests` exclu conformément à la consigne de ne pas lancer
+  les tests sans demande. Les trois avertissements de typage du worker restent
+  présents. Après le raccord de l'interrupteur, `make code-quality` runtime et
+  Fred Agents relancés avec succès.
+- `make -C apps/fred-agents generate-config-schema`, contrôle de dérive config et
+  chart, `make check-chart-values` et validation des deux YAML Fred Agents réussis.
+- Quatre nouvelles notes valides via `migration_guides.py check-pr --base
+  b6c92e402 --worktree`. Liens relatifs des documents touchés, syntaxe Python,
+  unicité des panneaux Grafana, absence de chevauchement runtime et
+  `git diff --check` vérifiés.
+- Bilan hors suivi : production **+441/-28 lignes** (net +413), tests **+559/-9**,
+  schémas générés **+18/-0**, configuration **+7/-0**. La croissance reprend la
+  correction de transport bornée et les diagnostics Swift ; le réglage opérateur
+  réutilise PodAIConfig et la factory sans nouveau service ni contrat d'autorité.
+
+Tests applicatifs non exécutés. Réception restante par Dimi : conversation avec
+outil sur fournisseur concerné, désactivation/réactivation après redémarrage,
+refus fournisseur et confidentialité sous délégation, panneaux Grafana importés.
+Aucun service, cluster, donnée ni configuration de déploiement vivante modifié ;
+commit de fusion local autorisé par la demande, sans push ni déploiement.
+
+
+## 24. Integration Swift du 18 novembre 2026
+
+Demande de Dimi : merger les nouveaux commits Swift dans Weaver et demander
+avant toute resolution ambigue. Checkout `weaver` propre a la prise en charge ;
+base `a08dbd4ec47aedbbd5ad45e726c6f4909da8d58e`, borne integree
+`e28d0391cf8ee8c5752944a0c89807b3f04372cf` (second parent de `ecc5a868c`),
+cible `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`. References confirmees apres
+fetch ; `origin/weaver` etait identique a la base et `origin/swift` a la cible.
+
+| Nouveau commit | Integration Weaver |
+| --- | --- |
+| `1a71424fb` - inventaire Alembic des releases | Script, CI et publication repris avec les chemins `deploy/release-notes`. Decouverte des trois arbres presents (runtime, PowerPoint, document modifiable) ; Control Plane SQLx explicitement hors inventaire, aucun ancien backend restaure. |
+| `a9b80c504`, `5ee79587f` - mail-parser 4.6.2 puis 4.6.3 | Deja depasse : l'ingestion appartient au worker, dont le lock utilise 4.10.0. Aucune dependance d'ingestion reintroduite dans l'API et aucun downgrade. |
+| `8a3680ffb` - traces SQL, resultats bornes et comptage modele | Pagination visuelle par dix lignes, copie du resultat enregistre complet, SQL non coupe, helpers visuels partages ; usage du tour conserve meme sans texte final. Budget tabulaire adapte a `fred-knowledge`, au scope et aux erreurs structures Weaver. |
+
+### Choix confirme par Dimi
+
+Combiner le budget Swift (50 000 caracteres JSON, 500 lignes par defaut,
+`max_rows: null` sans plafond de lignes) avec la precision Weaver : conserver
+`truncated`/`row_limit` et lire une ligne de preuve supplementaire. Exactement
+500 lignes ne signifient pas un resultat incomplet. Le budget de caracteres
+conserve des lignes entieres, arrete la lecture au premier debordement meme
+avec une tres grande limite de lignes, et ne confond pas une premiere ligne trop
+large avec une absence de resultats. Il ne calcule pas un total au-dela des lignes
+lues ; les agregats restent a demander en SQL.
+
+Le proprietaire de la configuration est `fred_knowledge.configuration` ; API,
+worker et Helm suivent la meme forme. Le transport MCP conserve le `null` explicite
+pour `query_tabular_documents`, avec etat local a l'invocation et nettoyage garanti.
+Les verifications de delegation, le scope documentaire, les erreurs typees,
+le masquage des diagnostics et les gardes DuckDB restent en place. La nouvelle
+option UI `highlight` de Swift, sans consommateur, n'est pas reprise ; les couleurs
+syntaxiques existantes et la memoisation sont conservees.
+
+Les documents Swift/OpenSpec retires ne sont pas recrees. Les nouvelles notes
+operateur rejoignent le workflow actuel ; arc42 n'est pas elargi a un parcours
+non recu. Les anciens reports et receptions restent un inventaire distinct,
+non cloture par cette fusion.
+
+### Verification et reception
+
+- OpenAPI Knowledge Flow et client RTK regeneres depuis les sources reunies ;
+  schemas API/worker et chart regeneres, derive du chart et valeurs Helm valides.
+  Les cinq YAML API/worker livres sont valides.
+- Trois nouvelles notes operateur valides via `migration_guides.py check-pr
+  --base a08dbd4ec --worktree`. Inventaire Alembic execute hors ligne : trois
+  arbres a une tete, sans migration ajoutee ni appliquee.
+- Comparaison des chemins touches avec les deux parents : noms d'outils,
+  erreurs structurees, sources publiees, autorisations et logs structures Weaver
+  conserves. Aucune modification de worker Temporal ni de schema SQL.
+- Regressions Swift adaptees aux fixtures et contrats Weaver ; cas limite exacte,
+  premiere ligne trop large, tres grande limite et isolation MCP prepares.
+  Tests applicatifs non executes, conformement aux instructions du depot.
+
+- Qualite des 18 composants validee via `make -o migration-tests code-quality`
+  puis relance frontend apres adaptation des fixtures `ok` vers `failure`, et
+  relance finale API. La cible de tests `migration-tests` est volontairement exclue.
+  Un avertissement PowerPoint sur `__all__` et trois avertissements worker sur du
+  code inaccessible restent dans des fichiers non modifies par cette fusion.
+- Syntaxe des workflows et des Python modifies, absence de methodes dupliquees,
+  liens locaux des documents touches et `git diff --check` verifies.
+- Bilan hors suivi : production/outillage **+556/-156** (net +400), tests
+  **+1156/-9**, schemas/client generes **+46/-46**, configuration/CI **+49/-14**.
+  L'outillage inclut les 217 lignes du nouvel inventaire de release Swift ;
+  l'extraction du preview remplace la materialisation globale de l'apercu,
+  les helpers UI sont partages, aucun nouveau service ou contrat d'autorite.
+
+Reception developpeur restante : traces SQL larges,
+reouverture et copie integrale, resultat de 500/501 lignes, budget de caracteres,
+appel MCP avec argument omis/null et compteur d'un tour sans texte final.
+Aucun service, cluster, donnee ni configuration vivante modifie ; fusion locale
+seulement, sans push ni deploiement.

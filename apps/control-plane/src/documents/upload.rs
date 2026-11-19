@@ -35,6 +35,17 @@ impl Spool {
     }
 }
 
+pub(crate) struct SourceUpload<'a> {
+    pub actor: &'a str,
+    pub key: Uuid,
+    pub destination: Destination,
+    pub file: &'a Spool,
+    pub profile: Option<crate::processing::models::Profile>,
+    pub retry_of: Option<Uuid>,
+    pub target: Option<Uuid>,
+    pub source: Option<(Uuid, &'a str, &'a str)>,
+}
+
 pub(crate) fn name(value: &str) -> AppResult<String> {
     let name: String = value.nfc().collect();
     if name.trim().is_empty()
@@ -221,7 +232,7 @@ impl Storage {
     }
 
     /// Shared journal acknowledgement and read-back verification, always outside SQL transactions.
-    pub(super) async fn transfer_upload(&self, id: Uuid, key: &str, spool: Spool) -> AppResult<()> {
+    pub(crate) async fn transfer_upload(&self, id: Uuid, key: &str, spool: Spool) -> AppResult<()> {
         let (certain, result) = self
             .objects
             .put_file(key, spool.file, spool.size, &spool.digest)
@@ -240,7 +251,7 @@ impl Storage {
             .map_err(|_| unavailable())
     }
 
-    pub(super) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
+    pub(crate) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
         let path = self.temp.path().to_owned();
         let file = tokio::task::spawn_blocking(move || tempfile::tempfile_in(path))
             .await
@@ -338,6 +349,9 @@ impl Storage {
             && db::folder(&mut *tx, id).await?.space_id != space.id
         {
             return Err(AppError::NotFound);
+        }
+        if let Destination::Folder(id) = destination {
+            crate::knowledge_bases::documents::require_manual_folder(&mut *tx, id).await?;
         }
         let (folder_id, session_id) = destination.columns();
         let placed = |r: &UploadReceipt| {
@@ -456,21 +470,23 @@ impl Storage {
                 ));
             }
         }
-        let (owner, _) = self.quota(space)?;
-        self.ensure_budgets(&mut tx, space).await?;
-        self.require_cleanup_capacity(&mut *tx).await?;
-        let id = Uuid::new_v4();
-        let object_key = format!("{}{id}/input/{}", self.prefix, file.name);
-        if object_key.len() > 1024 {
-            return Err(invalid(
-                "The encoded document path exceeds the object-store key limit",
-            ));
-        }
-        // The database runs local and organization reservation accounting.
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending,reserved_bytes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true,$11) returning *, null::uuid as document_id")
-            .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
-            .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
-            .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
+        let row = self
+            .reserve_source(
+                &mut tx,
+                space,
+                SourceUpload {
+                    actor: &user.uid,
+                    key,
+                    destination,
+                    file,
+                    profile,
+                    retry_of: predecessor.as_ref().map(|p| p.id),
+                    target: None,
+                    source: None,
+                },
+            )
+            .await?;
+        let id = row.id;
         if let Some(previous) = predecessor {
             // The database runs local and organization reservation accounting.
             sqlx::query("update document_upload set successor_key=$2, acknowledged_at=clock_timestamp() where id=$1").bind(previous.id).bind(key).execute(&mut *tx).await?;
@@ -478,6 +494,51 @@ impl Storage {
         tx.commit().await?;
         tracing::info!(operation_id=%id, space_id=%space.id, actor_uid=%user.uid, bytes=file.size, outcome="reserved", "document upload");
         Ok((true, row))
+    }
+
+    /// Shared quota reservation and durable PUT journal for every source producer.
+    pub(crate) async fn reserve_source(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        space: &Space,
+        upload: SourceUpload<'_>,
+    ) -> AppResult<UploadRow> {
+        let SourceUpload {
+            actor,
+            key,
+            destination,
+            file,
+            profile,
+            retry_of,
+            target,
+            source,
+        } = upload;
+        let (folder_id, session_id) = destination.columns();
+        let (owner, _) = self.quota(space)?;
+        self.ensure_budgets(tx, space).await?;
+        self.require_cleanup_capacity(&mut **tx).await?;
+        let (expected, previous_size) = match target {
+            Some(document) => {
+                let (content, size): (Uuid, i64) = sqlx::query_as("select d.current_content_id,c.size from document d join document_content c on c.id=d.current_content_id where d.id=$1 and d.deletion_id is null and d.space_id=$2 and d.folder_id is not distinct from $3 and d.session_id is not distinct from $4 for update of d")
+                    .bind(document).bind(space.id).bind(folder_id).bind(session_id).fetch_one(&mut **tx).await?;
+                (Some(content), size)
+            }
+            None => (None, 0),
+        };
+        let id = Uuid::new_v4();
+        let object_key = format!("{}{id}/input/{}", self.prefix, file.name);
+        if object_key.len() > 1024 {
+            return Err(invalid(
+                "The encoded document path exceeds the object-store key limit",
+            ));
+        }
+        Ok(sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending,reserved_bytes,target_document_id,expected_content_id,kb_run_id,source_key,source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true,$17,$18,$19,$20,$21,$22) returning *, null::uuid as document_id")
+            .bind(id).bind(key).bind(actor).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
+            .bind(&file.name).bind(&file.mime).bind(file.size).bind(file.sha256()).bind(object_key)
+            .bind(self.config.limits.lease_seconds() as f64).bind(retry_of).bind(profile)
+            .bind((file.size-previous_size).max(0)).bind(target).bind(expected)
+            .bind(source.map(|s| s.0)).bind(source.map(|s| s.1)).bind(source.map(|s| s.2))
+            .fetch_one(&mut **tx).await?)
     }
 
     async fn publish(
@@ -503,24 +564,7 @@ impl Storage {
         if let Destination::Folder(id) = destination {
             db::folder(&mut *tx, id).await?;
         }
-        // The database runs local and organization reservation accounting.
-        let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *, id as document_id")
-            .bind(row.id).fetch_one(&mut *tx).await?;
-        // The database runs local and organization used-byte accounting.
-        sqlx::query("insert into document (id,space_id,folder_id,session_id,name,created_by,quota_owner) values ($1,$2,$3,$4,$5,$6,$7)")
-            .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.actor).bind(row.quota_owner).execute(&mut *tx).await?;
-        sqlx::query("insert into document_content (id,document_id,kind,mime,size,sha256,object_key,published_at) values ($1,$1,'primary',$2,$3,$4,$5,clock_timestamp())")
-            .bind(row.id).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.object_key).execute(&mut *tx).await?;
-        // The database adjusts used storage bytes and schedules obsolete content cleanup.
-        sqlx::query("update document set current_content_id=$1 where id=$1")
-            .bind(row.id)
-            .execute(&mut *tx)
-            .await?;
-        // The database runs local and organization reservation accounting.
-        sqlx::query("update document_upload set target_document_id=$1,content_id=$1 where id=$1")
-            .bind(row.id)
-            .execute(&mut *tx)
-            .await?;
+        let receipt = self.store_upload(&mut tx, &row).await?;
         if let Some(profile) = row.receipt.processing_profile {
             processing
                 .ok_or_else(crate::processing::unavailable)?
@@ -539,6 +583,42 @@ impl Storage {
         token_current(user)?;
         tx.commit().await?;
         tracing::info!(target:"fred.security.audit", audit_event="document.stored", operation_id=%row.id, actor_uid=%user.uid, space_id=%row.receipt.space_id, outcome="succeeded", "Document original stored");
+        Ok(receipt)
+    }
+
+    /// Publish verified original bytes, or retain a replacement candidate until processing commits.
+    pub(crate) async fn store_upload(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        row: &UploadRow,
+    ) -> AppResult<UploadReceipt> {
+        if row.receipt.status != UploadStatus::Pending || row.expires_at <= Utc::now() {
+            return Err(conflict(
+                "upload_expired",
+                "This upload can no longer be published",
+            ));
+        }
+        let document = row.target_document_id.unwrap_or(row.id);
+        let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and not put_pending and expires_at>clock_timestamp() returning *, $2::uuid as document_id")
+            .bind(row.id).bind(document).fetch_one(&mut **tx).await?;
+        if row.target_document_id.is_none() {
+            sqlx::query("insert into document (id,space_id,folder_id,session_id,name,created_by,quota_owner) values ($1,$2,$3,$4,$5,$6,$7)")
+                .bind(document).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.actor).bind(row.quota_owner).execute(&mut **tx).await?;
+        }
+        sqlx::query("insert into document_content (id,document_id,kind,mime,size,sha256,object_key,published_at) values ($1,$2,'primary',$3,$4,$5,$6,clock_timestamp())")
+            .bind(row.id).bind(document).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.object_key).execute(&mut **tx).await?;
+        if row.expected_content_id.is_none() {
+            sqlx::query("update document set current_content_id=$2 where id=$1")
+                .bind(document)
+                .bind(row.id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        sqlx::query("update document_upload set target_document_id=$2,content_id=$1 where id=$1")
+            .bind(row.id)
+            .bind(document)
+            .execute(&mut **tx)
+            .await?;
         Ok(receipt)
     }
 

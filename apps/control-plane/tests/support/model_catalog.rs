@@ -675,7 +675,8 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
     initialize(&e.pool, &platform, true).await.unwrap();
     let view = inventory(&app, &identity, org.id).await;
     assert_eq!(view["policy"]["revision"], 0);
-    assert_eq!(view["sources"], json!([]));
+    assert_eq!(view["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(view["policy"]["permitted"], json!([]));
     assert_eq!(calls, provider.response.lock().await.2);
     platform.model_sources[0].revision = 2;
     platform.model_sources[0].enabled = false;
@@ -692,6 +693,85 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
             .enabled
     );
     assert!(completion(&e, org.id).await);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn configured_sources_are_added_after_initialization_without_reseeding() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    let mut platform = PlatformConfig {
+        model_sources: vec![
+            provider.source("a"),
+            provider.source("b"),
+            provider.source("c"),
+        ],
+        organization_models: vec![declaration("TSN", &["a"])],
+        ..Default::default()
+    };
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform.clone()).await;
+    let before = inventory(&app, &identity, org.id).await;
+    let receipt: Value = sqlx::query_scalar(
+        "select to_jsonb(r) from organization_model_initialization r where organization_id=$1",
+    )
+    .bind(org.id)
+    .fetch_one(&e.pool)
+    .await
+    .unwrap();
+    let calls = provider.response.lock().await.2;
+    // Even changed seed permissions/defaults must not overwrite the Owner's policy.
+    platform.organization_models[0] = declaration("TSN", &["b", "a"]);
+    let (first, replay) = tokio::join!(
+        initialize(&e.pool, &platform, true),
+        initialize(&e.pool, &platform, true),
+    );
+    first.unwrap();
+    replay.unwrap();
+    let after = inventory(&app, &identity, org.id).await;
+    assert_eq!(after["policy"], before["policy"]);
+    assert_eq!(after["sources"].as_array().unwrap().len(), 2);
+    assert_eq!(calls, provider.response.lock().await.2);
+    assert_eq!(
+        receipt,
+        sqlx::query_scalar::<_, Value>(
+            "select to_jsonb(r) from organization_model_initialization r where organization_id=$1",
+        )
+        .bind(org.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap()
+    );
+
+    // A missing source rolls back all additions for this organization.
+    platform.organization_models[0]
+        .sources
+        .extend(["c".into(), "unknown".into()]);
+    assert!(
+        initialize(&e.pool, &platform, true)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("model_source_unknown")
+    );
+    assert_eq!(inventory(&app, &identity, org.id).await, after);
+    // Removing YAML is not revocation; another organization receives no assignment.
+    platform.organization_models[0] = declaration("TSN", &["a"]);
+    let other = support::member_organization(&e.pool, "Other", "alice")
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    assert_eq!(inventory(&app, &identity, org.id).await, after);
+    assert_eq!(
+        inventory(&app, &identity, other.id).await["sources"],
+        json!([])
+    );
+    assert_eq!(calls, provider.response.lock().await.2);
 }
 
 #[tokio::test]

@@ -99,6 +99,15 @@ async def test_aput_emits_persist_sql_and_pool_wait_metrics(engine):
     for event in put_events:
         assert event["value"] >= 0.0
 
+    # The owner-index transaction and the checkpoint read are operations too,
+    # including a read that finds no checkpoint.
+    emitted.clear()
+    await cp.aget_tuple(_config("thread-A"))
+    await cp.aget_tuple(_config("thread-unknown"))
+    await _put(cp, "thread-A")
+    ops = [e["dims"]["op"] for e in emitted if e["name"] == "persist_sql_ms"]
+    assert ops == ["get_tuple", "get_tuple", "put", "owner"]
+
 
 @pytest.mark.asyncio
 async def test_aput_is_silent_without_a_kpi_writer(engine):
@@ -120,6 +129,23 @@ async def test_aput_writes_exactly_one_owner_row_upsert(checkpointer):
     assert row.user_id is None  # low-level writes may omit identity
     assert row.last_activity_at is not None
     assert row.created_at is not None
+
+
+@pytest.mark.asyncio
+async def test_owner_row_is_written_once_per_graph_run_not_per_step(engine):
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    cp = FredSqlCheckpointer(engine, prefix="v2_", kpi=_RecordingKPIWriter())
+    for source in ("input", "loop", "loop"):
+        await cp.aput(_config("thread-A"), empty_checkpoint(), {"source": source}, {})
+
+    ops = [e["dims"]["op"] for e in emitted if e["name"] == "persist_sql_ms"]
+    assert ops == ["put", "owner", "put", "put"]
+    assert len(await _owner_rows(cp)) == 1
 
 
 @pytest.mark.asyncio

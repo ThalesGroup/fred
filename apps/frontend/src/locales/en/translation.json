@@ -814,7 +814,8 @@
       "hitlQuestionsChanged": "The pending questions have changed. Your answers were not applied. Reopen the conversation to load the current questions.",
       "hitlConflict": "Your answer could not be applied because the conversation is busy or has changed. Please try again, or reopen the conversation if the problem persists.",
       "toolApprovalSaveFailedSummary": "Approval not saved",
-      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
+      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved.",
+      "agentErrorSummary": "Agent error"
     },
     "hitlOtherAnswerPlaceholder": "Other",
     "hitlOtherAnswerWithText": "Other: {{answer}}",
@@ -1246,6 +1247,10 @@
       },
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
+        "libraryBinding": {
+          "title": "Restrict to document folders",
+          "description": "Restrict tabular queries to the selected folders. An empty selection allows no corpus documents."
+        },
         "name": "Use tabular files"
       }
     }
@@ -1622,7 +1627,6 @@
       "scopeUnavailable": "This space is unavailable or you do not have access.",
       "modelProfile": "Recommended model",
       "modelUnavailable": "Model selection is not yet connected in this form. Saved model settings are preserved.",
-      "legacyModelReselection": "This saved profile is a diagnostic reference only. Explicit re-selection of a platform model is required; this form preserves the reference.",
       "errors": {
         "unauthorized": "Your session has expired. Please sign in again.",
         "forbidden": "You do not have permission for this operation.",
@@ -2517,6 +2521,38 @@
     },
     "cancel": "Cancel",
     "chatTrace": {
+      "readDocument": {
+        "documentLabel": "Reading {{name}}",
+        "folderLabel": "Reading the folder {{name}}",
+        "document": "Document",
+        "folder": "Folder",
+        "unnamed": "Name not shown in this trace"
+      },
+      "conversationFile": {
+        "labels": {
+          "ls": "Listing {{name}}",
+          "read_file": "Reading {{name}}",
+          "write_file": "Writing {{name}}",
+          "edit_file": "Editing {{name}}",
+          "glob": "Finding files matching {{name}}",
+          "grep": "Searching files for “{{name}}”",
+          "concat_files": "Combining files into {{name}}",
+          "read_conversation_file": "Retrieving {{name}}",
+          "publish_conversation_file": "Delivering {{name}}"
+        },
+        "file": "File",
+        "folder": "Folder",
+        "pattern": "Pattern",
+        "text": "Text searched",
+        "files": "Files searched",
+        "output": "Output file",
+        "inputs": "Combined files",
+        "delivered": "Delivered as",
+        "source": "Workspace file",
+        "size": "Size written",
+        "lines": "Lines requested",
+        "storedResult": "a stored tool result"
+      },
       "documentTree": {
         "metadataFor": "Metadata for {{name}}",
         "truncated": "Truncated",
@@ -2565,6 +2601,7 @@
       "partialRows_other": "Partial result: first {{count}} rows",
       "running": "running…",
       "show": "Show the agent's reasoning and tool calls",
+      "copyFullResponse": "The response copy button copies the complete recorded response.",
       "sqlQuery": "Query:",
       "sqlResponse": "Response:",
       "sources_one": "{{count}} source",
@@ -2581,6 +2618,12 @@
         "catalogComplete": "Full summary: {{total}} lines.",
         "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
         "emptyCatalog": "This catalog is empty.",
+        "queryPreview_one": "Preview of {{count}} row out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreview_other": "Preview of {{count}} rows out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreviewShortened": ", with some values shortened",
+        "queryPreviewCopy": "; Copy retrieves the complete recorded response",
+        "showMoreRows_one": "Show {{count}} more row",
+        "showMoreRows_other": "Show {{count}} more rows",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
           "csv": "CSV",
@@ -2694,6 +2737,7 @@
           "grep": "Searching files",
           "execute": "Running a command",
           "concat_files": "Combining files",
+          "list_conversation_files": "Listing conversation files",
           "task": "Delegating work to an assistant",
           "write_todos": "Updating the plan"
         },
@@ -2733,27 +2777,7 @@
       "failure": {
         "arguments": "Call arguments:",
         "error": "Error:",
-        "invalid_arguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
-        "not_approved": "Call declined by the user.",
-        "authentication_required": "Authentication was refused. Restore authentication before retrying.",
-        "resource_unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
-        "scope_refused": "This call targeted documents outside the selection of this conversation, so nothing was read.",
-        "rate_limited": "The service request limit was reached. Wait for the limit to reset before retrying.",
-        "misconfigured": "A dependency refused the platform configuration. This is a configuration problem, not a problem with your request: an administrator must correct it.",
-        "service_busy": "The service is temporarily unavailable or at capacity. Try again later.",
-        "timeout": "The operation exceeded its time budget. Narrow the request before retrying.",
-        "service_error": "The service could not complete this operation. Try again later; contact support if the problem persists.",
         "unexpected": "This step failed unexpectedly. Try again; contact support if the problem persists.",
-        "platform": {
-          "misconfigured": "{{origin}} refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
-          "service_busy": "{{origin}} is unreachable. This is a platform availability problem, not a problem with your request: try again later; if it persists, an administrator must check this service."
-        },
-        "origin": {
-          "knowledge_flow": "Knowledge Flow",
-          "object_storage": "The document storage",
-          "search_index": "The search index",
-          "database": "The database"
-        },
         "setting": "Setting to check:",
         "settingOwner": "(Knowledge Flow)",
         "httpStatus": "HTTP status {{status}}",
@@ -5124,12 +5148,14 @@
       "networkError": "The result could not be received.",
       "replay": "Some changes may already be applied. Correct the cause, then explicitly import the same bundle again.",
       "completed": "Import completed",
-      "additive": "Re-importing preserves existing identities, spaces and roles, and adds the declarations in the bundle. Existing passwords remain unchanged.",
+      "additive": "Re-importing preserves existing identities, spaces, roles and skills, and adds the declarations in the bundle. Existing passwords and skills already present remain unchanged.",
       "counts": {
         "identities_resolved": "Identities resolved",
         "identities_created": "Identities created",
         "spaces_reconciled": "Spaces reconciled",
-        "grants_acknowledged": "Grants acknowledged"
+        "grants_acknowledged": "Grants acknowledged",
+        "skills_created": "Skills created",
+        "skills_kept": "Skills kept"
       }
     },
     "manager": {
@@ -5374,12 +5400,12 @@
       "agentHint": "The choice must respect organization permissions and space restrictions. Without a recommendation, the agent follows the space default, then the organization default."
     },
     "toolGovernance": {
-      "title": "Tools",
+      "title": "Tools and applications",
       "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space.",
       "restrict": "Restrict offers in this space",
       "inherit": "Without a local restriction, this space follows its parent permissions.",
       "denyAll": "Allow no offers in this space",
-      "offer": "Pod offer",
+      "offer": "Offer",
       "parent": "Parent ceiling",
       "local": "Local choice",
       "effective": "Effective decision",
@@ -5396,16 +5422,23 @@
     "spaceSkills": {
       "title": "Skills",
       "scope": "This catalog belongs to the selected space. Conversations also use skills in parent spaces you can read directly.",
-      "empty": "No skills installed in this space.",
-      "defaults": "Provided skills",
-      "installExplanation": "Install an independent package in this space. Its contents can then be managed here.",
-      "install": "Install",
+      "empty": "No skills in this space.",
       "remove": "Remove",
       "removeConfirm": "Remove {{name}} from this space?",
       "edit": "Edit files",
       "save": "Save package",
       "cancel": "Cancel",
-      "failed": "The operation failed. Check the package format and reload if it changed."
+      "failed": "The operation failed. Check the package format and reload if it changed.",
+      "new": "New skill",
+      "create": "Create skill",
+      "name": "Name",
+      "nameHint": "Lowercase letters, digits and hyphens, for example meeting-notes. It cannot be changed later.",
+      "description": "Description",
+      "instructions": "Instructions (Markdown)",
+      "filePath": "New file path",
+      "filePathHint": "Text resource such as references/guide.md (.md, .txt, .json, .yaml, .yml, .csv).",
+      "addFile": "Add file",
+      "removeFile": "Remove this file"
     },
     "localMarketplace": {
       "savedProposals": "Submissions to check",
@@ -5631,6 +5664,44 @@
       "invalid": "Enter a positive whole number within the organization ceiling.",
       "failed": "Could not save the purge delay.",
       "saved": "Purge delay saved."
+    },
+    "applications": {
+      "registryHint": "Register hosted applications, then enable them for organization owners to authorize.",
+      "create": "Register application",
+      "edit": "Edit application",
+      "editNamed": "Edit {{name}}",
+      "display_name": "Name",
+      "description": "Description",
+      "logical_name": "Application key",
+      "icon": "Icon",
+      "version": "Version",
+      "ui_base_url": "Internal UI destination",
+      "api_base_url": "Internal API destination",
+      "ui_base_urlHint": "Full HTTP(S) directory URL, ending with /, from which the application UI is served.",
+      "api_base_urlHint": "Optional HTTP(S) base URL of the application API, ending with /. Leave empty for a UI-only application.",
+      "entry_permission": "Permission required to use this application",
+      "permissions": {
+        "read": "Read space content",
+        "write": "Edit space content",
+        "manage": "Manage the space",
+        "run_evaluations": "Run evaluations",
+        "manage_evaluation_corpus": "Manage the evaluation corpus",
+        "read_conversations_for_evaluation": "Read conversations for evaluation",
+        "read_usage": "View usage"
+      },
+      "enabled": "Enabled on the platform",
+      "active": "Enabled",
+      "inactive": "Disabled",
+      "createdDisabled": "New applications are disabled. Review the registration, then enable it. Organization owners decide where it is authorized.",
+      "conflict": "This registration changed. Close and reopen it before saving. If registering, choose an unused application key.",
+      "invalid": "Check the application key, labels and HTTP(S) destinations.",
+      "saveFailed": "The application could not be saved.",
+      "display_name_by_lang": "Translated name (optional)",
+      "description_by_lang": "Translated description (optional)",
+      "locale": {
+        "en": "English",
+        "fr": "French"
+      }
     }
   },
   "runtime": {

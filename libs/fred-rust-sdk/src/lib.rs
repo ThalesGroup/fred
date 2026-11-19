@@ -4,4 +4,6 @@
 //! Shared Rust building blocks for Fred services. Internal, unpublished API.
 pub mod inference;
 pub mod logging;
+pub mod metrics;
 pub mod security;
+pub mod telemetry;

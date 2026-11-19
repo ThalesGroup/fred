@@ -40,8 +40,6 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Chat profile new conversations start on; null follows the team default. */
-  recommendedChatProfileId: string | null;
   recommendedModel: ModelOfferKey | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
@@ -86,7 +84,6 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
-  recommendedChatProfileId: string | null;
   recommendedModel: ModelOfferKey | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
@@ -131,7 +128,6 @@ export function buildAgentFormSubmitPayload(
     role: form.role,
     description: form.description,
     usageStatement: form.usageStatement,
-    recommendedChatProfileId: form.recommendedChatProfileId,
     recommendedModel: form.recommendedModel,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: form.selectedCapabilityIds,
@@ -186,7 +182,6 @@ export default function AgentFormModal({
     role: "",
     description: "",
     usageStatement: "",
-    recommendedChatProfileId: null,
     recommendedModel: null,
     tuningValues: {},
     selectedCapabilityIds: [],
@@ -220,7 +215,6 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
-        recommendedChatProfileId: editInstance.recommended_chat_profile_id ?? null,
         recommendedModel: editInstance.recommended_model ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
@@ -238,7 +232,6 @@ export default function AgentFormModal({
         role: "",
         description: "",
         usageStatement: "",
-        recommendedChatProfileId: null,
         recommendedModel: null,
         tuningValues: {},
         selectedCapabilityIds: [],
@@ -259,7 +252,6 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
-      recommendedChatProfileId: null,
       recommendedModel: null,
       tuningValues: defaultTuningValues(tpl, lang),
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
@@ -329,7 +321,6 @@ export default function AgentFormModal({
   );
   const nameTaken = isAgentNameTaken(form.displayName, takenNames);
   const showNameTaken = nameTaken && (displayNameChecked || submitAttempted);
-  const recommendedChatProfileId = form.recommendedChatProfileId;
   const isFormValid =
     !!form.templateId &&
     selectedTemplate?.status !== "dependency_unavailable" &&
@@ -371,7 +362,7 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
-    await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
+    await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
   };
 
   const assistantButton = (
@@ -447,11 +438,8 @@ export default function AgentFormModal({
           role={form.role}
           description={form.description}
           usageStatement={form.usageStatement}
-          recommendedChatProfileId={recommendedChatProfileId}
           recommendedModel={form.recommendedModel}
-          onRecommendedModelChange={(value) =>
-            setForm((prev) => ({ ...prev, recommendedModel: value, recommendedChatProfileId: null }))
-          }
+          onRecommendedModelChange={(value) => setForm((prev) => ({ ...prev, recommendedModel: value }))}
           tuningFieldValues={form.tuningValues}
           selectedCapabilityIds={form.selectedCapabilityIds}
           capabilityConfigValues={form.capabilityConfigValues}

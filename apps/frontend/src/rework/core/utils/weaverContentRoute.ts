@@ -8,4 +8,5 @@ export const isPromptPublicationRoute = (pathname: string) =>
 export const isWeaverContentRoute = (pathname: string) =>
   /^\/join\/[^/]+\/?$/.test(pathname) ||
   /^\/team\/[^/]+(?:\/(?:agents|projects|skills|usage|settings(?:\/[^/]+)?|managed-chat\/[^/]+))?\/?$/.test(pathname) ||
+  /^\/team\/[^/]+\/apps(?:\/.*)?$/.test(pathname) ||
   isPromptPublicationRoute(pathname);

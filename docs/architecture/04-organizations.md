@@ -31,6 +31,13 @@ aggregates, without content access or business-structure authority. The
 [roles annex](A11-roles.md) details each mandate and the organization access
 allowlist that remains unimplemented.
 
+For hosted applications, the platform Admin registers approved destinations and
+controls global availability; registrations start disabled. The organization
+Owner authorizes their business use through the existing capability policy.
+Team and project Owners can narrow that ceiling. Each person must also hold the
+application's entry permission in the selected collective space; personal spaces
+are excluded. Registration and governance confer no business-data access.
+
 ## Spaces and memberships
 
 ```mermaid
@@ -55,10 +62,10 @@ sees and uses its spaces only through the roles held there. Signing in creates n
 attachment, and platform administration roles are separate from organization
 membership.
 
-The UI lists the person's accessible working spaces. It was designed for one
-organization per person: the personal-space entry on Home and the organization
-administration area still use the first organization listed. Choosing among
-several organizations is not offered yet.
+The profile menu selects the working organization when several are available.
+Home and organization-scoped pages use that shared context to show accessible
+spaces and the corresponding personal-space entry. Choosing an organization
+changes navigation, not permissions.
 
 ## Personal spaces
 

@@ -49,6 +49,7 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
+from fred_core.technical_tracing import technical_span
 
 logger = logging.getLogger(__name__)
 
@@ -283,11 +284,18 @@ def split_realm_url(realm_url: str) -> tuple[str, str]:
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 
+class _ObservedJWKClient(PyJWKClient):
+    def fetch_data(self) -> Any:
+        # Cache/key lookup is local; only the actual fetch is IAM network time.
+        with technical_span("iam.jwks.http"):
+            return super().fetch_data()
+
+
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
     if _JWKS_CLIENT is None:
         logger.debug("Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
-        _JWKS_CLIENT = PyJWKClient(KEYCLOAK_JWKS_URL)
+        _JWKS_CLIENT = _ObservedJWKClient(KEYCLOAK_JWKS_URL)
     return _JWKS_CLIENT
 
 
@@ -434,15 +442,16 @@ def decode_jwt(
         else None
     )
     try:
-        payload = jwt.decode(
-            token,
-            signing_key,
-            algorithms=["RS256"],
-            audience=expected_audience,
-            issuer=expected_issuer,
-            options={"verify_exp": True, "verify_aud": verify_aud},
-            leeway=CLOCK_SKEW_SECONDS,
-        )
+        with technical_span("auth.jwt.verify"):
+            payload = jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                audience=expected_audience,
+                issuer=expected_issuer,
+                options={"verify_exp": True, "verify_aud": verify_aud},
+                leeway=CLOCK_SKEW_SECONDS,
+            )
         logger.debug("JWT token successfully decoded")
     except jwt.ExpiredSignatureError:
         logger.warning("Access token expired")

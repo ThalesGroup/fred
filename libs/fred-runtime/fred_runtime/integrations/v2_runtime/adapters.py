@@ -38,7 +38,7 @@ import logging
 import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
@@ -60,6 +60,7 @@ from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_trace
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
+from fred_core.technical_tracing import TechnicalTracer
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     GeoPart,
@@ -119,6 +120,7 @@ from fred_sdk.support.builtins import (
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
+from opentelemetry import trace as otel_trace
 
 from fred_runtime.common.kf_base_client import reported_failure
 from fred_runtime.common.kf_document_client import KfDocumentClient
@@ -324,6 +326,11 @@ class LangfuseSpanAdapter(SpanPort):
         self._ended = False
 
     @property
+    def otel_span(self) -> otel_trace.Span | None:
+        span = getattr(self._span, "_otel_span", None)
+        return span if isinstance(span, otel_trace.Span) else None
+
+    @property
     def span_id(self) -> str:
         return self._span.id
 
@@ -417,7 +424,7 @@ class LangfuseSpanAdapter(SpanPort):
             # visible in the trace list without opening every span. The runtime
             # records status as a plain attribute; only this adapter knows what
             # the backend does with it.
-            if self._metadata.get("status") == "error":
+            if self._metadata.get("status") in ("error", "cancelled"):
                 update["level"] = "ERROR"
             if update:
                 self._span.update(**update)
@@ -451,7 +458,7 @@ class LangfuseSpanAdapter(SpanPort):
 
 class LangfuseTracerAdapter(TracerPort):
     """
-    Langfuse-backed implementation of the v2 runtime tracing port.
+    Fred observation mapping for the standalone Langfuse backend.
 
     Trace shape produced here:
     - **one trace per turn**, seeded on `exchange_id` so every span of one
@@ -471,7 +478,7 @@ class LangfuseTracerAdapter(TracerPort):
 
     def __init__(
         self,
-        client: Langfuse,
+        client: Langfuse | None = None,
         *,
         capture_content: bool = False,
         max_content_chars: int = 20000,
@@ -551,7 +558,25 @@ class LangfuseTracerAdapter(TracerPort):
             or portable_context.session_id
             or portable_context.actor
         )
-        trace_id = self._client.create_trace_id(seed=trace_seed)
+        # A propagated W3C identity is already a trace ID, never a seed.
+        active = otel_trace.get_current_span().get_span_context()
+        explicit = getattr(parent, "otel_span", None)
+        if isinstance(explicit, otel_trace.Span):
+            active = explicit.get_span_context()
+        if active.is_valid:
+            trace_id = otel_trace.format_trace_id(active.trace_id)
+        elif (
+            portable_context.trace_id
+            and re.fullmatch(r"[0-9a-f]{32}", portable_context.trace_id)
+            and int(portable_context.trace_id, 16)
+        ):
+            trace_id = portable_context.trace_id
+        else:
+            trace_id = (
+                self._client.create_trace_id(seed=trace_seed)
+                if self._client is not None
+                else Langfuse.create_trace_id(seed=trace_seed)
+            )
         metadata: dict[str, object] = {
             "agent_id": portable_context.agent_id,
             "agent_name": portable_context.agent_name,
@@ -582,6 +607,8 @@ class LangfuseTracerAdapter(TracerPort):
         parent_span_id = parent.span_id if parent is not None else None
         if parent_span_id is not None:
             trace_context["parent_span_id"] = parent_span_id
+        elif active.is_valid:
+            trace_context["parent_span_id"] = otel_trace.format_span_id(active.span_id)
         observation_type = _LANGFUSE_OBSERVATION_TYPE_BY_SPAN_NAME.get(name, "span")
         if isinstance(parent, LangfuseSpanAdapter):
             # trace_context marks a new application root in the SDK, even
@@ -592,24 +619,41 @@ class LangfuseTracerAdapter(TracerPort):
                 as_type=observation_type,
                 metadata=metadata,
             )
+        elif self._client is not None:
+            # Passing trace_context to the SDK reconstructs a sampled remote
+            # parent. Inherit the real OTel context instead, including its flags.
+            with (
+                otel_trace.use_span(
+                    explicit, record_exception=False, set_status_on_exception=False
+                )
+                if isinstance(explicit, otel_trace.Span)
+                else nullcontext()
+            ):
+                span = cast(
+                    "_LangfuseSpanLike",
+                    self._client.start_observation(
+                        name=name,
+                        as_type=cast(Any, observation_type),
+                        trace_context=None if active.is_valid else trace_context,
+                        metadata=metadata,
+                    ),
+                )
         else:
-            span = cast(
-                "_LangfuseSpanLike",
-                self._client.start_observation(
-                    name=name,
-                    as_type=cast(Any, observation_type),
-                    trace_context=trace_context,
-                    metadata=metadata,
-                ),
-            )
+            return SpanPort()
         self._apply_trace_attributes(
             span, portable_context=portable_context, span_name=name
         )
+        # The Fred agent is the application root even under an HTTP/W3C parent.
+        if name in _TRACE_AGENT_SPAN_NAMES and parent is None:
+            native_span = getattr(span, "_otel_span", None)
+            if isinstance(native_span, otel_trace.Span):
+                native_span.set_attribute("langfuse.internal.as_root", True)
         return LangfuseSpanAdapter(
             span,
             capture_content=self._capture_content,
             max_content_chars=self._max_content_chars,
-            is_root=parent_span_id is None,
+            is_root=parent_span_id is None
+            and (name in _TRACE_AGENT_SPAN_NAMES or not active.is_valid),
             observation_type=observation_type,
         )
 
@@ -788,11 +832,13 @@ def build_default_tracer() -> TracerPort:
     - `services = RuntimeServices(tracer=build_default_tracer(), ...)`
     """
 
+    configured = get_tracer()
+    if isinstance(configured, TechnicalTracer):
+        return configured
     langfuse = build_langfuse_tracer()
     if langfuse is not None:
         return langfuse
 
-    configured = get_tracer()
     if type(configured) is Tracer:
         return LoggingTracer()
     return configured

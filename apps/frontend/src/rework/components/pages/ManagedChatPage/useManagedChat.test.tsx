@@ -385,6 +385,15 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.agentConfigurationChanged).toBe(false);
   });
 
+  it("titles an agent error toast in the user's language and keeps the runtime's sentence", () => {
+    mount();
+    act(() => capturedOnError?.("Le fournisseur du modèle est injoignable."));
+    expect(showErrorMock).toHaveBeenCalledExactlyOnceWith({
+      summary: "chatbot.errors.agentErrorSummary",
+      detail: "Le fournisseur du modèle est injoignable.",
+    });
+  });
+
   beforeEach(() => {
     abortTurn("session-1");
     historyToLoad = undefined;
@@ -807,7 +816,6 @@ describe("useManagedChat — session write reliability", () => {
       hostModels = {
         default: null,
         fallback: null,
-        legacy_profile_id: null,
         recommendation: null,
         offers: [
           {
@@ -822,7 +830,6 @@ describe("useManagedChat — session write reliability", () => {
           },
         ],
         options: {},
-        requires_reselection: false,
       };
       mount();
       act(() => latest.setInput("question"));
@@ -839,7 +846,6 @@ describe("useManagedChat — session write reliability", () => {
     hostModels = {
       default: key,
       fallback: null,
-      legacy_profile_id: null,
       recommendation: null,
       offers: [
         {
@@ -854,7 +860,6 @@ describe("useManagedChat — session write reliability", () => {
         },
       ],
       options: {},
-      requires_reselection: false,
     };
     mount();
     act(() => latest.setInput("question"));
@@ -985,32 +990,30 @@ describe("useManagedChat — session write reliability", () => {
     expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined, false);
   });
 
-  it("sends combined selection on first and following messages, then explicit empty and reset", async () => {
-    chatSseChatControls = [{ capability_id: "document_access", widget: "document_scope", params: {} }];
-    composerValue.documentSelection = { folderIds: ["folder"], documentIds: ["doc"] };
-    mount();
-    for (const selection of [composerValue.documentSelection, { folderIds: [], documentIds: [] }, null]) {
-      composerValue.documentSelection = selection;
-      act(() => latest.setInput("question"));
-      rerender();
-      await act(async () => {
-        await latest.handleSend();
-      });
-      const call = sendMock.mock.calls[sendMock.mock.calls.length - 1];
-      expect(call[3]).toEqual({
-        document_access: {
-          library_tag_ids: selection?.folderIds ?? null,
-          document_uids: selection?.documentIds ?? null,
-        },
-      });
-      expect(call[2]).not.toHaveProperty("selected_document_libraries_ids");
-      expect(call[2]).not.toHaveProperty("selected_document_uids");
-      expect(call[2]).not.toHaveProperty("attachments_markdown");
-      expect(call[2]).not.toHaveProperty("attachment_ids");
-      expect(call[3]).not.toHaveProperty("attachments_markdown");
-      expect(call[3]).not.toHaveProperty("attachment_ids");
-    }
-  });
+  it.each(["document_access", "mcp-knowledge-flow-mcp-tabular"])(
+    "sends shared scope for %s on first and following messages, then explicit empty and reset",
+    async (capabilityId) => {
+      chatSseChatControls = [{ capability_id: capabilityId, widget: "document_scope", params: {} }];
+      composerValue.documentSelection = { folderIds: ["folder"], documentIds: ["doc"] };
+      mount();
+      for (const selection of [composerValue.documentSelection, { folderIds: [], documentIds: [] }, null]) {
+        composerValue.documentSelection = selection;
+        act(() => latest.setInput("question"));
+        rerender();
+        await act(async () => {
+          await latest.handleSend();
+        });
+        const call = sendMock.mock.calls[sendMock.mock.calls.length - 1];
+        expect(call[2]).toMatchObject({
+          selected_document_libraries_ids: selection?.folderIds ?? null,
+          selected_document_uids: selection?.documentIds ?? null,
+        });
+        expect(call[3]).toBeUndefined();
+        expect(call[2]).not.toHaveProperty("attachments_markdown");
+        expect(call[2]).not.toHaveProperty("attachment_ids");
+      }
+    },
+  );
 
   it("preserves an explicitly empty scope on human-input resume after restoration", async () => {
     composerValue.documentSelection = { folderIds: [], documentIds: [] };
@@ -1018,9 +1021,9 @@ describe("useManagedChat — session write reliability", () => {
     bindSession("session-1");
     act(() => capturedOnAwaitingHuman?.(awaitingHumanEvent));
     await act(async () => latest.handleHitlAnswer("proceed"));
-    expect(sendHitlResumeMock.mock.calls[sendHitlResumeMock.mock.calls.length - 1]?.[4]).toEqual({
-      document_access: { library_tag_ids: [], document_uids: [] },
-    });
+    const call = sendHitlResumeMock.mock.calls[sendHitlResumeMock.mock.calls.length - 1];
+    expect(call?.[3]).toMatchObject({ selected_document_libraries_ids: [], selected_document_uids: [] });
+    expect(call?.[4]).toBeUndefined();
   });
 
   it("hands a handleSend-minted session id to the composer instead of resetting it", async () => {
@@ -1684,10 +1687,8 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledWith(
       "",
       "session-1",
-      expect.any(Object),
-      {
-        document_access: { library_tag_ids: [], document_uids: [] },
-      },
+      expect.objectContaining({ selected_document_libraries_ids: [], selected_document_uids: [] }),
+      undefined,
       { action: "continue", interruptionId: "int-1" },
     );
   });

@@ -109,8 +109,6 @@ def resolved_binding(
                 ),
                 recommendation=key,
                 options={"max_tokens": 50},
-                legacy_profile_id=None,
-                requires_reselection=False,
                 offers=[
                     offer(key, permitted, candidate, diagnostics),
                     offer(fallback, True, True, ()),

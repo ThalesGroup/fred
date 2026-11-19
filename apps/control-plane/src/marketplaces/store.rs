@@ -477,7 +477,7 @@ pub(crate) async fn install(
                     let prepared = prepared.take().ok_or_else(|| {
                         anyhow::anyhow!("Missing agent installation preflight")
                     })??;
-                    crate::agent_instances::http::save_created(
+                    crate::agent_instances::save_created(
                         &mut tx,
                         user,
                         &destination,

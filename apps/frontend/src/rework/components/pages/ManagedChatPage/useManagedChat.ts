@@ -20,7 +20,6 @@ import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ExecutionPreparation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useComposerSettings } from "./useComposerSettings";
-import { documentSelectionTurnOptions } from "./documentSelectionTurnOptions";
 import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useSearchParams } from "react-router-dom";
 import { setCapabilityBaseUrls } from "../../../../common/capabilityRoutingSlice";
@@ -424,10 +423,10 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const handleChatError = useCallback(
     (msg: string, code?: string) => {
       if (code === "agent_configuration_changed") setConfigurationRefused(true);
-      showError({ summary: "Agent error", detail: msg });
+      showError({ summary: t("chatbot.errors.agentErrorSummary"), detail: msg });
       refetchSessionRef.current();
     },
-    [showError],
+    [showError, t],
   );
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
@@ -821,12 +820,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         ...(chatControls.some((control) => control.widget === "rag_scope")
           ? { search_rag_scope: composer.ragScope }
           : {}),
-      },
-      turnOptions:
-        DOCUMENT_SELECTION_SUPPORTED &&
+        // One conversation scope for every document consumer, including tabular alone.
+        ...(DOCUMENT_SELECTION_SUPPORTED &&
         (composer.documentSelection !== null || chatControls.some((control) => control.widget === "document_scope"))
-          ? documentSelectionTurnOptions(composer.documentSelection)
-          : undefined,
+          ? {
+              selected_document_libraries_ids: composer.documentSelection?.folderIds ?? null,
+              selected_document_uids: composer.documentSelection?.documentIds ?? null,
+            }
+          : {}),
+      },
     }),
     [
       composer.chatProfileId,
@@ -969,7 +971,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         replaceStagedHitlAnswers(new Map());
         setSelectedHitlKey(null);
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
-        const { runtimeContext, turnOptions } = buildTurnContext();
+        const { runtimeContext } = buildTurnContext();
         touchSessionActivity(sid);
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
@@ -990,7 +992,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
           },
-          turnOptions,
+          undefined,
           interrupted,
           pendingMessageId,
         );
@@ -1176,8 +1178,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           }
         };
         if (answer === "continue" && typeof interruptionId === "string" && interruptionId) {
-          const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-          void send("", prompt.session_id, runtimeContext, turnOptions, { action: "continue", interruptionId }).then(
+          const { runtimeContext } = buildTurnContextRef.current();
+          void send("", prompt.session_id, runtimeContext, undefined, { action: "continue", interruptionId }).then(
             restoreIfNotSent,
           );
         } else {
@@ -1241,7 +1243,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           setHitlFreeText(hitlDraftsRef.current.get(hitlKey(prompt)) ?? "");
         }
       };
-      const { runtimeContext, turnOptions } = buildTurnContextRef.current(prompt.exchange_id);
+      const { runtimeContext } = buildTurnContextRef.current(prompt.exchange_id);
       const toolNames = (prompt.payload.pending_calls ?? []).map((call) => call.tool_name);
       const rememberTools =
         rememberApproval && prompt.payload.stage === "tool_approval" && answer === "proceed" && toolNames.length > 0;
@@ -1261,7 +1263,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         }
       };
       const selectedAnswer = answerWithOtherPriority(prompt, answer, freeText);
-      const resume = sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped, onAccepted);
+      const resume = sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, undefined, skipped, onAccepted);
       void resume
         .then((reached) => {
           if (reached) {
@@ -1339,8 +1341,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
         setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
       };
-      const { runtimeContext, turnOptions } = buildTurnContextRef.current(owner.exchange_id);
-      void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, clearAcceptedBatch, answers)
+      const { runtimeContext } = buildTurnContextRef.current(owner.exchange_id);
+      void sendHitlResume(owner, undefined, undefined, runtimeContext, undefined, false, clearAcceptedBatch, answers)
         .then((accepted) => {
           if (!accepted) {
             if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();

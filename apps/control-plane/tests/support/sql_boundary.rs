@@ -89,17 +89,19 @@ async fn consumers_only_read_their_cp_read_contract_and_visibility_tracks_public
     sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'fixture',p_mime=>'text/plain',p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>'fixture',p_quota_owner=>$2,p_retrievable=>true)")
         .bind(doc).bind(org).bind(conversation).execute(&e.pool).await.unwrap();
     assert!(!visible(&e.pool, doc).await);
-    sqlx::query("insert into document_processing(id,document_id,actor,request_key,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$2,'alice',$1,'fast','fixture','{}',now()+interval '1 hour','{}',60,60,60)")
+    sqlx::query("insert into document_processing(id,document_id,actor,request_key,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id) select $1,$2,'alice',$1,'fast','fixture','{}',now()+interval '1 hour','{}',60,60,60,current_content_id,current_content_id,published_generation from document where id=$2")
         .bind(processing).bind(doc).execute(&e.pool).await.unwrap();
     sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after) values($1,$2,$3,'indexing',$1,$1,1,now()+interval '1 hour','fixture/',now(),array[0,2],now()+interval '2 hours')")
         .bind(generation).bind(processing).bind(doc).execute(&e.pool).await.unwrap();
+    sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=now() where id=$1")
+        .bind(processing).execute(&e.pool).await.unwrap();
     sqlx::query("update document set published_generation=$2 where id=$1")
         .bind(doc)
         .bind(generation)
         .execute(&e.pool)
         .await
         .unwrap();
-    // A live processing run does not hide the previously published generation.
+    // The committed generation is visible through the SQL read boundary.
     assert!(visible(&e.pool, doc).await);
     sqlx::query("insert into deletion(id,target_id,target_kind,organization_id,actor_subject,requested_at,due_at) values($1,$2,'organization',$2,'alice',now(),now())")
         .bind(deletion).bind(org).execute(&e.pool).await.unwrap();

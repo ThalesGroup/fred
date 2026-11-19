@@ -17,11 +17,11 @@
 // `t` is mocked to echo its key (plus any interpolated count), so we assert on
 // which key each state uses and on the enabled-team count it renders.
 
-import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { CapabilityInventoryOffer } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -30,7 +30,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  applicationsEnabled: false,
+  application: undefined as CapabilityInventoryOffer | undefined,
   drawer: undefined as
     | undefined
     | { organizationId: string; runtimeId?: string; capability: { id: string; route_base_url?: string } | null },
@@ -79,21 +79,27 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhanceme
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn(), showInfo: vi.fn() }),
 }));
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
-}));
 
 // The offers panel has its own suite; a marker is enough to see which panel the page chose.
 vi.mock("./OrganizationCapabilities", () => ({
   OrganizationCapabilities: ({
     capabilityColumns,
+    origin,
   }: {
+    origin?: string;
     capabilityColumns: import("@shared/molecules/DataTable/LocalizedDataTable").DataTableColumn<
       import("../../../../../slices/controlPlane/controlPlaneOpenApi").CapabilityInventoryOffer
     >[];
   }) => (
     <>
       <p>organization-offers</p>
+      {origin === "application" && h.application && (
+        <section data-testid="application-row">
+          {capabilityColumns.map((column) => (
+            <div key={column.label}>{column.cellRenderer?.(h.application!)}</div>
+          ))}
+        </section>
+      )}
       {capabilityColumns
         .filter((c) => c.label === "rework.admin.capabilities.col.settings")
         .map((c) => (
@@ -153,7 +159,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  h.applicationsEnabled = false;
+  h.application = undefined;
   h.list = { data: undefined, isLoading: false, isError: false };
   container = document.createElement("div");
   document.body.append(container);
@@ -199,6 +205,41 @@ describe("FeaturesPage states", () => {
 });
 
 describe("FeaturesPage catalog rows", () => {
+  it("shows the application key and offer version without its technical identifier", () => {
+    h.application = {
+      source_id: "$applications",
+      origin: "application",
+      runtime_id: null,
+      route_base_url: null,
+      capability_id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
+      application_logical_name: "evaluation",
+      version: "1.3.0",
+      advertised: true,
+      default_on: true,
+      unusable_instances: [],
+      descriptor: {
+        id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
+        name: "Evaluation",
+        kind: "application",
+        description: "Evaluation service",
+        icon: "science",
+        version: "1.3.0",
+      },
+    };
+    act(() => root.render(<FeaturesPage organizationId="O1" />));
+    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
+      element.textContent?.endsWith("kindFilter.app"),
+    );
+    expect(tab).toBeDefined();
+    act(() => tab!.click());
+    const row = container.querySelector('[data-testid="application-row"]');
+    expect(row?.textContent).toContain("Evaluation");
+    expect(row?.textContent).toContain("evaluation");
+    expect(row?.textContent).toContain("v1.3.0");
+    expect(container.innerHTML).not.toContain(h.application.capability_id);
+    expect(container.innerHTML).not.toContain("74c7ac76-1e22-4512-8f79-6beaa37dfafc");
+  });
+
   it("renders each Knowledge Base with its enabled-team count and a disabled manage action", () => {
     const html = renderKnowledgeBases([cap({ id: "kb", enabled_team_ids: ["nb"] })]);
 
@@ -294,35 +335,15 @@ describe("FeaturesPage default-on gate for required team settings", () => {
 });
 
 describe("FeaturesPage kind filter", () => {
-  it("hides the Apps filter by default", () => {
-    const html = renderToStaticMarkup(<FeaturesPage organizationId="O1" />);
-    expect(html).not.toContain("rework.admin.capabilities.kindFilter.app");
-  });
-
-  it("renders the Apps filter only when the deployment switch is enabled", () => {
-    h.applicationsEnabled = true;
-    const html = renderToStaticMarkup(<FeaturesPage organizationId="O1" />);
-    expect(html).toContain("rework.admin.capabilities.kindFilter.tool");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.agent");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.model");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.knowledge_base");
-    expect(html).toContain("rework.admin.capabilities.kindFilter.app");
-  });
-
-  it("falls back to the pod offers when the deployment switch goes off on the Apps tab", () => {
-    h.applicationsEnabled = true;
-    renderKnowledgeBases([cap({ id: "legacy_tool", kind: "tool" })]);
+  it("always exposes Applications and routes it through organization offers", () => {
+    renderKnowledgeBases([cap({ id: "legacy_app", kind: "app" })]);
     const appsTab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
       element.textContent?.endsWith("kindFilter.app"),
     );
+    expect(appsTab).toBeDefined();
     act(() => appsTab!.click());
-
-    h.applicationsEnabled = false;
-    act(() => root.render(<FeaturesPage organizationId="O1" />));
-
     expect(container.textContent).toContain("organization-offers");
-    expect(container.textContent).not.toContain("cap.legacy_tool");
-    expect(container.textContent).not.toContain("kindFilter.app");
+    expect(container.textContent).not.toContain("cap.legacy_app");
   });
 });
 

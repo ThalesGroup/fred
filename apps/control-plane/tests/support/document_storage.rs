@@ -1371,6 +1371,209 @@ async fn shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owne
     }
 }
 
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn downloads_resolve_one_content_snapshot_after_authorization() {
+    use control_plane::processing::preview::{PreviewQuery, preview};
+    let d = Documents::start(1024).await;
+    let (status, receipt) = d
+        .upload("writer", "source.pdf", b"old", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{receipt}");
+    let document: Uuid = serde_json::from_value(receipt["document_id"].clone()).unwrap();
+    let state = api::AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: d.e.pool.clone(),
+        auth: Arc::new(d.identity.auth().await),
+        content: Some(d.storage.clone()),
+        processing: None,
+        directory: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    };
+    for native in [false, true] {
+        let candidate = Uuid::new_v4();
+        let attempt = Uuid::new_v4();
+        let generation = Uuid::new_v4();
+        let bytes = if native {
+            b"new PDF bytes after another publication".as_slice()
+        } else {
+            b"first replacement".as_slice()
+        };
+        let digest: [u8; 32] = Sha256::digest(bytes).into();
+        let hash: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        let key = format!("{candidate}/input/source.pdf");
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), bytes).unwrap();
+        d.storage
+            .objects
+            .put_verified(&key, file.path(), bytes.len() as i64, &digest)
+            .await
+            .unwrap();
+        let mut tx = d.e.pool.begin().await.unwrap();
+        // Stop the reader after its first Document read, inside the existing authority check.
+        sqlx::query("lock table space_role_grant in access exclusive mode")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let publisher: i32 = sqlx::query_scalar("select pg_backend_pid()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let read = {
+            let state = state.clone();
+            tokio::spawn(async move {
+                if native {
+                    let mut headers = axum::http::HeaderMap::new();
+                    headers.insert("range", "bytes=1-".parse().unwrap());
+                    preview(
+                        &state,
+                        "reader",
+                        document,
+                        PreviewQuery {
+                            artifact: "native".into(),
+                            session_id: None,
+                        },
+                        headers,
+                    )
+                    .await
+                } else {
+                    state
+                        .content
+                        .as_ref()
+                        .unwrap()
+                        .content("reader", document)
+                        .await
+                }
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid)) and query like 'with subject_spaces%')")
+                    .bind(publisher).fetch_one(&d.e.pool).await.unwrap();
+                if waiting { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.expect("download did not reach its authority check");
+        sqlx::query("insert into document_content(id,document_id,kind,mime,size,sha256,object_key,published_at) values($1,$2,'primary','application/pdf',$3,$4,$5,clock_timestamp())")
+            .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at,processing_profile,target_document_id,content_id,expected_content_id,reserved_bytes) select $1,$1,'writer',s.organization_id,d.space_id,d.folder_id,d.quota_owner,d.name,'application/pdf',$3,$4,$5,'stored',clock_timestamp()+interval '1 hour',clock_timestamp(),'fast',d.id,$1,d.current_content_id,greatest($3-d.size,0) from document_current d join space s on s.id=d.space_id where d.id=$2")
+            .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,expected_generation_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) select $1,$1,'writer',id,$3,current_content_id,published_generation,'fast',$1::text,'{}',clock_timestamp()+interval '1 hour','{}',60,60,60 from document where id=$2")
+            .bind(attempt).bind(document).bind(candidate).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after) values($1,$2,$3,'indexing',$1,$1,1,clock_timestamp()+interval '1 hour',$1::text,clock_timestamp(),'{}',clock_timestamp()+interval '2 hours')")
+            .bind(generation).bind(attempt).bind(document).execute(&mut *tx).await.unwrap();
+        sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=clock_timestamp() where id=$1")
+            .bind(attempt).execute(&mut *tx).await.unwrap();
+        sqlx::query(
+            "update document set current_content_id=$2,published_generation=$3 where id=$1",
+        )
+        .bind(document)
+        .bind(candidate)
+        .bind(generation)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let response = tokio::time::timeout(Duration::from_secs(5), read)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.status().as_u16(), if native { 206 } else { 200 });
+        let expected = if native { &bytes[1..] } else { bytes };
+        assert_eq!(
+            response.headers()["content-length"],
+            expected.len().to_string()
+        );
+        if native {
+            assert_eq!(
+                response.headers()["content-range"],
+                format!("bytes 1-{}/{}", bytes.len() - 1, bytes.len())
+            );
+        }
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap(),
+            expected
+        );
+    }
+}
+
+// Prepared source replacements use the same storage journal; no public upload route admits them.
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn cleanup_preserves_active_source_candidate_then_reclaims_failed_bytes() {
+    let d = Documents::start(1024).await;
+    let (status, receipt) = d
+        .upload("writer", "source.txt", b"source", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{receipt}");
+    let (document, original): (Uuid, String) =
+        sqlx::query_as("select id,object_key from document_current")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let candidate = Uuid::new_v4();
+    let attempt = Uuid::new_v4();
+    let key = format!("{candidate}/input/source.txt");
+    let bytes = b"replacement";
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
+    let hash: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    d.storage
+        .objects
+        .put_verified(&key, file.path(), bytes.len() as i64, &digest)
+        .await
+        .unwrap();
+    let mut tx = d.e.pool.begin().await.unwrap();
+    sqlx::query("insert into document_content(id,document_id,kind,mime,size,sha256,object_key,published_at) values($1,$2,'primary','text/plain',$3,$4,$5,clock_timestamp())")
+        .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key)
+        .execute(&mut *tx).await.unwrap();
+    sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at,processing_profile,target_document_id,content_id,expected_content_id,reserved_bytes) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,name,'text/plain',$3,$4,$5,'stored',clock_timestamp()+interval '1 hour',clock_timestamp(),'fast',$2,$1,$2,greatest($3-size,0) from document_upload where id=$2")
+        .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key)
+        .execute(&mut *tx).await.unwrap();
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'writer',$2,$3,$2,'fast',$1::text,'{}',clock_timestamp()+interval '1 hour','{}',60,60,60)")
+        .bind(attempt).bind(document).bind(candidate).execute(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
+    // A due row can also be produced by retirement; an active source still owns its bytes.
+    sqlx::query("update document_content set cleanup_after=clock_timestamp() where id=$1")
+        .bind(candidate)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(d.bucket.store.get(&key).await.is_ok());
+    assert!(d.bucket.store.get(&original).await.is_ok());
+
+    sqlx::query("update document_processing set status='failed',error_code='execution_deadline',completed_at=clock_timestamp() where id=$1")
+        .bind(attempt).execute(&d.e.pool).await.unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(d.bucket.store.get(&key).await.is_err());
+    assert!(d.bucket.store.get(&original).await.is_ok());
+    let (current, reserved): (Uuid, i64) = sqlx::query_as("select d.current_content_id,u.reserved_bytes from document d join document_upload u on u.target_document_id=d.id where u.id=$1")
+        .bind(candidate).fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(current, document);
+    assert_eq!(reserved, 0);
+    // Processing history retains content identity even after the upload receipt is removed.
+    sqlx::query("delete from document_upload where id=$1")
+        .bind(candidate)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "select cleaned_at is not null from document_content where id=$1"
+        )
+        .bind(candidate)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    );
+}
+
 // Proves: I22, I25
 #[tokio::test]
 #[ignore = "needs disposable PostgreSQL and SeaweedFS"]

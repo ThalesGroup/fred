@@ -593,3 +593,58 @@ def test_runtime_tool_span_is_a_tool_observation() -> None:
         "v2.react.runtime_tool", context=_context(), attributes={"tool_name": "search"}
     )
     assert fake.start_kwargs[0]["as_type"] == "tool"
+
+
+def test_w3c_trace_id_is_not_hashed_again():
+    tracer, fake = _tracer()
+    tracer.start_span("agent.stream", context=_context(trace_id="a" * 32))
+    assert fake.seeds == []
+    assert fake.start_kwargs[0]["trace_context"]["trace_id"] == "a" * 32
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+def test_real_sdk_inherits_active_w3c_flags_and_parent(sampled):
+    from fred_core.technical_tracing import activate_span, extract_trace
+    from opentelemetry import trace
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    client = Langfuse(
+        public_key=f"pk-lf-offline-{uuid4()}",
+        secret_key=uuid4().hex,
+        tracer_provider=provider,
+        span_exporter=exporter,
+    )
+    tracer = LangfuseTracerAdapter(client)
+    remote = trace.get_current_span(
+        extract_trace(
+            {
+                "traceparent": f"00-{'a' * 32}-{'b' * 16}-{'01' if sampled else '00'}",
+            }
+        )
+    )
+    try:
+        with trace.use_span(remote):
+            root = tracer.start_span("agent.stream", context=_context())
+            with activate_span(root):
+                child = tracer.start_span(
+                    "v2.react.model", context=_context(), parent=root
+                )
+                child.end()
+            root.end()
+        client.flush()
+        spans = exporter.get_finished_spans()
+        if sampled:
+            assert len(spans) == 2
+            root_span = next(s for s in spans if s.name == "agent.stream")
+            assert root_span.parent is not None
+            assert root_span.parent.span_id == int("b" * 16, 16)
+            assert all(
+                s.context and s.context.trace_id == int("a" * 32, 16) for s in spans
+            )
+            assert root_span.attributes is not None
+            assert root_span.attributes["langfuse.internal.as_root"] is True
+        else:
+            assert not spans
+    finally:
+        client.shutdown()
