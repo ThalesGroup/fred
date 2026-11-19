@@ -17,7 +17,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
-import { builtinPartRenderers } from "./builtinPartRenderers";
+import { builtinPartRenderers } from "../builtinPartRenderers";
 
 const leaflet = vi.hoisted(() => {
   const map = {

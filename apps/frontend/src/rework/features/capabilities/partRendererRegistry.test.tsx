@@ -19,7 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildPartRendererRegistry, latestPartPerObject, rendererForPartKind } from "./partRendererRegistry";
 import type { CapabilityUiPlugin, UiPartIdentity, UiPartRendererProps } from "./types";
 
-vi.mock("./GeoPartRenderer", () => ({ GeoPartRenderer: () => null }));
+vi.mock("./geo/GeoPartRenderer", () => ({ GeoPartRenderer: () => null }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (value: string) => value }),
 }));

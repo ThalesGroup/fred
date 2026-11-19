@@ -6,7 +6,7 @@ dockerfiles
 .vite
 
 # Generated Natural Earth geometry is a compact, static offline asset.
-src/rework/features/capabilities/offline*.json
+src/rework/features/capabilities/geo/offlineBasemap/*.json
 
 # Ignore RTK Query slices generated from backend OpenAPI specs.
 src/slices/**/**OpenApi.ts

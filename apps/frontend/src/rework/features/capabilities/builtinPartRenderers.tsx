@@ -19,7 +19,7 @@ import type { LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
-import { GeoPartRenderer } from "./GeoPartRenderer";
+import { GeoPartRenderer } from "./geo/GeoPartRenderer";
 
 // Citations open the third-party page directly; every other kind is a Fred file.
 function LinkPartRenderer({ part }: UiPartRendererProps) {
