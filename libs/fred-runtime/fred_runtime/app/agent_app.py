@@ -4506,6 +4506,17 @@ async def _stream(
     base_rank, ranker = await _initial_history_ranker(
         history_store, session_id, request, 0 if prewritten_initial else None
     )
+    trace_history_rank = base_rank or 0
+    trace_client = container.conversation_trace_client
+    capture = None
+    if trace_client is not None and session_id and request.agent_instance_id:
+        capture = await trace_client.admit(
+            session_id=session_id,
+            user_id=user_id,
+            exchange_id=exchange_id,
+            agent_instance_id=request.agent_instance_id,
+            history_rank=trace_history_rank,
+        )
     turn_start = time.monotonic()
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
@@ -4542,10 +4553,11 @@ async def _stream(
         owns_run_record=True,
         steering_enabled=bool(request.agent_instance_id),
     )
+    events = capture.iterate(payloads) if capture is not None else payloads
     try:
         if on_start is not None:
             on_start()
-        async for runtime_payload in payloads:
+        async for runtime_payload in events:
             for payload in expander.expand(runtime_payload):
                 payload = await _rank_runtime_event(
                     payload,
@@ -4555,32 +4567,47 @@ async def _stream(
                     exchange_id=exchange_id,
                 )
                 collected.append(payload)
+                if capture is not None:
+                    capture.note_event(payload)
                 yield _sse(json.dumps(payload, ensure_ascii=False))
     finally:
-        await complete_cleanup(payloads.aclose())
-        if session_id and history_store is not None:
-            await complete_cleanup(
-                _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id,
-                    request_message=request.message,
-                    turn_command=_turn_command(ctx),
-                    skill_invocation=ctx.get("skill"),
-                    skill_invocations=ctx.get("skills"),
-                    attachments=ctx.get("attachments"),
-                    payloads=collected,
-                    history_store=history_store,
-                    team_id=resolved_team_id,
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
+        try:
+            await complete_cleanup(payloads.aclose())
+            if session_id and history_store is not None:
+                await complete_cleanup(
+                    _write_turn_history(
+                        session_id=session_id,
+                        user_id=user_id,
+                        request_message=request.message,
+                        turn_command=_turn_command(ctx),
+                        skill_invocation=ctx.get("skill"),
+                        skill_invocations=ctx.get("skills"),
+                        attachments=ctx.get("attachments"),
+                        payloads=collected,
+                        history_store=history_store,
+                        team_id=resolved_team_id,
+                        agent_instance_id=request.agent_instance_id,
+                        exchange_id=exchange_id,
+                        resume_payload=request.resume_payload,
+                        occurrence_id=request.occurrence_id,
+                        previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                        base_rank=base_rank,
+                        pending_message_id=request.pending_message_id,
+                        prewritten_initial=prewritten_initial,
+                    )
                 )
-            )
+        finally:
+            if capture is not None and session_id is not None:
+                await complete_cleanup(
+                    capture.finish(
+                        history_store,
+                        session_id=session_id,
+                        user_id=user_id,
+                        exchange_id=exchange_id,
+                        history_rank=trace_history_rank,
+                        started=turn_start,
+                    )
+                )
 
     _emit_turn_completed(
         container,

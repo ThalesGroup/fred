@@ -375,6 +375,7 @@ _PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
     PlatformRoleRelation.PLATFORM_ACCESS_MANAGER: OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
     PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
     PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+    PlatformRoleRelation.TRACE_READER: OrganizationPermission.CAN_MANAGE_CONVERSATION_TRACES,
 }
 
 

@@ -38,6 +38,7 @@ export function useUserCapabilities(): UserCapabilities {
     canManagePlatformAccess: roles.includes("platform_access_manager"),
     canManageFeatures: roles.includes("feature_manager"),
     canEditPlatformPrompt: roles.includes("prompt_editor"),
+    canManageConversationTraces: roles.includes("trace_reader"),
     canEditSessions: true,
     canDeleteSessions: true,
     isLoading,

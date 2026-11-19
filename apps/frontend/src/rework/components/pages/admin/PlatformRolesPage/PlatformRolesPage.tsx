@@ -191,6 +191,7 @@ export default function PlatformRolesPage() {
     "feature_manager",
     "prompt_editor",
     "platform_observer",
+    "trace_reader",
     "platform_admin",
   ];
 

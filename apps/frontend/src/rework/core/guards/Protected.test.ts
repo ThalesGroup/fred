@@ -28,6 +28,7 @@ const NONE: ProtectedCapabilities = {
   canManagePlatformAccess: false,
   canManageFeatures: false,
   canEditPlatformPrompt: false,
+  canManageConversationTraces: false,
 };
 
 const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({ ...NONE, ...held });
@@ -36,6 +37,7 @@ const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({
 const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
   ["admin", "canAdmin"],
   ["observer", "canObservePlatform"],
+  ["conversationTraces", "canManageConversationTraces"],
   ["teams", "canManageTeams"],
   ["platformAccess", "canManagePlatformAccess"],
   ["features", "canManageFeatures"],

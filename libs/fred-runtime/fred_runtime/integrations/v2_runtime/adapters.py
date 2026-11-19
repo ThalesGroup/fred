@@ -304,6 +304,7 @@ class LangfuseSpanAdapter(SpanPort):
         max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
         is_root: bool = False,
         observation_type: str = "span",
+        trace_id: str | None = None,
     ):
         self._span = span
         self._metadata: dict[str, object] = {}
@@ -311,6 +312,7 @@ class LangfuseSpanAdapter(SpanPort):
         self._max_content_chars = max_content_chars
         self._is_root = is_root
         self._observation_type = observation_type
+        self._trace_id = trace_id
         self._input: object | None = None
         self._output: object | None = None
         self._model: str | None = None
@@ -321,6 +323,10 @@ class LangfuseSpanAdapter(SpanPort):
     @property
     def span_id(self) -> str:
         return self._span.id
+
+    @property
+    def trace_id(self) -> str | None:
+        return self._trace_id
 
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
@@ -609,6 +615,7 @@ class LangfuseTracerAdapter(TracerPort):
             max_content_chars=self._max_content_chars,
             is_root=parent_span_id is None,
             observation_type=observation_type,
+            trace_id=trace_id,
         )
 
     def _apply_trace_attributes(

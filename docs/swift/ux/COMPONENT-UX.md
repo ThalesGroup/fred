@@ -6148,3 +6148,15 @@ note for distinct counts.
 
 - Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
   a sequential ramp for cohort cells) wait for the design-system update.
+
+## Conversation traces in Admin (2026-11-19)
+
+The catalog opens on failed conversations. The All control includes
+completed and incomplete captures. A masked conversation shows a neutral
+label and the recorded agent instance name. The capture switch explains
+its deployment-wide scope and what happens to turns already admitted.
+
+The inspector retains the main navigation rail and uses the rest of the
+workspace for its turn list and detail pane. Outcome and evidence
+availability are distinct. Operators can copy the conversation, exchange,
+and available trace, span, and call identifiers.

@@ -11,6 +11,7 @@ import type {
 export const PLATFORM_ROLES: PlatformRoleRelation[] = [
   "platform_admin",
   "platform_observer",
+  "trace_reader",
   "team_manager",
   "feature_manager",
   "prompt_editor",

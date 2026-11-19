@@ -1733,6 +1733,61 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformHomeRequest,
       }),
     }),
+    getConversationTraceSettings: build.query<
+      GetConversationTraceSettingsApiResponse,
+      GetConversationTraceSettingsApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/settings` }),
+    }),
+    setConversationTraceSettings: build.mutation<
+      SetConversationTraceSettingsApiResponse,
+      SetConversationTraceSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/settings`,
+        method: "PUT",
+        body: queryArg.conversationTraceSettings,
+      }),
+    }),
+    listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces`,
+        params: {
+          failed_only: queryArg.failedOnly,
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}`,
+        params: {
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/admit`,
+        method: "POST",
+        body: queryArg.traceAdmissionRequest,
+      }),
+    }),
+    finalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPut: build.mutation<
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse,
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}`,
+        method: "PUT",
+        body: queryArg.traceFinalization,
+      }),
+    }),
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
       GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse,
       GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg
@@ -3637,6 +3692,36 @@ export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse =
 export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg = {
   setPlatformHomeRequest: SetPlatformHomeRequest;
 };
+export type GetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type GetConversationTraceSettingsApiArg = void;
+export type SetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type SetConversationTraceSettingsApiArg = {
+  conversationTraceSettings: ConversationTraceSettings;
+};
+export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
+export type ListConversationTracesApiArg = {
+  failedOnly?: boolean;
+  limit?: number;
+  cursor?: string | null;
+};
+export type GetConversationTraceApiResponse = /** status 200 Successful Response */ ConversationTraceDetail;
+export type GetConversationTraceApiArg = {
+  sessionId: string;
+  limit?: number;
+  cursor?: string | null;
+};
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
+  /** status 200 Successful Response */ TraceAdmission | null;
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg = {
+  runtimeId: string;
+  traceAdmissionRequest: TraceAdmissionRequest;
+};
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse = unknown;
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceFinalization: TraceFinalization;
+};
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
   /** status 200 Successful Response */ MarketplaceSettings;
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiArg = void;
@@ -4646,7 +4731,8 @@ export type PlatformRoleRelation =
   | "team_manager"
   | "platform_access_manager"
   | "feature_manager"
-  | "prompt_editor";
+  | "prompt_editor"
+  | "trace_reader";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -6408,6 +6494,60 @@ export type SetPlatformHomeRequest = {
   /** Agent of the advanced home question field; none hides the field. */
   ask_agent_instance_id?: string | null;
 };
+export type ConversationTraceSettings = {
+  enabled: boolean;
+};
+export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceAvailability = "metadata_only" | "partial";
+export type ConversationTraceSummary = {
+  session_id: string;
+  agent_display_name: string;
+  team_id: string;
+  latest_started_at: string;
+  outcome: TraceOutcome;
+  availability: TraceAvailability;
+};
+export type ConversationTraceCatalog = {
+  conversations: ConversationTraceSummary[];
+  next_cursor: string | null;
+};
+export type ConversationTraceTurn = {
+  exchange_id: string;
+  turn_number: number | null;
+  started_at: string;
+  duration_ms: number | null;
+  outcome: TraceOutcome;
+  availability: TraceAvailability;
+  call_ids: string[];
+  trace_id: string | null;
+  span_id: string | null;
+};
+export type ConversationTraceDetail = {
+  session_id: string;
+  agent_display_name: string;
+  team_id: string;
+  turns: ConversationTraceTurn[];
+  next_cursor: string | null;
+};
+export type TraceAdmission = {
+  capture_id: string;
+};
+export type TraceAdmissionRequest = {
+  session_id: string;
+  exchange_id: string;
+  user_id: string;
+  agent_instance_id: string;
+  history_rank: number;
+};
+export type TraceFinalization = {
+  outcome: TraceOutcome;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  discarded?: boolean;
+};
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
   agents_publish_quota: number;
@@ -7423,6 +7563,15 @@ export const {
   useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
   useLazyGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
   usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation,
+  useGetConversationTraceSettingsQuery,
+  useLazyGetConversationTraceSettingsQuery,
+  useSetConversationTraceSettingsMutation,
+  useListConversationTracesQuery,
+  useLazyListConversationTracesQuery,
+  useGetConversationTraceQuery,
+  useLazyGetConversationTraceQuery,
+  useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,

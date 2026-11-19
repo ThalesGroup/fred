@@ -5421,3 +5421,24 @@ holidays (`kpi/counted_days.py`), days are local days in `tz`; excluded days
 leave every search as merged `must_not` ranges and per-day figures divide by
 counted days. State presets ignore them; more than four years with
 exclusions is 400. The export's About sheet states the counted days.
+
+## 75. Contract Notes - conversation trace catalog (2026-11-19)
+
+Platform admins and holders of the `trace_reader` platform role can list
+captures, inspect masked turns, and change capture settings under
+`/control-plane/v1/admin/conversation-traces`. The dedicated
+`can_manage_conversation_traces` permission requires the caller's own
+credential. Granting the role does not grant access to ordinary team or
+conversation APIs. Settings updates emit a content-free audit event.
+
+Capture starts disabled. Control Plane records admissions from the enrolled
+runtime workload against an existing managed conversation and accepts
+finalization of an admitted exchange after capture is switched off. The
+catalog keeps operational identifiers and timestamps. It omits conversation
+titles, transcript text, and tool payloads. Catalog rows are paged in SQL and
+follow the ordinary conversation erasure transaction.
+
+Trace turns are one-to-many with different read and retention rules from
+`session_metadata`. The trace tables reuse the existing conversation key,
+owner, agent instance, and runtime binding through a foreign key and scoped
+admission, without copying conversation content.

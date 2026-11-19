@@ -7451,3 +7451,14 @@ before. The `managed-conversations` specification owns the acceptance contract.
 All three are OpenSearch-only: no Prometheus label, Grafana unchanged. Past
 events are completed only by the optional `fred-control-plane-kpi-backfill`
 command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
+
+### Managed conversation trace admission (2026-11-19)
+
+The managed chat SSE route asks Control Plane to admit its exchange using
+the registered runtime workload identity. Admission is scoped to the
+conversation, owner, and agent instance. The runtime uses existing model
+and tool call identifiers, terminal events, and turn spans to finalize a
+masked summary. If the tracing backend exposes a span, the runtime attaches
+an opaque capture reference. Catalog persistence works independently of
+trace export. Admission and finalization have bounded deadlines and
+failures leave the managed SSE contract intact.

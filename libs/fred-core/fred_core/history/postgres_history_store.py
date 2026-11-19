@@ -822,6 +822,22 @@ class PostgresHistoryStore(BaseHistoryStore):
             row.metadata_json = metadata
             return self._steered_row(row)
 
+    async def exchange_number(
+        self, session_id: str, user_id: str, exchange_id: str, start_rank: int
+    ) -> int:
+        """Number an exchange using retained history, including uncaptured turns."""
+        row = SessionHistoryRow
+        async with use_session(self._sessions) as session:
+            prior_exchanges = await session.scalar(
+                select(func.count(row.exchange_id.distinct())).where(
+                    row.session_id == session_id,
+                    row.user_id == user_id,
+                    row.rank < start_rank,
+                    row.exchange_id != exchange_id,
+                )
+            )
+        return (prior_exchanges or 0) + 1
+
     async def latest_exchange_id(
         self,
         session_id: str,

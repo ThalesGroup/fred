@@ -99,6 +99,7 @@ class RelationType(str, Enum):
     PLATFORM_ACCESS_MANAGER = "platform_access_manager"
     FEATURE_MANAGER = "feature_manager"
     PROMPT_EDITOR = "prompt_editor"
+    TRACE_READER = "trace_reader"
 
     # AUTHZ-05 target team roles (RFC §26 — renamed from owner/manager/member
     # during the second implementation pass). team_admin and team_editor are
@@ -274,6 +275,7 @@ class OrganizationPermission(str, Enum):
     # — both were removed once the control-plane Analytics presets fully
     # superseded them.
     CAN_OBSERVE_PLATFORM = "can_observe_platform"
+    CAN_MANAGE_CONVERSATION_TRACES = "can_manage_conversation_traces"
 
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"

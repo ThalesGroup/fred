@@ -68,6 +68,7 @@ from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
@@ -864,9 +865,11 @@ def _start_runtime_span(
     if attributes:
         span_attributes.update(dict(attributes))
     try:
-        return tracer.start_span(
+        span = tracer.start_span(
             name=name, context=binding.portable_context, attributes=span_attributes
         )
+        attach_capture_reference(span, root=name == "v2.graph.node")
+        return span
     except Exception:
         # Tracing must never fail a turn.
         return None

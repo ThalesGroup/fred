@@ -67,6 +67,7 @@ from control_plane_backend.config.models import (
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
+from control_plane_backend.conversation_traces.store import ConversationTraceStore
 from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
@@ -150,6 +151,7 @@ class ApplicationContext:
             ModelDisplayNameOverrideStore | None
         ) = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._conversation_trace_store: ConversationTraceStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._team_wiki_store: TeamWikiStore | None = None
@@ -542,6 +544,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._model_display_name_override_store
+
+    def get_conversation_trace_store(self) -> ConversationTraceStore:
+        if self._conversation_trace_store is None:
+            self._conversation_trace_store = ConversationTraceStore(
+                self.get_pg_async_engine()
+            )
+        return self._conversation_trace_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

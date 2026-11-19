@@ -33,6 +33,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.conversation_trace import ConversationTraceClient
 
 if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
@@ -132,6 +133,7 @@ class PodApplicationContext:
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
+        self.conversation_trace_client: ConversationTraceClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
         self._kpi_turns_lock = threading.Lock()
@@ -159,6 +161,10 @@ class PodApplicationContext:
             timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
         )
+        if self.configuration.platform.control_plane_url is not None:
+            self.conversation_trace_client = ConversationTraceClient(
+                self._control_plane_http_client, self.configuration
+            )
 
     async def initialize_filesystem(self) -> None:
         """Build the one pod-wide runtime filesystem selected by configuration."""

@@ -18,6 +18,36 @@ version: 1
 operations:
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/settings
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/conversation-traces/settings
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/admit
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/platform/skills
     review_status: approved
     required_permission: can_manage_capabilities

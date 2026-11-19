@@ -32,7 +32,8 @@ export type ProtectedRequirement =
   | "teamRoster"
   | "platformAccess"
   | "features"
-  | "platformPrompt";
+  | "platformPrompt"
+  | "conversationTraces";
 
 export type ProtectedCapabilities = Pick<
   UserCapabilities,
@@ -42,6 +43,7 @@ export type ProtectedCapabilities = Pick<
   | "canManagePlatformAccess"
   | "canManageFeatures"
   | "canEditPlatformPrompt"
+  | "canManageConversationTraces"
 >;
 
 /** The capability flag that satisfies each requirement. Adding a delegated
@@ -54,6 +56,7 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
   platformAccess: "canManagePlatformAccess",
   features: "canManageFeatures",
   platformPrompt: "canEditPlatformPrompt",
+  conversationTraces: "canManageConversationTraces",
 };
 
 /** Pure decision, isolated from React/routing so it's trivially unit-testable.
@@ -81,6 +84,7 @@ const ADMIN_LANDING: [ProtectedRequirement, string][] = [
   ["features", "/admin/features"],
   ["platformPrompt", "/admin/platform-prompt"],
   ["observer", "/admin/analytics"],
+  ["conversationTraces", "/admin/conversation-traces"],
 ];
 
 export function adminLandingPath(capabilities: ProtectedCapabilities): string {

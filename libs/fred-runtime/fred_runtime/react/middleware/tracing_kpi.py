@@ -38,6 +38,7 @@ from langchain_core.runnables.config import (
     set_config_context,
 )
 
+from fred_runtime.app.conversation_trace import attach_capture_reference, trace_call
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.llm_diagnostics import (
     LlmObservation,
@@ -146,6 +147,7 @@ class TracingKpiMiddleware(AgentMiddleware):
             role=self._role,
             streaming=streaming,
         )
+        trace_call(observation.call_id)
         observation.http.allow_request_ids = not delegation_enabled()
         token = active_model_http.set(observation.http)
         span: SpanPort | None = None
@@ -203,6 +205,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                         },
                         parent=active_agent_span.get(),
                     )
+                    attach_capture_reference(span)
                     for key, value in sizes.items():
                         span.set_attribute(key, value)
                     captures_content = self._tracer.captures_content

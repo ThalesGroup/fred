@@ -1,0 +1,150 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+.captureSettings,
+.conversationSummary,
+.turns,
+.turnDetail {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+}
+.captureSettings,
+.toolbar,
+.conversationSummary,
+.turnDetail header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+.conversationSummary {
+  justify-content: flex-start;
+}
+.captureSettings h2,
+.turns h2,
+.turnDetail h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.captureSettings p,
+.empty {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--on-surface-retreat);
+}
+.error,
+.captureSettings .error {
+  color: var(--error);
+}
+.filters,
+.pager {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+.pager {
+  flex-wrap: wrap;
+  justify-content: end;
+}
+.table {
+  overflow-x: auto;
+}
+.conversationCell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-block: var(--spacing-xs);
+}
+.conversationCell > span,
+.conversationSummary > div > span,
+.turnButton time {
+  color: var(--on-surface-retreat);
+  font-size: 0.875rem;
+}
+.link {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.outcome {
+  display: inline-block;
+  border-radius: var(--radius-s);
+  background: var(--secondary-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  width: fit-content;
+  max-width: 100%;
+  color: var(--on-secondary-container);
+  font-size: 0.875rem;
+}
+.outcome[data-outcome="completed"] {
+  background: var(--success-container);
+  color: var(--on-success-container);
+}
+.outcome[data-outcome="failed"] {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+.inspector {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: var(--spacing-m);
+}
+.turns ul,
+.calls {
+  display: grid;
+  gap: var(--spacing-xs);
+  padding: 0;
+  list-style: none;
+}
+.calls {
+  margin: 0;
+}
+.turnButton {
+  display: grid;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
+  padding: var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  font: inherit;
+  text-align: start;
+}
+.turnButton[aria-pressed="true"] {
+  border-color: var(--primary);
+}
+.turnDetail dl {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--spacing-s) var(--spacing-m);
+  margin-block-end: 0;
+}
+.turnDetail dt {
+  color: var(--on-surface-retreat);
+}
+.turnDetail dd {
+  margin: 0;
+  min-width: 0;
+}
+.identifier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+.identifier code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .inspector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
