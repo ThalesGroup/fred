@@ -33,7 +33,7 @@ let success = true;
 let error = false;
 const removeSession = vi.fn();
 const refreshConsent = vi.fn();
-let consent = { grant_id: "first-grant", cutoff: { turn_number: 1 } };
+let consent: { grant_id: string; cutoff: { turn_number: number } } | undefined;
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTraceConsentQuery: () => ({
     currentData: { consent },
@@ -150,7 +150,11 @@ it("groups by agent identity while preserving distinct live and deleted names", 
   }
 });
 
-it("requires a new choice after the confirmed grant changed", async () => {
+it.each([
+  { label: "keep", option: 1, expected: "first-grant" },
+  { label: "everyone", option: 0, expected: "first-grant" },
+  { label: "confirm", option: undefined, expected: "unshared" },
+])("requires a new choice when consent changes after choosing $label", async ({ label, option, expected }) => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -167,20 +171,22 @@ it("requires a new choice after the confirmed grant changed", async () => {
         onDeleted={onDeleted}
       />,
     );
-  removeSession.mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
+  consent = option === undefined ? undefined : { grant_id: "first-grant", cutoff: { turn_number: 1 } };
+  removeSession.mockClear().mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
+  refreshConsent.mockClear();
   try {
     act(render);
     const radios = () => [...document.querySelectorAll<HTMLInputElement>('[role="alertdialog"] input[type="radio"]')];
-    act(() => radios()[1].click());
+    if (option !== undefined) act(() => radios()[option].click());
     const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
-      (button) => button.textContent === "keep",
+      (button) => button.textContent === label,
     );
     await act(async () => confirm?.click());
     expect(removeSession).toHaveBeenCalledWith({
       teamId: "team-1",
       sessionId: "saved",
-      keepSharedDiagnostics: true,
-      expectedTraceGrantId: "first-grant",
+      keepSharedDiagnostics: label === "keep",
+      expectedTraceGrantId: expected,
     });
     expect(refreshConsent).toHaveBeenCalledOnce();
     expect(onDeleted).not.toHaveBeenCalled();

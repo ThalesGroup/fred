@@ -535,6 +535,51 @@ async def test_flush_fences_old_reservations_and_leaves_history_only_shares(
 
 
 @pytest.mark.asyncio
+async def test_owner_erasure_requires_the_reviewed_sharing_state(
+    control_plane_sql_engine: AsyncEngine,
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "shared", "unshared")
+    store = ConversationTraceStore(engine)
+    metadata = SessionMetadataStore(engine)
+    team = TeamId("team")
+    reference = await store.reference("shared")
+    assert reference is not None and reference.consent is None
+    cutoff = TraceHistoryBoundary(
+        exchange_id="exchange-0",
+        first_rank=0,
+        last_rank=1,
+        turn_number=1,
+        started_at=utcnow(),
+    )
+    grant, _ = await store.set_consent(reference, cutoff)
+    assert grant is not None
+
+    assert not await metadata.fence_owner_trace_erasure(
+        "shared", team, "owner", expected_grant_id=None
+    )
+    replacement, _ = await store.set_consent(
+        reference,
+        cutoff.model_copy(update={"last_rank": 2}),
+        expected_version=grant.grant_id,
+    )
+    assert replacement is not None
+    assert not await metadata.fence_owner_trace_erasure(
+        "shared", team, "owner", expected_grant_id=grant.grant_id
+    )
+    assert not await metadata.fence_owner_trace_erasure(
+        "shared", team, "intruder", expected_grant_id=replacement.grant_id
+    )
+    assert await metadata.fence_owner_trace_erasure(
+        "shared", team, "owner", expected_grant_id=replacement.grant_id
+    )
+    assert await metadata.fence_owner_trace_erasure(
+        "unshared", team, "owner", expected_grant_id=None
+    )
+    assert await store.reference("shared") is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("removal", ["selected", "flush", "expiry"])
 async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
     control_plane_sql_engine: AsyncEngine,

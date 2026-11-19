@@ -5801,6 +5801,16 @@ async def delete_or_defer_session(
     )
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if not keep_shared_diagnostics and expected_trace_grant_id is not None:
+        expected_grant_id = (
+            None if expected_trace_grant_id == "unshared" else expected_trace_grant_id
+        )
+        if not await deps.get_session_metadata_store().fence_owner_trace_erasure(
+            session_id, team_id, user_id, expected_grant_id=expected_grant_id
+        ):
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
     if keep_shared_diagnostics:
         due_at = (
             _utcnow() + timedelta(seconds=duration_to_seconds(window))

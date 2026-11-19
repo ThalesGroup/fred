@@ -5625,11 +5625,13 @@ Storage cleanup works through the durable runtime leases, and retained
 reservations stay charged while a PUT may still complete. The audit events
 record the actor and affected conversation count.
 
-The owner can remove a shared conversation by supplying
-`keep_shared_diagnostics=true` and `expected_trace_grant_id` on the team
-session DELETE. Control Plane checks the confirmed grant ID, hides the chat,
-and freezes the grant in the same session transaction. The route returns 409
-if the confirmed grant is missing or no longer active.
+The owner delete dialog supplies `expected_trace_grant_id` on the team
+session DELETE with either the reviewed active grant ID or `unshared`. Control
+Plane checks it under the conversation lifecycle lock when accepting either
+choice, and returns 409 if consent has changed. The dialog then refreshes the
+options. `keep_shared_diagnostics=true` requires an active grant ID and hides
+the chat while freezing the grant in the same transaction. Programmatic callers
+can omit the guard for ordinary erasure.
 The owner-facing details, history and execution paths reject the removed chat.
 Support can read through the existing grant, and manual consent cannot extend
 it. The existing governed delete deadlines still apply. Otherwise, removal

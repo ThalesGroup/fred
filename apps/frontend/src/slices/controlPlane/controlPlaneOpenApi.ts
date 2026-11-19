@@ -3477,6 +3477,7 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
   teamId: string;
   sessionId: string;
   keepSharedDiagnostics?: boolean;
+  /** The reviewed active trace consent grant ID, or `unshared`. */
   expectedTraceGrantId?: string | null;
 };
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =

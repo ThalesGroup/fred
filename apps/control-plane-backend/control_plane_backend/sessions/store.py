@@ -232,6 +232,32 @@ class SessionMetadataStore:
                 .values(trace_erasing=True, updated_at=SessionMetadataRow.updated_at)
             )
 
+    async def fence_owner_trace_erasure(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        *,
+        expected_grant_id: str | None,
+    ) -> bool:
+        """Fence an owner erasure only for the active consent state they reviewed."""
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            row = await self._lock_trace_owner(session, session_id, team_id, user_id)
+            if row is None or row.trace_retained_after_delete:
+                return False
+            if (
+                await self._active_trace_grant_id(session, session_id)
+                != expected_grant_id
+            ):
+                return False
+            await session.execute(
+                update(owner)
+                .where(owner.session_id == session_id)
+                .values(trace_erasing=True, updated_at=owner.updated_at)
+            )
+            return True
+
     async def retain_for_support(
         self,
         session_id: str,
@@ -245,37 +271,16 @@ class SessionMetadataStore:
         if expected_grant_id is None:
             return None
         owner = SessionMetadataRow
-        grant = ConversationTraceConsentRow
         async with use_session(self._sessions) as session:
-            if session.get_bind().dialect.name == "sqlite":
-                # SQLite otherwise does not acquire a write lock for FOR UPDATE.
-                await session.execute(
-                    update(owner)
-                    .where(owner.session_id == session_id)
-                    .values(updated_at=owner.updated_at)
-                )
-            row = await session.scalar(
-                select(owner)
-                .where(
-                    owner.session_id == session_id,
-                    owner.team_id == team_id,
-                    owner.user_id == user_id,
-                    ~owner.trace_erasing,
-                )
-                .with_for_update()
-            )
-            if row is None or (
-                row.deleted_at is not None and not row.trace_retained_after_delete
+            row = await self._lock_trace_owner(session, session_id, team_id, user_id)
+            if (
+                row is None
+                or row.trace_erasing
+                or (row.deleted_at is not None and not row.trace_retained_after_delete)
             ):
                 return None
-            grant_id = await session.scalar(
-                select(grant.grant_id).where(
-                    grant.session_id == session_id,
-                    grant.revoked_at.is_(None),
-                    grant.grant_id == expected_grant_id,
-                )
-            )
-            if grant_id is None:
+            grant_id = await self._active_trace_grant_id(session, session_id)
+            if grant_id != expected_grant_id:
                 return None
             if not row.trace_retained_after_delete:
                 await session.execute(
@@ -290,6 +295,34 @@ class SessionMetadataStore:
             if due_at is not None:
                 await enqueue_retained_erasure(session, (session_id,), due_at)
             return grant_id
+
+    @staticmethod
+    async def _lock_trace_owner(
+        session: AsyncSession, session_id: str, team_id: TeamId, user_id: str
+    ) -> SessionMetadataRow | None:
+        owner = SessionMetadataRow
+        scope = (
+            owner.session_id == session_id,
+            owner.team_id == team_id,
+            owner.user_id == user_id,
+        )
+        if session.get_bind().dialect.name == "sqlite":
+            # SQLite otherwise does not acquire a write lock for FOR UPDATE.
+            await session.execute(
+                update(owner).where(*scope).values(updated_at=owner.updated_at)
+            )
+        return await session.scalar(select(owner).where(*scope).with_for_update())
+
+    @staticmethod
+    async def _active_trace_grant_id(
+        session: AsyncSession, session_id: str
+    ) -> str | None:
+        grant = ConversationTraceConsentRow
+        return await session.scalar(
+            select(grant.grant_id).where(
+                grant.session_id == session_id, grant.revoked_at.is_(None)
+            )
+        )
 
     async def owner_hidden_sessions(
         self,

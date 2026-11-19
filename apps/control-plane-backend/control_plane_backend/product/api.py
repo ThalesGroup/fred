@@ -2252,7 +2252,12 @@ async def delete_team_session(
     user: KeycloakUser = Depends(require_own_credential),
     keep_shared_diagnostics: bool = False,
     expected_trace_grant_id: Annotated[
-        str | None, Query(min_length=1, max_length=36)
+        str | None,
+        Query(
+            min_length=1,
+            max_length=36,
+            description="The reviewed active trace consent grant ID, or `unshared`.",
+        ),
     ] = None,
 ) -> Response:
     """
@@ -2267,8 +2272,9 @@ async def delete_team_session(
     not owned by the caller (ownership is enforced up front, identical to the
     immediate-erase path).
 
-    To keep shared diagnostics, supply the grant ID confirmed by the owner.
-    Returns 409 if that grant is no longer active.
+    To check the owner's reviewed sharing state, supply the active grant ID or
+    `unshared` as expected_trace_grant_id. Keeping shared diagnostics requires
+    a grant ID. Returns 409 if the current sharing state differs.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
