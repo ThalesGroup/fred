@@ -94,17 +94,18 @@ class DocumentVerbatimCapability(
             offset: int = 0,
             max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Read a document's exact text VERBATIM, one page at a time.
+            """Read a document's converted text, one bounded portion at a time.
 
             Use this to see what a document literally says at a given position —
             e.g. "what does the first paragraph say?", "read the introduction",
             "show me section 3" — or to read a whole short document. Returns the
-            document's text unchanged, NOT a summary.
+            converted text unchanged, NOT a summary. Conversion or OCR may lose
+            details from the original file; these portions are not PDF pages.
 
             When to use a different tool instead:
             - for a short, lossy overview of the whole document → summarize_document;
-            - to enumerate EVERY item matching a criterion across the whole
-              document ("all the requirements") → extract_from_document.
+            - to collect items matching a criterion across the document
+              ("list the requirements") -> extract_from_document.
 
             `document_uid` MUST be the document's opaque uid, not its name — get
             it from a vector-search hit's 'document_uid', the document tree, or the

@@ -46,6 +46,10 @@ from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import (
@@ -614,7 +618,22 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 selection.model.provider,
                 selection.model.name,
             )
-        return model, selection
+        # Providers can reuse model instances. Keep the route on this selection's
+        # model copy so two routes sharing a client cannot overwrite each other.
+        route = (
+            "Platform binding"
+            if selection.source == ModelSelectionSource.PLATFORM_BINDING
+            else selection.profile_id
+        )
+        return model.model_copy(
+            update={
+                "metadata": {
+                    **(model.metadata or {}),
+                    MODEL_ID_METADATA: selection.capability_id,
+                    MODEL_ROUTE_METADATA: route,
+                }
+            }
+        ), selection
 
     def usable_profile_selection(
         self, profile_id: str, binding: BoundRuntimeContext

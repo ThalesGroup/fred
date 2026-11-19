@@ -3993,6 +3993,11 @@ _(none — all prior issues resolved below)_
 
 ### `SessionAttachmentsDrawer`
 
+Upload notices distinguish missing stored text from a shortened preview, using
+existing toast feedback and a leading note in the persisted preview. See
+[Reading conversation attachments](../design/DESIGN.md#reading-conversation-attachments)
+for agent behavior and conversion limits.
+
 **Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
 **Status:** `Functional`
 

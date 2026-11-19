@@ -185,7 +185,7 @@
     },
     "document_summarize": {
       "name": "Résumer un document",
-      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
+      "description": "Produire une synthèse des points principaux d'un document, en laissant de côté les détails.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -198,18 +198,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Verbatim document",
-      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "name": "Lire le texte d'un document",
+      "description": "Lire le texte extrait du fichier, par portions, pour vérifier un passage. La fidélité dépend de la conversion du fichier.",
       "fields": {
         "page_max_chars": {
-          "title": "Longueur de page",
-          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+          "title": "Longueur de portion",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque portion de texte renvoyée. Ce ne sont pas les pages du fichier original."
         }
       }
     },
     "document_extract": {
-      "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "name": "Extraire des informations d'un document",
+      "description": "Relever les informations demandées dans le texte du document, par exemple les échéances. Des éléments peuvent être manqués ; les limites de traitement sont signalées.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -735,6 +735,9 @@
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
+      "notice": "Pièce jointe : {{name}}",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. Fred ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",

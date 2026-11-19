@@ -86,6 +86,7 @@ from fred_core.history.history_schema import (
     HitlRequestPart,
     HitlResponsePart,
     TextPart,
+    TraceFailureCategory,
 )
 from fred_core.history.managed_session_erasure import SESSION_ERASURE_HEADER
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -4360,9 +4361,13 @@ class _TurnOutcome:
     output_tokens: int | None
     cache_read_tokens: int | None
     tool_count: int
-    is_error: bool
+    failure_reason: str | None
     total_ms: int
     final_content: str | None
+
+    @property
+    def is_error(self) -> bool:
+        return self.failure_reason is not None
 
 
 def _parse_turn_outcome(
@@ -4372,19 +4377,26 @@ def _parse_turn_outcome(
     total_ms = int((time.monotonic() - turn_start) * 1000)
     tool_count = sum(1 for p in payloads if p.get("kind") == "tool_call")
     final = next((p for p in reversed(payloads) if p.get("kind") == "final"), None)
-    is_error = any(p.get("kind") == "execution_error" for p in payloads)
+    error = next(
+        (p for p in reversed(payloads) if p.get("kind") == "execution_error"), None
+    )
     token_usage: dict[str, Any] | None = final.get("token_usage") if final else None
     return _TurnOutcome(
         model_name=final.get("model_name") if final else None,
         finish_reason="error"
-        if is_error
+        if error is not None
         else ((final.get("finish_reason") or "") if final else ""),
         token_usage=token_usage,
         input_tokens=token_usage.get("input_tokens") if token_usage else None,
         output_tokens=token_usage.get("output_tokens") if token_usage else None,
         cache_read_tokens=token_usage.get("cache_read_tokens") if token_usage else None,
         tool_count=tool_count,
-        is_error=is_error,
+        failure_reason=(
+            error.get("trace_failure_category")
+            or TraceFailureCategory.INTERNAL_OR_UNKNOWN.value
+        )
+        if error is not None
+        else None,
         total_ms=total_ms,
         final_content=(final.get("content") or None) if final else None,
     )
@@ -4548,12 +4560,15 @@ def _emit_turn_completed(
             actor=KPIActor(type="human", user_id=user_id),
         )
 
-        if outcome.is_error:
+        if outcome.failure_reason is not None:
             kpi.emit(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
-                dims=turn_dims,
+                dims={
+                    **turn_dims,
+                    "failure_reason": outcome.failure_reason,
+                },
                 actor=KPIActor(type="human", user_id=user_id),
             )
 
@@ -5535,6 +5550,13 @@ async def _iterate_runtime_event_payloads(
             async for payload in iterator:
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
+                    if (
+                        owns_run_record
+                        and payload.get("trace_failure_category") is None
+                    ):
+                        payload["trace_failure_category"] = (
+                            TraceFailureCategory.INTERNAL_OR_UNKNOWN.value
+                        )
                     if (
                         owns_run_record
                         and not payload.get("support_error_ref")

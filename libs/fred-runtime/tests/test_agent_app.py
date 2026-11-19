@@ -55,6 +55,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.history.history_schema import SESSION_BINDING_HEADER
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -88,6 +89,7 @@ from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.react.middleware import rate_limit_retry
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     get_runtime_context,
@@ -95,6 +97,10 @@ from fred_runtime.runtime_context import (
 )
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -2146,9 +2152,12 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("prefiltered", [False, True])
+@pytest.mark.parametrize(
+    ("prefiltered", "fails"),
+    [(False, False), (True, False), (False, True), (True, True)],
+)
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream, prefiltered
+    monkeypatch, tmp_path, stream, prefiltered, fails
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2215,7 +2224,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                 }
             )
 
-    model = ToolFriendlyFakeChatModel(
+    class _UpstreamError(Exception):
+        status_code = 502
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            if fails:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    model = _Model(
         responses=[
             AIMessage(
                 content="",
@@ -2254,6 +2272,11 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             "trace-fixture", trace_client, http=buffer, segment_id=uuid4()
         )
     )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+    expected_kind = "execution_error" if fails else "final"
     with TestClient(app) as client, monkeypatch.context() as patches:
         patches.setattr(
             get_pod_container_from_app(app), "conversation_trace_client", trace_client
@@ -2269,18 +2292,38 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             },
         )
 
-    assert response.status_code == 200
-    payload = (
-        next(
-            json.loads(line.removeprefix("data: "))
-            for line in response.text.splitlines()
-            if line.startswith("data: ") and '"kind": "final"' in line
-        )
-        if stream
-        else response.json()
-    )
-    assert payload["kind"] == "final"
-    assert payload["content"] == "Managed execution complete."
+        assert response.status_code == 200
+        if stream:
+            events = [
+                json.loads(line.removeprefix("data: "))
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            payload = next(event for event in events if event["kind"] == expected_kind)
+        else:
+            payload = response.json()
+        assert payload["kind"] == expected_kind
+
+        errors = [
+            call.kwargs["dims"]["failure_reason"]
+            for call in recording.emit.call_args_list
+            if call.kwargs["name"] == "agent.turn_error_total"
+        ]
+        assert errors == (["http_5xx"] if fails else [])
+        if fails:
+            assert payload["trace_failure_category"] == errors[0]
+            history_store = get_runtime_context().config.history_store
+            assert isinstance(history_store, PostgresHistoryStore)
+            incident = asyncio.run(
+                history_store.trace_history_incident(
+                    "managed-session", "alice", payload["support_error_ref"]
+                )
+            )
+            assert incident is not None
+            assert incident.failure_category == errors[0]
+        else:
+            assert payload["content"] == "Managed execution complete."
+
     if prefiltered:
         trace_client.admit.assert_not_awaited()
         trace_client.note_ineligible.assert_called_once()
@@ -2292,10 +2335,15 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     trace_client.submit_http.assert_called_once()
     session_id, _, result, evidence, rank = trace_client.submit_http.call_args.args
     assert session_id == "managed-session"
-    assert result.outcome == "completed"
-    assert result.checkpoint_status == "persisted"
+    assert result.outcome == ("failed" if fails else "completed")
     assert rank is not None
-    assert evidence.model_calls
+    if fails:
+        assert result.failure_category == errors[0]
+        assert result.support_error_ref == payload["support_error_ref"]
+    else:
+        assert result.failure_category is None
+        assert result.checkpoint_status == "persisted"
+        assert evidence.model_calls
     if stream:
         assert evidence.outgoing is not None
         assert evidence.outgoing.headers == {
@@ -3293,6 +3341,98 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
 
     assert len(turns) == 1
     assert turns[0]["session_id"] == "session-depth"
+
+
+@pytest.mark.parametrize(
+    ("upstream_status", "recovers"), [(502, False), (429, False), (429, True)]
+)
+def test_turn_failure_telemetry_uses_terminal_outcome(
+    monkeypatch, tmp_path, upstream_status, recovers
+) -> None:
+    class _UpstreamError(Exception):
+        status_code = upstream_status
+
+    attempts = 0
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1 or not recovers:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    async def no_sleep(_delay: float) -> None:
+        pass
+
+    monkeypatch.setattr(rate_limit_retry, "asyncio", SimpleNamespace(sleep=no_sleep))
+    route = "Medium" if upstream_status == 502 else "Small"
+    model = _Model(
+        responses=[AIMessage(content="pong")],
+        metadata={
+            MODEL_ID_METADATA: "model__openai__synthetic",
+            MODEL_ROUTE_METADATA: route,
+        },
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={"agent_id": definition.agent_id, "input": "ping"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == ("final" if recovers else "execution_error")
+    assert "failure_reason" not in response.json()
+    emissions = recording.emit.call_args_list
+    completed = [
+        call.kwargs["dims"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_completed"
+    ]
+    assert len(completed) == 1
+    assert "failure_reason" not in completed[0]
+    errors = [
+        call.kwargs["dims"]["failure_reason"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_error_total"
+    ]
+    reason = "http_5xx" if upstream_status == 502 else "http_429"
+    assert errors == ([] if recovers else [reason])
+    assert response.json().get("trace_failure_category") == (
+        None if recovers else reason
+    )
+    calls = [
+        call.kwargs["dims"]
+        for call in recording.count.call_args_list
+        if call.args[0] == "llm.calls_total"
+    ]
+    expected_failed = (
+        1 if recovers or upstream_status == 502 else rate_limit_retry._MAX_ATTEMPTS
+    )
+    assert len(calls) == expected_failed + int(recovers)
+    assert all(call["model_route"] == route for call in calls)
+    assert [
+        (call["failure_reason"], call["http_status"])
+        for call in calls
+        if call["status"] == "error"
+    ] == [(reason, str(upstream_status))] * expected_failed
+    if recovers:
+        assert calls[-1]["status"] == "ok"
+        assert calls[-1]["failure_reason"] == calls[-1]["http_status"] == ""
 
 
 def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -> None:

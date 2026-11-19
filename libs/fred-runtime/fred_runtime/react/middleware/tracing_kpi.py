@@ -24,6 +24,7 @@ from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.kpi.kpi_writer_structures import Dims, MetricNames
 from fred_core.model.diagnostics import active_model_http, effective_model_settings
@@ -45,12 +46,16 @@ from fred_runtime.app.conversation_trace import (
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
     LlmObservation,
     LlmProgressCallback,
     Scalar,
     attach_failure,
+    bounded_http_status,
     change_active,
     classify_error,
+    invocation_failure_reason,
     streaming_selection,
 )
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
@@ -156,6 +161,7 @@ class TracingKpiMiddleware(AgentMiddleware):
         span: SpanPort | None = None
         captures_content = False
         outcome = "ok"
+        failure_reason: TraceFailureCategory | None = None
         error_fields: dict[str, Scalar] = {"error_code": "none"}
         response_fields: dict[str, Scalar] = {}
         response_model_name: str | None = None
@@ -268,6 +274,14 @@ class TracingKpiMiddleware(AgentMiddleware):
             error_fields = classify_error(exc)
             if error_fields["error_code"] == "stream_idle_timeout":
                 observation.streaming = True
+            if outcome == "error":
+                failure_reason = invocation_failure_reason(
+                    error_fields,
+                    stream_started=bool(
+                        observation.chunks
+                        or observation.http.fields.get("response_streaming") is True
+                    ),
+                )
             with suppress(Exception):
                 attach_failure(
                     exc,
@@ -276,6 +290,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                         "status": outcome,
                         **error_fields,
                     },
+                    failure_reason,
                 )
             raise
         finally:
@@ -316,8 +331,21 @@ class TracingKpiMiddleware(AgentMiddleware):
                     "error_code": str(error_fields["error_code"]),
                 }
                 with suppress(Exception):
+                    metadata = request.model.metadata or {}
+                    http_status = bounded_http_status(error_fields.get("http_status"))
                     self._kpi.count(
-                        MetricNames.LLM_CALLS, 1, dims=terminal_dims, actor=actor
+                        MetricNames.LLM_CALLS,
+                        1,
+                        dims={
+                            **terminal_dims,
+                            "model_capability_id": metadata.get(MODEL_ID_METADATA, ""),
+                            "model_route": metadata.get(MODEL_ROUTE_METADATA, ""),
+                            "failure_reason": failure_reason.value
+                            if failure_reason is not None
+                            else "",
+                            "http_status": str(http_status) if http_status else "",
+                        },
+                        actor=actor,
                     )
                 measurements: dict[str, float] = {
                     "call_latency_ms": float(fields["elapsed_ms"] or 0)

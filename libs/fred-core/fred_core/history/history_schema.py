@@ -423,7 +423,7 @@ class CommandDescriptor(BaseModel):
 
 
 class TraceFailureCategory(str, Enum):
-    """Bounded terminal failure labels shared by chat history and trace indexes."""
+    """Bounded failure labels shared by operational metrics, chat history and traces."""
 
     HTTP_5XX = "http_5xx"
     HTTP_429 = "http_429"

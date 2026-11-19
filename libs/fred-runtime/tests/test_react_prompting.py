@@ -438,12 +438,21 @@ def test_attachment_context_suffix_announces_current_files() -> None:
     assert "The user has attached one or more files" in suffix
     assert "scoped to the current conversation" in suffix
     assert "authorized access only" in suffix
-    # Attachments (documents and images) are ingested and retrievable. Direct
-    # reads go to read_document; factual questions still use search.
+    # Known text attachments use direct reading, with explicit coverage limits.
     assert "ingested and indexed for retrieval" in suffix
-    assert "use read_document with that file's uid" in suffix
-    assert "For factual questions" in suffix
-    assert "search tool" in suffix
+    assert "including factual questions, use read_document" in suffix
+    assert "starting at offset=0" in suffix
+    assert "call read_document again with that offset" in suffix
+    assert (
+        "do not switch to search merely because the first portion is insufficient"
+        in suffix
+    )
+    assert "If reading supplies the answer, answer without search" in suffix
+    assert "read all portions of the relevant files" in suffix
+    assert "If direct reading is unavailable, say so" in suffix
+    assert "disclose that limitation" in suffix
+    assert "do not claim completeness" in suffix
+    assert "For factual questions, comparisons, or lookups" not in suffix
     assert "- report.pdf" in suffix
 
 
