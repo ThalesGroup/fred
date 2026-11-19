@@ -29,6 +29,25 @@ The runtime SHALL expose `geo.render_points` to ReAct, Deep, and Graph agents wi
 - **WHEN** an agent explicitly declares `geo.render_points`
 - **THEN** the runtime exposes it once
 
+### Requirement: Optional zone from selected map points
+
+The shared map tool SHALL render selected GPS coordinates as individual point markers by default. When an agent explicitly requests a zone, it SHALL additionally connect at least three distinct supplied coordinates in their given order and close the boundary into one polygon. It SHALL keep the individual markers visible. An invalid zone request SHALL return a correctable tool error without a geographic UI part. The tool's agent-facing guidance SHALL describe when to request a zone and how to order its points.
+
+#### Scenario: Default point map
+
+- **WHEN** an agent submits GPS points without requesting a zone
+- **THEN** the result contains the point markers and no zone polygon
+
+#### Scenario: Requested zone
+
+- **WHEN** an agent submits at least three distinct GPS points in boundary order and requests a zone
+- **THEN** the result contains each point marker and one closed polygon following that order
+
+#### Scenario: Insufficient zone coordinates
+
+- **WHEN** an agent requests a zone with fewer than three distinct GPS coordinates
+- **THEN** the tool returns an error explaining the minimum and emits no geographic UI part
+
 ### Requirement: Typed geographic content renders as a map
 
 The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an interactive map, with a bundled geographic basemap and visible map attribution. Map rendering SHALL work without network access after the application assets have loaded. Point names SHALL appear beside their markers where space permits; all names SHALL remain available in a keyboard-operated list. Additional scalar properties SHALL appear as a short preview on hover and in full on click and in the list. A named point without additional properties SHALL show its name and coordinates on hover. All labels and details SHALL be treated as text. The chat SHALL leave GeoJSON contained only in message prose or a code block as text.

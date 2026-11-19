@@ -65,7 +65,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from fred_sdk.contracts.context import (
     GeoPart,
@@ -209,6 +209,10 @@ class GeoRenderPointsToolArgs(BaseModel):
         max_length=100,
         description="Latitude/longitude points to render as a GeoJSON feature collection.",
     )
+    connect_as_zone: bool = Field(
+        default=False,
+        description="Set true only when the user asks to connect the supplied points into a closed zone. Provide at least three distinct coordinates in boundary order; the tool closes the zone automatically and keeps the point markers.",
+    )
     popup_property: str | None = Field(
         default="name",
         description="Feature property to show in popups when present.",
@@ -217,6 +221,15 @@ class GeoRenderPointsToolArgs(BaseModel):
         default=True,
         description="Whether the UI should fit the map viewport to the returned features.",
     )
+
+    @model_validator(mode="after")
+    def validate_zone_points(self) -> GeoRenderPointsToolArgs:
+        if (
+            self.connect_as_zone
+            and len({(point.latitude, point.longitude) for point in self.points}) < 3
+        ):
+            raise ValueError("A zone requires at least three distinct GPS coordinates.")
+        return self
 
 
 @dataclass(frozen=True)
@@ -320,6 +333,9 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "Display locations on an interactive map in the chat. Call this tool "
             "with points=[{latitude: number, longitude: number, name?: string, "
             "properties?: {description?: string, ...}}, ...] and an optional title. "
+            "By default, display only point markers. Set connect_as_zone=true only if the user asks for a zone; "
+            "supply at least three distinct points in boundary order. The tool closes the polygon and keeps the markers. "
+            "For GPS points in Fred documents, use knowledge.search when available to retrieve coordinates; do not guess them. "
             "Names appear beside points where space permits; scalar properties have a short hover preview and full details on click. "
             "Use numeric coordinates in degrees and keep the "
             "user-facing reply concise. The tool returns the renderable map, so do not "

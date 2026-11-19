@@ -54,7 +54,21 @@ def render_geo_points(payload: dict[str, object]) -> ToolInvocationResult:
             }
         )
 
-    summary = f"{title}: displaying {len(features)} point(s) on the map"
+    if args.connect_as_zone:
+        ring = [[point.longitude, point.latitude] for point in args.points]
+        if ring[-1] != ring[0]:
+            ring.append(ring[0])
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [ring]},
+                "properties": {"name": "Zone", "fillOpacity": 0.15},
+            }
+        )
+
+    summary = f"{title}: displaying {len(args.points)} point(s) on the map"
+    if args.connect_as_zone:
+        summary += " with a closed zone"
     if point_labels:
         preview = ", ".join(point_labels[:3])
         if len(point_labels) > 3:

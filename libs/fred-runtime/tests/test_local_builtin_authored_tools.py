@@ -14,6 +14,7 @@ from fred_sdk.authoring.api import ToolContext
 from fred_sdk.authoring.authored_tool_runtime import _AuthorRuntime
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    GeoPart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -64,6 +65,19 @@ async def test_authored_tool_context_can_invoke_local_builtin() -> None:
 
     assert result.tool_ref == TOOL_REF_GEO_RENDER_POINTS
     assert result.ui_parts[0].type == "geo"
+
+    zone = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        points=[
+            {"latitude": 43.1242, "longitude": 5.928},
+            {"latitude": 43.08, "longitude": 5.95},
+            {"latitude": 43.119, "longitude": 6.132},
+        ],
+        connect_as_zone=True,
+    )
+    zone_part = zone.ui_parts[0]
+    assert isinstance(zone_part, GeoPart)
+    assert zone_part.geojson["features"][-1]["geometry"]["type"] == "Polygon"
 
     invalid = await context.invoke_tool(
         TOOL_REF_GEO_RENDER_POINTS,

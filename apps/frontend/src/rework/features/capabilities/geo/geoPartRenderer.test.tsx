@@ -277,6 +277,67 @@ it("enlarges the map in Fred's dialog and restores the current view", async () =
   host.remove();
 });
 
+it("passes a requested zone to Leaflet while keeping point labels and locations", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const GeoRenderer = builtinPartRenderers.geo;
+  const points = [
+    { type: "Feature", geometry: { type: "Point", coordinates: [5.928, 43.1242] }, properties: { name: "Toulon" } },
+    { type: "Feature", geometry: { type: "Point", coordinates: [5.95, 43.08] }, properties: { name: "At sea" } },
+    { type: "Feature", geometry: { type: "Point", coordinates: [6.132, 43.119] }, properties: { name: "Hyères" } },
+  ];
+  const polygon = {
+    type: "Feature",
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [5.928, 43.1242],
+          [5.95, 43.08],
+          [6.132, 43.119],
+          [5.928, 43.1242],
+        ],
+      ],
+    },
+    properties: { name: "Zone", fillOpacity: 0.15 },
+  };
+  const geojson = { type: "FeatureCollection", features: [...points, polygon] };
+
+  await act(async () => root.render(<GeoRenderer part={{ type: "geo", geojson }} />));
+
+  const [, options] = leaflet.geoJSON.mock.calls[5] as unknown as [
+    unknown,
+    {
+      pointToLayer: (feature: unknown, latlng: [number, number]) => void;
+      style: (feature: { properties: object }) => { fillOpacity: number };
+      onEachFeature: (
+        feature: (typeof points)[number],
+        layer: {
+          bindPopup: ReturnType<typeof vi.fn>;
+          bindTooltip: ReturnType<typeof vi.fn>;
+          on: ReturnType<typeof vi.fn>;
+          setTooltipContent: ReturnType<typeof vi.fn>;
+        },
+      ) => void;
+    },
+  ];
+  expect(leaflet.geoJSON).toHaveBeenCalledWith(geojson, expect.any(Object));
+  expect(options.style(polygon)).toMatchObject({ fillOpacity: 0.15 });
+  options.pointToLayer(points[0], [43.1242, 5.928]);
+  expect(leaflet.circleMarker).toHaveBeenCalledWith([43.1242, 5.928], expect.objectContaining({ radius: 7 }));
+  const pointLayer = { bindPopup: vi.fn(), bindTooltip: vi.fn(), on: vi.fn(), setTooltipContent: vi.fn() };
+  options.onEachFeature(points[0], pointLayer);
+  expect(pointLayer.bindTooltip).toHaveBeenCalled();
+  expect([...host.querySelectorAll("ol > li")].map((item) => item.firstChild?.textContent)).toEqual([
+    "Toulon",
+    "At sea",
+    "Hyères",
+    "Zone",
+  ]);
+
+  await act(async () => root.unmount());
+});
+
 it("keeps feature text available if updated GeoJSON cannot be drawn", async () => {
   const host = document.createElement("div");
   const root = createRoot(host);

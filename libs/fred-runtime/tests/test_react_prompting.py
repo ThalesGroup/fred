@@ -809,7 +809,9 @@ def test_geo_guidance_is_in_available_tools_block_only(
         assert "GeoJSON" not in block
     tools_block = prompt.split("<tools>", 1)[1].split("</tools>", 1)[0]
     assert "- geo_render_points: Display locations" in tools_block
-    assert "points=[{latitude: number, longitude: number, name?: string}" in tools_block
+    assert "points=[{latitude: number, longitude: number, name?: string," in tools_block
+    assert "connect_as_zone=true only if the user asks for a zone" in tools_block
+    assert "use knowledge.search when available to retrieve coordinates" in tools_block
     assert "do not copy its GeoJSON into the reply" in tools_block
 
 

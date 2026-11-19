@@ -25,7 +25,7 @@ Deploy the agent pods and frontend normally. Agents can call `geo.render_points`
 
 ## Validation
 
-Ask a ReAct, Deep or Graph agent to map named coordinates. Confirm that the tool call appears and its result renders as a Leaflet map with the bundled world outlines. Disable browser network access after loading the chat and confirm that the map remains usable.
+Ask a ReAct, Deep or Graph agent to map named coordinates. Confirm that the tool call appears and its result renders as a Leaflet map with the bundled basemap. Ask for a zone from at least three selected GPS points and confirm that a closed, lightly filled boundary appears while the point markers remain. Disable browser network access after loading the chat and confirm that the map remains usable.
 
 ## Rollback
 
@@ -33,4 +33,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-The bundled base map has country outlines rather than streets. The map does not load remote tiles.
+The bundled basemap includes world relief, roads, rivers, lakes, and cities, but lacks street-level detail. The map does not load remote tiles. The agent selects points from available corpus search results; this tool does not exhaustively extract every coordinate from the corpus.
