@@ -305,13 +305,14 @@
           "min": 0,
           "decimals": 2,
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 75,
-            "lineWidth": 0,
+            "drawStyle": "line",
+            "fillOpacity": 60,
+            "lineWidth": 1,
             "stacking": {
               "mode": "normal",
               "group": "reasons"
-            }
+            },
+            "showPoints": "never"
           }
         },
         "overrides": [
@@ -568,12 +569,321 @@
       }
     },
     {
+      "id": 6,
+      "title": "Compare reasons",
+      "type": "row",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Failure reason trends",
+          "description": "Compare each reason's share of all recorded chat turns on the same baseline. The time range and Lookback also apply here.",
+          "datasource": {
+            "type": "dashboard",
+            "uid": "-- Dashboard --"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 10,
+            "w": 24,
+            "h": 9
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "dashboard",
+                "uid": "-- Dashboard --"
+              },
+              "refId": "A",
+              "panelId": 1,
+              "withTransforms": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "lineWidth": 1,
+                "stacking": {
+                  "mode": "none",
+                  "group": "reasons"
+                },
+                "showPoints": "never"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_5xx"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "5xx"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#F2495C"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_429"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "429"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#FF9830"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_400"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "400"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#FADE2A"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_other_4xx"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Other 4xx"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#B877D9"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "stream_interrupted"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Stream interrupted"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#5794F2"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "timeout_or_connection"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Timeout or connection failure"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#3274D9"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "context_limit"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Context limit"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#CAB2D6"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "tool_or_capability"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Tool or capability failure"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#73BF69"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "internal_or_unknown"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Internal or unknown"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#8E8E8E"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "unavailable"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Reason unavailable"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#C2C8D1"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "/^(All|Failed) turns \\(/"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
+                    "id": "custom.hideFrom",
+                    "value": {
+                      "legend": true,
+                      "tooltip": false,
+                      "viz": false
+                    }
+                  },
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "hidden"
+                  },
+                  {
+                    "id": "custom.drawStyle",
+                    "value": "line"
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.showPoints",
+                    "value": "never"
+                  },
+                  {
+                    "id": "custom.stacking",
+                    "value": {
+                      "mode": "none",
+                      "group": "counts"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "hideZeros": false,
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": 2,
       "type": "text",
       "title": "Where to look next",
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 10,
         "w": 24,
         "h": 5
       },
@@ -593,7 +903,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 15,
         "w": 24,
         "h": 9
       },
@@ -618,13 +928,14 @@
           "min": 0,
           "decimals": 2,
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 75,
-            "lineWidth": 0,
+            "drawStyle": "line",
+            "fillOpacity": 60,
+            "lineWidth": 1,
             "stacking": {
               "mode": "normal",
               "group": "reasons"
-            }
+            },
+            "showPoints": "never"
           }
         },
         "overrides": [
@@ -834,17 +1145,279 @@
       }
     },
     {
+      "id": 8,
+      "title": "Compare invocation reasons",
+      "type": "row",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Model invocation failure trends",
+          "description": "Compare estimated failed model invocation counts by reason on the same baseline. Model, Route, and Reason apply here.",
+          "datasource": {
+            "type": "dashboard",
+            "uid": "-- Dashboard --"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 25,
+            "w": 24,
+            "h": 9
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "dashboard",
+                "uid": "-- Dashboard --"
+              },
+              "refId": "A",
+              "panelId": 3,
+              "withTransforms": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "lineWidth": 1,
+                "stacking": {
+                  "mode": "none",
+                  "group": "reasons"
+                },
+                "showPoints": "never"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_5xx"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "5xx"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#F2495C"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_429"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "429"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#FF9830"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_400"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "400"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#FADE2A"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "http_other_4xx"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Other 4xx"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#B877D9"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "stream_interrupted"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Stream interrupted"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#5794F2"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "timeout_or_connection"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Timeout or connection failure"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#3274D9"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "context_limit"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Context limit"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#CAB2D6"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "tool_or_capability"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Tool or capability failure"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#73BF69"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "internal_or_unknown"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Internal or unknown"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#8E8E8E"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "unavailable"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Reason unavailable"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "#C2C8D1"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "hideZeros": false,
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": 4,
       "type": "table",
       "title": "LLM invocations by model and route",
-      "description": "Estimated counts over the selected time range. Total includes all terminal outcomes, including cancellations. Click a column heading to sort. Reason columns appear when that reason occurs in the range.",
+      "description": "Each failure cell shows its rate across all invocations for that model and route, followed by the estimated count in parentheses. Total includes all terminal outcomes, including cancellations. Click a column heading to sort by rate or total. Reason columns appear when that reason occurs in the selected time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 25,
         "w": 24,
         "h": 8
       },
@@ -880,37 +1453,284 @@
             "excludeByName": {
               "Time": true
             },
-            "indexByName": {
-              "model_capability_id": 0,
-              "model_route": 1,
-              "Failed": 2,
-              "Total": 3,
-              "http_5xx": 4,
-              "http_429": 5,
-              "http_400": 6,
-              "http_other_4xx": 7,
-              "stream_interrupted": 8,
-              "timeout_or_connection": 9,
-              "context_limit": 10,
-              "tool_or_capability": 11,
-              "internal_or_unknown": 12,
-              "unavailable": 13
-            },
             "renameByName": {
               "model_capability_id": "Model",
               "model_route": "Route",
-              "Failed": "Failed",
+              "Failed": "Count Failed",
               "Total": "Total",
-              "http_5xx": "5xx",
-              "http_429": "429",
-              "http_400": "400",
-              "http_other_4xx": "Other 4xx",
-              "stream_interrupted": "Stream interrupted",
-              "timeout_or_connection": "Timeout or connection failure",
-              "context_limit": "Context limit",
-              "tool_or_capability": "Tool or capability failure",
-              "internal_or_unknown": "Internal or unknown",
-              "unavailable": "Reason unavailable"
+              "http_5xx": "Count 5xx",
+              "http_429": "Count 429",
+              "http_400": "Count 400",
+              "http_other_4xx": "Count Other 4xx",
+              "stream_interrupted": "Count Stream interrupted",
+              "timeout_or_connection": "Count Timeout or connection failure",
+              "context_limit": "Count Context limit",
+              "tool_or_capability": "Count Tool or capability failure",
+              "internal_or_unknown": "Count Internal or unknown",
+              "unavailable": "Count Reason unavailable"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Failed",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Failed"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate 5xx",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count 5xx"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate 429",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count 429"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate 400",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count 400"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Other 4xx",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Other 4xx"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Stream interrupted",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Stream interrupted"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Timeout or connection failure",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Timeout or connection failure"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Context limit",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Context limit"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Tool or capability failure",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Tool or capability failure"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Internal or unknown",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Internal or unknown"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Rate Reason unavailable",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Count Reason unavailable"
+                }
+              },
+              "operator": "/",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Model": 0,
+              "Route": 1,
+              "Rate Failed": 2,
+              "Total": 3,
+              "Rate 5xx": 4,
+              "Rate 429": 5,
+              "Rate 400": 6,
+              "Rate Other 4xx": 7,
+              "Rate Stream interrupted": 8,
+              "Rate Timeout or connection failure": 9,
+              "Rate Context limit": 10,
+              "Rate Tool or capability failure": 11,
+              "Rate Internal or unknown": 12,
+              "Rate Reason unavailable": 13
             }
           }
         }
@@ -925,153 +1745,351 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Failed"
+              "id": "byRegexp",
+              "options": "/^Count /"
             },
             "properties": [
               {
+                "id": "custom.hidden",
+                "value": true
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
                 "id": "noValue",
                 "value": "0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^Rate /"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "data-links"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "nan",
+                      "result": {
+                        "text": "—"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rate Failed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failed"
               },
               {
                 "id": "custom.width",
-                "value": 85
+                "value": 108
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Failed\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "5xx"
+              "options": "Rate 5xx"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "5xx"
               },
               {
                 "id": "custom.width",
-                "value": 85
+                "value": 108
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count 5xx\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=http_5xx",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "429"
+              "options": "Rate 429"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "429"
               },
               {
                 "id": "custom.width",
-                "value": 85
+                "value": 108
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count 429\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=http_429",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "400"
+              "options": "Rate 400"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "400"
               },
               {
                 "id": "custom.width",
-                "value": 85
+                "value": 108
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count 400\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=http_400",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Other 4xx"
+              "options": "Rate Other 4xx"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Other 4xx"
               },
               {
                 "id": "custom.width",
-                "value": 85
+                "value": 108
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Other 4xx\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=http_other_4xx",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Stream interrupted"
+              "options": "Rate Stream interrupted"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Stream interrupted"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Stream interrupted\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=stream_interrupted",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Timeout or connection failure"
+              "options": "Rate Timeout or connection failure"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Timeout or connection failure"
+              },
+              {
+                "id": "custom.width",
+                "value": 227
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Timeout or connection failure\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=timeout_or_connection",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Context limit"
+              "options": "Rate Context limit"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Context limit"
+              },
+              {
+                "id": "custom.width",
+                "value": 115
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Context limit\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=context_limit",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Tool or capability failure"
+              "options": "Rate Tool or capability failure"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Tool or capability failure"
+              },
+              {
+                "id": "custom.width",
+                "value": 206
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Tool or capability failure\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=tool_or_capability",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Internal or unknown"
+              "options": "Rate Internal or unknown"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Internal or unknown"
+              },
+              {
+                "id": "custom.width",
+                "value": 157
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Internal or unknown\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=internal_or_unknown",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Reason unavailable"
+              "options": "Rate Reason unavailable"
             },
             "properties": [
               {
-                "id": "noValue",
-                "value": "0"
+                "id": "displayName",
+                "value": "Reason unavailable"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "${__value.text} (${__data.fields[\"Count Reason unavailable\"].text})",
+                    "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}&var-model=${__data.fields[\"Model\"]}&var-model_route=${__data.fields[\"Route\"]}&viewPanel=3&var-reason=%5E%24",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           },
@@ -1134,7 +2152,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 33,
         "w": 24,
         "h": 8
       },
