@@ -12,29 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Shared plumbing for the document-reading capability pair (DOCREAD-01):
-`document_verbatim` (verbatim positional read) and `document_extract`
-(exhaustive extraction). Both sit on the SAME `RuntimeServices.document_markdown`
-port and differ only in tool intent and how the pagination footer is worded, so
-the config model, length resolution, error shaping, and page-to-tool-result
-formatting live here once.
+"""Pagination for document_verbatim and shared document-tool error formatting.
 
-`document_tool_failure` has outgrown that pair - `document_similarity` uses it
-too, since the error shaping is about the document ports in general, not about
-paginated reading. It stays here rather than moving to a new module: two other
-capabilities (`document_access`, `document_summarize`) still carry their own
-private copies, and folding all four into one home is a cleanup of its own, not
-something to smuggle into a feature change.
-
-Doctrine (RFC §3.5, §3.8, §10), identical to `document_summarize`:
-- the capability reaches the platform ONLY through the typed
-  `RuntimeServices.document_markdown` port; the per-turn binding and the raw
-  access token NEVER enter `CapabilityContext`;
-- the tool signature exposes ONLY LLM arguments (uid + page window); identity
-  and config reach the tool through the middleware closure, never the schema;
-- `document_uid` is an internal working identifier — tools instruct the model to
-  NEVER repeat it to the end user (answers refer to documents by display name).
+Document extraction uses its own server-side port, not this pagination path.
 """
 
 from __future__ import annotations
@@ -95,7 +75,7 @@ def resolve_page_max_chars(cap: int | None, requested: int | None) -> int:
 
 
 class DocumentReadConfig(BaseModel):
-    """Shared agent-creation / stored config of the document-reading pair.
+    """Agent-creation / stored config for paginated document reading.
 
     A single knob today: the default AND hard cap for the per-call page length
     (chars). None = built-in default, caller's request honored verbatim.

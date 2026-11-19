@@ -22,6 +22,8 @@ throttling provider slow the map down instead of failing the turn.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from knowledge_flow_backend.features.extract import extractor as extractor_mod
@@ -51,7 +53,7 @@ class _FakeModel:
     """Returns a canned output per chunk (keyed by call order); can raise a
     rate-limit error a fixed number of times before succeeding."""
 
-    def __init__(self, outputs: list[str], rate_limit_times: int = 0) -> None:
+    def __init__(self, outputs: list[str | BaseException], rate_limit_times: int = 0) -> None:
         self._outputs = outputs
         self._rate_limit_times = rate_limit_times
         self.calls = 0
@@ -62,6 +64,8 @@ class _FakeModel:
             raise _RateLimitError()
         out = self._outputs[self.calls] if self.calls < len(self._outputs) else "NONE"
         self.calls += 1
+        if isinstance(out, BaseException):
+            raise out
         return _AIMessage(out)
 
 
@@ -155,3 +159,40 @@ async def test_extract_empty_input() -> None:
     ex = _make_extractor(_FakeModel([]))
     result = await ex.extract(text="   ", instruction="x")
     assert result.item_count == 0 and result.chunks_processed == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outputs", [["- valid item", RuntimeError("failed")], [RuntimeError("failed"), RuntimeError("failed")]])
+async def test_failed_windows_do_not_become_successful_results(monkeypatch, outputs) -> None:
+    monkeypatch.setattr(extractor_mod, "_MAP_WINDOW_CHARS", 1)
+    model = _FakeModel(outputs)
+    with pytest.raises(RuntimeError, match="some text could not be processed"):
+        await _make_extractor(model).extract(text="a|||b", instruction="requirements")
+    assert model.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_exhausted_rate_limit_retries_fail_extraction(monkeypatch) -> None:
+    async def no_sleep(_):
+        pass
+
+    monkeypatch.setattr(extractor_mod.asyncio, "sleep", no_sleep)
+    model = _FakeModel([], rate_limit_times=extractor_mod._MAX_RETRIES + 1)
+    with pytest.raises(RuntimeError, match="some text could not be processed"):
+        await _make_extractor(model).extract(text="a", instruction="requirements")
+    assert model._rate_limit_times == 0
+
+
+@pytest.mark.asyncio
+async def test_extraction_preserves_cancellation() -> None:
+    with pytest.raises(asyncio.CancelledError):
+        await _make_extractor(_FakeModel([asyncio.CancelledError()])).extract(text="a", instruction="requirements")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("output", ["NONE", "- found item"])
+async def test_input_cap_is_reported_with_or_without_matches(monkeypatch, output) -> None:
+    monkeypatch.setattr(extractor_mod, "_INPUT_CHAR_CAP", 10)
+    result = await _make_extractor(_FakeModel([output])).extract(text="x" * 20, instruction="requirements")
+    assert result.truncated is True
+    assert result.item_count == (0 if output == "NONE" else 1)

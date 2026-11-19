@@ -185,7 +185,7 @@
     },
     "document_summarize": {
       "name": "Summarize a document",
-      "description": "Ability to summarize a document and make use of the result.",
+      "description": "Produce a selective overview of the main points in a document, leaving out details.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
@@ -198,18 +198,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Read a document verbatim",
-      "description": "Ability to read a document's exact text, page by page.",
+      "name": "Read document text",
+      "description": "Read converted document text in bounded portions to check a passage. Fidelity depends on file conversion.",
       "fields": {
         "page_max_chars": {
-          "title": "Page length",
-          "description": "Default and hard maximum length (in characters) of each page returned by the read_document tool. Leave empty to use the built-in default."
+          "title": "Portion length",
+          "description": "Default and maximum length (in characters) of each returned text portion. These are not the original file pages."
         }
       }
     },
     "document_extract": {
       "name": "Extract information from a document",
-      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "description": "Collect requested information from document text, such as deadlines. Items may be missed; processing limits are reported.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
