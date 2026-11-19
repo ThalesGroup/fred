@@ -39,6 +39,7 @@ _ANTHROPIC = (
 class _Credentials(Credentials):
     def __init__(self) -> None:
         super().__init__()
+        self.token: str | None = None
         self.refreshes = 0
 
     def refresh(self, request: Any) -> None:

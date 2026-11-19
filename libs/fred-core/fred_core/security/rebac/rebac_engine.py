@@ -28,7 +28,7 @@ from fred_core.security.models import (
     AuthorizationError,
     Resource,
 )
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, Principal
 
 ORGANIZATION_ID = "fred"
 logger = logging.getLogger(__name__)
@@ -876,7 +876,7 @@ class RebacEngine(ABC):
 
     async def add_user_relation(
         self,
-        user: KeycloakUser,
+        user: Principal,
         relation: RelationType,
         resource_type: Resource,
         resource_id: str,
@@ -1251,7 +1251,7 @@ class RebacEngine(ABC):
         )
 
     async def _ensure_personal_team_editor(
-        self, user: KeycloakUser, resource_type: Resource, resource_id: str
+        self, user: Principal, resource_type: Resource, resource_id: str
     ) -> None:
         """Self-heal a personal team's own `team_editor` tuple on first touch (AUTHZ-08).
 
@@ -1350,7 +1350,7 @@ class RebacEngine(ABC):
 
     async def check_user_permission_or_raise(
         self,
-        user: KeycloakUser,
+        user: Principal,
         permission: RebacPermission,
         resource_id: str,
         *,
@@ -1382,7 +1382,7 @@ class RebacEngine(ABC):
 
     async def check_user_team_permissions_or_raise(
         self,
-        user: KeycloakUser,
+        user: Principal,
         team_id: str,
         permissions: Iterable[TeamPermission],
     ) -> str | None:

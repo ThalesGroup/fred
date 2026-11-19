@@ -714,17 +714,16 @@ class PostgresHistoryStore(BaseHistoryStore):
             .group_by(row.session_id)
             .order_by(func.max(row.timestamp).desc())
         )
-        if hidden_sessions is not None:
-            query = query.add_columns(
+        async with use_session(self._sessions, session) as s:
+            if hidden_sessions is None:
+                return list((await s.scalars(query)).all())
+            managed_query = query.add_columns(
                 (func.count(row.agent_instance_id) > 0).label("managed")
             )
-        async with use_session(self._sessions, session) as s:
-            sessions = (await s.execute(query)).all()
-        if hidden_sessions is None:
-            return [item[0] for item in sessions]
-        managed = [item[0] for item in sessions if item[1]]
+            sessions = (await s.execute(managed_query)).all()
+        managed = [session_id for session_id, is_managed in sessions if is_managed]
         hidden = await hidden_sessions(managed) if managed else set()
-        return [item[0] for item in sessions if item[0] not in hidden]
+        return [session_id for session_id, _ in sessions if session_id not in hidden]
 
     async def delete_session(
         self,

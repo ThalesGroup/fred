@@ -607,7 +607,9 @@ async def test_binding_prefilter_requires_the_registered_workload_or_loopback(
         deps=cast(Any, deps),
         user=principal,
     )
-    assert resolve.await_args.kwargs == (
+    resolved = resolve.await_args
+    assert resolved is not None
+    assert resolved.kwargs == (
         {"trace_scope": ("session:example", frozenset({"fred-agents"}))}
         if permitted
         else {}
@@ -674,15 +676,18 @@ async def test_person_binding_keeps_team_and_owner_auth_with_runtime_proof(
         deps=cast(Any, deps),
         user=person,
     )
-    assert team_guard.await_args.args[0] is person
-    assert resolve.await_args.kwargs["owner_session"] == (person.uid, owner_session)
+    authorization = team_guard.await_args
+    resolved = resolve.await_args
+    assert authorization is not None and resolved is not None
+    assert authorization.args[0] is person
+    assert resolved.kwargs["owner_session"] == (person.uid, owner_session)
     if eligible:
-        assert resolve.await_args.kwargs["trace_scope"] == (
+        assert resolved.kwargs["trace_scope"] == (
             "session",
             frozenset({"fred-agents"}),
         )
     else:
-        assert "trace_scope" not in resolve.await_args.kwargs
+        assert "trace_scope" not in resolved.kwargs
     if owner_session == "session":
         decode.assert_called_once_with("proof", cached_jwks_only=True)
     else:
