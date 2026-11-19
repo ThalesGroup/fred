@@ -17,6 +17,7 @@ import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 import { useFocusHandoff } from "../../utils/useFocusHandoff";
+import { isTopmostModal } from "../../utils/Portal";
 
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
@@ -158,7 +159,9 @@ export function InlineDrawer({
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) handleClose();
+      if (e.key !== "Escape" || e.defaultPrevented || !isTopmostModal(drawerRef.current)) return;
+      e.preventDefault();
+      handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
