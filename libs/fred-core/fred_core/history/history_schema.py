@@ -453,6 +453,8 @@ class ChatMetadata(BaseModel):
     # User rows: set when the turn was launched by a prompt command. A reader
     # that does not know it renders the turn as plain text.
     command: Optional[CommandDescriptor] = None
+    # Runtime-generated terminal error correlation, written only on error rows.
+    support_error_ref: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
     @field_validator("finish_reason", mode="before")
     @classmethod

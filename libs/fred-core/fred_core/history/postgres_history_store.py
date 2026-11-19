@@ -69,6 +69,7 @@ from fred_core.sql.async_session import make_session_factory, use_session
 if TYPE_CHECKING:
     from fred_core.conversation_trace import (
         TraceHistoryBoundary,
+        TraceHistoryIncident,
         TraceHistoryTranscript,
     )
 
@@ -465,6 +466,46 @@ class PostgresHistoryStore(BaseHistoryStore):
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).mappings().all()
         return [TraceHistoryBoundary.model_validate(row) for row in rows]
+
+    async def trace_history_incident(
+        self, session_id: str, user_id: str, support_error_ref: str
+    ) -> TraceHistoryIncident | None:
+        from fred_core.conversation_trace import (
+            TraceHistoryBoundary,
+            TraceHistoryIncident,
+        )
+
+        row = SessionHistoryRow
+        turns = self._trace_boundaries(session_id, user_id)
+        query = (
+            select(
+                turns.c.exchange_id,
+                turns.c.first_rank,
+                row.rank.label("last_rank"),
+                turns.c.turn_number,
+                turns.c.started_at,
+            )
+            .join(row, row.exchange_id == turns.c.exchange_id)
+            .where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.role == Role.system.value,
+                row.channel == Channel.error.value,
+                row.rank >= 0,
+                row.delivery_state.is_distinct_from("pending"),
+                row.metadata_json["support_error_ref"].as_string() == support_error_ref,
+            )
+            .order_by(row.rank)
+            .limit(1)
+        )
+        async with use_session(self._sessions) as session:
+            boundary = (await session.execute(query)).mappings().first()
+        if boundary is None:
+            return None
+        return TraceHistoryIncident(
+            cutoff=TraceHistoryBoundary.model_validate(boundary),
+            support_error_ref=support_error_ref,
+        )
 
     async def trace_transcript(
         self,

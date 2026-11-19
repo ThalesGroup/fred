@@ -25,6 +25,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -49,6 +50,8 @@ class ConversationTraceConsentRow(Base):
     )
     actor_id: Mapped[str] = mapped_column(String(255))
     source: Mapped[str] = mapped_column(String(32))
+    source_note: Mapped[str | None] = mapped_column(Text, deferred=True)
+    incident: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
     exchange_id: Mapped[str] = mapped_column(String(255))
     first_rank: Mapped[int] = mapped_column(Integer)
     last_rank: Mapped[int] = mapped_column(Integer)

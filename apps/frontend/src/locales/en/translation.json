@@ -705,7 +705,17 @@
       "revokeDescription": "Support will lose access to the shared content in Fred. Files already downloaded remain with their recipients.",
       "shareDescription": "Support can read the saved conversation through turn {{number}}, including messages, tool inputs, and tool results. If detailed traces were recorded, model inputs and outputs may also contain prompts and document excerpts. Later turns stay private unless you share them.",
       "cancel": "Cancel",
-      "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again."
+      "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again.",
+      "incident": {
+        "failure": "The agent could not complete this turn.",
+        "title": "Share this error with support?",
+        "reference": "Support error reference",
+        "captured": "Support can read saved messages, tool inputs, and tool results through turn {{number}}. Any detailed traces available through that turn can also contain prompts, model inputs and outputs, and document excerpts.",
+        "historyOnly": "Support can read saved history through turn {{number}}, including available messages, tool inputs, and tool results. This report has no detailed traces.",
+        "unavailable": "Fred could not verify the saved history for this error. Try again once the turn has finished saving.",
+        "reported": "This error has already been shared with support.",
+        "saveError": "Fred could not confirm sharing. Review the sharing details and try again."
+      }
     },
     "debugRaw": {
       "title": "Debug",
@@ -1430,8 +1440,8 @@
         "all": "All",
         "refresh": "Refresh",
         "listError": "Conversation traces could not be loaded.",
-        "noFailures": "No failed conversations were captured.",
-        "noCaptures": "No conversations were captured.",
+        "noFailures": "No failed conversations were captured or shared.",
+        "noCaptures": "No conversations were captured or shared.",
         "loading": "Loading conversation traces...",
         "pagination": "Trace pages",
         "previous": "Previous",
@@ -1450,6 +1460,18 @@
         "duration": "Duration",
         "unavailable": "Unavailable",
         "exchangeId": "Exchange ID",
+        "supportErrorRef": "Support error reference",
+        "manual": {
+          "action": "Record consent",
+          "description": "Record permission the conversation owner gave outside Fred. Support will be able to read saved history and any available traces through the selected turn.",
+          "cutoff": "Share through",
+          "chooseCutoff": "Select a turn",
+          "source": "Consent source",
+          "sourceHelp": "Describe where you received permission, such as a call, Teams message, or Jira ticket.",
+          "cancel": "Cancel",
+          "recorded": "Consent recorded.",
+          "error": "Fred could not record consent. Close this dialog, check the current cutoff, and try again."
+        },
         "traceId": "Trace ID",
         "spanId": "Span ID",
         "callIds": "Call identifiers",

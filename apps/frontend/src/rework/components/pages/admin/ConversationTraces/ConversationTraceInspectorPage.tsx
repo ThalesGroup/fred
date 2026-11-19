@@ -20,6 +20,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { ConversationTraceHttp } from "./ConversationTraceHttp";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
 import { ConversationTraceTool, ConversationTraceToolTree } from "./ConversationTraceTool";
+import { RecordTraceConsent } from "./RecordTraceConsent";
 import {
   useGetConversationTraceQuery,
   useListConversationTraceToolCallsQuery,
@@ -121,6 +122,11 @@ function ConversationTraceInspector({
               <TraceIdentifier label={t("teamId")} value={conversation.team_id} />
             </div>
             <span className={styles.outcome}>{conversationAccess}</span>
+            <RecordTraceConsent
+              conversation={conversation}
+              selectedExchange={turn?.exchange_id}
+              onConflict={() => void trace.refetch()}
+            />
           </div>
           {turn ? (
             <div className={styles.inspector}>
@@ -185,6 +191,14 @@ function ConversationTraceInspector({
                   <dd>
                     <TraceIdentifier label={t("exchangeId")} value={turn.exchange_id} />
                   </dd>
+                  {turn.support_error_ref && (
+                    <>
+                      <dt>{t("supportErrorRef")}</dt>
+                      <dd>
+                        <TraceIdentifier label={t("supportErrorRef")} value={turn.support_error_ref} />
+                      </dd>
+                    </>
+                  )}
                   {turn.trace_id && (
                     <>
                       <dt>{t("traceId")}</dt>

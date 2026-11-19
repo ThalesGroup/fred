@@ -102,6 +102,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
     "ConversationTraceConsent",
+    "ConversationTraceCatalog",
   ],
   endpoints: {
     getTraceConsent: {
@@ -110,11 +111,26 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     setTraceConsent: {
       invalidatesTags: (_result, error, { sessionId }) =>
-        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }],
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
     },
     revokeTraceConsent: {
       invalidatesTags: (_result, error, { sessionId }) =>
-        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }],
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    getTraceIncidentOffer: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    shareTraceIncident: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    recordTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    listConversationTraces: {
+      providesTags: ["ConversationTraceCatalog"],
     },
     getConversationTrace: {
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
@@ -1083,6 +1099,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 export const {
   useGetTraceConsentQuery,
   useSetTraceConsentMutation,
+  useGetTraceIncidentOfferQuery,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
   useRevokeTraceConsentMutation,
   useGetConversationTraceHistoryQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,

@@ -28,6 +28,7 @@ import {
 import {
   TRACE_LIST_PATH,
   TRACE_TRANSLATION_PREFIX,
+  TraceIdentifier,
   TraceOutcomeBadge,
   TracePageButtons,
   useTracePagination,
@@ -69,6 +70,12 @@ export default function ConversationTraceListPage() {
             {t("maskedConversation")}
           </Link>
           <span>{row.agent_display_name}</span>
+          {row.support_error_ref && (
+            <div>
+              <span>{t("supportErrorRef")}</span>
+              <TraceIdentifier label={t("supportErrorRef")} value={row.support_error_ref} />
+            </div>
+          )}
         </div>
       ),
     },

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -19,6 +20,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fred_core import KeycloakUser
 from fred_core.conversation_trace import TraceHistoryAccess
 from fred_core.history.history_schema import (
+    Channel,
+    ChatMessage,
+    ChatMetadata,
+    Role,
+    TextPart,
     make_tool_call,
     make_tool_result,
     make_user_text,
@@ -53,13 +59,24 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
         )
         cutoff = await store.trace_boundary("session", "owner", "first")
         assert cutoff is not None
+        error_ref = "1" * 32
         await store.save(
             "session",
             [
-                make_user_text(
-                    "session", "first", 3, "Late content in a prior exchange"
+                ChatMessage(
+                    session_id="session",
+                    exchange_id="first",
+                    rank=3,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.error,
+                    parts=[TextPart(text="Terminal failure")],
+                    metadata=ChatMetadata(support_error_ref=error_ref),
                 ),
-                make_user_text("session", "later", 4, "Later private turn"),
+                make_user_text(
+                    "session", "first", 4, "Late content in a prior exchange"
+                ),
+                make_user_text("session", "later", 5, "Later private turn"),
             ],
             "owner",
         )
@@ -106,6 +123,18 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
+            incident_path = (
+                f"/agents/sessions/session/trace-history-incident/{error_ref}"
+            )
+            incident = await client.get(
+                incident_path, headers={"Authorization": "Bearer owner"}
+            )
+            assert incident.status_code == 200
+            assert incident.json()["cutoff"]["last_rank"] == 3
+            assert incident.json()["cutoff"]["exchange_id"] == "first"
+            assert incident.json()["support_error_ref"] == error_ref
+            assert (await client.get(incident_path, headers=reader)).json() is None
+
             response = await client.get(f"{base}/first", headers=reader)
             assert response.status_code == 200
             assert response.headers["cache-control"] == "no-store"

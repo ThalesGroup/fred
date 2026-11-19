@@ -14,7 +14,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import httpx
@@ -29,6 +29,9 @@ from control_plane_backend.conversation_traces.store import (
     TraceConversationReference,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceConsentRow,
+)
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.sessions.store import SessionMetadataStore
 from fastapi import FastAPI, HTTPException, Request
@@ -45,6 +48,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 _ADMIN = "/admin/conversation-traces"
@@ -292,6 +296,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
 @pytest.mark.asyncio
 async def test_owner_share_catalog_extension_and_revocation(
     control_plane_sql_engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     engine = control_plane_sql_engine
     async with async_sessionmaker(engine).begin() as session:
@@ -326,8 +331,19 @@ async def test_owner_share_catalog_extension_and_revocation(
         for number, rank in ((1, 0), (2, 2))
     ]
     latest = 0
+    error_ref = uuid4().hex
+    audit = Mock()
+    monkeypatch.setattr(
+        "control_plane_backend.conversation_traces.api.emit_audit_log", audit
+    )
 
     def runtime(request: httpx.Request) -> httpx.Response:
+        if "/trace-history-incident/" in request.url.path:
+            assert request.headers["Authorization"] == "Bearer owner"
+            incident = {"cutoff": turns[0], "support_error_ref": error_ref}
+            if request.url.path.endswith(error_ref):
+                return httpx.Response(200, json=incident)
+            return httpx.Response(200, content=b"null")
         if request.url.path.endswith("/trace-history-boundary"):
             assert request.headers["Authorization"] == "Bearer owner"
             selected = request.url.params.get("exchange_id")
@@ -335,6 +351,8 @@ async def test_owner_share_catalog_extension_and_revocation(
                 (item for item in turns if item["exchange_id"] == selected), None
             )
             return httpx.Response(200, json=turn if selected else turns[latest])
+        if request.url.path.endswith("/trace-history-turns/exchange-2"):
+            return httpx.Response(403, json={"detail": "trace_history_access_denied"})
         assert request.url.path.endswith("/trace-history-turns")
         assert request.headers["Authorization"] == "Bearer reader"
         return httpx.Response(200, json=turns)
@@ -420,6 +438,94 @@ async def test_owner_share_catalog_extension_and_revocation(
                 f"{_ADMIN}/shared-session/history/exchange-1", headers=reader
             )
         ).status_code == 403
+
+        report = f"/teams/personal/sessions/shared-session/trace-incident/{error_ref}"
+        offer = await client.get(report, headers=owner)
+        assert offer.status_code == 200
+        assert offer.json()["capture_available"] is False
+        assert offer.json()["reported"] is False
+        assert (await client.get(report, headers=reader)).status_code == 404
+        assert (
+            await client.get(report.replace(error_ref, uuid4().hex), headers=owner)
+        ).status_code == 404
+        # Opening and dismissing the offer has no grant/catalog side effect.
+        assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
+        request = {
+            "exchange_id": turns[0]["exchange_id"],
+            "last_rank": turns[0]["last_rank"],
+            "expected_version": offer.json()["consent_version"],
+        }
+        assert (
+            await client.put(report, headers=owner, json={**request, "last_rank": 3})
+        ).status_code == 409
+        assert (
+            await client.put(
+                report, headers=owner, json={**request, "outcome": "failed"}
+            )
+        ).status_code == 422
+        shared_incident = await client.put(report, headers=owner, json=request)
+        assert shared_incident.status_code == 200
+        active_id = shared_incident.json()["consent_version"]
+        rows = (await client.get(_ADMIN, headers=reader)).json()["conversations"]
+        assert [
+            (row["availability"], row["outcome"], row["support_error_ref"])
+            for row in rows
+        ] == [("history_only", "failed", error_ref)]
+        assert (
+            await client.get(
+                f"{_ADMIN}/shared-session/history/exchange-2", headers=reader
+            )
+        ).status_code == 403
+
+        manual_path = f"{_ADMIN}/shared-session/consent"
+        note = "Consent confirmed in a private support call."
+        manual = {**extension, "expected_version": active_id, "source_note": note}
+        assert (
+            await client.put(manual_path, headers=owner, json=manual)
+        ).status_code == 403
+        assert (
+            await client.put(
+                manual_path, headers=reader, json={**manual, "source_note": " \n "}
+            )
+        ).status_code == 422
+        assert (
+            await client.put(
+                manual_path,
+                headers=reader,
+                json={**manual, "expected_version": first_id},
+            )
+        ).status_code == 409
+        recorded = await client.put(manual_path, headers=reader, json=manual)
+        assert recorded.status_code == 200
+        recorded_id = recorded.json()["consent_version"]
+        assert note not in recorded.text
+        assert recorded.json()["consent"]["cutoff"]["turn_number"] == 2
+        audit.assert_called_with(
+            "conversation_trace.consent.recorded",
+            user_id="reader",
+            session_id="shared-session",
+            grant_id=recorded_id,
+            cutoff_exchange_id="exchange-2",
+            cutoff_turn=2,
+            source="manual",
+        )
+        async with async_sessionmaker(engine)() as session:
+            assert (
+                await session.scalar(
+                    select(ConversationTraceConsentRow.source_note).where(
+                        ConversationTraceConsentRow.grant_id == recorded_id
+                    )
+                )
+                == note
+            )
+        detail = await client.get(f"{_ADMIN}/shared-session", headers=reader)
+        assert note not in detail.text
+        assert detail.json()["turns"][0]["support_error_ref"] == error_ref
+        assert (await client.delete(path, headers=owner)).status_code == 204
+        assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
+        assert (
+            await client.put(manual_path, headers=reader, json=manual)
+        ).status_code == 404
 
 
 @pytest.mark.asyncio

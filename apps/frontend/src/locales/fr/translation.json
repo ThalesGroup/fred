@@ -705,7 +705,17 @@
       "revokeDescription": "Le support perdra l'accès au contenu partagé dans Fred. Les destinataires conservent les fichiers déjà téléchargés.",
       "shareDescription": "Le support peut lire la conversation enregistrée jusqu'au tour {{number}}, y compris les messages, les entrées et les résultats des outils. Si des traces détaillées ont été enregistrées, les entrées et les sorties du modèle peuvent aussi contenir des invites et des extraits de documents. Les tours suivants restent privés jusqu'à ce que vous les partagiez.",
       "cancel": "Annuler",
-      "saveError": "Fred n'a pas pu confirmer la modification. Fermez cette fenêtre, vérifiez l'état du partage et réessayez."
+      "saveError": "Fred n'a pas pu confirmer la modification. Fermez cette fenêtre, vérifiez l'état du partage et réessayez.",
+      "incident": {
+        "failure": "L'agent n'a pas pu terminer ce tour.",
+        "title": "Partager cette erreur avec le support ?",
+        "reference": "Référence de l'erreur pour le support",
+        "captured": "Le support peut lire les messages, les entrées et les résultats des outils enregistrés jusqu'au tour {{number}}. Les traces détaillées disponibles jusqu'à ce tour peuvent aussi contenir des invites, des entrées et des sorties du modèle et des extraits de documents.",
+        "historyOnly": "Le support peut lire l'historique enregistré jusqu'au tour {{number}}, y compris les messages, les entrées et les résultats des outils disponibles. Ce signalement ne contient aucune trace détaillée.",
+        "unavailable": "Fred n'a pas pu vérifier l'historique enregistré pour cette erreur. Réessayez une fois le tour enregistré.",
+        "reported": "Cette erreur a déjà été partagée avec le support.",
+        "saveError": "Fred n'a pas pu confirmer le partage. Vérifiez les informations de partage et réessayez."
+      }
     },
     "debugRaw": {
       "title": "Débogage",
@@ -1430,8 +1440,8 @@
         "all": "Toutes",
         "refresh": "Actualiser",
         "listError": "Impossible de charger les traces de conversation.",
-        "noFailures": "Aucune conversation en échec n'a été capturée.",
-        "noCaptures": "Aucune conversation n'a été capturée.",
+        "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
+        "noCaptures": "Aucune conversation n'a été capturée ou partagée.",
         "loading": "Chargement des traces de conversation...",
         "pagination": "Pages de traces",
         "previous": "Précédente",
@@ -1450,6 +1460,18 @@
         "duration": "Durée",
         "unavailable": "Indisponible",
         "exchangeId": "Identifiant d'échange",
+        "supportErrorRef": "Référence de l'erreur pour le support",
+        "manual": {
+          "action": "Enregistrer le consentement",
+          "description": "Enregistrez l'autorisation donnée par le propriétaire de la conversation en dehors de Fred. Le support pourra lire l'historique enregistré et les traces disponibles jusqu'au tour sélectionné.",
+          "cutoff": "Partager jusqu'au",
+          "chooseCutoff": "Sélectionner un tour",
+          "source": "Source du consentement",
+          "sourceHelp": "Indiquez où vous avez reçu l'autorisation, par exemple lors d'un appel, dans un message Teams ou dans un ticket Jira.",
+          "cancel": "Annuler",
+          "recorded": "Consentement enregistré.",
+          "error": "Fred n'a pas pu enregistrer le consentement. Fermez cette fenêtre, vérifiez le tour actuellement partagé et réessayez."
+        },
         "traceId": "Identifiant de trace",
         "spanId": "Identifiant du segment",
         "callIds": "Identifiants d'appel",

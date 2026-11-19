@@ -243,6 +243,11 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceHistoryIncident: build.query<GetTraceHistoryIncidentApiResponse, GetTraceHistoryIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-incident/${queryArg.supportErrorRef}`,
+      }),
+    }),
     listTraceHistoryTurns: build.query<ListTraceHistoryTurnsApiResponse, ListTraceHistoryTurnsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-turns`,
@@ -250,6 +255,7 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
           after_rank: queryArg.afterRank,
           after_exchange: queryArg.afterExchange,
+          exchange_id: queryArg.exchangeId,
         },
       }),
     }),
@@ -525,12 +531,18 @@ export type GetTraceHistoryBoundaryApiArg = {
   sessionId: string;
   exchangeId?: string | null;
 };
+export type GetTraceHistoryIncidentApiResponse = /** status 200 Successful Response */ TraceHistoryIncident | null;
+export type GetTraceHistoryIncidentApiArg = {
+  sessionId: string;
+  supportErrorRef: string;
+};
 export type ListTraceHistoryTurnsApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary[];
 export type ListTraceHistoryTurnsApiArg = {
   sessionId: string;
   limit?: number;
   afterRank?: number;
   afterExchange?: string;
+  exchangeId?: string | null;
 };
 export type GetTraceHistoryTranscriptApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
 export type GetTraceHistoryTranscriptApiArg = {
@@ -1077,6 +1089,7 @@ export type RuntimeErrorEvent = {
   rank?: number | null;
   reason?: RuntimeStopReason | null;
   sequence?: number;
+  support_error_ref?: string | null;
 };
 export type ExecutionInterruptedRuntimeEvent = {
   interruption_id: string;
@@ -1378,6 +1391,7 @@ export type ChatMetadata = {
   latency_ms?: number | null;
   model?: string | null;
   sources?: VectorSearchHit[];
+  support_error_ref?: string | null;
   token_usage?: ChatTokenUsage | null;
   ui_parts?: {
     [key: string]: any;
@@ -1482,6 +1496,10 @@ export type TraceHistoryBoundary = {
   last_rank: number;
   started_at: string;
   turn_number: number;
+};
+export type TraceHistoryIncident = {
+  cutoff: TraceHistoryBoundary;
+  support_error_ref: string;
 };
 export type TraceHistoryTranscript = {
   available: boolean;
@@ -1833,6 +1851,8 @@ export const {
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
   useGetTraceHistoryBoundaryQuery,
   useLazyGetTraceHistoryBoundaryQuery,
+  useGetTraceHistoryIncidentQuery,
+  useLazyGetTraceHistoryIncidentQuery,
   useListTraceHistoryTurnsQuery,
   useLazyListTraceHistoryTurnsQuery,
   useGetTraceHistoryTranscriptQuery,

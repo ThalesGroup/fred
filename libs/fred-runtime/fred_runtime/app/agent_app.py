@@ -166,6 +166,7 @@ from fred_sdk.contracts.runtime import (
     HumanInputRequest,
     InterruptedAction,
     RuntimeErrorEvent,
+    RuntimeStopReason,
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
@@ -3470,7 +3471,9 @@ class _HistoryRanker:
             if isinstance(load_id, str) and load_id not in self.skill_load_ids:
                 self.skill_load_ids.add(load_id)
                 return _HistoryPositions(row=self._take())
-        if kind in ("tool_call", "tool_result", "node_error"):
+        if kind in ("tool_call", "tool_result", "node_error") or (
+            kind == "execution_error" and payload.get("support_error_ref")
+        ):
             return _HistoryPositions(row=self._take())
         if (
             kind == "thought_start"
@@ -4092,7 +4095,9 @@ async def _write_turn_history(
             )
             messages.append(hitl_message)
 
-        elif kind == "node_error":
+        elif kind == "node_error" or (
+            kind == "execution_error" and payload.get("support_error_ref")
+        ):
             messages.append(
                 ChatMessage(
                     session_id=session_id,
@@ -4101,7 +4106,18 @@ async def _write_turn_history(
                     timestamp=datetime.now(timezone.utc),
                     role=Role.system,
                     channel=Channel.error,
-                    parts=[TextPart(text=payload.get("error_message", "node error"))],
+                    parts=[
+                        TextPart(
+                            text=payload["message"]
+                            if kind == "execution_error"
+                            else payload.get("error_message", "node error")
+                        )
+                    ],
+                    metadata=ChatMetadata(
+                        support_error_ref=payload.get("support_error_ref")
+                        if kind == "execution_error"
+                        else None
+                    ),
                 )
             )
 
@@ -5311,6 +5327,18 @@ async def _iterate_runtime_event_payloads(
             async for payload in iterator:
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
+                    if (
+                        owns_run_record
+                        and not payload.get("support_error_ref")
+                        and payload.get("reason") != RuntimeStopReason.CANCELLED
+                    ):
+                        error_ref = uuid4().hex
+                        logger.warning(
+                            "event=execution_error outcome=failed error_ref=%s",
+                            error_ref,
+                            extra={"error_ref": error_ref},
+                        )
+                        payload["support_error_ref"] = error_ref
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
                     outcome = "awaiting_human"
                 if title_task is not None and (
@@ -5833,8 +5861,11 @@ async def _iterate_runtime_event_payloads_inner(
         if owns_run_record:
             _mark_run_terminal(credential_provider)
         note_stream_failure(exc)
-        message = report_execution_error(logger, exc, error_phase)
-        yield RuntimeErrorEvent(message=message).model_dump(mode="json")
+        error_ref = uuid4().hex
+        message = report_execution_error(logger, exc, error_phase, reference=error_ref)
+        yield RuntimeErrorEvent(
+            message=message, support_error_ref=error_ref
+        ).model_dump(mode="json")
     finally:
         if owns_run_record:
             _mark_run_terminal(credential_provider)

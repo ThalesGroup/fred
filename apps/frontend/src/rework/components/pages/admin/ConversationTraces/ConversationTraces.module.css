@@ -506,3 +506,12 @@
 .rangeLegend {
   flex-wrap: wrap;
 }
+.recordConsentFields {
+  display: grid;
+  gap: 12px;
+}
+
+.recordConsentFields label:has(select) {
+  display: grid;
+  gap: 4px;
+}

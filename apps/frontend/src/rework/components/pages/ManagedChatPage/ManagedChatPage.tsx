@@ -1007,6 +1007,7 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        traceConsentTeamId={teamId}
                         onRetryHitlAvailability={chat.retryHitlAvailability}
                         onRetryPendingMessage={chat.retryPendingMessage}
                         messages={chat.threadMessages}

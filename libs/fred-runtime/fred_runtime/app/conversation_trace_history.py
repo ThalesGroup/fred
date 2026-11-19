@@ -20,7 +20,9 @@ from fred_core.conversation_trace import (
     TRACE_MAX_SSE_FRAMES,
     TraceHistoryAccess,
     TraceHistoryBoundary,
+    TraceHistoryIncident,
     TraceHistoryTranscript,
+    TraceId,
     TraceHttpEvidence,
     TraceModelEvidence,
     TraceSseFrame,
@@ -83,6 +85,24 @@ async def get_trace_history_boundary(
     return await store.trace_boundary(session_id, caller.uid, exchange_id)
 
 
+@router.get(
+    "/{session_id}/trace-history-incident/{support_error_ref}",
+    operation_id="get_trace_history_incident",
+)
+async def get_trace_history_incident(
+    session_id: Session,
+    support_error_ref: TraceId,
+    caller: Caller,
+    container: Container,
+    response: Response,
+) -> TraceHistoryIncident | None:
+    response.headers["Cache-Control"] = "no-store"
+    store = _history(container)
+    if store is None:
+        return None
+    return await store.trace_history_incident(session_id, caller.uid, support_error_ref)
+
+
 async def _access(
     container: PodApplicationContext,
     request: Request,
@@ -112,12 +132,16 @@ async def list_trace_history_turns(
     limit: Annotated[int, Query(ge=1, le=101)] = 51,
     after_rank: Rank = -1,
     after_exchange: Annotated[str, Query(max_length=255)] = "",
+    exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
 ) -> list[TraceHistoryBoundary]:
     response.headers["Cache-Control"] = "no-store"
     access = await _access(container, request, session_id)
     store = _history(container)
     if store is None:
         return []
+    if exchange_id is not None:
+        boundary = await store.trace_boundary(session_id, access.owner_id, exchange_id)
+        return [boundary] if boundary is not None else []
     return await store.trace_history_page(
         session_id,
         access.owner_id,

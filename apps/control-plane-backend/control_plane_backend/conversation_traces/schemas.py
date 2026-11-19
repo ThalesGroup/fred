@@ -14,15 +14,17 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
 from fred_core.conversation_trace import (
     TraceAvailability,
     TraceHistoryBoundary,
     TraceIdentifier,
+    TraceId,
     TraceOutcome,
     TraceRank,
 )
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 
 class ConversationTraceSettings(BaseModel):
@@ -39,6 +41,12 @@ class TraceConsentRequest(BaseModel):
     expected_version: str | None
 
 
+class ManualTraceConsentRequest(TraceConsentRequest):
+    source_note: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+    ]
+
+
 class TraceConsentGrant(BaseModel):
     grant_id: str
     cutoff: TraceHistoryBoundary
@@ -49,6 +57,14 @@ class TraceConsentState(BaseModel):
     consent_version: str | None = None
     available_cutoff: TraceHistoryBoundary | None = None
     history_unavailable: bool = False
+
+
+class TraceIncidentOffer(BaseModel):
+    cutoff: TraceHistoryBoundary
+    consent_version: str | None
+    consent_cutoff: TraceHistoryBoundary | None
+    capture_available: bool
+    reported: bool
 
 
 class TraceContentAccess(StrEnum):
@@ -64,6 +80,7 @@ class ConversationTraceSummary(BaseModel):
     latest_started_at: datetime
     outcome: TraceOutcome
     availability: TraceAvailability
+    support_error_ref: TraceId | None = None
 
 
 class ConversationTraceCatalog(BaseModel):
@@ -82,6 +99,8 @@ class ConversationTraceTurn(BaseModel):
     trace_id: str | None
     span_id: str | None
     access: TraceContentAccess = TraceContentAccess.MASKED
+    retained_cutoff: TraceHistoryBoundary | None = None
+    support_error_ref: TraceId | None = None
 
 
 class ConversationTraceDetail(BaseModel):
@@ -91,4 +110,5 @@ class ConversationTraceDetail(BaseModel):
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None
+    consent_version: str | None = None
     local_content_access: bool = False

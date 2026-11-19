@@ -1777,6 +1777,25 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTraceIncidentOffer: build.query<GetTraceIncidentOfferApiResponse, GetTraceIncidentOfferApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+      }),
+    }),
+    shareTraceIncident: build.mutation<ShareTraceIncidentApiResponse, ShareTraceIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    recordTraceConsent: build.mutation<RecordTraceConsentApiResponse, RecordTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/consent`,
+        method: "PUT",
+        body: queryArg.manualTraceConsentRequest,
+      }),
+    }),
     getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}`,
@@ -3882,6 +3901,24 @@ export type RevokeTraceConsentApiResponse = unknown;
 export type RevokeTraceConsentApiArg = {
   teamId: string;
   sessionId: string;
+};
+export type GetTraceIncidentOfferApiResponse = /** status 200 Successful Response */ TraceIncidentOffer;
+export type GetTraceIncidentOfferApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+};
+export type ShareTraceIncidentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type ShareTraceIncidentApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RecordTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type RecordTraceConsentApiArg = {
+  sessionId: string;
+  manualTraceConsentRequest: ManualTraceConsentRequest;
 };
 export type GetConversationTraceApiResponse = /** status 200 Successful Response */ ConversationTraceDetail;
 export type GetConversationTraceApiArg = {
@@ -6777,6 +6814,7 @@ export type ConversationTraceSummary = {
   latest_started_at: string;
   outcome: TraceOutcome;
   availability: TraceAvailability;
+  support_error_ref?: string | null;
 };
 export type ConversationTraceCatalog = {
   conversations: ConversationTraceSummary[];
@@ -6804,6 +6842,19 @@ export type TraceConsentRequest = {
   last_rank: number;
   expected_version: string | null;
 };
+export type TraceIncidentOffer = {
+  cutoff: TraceHistoryBoundary;
+  consent_version: string | null;
+  consent_cutoff: TraceHistoryBoundary | null;
+  capture_available: boolean;
+  reported: boolean;
+};
+export type ManualTraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+  source_note: string;
+};
 export type TraceContentAccess = "masked" | "shared" | "local";
 export type ConversationTraceTurn = {
   exchange_id: string;
@@ -6816,6 +6867,8 @@ export type ConversationTraceTurn = {
   trace_id: string | null;
   span_id: string | null;
   access?: TraceContentAccess;
+  retained_cutoff?: TraceHistoryBoundary | null;
+  support_error_ref?: string | null;
 };
 export type ConversationTraceDetail = {
   session_id: string;
@@ -6824,6 +6877,7 @@ export type ConversationTraceDetail = {
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;
+  consent_version?: string | null;
   local_content_access?: boolean;
 };
 export type TraceHistoryAccess = {
@@ -6987,6 +7041,7 @@ export type ChatMetadata = {
     [key: string]: any;
   }[];
   command?: CommandDescriptor | null;
+  support_error_ref?: string | null;
   [key: string]: any;
 };
 export type ChatMessage = {
@@ -8259,6 +8314,10 @@ export const {
   useLazyGetTraceConsentQuery,
   useSetTraceConsentMutation,
   useRevokeTraceConsentMutation,
+  useGetTraceIncidentOfferQuery,
+  useLazyGetTraceIncidentOfferQuery,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
   useGetConversationTraceQuery,
   useLazyGetConversationTraceQuery,
   useGetConversationTraceHistoryAccessQuery,

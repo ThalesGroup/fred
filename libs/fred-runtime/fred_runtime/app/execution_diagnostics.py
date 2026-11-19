@@ -12,8 +12,10 @@ from fred_runtime.execution_errors import UserFacingExecutionError
 from fred_runtime.runtime_support.llm_diagnostics import failed_calls
 
 
-def report_execution_error(logger: logging.Logger, exc: Exception, phase: str) -> str:
-    reference = uuid4().hex
+def report_execution_error(
+    logger: logging.Logger, exc: Exception, phase: str, *, reference: str | None = None
+) -> str:
+    reference = reference or uuid4().hex
     # Walk causes without formatting exceptions: HTTP errors may embed tokens,
     # delegated identities, request bodies or URLs in their messages. The same
     # walk picks the sentence to surface, so both honour one traversal order:

@@ -28,6 +28,7 @@ from fred_core.conversation_trace import (
     TraceFinalization,
     TraceHistoryAccess,
     TraceHistoryBoundary,
+    TraceHistoryIncident,
     TraceHistoryTranscript,
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
@@ -64,9 +65,11 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
     ConversationTraceSettings,
+    ManualTraceConsentRequest,
     TraceConsentGrant,
     TraceConsentRequest,
     TraceConsentState,
+    TraceIncidentOffer,
 )
 from control_plane_backend.conversation_traces.store import (
     TraceConsentChanged,
@@ -87,6 +90,7 @@ FrameIndex = Annotated[int, Path(ge=0, lt=TRACE_MAX_SSE_FRAMES)]
 
 _TraceResponse = TypeVar("_TraceResponse")
 _BOUNDARY = TypeAdapter(TraceHistoryBoundary | None)
+_INCIDENT = TypeAdapter(TraceHistoryIncident | None)
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
@@ -312,6 +316,19 @@ async def set_trace_consent(
         _BOUNDARY,
         params={"exchange_id": body.exchange_id},
     )
+    return await _save_consent(container, reference, cutoff, body, user.uid)
+
+
+async def _save_consent(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference,
+    cutoff: TraceHistoryBoundary | None,
+    body: TraceConsentRequest,
+    actor_id: str,
+    *,
+    incident: TraceHistoryIncident | None = None,
+    source_note: str | None = None,
+) -> TraceConsentState:
     if (
         cutoff is None
         or cutoff.exchange_id != body.exchange_id
@@ -320,7 +337,12 @@ async def set_trace_consent(
         raise HTTPException(409, "trace_consent_turn_changed")
     try:
         grant, action = await container.get_conversation_trace_store().set_consent(
-            reference, cutoff, expected_version=body.expected_version
+            reference,
+            cutoff,
+            expected_version=body.expected_version,
+            incident=incident,
+            actor_id=actor_id,
+            source_note=source_note,
         )
     except TraceSessionNotFound as exc:
         raise HTTPException(404, "conversation_trace_not_found") from exc
@@ -329,7 +351,14 @@ async def set_trace_consent(
     except TraceConsentDoesNotExtend as exc:
         raise HTTPException(409, "trace_consent_does_not_extend") from exc
     if action is not None and grant is not None:
-        _audit_consent(action, user.uid, session_id, grant.grant_id, cutoff)
+        _audit_consent(
+            action,
+            actor_id,
+            reference.session_id,
+            grant.grant_id,
+            grant.cutoff,
+            source="manual" if source_note is not None else "owner",
+        )
     return TraceConsentState(
         consent=grant,
         consent_version=grant.grant_id if grant is not None else None,
@@ -343,6 +372,8 @@ def _audit_consent(
     session_id: str,
     grant_id: str,
     cutoff: TraceHistoryBoundary,
+    *,
+    source: str = "owner",
 ) -> None:
     emit_audit_log(
         f"conversation_trace.consent.{action}",
@@ -351,7 +382,113 @@ def _audit_consent(
         grant_id=grant_id,
         cutoff_exchange_id=cutoff.exchange_id,
         cutoff_turn=cutoff.turn_number,
-        source="owner",
+        source=source,
+    )
+
+
+async def _owner_incident(
+    container: ControlPlaneContainer,
+    session_id: str,
+    team_id: TeamId,
+    user: KeycloakUser,
+    request: Request,
+    error_ref: str,
+) -> tuple[TraceConversationReference, TraceHistoryIncident]:
+    reference = await _owned_conversation(container, session_id, team_id, user)
+    incident = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-history-incident/{error_ref}",
+        _INCIDENT,
+    )
+    if incident is None or incident.support_error_ref != error_ref:
+        raise HTTPException(404, "trace_incident_not_found")
+    return reference, incident
+
+
+@router.get(
+    "/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}",
+    operation_id="get_trace_incident_offer",
+)
+async def get_trace_incident_offer(
+    team_id: RouteTeamId,
+    session_id: SessionId,
+    error_ref: ArtifactRef,
+    user: Owner,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceIncidentOffer:
+    response.headers["Cache-Control"] = "no-store"
+    reference, incident = await _owner_incident(
+        container, session_id, team_id, user, request, error_ref
+    )
+    return TraceIncidentOffer(
+        cutoff=incident.cutoff,
+        consent_version=reference.consent_version,
+        consent_cutoff=reference.consent.cutoff
+        if reference.consent is not None
+        else None,
+        capture_available=await container.get_conversation_trace_store().has_capture_through(
+            session_id, incident.cutoff
+        ),
+        reported=reference.incident == incident,
+    )
+
+
+@router.put(
+    "/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}",
+    operation_id="share_trace_incident",
+)
+async def share_trace_incident(
+    team_id: RouteTeamId,
+    session_id: SessionId,
+    error_ref: ArtifactRef,
+    body: TraceConsentRequest,
+    user: Owner,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceConsentState:
+    response.headers["Cache-Control"] = "no-store"
+    reference, incident = await _owner_incident(
+        container, session_id, team_id, user, request, error_ref
+    )
+    return await _save_consent(
+        container, reference, incident.cutoff, body, user.uid, incident=incident
+    )
+
+
+@router.put(
+    "/admin/conversation-traces/{session_id}/consent",
+    operation_id="record_trace_consent",
+)
+async def record_trace_consent(
+    session_id: SessionId,
+    body: ManualTraceConsentRequest,
+    container: Container,
+    user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceConsentState:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await container.get_conversation_trace_store().reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "conversation_trace_not_found")
+    turns = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        "trace-history-turns",
+        _HISTORY_TURNS,
+        params={"exchange_id": body.exchange_id},
+    )
+    cutoff = next(
+        (turn for turn in turns if turn.exchange_id == body.exchange_id), None
+    )
+    return await _save_consent(
+        container, reference, cutoff, body, user.uid, source_note=body.source_note
     )
 
 

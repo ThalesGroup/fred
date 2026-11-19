@@ -5463,6 +5463,24 @@ The explicit local development profile defaults capture on and permits
 local content reads when both services receive loopback requests.
 Shared deployments default capture off and enforce role and turn consent.
 
+### Terminal incident sharing and manually recorded consent
+
+The conversation owner opens and confirms a report at
+`/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`. Control
+Plane resolves the reference against the bound runtime's saved terminal error
+and verifies its exact cutoff and consent version on confirmation. An active
+report contributes a failed catalog entry even without a capture. The Admin
+catalog shows its support reference and the inspector serves retained evidence
+through the active cutoff. Withdrawal removes a history-only entry from the
+catalog and revokes its content access.
+
+Trace readers and platform admins can `PUT` to
+`/admin/conversation-traces/{session_id}/consent` for a retained turn in a
+visible conversation. Control Plane verifies the cutoff against the runtime
+and the current grant version. Manual grants record the caller and a required
+source note. Only the restricted grant holds the note. The audit event carries
+the actor, grant reference, cutoff, and source type.
+
 ### Per-attempt HTTP evidence
 
 `GET /admin/conversation-traces/{session_id}/http/{exchange_id}` returns

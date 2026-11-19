@@ -503,3 +503,9 @@
   color: var(--on-surface);
   font: var(--font-body-medium);
 }
+.incidentShare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

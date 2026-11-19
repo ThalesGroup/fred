@@ -63,6 +63,11 @@ class TraceHistoryBoundary(BaseModel):
         return self
 
 
+class TraceHistoryIncident(BaseModel):
+    cutoff: TraceHistoryBoundary
+    support_error_ref: TraceId
+
+
 def is_local_trace_request(peer: str | None, host: str | None) -> bool:
     if peer is None or host is None:
         return False
