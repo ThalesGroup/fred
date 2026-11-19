@@ -173,6 +173,8 @@ class PodApplicationContext:
         self._filesystem = await build_runtime_filesystem(
             self.configuration.storage.object_store
         )
+        if self.conversation_trace_client is not None:
+            self.conversation_trace_client.configure_artifacts(self._filesystem)
 
     async def initialize_sql(self) -> None:
         """Build SQL engine, checkpointer, and history store.
@@ -414,6 +416,8 @@ class PodApplicationContext:
             logger.info("[fred-runtime] platform SQL engine disposed")
         if self.web_research is not None:
             await self.web_research.close()
+        if self.conversation_trace_client is not None:
+            await self.conversation_trace_client.drain()
         if self._control_plane_http_client is not None:
             await self._control_plane_http_client.aclose()
         self._stop_metrics_exporter()

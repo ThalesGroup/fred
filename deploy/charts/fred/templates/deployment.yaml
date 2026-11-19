@@ -100,13 +100,17 @@ spec:
 {{ toYaml .app.command.data | nindent 12 }}
           {{- end }}
 
-          {{- if or .app.env .app.extraEnvVars $isFrontend }}
+          {{- if or .app.env .app.extraEnvVars $isFrontend $isFredAgents }}
           env:
             {{- if .app.env }}
 {{ toYaml .app.env | nindent 12 }}
             {{- end }}
             {{- if .app.extraEnvVars }}
 {{ toYaml .app.extraEnvVars | nindent 12 }}
+            {{- end }}
+            {{- if $isFredAgents }}
+            - name: FRED_TRACE_RELEASE
+              value: {{ .app.image.tag | default .root.Chart.AppVersion | quote }}
             {{- end }}
             {{- if $isFrontend }}
             - name: FRONTEND_ENABLE_APPLICATIONS

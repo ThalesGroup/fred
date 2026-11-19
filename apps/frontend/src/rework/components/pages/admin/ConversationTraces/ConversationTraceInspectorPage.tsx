@@ -17,6 +17,7 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import { ConversationTraceHttp } from "./ConversationTraceHttp";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
 import { useGetConversationTraceQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
@@ -160,6 +161,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId: string | undefin
                     </>
                   )}
                 </dl>
+                <ConversationTraceHttp
+                  key={`http-${turn.exchange_id}`}
+                  sessionId={conversation.session_id}
+                  turn={turn}
+                />
                 <ConversationTraceHistory key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
               </section>
             </div>

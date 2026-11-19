@@ -1483,10 +1483,50 @@
           "paused": "Awaiting input",
           "unknown": "Unknown"
         },
+        "http": {
+          "title": "Model HTTP exchange",
+          "modelCall": "Model call",
+          "attempt": "Attempt {{number}}",
+          "noStatus": "No response headers",
+          "model": "Effective model",
+          "httpStatus": "HTTP status",
+          "duration": "HTTP duration",
+          "failureStage": "Failure stage",
+          "noFailure": "None recorded",
+          "release": "Fred release",
+          "completeness": "HTTP evidence",
+          "callId": "Call ID",
+          "upstreamId": "Upstream request ID",
+          "masked": "Request and response content require consent for this turn.",
+          "view": "View HTTP exchange",
+          "hide": "Hide HTTP exchange",
+          "request": "Provider request",
+          "response": "Provider response",
+          "headers": "Diagnostic headers",
+          "downloadOriginal": "Download recorded bytes",
+          "emptyBody": "Empty HTTP body.",
+          "partialBody": "The recorded body is incomplete.",
+          "binaryBody": "Preview unavailable for these bytes. You can download them.",
+          "unavailable": "HTTP evidence is unavailable.",
+          "loading": "Loading HTTP evidence...",
+          "foldJson": "Fold JSON",
+          "unfoldJson": "Unfold JSON",
+          "stage": {
+            "response_headers": "Before response headers",
+            "response_body": "While reading the response body",
+            "http_status": "Provider HTTP response"
+          },
+          "completenessValue": {
+            "complete": "Complete",
+            "partial": "Partial",
+            "unavailable": "Unavailable"
+          }
+        },
         "evidence": {
+          "captured": "HTTP exchange captured",
           "history_only": "History only",
           "metadata_only": "Metadata only",
-          "partial": "Partial metadata"
+          "partial": "Partial evidence"
         }
       },
       "capabilities": {

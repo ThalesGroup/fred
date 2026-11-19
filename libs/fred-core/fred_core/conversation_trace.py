@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import StrEnum
 from ipaddress import ip_address
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -42,6 +42,7 @@ class TraceOutcome(StrEnum):
 
 class TraceAvailability(StrEnum):
     METADATA_ONLY = "metadata_only"
+    CAPTURED = "captured"
     PARTIAL = "partial"
     HISTORY_ONLY = "history_only"
 
@@ -101,6 +102,64 @@ class TraceAdmission(BaseModel):
     capture_id: TraceIdentifier
 
 
+TRACE_MAX_HTTP_ATTEMPTS = 64
+TRACE_HTTP_TURN_BYTES = 2 * 1024 * 1024
+TRACE_HTTP_CHUNK_BYTES = 256 * 1024
+EvidenceReference = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+
+
+class TraceHttpCompleteness(StrEnum):
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    UNAVAILABLE = "unavailable"
+
+
+class TraceHttpFailureStage(StrEnum):
+    RESPONSE_HEADERS = "response_headers"
+    RESPONSE_BODY = "response_body"
+    HTTP_STATUS = "http_status"
+
+
+class TraceHttpAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ref: EvidenceReference
+    call_id: CallIdentifier
+    attempt: Annotated[int, Field(ge=1, le=TRACE_MAX_HTTP_ATTEMPTS)]
+    model: CallIdentifier | None = None
+    release: CallIdentifier | None = None
+    status: Annotated[int, Field(ge=100, le=599)] | None = None
+    upstream_id: CallIdentifier | None = None
+    failure_stage: TraceHttpFailureStage | None = None
+    duration_ms: TraceRank
+    request_bytes: TraceRank
+    response_bytes: TraceRank
+    observed_through_rank: TraceRank | None = None
+    completeness: TraceHttpCompleteness
+
+
+class TraceHttpArtifactAccess(BaseModel):
+    grant_id: str | None = None
+    local_content_access: bool = False
+    attempt: TraceHttpAttempt
+
+
+class TraceHttpBody(BaseModel):
+    encoding: Literal["base64"] = "base64"
+    data: str
+    complete: bool
+
+
+class TraceHttpEvidence(BaseModel):
+    version: Literal[1] = 1
+    method: str
+    target: str
+    request_headers: dict[str, str]
+    response_headers: dict[str, str]
+    request_body: TraceHttpBody | None = None
+    response_body: TraceHttpBody | None = None
+
+
 class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -113,3 +172,7 @@ class TraceFinalization(BaseModel):
     trace_id: TraceId | None = None
     span_id: SpanId | None = None
     discarded: bool = False
+    http_attempts: Annotated[
+        list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
+    ] = Field(default_factory=list)
+    http_incomplete: bool = False

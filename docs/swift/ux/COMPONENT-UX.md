@@ -6166,3 +6166,10 @@ content they can share with support. It shows the active cutoff and makes
 extensions and withdrawals explicit. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
+
+Model calls group their recorded HTTP attempts beneath the selected turn.
+The HTTP status and failure stage describe an individual attempt, and the
+turn header retains its own terminal outcome. The reader can inspect safe
+attempt details while masked. With consent, they can open request and response
+panels and distinguish empty, unavailable, and truncated bodies. JSON can be
+folded and the recorded body bytes can be downloaded.

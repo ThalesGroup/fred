@@ -213,6 +213,14 @@ class SessionMetadataStore:
             context_prompt_ids = await _load_context_prompt_ids(s, session_id)
         return _row_to_record(row, context_prompt_ids)
 
+    async def fence_trace_erasure(self, session_id: str) -> None:
+        async with use_session(self._sessions) as session:
+            await session.execute(
+                update(SessionMetadataRow)
+                .where(SessionMetadataRow.session_id == session_id)
+                .values(trace_erasing=True, updated_at=SessionMetadataRow.updated_at)
+            )
+
     async def list_by_team(
         self,
         team_id: TeamId,

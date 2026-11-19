@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, cast
+from uuid import uuid4
 
 from fred_core.portable import MetricsProvider, Span
 from fred_sdk.contracts.context import (
@@ -68,7 +69,11 @@ from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
-from fred_runtime.app.conversation_trace import attach_capture_reference
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+    is_trace_capture_active,
+)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
@@ -317,13 +322,20 @@ class NodeContext:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
         model_name = _resolve_model_name(model)
-        with _observe(
-            self,
-            "v2.graph.model",
-            {"model_name": model_name},
-            phase="v2_graph_model",
-            dims={"model_name": model_name},
-        ) as obs:
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name),
+            _observe(
+                self,
+                "v2.graph.model",
+                {
+                    "model_name": model_name,
+                    **({"llm_call_id": call_id} if call_id else {}),
+                },
+                phase="v2_graph_model",
+                dims={"model_name": model_name},
+            ) as obs,
+        ):
             accumulated: BaseMessage | None = None
             async for chunk in model.astream(messages):
                 if isinstance(chunk.content, str) and chunk.content:
@@ -368,13 +380,17 @@ class NodeContext:
             include_raw=True,
         )
         observed = {"model_name": model_name, "output_model": output_model.__name__}
-        with _observe(
-            self,
-            "v2.graph.structured_model",
-            observed,
-            phase="v2_graph_structured_model",
-            dims=observed,
-        ) as obs:
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name),
+            _observe(
+                self,
+                "v2.graph.structured_model",
+                {**observed, **({"llm_call_id": call_id} if call_id else {})},
+                phase="v2_graph_structured_model",
+                dims=observed,
+            ) as obs,
+        ):
             response = cast(dict[str, Any], await structured_model.ainvoke(messages))
             raw = response["raw"]
             name, usage, finish_reason = (

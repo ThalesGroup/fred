@@ -160,7 +160,6 @@ from fred_sdk.contracts.runtime import (
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
     ConversationScratchpadInvalidPathError,
-    ConversationScratchpadStorageError,
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
@@ -310,6 +309,7 @@ from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
+from .conversation_trace_artifacts import TraceHttpArtifactStore
 from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
     attach_pod_container,
@@ -7010,7 +7010,7 @@ def _build_agent_router(
         DELETE <base_url>/agents/sessions/{session_id}/filesystem
 
         This is an internal lifecycle endpoint, not a general file API.  It
-        removes only the code-owned ``scratchpad`` and ``.deep`` namespaces.
+        removes the code-owned conversation files and private trace artifacts.
         Ownership follows checkpoint deletion: an owner may erase their own
         conversation and a platform runtime administrator may erase any
         conversation; both depend on history as the ownership oracle.
@@ -7047,12 +7047,13 @@ def _build_agent_router(
             )
             await filesystem.purge_namespace("scratchpad")
             await filesystem.purge_namespace(".deep")
+            await TraceHttpArtifactStore(runtime_config.filesystem).erase(session_id)
         except ConversationScratchpadInvalidPathError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid session identifier.",
             ) from exc
-        except ConversationScratchpadStorageError as exc:
+        except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Conversation filesystem storage is unavailable.",

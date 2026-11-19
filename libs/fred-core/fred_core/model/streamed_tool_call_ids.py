@@ -9,6 +9,7 @@ import re
 from collections.abc import AsyncIterator, Iterator
 
 import httpx
+from fred_core.model.http_capture import observe_http_response, start_http_attempt
 from prometheus_client import Counter
 
 NORMALIZE_TOOL_CALL_IDS_SETTING = "normalize_streamed_tool_call_ids"
@@ -248,7 +249,15 @@ class ToolCallIdTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
-        response = self._upstream.handle_request(request)
+        attempt = start_http_attempt(request)
+        try:
+            response = self._upstream.handle_request(request)
+        except Exception:
+            if attempt is not None:
+                attempt.finish(body_complete=False, failed=True)
+            raise
+        if attempt is not None:
+            observe_http_response(response, attempt, asynchronous=False)
         if normalize and _is_streamed_success(response):
             return _stream_response(request, response, _NormalizedStream(response))
         return response
@@ -263,7 +272,15 @@ class AsyncToolCallIdTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
-        response = await self._upstream.handle_async_request(request)
+        attempt = start_http_attempt(request)
+        try:
+            response = await self._upstream.handle_async_request(request)
+        except Exception:
+            if attempt is not None:
+                attempt.finish(body_complete=False, failed=True)
+            raise
+        if attempt is not None:
+            observe_http_response(response, attempt, asynchronous=True)
         if normalize and _is_streamed_success(response):
             return _stream_response(request, response, _AsyncNormalizedStream(response))
         return response

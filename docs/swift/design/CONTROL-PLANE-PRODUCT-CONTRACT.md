@@ -5462,3 +5462,15 @@ runtime boundary and the response is served without caching.
 The explicit local development profile defaults capture on and permits
 local content reads when both services receive loopback requests.
 Shared deployments default capture off and enforce role and turn consent.
+
+### Per-attempt HTTP evidence
+
+`GET /admin/conversation-traces/{session_id}/http/{exchange_id}` returns
+the selected turn's bounded safe attempt index independently of its content
+consent. The endpoint with a trailing opaque attempt reference checks the
+caller's trace permission, immutable turn cutoff, and registered runtime
+before and after proxying the single artifact. The attempt is bound to the
+saved end rank observed by its runtime execution, so resuming an exchange
+does not expand an earlier grant. Ordinary session erasure
+fences new trace writes at the session anchor and purges the private runtime
+prefix before clearing history and the anchor.

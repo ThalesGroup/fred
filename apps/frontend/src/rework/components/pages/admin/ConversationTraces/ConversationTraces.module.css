@@ -182,3 +182,73 @@
   display: flex;
   gap: var(--spacing-s);
 }
+
+.httpAttempts,
+.httpContent,
+.httpPayload,
+.httpAttemptGroup {
+  display: grid;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.httpAttemptGroup {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s);
+}
+
+.httpAttemptButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.httpContent,
+.httpPayload {
+  margin-block-start: var(--spacing-s);
+}
+
+.httpPayload {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+}
+
+.httpPayload h4 {
+  margin: 0;
+}
+
+.httpPayload summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.httpHeader {
+  display: contents;
+}
+
+.httpHeader dd,
+.httpTarget {
+  overflow-wrap: anywhere;
+}
+
+.httpText {
+  margin: 0;
+  max-height: 34lh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.traceJson {
+  min-width: 0;
+}
+
+.jsonToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--on-surface-retreat);
+}

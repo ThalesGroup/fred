@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -59,6 +59,7 @@ class SessionMetadataRow(Base):
     # the conversation is hidden from the sidebar/team list but its row and
     # history survive until the lifecycle erases it at window expiry. NULL for
     # live conversations. Set by `SessionMetadataStore.mark_deleted`.
+    trace_erasing: Mapped[bool] = mapped_column(Boolean, server_default=false())
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

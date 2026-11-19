@@ -7473,3 +7473,22 @@ without exposing message bodies. A transcript read is bounded to one
 exchange and the immutable consent rank, with pagination and a second
 access check before returning content. Ordinary owner history access
 continues through the existing messages route.
+
+### Model HTTP exchange evidence (2026-11-19)
+
+The shared HTTPX model transport captures serialized requests and raw response
+bytes before stream normalization while a managed model call has an admitted
+capture. Each transport attempt has its own index, status, correlation ID, and
+completion state. Successful responses are observed as the SDK reads them. A
+discarded async error response gets up to 150 ms and the remaining turn byte
+budget before close. This covers OpenAI-compatible and Azure chat, including
+Mistral through the existing OpenAI-compatible binding. SDK-owned transports
+outside the shared stack can still appear with model call metadata.
+
+An admitted turn buffers at most 2 MiB and 64 HTTP attempts. Per-pod capacity
+is limited to 32 buffers and four background publishers. The existing private
+runtime filesystem stores a manifest and up to 256 KiB per raw-body chunk under
+a separate trace prefix. The runtime authorizes a requested attempt through
+Control Plane before reading bytes and again before returning them. Transport
+headers use an explicit diagnostic allowlist. Request targets omit userinfo
+and query strings.

@@ -13,12 +13,14 @@
 # limitations under the License.
 from typing import Annotated
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fred_core import KeycloakUser
 from fred_core.conversation_trace import (
     TraceHistoryAccess,
     TraceHistoryBoundary,
     TraceHistoryTranscript,
+    TraceHttpEvidence,
     is_local_trace_request,
 )
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -38,6 +40,20 @@ Rank = Annotated[int, Query(ge=-1, lt=2**31)]
 def _history(container: PodApplicationContext) -> PostgresHistoryStore | None:
     store = container.get_history_store()
     return store if isinstance(store, PostgresHistoryStore) else None
+
+
+def _allows_local_trace(container: PodApplicationContext, request: Request) -> bool:
+    security = container.configuration.security
+    return (
+        security.profile is None
+        and not security.user.enabled
+        and not security.m2m.enabled
+        and (security.rebac is None or not security.rebac.enabled)
+        and is_local_trace_request(
+            request.client.host if request.client is not None else None,
+            request.url.hostname,
+        )
+    )
 
 
 @router.get(
@@ -69,17 +85,7 @@ async def _access(
     access = await client.history_access(
         session_id, request.headers.get("Authorization", ""), exchange_id
     )
-    security = container.configuration.security
-    if access.local_content_access and (
-        security.profile is not None
-        or security.user.enabled
-        or security.m2m.enabled
-        or (security.rebac is not None and security.rebac.enabled)
-        or not is_local_trace_request(
-            request.client.host if request.client is not None else None,
-            request.url.hostname,
-        )
-    ):
+    if access.local_content_access and not _allows_local_trace(container, request):
         raise HTTPException(403, "trace_history_access_denied")
     return access
 
@@ -158,4 +164,35 @@ async def get_trace_history_transcript(
     # A revocation or replacement during the history read must not release the old result.
     if access != await _access(container, request, session_id, exchange_id):
         raise HTTPException(403, "trace_history_access_denied")
+    return result
+
+
+@router.get(
+    "/{session_id}/trace-http/{exchange_id}/{ref}",
+    operation_id="get_trace_http_evidence",
+)
+async def get_trace_http_evidence(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceHttpEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_http_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    access = await client.http_access(session_id, exchange_id, ref, authorization)
+    if access.local_content_access and not _allows_local_trace(container, request):
+        raise HTTPException(403, "trace_http_access_denied")
+    try:
+        with anyio.fail_after(5):
+            result = await client.read_artifact(session_id, ref)
+    except Exception as exc:
+        raise HTTPException(503, "trace_http_unavailable") from exc
+    if access != await client.http_access(session_id, exchange_id, ref, authorization):
+        raise HTTPException(403, "trace_http_access_denied")
     return result

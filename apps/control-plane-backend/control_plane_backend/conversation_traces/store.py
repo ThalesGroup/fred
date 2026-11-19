@@ -20,10 +20,13 @@ from uuid import uuid4
 
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    TRACE_MAX_HTTP_ATTEMPTS,
     TraceAdmissionRequest,
     TraceAvailability,
     TraceFinalization,
     TraceHistoryBoundary,
+    TraceHttpAttempt,
+    TraceHttpCompleteness,
     TraceOutcome,
 )
 from fred_core.sql import make_session_factory, use_session
@@ -31,7 +34,7 @@ from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, defer
 
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
@@ -57,7 +60,11 @@ def _utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-def _availability(completed_at: datetime | None, outcome: str) -> TraceAvailability:
+def _availability(
+    completed_at: datetime | None, outcome: str, http: str | None = None
+) -> TraceAvailability:
+    if http is not None:
+        return TraceAvailability(http)
     return (
         TraceAvailability.PARTIAL
         if completed_at is None or outcome == TraceOutcome.UNKNOWN
@@ -160,6 +167,7 @@ class ConversationTraceStore:
                     SessionMetadataRow.session_id == request.session_id,
                     SessionMetadataRow.user_id == request.user_id,
                     SessionMetadataRow.deleted_at.is_(None),
+                    SessionMetadataRow.trace_erasing.is_(False),
                     AgentInstanceRow.agent_instance_id == request.agent_instance_id,
                     AgentInstanceRow.source_runtime_id == runtime_id,
                 )
@@ -188,10 +196,42 @@ class ConversationTraceStore:
             )
             return capture_id
 
+    async def can_write(self, runtime_id: str, capture_id: str) -> bool:
+        row = ConversationTraceTurnRow
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            return bool(
+                await session.scalar(
+                    select(row.capture_id)
+                    .join(owner, owner.session_id == row.session_id)
+                    .where(
+                        row.capture_id == capture_id,
+                        row.runtime_id == runtime_id,
+                        owner.deleted_at.is_(None),
+                        owner.trace_erasing.is_(False),
+                    )
+                )
+            )
+
     async def finalize(
         self, runtime_id: str, capture_id: str, result: TraceFinalization
-    ) -> None:
+    ) -> bool:
         async with use_session(self._sessions) as session:
+            owner = SessionMetadataRow
+            turn = ConversationTraceTurnRow
+            permitted = await session.scalar(
+                select(owner.session_id)
+                .join(turn, turn.session_id == owner.session_id)
+                .where(
+                    turn.capture_id == capture_id,
+                    turn.runtime_id == runtime_id,
+                    owner.deleted_at.is_(None),
+                    owner.trace_erasing.is_(False),
+                )
+                .with_for_update(of=owner)
+            )
+            if permitted is None:
+                return False
             row = await session.scalar(
                 select(ConversationTraceTurnRow)
                 .where(
@@ -204,11 +244,15 @@ class ConversationTraceStore:
                 TraceOutcome.COMPLETED,
                 TraceOutcome.FAILED,
             ):
-                return
+                # A network retry for the same accepted refs must stay idempotent.
+                accepted = (
+                    {a["ref"] for a in (row.http_attempts or [])} if row else set()
+                )
+                return all(item.ref in accepted for item in result.http_attempts)
             if result.discarded:
                 if row.completed_at is None:
                     await session.delete(row)
-                return
+                return True
             row.completed_at = utcnow()
             row.outcome = result.outcome.value
             row.turn_number = row.turn_number or result.turn_number
@@ -220,6 +264,41 @@ class ConversationTraceStore:
             row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))[
                 :MAX_TRACE_CALL_IDS
             ]
+
+            previous = row.http_attempts or []
+            already = {item["ref"] for item in previous}
+            incoming = [
+                item for item in result.http_attempts if item.ref not in already
+            ]
+            combined = [*previous, *(item.model_dump(mode="json") for item in incoming)]
+            if len(combined) > TRACE_MAX_HTTP_ATTEMPTS:
+                row.http_availability = TraceAvailability.PARTIAL
+                return False
+            row.http_attempts = combined or None
+            if (
+                result.http_incomplete
+                or row.http_availability == TraceAvailability.PARTIAL
+                or any(
+                    item.completeness != TraceHttpCompleteness.COMPLETE
+                    for item in incoming
+                )
+            ):
+                row.http_availability = TraceAvailability.PARTIAL
+            elif combined:
+                row.http_availability = TraceAvailability.CAPTURED
+            return True
+
+    async def http_attempts(
+        self, session_id: str, exchange_id: str
+    ) -> list[TraceHttpAttempt]:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            attempts = await session.scalar(
+                select(turn.http_attempts).where(
+                    turn.session_id == session_id, turn.exchange_id == exchange_id
+                )
+            )
+        return [TraceHttpAttempt.model_validate(item) for item in attempts or []]
 
     async def reference(self, session_id: str) -> TraceConversationReference | None:
         active = ConversationTraceConsentRow
@@ -267,7 +346,11 @@ class ConversationTraceStore:
             )
             .outerjoin(active, active.grant_id == latest_grant_id)
             .outerjoin(latest, literal(True))
-            .where(metadata.session_id == session_id, metadata.deleted_at.is_(None))
+            .where(
+                metadata.session_id == session_id,
+                metadata.deleted_at.is_(None),
+                metadata.trace_erasing.is_(False),
+            )
         )
         async with use_session(self._sessions) as session:
             row = (await session.execute(query)).one_or_none()
@@ -392,11 +475,16 @@ class ConversationTraceStore:
                 turn.capture_id.label("entry_id"),
                 turn.outcome.label("outcome"),
                 turn.completed_at.label("completed_at"),
+                turn.http_availability.label("http_availability"),
                 literal(False).label("history_only"),
             )
             .select_from(turn)
             .join(metadata, metadata.session_id == turn.session_id)
-            .where(metadata.deleted_at.is_(None), ~superseded.exists())
+            .where(
+                metadata.deleted_at.is_(None),
+                metadata.trace_erasing.is_(False),
+                ~superseded.exists(),
+            )
         )
         if failed_only:
             entries = captured.where(
@@ -416,6 +504,7 @@ class ConversationTraceStore:
                     grant.grant_id,
                     literal(TraceOutcome.UNKNOWN.value),
                     grant.granted_at,
+                    literal(None),
                     literal(True),
                 )
                 .select_from(grant)
@@ -430,6 +519,7 @@ class ConversationTraceStore:
                 .where(
                     grant.revoked_at.is_(None),
                     metadata.deleted_at.is_(None),
+                    metadata.trace_erasing.is_(False),
                     ~select(turn.capture_id)
                     .where(turn.session_id == grant.session_id)
                     .exists(),
@@ -463,7 +553,9 @@ class ConversationTraceStore:
                     availability=(
                         TraceAvailability.HISTORY_ONLY
                         if row.history_only
-                        else _availability(row.completed_at, row.outcome)
+                        else _availability(
+                            row.completed_at, row.outcome, row.http_availability
+                        )
                     ),
                 )
                 for row in rows[:limit]
@@ -485,6 +577,7 @@ class ConversationTraceStore:
         turn = ConversationTraceTurnRow
         query = (
             select(turn)
+            .options(defer(turn.http_attempts))
             .where(turn.session_id == reference.session_id)
             .order_by(turn.history_rank, turn.exchange_id)
             .limit(limit + 1)
@@ -539,7 +632,9 @@ class ConversationTraceStore:
                     started_at=_utc(row.started_at),
                     duration_ms=row.duration_ms,
                     outcome=TraceOutcome(row.outcome),
-                    availability=_availability(row.completed_at, row.outcome),
+                    availability=_availability(
+                        row.completed_at, row.outcome, row.http_availability
+                    ),
                     call_ids=row.call_ids,
                     trace_id=row.trace_id,
                     span_id=row.span_id,

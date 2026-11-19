@@ -14,6 +14,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -22,13 +23,22 @@ import yaml
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.conversation_traces.api import router
-from control_plane_backend.conversation_traces.store import ConversationTraceStore
+from control_plane_backend.conversation_traces.schemas import TraceConsentGrant
+from control_plane_backend.conversation_traces.store import (
+    ConversationTraceStore,
+    TraceConversationReference,
+)
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.sessions.store import SessionMetadataStore
 from fastapi import FastAPI, HTTPException, Request
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.common import TeamId
+from fred_core.conversation_trace import (
+    TraceHistoryBoundary,
+    TraceHttpAttempt,
+    TraceHttpCompleteness,
+)
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
@@ -342,3 +352,73 @@ async def test_owner_share_catalog_extension_and_revocation(
                 f"{_ADMIN}/shared-session/history/exchange-1", headers=reader
             )
         ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_http_content_consent_excludes_new_attempt_in_same_exchange():
+    persisted = [
+        TraceHttpAttempt(
+            ref=uuid4().hex,
+            call_id="call",
+            attempt=number,
+            status=200,
+            duration_ms=5,
+            request_bytes=2,
+            response_bytes=2,
+            observed_through_rank=rank,
+            completeness=TraceHttpCompleteness.COMPLETE,
+        )
+        for number, rank in ((1, 4), (2, 5))
+    ]
+    reference = TraceConversationReference(
+        session_id="session",
+        team_id="team",
+        owner_id="owner",
+        runtime_id="fred-agents",
+        agent_display_name="Fixture",
+        has_capture=True,
+        consent=TraceConsentGrant(
+            grant_id="fixture-grant",
+            cutoff=TraceHistoryBoundary.model_validate(
+                {
+                    "exchange_id": "exchange",
+                    "first_rank": 1,
+                    "last_rank": 4,
+                    "turn_number": 1,
+                    "started_at": "2026-01-01T12:00:00Z",
+                }
+            ),
+        ),
+        consent_version="fixture-grant",
+    )
+    store = SimpleNamespace(
+        reference=AsyncMock(return_value=reference),
+        capture_start_rank=AsyncMock(return_value=1),
+        http_attempts=AsyncMock(return_value=persisted),
+        local_development=False,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac,
+        get_conversation_trace_store=lambda: store,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        path = f"{_ADMIN}/session/http-access"
+        for item, expected in zip(persisted, (200, 403), strict=True):
+            response = await client.get(
+                path,
+                headers=_READER,
+                params={
+                    "exchange_id": "exchange",
+                    "runtime_id": "fred-agents",
+                    "ref": item.ref,
+                },
+            )
+            assert response.status_code == expected
+        masked = await client.get(f"{_ADMIN}/session/http/exchange", headers=_READER)
+        assert masked.status_code == 200
+        assert len(masked.json()) == 2

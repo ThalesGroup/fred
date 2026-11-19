@@ -1809,6 +1809,40 @@ const injectedRtkApi = api.injectEndpoints({
         }),
       },
     ),
+    listConversationTraceHttpAttempts: build.query<
+      ListConversationTraceHttpAttemptsApiResponse,
+      ListConversationTraceHttpAttemptsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceHttpAccess: build.query<
+      GetConversationTraceHttpAccessApiResponse,
+      GetConversationTraceHttpAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceHttpEvidence: build.query<
+      GetConversationTraceHttpEvidenceApiResponse,
+      GetConversationTraceHttpEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    getTraceCaptureWritable: build.query<GetTraceCaptureWritableApiResponse, GetTraceCaptureWritableApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/writable`,
+      }),
+    }),
     admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
@@ -3779,6 +3813,29 @@ export type GetConversationTraceHistoryApiArg = {
   exchangeId: string;
   afterRank?: number;
   limit?: number;
+};
+export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 Successful Response */ TraceHttpAttempt[];
+export type ListConversationTraceHttpAttemptsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceHttpAccessApiResponse = /** status 200 Successful Response */ TraceHttpArtifactAccess;
+export type GetConversationTraceHttpAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
+export type GetConversationTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceCaptureWritableApiResponse = /** status 200 Successful Response */ boolean;
+export type GetTraceCaptureWritableApiArg = {
+  captureId: string;
+  runtimeId: string;
 };
 export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
   /** status 200 Successful Response */ TraceAdmission | null;
@@ -6568,7 +6625,7 @@ export type ConversationTraceSettings = {
   enabled: boolean;
 };
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
-export type TraceAvailability = "metadata_only" | "partial" | "history_only";
+export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
 export type ConversationTraceSummary = {
   session_id: string;
   agent_display_name: string;
@@ -6825,6 +6882,46 @@ export type TraceHistoryTranscript = {
   messages: ChatMessage[];
   next_rank?: number | null;
 };
+export type TraceHttpFailureStage = "response_headers" | "response_body" | "http_status";
+export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
+export type TraceHttpAttempt = {
+  ref: string;
+  call_id: string;
+  attempt: number;
+  model?: string | null;
+  release?: string | null;
+  status?: number | null;
+  upstream_id?: string | null;
+  failure_stage?: TraceHttpFailureStage | null;
+  duration_ms: number;
+  request_bytes: number;
+  response_bytes: number;
+  observed_through_rank?: number | null;
+  completeness: TraceHttpCompleteness;
+};
+export type TraceHttpArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  attempt: TraceHttpAttempt;
+};
+export type TraceHttpBody = {
+  encoding?: "base64";
+  data: string;
+  complete: boolean;
+};
+export type TraceHttpEvidence = {
+  version?: 1;
+  method: string;
+  target: string;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_headers: {
+    [key: string]: string;
+  };
+  request_body?: TraceHttpBody | null;
+  response_body?: TraceHttpBody | null;
+};
 export type TraceAdmission = {
   capture_id: string;
 };
@@ -6843,6 +6940,8 @@ export type TraceFinalization = {
   trace_id?: string | null;
   span_id?: string | null;
   discarded?: boolean;
+  http_attempts?: TraceHttpAttempt[];
+  http_incomplete?: boolean;
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -7874,6 +7973,14 @@ export const {
   useLazyGetConversationTraceHistoryAccessQuery,
   useGetConversationTraceHistoryQuery,
   useLazyGetConversationTraceHistoryQuery,
+  useListConversationTraceHttpAttemptsQuery,
+  useLazyListConversationTraceHttpAttemptsQuery,
+  useGetConversationTraceHttpAccessQuery,
+  useLazyGetConversationTraceHttpAccessQuery,
+  useGetConversationTraceHttpEvidenceQuery,
+  useLazyGetConversationTraceHttpEvidenceQuery,
+  useGetTraceCaptureWritableQuery,
+  useLazyGetTraceCaptureWritableQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
   useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,

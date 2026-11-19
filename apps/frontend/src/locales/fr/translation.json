@@ -1483,10 +1483,50 @@
           "paused": "En attente d'une réponse",
           "unknown": "Inconnu"
         },
+        "http": {
+          "title": "Échange HTTP du modèle",
+          "modelCall": "Appel du modèle",
+          "attempt": "Tentative {{number}}",
+          "noStatus": "Aucun en-tête de réponse",
+          "model": "Modèle effectif",
+          "httpStatus": "Statut HTTP",
+          "duration": "Durée HTTP",
+          "failureStage": "Étape de l'échec",
+          "noFailure": "Aucun échec enregistré",
+          "release": "Version de Fred",
+          "completeness": "Données HTTP",
+          "callId": "Identifiant d'appel",
+          "upstreamId": "Identifiant de requête du fournisseur",
+          "masked": "Le consentement pour ce tour est nécessaire pour lire la requête et la réponse.",
+          "view": "Voir l'échange HTTP",
+          "hide": "Masquer l'échange HTTP",
+          "request": "Requête au fournisseur",
+          "response": "Réponse du fournisseur",
+          "headers": "En-têtes de diagnostic",
+          "downloadOriginal": "Télécharger les octets enregistrés",
+          "emptyBody": "Corps HTTP vide.",
+          "partialBody": "Le corps enregistré est incomplet.",
+          "binaryBody": "Aperçu indisponible. Vous pouvez télécharger le corps enregistré.",
+          "unavailable": "Données HTTP indisponibles.",
+          "loading": "Chargement des données HTTP...",
+          "foldJson": "Replier le JSON",
+          "unfoldJson": "Déplier le JSON",
+          "stage": {
+            "response_headers": "Avant les en-têtes de réponse",
+            "response_body": "Pendant la lecture du corps de réponse",
+            "http_status": "Réponse HTTP du fournisseur"
+          },
+          "completenessValue": {
+            "complete": "Complètes",
+            "partial": "Partielles",
+            "unavailable": "Indisponibles"
+          }
+        },
         "evidence": {
+          "captured": "Échange HTTP enregistré",
           "history_only": "Historique uniquement",
           "metadata_only": "Métadonnées seules",
-          "partial": "Métadonnées partielles"
+          "partial": "Données partielles"
         }
       },
       "capabilities": {

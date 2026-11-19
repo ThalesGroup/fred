@@ -221,9 +221,20 @@ class ConversationErasureService:
             receipt.stores.append(checkpoint_result)
 
             if checkpoint_result.ok:
-                filesystem_result = await self._erase_runtime_filesystem(
-                    base_url, session_id, authorization
-                )
+                try:
+                    await deps.get_session_metadata_store().fence_trace_erasure(
+                        session_id
+                    )
+                except Exception:
+                    filesystem_result = StoreErasureResult(
+                        store=STORE_CONVERSATION_FILESYSTEM,
+                        ok=False,
+                        error="Could not fence trace writes before filesystem erasure.",
+                    )
+                else:
+                    filesystem_result = await self._erase_runtime_filesystem(
+                        base_url, session_id, authorization
+                    )
                 receipt.stores.append(filesystem_result)
                 if filesystem_result.ok:
                     receipt.stores.append(

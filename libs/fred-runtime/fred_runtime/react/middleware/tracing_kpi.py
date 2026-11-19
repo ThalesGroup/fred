@@ -38,7 +38,10 @@ from langchain_core.runnables.config import (
     set_config_context,
 )
 
-from fred_runtime.app.conversation_trace import attach_capture_reference, trace_call
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+)
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.llm_diagnostics import (
     LlmObservation,
@@ -147,7 +150,6 @@ class TracingKpiMiddleware(AgentMiddleware):
             role=self._role,
             streaming=streaming,
         )
-        trace_call(observation.call_id)
         observation.http.allow_request_ids = not delegation_enabled()
         token = active_model_http.set(observation.http)
         span: SpanPort | None = None
@@ -225,7 +227,8 @@ class TracingKpiMiddleware(AgentMiddleware):
                 # Exclude telemetry setup/teardown from model boundary timings.
                 observation.http.started = time.monotonic()
                 try:
-                    return await handler(request)
+                    with capture_model_http(observation.call_id, model_name):
+                        return await handler(request)
                 finally:
                     handler_ended = time.monotonic()
 

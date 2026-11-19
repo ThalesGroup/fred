@@ -46,14 +46,13 @@ import logging
 import time
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from sqlalchemy import MetaData, and_, delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from fred_core.conversation_trace import TraceHistoryBoundary, TraceHistoryTranscript
 from fred_core.history.base_history_store import BaseHistoryStore
 from fred_core.history.history_models import SessionHistoryRow
 from fred_core.history.history_schema import (
@@ -66,6 +65,12 @@ from fred_core.history.history_schema import (
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.sql.async_session import make_session_factory, use_session
+
+if TYPE_CHECKING:
+    from fred_core.conversation_trace import (
+        TraceHistoryBoundary,
+        TraceHistoryTranscript,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -427,6 +432,8 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def trace_boundary(
         self, session_id: str, user_id: str, exchange_id: str | None
     ) -> TraceHistoryBoundary | None:
+        from fred_core.conversation_trace import TraceHistoryBoundary
+
         turns = self._trace_boundaries(session_id, user_id)
         query = select(turns).order_by(turns.c.turn_number.desc()).limit(1)
         if exchange_id is not None:
@@ -443,6 +450,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         limit: int,
         after: tuple[int, str] | None,
     ) -> list[TraceHistoryBoundary]:
+        from fred_core.conversation_trace import TraceHistoryBoundary
+
         turns = self._trace_boundaries(session_id, user_id)
         query = select(turns).order_by(turns.c.turn_number).limit(limit)
         if after is not None:
@@ -467,6 +476,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         after_rank: int,
         limit: int,
     ) -> TraceHistoryTranscript:
+        from fred_core.conversation_trace import TraceHistoryTranscript
+
         row = SessionHistoryRow
         query = (
             select(row)

@@ -3,7 +3,7 @@ schema: 1
 title: "Capture managed conversation traces for Fred support"
 impact: minor
 configuration: production
-configuration_reason: "The Fred chart explicitly disables local trace access. The new Control Plane setting is enabled only in the loopback developer profile."
+configuration_reason: "The Fred chart disables local trace access and labels model HTTP evidence with the Fred Agents image tag."
 ---
 
 ## Applicability
@@ -12,7 +12,7 @@ Fred deployments with a registered Fred Agents runtime. Capture starts off in sh
 
 ## Prerequisites
 
-Control Plane must be able to migrate PostgreSQL and install the current OpenFGA authorization model. Fred Agents must use its registered workload client when calling Control Plane.
+Control Plane must be able to migrate PostgreSQL and install the current OpenFGA authorization model. Fred Agents must use its registered workload client when calling Control Plane and have read, write, and delete access to its private runtime object storage.
 
 ## Configuration
 
@@ -22,7 +22,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations for the catalog and consent records, then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation.
+Apply the Control Plane migrations for the catalog, consent, and HTTP attempt index, then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation.
 
 ## Validation
 
@@ -34,4 +34,4 @@ Switch capture off before rolling back. An older runtime does not write trace su
 
 ## Limitations
 
-Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata.
+Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model transport within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix.

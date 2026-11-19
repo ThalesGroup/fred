@@ -262,6 +262,11 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceHttpEvidence: build.query<GetTraceHttpEvidenceApiResponse, GetTraceHttpEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-http/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -518,6 +523,12 @@ export type GetTraceHistoryTranscriptApiArg = {
   exchangeId: string;
   afterRank?: number;
   limit?: number;
+};
+export type GetTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
+export type GetTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -1443,6 +1454,24 @@ export type TraceHistoryTranscript = {
   messages: ChatMessage[];
   next_rank?: number | null;
 };
+export type TraceHttpBody = {
+  complete: boolean;
+  data: string;
+  encoding?: "base64";
+};
+export type TraceHttpEvidence = {
+  method: string;
+  request_body?: TraceHttpBody | null;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_body?: TraceHttpBody | null;
+  response_headers: {
+    [key: string]: string;
+  };
+  target: string;
+  version?: 1;
+};
 export type SkillDetail = {
   content: string;
   revision: string;
@@ -1719,6 +1748,8 @@ export const {
   useLazyListTraceHistoryTurnsQuery,
   useGetTraceHistoryTranscriptQuery,
   useLazyGetTraceHistoryTranscriptQuery,
+  useGetTraceHttpEvidenceQuery,
+  useLazyGetTraceHttpEvidenceQuery,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

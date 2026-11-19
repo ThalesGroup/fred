@@ -91,6 +91,8 @@ class ConversationTraceTurnRow(Base):
     turn_number: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(String(32), default=TraceOutcome.UNKNOWN.value)
     call_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    http_attempts: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
+    http_availability: Mapped[str | None] = mapped_column(String(32))
     trace_id: Mapped[str | None] = mapped_column(String(32))
     span_id: Mapped[str | None] = mapped_column(String(16))
 

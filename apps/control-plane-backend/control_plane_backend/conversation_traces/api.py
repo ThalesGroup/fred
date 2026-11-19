@@ -28,6 +28,10 @@ from fred_core.conversation_trace import (
     TraceHistoryAccess,
     TraceHistoryBoundary,
     TraceHistoryTranscript,
+    TraceHttpArtifactAccess,
+    TraceHttpAttempt,
+    TraceHttpCompleteness,
+    TraceHttpEvidence,
     is_local_trace_request,
 )
 from fred_core.logs.audit_log import emit_audit_log
@@ -37,11 +41,11 @@ from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
 )
-from pydantic import TypeAdapter
 from fred_core.security.structure import (
     LOCAL_DEV_CLIENT_ID,
     is_service_agent,
 )
+from pydantic import TypeAdapter
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
@@ -52,7 +56,6 @@ from control_plane_backend.conversation_traces.schemas import (
     TraceConsentRequest,
     TraceConsentState,
 )
-
 from control_plane_backend.conversation_traces.store import (
     TraceConsentChanged,
     TraceConsentDoesNotExtend,
@@ -67,11 +70,13 @@ Owner = Annotated[KeycloakUser, Depends(require_own_credential)]
 SessionId = Annotated[str, Path(min_length=1, max_length=255)]
 RouteTeamId = Annotated[TeamId, Path(min_length=1, max_length=255)]
 ExchangeId = Annotated[str, Path(min_length=1, max_length=255)]
+ArtifactRef = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
 
 _TraceResponse = TypeVar("_TraceResponse")
 _BOUNDARY = TypeAdapter(TraceHistoryBoundary | None)
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
+_HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 
 
 async def _runtime_history(
@@ -483,6 +488,130 @@ async def get_conversation_trace_history(
     return result
 
 
+@router.get(
+    "/admin/conversation-traces/{session_id}/http/{exchange_id}",
+    operation_id="list_conversation_trace_http_attempts",
+)
+async def list_conversation_trace_http_attempts(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    container: Container,
+    _user: Operator,
+    response: Response,
+) -> list[TraceHttpAttempt]:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "conversation_trace_not_found")
+    return await store.http_attempts(session_id, exchange_id)
+
+
+async def _http_artifact_access(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference | None,
+    request: Request,
+    exchange_id: str,
+    ref: str,
+) -> TraceHttpArtifactAccess:
+    if reference is None or not reference.visible or exchange_id in {".", ".."}:
+        raise HTTPException(403, "trace_http_access_denied")
+    store = container.get_conversation_trace_store()
+    local = _local_content_access(container, request)
+    grant = reference.consent
+    rank = await store.capture_start_rank(reference.session_id, exchange_id)
+    if rank is None or (
+        not local
+        and (
+            grant is None
+            or (rank, exchange_id) > (grant.cutoff.first_rank, grant.cutoff.exchange_id)
+        )
+    ):
+        raise HTTPException(403, "trace_http_access_denied")
+    attempts = await store.http_attempts(reference.session_id, exchange_id)
+    attempt = next((item for item in attempts if item.ref == ref), None)
+    if attempt is None or attempt.completeness == TraceHttpCompleteness.UNAVAILABLE:
+        raise HTTPException(404, "trace_http_unavailable")
+    if not local and (
+        grant is None
+        or attempt.observed_through_rank is None
+        or attempt.observed_through_rank > grant.cutoff.last_rank
+    ):
+        raise HTTPException(403, "trace_http_access_denied")
+    return TraceHttpArtifactAccess(
+        grant_id=grant.grant_id if grant is not None else None,
+        local_content_access=local,
+        attempt=attempt,
+    )
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/http-access",
+    operation_id="get_conversation_trace_http_access",
+)
+async def get_conversation_trace_http_access(
+    session_id: SessionId,
+    runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
+    exchange_id: Annotated[str, Query(min_length=1, max_length=255)],
+    ref: Annotated[str, Query(pattern=r"^[0-9a-f]{32}$")],
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceHttpArtifactAccess:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await container.get_conversation_trace_store().reference(session_id)
+    if reference is None or reference.runtime_id != runtime_id:
+        raise HTTPException(403, "trace_http_access_denied")
+    return await _http_artifact_access(container, reference, request, exchange_id, ref)
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/http/{exchange_id}/{ref}",
+    operation_id="get_conversation_trace_http_evidence",
+)
+async def get_conversation_trace_http_evidence(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    ref: ArtifactRef,
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceHttpEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    access = await _http_artifact_access(
+        container, reference, request, exchange_id, ref
+    )
+    assert reference is not None
+    result = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-http/{quote(exchange_id, safe='')}/{ref}",
+        _HTTP_EXCHANGE,
+    )
+    if access != await _http_artifact_access(
+        container, await store.reference(session_id), request, exchange_id, ref
+    ):
+        raise HTTPException(403, "trace_http_access_denied")
+    return result
+
+
+@router.get(
+    "/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/writable",
+    operation_id="get_trace_capture_writable",
+)
+async def get_trace_capture_writable(
+    capture_id: UUID, container: Container, runtime_id: Runtime
+) -> bool:
+    return await container.get_conversation_trace_store().can_write(
+        runtime_id, str(capture_id)
+    )
+
+
 @router.post(
     "/internal/runtimes/{runtime_id}/conversation-traces/admit",
     response_model=TraceAdmission | None,
@@ -500,7 +629,9 @@ async def admit_trace_turn(
 async def finalize_trace_turn(
     capture_id: UUID, body: TraceFinalization, container: Container, runtime_id: Runtime
 ) -> Response:
-    await container.get_conversation_trace_store().finalize(
+    accepted = await container.get_conversation_trace_store().finalize(
         runtime_id, str(capture_id), body
     )
+    if not accepted and body.http_attempts:
+        raise HTTPException(409, "trace_capture_no_longer_writable")
     return Response(status_code=204)

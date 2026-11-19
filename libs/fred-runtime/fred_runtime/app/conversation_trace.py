@@ -13,10 +13,12 @@
 # limitations under the License.
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import re
-from collections.abc import AsyncGenerator
-from contextlib import suppress
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from time import monotonic
@@ -32,9 +34,14 @@ from fred_core.conversation_trace import (
     TraceAdmissionRequest,
     TraceFinalization,
     TraceHistoryAccess,
+    TraceHttpArtifactAccess,
+    TraceHttpAttempt,
+    TraceHttpEvidence,
     TraceOutcome,
 )
+from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.model.http_capture import HttpCapture, active_http_capture
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
     M2MBearerAuth,
@@ -45,6 +52,12 @@ from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
 from pydantic import ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.conversation_trace_artifacts import (
+    HttpTurnBuffer,
+    ModelHttpCapture,
+    TraceHttpArtifactStore,
+    safe_identifier,
+)
 
 logger = logging.getLogger(__name__)
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
@@ -55,10 +68,27 @@ _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
 )
 
 
-def trace_call(call_id: str) -> None:
+@contextmanager
+def capture_model_http(call_id: str, model: str | None) -> Iterator[None]:
     capture = _ACTIVE_CAPTURE.get()
-    if capture is not None:
-        capture.note_call(call_id)
+    if capture is None:
+        yield
+        return
+    capture.note_call(call_id)
+    observer: HttpCapture | None = (
+        ModelHttpCapture(capture.http, call_id, safe_identifier(model))
+        if capture.http is not None
+        else None
+    )
+    token = active_http_capture.set(observer)
+    try:
+        yield
+    finally:
+        active_http_capture.reset(token)
+
+
+def is_trace_capture_active() -> bool:
+    return _ACTIVE_CAPTURE.get() is not None
 
 
 def attach_capture_reference(span: SpanPort, *, root: bool = False) -> None:
@@ -79,6 +109,12 @@ class ConversationTraceClient:
         self._control_plane_url = str(config.platform.control_plane_url).rstrip("/")
         self._url = f"{self._control_plane_url}/internal/runtimes/{runtime_id}/conversation-traces"
         self._auth: M2MBearerAuth | None = None
+        self.artifacts: TraceHttpArtifactStore | None = None
+        self._http_turns = 0
+        self._http_workers = asyncio.Semaphore(4)
+        self._http_readers = asyncio.Semaphore(8)
+        self._http_tasks: set[asyncio.Task[None]] = set()
+        self._release = safe_identifier(os.environ.get("FRED_TRACE_RELEASE"))
         m2m = config.security.m2m
         if m2m.enabled:
             realm = str(m2m.realm_url).rstrip("/")
@@ -98,6 +134,136 @@ class ConversationTraceClient:
                     )
                 )
             )
+
+    def configure_artifacts(self, filesystem: BaseFilesystem) -> None:
+        self.artifacts = TraceHttpArtifactStore(filesystem)
+
+    async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
+        assert self.artifacts is not None
+        async with self._http_readers:
+            return await self.artifacts.read(session_id, ref)
+
+    def _new_http_buffer(self) -> HttpTurnBuffer | None:
+        # Pod-local memory bound only. The catalog and artifacts are shared.
+        if self.artifacts is None or self._http_turns >= 32:
+            return None
+        self._http_turns += 1
+        return HttpTurnBuffer()
+
+    def submit_http(
+        self,
+        session_id: str,
+        capture_id: str,
+        result: TraceFinalization,
+        buffer: HttpTurnBuffer,
+        observed_through_rank: int | None,
+    ) -> None:
+        task = asyncio.create_task(
+            self._publish_http(
+                session_id, capture_id, result, buffer, observed_through_rank
+            )
+        )
+        self._http_tasks.add(task)
+        task.add_done_callback(self._http_tasks.discard)
+
+    async def drain(self) -> None:
+        if self._http_tasks:
+            await asyncio.gather(*tuple(self._http_tasks), return_exceptions=True)
+
+    async def _can_write(self, capture_id: str) -> bool | None:
+        try:
+            with anyio.fail_after(0.75):
+                response = await self._client.get(
+                    f"{self._url}/{capture_id}/writable",
+                    auth=self._auth
+                    if self._auth is not None
+                    else httpx.USE_CLIENT_DEFAULT,
+                )
+                response.raise_for_status()
+                return response.json() is True
+        except Exception:
+            return None
+
+    async def _erase_attempts(self, session_id: str, attempts: list[str]) -> None:
+        store = self.artifacts
+        if store is None:
+            return
+        try:
+            with anyio.fail_after(4):
+                for ref in attempts:
+                    await store.erase(session_id, ref)
+        except Exception:
+            logger.warning("event=conversation_trace.http_artifact_cleanup_failed")
+
+    async def _publish_http(
+        self,
+        session_id: str,
+        capture_id: str,
+        result: TraceFinalization,
+        buffer: HttpTurnBuffer,
+        observed_through_rank: int | None,
+    ) -> None:
+        refs: list[str] = []
+        try:
+            attempts = buffer.close()
+            store = self.artifacts
+            async with self._http_workers:
+                permitted = await self._can_write(capture_id)
+                if permitted is False:
+                    return
+                summaries: list[TraceHttpAttempt] = []
+                # Keep order and cap per-pod in-flight writes across all turns.
+                deadline = monotonic() + 8
+                for attempt in attempts:
+                    stored = False
+                    if permitted and store is not None and deadline > monotonic():
+                        try:
+                            with anyio.fail_after(max(0, deadline - monotonic())):
+                                await store.write(session_id, attempt)
+                            refs.append(attempt.ref)
+                            stored = True
+                        except Exception:
+                            logger.warning(
+                                "event=conversation_trace.http_artifact_write_failed"
+                            )
+                            await self._erase_attempts(session_id, [attempt.ref])
+                    summaries.append(
+                        attempt.summary(
+                            self._release,
+                            stored=stored,
+                            observed_through_rank=observed_through_rank,
+                        )
+                    )
+                result.http_attempts = summaries
+                result.http_incomplete = buffer.incomplete
+                published = await self.finalize(capture_id, result)
+                # A definitive rejection fences erasure and duplicate finalizations.
+                # A lost response can still mean the index committed.
+                if published is False:
+                    await self._erase_attempts(session_id, refs)
+        finally:
+            self._http_turns -= 1
+
+    async def http_access(
+        self, session_id: str, exchange_id: str, ref: str, authorization: str
+    ) -> TraceHttpArtifactAccess:
+        key = quote(session_id, safe="")
+        try:
+            response = await self._client.get(
+                f"{self._control_plane_url}/admin/conversation-traces/{key}/http-access",
+                headers={"Authorization": authorization},
+                params={
+                    "runtime_id": self._runtime_id,
+                    "exchange_id": exchange_id,
+                    "ref": ref,
+                },
+            )
+            if response.status_code in {401, 403, 404}:
+                raise HTTPException(403, "trace_http_access_denied")
+            response.raise_for_status()
+            return TraceHttpArtifactAccess.model_validate_json(response.content)
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(503, "trace_http_unavailable") from exc
 
     async def history_access(
         self, session_id: str, authorization: str, exchange_id: str | None = None
@@ -148,12 +314,14 @@ class ConversationTraceClient:
                 raw = response.json()
                 if raw is not None:
                     admission = TraceAdmission.model_validate(raw)
-                    return ManagedTurnCapture(admission.capture_id, self)
+                    return ManagedTurnCapture(
+                        admission.capture_id, self, http=self._new_http_buffer()
+                    )
         except Exception:
             logger.debug("event=conversation_trace.admission_unavailable")
         return None
 
-    async def finalize(self, capture_id: str, result: TraceFinalization) -> None:
+    async def finalize(self, capture_id: str, result: TraceFinalization) -> bool | None:
         try:
             with anyio.fail_after(0.75):
                 response = await self._client.put(
@@ -163,9 +331,13 @@ class ConversationTraceClient:
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
                 )
+                if response.status_code == 409:
+                    return False
                 response.raise_for_status()
+                return True
         except Exception:
             logger.debug("event=conversation_trace.finalization_unavailable")
+            return None
 
 
 @dataclass(slots=True)
@@ -174,6 +346,7 @@ class ManagedTurnCapture:
     client: ConversationTraceClient
     outcome: TraceOutcome = TraceOutcome.UNKNOWN
     discarded: bool = False
+    http: HttpTurnBuffer | None = None
     call_ids: dict[str, None] = field(default_factory=dict)
     trace_id: str | None = None
     span_id: str | None = None
@@ -231,21 +404,41 @@ class ManagedTurnCapture:
     ) -> None:
         duration_ms = min(int((monotonic() - started) * 1000), 2**31 - 1)
         turn_number = None
+        observed_through_rank = None
+        attempts = self.http.close() if self.http is not None else []
         if isinstance(history_store, PostgresHistoryStore) and not self.discarded:
             with suppress(Exception):
                 with anyio.fail_after(0.35):
-                    turn_number = await history_store.exchange_number(
-                        session_id, user_id, exchange_id, history_rank
-                    )
-        await self.client.finalize(
-            self.capture_id,
-            TraceFinalization(
-                outcome=self.outcome,
-                duration_ms=duration_ms,
-                turn_number=turn_number,
-                call_ids=list(self.call_ids),
-                trace_id=self.trace_id,
-                span_id=self.span_id,
-                discarded=self.discarded,
-            ),
+                    if attempts:
+                        boundary = await history_store.trace_boundary(
+                            session_id, user_id, exchange_id
+                        )
+                        if boundary is not None:
+                            turn_number = boundary.turn_number
+                            observed_through_rank = boundary.last_rank
+                    else:
+                        turn_number = await history_store.exchange_number(
+                            session_id, user_id, exchange_id, history_rank
+                        )
+        result = TraceFinalization(
+            outcome=self.outcome,
+            duration_ms=duration_ms,
+            turn_number=turn_number,
+            call_ids=list(self.call_ids),
+            trace_id=self.trace_id,
+            span_id=self.span_id,
+            discarded=self.discarded,
+            http_incomplete=self.http is None,
         )
+        if self.http is not None:
+            if attempts and not self.discarded:
+                self.client.submit_http(
+                    session_id,
+                    self.capture_id,
+                    result,
+                    self.http,
+                    observed_through_rank,
+                )
+                return
+            self.client._http_turns -= 1
+        await self.client.finalize(self.capture_id, result)
