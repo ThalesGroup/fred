@@ -15,13 +15,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, TypedDict
 
 import google.auth
 from google.api_core.client_options import ClientOptions
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import storage
+
+
+class _SessionOptions(TypedDict, total=False):
+    _http: AuthorizedSession
 
 
 def build_gcs_client(
@@ -52,7 +56,7 @@ def build_gcs_client(
     """
 
     credentials, adc_project = google.auth.default()
-    session_options = (
+    session_options: _SessionOptions = (
         {"_http": session_factory(credentials)} if session_factory is not None else {}
     )
     return storage.Client(
