@@ -2,8 +2,8 @@
 schema: 1
 title: "Capture managed conversation traces for Fred support"
 impact: minor
-configuration: none
-configuration_reason: "Capture is persisted in Control Plane. It uses existing runtime registration, machine authentication and OpenFGA configuration."
+configuration: production
+configuration_reason: "The Fred chart explicitly disables local trace access. The new Control Plane setting is enabled only in the loopback developer profile."
 ---
 
 ## Applicability
@@ -16,19 +16,21 @@ Control Plane must be able to migrate PostgreSQL and install the current OpenFGA
 
 ## Configuration
 
-No production configuration changes are required. Use Admin > Conversation traces to operate capture. Platform admins can grant the Trace reader role from Platform roles.
+Existing deployments can keep their configured values. The chart and backend schema default `conversation_trace_local_development` to false. Use Admin > Conversation traces to operate capture and grant the Trace reader role from Platform roles.
+
+The explicit loopback-only, unsecured developer profile starts capture on and allows local content inspection. Shared profiles retain normal authentication and consent enforcement.
 
 ## Upgrade
 
-Apply the Control Plane migration and update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation.
+Apply the Control Plane migrations for the catalog and consent records, then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation.
 
 ## Validation
 
-Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent conversation does not appear.
+Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent unshared conversation does not appear. From the owner's Debug panel, share through a saved turn, confirm support can read that turn, then withdraw access and verify it is denied.
 
 ## Rollback
 
-Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog tables in place if the evidence must be retained during rollback. The migration downgrade drops the catalog and its settings.
+Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog tables in place if the evidence must be retained during rollback. The migration downgrades drop the catalog, its settings, and consent records.
 
 ## Limitations
 

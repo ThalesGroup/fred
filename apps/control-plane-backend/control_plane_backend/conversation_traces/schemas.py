@@ -13,8 +13,15 @@
 # limitations under the License.
 
 from datetime import datetime
+from enum import StrEnum
 
-from fred_core.conversation_trace import TraceAvailability, TraceOutcome
+from fred_core.conversation_trace import (
+    TraceAvailability,
+    TraceHistoryBoundary,
+    TraceIdentifier,
+    TraceOutcome,
+    TraceRank,
+)
 from pydantic import BaseModel, ConfigDict
 
 
@@ -22,6 +29,32 @@ class ConversationTraceSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
+
+
+class TraceConsentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exchange_id: TraceIdentifier
+    last_rank: TraceRank
+    expected_version: str | None
+
+
+class TraceConsentGrant(BaseModel):
+    grant_id: str
+    cutoff: TraceHistoryBoundary
+
+
+class TraceConsentState(BaseModel):
+    consent: TraceConsentGrant | None = None
+    consent_version: str | None = None
+    available_cutoff: TraceHistoryBoundary | None = None
+    history_unavailable: bool = False
+
+
+class TraceContentAccess(StrEnum):
+    MASKED = "masked"
+    SHARED = "shared"
+    LOCAL = "local"
 
 
 class ConversationTraceSummary(BaseModel):
@@ -48,6 +81,7 @@ class ConversationTraceTurn(BaseModel):
     call_ids: list[str]
     trace_id: str | None
     span_id: str | None
+    access: TraceContentAccess = TraceContentAccess.MASKED
 
 
 class ConversationTraceDetail(BaseModel):
@@ -56,3 +90,5 @@ class ConversationTraceDetail(BaseModel):
     team_id: str
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
+    consent_cutoff: TraceHistoryBoundary | None = None
+    local_content_access: bool = False

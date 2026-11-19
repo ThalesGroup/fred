@@ -548,7 +548,8 @@ class ApplicationContext:
     def get_conversation_trace_store(self) -> ConversationTraceStore:
         if self._conversation_trace_store is None:
             self._conversation_trace_store = ConversationTraceStore(
-                self.get_pg_async_engine()
+                self.get_pg_async_engine(),
+                local_development=self.configuration.conversation_trace_local_development,
             )
         return self._conversation_trace_store
 

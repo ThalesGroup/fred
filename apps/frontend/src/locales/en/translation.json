@@ -688,8 +688,27 @@
       "empty": "The agent has not reasoned in this conversation yet.",
       "hideRestatements": "Hide restatements"
     },
+    "traceConsent": {
+      "section": "Share with support",
+      "loading": "Checking saved history...",
+      "loadError": "Sharing settings could not be loaded.",
+      "sharedThrough": "Shared through turn {{number}}.",
+      "notShared": "This conversation is private to you.",
+      "historyUnavailable": "Fred could not check whether saved history is available.",
+      "noSavedTurns": "Send a message and wait for a turn to be saved before sharing.",
+      "extend": "Share through a later turn",
+      "share": "Share with support",
+      "revoke": "Withdraw access",
+      "refresh": "Try again",
+      "revokeTitle": "Withdraw support access?",
+      "shareTitle": "Share this conversation with support?",
+      "revokeDescription": "Support will lose access to the shared content in Fred. Files already downloaded remain with their recipients.",
+      "shareDescription": "Support can read the saved conversation through turn {{number}}, including messages, tool inputs, and tool results. If detailed traces were recorded, model inputs and outputs may also contain prompts and document excerpts. Later turns stay private unless you share them.",
+      "cancel": "Cancel",
+      "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again."
+    },
     "debugRaw": {
-      "title": "Debug — raw messages",
+      "title": "Debug",
       "scopeAria": "Message scope",
       "scope": {
         "lastExchange": "Last exchange",
@@ -1437,6 +1456,27 @@
         "callId": "call ID",
         "notFound": "This conversation trace is unavailable.",
         "inspectorError": "The conversation trace could not be loaded.",
+        "sharedThrough": "Shared through turn {{number}}",
+        "localAccess": "Local content access",
+        "savedHistory": "Saved history",
+        "historyMasked": "This turn has no active consent for support to read its saved content.",
+        "viewHistory": "View saved history",
+        "hideHistory": "Hide saved history",
+        "historyLoading": "Loading saved history...",
+        "historyUnavailable": "Saved history is unavailable.",
+        "access": {
+          "masked": "Masked",
+          "shared": "Shared",
+          "local": "Local access"
+        },
+        "historyRoles": {
+          "user": "User",
+          "assistant": "Assistant",
+          "tool": "Tool",
+          "tool_call": "Tool call",
+          "tool_result": "Tool result",
+          "system": "System"
+        },
         "outcome": {
           "completed": "Completed",
           "failed": "Failed",
@@ -1444,6 +1484,7 @@
           "unknown": "Unknown"
         },
         "evidence": {
+          "history_only": "History only",
           "metadata_only": "Metadata only",
           "partial": "Partial metadata"
         }

@@ -33943,6 +33943,12 @@
                   "title": "KnowledgeBasesConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "conversation_trace_local_development": {
+                  "default": false,
+                  "description": "Enable default capture and consent-free inspection only on a loopback, unsecured development stack.",
+                  "title": "Conversation Trace Local Development",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -36463,6 +36469,12 @@
                   "title": "KnowledgeBasesConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "conversation_trace_local_development": {
+                  "default": false,
+                  "description": "Enable default capture and consent-free inspection only on a loopback, unsecured development stack.",
+                  "title": "Conversation Trace Local Development",
+                  "type": "boolean"
                 }
               },
               "required": [

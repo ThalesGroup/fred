@@ -101,8 +101,28 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ConversationTraceConsent",
   ],
   endpoints: {
+    getTraceConsent: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    setTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    revokeTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTrace: {
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHistory: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
@@ -1045,6 +1065,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetConversationTraceHistoryQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:

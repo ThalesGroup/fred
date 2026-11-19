@@ -25,11 +25,13 @@ from urllib.parse import quote
 
 import anyio
 import httpx
+from fastapi import HTTPException
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceFinalization,
+    TraceHistoryAccess,
     TraceOutcome,
 )
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -40,6 +42,7 @@ from fred_core.security.backend_to_backend_auth import (
 )
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
+from pydantic import ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
 
@@ -72,7 +75,9 @@ class ConversationTraceClient:
     def __init__(self, client: httpx.AsyncClient, config: AgentPodConfig) -> None:
         self._client = client
         runtime_id = quote(config.app.runtime_id, safe="")
-        self._url = f"{str(config.platform.control_plane_url).rstrip('/')}/internal/runtimes/{runtime_id}/conversation-traces"
+        self._runtime_id = config.app.runtime_id
+        self._control_plane_url = str(config.platform.control_plane_url).rstrip("/")
+        self._url = f"{self._control_plane_url}/internal/runtimes/{runtime_id}/conversation-traces"
         self._auth: M2MBearerAuth | None = None
         m2m = config.security.m2m
         if m2m.enabled:
@@ -93,6 +98,26 @@ class ConversationTraceClient:
                     )
                 )
             )
+
+    async def history_access(
+        self, session_id: str, authorization: str, exchange_id: str | None = None
+    ) -> TraceHistoryAccess:
+        key = quote(session_id, safe="")
+        params = {"runtime_id": self._runtime_id}
+        if exchange_id is not None:
+            params["exchange_id"] = exchange_id
+        try:
+            response = await self._client.get(
+                f"{self._control_plane_url}/admin/conversation-traces/{key}/history-access",
+                headers={"Authorization": authorization},
+                params=params,
+            )
+            if response.status_code in {401, 403, 404}:
+                raise HTTPException(403, "trace_history_access_denied")
+            response.raise_for_status()
+            return TraceHistoryAccess.model_validate(response.json())
+        except (httpx.HTTPError, ValueError, ValidationError) as exc:
+            raise HTTPException(503, "trace_history_access_unavailable") from exc
 
     async def admit(
         self,

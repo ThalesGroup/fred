@@ -14,10 +14,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from enum import StrEnum
+from ipaddress import ip_address
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from fred_core.history.history_schema import ChatMessage
 
 TraceIdentifier = Annotated[str, StringConstraints(min_length=1, max_length=255)]
 CallIdentifier = Annotated[
@@ -25,6 +29,7 @@ CallIdentifier = Annotated[
 ]
 TraceId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 SpanId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{16}$")]
+TraceRank = Annotated[int, Field(ge=0, lt=2**31)]
 MAX_TRACE_CALL_IDS = 128
 
 
@@ -38,6 +43,48 @@ class TraceOutcome(StrEnum):
 class TraceAvailability(StrEnum):
     METADATA_ONLY = "metadata_only"
     PARTIAL = "partial"
+    HISTORY_ONLY = "history_only"
+
+
+class TraceHistoryBoundary(BaseModel):
+    exchange_id: TraceIdentifier
+    first_rank: TraceRank
+    last_rank: TraceRank
+    turn_number: Annotated[int, Field(ge=1)]
+    started_at: datetime
+
+    @model_validator(mode="after")
+    def _check_ranks(self) -> TraceHistoryBoundary:
+        if self.last_rank < self.first_rank:
+            raise ValueError("the saved history boundary is inverted")
+        if self.started_at.tzinfo is None:
+            self.started_at = self.started_at.replace(tzinfo=timezone.utc)
+        return self
+
+
+def is_local_trace_request(peer: str | None, host: str | None) -> bool:
+    if peer is None or host is None:
+        return False
+    try:
+        return ip_address(peer).is_loopback and (
+            host == "localhost" or ip_address(host).is_loopback
+        )
+    except ValueError:
+        return False
+
+
+class TraceHistoryAccess(BaseModel):
+    owner_id: TraceIdentifier
+    cutoff: TraceHistoryBoundary | None = None
+    grant_id: str | None = None
+    local_content_access: bool = False
+    captured_rank: TraceRank | None = None
+
+
+class TraceHistoryTranscript(BaseModel):
+    available: bool
+    messages: list[ChatMessage]
+    next_rank: TraceRank | None = None
 
 
 class TraceAdmissionRequest(BaseModel):
@@ -47,7 +94,7 @@ class TraceAdmissionRequest(BaseModel):
     exchange_id: TraceIdentifier
     user_id: TraceIdentifier
     agent_instance_id: TraceIdentifier
-    history_rank: Annotated[int, Field(ge=0, lt=2**31)]
+    history_rank: TraceRank
 
 
 class TraceAdmission(BaseModel):

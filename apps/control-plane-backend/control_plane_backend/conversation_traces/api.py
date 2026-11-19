@@ -13,15 +13,22 @@
 # limitations under the License.
 
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, TypeVar
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fred_core import KeycloakUser
+from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TraceAdmission,
     TraceAdmissionRequest,
     TraceFinalization,
+    TraceHistoryAccess,
+    TraceHistoryBoundary,
+    TraceHistoryTranscript,
+    is_local_trace_request,
 )
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.delegation import AssertedUser
@@ -30,6 +37,7 @@ from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
 )
+from pydantic import TypeAdapter
 from fred_core.security.structure import (
     LOCAL_DEV_CLIENT_ID,
     is_service_agent,
@@ -41,10 +49,93 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
     ConversationTraceSettings,
+    TraceConsentRequest,
+    TraceConsentState,
 )
+
+from control_plane_backend.conversation_traces.store import (
+    TraceConsentChanged,
+    TraceConsentDoesNotExtend,
+    TraceConversationReference,
+    TraceSessionNotFound,
+)
+from control_plane_backend.teams.system import resolve_system_team_id
 
 router = APIRouter(tags=["ConversationTraces"])
 Container = Annotated[ControlPlaneContainer, Depends(get_application_container)]
+Owner = Annotated[KeycloakUser, Depends(require_own_credential)]
+SessionId = Annotated[str, Path(min_length=1, max_length=255)]
+RouteTeamId = Annotated[TeamId, Path(min_length=1, max_length=255)]
+ExchangeId = Annotated[str, Path(min_length=1, max_length=255)]
+
+_TraceResponse = TypeVar("_TraceResponse")
+_BOUNDARY = TypeAdapter(TraceHistoryBoundary | None)
+_HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
+_TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
+
+
+async def _runtime_history(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference,
+    authorization: str,
+    path: str,
+    decoder: TypeAdapter[_TraceResponse],
+    *,
+    params: dict[str, str | int] | None = None,
+) -> _TraceResponse:
+    source = next(
+        (
+            item
+            for item in container.configuration.platform.runtime_catalog_sources
+            if item.enabled
+            and item.runtime_id == reference.runtime_id
+            and getattr(item, "base_url", None)
+        ),
+        None,
+    )
+    if source is None or reference.session_id in {".", ".."}:
+        raise HTTPException(503, "trace_history_unavailable")
+    session_path = quote(reference.session_id, safe="")
+    url = f"{source.base_url.rstrip('/')}/agents/sessions/{session_path}/{path}"
+    try:
+        result = await container.get_runtime_http_client().get(
+            url,
+            params=params,
+            headers={"Authorization": authorization},
+        )
+        if result.status_code in {401, 403}:
+            raise HTTPException(403, "trace_history_access_denied")
+        result.raise_for_status()
+        return decoder.validate_json(result.content)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(503, "trace_history_unavailable") from exc
+
+
+def _local_content_access(container: ControlPlaneContainer, request: Request) -> bool:
+    return (
+        container.get_conversation_trace_store().local_development
+        and is_local_trace_request(
+            request.client.host if request.client is not None else None,
+            request.url.hostname,
+        )
+    )
+
+
+async def _owned_conversation(
+    container: ControlPlaneContainer,
+    session_id: str,
+    team_id: TeamId,
+    user: KeycloakUser,
+) -> TraceConversationReference:
+    team_id = resolve_system_team_id(user, team_id) or team_id
+    reference = await container.get_conversation_trace_store().reference(session_id)
+    if (
+        reference is None
+        or reference.owner_id != user.uid
+        or reference.team_id != team_id
+    ):
+        raise HTTPException(404, "conversation_trace_not_found")
+    return reference
 
 
 async def require_trace_operator(
@@ -143,37 +234,253 @@ async def list_conversation_traces(
 
 
 @router.get(
+    "/teams/{team_id}/sessions/{session_id}/trace-consent",
+    operation_id="get_trace_consent",
+)
+async def get_trace_consent(
+    team_id: RouteTeamId,
+    session_id: SessionId,
+    user: Owner,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceConsentState:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await _owned_conversation(container, session_id, team_id, user)
+    try:
+        cutoff = await _runtime_history(
+            container,
+            reference,
+            request.headers.get("Authorization", ""),
+            "trace-history-boundary",
+            _BOUNDARY,
+        )
+    except HTTPException:
+        return TraceConsentState(
+            consent=reference.consent,
+            consent_version=reference.consent_version,
+            history_unavailable=True,
+        )
+    return TraceConsentState(
+        consent=reference.consent,
+        consent_version=reference.consent_version,
+        available_cutoff=cutoff,
+    )
+
+
+@router.put(
+    "/teams/{team_id}/sessions/{session_id}/trace-consent",
+    operation_id="set_trace_consent",
+)
+async def set_trace_consent(
+    team_id: RouteTeamId,
+    session_id: SessionId,
+    body: TraceConsentRequest,
+    user: Owner,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceConsentState:
+    response.headers["Cache-Control"] = "no-store"
+    reference = await _owned_conversation(container, session_id, team_id, user)
+    cutoff = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        "trace-history-boundary",
+        _BOUNDARY,
+        params={"exchange_id": body.exchange_id},
+    )
+    if (
+        cutoff is None
+        or cutoff.exchange_id != body.exchange_id
+        or cutoff.last_rank != body.last_rank
+    ):
+        raise HTTPException(409, "trace_consent_turn_changed")
+    try:
+        grant, action = await container.get_conversation_trace_store().set_consent(
+            reference, cutoff, expected_version=body.expected_version
+        )
+    except TraceSessionNotFound as exc:
+        raise HTTPException(404, "conversation_trace_not_found") from exc
+    except TraceConsentChanged as exc:
+        raise HTTPException(409, "trace_consent_changed") from exc
+    except TraceConsentDoesNotExtend as exc:
+        raise HTTPException(409, "trace_consent_does_not_extend") from exc
+    if action is not None and grant is not None:
+        _audit_consent(action, user.uid, session_id, grant.grant_id, cutoff)
+    return TraceConsentState(
+        consent=grant,
+        consent_version=grant.grant_id if grant is not None else None,
+        available_cutoff=cutoff,
+    )
+
+
+def _audit_consent(
+    action: str,
+    actor_id: str,
+    session_id: str,
+    grant_id: str,
+    cutoff: TraceHistoryBoundary,
+) -> None:
+    emit_audit_log(
+        f"conversation_trace.consent.{action}",
+        user_id=actor_id,
+        session_id=session_id,
+        grant_id=grant_id,
+        cutoff_exchange_id=cutoff.exchange_id,
+        cutoff_turn=cutoff.turn_number,
+        source="owner",
+    )
+
+
+@router.delete(
+    "/teams/{team_id}/sessions/{session_id}/trace-consent",
+    status_code=204,
+    operation_id="revoke_trace_consent",
+)
+async def revoke_trace_consent(
+    team_id: RouteTeamId, session_id: SessionId, user: Owner, container: Container
+) -> Response:
+    reference = await _owned_conversation(container, session_id, team_id, user)
+    try:
+        grant, action = await container.get_conversation_trace_store().set_consent(
+            reference, None
+        )
+    except TraceSessionNotFound as exc:
+        raise HTTPException(404, "conversation_trace_not_found") from exc
+    if action is not None and grant is not None:
+        _audit_consent(action, user.uid, session_id, grant.grant_id, grant.cutoff)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+
+@router.get(
     "/admin/conversation-traces/{session_id}", operation_id="get_conversation_trace"
 )
 async def get_conversation_trace(
-    session_id: Annotated[str, Path(min_length=1, max_length=255)],
+    session_id: SessionId,
     container: Container,
     _user: Operator,
+    request: Request,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    cursor: Annotated[str | None, Query(max_length=100)] = None,
+    cursor: Annotated[str | None, Query(max_length=266)] = None,
 ) -> ConversationTraceDetail:
+    response.headers["Cache-Control"] = "no-store"
     after = None
     if cursor is not None:
         try:
-            rank, capture_id = cursor.split("|", 1)
+            rank, exchange_id = cursor.split("|", 1)
             if (
                 not rank.isascii()
                 or not rank.isdecimal()
                 or len(rank) > 10
                 or int(rank) >= 2**31
+                or not 1 <= len(exchange_id) <= 255
             ):
-                raise ValueError("invalid history rank")
-            after = (int(rank), str(UUID(capture_id)))
+                raise ValueError("invalid history rank or exchange")
+            after = (int(rank), exchange_id)
         except ValueError as exc:
             raise HTTPException(422, "invalid_trace_cursor") from exc
-    detail = await container.get_conversation_trace_store().get_conversation(
-        session_id,
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "conversation_trace_not_found")
+    params: dict[str, int | str] = {"limit": limit + 1}
+    if after is not None:
+        params.update(after_rank=after[0], after_exchange=after[1])
+    try:
+        retained_turns = await _runtime_history(
+            container,
+            reference,
+            request.headers.get("Authorization", ""),
+            "trace-history-turns",
+            _HISTORY_TURNS,
+            params=params,
+        )
+    except HTTPException:
+        retained_turns = []
+    # Re-read the active grant after making an independent runtime request.
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible:
+        raise HTTPException(404, "conversation_trace_not_found")
+    return await store.conversation_page(
+        reference,
         limit=limit,
         after=after,
+        retained_turns=retained_turns,
+        local_content_access=_local_content_access(container, request),
     )
-    if detail is None:
-        raise HTTPException(404, "conversation_trace_not_found")
-    return detail
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/history-access",
+    operation_id="get_conversation_trace_history_access",
+)
+async def get_conversation_trace_history_access(
+    session_id: SessionId,
+    runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+    exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+) -> TraceHistoryAccess:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if reference is None or not reference.visible or reference.runtime_id != runtime_id:
+        raise HTTPException(403, "trace_history_access_denied")
+    grant = reference.consent
+    return TraceHistoryAccess(
+        owner_id=reference.owner_id,
+        cutoff=grant.cutoff if grant is not None else None,
+        grant_id=grant.grant_id if grant is not None else None,
+        local_content_access=_local_content_access(container, request),
+        captured_rank=(
+            await store.capture_start_rank(session_id, exchange_id)
+            if exchange_id is not None
+            else None
+        ),
+    )
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/history/{exchange_id}",
+    operation_id="get_conversation_trace_history",
+)
+async def get_conversation_trace_history(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+    after_rank: Annotated[int, Query(ge=-1, lt=2**31)] = -1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> TraceHistoryTranscript:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    reference = await store.reference(session_id)
+    if (
+        reference is None
+        or not reference.visible
+        or exchange_id in {".", ".."}
+        or (reference.consent is None and not _local_content_access(container, request))
+    ):
+        raise HTTPException(403, "trace_history_access_denied")
+    result = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-history-turns/{quote(exchange_id, safe='')}",
+        _TRANSCRIPT,
+        params={"after_rank": after_rank, "limit": limit},
+    )
+    current = await store.reference(session_id)
+    if current is None or not current.visible or current.consent != reference.consent:
+        raise HTTPException(403, "trace_history_access_denied")
+    return result
 
 
 @router.post(

@@ -2293,6 +2293,8 @@ applications:
         # the frontend's legal "gcu" page (FORKING_GUIDE.md, "Legal pages").
         gcu_version: null
 
+      conversation_trace_local_development: false
+
       observability:
         kpi:
           prometheus:

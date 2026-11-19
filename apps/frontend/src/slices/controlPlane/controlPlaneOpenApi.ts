@@ -1759,6 +1759,24 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceConsent: build.query<GetTraceConsentApiResponse, GetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+      }),
+    }),
+    setTraceConsent: build.mutation<SetTraceConsentApiResponse, SetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    revokeTraceConsent: build.mutation<RevokeTraceConsentApiResponse, RevokeTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "DELETE",
+      }),
+    }),
     getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}`,
@@ -1768,6 +1786,29 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getConversationTraceHistoryAccess: build.query<
+      GetConversationTraceHistoryAccessApiResponse,
+      GetConversationTraceHistoryAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+        },
+      }),
+    }),
+    getConversationTraceHistory: build.query<GetConversationTraceHistoryApiResponse, GetConversationTraceHistoryApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history/${queryArg.exchangeId}`,
+          params: {
+            after_rank: queryArg.afterRank,
+            limit: queryArg.limit,
+          },
+        }),
+      },
+    ),
     admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
@@ -3704,11 +3745,40 @@ export type ListConversationTracesApiArg = {
   limit?: number;
   cursor?: string | null;
 };
+export type GetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type GetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type SetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type SetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RevokeTraceConsentApiResponse = unknown;
+export type RevokeTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
 export type GetConversationTraceApiResponse = /** status 200 Successful Response */ ConversationTraceDetail;
 export type GetConversationTraceApiArg = {
   sessionId: string;
   limit?: number;
   cursor?: string | null;
+};
+export type GetConversationTraceHistoryAccessApiResponse = /** status 200 Successful Response */ TraceHistoryAccess;
+export type GetConversationTraceHistoryAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId?: string | null;
+};
+export type GetConversationTraceHistoryApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
+export type GetConversationTraceHistoryApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
 };
 export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
   /** status 200 Successful Response */ TraceAdmission | null;
@@ -6498,7 +6568,7 @@ export type ConversationTraceSettings = {
   enabled: boolean;
 };
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
-export type TraceAvailability = "metadata_only" | "partial";
+export type TraceAvailability = "metadata_only" | "partial" | "history_only";
 export type ConversationTraceSummary = {
   session_id: string;
   agent_display_name: string;
@@ -6511,6 +6581,29 @@ export type ConversationTraceCatalog = {
   conversations: ConversationTraceSummary[];
   next_cursor: string | null;
 };
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  turn_number: number;
+  started_at: string;
+};
+export type TraceConsentGrant = {
+  grant_id: string;
+  cutoff: TraceHistoryBoundary;
+};
+export type TraceConsentState = {
+  consent?: TraceConsentGrant | null;
+  consent_version?: string | null;
+  available_cutoff?: TraceHistoryBoundary | null;
+  history_unavailable?: boolean;
+};
+export type TraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+};
+export type TraceContentAccess = "masked" | "shared" | "local";
 export type ConversationTraceTurn = {
   exchange_id: string;
   turn_number: number | null;
@@ -6521,6 +6614,7 @@ export type ConversationTraceTurn = {
   call_ids: string[];
   trace_id: string | null;
   span_id: string | null;
+  access?: TraceContentAccess;
 };
 export type ConversationTraceDetail = {
   session_id: string;
@@ -6528,6 +6622,208 @@ export type ConversationTraceDetail = {
   team_id: string;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
+  consent_cutoff?: TraceHistoryBoundary | null;
+  local_content_access?: boolean;
+};
+export type TraceHistoryAccess = {
+  owner_id: string;
+  cutoff?: TraceHistoryBoundary | null;
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  captured_rank?: number | null;
+};
+export type Role = "user" | "assistant" | "tool" | "system";
+export type Channel =
+  | "final"
+  | "plan"
+  | "thought"
+  | "observation"
+  | "tool_call"
+  | "tool_result"
+  | "error"
+  | "system_note"
+  | "hitl_request"
+  | "hitl_response";
+export type CodePart = {
+  type?: "code";
+  language?: string | null;
+  code: string;
+};
+export type HitlChoiceRecord = {
+  id: string;
+  label: string;
+};
+export type HitlPendingCallRecord = {
+  tool_call_id?: string;
+  tool_name: string;
+  args_preview?: string;
+};
+export type HitlRequestPart = {
+  type?: "hitl_request";
+  stage?: string | null;
+  title?: string | null;
+  question: string;
+  choices: HitlChoiceRecord[];
+  free_text?: boolean;
+  interrupt_id?: string | null;
+  occurrence_id?: string | null;
+  pending_calls?: HitlPendingCallRecord[];
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
+};
+export type HitlResponsePart = {
+  type?: "hitl_response";
+  choice_id?: string | null;
+  text?: string | null;
+  skipped?: boolean;
+  occurrence_id?: string | null;
+  label?: string | null;
+};
+export type ImageUrlPart = {
+  type?: "image_url";
+  url: string;
+  alt?: string | null;
+};
+export type TextPart = {
+  type?: "text";
+  text: string;
+};
+export type ToolCallPart = {
+  type?: "tool_call";
+  call_id: string;
+  name: string;
+  args: {
+    [key: string]: any;
+  };
+};
+export type ToolResultPart = {
+  type?: "tool_result";
+  call_id: string;
+  ok?: boolean | null;
+  latency_ms?: number | null;
+  content: string;
+};
+export type ChatTokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
+  chunk_kind?: string | null;
+  /** Document UID */
+  uid: string;
+  title: string;
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
+  score: number;
+  rank?: number | null;
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  embedding_model?: string | null;
+  vector_index?: string | null;
+  token_count?: number | null;
+  retrieved_at?: string | null;
+  retrieval_session_id?: string | null;
+};
+export type CommandPromptDescriptor = {
+  command: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_offset: number;
+  text_offset: number;
+  text_length: number;
+  [key: string]: any;
+};
+export type CommandDescriptor = {
+  command: string;
+  appended_text?: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_text?: string | null;
+  draft_command_offset?: number | null;
+  prompts?: CommandPromptDescriptor[] | null;
+  [key: string]: any;
+};
+export type ChatMetadata = {
+  model?: string | null;
+  token_usage?: ChatTokenUsage | null;
+  context_tokens?: number | null;
+  agent_id?: string | null;
+  latency_ms?: number | null;
+  finish_reason?: FinishReason | null;
+  sources?: VectorSearchHit[];
+  ui_parts?: {
+    [key: string]: any;
+  }[];
+  command?: CommandDescriptor | null;
+  [key: string]: any;
+};
+export type ChatMessage = {
+  session_id: string;
+  exchange_id: string;
+  rank: number;
+  timestamp: string;
+  role: Role;
+  channel: Channel;
+  parts: (
+    | ({
+        type: "code";
+      } & CodePart)
+    | ({
+        type: "hitl_request";
+      } & HitlRequestPart)
+    | ({
+        type: "hitl_response";
+      } & HitlResponsePart)
+    | ({
+        type: "image_url";
+      } & ImageUrlPart)
+    | ({
+        type: "text";
+      } & TextPart)
+    | ({
+        type: "tool_call";
+      } & ToolCallPart)
+    | ({
+        type: "tool_result";
+      } & ToolResultPart)
+  )[];
+  metadata?: ChatMetadata;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: ChatMessage[];
+  next_rank?: number | null;
 };
 export type TraceAdmission = {
   capture_id: string;
@@ -7568,8 +7864,16 @@ export const {
   useSetConversationTraceSettingsMutation,
   useListConversationTracesQuery,
   useLazyListConversationTracesQuery,
+  useGetTraceConsentQuery,
+  useLazyGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useRevokeTraceConsentMutation,
   useGetConversationTraceQuery,
   useLazyGetConversationTraceQuery,
+  useGetConversationTraceHistoryAccessQuery,
+  useLazyGetConversationTraceHistoryAccessQuery,
+  useGetConversationTraceHistoryQuery,
+  useLazyGetConversationTraceHistoryQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
   useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,

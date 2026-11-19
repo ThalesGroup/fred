@@ -47,3 +47,27 @@
   white-space: pre;
   word-break: normal;
 }
+
+.sharing {
+  display: grid;
+  flex-shrink: 0;
+  align-items: start;
+  gap: var(--spacing-s);
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-s);
+}
+
+.sharing h2,
+.sharing p {
+  margin: 0;
+}
+
+.sharing h2 {
+  font: var(--font-title-small);
+}
+
+.sharingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}

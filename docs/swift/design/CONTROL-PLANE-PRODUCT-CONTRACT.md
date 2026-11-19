@@ -5442,3 +5442,23 @@ Trace turns are one-to-many with different read and retention rules from
 `session_metadata`. The trace tables reuse the existing conversation key,
 owner, agent instance, and runtime binding through a foreign key and scoped
 admission, without copying conversation content.
+
+### Owner consent for saved history
+
+The owner can read, grant, extend, or withdraw support consent at
+`/teams/{team_id}/sessions/{session_id}/trace-consent` using their own
+credential. Control Plane verifies session ownership and asks the bound
+runtime for the exact saved exchange and rank approved by the owner. An
+extension creates a new immutable grant. A stale sharing decision is
+rejected after revocation. Grants, extensions, and revocations emit
+content-free audit events. The consent table follows session erasure.
+
+An explicit Debug share appears under All while its grant is active.
+Previously captured conversations remain visible with masked content
+after revocation. The inspector merges captured and retained safe turn
+metadata. Requests for a saved transcript are reauthorized at the
+runtime boundary and the response is served without caching.
+
+The explicit local development profile defaults capture on and permits
+local content reads when both services receive loopback requests.
+Shared deployments default capture off and enforce role and turn consent.

@@ -7462,3 +7462,14 @@ masked summary. If the tracing backend exposes a span, the runtime attaches
 an opaque capture reference. Catalog persistence works independently of
 trace export. Admission and finalization have bounded deadlines and
 failures leave the managed SSE contract intact.
+
+### Consent-checked trace history (2026-11-19)
+
+The runtime adds an owner-scoped saved boundary lookup and diagnostic
+history routes under `/agents/sessions/{session_id}`. The diagnostic routes
+validate the caller's own credential and recheck Control Plane's access
+decision for the bound runtime. Metadata can describe retained exchanges
+without exposing message bodies. A transcript read is bounded to one
+exchange and the immutable consent rank, with pagination and a second
+access check before returning content. Ordinary owner history access
+continues through the existing messages route.

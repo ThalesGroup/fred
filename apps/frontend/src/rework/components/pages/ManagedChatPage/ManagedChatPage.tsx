@@ -27,6 +27,7 @@ import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandProm
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { TraceConsentControls } from "@shared/molecules/DebugRawDrawer/TraceConsentControls";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
@@ -844,7 +845,7 @@ export default function ManagedChatPage() {
 
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
-  // already readable in the trace drawer — the raw message dump for admins only.
+  // already readable in the trace drawer. Debug also contains the owner sharing controls.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
   const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
@@ -869,7 +870,7 @@ export default function ManagedChatPage() {
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
     },
-    ...(isAdmin
+    ...(isAdmin || chat.sessionId
       ? [
           {
             key: "debug",
@@ -1120,11 +1121,17 @@ export default function ManagedChatPage() {
             messages={chat.messages}
           />
 
-          {isAdmin && (
+          {(isAdmin || chat.sessionId) && (
             <DebugRawDrawer
               open={activePushDrawer?.kind === "debug"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
               messages={chat.messages}
+              showRaw={isAdmin}
+              sharing={
+                chat.sessionId ? (
+                  <TraceConsentControls key={chat.sessionId} teamId={teamId} sessionId={chat.sessionId} />
+                ) : undefined
+              }
             />
           )}
 

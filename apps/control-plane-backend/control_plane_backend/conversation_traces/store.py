@@ -14,7 +14,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fred_core.conversation_trace import (
@@ -22,24 +23,28 @@ from fred_core.conversation_trace import (
     TraceAdmissionRequest,
     TraceAvailability,
     TraceFinalization,
+    TraceHistoryBoundary,
     TraceOutcome,
 )
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.orm import aliased, load_only
+from sqlalchemy.orm import aliased
 
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
     ConversationTraceSummary,
     ConversationTraceTurn,
+    TraceConsentGrant,
+    TraceContentAccess,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceConsentRow,
     ConversationTraceSettingsRow,
     ConversationTraceTurnRow,
 )
@@ -52,17 +57,65 @@ def _utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-def _availability(row: ConversationTraceTurnRow) -> TraceAvailability:
+def _availability(completed_at: datetime | None, outcome: str) -> TraceAvailability:
     return (
         TraceAvailability.PARTIAL
-        if row.completed_at is None or row.outcome == TraceOutcome.UNKNOWN
+        if completed_at is None or outcome == TraceOutcome.UNKNOWN
         else TraceAvailability.METADATA_ONLY
     )
 
 
+def _consent(row: ConversationTraceConsentRow) -> TraceConsentGrant:
+    return TraceConsentGrant(
+        grant_id=row.grant_id,
+        cutoff=TraceHistoryBoundary(
+            exchange_id=row.exchange_id,
+            first_rank=row.first_rank,
+            last_rank=row.last_rank,
+            turn_number=row.turn_number,
+            started_at=_utc(row.started_at),
+        ),
+    )
+
+
+def _consent_version(row: ConversationTraceConsentRow | None) -> str | None:
+    if row is None:
+        return None
+    return f"{row.grant_id}:revoked" if row.revoked_at is not None else row.grant_id
+
+
+@dataclass(frozen=True)
+class TraceConversationReference:
+    session_id: str
+    team_id: str
+    owner_id: str
+    runtime_id: str | None
+    agent_display_name: str
+    has_capture: bool
+    consent: TraceConsentGrant | None
+    consent_version: str | None
+
+    @property
+    def visible(self) -> bool:
+        return self.has_capture or self.consent is not None
+
+
+class TraceSessionNotFound(Exception):
+    pass
+
+
+class TraceConsentDoesNotExtend(Exception):
+    pass
+
+
+class TraceConsentChanged(Exception):
+    pass
+
+
 class ConversationTraceStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, *, local_development: bool = False) -> None:
         self._sessions = make_session_factory(engine)
+        self.local_development = local_development
         self._insert = (
             pg_insert if engine.dialect.name == "postgresql" else sqlite_insert
         )
@@ -70,7 +123,7 @@ class ConversationTraceStore:
     async def enabled(self) -> bool:
         async with use_session(self._sessions) as session:
             row = await session.get(ConversationTraceSettingsRow, _SETTINGS_ID)
-            return row.enabled if row is not None else False
+            return row.enabled if row is not None else self.local_development
 
     async def set_enabled(self, enabled: bool) -> None:
         statement = self._insert(ConversationTraceSettingsRow).values(
@@ -88,7 +141,9 @@ class ConversationTraceStore:
     ) -> str | None:
         async with use_session(self._sessions) as session:
             settings = await session.get(ConversationTraceSettingsRow, _SETTINGS_ID)
-            if settings is None or not settings.enabled:
+            if not (
+                settings.enabled if settings is not None else self.local_development
+            ):
                 return None
             agent_name = await session.scalar(
                 select(AgentInstanceRow.display_name)
@@ -166,6 +221,146 @@ class ConversationTraceStore:
                 :MAX_TRACE_CALL_IDS
             ]
 
+    async def reference(self, session_id: str) -> TraceConversationReference | None:
+        active = ConversationTraceConsentRow
+        captured = ConversationTraceTurnRow
+        metadata = SessionMetadataRow
+        instance = AgentInstanceRow
+        latest = (
+            select(captured.runtime_id, captured.agent_display_name)
+            .where(captured.session_id == session_id)
+            .order_by(captured.history_rank.desc(), captured.capture_id.desc())
+            .limit(1)
+            .subquery()
+        )
+        last_grant = aliased(active)
+        latest_grant_id = (
+            select(last_grant.grant_id)
+            .where(last_grant.session_id == session_id)
+            .order_by(last_grant.granted_at.desc(), last_grant.grant_id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        query = (
+            select(
+                metadata,
+                active,
+                func.coalesce(
+                    metadata.source_runtime_id,
+                    instance.source_runtime_id,
+                    latest.c.runtime_id,
+                ),
+                func.coalesce(
+                    instance.display_name,
+                    metadata.agent_display_name,
+                    latest.c.agent_display_name,
+                ),
+                latest.c.runtime_id.is_not(None),
+            )
+            .select_from(metadata)
+            .outerjoin(
+                instance,
+                and_(
+                    instance.agent_instance_id == metadata.agent_instance_id,
+                    instance.team_id == metadata.team_id,
+                ),
+            )
+            .outerjoin(active, active.grant_id == latest_grant_id)
+            .outerjoin(latest, literal(True))
+            .where(metadata.session_id == session_id, metadata.deleted_at.is_(None))
+        )
+        async with use_session(self._sessions) as session:
+            row = (await session.execute(query)).one_or_none()
+        if row is None:
+            return None
+        owner, grant, runtime_id, display_name, has_capture = row
+        if owner.user_id is None:
+            return None
+        return TraceConversationReference(
+            session_id=session_id,
+            team_id=owner.team_id,
+            owner_id=owner.user_id,
+            runtime_id=runtime_id,
+            agent_display_name=display_name or "",
+            has_capture=bool(has_capture),
+            consent=_consent(grant)
+            if grant is not None and grant.revoked_at is None
+            else None,
+            consent_version=_consent_version(grant),
+        )
+
+    async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            return await session.scalar(
+                select(turn.history_rank).where(
+                    turn.session_id == session_id, turn.exchange_id == exchange_id
+                )
+            )
+
+    async def set_consent(
+        self,
+        reference: TraceConversationReference,
+        cutoff: TraceHistoryBoundary | None,
+        *,
+        expected_version: str | None = None,
+    ) -> tuple[TraceConsentGrant | None, str | None]:
+        metadata = SessionMetadataRow
+        active = ConversationTraceConsentRow
+        async with use_session(self._sessions) as session:
+            owner = await session.scalar(
+                select(metadata.session_id)
+                .where(
+                    metadata.session_id == reference.session_id,
+                    metadata.user_id == reference.owner_id,
+                    metadata.team_id == reference.team_id,
+                    metadata.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if owner is None:
+                raise TraceSessionNotFound()
+            latest = await session.scalar(
+                select(active)
+                .where(active.session_id == owner)
+                .order_by(active.granted_at.desc(), active.grant_id.desc())
+                .limit(1)
+            )
+            previous = (
+                latest if latest is not None and latest.revoked_at is None else None
+            )
+            if cutoff is None:
+                if previous is None:
+                    return None, None
+                previous.revoked_at = utcnow()
+                return _consent(previous), "revoked"
+            current = _consent(previous) if previous is not None else None
+            if current is not None and current.cutoff == cutoff:
+                return current, None
+            if expected_version != _consent_version(latest):
+                raise TraceConsentChanged()
+            if previous is not None:
+                if cutoff.first_rank <= previous.first_rank:
+                    raise TraceConsentDoesNotExtend()
+                previous.revoked_at = utcnow()
+                await session.flush()
+            granted_at = utcnow()
+            if latest is not None:
+                # Keep grant order stable when the next request lands on a different pod.
+                granted_at = max(
+                    granted_at, _utc(latest.granted_at) + timedelta(microseconds=1)
+                )
+            row = active(
+                grant_id=str(uuid4()),
+                session_id=owner,
+                actor_id=reference.owner_id,
+                source="owner",
+                granted_at=granted_at,
+                **cutoff.model_dump(),
+            )
+            session.add(row)
+            return _consent(row), "extended" if previous is not None else "granted"
+
     async def list_conversations(
         self,
         *,
@@ -175,6 +370,7 @@ class ConversationTraceStore:
     ) -> ConversationTraceCatalog:
         turn = ConversationTraceTurnRow
         newer = aliased(turn)
+        metadata = SessionMetadataRow
         superseded = select(newer.capture_id).where(
             newer.session_id == turn.session_id,
             or_(
@@ -187,100 +383,179 @@ class ConversationTraceStore:
         )
         if failed_only:
             superseded = superseded.where(newer.outcome == TraceOutcome.FAILED.value)
-        query = (
-            select(turn, SessionMetadataRow.team_id)
-            .join(SessionMetadataRow, SessionMetadataRow.session_id == turn.session_id)
-            .options(
-                load_only(
-                    turn.session_id,
-                    turn.agent_display_name,
-                    turn.started_at,
-                    turn.outcome,
-                    turn.completed_at,
-                )
+        captured = (
+            select(
+                turn.session_id.label("session_id"),
+                turn.agent_display_name.label("agent_display_name"),
+                metadata.team_id.label("team_id"),
+                turn.started_at.label("started_at"),
+                turn.capture_id.label("entry_id"),
+                turn.outcome.label("outcome"),
+                turn.completed_at.label("completed_at"),
+                literal(False).label("history_only"),
             )
-            .where(SessionMetadataRow.deleted_at.is_(None), ~superseded.exists())
-            .order_by(turn.started_at.desc(), turn.capture_id.desc())
-            .limit(limit + 1)
+            .select_from(turn)
+            .join(metadata, metadata.session_id == turn.session_id)
+            .where(metadata.deleted_at.is_(None), ~superseded.exists())
         )
         if failed_only:
-            query = query.where(turn.outcome == TraceOutcome.FAILED.value)
+            entries = captured.where(
+                turn.outcome == TraceOutcome.FAILED.value
+            ).subquery()
+        else:
+            grant = ConversationTraceConsentRow
+            instance = AgentInstanceRow
+            shared = (
+                select(
+                    grant.session_id,
+                    func.coalesce(
+                        instance.display_name, metadata.agent_display_name, ""
+                    ),
+                    metadata.team_id,
+                    grant.started_at,
+                    grant.grant_id,
+                    literal(TraceOutcome.UNKNOWN.value),
+                    grant.granted_at,
+                    literal(True),
+                )
+                .select_from(grant)
+                .join(metadata, metadata.session_id == grant.session_id)
+                .outerjoin(
+                    instance,
+                    and_(
+                        instance.agent_instance_id == metadata.agent_instance_id,
+                        instance.team_id == metadata.team_id,
+                    ),
+                )
+                .where(
+                    grant.revoked_at.is_(None),
+                    metadata.deleted_at.is_(None),
+                    ~select(turn.capture_id)
+                    .where(turn.session_id == grant.session_id)
+                    .exists(),
+                )
+            )
+            entries = union_all(captured, shared).subquery()
+        query = (
+            select(entries)
+            .order_by(entries.c.started_at.desc(), entries.c.entry_id.desc())
+            .limit(limit + 1)
+        )
         if before is not None:
-            date, capture_id = before
+            date, entry_id = before
             query = query.where(
                 or_(
-                    turn.started_at < date,
-                    and_(turn.started_at == date, turn.capture_id < capture_id),
+                    entries.c.started_at < date,
+                    and_(entries.c.started_at == date, entries.c.entry_id < entry_id),
                 )
             )
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).all()
-        last = rows[limit - 1][0] if len(rows) > limit else None
+        last = rows[limit - 1] if len(rows) > limit else None
         return ConversationTraceCatalog(
             conversations=[
                 ConversationTraceSummary(
                     session_id=row.session_id,
                     agent_display_name=row.agent_display_name,
-                    team_id=team_id,
+                    team_id=row.team_id,
                     latest_started_at=_utc(row.started_at),
                     outcome=TraceOutcome(row.outcome),
-                    availability=_availability(row),
+                    availability=(
+                        TraceAvailability.HISTORY_ONLY
+                        if row.history_only
+                        else _availability(row.completed_at, row.outcome)
+                    ),
                 )
-                for row, team_id in rows[:limit]
+                for row in rows[:limit]
             ],
-            next_cursor=f"{_utc(last.started_at).isoformat()}|{last.capture_id}"
+            next_cursor=f"{_utc(last.started_at).isoformat()}|{last.entry_id}"
             if last
             else None,
         )
 
-    async def get_conversation(
+    async def conversation_page(
         self,
-        session_id: str,
+        reference: TraceConversationReference,
         *,
         limit: int,
         after: tuple[int, str] | None,
-    ) -> ConversationTraceDetail | None:
+        retained_turns: list[TraceHistoryBoundary],
+        local_content_access: bool,
+    ) -> ConversationTraceDetail:
         turn = ConversationTraceTurnRow
         query = (
-            select(turn, SessionMetadataRow.team_id)
-            .join(SessionMetadataRow, SessionMetadataRow.session_id == turn.session_id)
-            .where(
-                turn.session_id == session_id, SessionMetadataRow.deleted_at.is_(None)
-            )
-            .order_by(turn.history_rank, turn.capture_id)
+            select(turn)
+            .where(turn.session_id == reference.session_id)
+            .order_by(turn.history_rank, turn.exchange_id)
             .limit(limit + 1)
         )
         if after is not None:
-            rank, capture_id = after
+            rank, exchange_id = after
             query = query.where(
                 or_(
                     turn.history_rank > rank,
-                    and_(turn.history_rank == rank, turn.capture_id > capture_id),
+                    and_(turn.history_rank == rank, turn.exchange_id > exchange_id),
                 )
             )
         async with use_session(self._sessions) as session:
-            rows = (await session.execute(query)).all()
-        if not rows:
-            return None
-        first, team_id = rows[0]
-        last = rows[limit - 1][0] if len(rows) > limit else None
-        return ConversationTraceDetail(
-            session_id=session_id,
-            agent_display_name=first.agent_display_name,
-            team_id=team_id,
-            turns=[
+            rows = (await session.execute(query)).scalars().all()
+        cutoff = reference.consent.cutoff if reference.consent is not None else None
+
+        def access(rank: int, exchange_id: str) -> TraceContentAccess:
+            if local_content_access:
+                return TraceContentAccess.LOCAL
+            if cutoff is not None and (rank, exchange_id) <= (
+                cutoff.first_rank,
+                cutoff.exchange_id,
+            ):
+                return TraceContentAccess.SHARED
+            return TraceContentAccess.MASKED
+
+        points = {
+            item.exchange_id: (
+                item.first_rank,
+                ConversationTraceTurn(
+                    exchange_id=item.exchange_id,
+                    turn_number=item.turn_number,
+                    started_at=_utc(item.started_at),
+                    duration_ms=None,
+                    outcome=TraceOutcome.UNKNOWN,
+                    availability=TraceAvailability.HISTORY_ONLY,
+                    call_ids=[],
+                    trace_id=None,
+                    span_id=None,
+                    access=access(item.first_rank, item.exchange_id),
+                ),
+            )
+            for item in retained_turns
+        }
+        for row in rows:
+            start_rank = points.get(row.exchange_id, (row.history_rank, None))[0]
+            points[row.exchange_id] = (
+                start_rank,
                 ConversationTraceTurn(
                     exchange_id=row.exchange_id,
                     turn_number=row.turn_number,
                     started_at=_utc(row.started_at),
                     duration_ms=row.duration_ms,
                     outcome=TraceOutcome(row.outcome),
-                    availability=_availability(row),
+                    availability=_availability(row.completed_at, row.outcome),
                     call_ids=row.call_ids,
                     trace_id=row.trace_id,
                     span_id=row.span_id,
-                )
-                for row, _ in rows[:limit]
-            ],
-            next_cursor=f"{last.history_rank}|{last.capture_id}" if last else None,
+                    access=access(start_rank, row.exchange_id),
+                ),
+            )
+        ordered = sorted(
+            points.values(), key=lambda item: (item[0], item[1].exchange_id)
+        )
+        last = ordered[limit - 1] if len(ordered) > limit else None
+        return ConversationTraceDetail(
+            session_id=reference.session_id,
+            agent_display_name=reference.agent_display_name,
+            team_id=reference.team_id,
+            turns=[item for _, item in ordered[:limit]],
+            next_cursor=f"{last[0]}|{last[1].exchange_id}" if last else None,
+            consent_cutoff=cutoff,
+            local_content_access=local_content_access,
         )

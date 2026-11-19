@@ -235,6 +235,33 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceHistoryBoundary: build.query<GetTraceHistoryBoundaryApiResponse, GetTraceHistoryBoundaryApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-boundary`,
+        params: {
+          exchange_id: queryArg.exchangeId,
+        },
+      }),
+    }),
+    listTraceHistoryTurns: build.query<ListTraceHistoryTurnsApiResponse, ListTraceHistoryTurnsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-turns`,
+        params: {
+          limit: queryArg.limit,
+          after_rank: queryArg.afterRank,
+          after_exchange: queryArg.afterExchange,
+        },
+      }),
+    }),
+    getTraceHistoryTranscript: build.query<GetTraceHistoryTranscriptApiResponse, GetTraceHistoryTranscriptApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-turns/${queryArg.exchangeId}`,
+        params: {
+          after_rank: queryArg.afterRank,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -472,6 +499,25 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   sessionId: string;
   messageId: string;
   runtimeExecuteRequest: RuntimeExecuteRequest;
+};
+export type GetTraceHistoryBoundaryApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary | null;
+export type GetTraceHistoryBoundaryApiArg = {
+  sessionId: string;
+  exchangeId?: string | null;
+};
+export type ListTraceHistoryTurnsApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary[];
+export type ListTraceHistoryTurnsApiArg = {
+  sessionId: string;
+  limit?: number;
+  afterRank?: number;
+  afterExchange?: string;
+};
+export type GetTraceHistoryTranscriptApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
+export type GetTraceHistoryTranscriptApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -1385,6 +1431,18 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  started_at: string;
+  turn_number: number;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: ChatMessage[];
+  next_rank?: number | null;
+};
 export type SkillDetail = {
   content: string;
   revision: string;
@@ -1655,6 +1713,12 @@ export const {
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
+  useGetTraceHistoryBoundaryQuery,
+  useLazyGetTraceHistoryBoundaryQuery,
+  useListTraceHistoryTurnsQuery,
+  useLazyListTraceHistoryTurnsQuery,
+  useGetTraceHistoryTranscriptQuery,
+  useLazyGetTraceHistoryTranscriptQuery,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

@@ -49,10 +49,11 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import MetaData, delete, func, select, text, update
+from sqlalchemy import MetaData, and_, delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from fred_core.conversation_trace import TraceHistoryBoundary, TraceHistoryTranscript
 from fred_core.history.base_history_store import BaseHistoryStore
 from fred_core.history.history_models import SessionHistoryRow
 from fred_core.history.history_schema import (
@@ -359,7 +360,13 @@ class PostgresHistoryStore(BaseHistoryStore):
                 .all()
             )
 
-        out: List[ChatMessage] = []
+        return self._deserialize_messages(session_id, rows)
+
+    @staticmethod
+    def _deserialize_messages(
+        session_id: str, rows: Sequence[SessionHistoryRow]
+    ) -> list[ChatMessage]:
+        out: list[ChatMessage] = []
         for row in rows:
             try:
                 parts = _MESSAGE_PARTS_ADAPTER.validate_python(row.parts_json or [])
@@ -390,6 +397,100 @@ class PostgresHistoryStore(BaseHistoryStore):
                     "[history][pg] Skipping malformed row rank=%s: %s", row.rank, exc
                 )
         return out
+
+    @staticmethod
+    def _trace_boundaries(session_id: str, user_id: str):
+        row = SessionHistoryRow
+        first_rank = func.min(row.rank)
+        return (
+            select(
+                row.exchange_id.label("exchange_id"),
+                first_rank.label("first_rank"),
+                func.max(row.rank).label("last_rank"),
+                func.min(row.timestamp).label("started_at"),
+                func.row_number()
+                .over(order_by=(first_rank, row.exchange_id))
+                .label("turn_number"),
+            )
+            .where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.rank >= 0,
+                row.exchange_id.is_not(None),
+                row.exchange_id != "",
+                row.delivery_state.is_distinct_from("pending"),
+            )
+            .group_by(row.exchange_id)
+            .subquery()
+        )
+
+    async def trace_boundary(
+        self, session_id: str, user_id: str, exchange_id: str | None
+    ) -> TraceHistoryBoundary | None:
+        turns = self._trace_boundaries(session_id, user_id)
+        query = select(turns).order_by(turns.c.turn_number.desc()).limit(1)
+        if exchange_id is not None:
+            query = query.where(turns.c.exchange_id == exchange_id)
+        async with use_session(self._sessions) as session:
+            row = (await session.execute(query)).mappings().first()
+        return TraceHistoryBoundary.model_validate(row) if row is not None else None
+
+    async def trace_history_page(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        limit: int,
+        after: tuple[int, str] | None,
+    ) -> list[TraceHistoryBoundary]:
+        turns = self._trace_boundaries(session_id, user_id)
+        query = select(turns).order_by(turns.c.turn_number).limit(limit)
+        if after is not None:
+            rank, exchange_id = after
+            query = query.where(
+                or_(
+                    turns.c.first_rank > rank,
+                    and_(turns.c.first_rank == rank, turns.c.exchange_id > exchange_id),
+                )
+            )
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).mappings().all()
+        return [TraceHistoryBoundary.model_validate(row) for row in rows]
+
+    async def trace_transcript(
+        self,
+        session_id: str,
+        user_id: str,
+        exchange_id: str,
+        *,
+        highest_rank: int | None,
+        after_rank: int,
+        limit: int,
+    ) -> TraceHistoryTranscript:
+        row = SessionHistoryRow
+        query = (
+            select(row)
+            .where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.exchange_id == exchange_id,
+                row.rank > after_rank,
+                row.delivery_state.is_distinct_from("pending"),
+            )
+            .order_by(row.rank)
+            .limit(limit + 1)
+        )
+        if highest_rank is not None:
+            query = query.where(row.rank <= highest_rank)
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).scalars().all()
+        messages = self._deserialize_messages(session_id, rows[:limit])
+        next_rank = rows[limit - 1].rank if len(rows) > limit else None
+        return TraceHistoryTranscript(
+            available=bool(messages) or next_rank is not None,
+            messages=messages,
+            next_rank=next_rank,
+        )
 
     async def list_sessions(
         self,

@@ -444,7 +444,10 @@ technical panels, gate those specific widgets on a new, narrower capability
 `platform_admin` and authorizes the Admin trace surface only. The role
 does not grant membership or access through ordinary conversation or team
 APIs. Runtime ingestion uses the registered runtime workload identity
-independently of these platform role grants.
+independently of these platform role grants. Reading saved trace content
+also requires an active conversation grant through the selected exchange.
+The owner manages that grant with their own credential. Both platform
+admins and trace readers are subject to the same checks.
 
 ### Deployment admin
 

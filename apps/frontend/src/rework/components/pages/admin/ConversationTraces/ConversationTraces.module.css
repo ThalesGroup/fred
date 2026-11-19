@@ -148,3 +148,37 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.history {
+  margin-top: var(--spacing-l);
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-m);
+}
+
+.history h3 {
+  margin-top: 0;
+}
+
+.historyMessages {
+  display: grid;
+  gap: var(--spacing-s);
+  padding-inline-start: var(--spacing-l);
+}
+
+.historyMessages summary {
+  cursor: pointer;
+}
+
+.historyMessages pre,
+.historyText {
+  max-height: 32lh;
+  overflow: auto;
+  user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.historyPaging {
+  display: flex;
+  gap: var(--spacing-s);
+}

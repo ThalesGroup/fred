@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
+import yaml
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.config.models import Configuration
 from control_plane_backend.conversation_traces.api import router
 from control_plane_backend.conversation_traces.store import ConversationTraceStore
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
@@ -27,12 +30,25 @@ from fastapi import FastAPI, HTTPException, Request
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.common import TeamId
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 _ADMIN = "/admin/conversation-traces"
 _INGEST = "/internal/runtimes/fred-agents/conversation-traces"
 _AGENT = {"x-test-principal": "agentic"}
 _READER = {"x-test-principal": "reader"}
+
+
+def test_trace_local_development_is_explicit_and_rejects_shared_profiles():
+    path = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    config = yaml.safe_load(path.read_text())
+    assert Configuration.model_validate(config).conversation_trace_local_development
+    assert not Configuration.model_validate(
+        {**config, "conversation_trace_local_development": False}
+    ).conversation_trace_local_development
+    config["security"]["profile"] = "c3"
+    with pytest.raises(ValidationError, match="requires loopback"):
+        Configuration.model_validate(config)
 
 
 class _TraceRebac:
@@ -193,3 +209,136 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             await client.get(f"{_ADMIN}/session", headers=_READER)
         ).status_code == 404
         assert (await client.get(_ADMIN, headers=_READER)).json()["conversations"] == []
+
+
+@pytest.mark.asyncio
+async def test_owner_share_catalog_extension_and_revocation(
+    control_plane_sql_engine: AsyncEngine,
+):
+    engine = control_plane_sql_engine
+    async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            AgentInstanceRow(
+                agent_instance_id="share-agent",
+                team_id="personal-owner",
+                template_id="synthetic",
+                source_runtime_id="fred-agents",
+                source_agent_id="synthetic",
+                display_name="Synthetic assistant",
+            )
+        )
+        session.add(
+            SessionMetadataRow(
+                session_id="shared-session",
+                team_id="personal-owner",
+                user_id="owner",
+                agent_instance_id="share-agent",
+                title="Private title",
+            )
+        )
+
+    turns = [
+        {
+            "exchange_id": f"exchange-{number}",
+            "first_rank": rank,
+            "last_rank": rank + 1,
+            "turn_number": number,
+            "started_at": "2026-01-01T12:00:00Z",
+        }
+        for number, rank in ((1, 0), (2, 2))
+    ]
+    latest = 0
+
+    def runtime(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/trace-history-boundary"):
+            assert request.headers["Authorization"] == "Bearer owner"
+            selected = request.url.params.get("exchange_id")
+            turn = next(
+                (item for item in turns if item["exchange_id"] == selected), None
+            )
+            return httpx.Response(200, json=turn if selected else turns[latest])
+        assert request.url.path.endswith("/trace-history-turns")
+        assert request.headers["Authorization"] == "Bearer reader"
+        return httpx.Response(200, json=turns)
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    store = ConversationTraceStore(engine)
+    async with (
+        httpx.AsyncClient(transport=httpx.MockTransport(runtime)) as runtime_http,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client,
+    ):
+        app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+            get_rebac_engine=_TraceRebac,
+            get_conversation_trace_store=lambda: store,
+            get_runtime_http_client=lambda: runtime_http,
+            configuration=SimpleNamespace(
+                platform=SimpleNamespace(
+                    runtime_catalog_sources=[
+                        SimpleNamespace(
+                            runtime_id="fred-agents",
+                            enabled=True,
+                            base_url="http://runtime",
+                        )
+                    ]
+                ),
+            ),
+        )
+        path = "/teams/personal/sessions/shared-session/trace-consent"
+        owner = {"x-test-principal": "owner", "Authorization": "Bearer owner"}
+        reader = {**_READER, "Authorization": "Bearer reader"}
+        assert (await client.get(path, headers=_READER)).status_code == 404
+        assert (
+            await client.get(f"{_ADMIN}/shared-session", headers=reader)
+        ).status_code == 404
+
+        state = (await client.get(path, headers=owner)).json()
+        cutoff = state["available_cutoff"]
+        request = {
+            "exchange_id": cutoff["exchange_id"],
+            "last_rank": cutoff["last_rank"],
+            "expected_version": state["consent_version"],
+        }
+        response = await client.put(path, headers=owner, json=request)
+        assert response.status_code == 200
+        first_id = response.json()["consent"]["grant_id"]
+        catalog = await client.get(
+            _ADMIN, headers=reader, params={"failed_only": False}
+        )
+        assert [item["availability"] for item in catalog.json()["conversations"]] == [
+            "history_only"
+        ]
+        detail = await client.get(f"{_ADMIN}/shared-session", headers=reader)
+        assert "Private title" not in detail.text
+        assert [item["access"] for item in detail.json()["turns"]] == [
+            "shared",
+            "masked",
+        ]
+
+        latest = 1
+        state = (await client.get(path, headers=owner)).json()
+        new_cutoff = state["available_cutoff"]
+        extension = {
+            "exchange_id": new_cutoff["exchange_id"],
+            "last_rank": new_cutoff["last_rank"],
+            "expected_version": first_id,
+        }
+        extended = await client.put(path, headers=owner, json=extension)
+        assert extended.status_code == 200
+        assert extended.json()["consent"]["grant_id"] != first_id
+        assert extended.json()["consent"]["cutoff"]["turn_number"] == 2
+        assert (await client.delete(path, headers=owner)).status_code == 204
+        assert (
+            await client.put(path, headers=owner, json=extension)
+        ).status_code == 409
+        assert (
+            await client.get(f"{_ADMIN}/shared-session", headers=reader)
+        ).status_code == 404
+        assert (
+            await client.get(
+                f"{_ADMIN}/shared-session/history/exchange-1", headers=reader
+            )
+        ).status_code == 403

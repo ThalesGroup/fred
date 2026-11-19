@@ -6160,3 +6160,9 @@ The inspector retains the main navigation rail and uses the rest of the
 workspace for its turn list and detail pane. Outcome and evidence
 availability are distinct. Operators can copy the conversation, exchange,
 and available trace, span, and call identifiers.
+
+The conversation owner's Debug panel explains which saved turns and
+content they can share with support. It shows the active cutoff and makes
+extensions and withdrawals explicit. The inspector labels retained
+uncaptured turns History only, shows which turns remain masked, and loads
+saved messages and tool evidence when the reader opens a shared turn.

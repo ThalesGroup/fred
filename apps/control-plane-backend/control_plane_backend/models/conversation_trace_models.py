@@ -26,6 +26,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +38,38 @@ class ConversationTraceSettingsRow(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
+class ConversationTraceConsentRow(Base):
+    __tablename__ = "conversation_trace_consent"
+
+    grant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("session_metadata.session_id", ondelete="CASCADE")
+    )
+    actor_id: Mapped[str] = mapped_column(String(255))
+    source: Mapped[str] = mapped_column(String(32))
+    exchange_id: Mapped[str] = mapped_column(String(255))
+    first_rank: Mapped[int] = mapped_column(Integer)
+    last_rank: Mapped[int] = mapped_column(Integer)
+    turn_number: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index(
+            "uq_conversation_trace_active_consent",
+            "session_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
+        Index("ix_conversation_trace_consent_session", "session_id"),
+        Index("ix_conversation_trace_consent_catalog", "granted_at", "grant_id"),
+    )
 
 
 class ConversationTraceTurnRow(Base):

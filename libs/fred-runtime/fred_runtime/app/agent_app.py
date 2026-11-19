@@ -310,6 +310,7 @@ from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
+from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
     attach_pod_container,
     get_pod_container,
@@ -8260,6 +8261,7 @@ def create_agent_app(
             base_url=base_url,
         )
     )
+    api_router.include_router(conversation_trace_history_router)
 
     # Capability routers (#1979, RFC §9.1): each capability that ships a
     # `manifest.router` is auto-mounted under `/capabilities/{id}` with the
