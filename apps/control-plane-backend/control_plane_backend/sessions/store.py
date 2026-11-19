@@ -293,10 +293,10 @@ class SessionMetadataStore:
 
     async def owner_hidden_sessions(
         self,
+        runtime_id: str | None,
         user_id: str,
         session_ids: list[str],
         *,
-        runtime_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> list[str]:
         """Find retained conversations that ordinary owner history must hide."""

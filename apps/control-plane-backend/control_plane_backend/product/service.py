@@ -4172,7 +4172,7 @@ async def get_runtime_binding_for_team(
         if owner_session is not None:
             user_id, session_id = owner_session
             if await deps.get_session_metadata_store().owner_hidden_sessions(
-                user_id, [session_id], session=session
+                None, user_id, [session_id], session=session
             ):
                 raise ExecutionPreparationError("conversation_removed", http_status=403)
         if session is not None:

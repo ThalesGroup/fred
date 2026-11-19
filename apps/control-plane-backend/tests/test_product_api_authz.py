@@ -529,7 +529,7 @@ async def test_runtime_binding_checks_product_visibility_without_trace_admission
         )
     assert denied.value.status_code == 403
     assert denied.value.detail == "conversation_removed"
-    hidden.assert_awaited_once_with(user.uid, ["removed"], session=None)
+    hidden.assert_awaited_once_with(None, user.uid, ["removed"], session=None)
 
 
 @pytest.mark.parametrize(

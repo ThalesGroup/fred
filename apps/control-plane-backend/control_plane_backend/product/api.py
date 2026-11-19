@@ -2014,7 +2014,7 @@ async def get_owner_hidden_sessions(
 ) -> list[str]:
     """Find the authenticated owner's conversations hidden by product lifecycle."""
     return await deps.get_session_metadata_store().owner_hidden_sessions(
-        user.uid, session_ids
+        None, user.uid, session_ids
     )
 
 

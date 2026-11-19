@@ -1558,7 +1558,7 @@ async def get_trace_owner_hidden_sessions(
     body: TraceOwnerVisibilityRequest, container: Container, runtime_id: Runtime
 ) -> list[str]:
     return await container.get_session_metadata_store().owner_hidden_sessions(
-        body.user_id, body.session_ids, runtime_id=runtime_id
+        runtime_id, body.user_id, body.session_ids
     )
 
 
