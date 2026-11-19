@@ -80,6 +80,7 @@
   color: var(--on-secondary-container);
   font-size: 0.875rem;
 }
+.outcome[data-outcome="success"],
 .outcome[data-outcome="completed"] {
   background: var(--success-container);
   color: var(--on-success-container);
@@ -117,6 +118,16 @@
   font: inherit;
   text-align: start;
 }
+.turns .turnTools {
+  margin: var(--spacing-xs) 0 0 var(--spacing-s);
+  border-inline-start: 1px solid var(--outline-variant);
+  padding-inline-start: var(--spacing-s);
+}
+
+.turnTools strong {
+  overflow-wrap: anywhere;
+}
+
 .turnButton[aria-pressed="true"] {
   border-color: var(--primary);
 }

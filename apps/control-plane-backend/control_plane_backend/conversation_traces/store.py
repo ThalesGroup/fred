@@ -23,6 +23,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_HTTP_ATTEMPTS,
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
+    TRACE_MAX_TOOL_CALLS,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
@@ -35,6 +36,7 @@ from fred_core.conversation_trace import (
     TraceOutcome,
     TraceSseAvailability,
     TraceSseSegment,
+    TraceToolCall,
 )
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import and_, func, literal, or_, select, union_all
@@ -279,10 +281,14 @@ class ConversationTraceStore:
                 accepted_models = (
                     {item["ref"] for item in row.model_calls or []} if row else set()
                 )
+                accepted_tools = (
+                    {item["ref"] for item in row.tool_calls or []} if row else set()
+                )
                 return (
                     all(item.ref in accepted for item in result.http_attempts)
                     and (result.sse is None or result.sse.outgoing.ref in accepted_sse)
                     and all(item.ref in accepted_models for item in result.model_calls)
+                    and all(item.ref in accepted_tools for item in result.tool_calls)
                 )
             if result.discarded:
                 if row.completed_at is None:
@@ -320,22 +326,33 @@ class ConversationTraceStore:
                 *model_calls,
                 *(item.model_dump(mode="json") for item in new_models),
             ]
+            tool_calls = row.tool_calls or []
+            tool_refs = {item["ref"] for item in tool_calls}
+            new_tools = [
+                item for item in result.tool_calls if item.ref not in tool_refs
+            ]
+            tool_calls = [
+                *tool_calls,
+                *(item.model_dump(mode="json") for item in new_tools),
+            ]
             if (
                 len(combined) > TRACE_MAX_HTTP_ATTEMPTS
                 or len(sse_segments) > TRACE_MAX_SSE_SEGMENTS
                 or len(model_calls) > TRACE_MAX_MODEL_CALLS
+                or len(tool_calls) > TRACE_MAX_TOOL_CALLS
             ):
                 row.http_availability = TraceAvailability.PARTIAL
                 return False
             row.http_attempts = combined or None
             row.sse_segments = sse_segments or None
             row.model_calls = model_calls or None
+            row.tool_calls = tool_calls or None
             if (
                 result.http_incomplete
                 or row.http_availability == TraceAvailability.PARTIAL
                 or any(
                     item.completeness != TraceHttpCompleteness.COMPLETE
-                    for item in [*incoming, *new_models]
+                    for item in [*incoming, *new_models, *new_tools]
                 )
                 or (
                     result.sse is not None
@@ -346,7 +363,7 @@ class ConversationTraceStore:
                 )
             ):
                 row.http_availability = TraceAvailability.PARTIAL
-            elif combined or sse_segments or model_calls:
+            elif combined or sse_segments or model_calls or tool_calls:
                 row.http_availability = TraceAvailability.CAPTURED
             return True
 
@@ -386,6 +403,18 @@ class ConversationTraceStore:
                 )
             )
         return [TraceModelIndex.model_validate(item) for item in items or []]
+
+    async def tool_calls(
+        self, session_id: str, exchange_id: str
+    ) -> list[TraceToolCall]:
+        turn = ConversationTraceTurnRow
+        async with use_session(self._sessions) as session:
+            items = await session.scalar(
+                select(turn.tool_calls).where(
+                    turn.session_id == session_id, turn.exchange_id == exchange_id
+                )
+            )
+        return [TraceToolCall.model_validate(item) for item in items or []]
 
     async def model_origins(
         self,
@@ -719,6 +748,7 @@ class ConversationTraceStore:
                 defer(turn.http_attempts),
                 defer(turn.sse_segments),
                 defer(turn.model_calls),
+                defer(turn.tool_calls),
             )
             .where(turn.session_id == reference.session_id)
             .order_by(turn.history_rank, turn.exchange_id)

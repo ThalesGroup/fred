@@ -538,6 +538,8 @@ class NodeContext:
                 tool_name=tool_ref,
                 source="capability",
                 span=obs.span,
+                call_id=call_id,
+                arguments=payload,
             )
             if result.is_error:
                 obs.fail()
@@ -602,6 +604,8 @@ class NodeContext:
                     else "capability",
                     span=obs.span,
                     capability_id=capability_id_of(tool),
+                    call_id=call_id,
+                    arguments=arguments,
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
                 if isinstance(raw_result, ToolMessage):

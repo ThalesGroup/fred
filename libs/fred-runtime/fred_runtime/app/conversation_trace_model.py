@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from itertools import islice
 from math import isfinite
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -27,6 +28,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from langchain_core.outputs.chat_generation import merge_chat_generation_chunks
+from pydantic import BaseModel
 
 from fred_runtime.runtime_support.trace_payloads import serialize_tools
 
@@ -70,6 +72,8 @@ class _JsonBudget:
                 encoded = len(json.dumps(prefix, ensure_ascii=False).encode("utf-8"))
             self.partial |= len(prefix) < len(value)
             return prefix if self.take(encoded) else None
+        if isinstance(value, BaseModel):
+            value = vars(value)
         if isinstance(value, dict):
             if not self.take(4):
                 return None
@@ -103,6 +107,12 @@ class _JsonBudget:
             return value if self.take(28) else None
         self.partial = True
         return None
+
+
+def retain_json(value: object, capacity: int) -> tuple[object, int, bool]:
+    budget = _JsonBudget(capacity)
+    retained = budget.copy(value)
+    return retained, capacity - budget.remaining, budget.partial
 
 
 def _message(message: BaseMessage) -> dict[str, object]:
@@ -251,6 +261,7 @@ class RecordedModelCall:
     call_id: str
     model: str | None
     ref: str = field(default_factory=lambda: uuid4().hex)
+    started: float = field(default_factory=monotonic)
     input: TraceModelSnapshot | None = None
     output: TraceModelSnapshot | None = None
     output_state: TraceModelOutputState = TraceModelOutputState.UNAVAILABLE

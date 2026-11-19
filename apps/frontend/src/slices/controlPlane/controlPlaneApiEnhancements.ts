@@ -131,6 +131,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
     },
+    getConversationTraceToolEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     getConversationTraceModelEvidence: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],

@@ -1897,6 +1897,35 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    listConversationTraceToolCalls: build.query<
+      ListConversationTraceToolCallsApiResponse,
+      ListConversationTraceToolCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceToolAccess: build.query<
+      GetConversationTraceToolAccessApiResponse,
+      GetConversationTraceToolAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceToolEvidence: build.query<
+      GetConversationTraceToolEvidenceApiResponse,
+      GetConversationTraceToolEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getTraceCaptureWritable: build.query<GetTraceCaptureWritableApiResponse, GetTraceCaptureWritableApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/writable`,
@@ -3925,6 +3954,24 @@ export type GetConversationTraceModelAccessApiArg = {
 };
 export type GetConversationTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
 export type GetConversationTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceToolCallsApiResponse = /** status 200 Successful Response */ TraceToolCall[];
+export type ListConversationTraceToolCallsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceToolAccessApiResponse = /** status 200 Successful Response */ TraceToolArtifactAccess;
+export type GetConversationTraceToolAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceToolEvidenceApiResponse = /** status 200 Successful Response */ TraceToolEvidence;
+export type GetConversationTraceToolEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -6984,6 +7031,7 @@ export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
 export type TraceHttpAttempt = {
   ref: string;
   call_id: string;
+  tool_ref?: string | null;
   attempt: number;
   model?: string | null;
   release?: string | null;
@@ -7120,6 +7168,39 @@ export type TraceModelEvidence = {
   }[];
   origins?: TraceModelOrigin[];
 };
+export type TraceToolSource = "native" | "mcp" | "knowledge_flow";
+export type TraceToolOutcome = "success" | "error" | "paused" | "cancelled";
+export type TraceToolModelLink = {
+  call_id: string;
+  relation: "requested" | "received";
+};
+export type TraceToolCall = {
+  ref: string;
+  call_id: string | null;
+  tool_name: string | null;
+  source: TraceToolSource;
+  outcome: TraceToolOutcome;
+  attempt: number;
+  duration_ms: number;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+  model_calls?: TraceToolModelLink[];
+  http_attempts?: TraceHttpAttempt[];
+};
+export type TraceToolArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  observed_through_rank: number | null;
+};
+export type TraceToolEvidence = {
+  version?: 1;
+  input?: any;
+  output?: any;
+  model_result?: {
+    [key: string]: any;
+  } | null;
+  partial?: boolean;
+};
 export type TraceAdmission = {
   capture_id: string;
   stream_offset_ms?: number;
@@ -7152,6 +7233,7 @@ export type TraceFinalization = {
   http_incomplete?: boolean;
   sse?: TraceSseSegment | null;
   model_calls?: TraceModelIndex[];
+  tool_calls?: TraceToolCall[];
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -8201,6 +8283,12 @@ export const {
   useLazyGetConversationTraceModelAccessQuery,
   useGetConversationTraceModelEvidenceQuery,
   useLazyGetConversationTraceModelEvidenceQuery,
+  useListConversationTraceToolCallsQuery,
+  useLazyListConversationTraceToolCallsQuery,
+  useGetConversationTraceToolAccessQuery,
+  useLazyGetConversationTraceToolAccessQuery,
+  useGetConversationTraceToolEvidenceQuery,
+  useLazyGetConversationTraceToolEvidenceQuery,
   useGetTraceCaptureWritableQuery,
   useLazyGetTraceCaptureWritableQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,

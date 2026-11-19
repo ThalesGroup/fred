@@ -7528,3 +7528,18 @@ and its original frame index if the raw SSE lane retained it. Model evidence
 uses the private trace prefix and can be read with the same runtime
 binding, consent, and rank checks as HTTP/SSE. Capture works independently
 of tracing export.
+
+### Native and remote tool evidence (2026-11-19)
+
+An admitted execution segment records authorized invocations at the shared
+tool boundary. The tool result and the ToolMessage present in a later model
+invocation are separate evidence. Model links use the original tool call ID
+observed in that segment. Calls without a matching model invocation still
+retain tool evidence.
+
+The shared MCP and direct Knowledge Flow clients observe their own HTTP
+attempts as the caller reads the response. The bytes use the same bounded
+private storage and header allowlist as model HTTP evidence. Up to 64 tool
+invocations and a total of 512 KiB of structured tool evidence are retained
+per execution segment. Transport status, tool outcome, and terminal turn
+outcome remain independent and can reflect a tool error in a completed turn.

@@ -14,7 +14,7 @@ import type {
   TraceNormalization,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { TraceSseFramePayload } from "./ConversationTraceSse";
-import { TRACE_TRANSLATION_PREFIX } from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, canReadTraceArtifact } from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -121,13 +121,7 @@ export function ConversationTraceModel({
   cutoffRank?: number;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
-  const canRead =
-    model != null &&
-    (turn.access === "local" ||
-      (turn.access === "shared" &&
-        cutoffRank != null &&
-        model.observed_through_rank != null &&
-        model.observed_through_rank <= cutoffRank));
+  const canRead = model != null && canReadTraceArtifact(turn, cutoffRank, model.observed_through_rank);
   const query = enhancedControlPlaneApi.useGetConversationTraceModelEvidenceQuery(
     canRead && model.completeness !== "unavailable"
       ? { sessionId, exchangeId: turn.exchange_id, ref: model.ref }

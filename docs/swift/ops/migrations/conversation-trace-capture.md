@@ -22,7 +22,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations for the catalog, consent, HTTP attempt index, SSE timeline, and LangChain evidence index (`9a6e2c14b7d0`), then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation. Existing rows retain their previous evidence. New captures populate the LangChain index.
+Apply the Control Plane migrations for the catalog, consent, HTTP attempt index, SSE timeline, LangChain evidence index, and tool evidence index (`4d81a3f9b2c6`), then update its OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. Enable capture in Admin when needed for an investigation. Existing rows retain their previous evidence. New captures populate the LangChain and tool indexes.
 
 ## Validation
 
@@ -32,10 +32,12 @@ For a captured streaming turn, open the model attempt's SSE tab. Verify the prov
 
 Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there.
 
+For a shared turn with remote tool evidence, select the tool and open its HTTP tab. Verify the individual tool outcome, HTTP status, and turn outcome. Check that the raw response is readable only through consent.
+
 ## Rollback
 
 Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog tables in place if the evidence must be retained during rollback. The migration downgrades drop the catalog, its settings, and consent records.
 
 ## Limitations
 
-Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model transport within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix.
+Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix.

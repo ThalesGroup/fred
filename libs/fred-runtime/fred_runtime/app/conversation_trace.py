@@ -45,6 +45,8 @@ from fred_core.conversation_trace import (
     TraceSseEnding,
     TraceSseFrame,
     TraceSseSegment,
+    TraceToolArtifactAccess,
+    TraceToolEvidence,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -68,6 +70,7 @@ from fred_runtime.app.conversation_trace_artifacts import (
 from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane
 from fred_runtime.runtime_support.llm_diagnostics import classify_error
+from fred_runtime.runtime_support.tool_capture import active_tool_buffer
 
 logger = logging.getLogger(__name__)
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
@@ -182,6 +185,11 @@ class ConversationTraceClient:
         async with self._http_readers:
             return await self.artifacts.read_model(session_id, ref)
 
+    async def read_tool(self, session_id: str, ref: str) -> TraceToolEvidence:
+        assert self.artifacts is not None
+        async with self._http_readers:
+            return await self.artifacts.read_tool(session_id, ref)
+
     def _new_http_buffer(self) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
         if self.artifacts is None or self._http_turns >= 32:
@@ -252,6 +260,7 @@ class ConversationTraceClient:
                     return
                 summaries: list[TraceHttpAttempt] = []
                 lanes = []
+                tool_http: dict[str, list[TraceHttpAttempt]] = {}
                 normalization: dict[str, list[TraceNormalization]] = {}
                 # Keep order and cap per-pod in-flight writes across all turns.
                 deadline = monotonic() + 8
@@ -275,6 +284,9 @@ class ConversationTraceClient:
                             observed_through_rank=observed_through_rank,
                         )
                     )
+                    if attempt.tool_ref is not None:
+                        tool_http.setdefault(attempt.tool_ref, []).append(summaries[-1])
+                        continue
                     lane_stored = False
                     if attempt.sse is not None:
                         lane_stored = await self._publish_sse_lane(
@@ -330,6 +342,40 @@ class ConversationTraceClient:
                             observed_through_rank=observed_through_rank,
                         )
                     )
+                later_attempts: dict[str, float] = {}
+                for tool in reversed(buffer.tool_calls):
+                    call_id = tool.call_id
+                    before = (
+                        later_attempts.get(call_id, float("inf"))
+                        if call_id is not None
+                        else float("inf")
+                    )
+                    if call_id is not None:
+                        later_attempts[call_id] = tool.started
+                    links = tool.model_links(buffer.model_calls, before=before)
+                    stored = False
+                    if permitted and store is not None and deadline > monotonic():
+                        try:
+                            with anyio.fail_after(max(0, deadline - monotonic())):
+                                await store.write_tool(
+                                    session_id, tool.ref, tool.evidence
+                                )
+                            refs.append(tool.ref)
+                            stored = True
+                        except Exception:
+                            logger.warning(
+                                "event=conversation_trace.tool_artifact_write_failed"
+                            )
+                            await self._erase_attempts(session_id, [tool.ref])
+                    result.tool_calls.append(
+                        tool.summary(
+                            stored=stored,
+                            observed_through_rank=observed_through_rank,
+                            model_calls=links,
+                            http_attempts=tool_http.get(tool.ref, []),
+                        )
+                    )
+                result.tool_calls.reverse()
                 published = await self.finalize(capture_id, result)
                 # A definitive rejection fences erasure and duplicate finalizations.
                 # A lost response can still mean the index committed.
@@ -398,6 +444,13 @@ class ConversationTraceClient:
             ref,
             authorization,
             TraceModelArtifactAccess,
+        )
+
+    async def tool_access(
+        self, session_id: str, exchange_id: str, ref: str, authorization: str
+    ) -> TraceToolArtifactAccess:
+        return await self._artifact_access(
+            "tool", session_id, exchange_id, ref, authorization, TraceToolArtifactAccess
         )
 
     async def _artifact_access(
@@ -556,11 +609,13 @@ class ManagedTurnCapture:
     ) -> AsyncGenerator[dict[str, Any], None]:
         while True:
             token = _ACTIVE_CAPTURE.set(self)
+            tool_token = active_tool_buffer.set(self.http)
             try:
                 payload = await anext(payloads)
             except StopAsyncIteration:
                 return
             finally:
+                active_tool_buffer.reset(tool_token)
                 _ACTIVE_CAPTURE.reset(token)
             yield payload
 

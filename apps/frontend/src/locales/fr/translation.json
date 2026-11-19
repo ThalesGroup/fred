@@ -1483,6 +1483,43 @@
           "paused": "En attente d'une réponse",
           "unknown": "Inconnu"
         },
+        "tool": {
+          "title": "Appels d'outils",
+          "unnamed": "Appel d'outil",
+          "summaryUnavailable": "Impossible de charger les appels d'outils.",
+          "source": "Source",
+          "outcome": "Résultat de l'outil",
+          "attempt": "Tentative de l'outil",
+          "duration": "Durée",
+          "callId": "Identifiant de l'appel d'outil",
+          "callLabel": "{{name}} · {{summary}}",
+          "attemptOutcome": "Tentative {{number}} · {{outcome}}",
+          "inputOutput": "Entrée / sortie",
+          "http": "HTTP",
+          "tabs": "Onglets de diagnostic de l'outil",
+          "input": "Entrée de l'outil",
+          "output": "Sortie réelle de l'outil",
+          "modelResult": "Résultat transmis au modèle",
+          "masked": "Ces données de l'outil sont hors du périmètre de partage.",
+          "unavailable": "Données de l'outil indisponibles.",
+          "loading": "Chargement des données de l'outil...",
+          "partial": "Seule une partie des données de l'outil a été conservée.",
+          "sources": {
+            "native": "Natif",
+            "mcp": "MCP",
+            "knowledge_flow": "Knowledge Flow"
+          },
+          "outcomes": {
+            "success": "Réussi",
+            "error": "Erreur de l'outil",
+            "paused": "En attente d'une réponse",
+            "cancelled": "Annulé"
+          },
+          "modelLink": {
+            "requested": "Demandé par l'appel au modèle {{id}}",
+            "received": "Résultat lu par l'appel au modèle {{id}}"
+          }
+        },
         "model": {
           "input": "Invocation LangChain",
           "output": "Sortie analysée du modèle",
@@ -1533,6 +1570,8 @@
           "masked": "Le consentement pour ce tour est nécessaire pour lire la requête et la réponse.",
           "view": "Voir l'échange HTTP",
           "hide": "Masquer l'échange HTTP",
+          "toolRequest": "Requête HTTP",
+          "toolResponse": "Réponse HTTP",
           "request": "Requête au fournisseur",
           "response": "Réponse du fournisseur",
           "headers": "En-têtes de diagnostic",

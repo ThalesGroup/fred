@@ -39,6 +39,9 @@ from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceSseSegment,
+    TraceToolCall,
+    TraceToolOutcome,
+    TraceToolSource,
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
 from pydantic import ValidationError
@@ -204,10 +207,43 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (
             await client.put(f"{_INGEST}/{capture_id}", headers=_AGENT, json=failed)
         ).status_code == 204
-        done = {"outcome": "completed", "duration_ms": 2, "turn_number": 3}
+        tool = TraceToolCall(
+            ref=uuid4().hex,
+            call_id="tool-call-1",
+            tool_name="lookup",
+            source=TraceToolSource.MCP,
+            outcome=TraceToolOutcome.ERROR,
+            attempt=1,
+            duration_ms=2,
+            observed_through_rank=16,
+            completeness=TraceHttpCompleteness.COMPLETE,
+        ).model_dump(mode="json")
+        done = {
+            "outcome": "completed",
+            "duration_ms": 2,
+            "turn_number": 3,
+            "tool_calls": [tool],
+        }
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
         ).status_code == 204
+
+        assert (
+            await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
+        ).status_code == 204
+        assert (
+            await client.put(
+                f"{_INGEST}/{later_id}",
+                headers=_AGENT,
+                json={**done, "tool_calls": [{**tool, "ref": uuid4().hex}]},
+            )
+        ).status_code == 409
+        tool_path = f"{_ADMIN}/session/tool/{later['exchange_id']}"
+        assert (await client.get(tool_path, headers=_READER)).json() == [tool]
+        assert (await client.get(tool_path)).status_code == 403
+        assert (
+            await client.get(f"{tool_path}/{tool['ref']}", headers=_READER)
+        ).status_code == 403
 
         failure_page = (await client.get(_ADMIN, headers=_READER)).json()[
             "conversations"
@@ -246,7 +282,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         )
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
-        ).status_code == 204
+        ).status_code == 409
         assert (
             await client.get(f"{_ADMIN}/session", headers=_READER)
         ).status_code == 404
@@ -402,6 +438,24 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
         )
         for number, rank in ((1, 4), (2, 5))
     ]
+    tools = [
+        TraceToolCall(
+            ref=uuid4().hex,
+            call_id=f"tool-{item.attempt}",
+            tool_name="lookup",
+            source=TraceToolSource.KNOWLEDGE_FLOW,
+            outcome=TraceToolOutcome.ERROR,
+            attempt=item.attempt,
+            duration_ms=5,
+            observed_through_rank=item.observed_through_rank,
+            completeness=TraceHttpCompleteness.COMPLETE,
+        )
+        for item in persisted
+    ]
+    for tool, attempt in zip(tools, persisted, strict=True):
+        tool.http_attempts.append(
+            attempt.model_copy(update={"ref": uuid4().hex, "tool_ref": tool.ref})
+        )
     reference = TraceConversationReference(
         session_id="session",
         team_id="team",
@@ -426,7 +480,10 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
     store = SimpleNamespace(
         reference=AsyncMock(return_value=reference),
         capture_start_rank=AsyncMock(return_value=1),
-        http_attempts=AsyncMock(return_value=persisted),
+        http_attempts=AsyncMock(
+            return_value=[*persisted, *(tool.http_attempts[0] for tool in tools)]
+        ),
+        tool_calls=AsyncMock(return_value=tools),
         sse_segments=AsyncMock(return_value=[_sse_segment(4), _sse_segment(5)]),
         local_development=False,
     )
@@ -455,6 +512,23 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
         masked = await client.get(f"{_ADMIN}/session/http/exchange", headers=_READER)
         assert masked.status_code == 200
         assert len(masked.json()) == 2
+        tool_summaries = await client.get(
+            f"{_ADMIN}/session/tool/exchange", headers=_READER
+        )
+        assert tool_summaries.json() == [tool.model_dump(mode="json") for tool in tools]
+        for tool, expected in zip(tools, (200, 403), strict=True):
+            for kind, ref in (("tool", tool.ref), ("http", tool.http_attempts[0].ref)):
+                response = await client.get(
+                    f"{_ADMIN}/session/{kind}-access",
+                    headers=_READER,
+                    params={
+                        "exchange_id": "exchange",
+                        "runtime_id": "fred-agents",
+                        "ref": ref,
+                    },
+                )
+                assert response.status_code == expected
+
         segments = await client.get(f"{_ADMIN}/session/sse/exchange", headers=_READER)
         assert segments.status_code == 200
         for segment, expected in zip(segments.json(), (200, 403), strict=True):

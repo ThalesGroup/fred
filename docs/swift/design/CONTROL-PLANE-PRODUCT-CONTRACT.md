@@ -5466,8 +5466,8 @@ Shared deployments default capture off and enforce role and turn consent.
 ### Per-attempt HTTP evidence
 
 `GET /admin/conversation-traces/{session_id}/http/{exchange_id}` returns
-the selected turn's bounded safe attempt index independently of its content
-consent. The endpoint with a trailing opaque attempt reference checks the
+the selected turn's bounded safe model HTTP attempt index independently of
+its content consent. The endpoint with a trailing opaque attempt reference checks the
 caller's trace permission, immutable turn cutoff, and registered runtime
 before and after proxying the single artifact. The attempt is bound to the
 saved end rank observed by its runtime execution, so resuming an exchange
@@ -5496,3 +5496,13 @@ matching malformed tool call or wire rewrite. That lookup is limited to
 the first 64 indexed turns in the conversation and to evidence covered by
 the active grant. If no match is identifiable within those bounds, the
 snapshot remains available with no earlier-turn link.
+
+### Tool execution evidence
+
+`GET /admin/conversation-traces/{session_id}/tool/{exchange_id}` lists safe
+metadata for executed tools with linked model invocations and any observed
+HTTP attempts. A read at `/tool/{exchange_id}/{ref}` requires the reader's
+own credential, the registered runtime, and current consent through the
+execution segment's saved end rank. Both services repeat the checks before
+returning the artifact. The exposed HTTP references use the same gated
+`/http/{exchange_id}/{ref}` read as model HTTP evidence.

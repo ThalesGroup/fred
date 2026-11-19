@@ -1483,6 +1483,43 @@
           "paused": "Awaiting input",
           "unknown": "Unknown"
         },
+        "tool": {
+          "title": "Tool calls",
+          "unnamed": "Tool call",
+          "summaryUnavailable": "Tool calls could not be loaded.",
+          "source": "Source",
+          "outcome": "Tool outcome",
+          "attempt": "Tool attempt",
+          "duration": "Duration",
+          "callId": "Tool call ID",
+          "callLabel": "{{name}} · {{summary}}",
+          "attemptOutcome": "Attempt {{number}} · {{outcome}}",
+          "inputOutput": "Input / output",
+          "http": "HTTP",
+          "tabs": "Tool evidence tabs",
+          "input": "Tool input",
+          "output": "Actual tool output",
+          "modelResult": "Result sent to the model",
+          "masked": "This tool evidence falls outside the shared content cutoff.",
+          "unavailable": "Tool evidence unavailable.",
+          "loading": "Loading tool evidence...",
+          "partial": "Only part of the tool evidence was retained.",
+          "sources": {
+            "native": "Native",
+            "mcp": "MCP",
+            "knowledge_flow": "Knowledge Flow"
+          },
+          "outcomes": {
+            "success": "Succeeded",
+            "error": "Tool error",
+            "paused": "Awaiting input",
+            "cancelled": "Cancelled"
+          },
+          "modelLink": {
+            "requested": "Requested by model call {{id}}",
+            "received": "Result read by model call {{id}}"
+          }
+        },
         "model": {
           "input": "LangChain invocation",
           "output": "Parsed model output",
@@ -1533,6 +1570,8 @@
           "masked": "Request and response content require consent for this turn.",
           "view": "View HTTP exchange",
           "hide": "Hide HTTP exchange",
+          "toolRequest": "HTTP request",
+          "toolResponse": "HTTP response",
           "request": "Provider request",
           "response": "Provider response",
           "headers": "Diagnostic headers",

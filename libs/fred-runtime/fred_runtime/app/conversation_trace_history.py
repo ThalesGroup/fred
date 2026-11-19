@@ -24,6 +24,7 @@ from fred_core.conversation_trace import (
     TraceHttpEvidence,
     TraceModelEvidence,
     TraceSseFrame,
+    TraceToolEvidence,
     is_local_trace_request,
 )
 from fred_core.history.history_schema import Channel, ToolResultPart
@@ -231,6 +232,37 @@ async def get_trace_model_evidence(
     if access != await client.model_access(session_id, exchange_id, ref, authorization):
         raise HTTPException(403, "trace_model_access_denied")
     return evidence
+
+
+@router.get(
+    "/{session_id}/trace-tool/{exchange_id}/{ref}",
+    operation_id="get_trace_tool_evidence",
+)
+async def get_trace_tool_evidence(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceToolEvidence:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_tool_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    access = await client.tool_access(session_id, exchange_id, ref, authorization)
+    if access.local_content_access and not _allows_local_trace(container, request):
+        raise HTTPException(403, "trace_tool_access_denied")
+    try:
+        with anyio.fail_after(5):
+            result = await client.read_tool(session_id, ref)
+    except Exception as exc:
+        raise HTTPException(503, "trace_tool_unavailable") from exc
+    if access != await client.tool_access(session_id, exchange_id, ref, authorization):
+        raise HTTPException(403, "trace_tool_access_denied")
+    return result
 
 
 @router.get(

@@ -277,6 +277,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
       }),
     }),
+    getTraceToolEvidence: build.query<GetTraceToolEvidenceApiResponse, GetTraceToolEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -552,6 +557,12 @@ export type GetTraceSseFrameApiArg = {
   exchangeId: string;
   ref: string;
   index: number;
+};
+export type GetTraceToolEvidenceApiResponse = /** status 200 Successful Response */ TraceToolEvidence;
+export type GetTraceToolEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -1541,6 +1552,15 @@ export type TraceSseFrame = {
   data: string;
   encoding?: "base64";
 };
+export type TraceToolEvidence = {
+  input?: any;
+  model_result?: {
+    [key: string]: any;
+  } | null;
+  output?: any;
+  partial?: boolean;
+  version?: 1;
+};
 export type SkillDetail = {
   content: string;
   revision: string;
@@ -1823,6 +1843,8 @@ export const {
   useLazyGetTraceModelEvidenceQuery,
   useGetTraceSseFrameQuery,
   useLazyGetTraceSseFrameQuery,
+  useGetTraceToolEvidenceQuery,
+  useLazyGetTraceToolEvidenceQuery,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

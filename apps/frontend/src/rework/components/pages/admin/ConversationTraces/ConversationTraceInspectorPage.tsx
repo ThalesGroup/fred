@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { ConversationTraceHttp } from "./ConversationTraceHttp";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
-import { useGetConversationTraceQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { ConversationTraceTool, ConversationTraceToolTree } from "./ConversationTraceTool";
+import {
+  useGetConversationTraceQuery,
+  useListConversationTraceToolCallsQuery,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   TRACE_LIST_PATH,
   TRACE_TRANSLATION_PREFIX,
@@ -62,6 +66,10 @@ function ConversationTraceInspector({
 }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [selectedExchange, setSelectedExchange] = useState(initialExchange);
+  const [selectedToolRef, setSelectedToolRef] = useState<string>();
+  const [focusedModel, setFocusedModel] = useState<{ exchange: string; call: string; revision: number }>();
+  const modelSection = useRef<HTMLDivElement>(null);
+  const toolSection = useRef<HTMLDivElement>(null);
   const pager = useTracePagination(initialCursor);
   const trace = useGetConversationTraceQuery(sessionId ? { sessionId, cursor: pager.cursor } : skipToken, {
     refetchOnMountOrArgChange: true,
@@ -70,6 +78,12 @@ function ConversationTraceInspector({
   const conversation = trace.currentData;
   const turn =
     conversation?.turns.find(({ exchange_id }) => exchange_id === selectedExchange) ?? conversation?.turns[0];
+  const tools = useListConversationTraceToolCallsQuery(
+    turn && turn.availability !== "history_only" && sessionId ? { sessionId, exchangeId: turn.exchange_id } : skipToken,
+    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+  );
+  const toolCalls = tools.currentData ?? [];
+  const selectedTool = toolCalls.find(({ ref }) => ref === selectedToolRef) ?? toolCalls[0];
   const cutoff = conversation?.consent_cutoff;
   const conversationAccess = conversation?.local_content_access
     ? t("localAccess")
@@ -119,7 +133,13 @@ function ConversationTraceInspector({
                         type="button"
                         className={styles.turnButton}
                         aria-pressed={item.exchange_id === turn.exchange_id}
-                        onClick={() => setSelectedExchange(item.exchange_id)}
+                        onClick={() => {
+                          if (item.exchange_id !== turn.exchange_id) {
+                            setSelectedToolRef(undefined);
+                            setFocusedModel(undefined);
+                          }
+                          setSelectedExchange(item.exchange_id);
+                        }}
                       >
                         <strong>
                           {item.turn_number ? t("turnNumber", { number: item.turn_number }) : t("capturedTurn")}
@@ -131,6 +151,17 @@ function ConversationTraceInspector({
                           <small>{t(`access.${item.access ?? "masked"}`)}</small>
                         )}
                       </button>
+                      {item.exchange_id === turn.exchange_id && (
+                        <ConversationTraceToolTree
+                          calls={toolCalls}
+                          activeRef={selectedTool?.ref}
+                          unavailable={tools.isError}
+                          onSelect={(ref) => {
+                            setSelectedToolRef(ref);
+                            toolSection.current?.focus();
+                          }}
+                        />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -185,13 +216,40 @@ function ConversationTraceInspector({
                     </>
                   )}
                 </dl>
-                <ConversationTraceHttp
-                  key={`http-${turn.exchange_id}`}
-                  sessionId={conversation.session_id}
-                  turn={turn}
-                  cutoffRank={cutoff?.last_rank}
-                  initialCallId={turn.exchange_id === initialExchange ? initialCall : undefined}
-                />
+                {selectedTool && !tools.isError && (
+                  <div ref={toolSection} tabIndex={-1}>
+                    <ConversationTraceTool
+                      key={selectedTool.ref}
+                      sessionId={conversation.session_id}
+                      turn={turn}
+                      tool={selectedTool}
+                      cutoffRank={cutoff?.last_rank}
+                      onModelCall={(call) => {
+                        setFocusedModel((previous) => ({
+                          exchange: turn.exchange_id,
+                          call,
+                          revision: (previous?.revision ?? 0) + 1,
+                        }));
+                        modelSection.current?.focus();
+                      }}
+                    />
+                  </div>
+                )}
+                <div ref={modelSection} tabIndex={-1}>
+                  <ConversationTraceHttp
+                    key={turn.exchange_id + "|" + (focusedModel?.revision ?? "")}
+                    sessionId={conversation.session_id}
+                    turn={turn}
+                    cutoffRank={cutoff?.last_rank}
+                    initialCallId={
+                      focusedModel?.exchange === turn.exchange_id
+                        ? focusedModel.call
+                        : turn.exchange_id === initialExchange
+                          ? initialCall
+                          : undefined
+                    }
+                  />
+                </div>
                 <ConversationTraceHistory key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
               </section>
             </div>

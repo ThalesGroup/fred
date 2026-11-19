@@ -29,6 +29,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 import httpx
+import httpx2
 from fred_core.conversation_trace import (
     TRACE_HTTP_CHUNK_BYTES,
     TRACE_HTTP_TURN_BYTES,
@@ -36,6 +37,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_NORMALIZATION_REWRITES,
     TRACE_MAX_SSE_FRAMES,
+    TRACE_MAX_TOOL_CALLS,
     TraceHttpAttempt,
     TraceHttpBody,
     TraceHttpCompleteness,
@@ -48,6 +50,8 @@ from fred_core.conversation_trace import (
     TraceNormalizationStatus,
     TraceSseEnding,
     TraceSseFrame,
+    TraceToolEvidence,
+    TraceToolSource,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.model.http_capture import HttpAttempt
@@ -60,6 +64,7 @@ from fred_runtime.app.conversation_trace_model import (
     capture_snapshot,
 )
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.app.conversation_trace_tools import TOOL_TURN_BYTES, RecordedToolCall
 
 _MAX_COUNT = 2**31 - 1
 _MAX_CHUNKS = TRACE_HTTP_TURN_BYTES // TRACE_HTTP_CHUNK_BYTES
@@ -78,7 +83,9 @@ _REQUEST_IDS = (
 _RESPONSE_HEADERS = _REQUEST_HEADERS.union(_REQUEST_IDS, {"retry-after", "date"})
 
 
-def _headers(source: httpx.Headers, allow: frozenset[str]) -> dict[str, str]:
+def _headers(
+    source: httpx.Headers | httpx2.Headers, allow: frozenset[str]
+) -> dict[str, str]:
     return {name: source[name][:256] for name in allow if name in source}
 
 
@@ -131,6 +138,7 @@ class RecordedHttpAttempt:
     method: str
     target: str
     request_headers: dict[str, str]
+    tool_ref: str | None = None
     sse: RecordedSseLane | None = None
     streams_sse: bool = False
     started: float = field(default_factory=monotonic)
@@ -153,7 +161,7 @@ class RecordedHttpAttempt:
         with self.buffer.lock:
             return 0 if self.buffer.closed else self.buffer.remaining
 
-    def headers(self, response: httpx.Response) -> None:
+    def headers(self, response: httpx.Response | httpx2.Response) -> None:
         self.status = response.status_code
         self.response_headers = _headers(response.headers, _RESPONSE_HEADERS)
         if not response.is_success or (
@@ -299,6 +307,7 @@ class RecordedHttpAttempt:
         return TraceHttpAttempt(
             ref=self.ref,
             call_id=self.call_id,
+            tool_ref=self.tool_ref,
             attempt=self.number,
             model=self.model,
             release=release,
@@ -333,6 +342,65 @@ class HttpTurnBuffer:
     model_calls: list[RecordedModelCall] = field(default_factory=list)
     model_remaining: int = MODEL_TURN_BYTES
     normalization_remaining: int = _NORMALIZATION_REWRITES_PER_SEGMENT
+    tool_calls: list[RecordedToolCall] = field(default_factory=list)
+    tool_remaining: int = TOOL_TURN_BYTES
+
+    def start_tool(
+        self, tool_name: str, call_id: str | None, source: TraceToolSource
+    ) -> RecordedToolCall | None:
+        with self.lock:
+            if self.closed or len(self.tool_calls) >= TRACE_MAX_TOOL_CALLS:
+                self.incomplete = True
+                return None
+            name = safe_identifier(tool_name)
+            attempt = 1 + sum(call.tool_name == name for call in self.tool_calls)
+            tool = RecordedToolCall(
+                self, safe_identifier(call_id), name, source, attempt
+            )
+            self.tool_calls.append(tool)
+            return tool
+
+    def begin_http(
+        self,
+        request: httpx.Request | httpx2.Request,
+        *,
+        call_id: str,
+        number: int,
+        model: str | None = None,
+        tool_ref: str | None = None,
+    ) -> RecordedHttpAttempt | None:
+        with self.lock:
+            if self.closed:
+                return None
+            if len(self.attempts) >= TRACE_MAX_HTTP_ATTEMPTS:
+                self.incomplete = True
+                return None
+            url = request.url
+            target = f"{url.scheme}://{url.netloc.decode('ascii')}{url.path}"[:2048]
+            attempt = RecordedHttpAttempt(
+                self,
+                uuid4().hex,
+                call_id,
+                number,
+                model,
+                request.method[:16],
+                target,
+                _headers(request.headers, _REQUEST_HEADERS),
+                tool_ref=tool_ref,
+            )
+            if tool_ref is None and self.outgoing is not None:
+                attempt.sse = RecordedSseLane(
+                    attempt.ref, self.sse, self.sse.at(attempt.started)
+                )
+            self.attempts.append(attempt)
+            try:
+                data = request.content
+            except (httpx.RequestNotRead, httpx2.RequestNotRead):
+                return attempt
+            kept = attempt.request_body.add(data, self.remaining)
+            self.remaining -= kept
+            attempt.request_complete = kept == len(data)
+            return attempt
 
     def start_stream(self, headers_at: float, offset_ms: int) -> None:
         self.sse.started = headers_at
@@ -409,38 +477,10 @@ class ModelHttpCapture:
                 )
 
     def begin(self, request: httpx.Request) -> HttpAttempt | None:
-        with self.buffer.lock:
-            if self.buffer.closed:
-                return None
-            if len(self.buffer.attempts) >= TRACE_MAX_HTTP_ATTEMPTS:
-                self.buffer.incomplete = True
-                return None
-            self.attempts += 1
-            url = request.url
-            target = f"{url.scheme}://{url.netloc.decode('ascii')}{url.path}"[:2048]
-            attempt = RecordedHttpAttempt(
-                self.buffer,
-                uuid4().hex,
-                self.call_id,
-                self.attempts,
-                self.model,
-                request.method[:16],
-                target,
-                _headers(request.headers, _REQUEST_HEADERS),
-            )
-            if self.buffer.outgoing is not None:
-                attempt.sse = RecordedSseLane(
-                    attempt.ref, self.buffer.sse, self.buffer.sse.at(attempt.started)
-                )
-            self.buffer.attempts.append(attempt)
-            try:
-                data = request.content
-            except httpx.RequestNotRead:
-                return attempt
-            kept = attempt.request_body.add(data, self.buffer.remaining)
-            self.buffer.remaining -= kept
-            attempt.request_complete = kept == len(data)
-            return attempt
+        self.attempts += 1
+        return self.buffer.begin_http(
+            request, call_id=self.call_id, number=self.attempts, model=self.model
+        )
 
 
 class _BodyManifest(BaseModel):
@@ -483,6 +523,22 @@ class TraceHttpArtifactStore:
         if len(data) > MODEL_TURN_BYTES:
             raise ValueError("Oversized model trace artifact")
         return TraceModelEvidence.model_validate_json(data)
+
+    async def write_tool(
+        self, session_id: str, ref: str, evidence: TraceToolEvidence
+    ) -> None:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        await self._filesystem.mkdir(prefix)
+        await self._filesystem.write(
+            f"{prefix}/tool-v1.json", evidence.model_dump_json()
+        )
+
+    async def read_tool(self, session_id: str, ref: str) -> TraceToolEvidence:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        data = await self._filesystem.read(f"{prefix}/tool-v1.json")
+        if len(data) > TOOL_TURN_BYTES:
+            raise ValueError("Oversized tool trace artifact")
+        return TraceToolEvidence.model_validate_json(data)
 
     async def write(self, session_id: str, attempt: RecordedHttpAttempt) -> None:
         prefix = f"{_session_path(session_id)}/{attempt.ref}"

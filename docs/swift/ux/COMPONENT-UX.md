@@ -6188,3 +6188,11 @@ JSON. The response status distinguishes a rejection before model output
 from unavailable evidence. The tab shows the normalization result and
 provides links to the original provider frame and the earliest matching
 retained turn when available.
+
+The selected turn expands its tool calls in the turn list. Each tool shows
+its source, individual attempt and outcome, call ID, and links to matching
+model requests and results. The evidence pane opens to tool input, actual
+output, and any matching result captured in the model input. Remote tools
+with observed HTTP attempts also have an HTTP tab. HTTP status remains
+separate from the tool result and the turn outcome. The safe call tree
+remains visible when content is masked.

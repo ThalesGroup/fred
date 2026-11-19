@@ -126,6 +126,7 @@ class TraceHttpAttempt(BaseModel):
 
     ref: EvidenceReference
     call_id: CallIdentifier
+    tool_ref: EvidenceReference | None = None
     attempt: Annotated[int, Field(ge=1, le=TRACE_MAX_HTTP_ATTEMPTS)]
     model: CallIdentifier | None = None
     release: CallIdentifier | None = None
@@ -340,6 +341,59 @@ class TraceModelEvidence(BaseModel):
     origins: list[TraceModelOrigin] = Field(default_factory=list)
 
 
+TRACE_MAX_TOOL_CALLS = 64
+
+
+class TraceToolSource(StrEnum):
+    NATIVE = "native"
+    MCP = "mcp"
+    KNOWLEDGE_FLOW = "knowledge_flow"
+
+
+class TraceToolOutcome(StrEnum):
+    SUCCESS = "success"
+    ERROR = "error"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+
+
+class TraceToolModelLink(BaseModel):
+    call_id: CallIdentifier
+    relation: Literal["requested", "received"]
+
+
+class TraceToolCall(BaseModel):
+    ref: EvidenceReference
+    call_id: CallIdentifier | None
+    tool_name: CallIdentifier | None
+    source: TraceToolSource
+    outcome: TraceToolOutcome
+    attempt: Annotated[int, Field(ge=1, le=TRACE_MAX_TOOL_CALLS)]
+    duration_ms: TraceRank
+    observed_through_rank: TraceRank | None
+    completeness: TraceHttpCompleteness
+    model_calls: Annotated[
+        list[TraceToolModelLink], Field(max_length=2 * TRACE_MAX_MODEL_CALLS)
+    ] = Field(default_factory=list)
+    http_attempts: Annotated[
+        list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
+    ] = Field(default_factory=list)
+
+
+class TraceToolArtifactAccess(BaseModel):
+    grant_id: str | None = None
+    local_content_access: bool = False
+    observed_through_rank: TraceRank | None
+
+
+class TraceToolEvidence(BaseModel):
+    version: Literal[1] = 1
+    input: object = None
+    output: object = None
+    model_result: dict[str, object] | None = None
+    partial: bool = False
+
+
 class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -359,4 +413,7 @@ class TraceFinalization(BaseModel):
     sse: TraceSseSegment | None = None
     model_calls: Annotated[
         list[TraceModelIndex], Field(max_length=TRACE_MAX_MODEL_CALLS)
+    ] = Field(default_factory=list)
+    tool_calls: Annotated[
+        list[TraceToolCall], Field(max_length=TRACE_MAX_TOOL_CALLS)
     ] = Field(default_factory=list)

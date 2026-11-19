@@ -22,7 +22,13 @@ import type {
   TraceHttpBody,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { TRACE_TRANSLATION_PREFIX, TraceIdentifier, downloadTraceBytes, traceBytes } from "./traceControls";
+import {
+  TRACE_TRANSLATION_PREFIX,
+  TraceIdentifier,
+  canReadTraceArtifact,
+  downloadTraceBytes,
+  traceBytes,
+} from "./traceControls";
 import { ConversationTraceModel } from "./ConversationTraceModel";
 import { ConversationTraceSse } from "./ConversationTraceSse";
 import TraceJson from "./TraceJson";
@@ -100,11 +106,13 @@ function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: st
 function HttpPayload({
   label,
   side,
+  remoteTool,
   headers,
   body,
 }: {
   label: string;
   side: "request" | "response";
+  remoteTool: boolean;
   headers: Record<string, string>;
   body?: TraceHttpBody | null;
 }) {
@@ -119,7 +127,7 @@ function HttpPayload({
             size="2xs"
             variant="text"
             color="on-surface"
-            onClick={() => downloadTraceBytes(body.data, "provider-" + side + ".bin")}
+            onClick={() => downloadTraceBytes(body.data, (remoteTool ? "http-" : "provider-") + side + ".bin")}
           >
             {t("downloadOriginal")}
           </Button>
@@ -185,14 +193,16 @@ function AttemptEvidence({
               {exchange.method} {exchange.target}
             </code>
             <HttpPayload
-              label={t("request")}
+              label={t(attempt.tool_ref != null ? "toolRequest" : "request")}
               side="request"
+              remoteTool={attempt.tool_ref != null}
               headers={exchange.request_headers}
               body={exchange.request_body}
             />
             <HttpPayload
-              label={t("response")}
+              label={t(attempt.tool_ref != null ? "toolResponse" : "response")}
               side="response"
+              remoteTool={attempt.tool_ref != null}
               headers={exchange.response_headers}
               body={exchange.response_body}
             />
@@ -202,6 +212,70 @@ function AttemptEvidence({
         ))}
     </>
   );
+}
+
+export function TraceHttpAttemptSummary({
+  active,
+  provider = false,
+}: {
+  active: TraceHttpAttempt;
+  provider?: boolean;
+}) {
+  const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
+  const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
+  return (
+    <dl>
+      {provider && (
+        <>
+          <dt>{t("model")}</dt>
+          <dd>{active.model ?? t("unavailable")}</dd>
+        </>
+      )}
+      <dt>{t("httpStatus")}</dt>
+      <dd>{active.status ?? t("noStatus")}</dd>
+      <dt>{t("duration")}</dt>
+      <dd>{milliseconds.format(active.duration_ms)}</dd>
+      <dt>{t("failureStage")}</dt>
+      <dd>{active.failure_stage ? t(`stage.${active.failure_stage}`) : t("noFailure")}</dd>
+      {provider && (
+        <>
+          <dt>{t("release")}</dt>
+          <dd>{active.release ?? t("unavailable")}</dd>
+        </>
+      )}
+      <dt>{t("completeness")}</dt>
+      <dd>{t(`completenessValue.${active.completeness}`)}</dd>
+      <dt>{t("callId")}</dt>
+      <dd>
+        <TraceIdentifier label={t("callId")} value={active.call_id} />
+      </dd>
+      {active.upstream_id && (
+        <>
+          <dt>{t("upstreamId")}</dt>
+          <dd>
+            <TraceIdentifier label={t("upstreamId")} value={active.upstream_id} />
+          </dd>
+        </>
+      )}
+    </dl>
+  );
+}
+
+export function TraceHttpAttemptEvidence({
+  sessionId,
+  turn,
+  attempt,
+  cutoffRank,
+}: {
+  sessionId: string;
+  turn: ConversationTraceTurn;
+  attempt: TraceHttpAttempt;
+  cutoffRank?: number;
+}) {
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  if (!canReadTraceArtifact(turn, cutoffRank, attempt.observed_through_rank)) return <p>{t("masked")}</p>;
+  if (attempt.completeness === "unavailable") return <p>{t("unavailable")}</p>;
+  return <AttemptEvidence key={attempt.ref} sessionId={sessionId} exchangeId={turn.exchange_id} attempt={attempt} />;
 }
 
 export function ConversationTraceHttp({
@@ -215,7 +289,7 @@ export function ConversationTraceHttp({
   cutoffRank?: number;
   initialCallId?: string;
 }) {
-  const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
+  const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const [selected, setSelected] = useState(initialCallId);
   const [view, setView] = useState(initialCallId ? 1 : 0);
   const metadata = enhancedControlPlaneApi.useListConversationTraceHttpAttemptsQuery(
@@ -246,7 +320,6 @@ export function ConversationTraceHttp({
     group.push(attempt);
     groups.set(attempt.call_id, group);
   }
-  const milliseconds = new Intl.NumberFormat(i18n.language, { style: "unit", unit: "millisecond" });
   return (
     <section className={styles.history} aria-label={t("evidenceTitle")}>
       <h3>{t("evidenceTitle")}</h3>
@@ -292,34 +365,7 @@ export function ConversationTraceHttp({
             </Button>
           ))}
       </div>
-      {active && (
-        <dl>
-          <dt>{t("model")}</dt>
-          <dd>{active.model ?? t("unavailable")}</dd>
-          <dt>{t("httpStatus")}</dt>
-          <dd>{active.status ?? t("noStatus")}</dd>
-          <dt>{t("duration")}</dt>
-          <dd>{milliseconds.format(active.duration_ms)}</dd>
-          <dt>{t("failureStage")}</dt>
-          <dd>{active.failure_stage ? t(`stage.${active.failure_stage}`) : t("noFailure")}</dd>
-          <dt>{t("release")}</dt>
-          <dd>{active.release ?? t("unavailable")}</dd>
-          <dt>{t("completeness")}</dt>
-          <dd>{t(`completenessValue.${active.completeness}`)}</dd>
-          <dt>{t("callId")}</dt>
-          <dd>
-            <TraceIdentifier label={t("callId")} value={active.call_id} />
-          </dd>
-          {active.upstream_id && (
-            <>
-              <dt>{t("upstreamId")}</dt>
-              <dd>
-                <TraceIdentifier label={t("upstreamId")} value={active.upstream_id} />
-              </dd>
-            </>
-          )}
-        </dl>
-      )}
+      {active && <TraceHttpAttemptSummary active={active} provider />}
       <ButtonGroup
         items={[{ label: t("exchangeTab") }, { label: t("langchainTab") }, { label: t("sseTab") }]}
         size="2xs"
@@ -335,18 +381,8 @@ export function ConversationTraceHttp({
         <ConversationTraceModel sessionId={sessionId} turn={turn} model={activeModel} cutoffRank={cutoffRank} />
       ) : !active ? (
         <p>{t("unavailable")}</p>
-      ) : turn.access === "local" ||
-        (turn.access === "shared" &&
-          cutoffRank != null &&
-          active.observed_through_rank != null &&
-          active.observed_through_rank <= cutoffRank) ? (
-        active.completeness === "unavailable" ? (
-          <p>{t("unavailable")}</p>
-        ) : (
-          <AttemptEvidence key={active.ref} sessionId={sessionId} exchangeId={turn.exchange_id} attempt={active} />
-        )
       ) : (
-        <p>{t("masked")}</p>
+        <TraceHttpAttemptEvidence sessionId={sessionId} turn={turn} attempt={active} cutoffRank={cutoffRank} />
       )}
     </section>
   );

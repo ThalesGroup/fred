@@ -95,6 +95,7 @@ class ConversationTraceTurnRow(Base):
     http_availability: Mapped[str | None] = mapped_column(String(32))
     sse_segments: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
     model_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
+    tool_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
     trace_id: Mapped[str | None] = mapped_column(String(32))
     span_id: Mapped[str | None] = mapped_column(String(16))
 

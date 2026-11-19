@@ -18,11 +18,22 @@ import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useCopyConfirmation } from "@core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import type { TraceOutcome } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ConversationTraceTurn, TraceOutcome } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
 export const TRACE_TRANSLATION_PREFIX = "rework.admin.conversationTraces";
+
+export function canReadTraceArtifact(
+  turn: ConversationTraceTurn,
+  cutoffRank: number | undefined,
+  observedRank: number | null | undefined,
+): boolean {
+  return (
+    turn.access === "local" ||
+    (turn.access === "shared" && cutoffRank != null && observedRank != null && observedRank <= cutoffRank)
+  );
+}
 
 export function traceBytes(data: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(data), (character) => character.charCodeAt(0));

@@ -24,6 +24,7 @@ from contextlib import nullcontext
 from typing import Optional, TypeVar
 
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.conversation_trace import TraceToolOutcome, TraceToolSource
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import operation_log_scope
@@ -33,17 +34,36 @@ from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
+from langgraph.types import Command
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
 from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.runtime_support.tool_capture import capture_tool
 
 logger = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
 
 # Stamped on capability tools at assembly; tags tool KPIs with their capability.
 CAPABILITY_ID_METADATA_KEY = "fred.capability_id"
+
+
+def _traced_result(result: object, call_id: str | None) -> object:
+    # Some Deep tools return a graph update carrying their model-visible message.
+    if isinstance(result, Command) and isinstance(result.update, dict):
+        messages = result.update.get("messages")
+        if isinstance(messages, (list, tuple)):
+            return next(
+                (
+                    message
+                    for message in messages
+                    if isinstance(message, ToolMessage)
+                    and message.tool_call_id == call_id
+                ),
+                result,
+            )
+    return result
 
 
 def capability_id_of(tool: object) -> str | None:
@@ -140,6 +160,8 @@ class ToolExecution:
         source: str,
         span: SpanPort | None = None,
         capability_id: str | None = None,
+        call_id: str | None = None,
+        arguments: object = None,
     ) -> _Result:
         started = time.perf_counter()
         outcome = "failed"
@@ -151,6 +173,8 @@ class ToolExecution:
                     source=source,
                     span=span,
                     capability_id=capability_id,
+                    call_id=call_id,
+                    arguments=arguments,
                 )
                 outcome = "failed" if self._result_is_error(result)[0] else "succeeded"
                 return result
@@ -195,6 +219,8 @@ class ToolExecution:
         source: str,
         span: SpanPort | None = None,
         capability_id: str | None = None,
+        call_id: str | None = None,
+        arguments: object = None,
     ) -> _Result:
         base_dims = self._base_dims(
             tool_name=tool_name, source=source, capability_id=capability_id
@@ -232,7 +258,35 @@ class ToolExecution:
                     )
                     == "true",
                 )
-                result = await invoke()
+                trace_source = (
+                    TraceToolSource.MCP if source == "mcp" else TraceToolSource.NATIVE
+                )
+                with capture_tool(tool_name, call_id, trace_source, arguments) as tool:
+                    if tool is None:
+                        result = await invoke()
+                    else:
+                        try:
+                            result = await invoke()
+                        except GraphBubbleUp:
+                            tool.finish(TraceToolOutcome.PAUSED)
+                            raise
+                        except asyncio.CancelledError:
+                            tool.finish(TraceToolOutcome.CANCELLED)
+                            raise
+                        except Exception as exc:
+                            tool.finish(
+                                TraceToolOutcome.ERROR,
+                                {"exception": type(exc).__name__},
+                            )
+                            raise
+                        else:
+                            tool_result = _traced_result(result, call_id)
+                            outcome = (
+                                TraceToolOutcome.ERROR
+                                if self._result_is_error(tool_result)[0]
+                                else TraceToolOutcome.SUCCESS
+                            )
+                            tool.finish(outcome, tool_result)
             except GraphBubbleUp:
                 if kpi_dims is not None:
                     kpi_dims["status"] = "awaiting_human"

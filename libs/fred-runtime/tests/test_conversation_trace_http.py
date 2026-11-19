@@ -22,6 +22,7 @@ from time import monotonic
 from uuid import uuid4
 
 import httpx
+import httpx2
 import pytest
 from fred_core.conversation_trace import (
     TRACE_HTTP_TURN_BYTES,
@@ -31,6 +32,8 @@ from fred_core.conversation_trace import (
     TraceNormalizationStatus,
     TraceSseEnding,
     TraceSseKind,
+    TraceToolOutcome,
+    TraceToolSource,
 )
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.model.http_capture import active_http_capture
@@ -42,6 +45,13 @@ from fred_runtime.app.conversation_trace_artifacts import (
 )
 from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.runtime_support.tool_capture import active_tool_buffer, capture_tool
+from fred_runtime.runtime_support.tool_capture_http import (
+    kf_trace_request,
+    kf_trace_response,
+    mcp_trace_request,
+    mcp_trace_response,
+)
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
@@ -366,3 +376,106 @@ async def test_slow_discarded_error_is_partial_and_does_not_delay_retry_indefini
     assert (
         attempt.summary(None, stored=True).completeness == TraceHttpCompleteness.PARTIAL
     )
+
+
+@pytest.mark.asyncio
+async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path):
+    buffer = HttpTurnBuffer()
+    shared = asyncio.Barrier(2)
+    kf_error = b'{"detail":"Original Knowledge Flow response"}'
+    mcp_result = b'{"jsonrpc":"2.0","id":3,"result":{"isError":true,"content":[]}}'
+
+    class McpBodyStream(httpx2.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield mcp_result[:20]
+            yield mcp_result[20:]
+
+    async def kf_handler(_request: httpx.Request) -> httpx.Response:
+        await shared.wait()
+        return httpx.Response(
+            503,
+            stream=BodyStream([kf_error[:12], kf_error[12:]]),
+            headers={"x-correlation-id": "kf-request", "set-cookie": "secret=value"},
+        )
+
+    async def mcp_handler(_request: httpx2.Request) -> httpx2.Response:
+        await shared.wait()
+        return httpx2.Response(200, stream=McpBodyStream())
+
+    async def kf_call() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(kf_handler),
+            event_hooks={
+                "request": [kf_trace_request],
+                "response": [kf_trace_response],
+            },
+        ) as client:
+            with capture_tool(
+                "search", "kf-call", TraceToolSource.NATIVE, {"top_k": 2}
+            ) as tool:
+                response = await client.post(
+                    "https://kf.example/vector/search?credential=synthetic",
+                    headers={"authorization": "Bearer synthetic"},
+                )
+                assert response.status_code == 503
+                assert tool is not None
+                tool.finish(TraceToolOutcome.ERROR, {"text": "Transformed tool error"})
+
+    async def mcp_call() -> None:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(mcp_handler),
+            event_hooks={
+                "request": [mcp_trace_request],
+                "response": [mcp_trace_response],
+            },
+        ) as client:
+            with capture_tool(
+                "lookup", "mcp-call", TraceToolSource.MCP, {"query": "example"}
+            ) as tool:
+                response = await client.post(
+                    "https://mcp.example/mcp",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "lookup"},
+                    },
+                )
+                assert response.status_code == 200
+                assert tool is not None
+                tool.finish(TraceToolOutcome.ERROR, {"is_error": True})
+
+    token = active_tool_buffer.set(buffer)
+    try:
+        async with asyncio.timeout(5):
+            await asyncio.gather(kf_call(), mcp_call())
+    finally:
+        active_tool_buffer.reset(token)
+    attempts = {item.call_id: item for item in buffer.close()}
+    tools = {tool.call_id: tool for tool in buffer.tool_calls}
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    for call_id, raw, status, source in (
+        ("kf-call", kf_error, 503, TraceToolSource.KNOWLEDGE_FLOW),
+        ("mcp-call", mcp_result, 200, TraceToolSource.MCP),
+    ):
+        tool = tools[call_id]
+        assert (tool.outcome, tool.source) == (TraceToolOutcome.ERROR, source)
+        attempt = attempts[call_id]
+        assert (attempt.tool_ref, attempt.status, attempt.number) == (
+            tool.ref,
+            status,
+            1,
+        )
+        await store.write("session", attempt)
+        evidence = await store.read("session", attempt.ref)
+        assert evidence.response_body is not None
+        assert b64decode(evidence.response_body.data) == raw
+        assert "authorization" not in evidence.request_headers
+        assert "set-cookie" not in evidence.response_headers
+        assert "?" not in evidence.target
+
+    kf_tool = tools["kf-call"]
+    await store.write_tool("session", kf_tool.ref, kf_tool.evidence)
+    saved = await store.read_tool("session", kf_tool.ref)
+    assert saved.input == {"top_k": 2}
+    assert saved.output == {"text": "Transformed tool error"}
