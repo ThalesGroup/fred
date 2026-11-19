@@ -190,7 +190,7 @@ operations:
     method: DELETE
     path: /pod/v1/agents/checkpoints/{session_id}
     review_status: approved
-    required_permission: session_owner_or_can_manage_platform_and_own_credential
+    required_permission: session_owner_or_can_manage_platform_and_own_credential_with_runtime_bound_control_plane_acceptance_for_owner_write_fence
   - service: agent-pod
     method: DELETE
     path: /pod/v1/agents/sessions/{session_id}/filesystem

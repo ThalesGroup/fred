@@ -72,6 +72,40 @@ async def _seed(engine: AsyncEngine, *sessions: str):
         )
 
 
+@pytest.mark.asyncio
+async def test_owner_erasure_acceptance_requires_the_authoritative_runtime(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    engine = control_plane_sql_engine
+    await _seed(engine, "legacy", "current", "visible")
+    async with async_sessionmaker(engine).begin() as session:
+        await session.execute(
+            update(SessionMetadataRow)
+            .where(SessionMetadataRow.session_id.in_(["legacy", "current"]))
+            .values(deleted_at=utcnow(), trace_erasing=True)
+        )
+        await session.execute(
+            update(SessionMetadataRow)
+            .where(SessionMetadataRow.session_id == "current")
+            .values(source_runtime_id="moved-runtime")
+        )
+    store = SessionMetadataStore(engine)
+    ids = ["legacy", "current", "visible"]
+    assert await store.owner_hidden_sessions(
+        _RUNTIME, "owner", ids, erasing_only=True
+    ) == ["legacy"]
+    assert await store.owner_hidden_sessions(
+        "moved-runtime", "owner", ids, erasing_only=True
+    ) == ["current"]
+    assert (
+        await store.owner_hidden_sessions(_RUNTIME, "other", ids, erasing_only=True)
+        == []
+    )
+    assert (
+        await store.owner_hidden_sessions(None, "owner", ids, erasing_only=True) == []
+    )
+
+
 async def _admit(store: ConversationTraceStore, session_id: str, rank: int = 0):
     return await store.admit(
         _RUNTIME,

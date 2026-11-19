@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import case, delete, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -357,12 +357,24 @@ class SessionMetadataStore:
             owner.session_id.in_(session_ids),
         )
         if erasing_only:
+            if runtime_id is None:
+                return []
+            legacy_runtime = (
+                select(AgentInstanceRow.source_runtime_id)
+                .where(
+                    AgentInstanceRow.agent_instance_id == owner.agent_instance_id,
+                    AgentInstanceRow.team_id == owner.team_id,
+                )
+                .scalar_subquery()
+            )
             hidden = hidden.where(
-                owner.deleted_at.is_not(None), owner.trace_erasing.is_(True)
+                owner.deleted_at.is_not(None),
+                owner.trace_erasing.is_(True),
+                func.coalesce(owner.source_runtime_id, legacy_runtime) == runtime_id,
             )
         else:
             hidden = hidden.where(owner.trace_retained_after_delete.is_(True))
-        if runtime_id is not None:
+        if runtime_id is not None and not erasing_only:
             hidden = hidden.where(
                 or_(
                     owner.source_runtime_id == runtime_id,

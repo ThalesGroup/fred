@@ -59,6 +59,7 @@ class OwnerSessionVisibility:
         config: "AgentPodConfig",
     ) -> None:
         self._client = client
+        self._runtime_id = config.app.runtime_id
         base = str(config.platform.control_plane_url).rstrip("/")
         self._url = f"{base}/internal/sessions/owner-hidden"
 
@@ -77,6 +78,7 @@ class OwnerSessionVisibility:
         )
         if erasing_only:
             params["erasing_only"] = "true"
+            params["runtime_id"] = self._runtime_id
         response = await self._client.post(
             self._url,
             json=list(session_ids),

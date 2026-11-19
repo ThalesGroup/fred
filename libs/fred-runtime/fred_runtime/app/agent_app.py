@@ -7770,30 +7770,38 @@ def _build_agent_router(
             )
         # Also the session's LangGraph-native graph threads (graph_thread_id).
         derived_prefix = graph_thread_prefix(session_id)
-        if (
-            not platform
-            and caller_uid is not None
-            and history_store is not None
-            and fenced_history is None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
-        ):
-            # No history to prove ownership (e.g. an erase retry after history
-            # went first): nothing left is a successful no-op, otherwise every
-            # remaining thread must be recorded as the caller's.
-            owners = (
-                await cp.session_thread_owners(
-                    session_id, derived_prefix=derived_prefix
-                )
-                if isinstance(cp, FredSqlCheckpointer)
-                else None
+        if not platform and caller_uid is not None and history_store is not None:
+            owns_history = await history_store.session_belongs_to_user(
+                session_id, caller_uid
             )
-            if owners == {}:
-                return {"deleted": 0}
-            if not owners or any(owner != caller_uid for owner in owners.values()):
+            if (
+                fenced_history is not None
+                and await fenced_history.session_has_other_owner(session_id, caller_uid)
+            ):
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied.",
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
                 )
+            if fenced_history is not None or not owns_history:
+                owners = (
+                    await cp.session_thread_owners(
+                        session_id, derived_prefix=derived_prefix
+                    )
+                    if isinstance(cp, FredSqlCheckpointer)
+                    else None
+                )
+                if not owns_history and owners is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                    )
+                if owners and any(
+                    owner != caller_uid and (owner is not None or not owns_history)
+                    for owner in owners.values()
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                    )
+                if owners == {} and not owns_history and fenced_history is None:
+                    return {"deleted": 0}
         if fenced_history is not None:
             await fenced_history.fence_managed_session_erasure(session_id)
         if isinstance(cp, FredSqlCheckpointer):

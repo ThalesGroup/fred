@@ -2035,12 +2035,15 @@ async def get_owner_hidden_sessions(
     deps: ProductDependencies,
     user: KeycloakUser | AssertedUser = Depends(get_current_user),
     erasing_only: bool = False,
+    runtime_id: str | None = None,
 ) -> list[str]:
     """Find the authenticated owner's conversations hidden by product lifecycle."""
     store = deps.get_session_metadata_store()
     if erasing_only:
+        if not runtime_id:
+            return []
         return await store.owner_hidden_sessions(
-            None, user.uid, session_ids, erasing_only=True
+            runtime_id, user.uid, session_ids, erasing_only=True
         )
     return await store.owner_hidden_sessions(None, user.uid, session_ids)
 

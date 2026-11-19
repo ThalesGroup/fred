@@ -180,12 +180,20 @@ async def test_accepted_erasure_fences_managed_writes_across_runtimes(
                     config, empty_checkpoint(), {}, {"message": "2"}
                 )
                 accepted = True
+                app.dependency_overrides[get_current_user_or_service] = lambda: (
+                    KeycloakUser(uid="other", username="other", roles=[])
+                )
+                assert (await client.delete(path, headers=flag)).status_code == 403
+                app.dependency_overrides[get_current_user_or_service] = lambda: owner
                 assert (await client.delete(path, headers=flag)).json() == {
                     "deleted": 1
                 }
                 assert (
                     await client.delete(f"/agents/sessions/{session_id}")
                 ).json() == {"deleted": 1}
+                assert (await client.delete(path, headers=flag)).json() == {
+                    "deleted": 0
+                }
 
             late = await writer_checkpoints.aput(
                 config, empty_checkpoint(), {}, {"message": "3"}
@@ -202,6 +210,11 @@ async def test_accepted_erasure_fences_managed_writes_across_runtimes(
             )
             with pytest.raises(ValueError, match="session_erasing"):
                 await writer.claim_initial_user_message(**opening, message=None)
+            with pytest.raises(ValueError, match="session_erasing"):
+                await writer.submit_steered_message(
+                    **opening, message_id="late-steer", content="Late"
+                )
+            assert await eraser.pending_steered_messages(session_id, owner.uid) == []
             assert await eraser.get(session_id, owner.uid) == []
             async with reader_engine.connect() as connection:
                 for table in (
