@@ -204,6 +204,7 @@ async def test_sdk_owned_httpx_streams(
 ) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "mock-native-key")
     credentials = _Credentials()
+    static_credential = f"fixture-{provider}-{family}"
     settings: dict[str, Any] = {}
     if provider.startswith("vertex-ai"):
         settings.update(
@@ -213,7 +214,7 @@ async def test_sdk_owned_httpx_streams(
         settings["model_family"] = family
     if family == "anthropic":
         # The pinned Anthropic Messages API rejects legacy sampling keywords.
-        settings.update(access_token="mock-vertex-anthropic-token", temperature=None)
+        settings.update(access_token=static_credential, temperature=None)
     elif provider == "ollama":
         settings["base_url"] = "http://local-user:local-password@127.0.0.1:11434"
     elif provider == "vertex-ai":
@@ -244,7 +245,7 @@ async def test_sdk_owned_httpx_streams(
         ModelConfiguration(provider=provider, name=name, settings=settings)
     )
     if family in {"mistral", "llama"}:
-        credentials.token = ""  # The original static token is now expired.
+        credentials.token = None  # Force the next request to refresh its credentials.
     try:
         async with asyncio.timeout(5):
             chunks = [chunk async for chunk in model.astream(_MESSAGE)]
@@ -262,7 +263,7 @@ async def test_sdk_owned_httpx_streams(
             )
             assert credentials.refreshes >= 2
         if family == "anthropic":
-            assert request.headers[auth_header] == "Bearer mock-vertex-anthropic-token"
+            assert request.headers[auth_header] == f"Bearer {static_credential}"
         assert attempt.response is not None
         assert attempt.response.headers["x-request-id"] == "upstream-123"
         assert attempt.body == wire_body
