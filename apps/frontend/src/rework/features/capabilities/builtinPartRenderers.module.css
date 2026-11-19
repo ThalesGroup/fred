@@ -20,6 +20,43 @@
   max-width: 720px;
 }
 
+.geoMapFrame {
+  position: relative;
+}
+
+.geoExpandButton {
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+  z-index: 1001;
+  box-shadow: var(--shadow-s);
+  background: var(--surface-container);
+}
+
+.geoDialog {
+  height: min(85dvh, 850px);
+}
+
+.geoLargeBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-height: 0;
+}
+
+.geoLargeLocations {
+  flex: none;
+  max-height: 25%;
+  overflow: auto;
+}
+
+@media (max-width: 600px) {
+  .geoDialog {
+    height: calc(100dvh - var(--spacing-xl));
+  }
+}
+
 .geoDetails {
   margin-top: var(--spacing-xs);
   color: var(--on-surface-retreat);
@@ -48,6 +85,12 @@
   background: #dceaf0;
   width: 100%;
   height: 320px;
+}
+
+.geoMapLarge {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .geoCity {

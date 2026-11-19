@@ -114,7 +114,7 @@ async def test_invalid_geo_call_is_recoverable_tool_result() -> None:
         for spec in _resolver().resolve_tools()
         if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
     )
-    payload = {"points": [{"latitude": 91, "longitude": 2}]}
+    payload: dict[str, object] = {"points": [{"latitude": 91, "longitude": 2}]}
     content, result = await spec.invoke(payload)
     assert result is not None
     assert result.is_error

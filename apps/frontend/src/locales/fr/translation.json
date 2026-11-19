@@ -657,6 +657,8 @@
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Carte",
+      "geoEnlarge": "Agrandir la carte",
+      "geoClose": "Fermer la carte",
       "geoFeature": "Point {{index}}",
       "geoLocations": "Voir les lieux",
       "geoUnavailable": "La carte n'a pas pu être affichée. Les noms des points restent accessibles ci-dessous."

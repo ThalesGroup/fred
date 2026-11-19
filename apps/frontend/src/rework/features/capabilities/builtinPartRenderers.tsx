@@ -28,6 +28,8 @@ import offlineRelief from "./offlineRelief.webp?inline";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
 import styles from "./builtinPartRenderers.module.css";
 
@@ -145,17 +147,40 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
   const geo = part as unknown as GeoPart;
   const featureList = Array.isArray(geo.geojson?.features) ? geo.geojson.features : [];
-  const container = useRef<HTMLDivElement>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const savedView = useRef<{ center: L.LatLng; zoom: number } | null>(null);
+  const enlargeTrigger = useRef<HTMLButtonElement | null>(null);
+  const [enlarged, setEnlarged] = useState(false);
+  const [hasRendered, setHasRendered] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  function rememberView() {
+    if (mapRef.current) {
+      savedView.current = { center: mapRef.current.getCenter(), zoom: mapRef.current.getZoom() };
+    }
+  }
+
+  function closeEnlarged() {
+    rememberView();
+    setEnlarged(false);
+    enlargeTrigger.current?.focus();
+  }
 
   useEffect(() => {
     setStatus("loading");
-    if (!container.current) return;
+    if (!container) return;
     let map: L.Map | undefined;
     try {
       const basemap = getBasemap();
       // Natural Earth relief is equirectangular; its image and vectors share this CRS.
-      map = L.map(container.current, { crs: L.CRS.EPSG4326, scrollWheelZoom: false, preferCanvas: true });
+      map = L.map(container, {
+        crs: L.CRS.EPSG4326,
+        scrollWheelZoom: true,
+        zoomAnimation: false,
+        preferCanvas: true,
+      });
+      mapRef.current = map;
       map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
       L.imageOverlay(
         offlineRelief,
@@ -249,7 +274,10 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
         },
       }).addTo(map);
       const bounds = layer.getBounds();
-      if (bounds.isValid() && geo.fit_bounds !== false) {
+      if (savedView.current) {
+        map.setView(savedView.current.center, savedView.current.zoom);
+        savedView.current = null;
+      } else if (bounds.isValid() && geo.fit_bounds !== false) {
         map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
       } else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
       else map.setView([0, 0], 2);
@@ -287,56 +315,101 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
       };
       map.on("moveend", updateBasemap);
       updateBasemap();
+      setHasRendered(true);
       setStatus("ready");
     } catch {
       map?.remove();
+      mapRef.current = null;
       map = undefined;
       setStatus("error");
     }
 
     return () => {
       map?.remove();
+      mapRef.current = null;
     };
-  }, [geo.geojson, geo.fit_bounds, geo.popup_property]);
+  }, [geo.geojson, geo.fit_bounds, geo.popup_property, container]);
+
+  const mapView = (
+    <div
+      ref={setContainer}
+      className={`${styles.geoMap} ${enlarged ? styles.geoMapLarge : ""}`}
+      role="region"
+      aria-busy={status === "loading"}
+      aria-label={t("chatbot.uiParts.geoAria")}
+    />
+  );
+  const locations = featureList.length > 0 && (
+    <details className={styles.geoDetails} open={status === "error"}>
+      <summary>{t("chatbot.uiParts.geoLocations")}</summary>
+      <ol className={styles.geoFeatureList}>
+        {featureList.map((feature, index) => {
+          const properties = feature.properties ?? {};
+          const label = properties.name;
+          const details = pointDetails(properties, geo.popup_property ?? undefined);
+          return (
+            <li key={index}>
+              {typeof label === "string" || typeof label === "number"
+                ? label
+                : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
+              {details.length > 0 && (
+                <ul>
+                  {details.map(([key, value]) => (
+                    <li key={key}>
+                      {key === "description" || key === "details" ? String(value) : `${key}: ${String(value)}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
 
   return (
     <div className={styles.geoPanel}>
-      {status === "error" && <p role="status">{t("chatbot.uiParts.geoUnavailable")}</p>}
-      <div
-        ref={container}
-        className={styles.geoMap}
-        role="region"
-        aria-busy={status === "loading"}
-        aria-label={t("chatbot.uiParts.geoAria")}
-      />
-      {featureList.length > 0 && (
-        <details className={styles.geoDetails} open={status === "error"}>
-          <summary>{t("chatbot.uiParts.geoLocations")}</summary>
-          <ol className={styles.geoFeatureList}>
-            {featureList.map((feature, index) => {
-              const properties = feature.properties ?? {};
-              const label = properties.name;
-              const details = pointDetails(properties, geo.popup_property ?? undefined);
-              return (
-                <li key={index}>
-                  {typeof label === "string" || typeof label === "number"
-                    ? label
-                    : t("chatbot.uiParts.geoFeature", { index: index + 1 })}
-                  {details.length > 0 && (
-                    <ul>
-                      {details.map(([key, value]) => (
-                        <li key={key}>
-                          {key === "description" || key === "details" ? String(value) : `${key}: ${String(value)}`}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </details>
-      )}
+      {status === "error" && !enlarged && <p role="status">{t("chatbot.uiParts.geoUnavailable")}</p>}
+      <div className={styles.geoMapFrame}>
+        {enlarged ? <div className={styles.geoMap} aria-hidden="true" /> : mapView}
+        {hasRendered && status !== "error" && (
+          <IconButton
+            type="button"
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "fullscreen" }}
+            className={styles.geoExpandButton}
+            aria-label={t("chatbot.uiParts.geoEnlarge")}
+            title={t("chatbot.uiParts.geoEnlarge")}
+            aria-haspopup="dialog"
+            onClick={(event) => {
+              enlargeTrigger.current = event.currentTarget;
+              rememberView();
+              setEnlarged(true);
+            }}
+          />
+        )}
+      </div>
+      {!enlarged && locations}
+      <Dialog
+        open={enlarged}
+        title={t("chatbot.uiParts.geoAria")}
+        cancelLabel={t("chatbot.uiParts.geoClose")}
+        confirmLabel={t("chatbot.uiParts.geoClose")}
+        onCancel={closeEnlarged}
+        onConfirm={closeEnlarged}
+        hideConfirm
+        maxWidth={1200}
+        scrollMode="children"
+        className={styles.geoDialog}
+      >
+        <div className={styles.geoLargeBody}>
+          {status === "error" && <p role="status">{t("chatbot.uiParts.geoUnavailable")}</p>}
+          {enlarged && mapView}
+          <div className={styles.geoLargeLocations}>{enlarged && locations}</div>
+        </div>
+      </Dialog>
     </div>
   );
 }

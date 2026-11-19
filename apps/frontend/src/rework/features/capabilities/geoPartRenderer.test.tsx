@@ -25,6 +25,7 @@ const leaflet = vi.hoisted(() => {
     setView: vi.fn(),
     on: vi.fn(),
     getZoom: vi.fn(() => 9),
+    getCenter: vi.fn(() => ({ lat: 43.12, lng: 5.93 })),
     getBounds: vi.fn(() => ({
       pad: vi.fn().mockReturnThis(),
       getWest: () => 5.7,
@@ -111,7 +112,7 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   );
   expect(leaflet.createMap).toHaveBeenCalledWith(
     expect.any(HTMLElement),
-    expect.objectContaining({ preferCanvas: true }),
+    expect.objectContaining({ preferCanvas: true, scrollWheelZoom: true, zoomAnimation: false }),
   );
   expect(leaflet.canvas).toHaveBeenCalledWith({ pane: "geoUserPoints" });
   expect(leaflet.map.attributionControl.addAttribution).toHaveBeenCalledWith(expect.stringContaining("Natural Earth"));
@@ -212,6 +213,50 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
 
   await act(async () => root.unmount());
   expect(leaflet.map.remove).toHaveBeenCalledOnce();
+  host.remove();
+});
+
+it("enlarges the map in Fred's dialog and restores the current view", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const GeoRenderer = builtinPartRenderers.geo;
+  const geojson = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", geometry: { type: "Point", coordinates: [5.93, 43.12] }, properties: { name: "Toulon" } },
+    ],
+  };
+
+  await act(async () => root.render(<GeoRenderer part={{ type: "geo", geojson }} />));
+  const enlarge = host.querySelector<HTMLButtonElement>('button[aria-label="chatbot.uiParts.geoEnlarge"]');
+  expect(enlarge).not.toBeNull();
+  await act(async () => enlarge?.click());
+
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+  const titleId = dialog?.getAttribute("aria-labelledby");
+  expect(document.getElementById(titleId ?? "")?.textContent).toBe("chatbot.uiParts.geoAria");
+  expect(dialog?.querySelector('[aria-label="chatbot.uiParts.geoAria"]')).not.toBeNull();
+  expect(dialog?.textContent).toContain("Toulon");
+  expect(leaflet.createMap).toHaveBeenCalledTimes(2);
+  expect(leaflet.map.setView).toHaveBeenCalledWith(leaflet.map.getCenter(), 9);
+  expect(leaflet.map.remove).toHaveBeenCalledTimes(1);
+
+  const close = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (button) => button.textContent === "chatbot.uiParts.geoClose",
+  );
+  close?.focus();
+  const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+  await act(async () => window.dispatchEvent(tab));
+  expect(tab.defaultPrevented).toBe(true);
+  expect(dialog?.contains(document.activeElement)).toBe(true);
+  await act(async () => close?.click());
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+  expect(leaflet.createMap).toHaveBeenCalledTimes(3);
+  expect(leaflet.map.remove).toHaveBeenCalledTimes(2);
+  expect(document.activeElement).toBe(enlarge);
+
+  await act(async () => root.unmount());
   host.remove();
 });
 

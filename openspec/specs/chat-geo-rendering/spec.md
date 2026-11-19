@@ -48,6 +48,12 @@ The chat SHALL render a `GeoPart` containing a GeoJSON FeatureCollection as an i
 - **WHEN** an agent calls `geo.render_points` with a named point and additional `properties`
 - **THEN** the name is visible beside the point where space permits, the additional information appears on hover or click, and the list exposes the same information to keyboard users
 
+#### Scenario: Enlarge and explore a map
+
+- **WHEN** the user enlarges a map in the chat
+- **THEN** the map opens in a large Fred dialog, retains its current view, and can be closed with the visible control or Escape
+- **AND** scrolling the wheel over either map view changes the map zoom while scrolling outside the inline map continues to move the chat
+
 #### Scenario: JSON code block remains text
 
 - **WHEN** an agent writes a GeoJSON object in a Markdown code block without a `GeoPart`
